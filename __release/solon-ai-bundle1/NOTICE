@@ -1,0 +1,176 @@
+Copyright 2017-2025 noear.org and authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+      https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+This project includes:
+  aggs-matrix-stats under Elastic License 2.0 or Server Side Public License, v 1
+  aio-core under The Apache License, Version 2.0
+  aio-pro under The Apache License, Version 2.0
+  Animal Sniffer Annotations under MIT license
+  Apache Commons Codec under Apache-2.0
+  Apache Commons Collections under Apache License, Version 2.0
+  Apache Commons Compress under Apache-2.0
+  Apache Commons IO under Apache-2.0
+  Apache Commons Lang under Apache-2.0
+  Apache Commons Logging under The Apache Software License, Version 2.0
+  Apache Commons Math under Apache License, Version 2.0
+  Apache Commons Pool under Apache-2.0
+  Apache Commons Text under Apache License, Version 2.0
+  Apache FontBox under Apache License, Version 2.0
+  Apache HttpAsyncClient under Apache License, Version 2.0
+  Apache HttpClient under Apache License, Version 2.0
+  Apache HttpCore under Apache License, Version 2.0
+  Apache HttpCore NIO under Apache License, Version 2.0
+  Apache Log4j API under Apache-2.0
+  Apache PDFBox under Apache License, Version 2.0
+  Apache POI under Apache License, Version 2.0
+  Apache POI - API based on OPC and OOXML schemas under Apache License, Version 2.0
+  Apache POI - Common under Apache License, Version 2.0
+  asm under BSD-3-Clause
+  Byte Buddy (without dependencies) under Apache License, Version 2.0
+  Byte Buddy agent under Apache License, Version 2.0
+  Checker Qual under The MIT License
+  commonmark-java core under BSD 2-Clause License
+  Commons Logging under The Apache Software License, Version 2.0
+  compiler under Apache License 2.0
+  curvesapi under BSD License
+  elasticsearch-cli under Elastic License 2.0 or Server Side Public License, v 1
+  elasticsearch-core under Elastic License 2.0 or Server Side Public License, v 1
+  elasticsearch-geo under Elastic License 2.0 or Server Side Public License, v 1
+  elasticsearch-lz4 under Elastic License 2.0 or Server Side Public License, v 1
+  elasticsearch-plugin-classloader under Elastic License 2.0 or Server Side Public License, v 1
+  elasticsearch-secure-sm under Elastic License 2.0 or Server Side Public License, v 1
+  elasticsearch-x-content under Elastic License 2.0 or Server Side Public License, v 1
+  error-prone annotations under Apache 2.0
+  FindBugs-jsr305 under The Apache Software License, Version 2.0
+  Google Android Annotations Library under Apache 2.0
+  Gson under Apache-2.0
+  Guava InternalFutureFailureAccess and InternalFutures under The Apache Software License, Version 2.0
+  Guava ListenableFuture only under The Apache Software License, Version 2.0
+  Guava: Google Core Libraries for Java under Apache License, Version 2.0
+  HdrHistogram under Public Domain, per Creative Commons CC0
+  HPPC Collections under The Apache Software License, Version 2.0
+  IntelliJ IDEA Annotations under The Apache Software License, Version 2.0
+  io.grpc:grpc-api under Apache 2.0
+  io.grpc:grpc-context under Apache 2.0
+  io.grpc:grpc-core under Apache 2.0
+  io.grpc:grpc-netty-shaded under Apache 2.0
+  io.grpc:grpc-protobuf under Apache 2.0
+  io.grpc:grpc-protobuf-lite under Apache 2.0
+  io.grpc:grpc-stub under Apache 2.0
+  io.grpc:grpc-util under Apache 2.0
+  J2ObjC Annotations under Apache License, Version 2.0
+  Jackson dataformat: CBOR under The Apache Software License, Version 2.0
+  Jackson dataformat: Smile under The Apache Software License, Version 2.0
+  Jackson-core under The Apache Software License, Version 2.0
+  Jackson-dataformat-YAML under The Apache Software License, Version 2.0
+  Java Native Access under LGPL-2.1-or-later or Apache-2.0
+  JavaPoet under Apache 2.0
+  Jedis under MIT
+  Joda-Time under Apache License, Version 2.0
+  JOpt Simple under The MIT License
+  JSON in Java under Public Domain
+  jsoup Java HTML Parser under The MIT License
+  JTokkit under MIT License
+  JUnit Jupiter (Aggregator) under Eclipse Public License v2.0
+  JUnit Jupiter API under Eclipse Public License v2.0
+  JUnit Jupiter Engine under Eclipse Public License v2.0
+  JUnit Jupiter Params under Eclipse Public License v2.0
+  JUnit Platform Commons under Eclipse Public License v2.0
+  JUnit Platform Engine API under Eclipse Public License v2.0
+  Kotlin Stdlib under The Apache License, Version 2.0
+  Kotlin Stdlib Common under The Apache License, Version 2.0
+  Kotlin Stdlib Jdk7 under The Apache License, Version 2.0
+  Kotlin Stdlib Jdk8 under The Apache License, Version 2.0
+  lang-mustache under Elastic License 2.0 or Server Side Public License, v 1
+  liquor under The Apache Software License, Version 2.0
+  liquor-eval under The Apache Software License, Version 2.0
+  Lucene Common Analyzers under Apache License, Version 2.0
+  Lucene Core under Apache License, Version 2.0
+  Lucene Grouping under Apache License, Version 2.0
+  Lucene Highlighter under Apache License, Version 2.0
+  Lucene Join under Apache License, Version 2.0
+  Lucene Memory under Apache License, Version 2.0
+  Lucene Miscellaneous under Apache License, Version 2.0
+  Lucene Queries under Apache License, Version 2.0
+  Lucene QueryParsers under Apache License, Version 2.0
+  Lucene Sandbox under Apache License, Version 2.0
+  Lucene Spatial 3D under Apache License, Version 2.0
+  Lucene Suggest under Apache License, Version 2.0
+  LZ4 and xxHash under The Apache Software License, Version 2.0
+  mapper-extras under Elastic License 2.0 or Server Side Public License, v 1
+  milvus-sdk-java under Apache License, Version 2.0
+  mockito-core under The MIT License
+  mockito-junit-jupiter under The MIT License
+  Non-Blocking Reactive Foundation for the JVM under Apache License, Version 2.0
+  Objenesis under Apache License, Version 2.0
+  okhttp under The Apache Software License, Version 2.0
+  okio under The Apache Software License, Version 2.0
+  org.apiguardian:apiguardian-api under The Apache License, Version 2.0
+  org.opentest4j:opentest4j under The Apache License, Version 2.0
+  parent-join under Elastic License 2.0 or Server Side Public License, v 1
+  perfmark:perfmark-api under Apache 2.0
+  Project Lombok under The MIT License
+  proto-google-common-protos under Apache-2.0
+  Protocol Buffers [Core] under BSD-3-Clause
+  rank-eval under Elastic License 2.0 or Server Side Public License, v 1
+  reactive-streams under MIT-0
+  redisx under The Apache Software License, Version 2.0
+  rest under The Apache Software License, Version 2.0
+  rest-high-level under Elastic License 2.0
+  server under Elastic License 2.0 or Server Side Public License, v 1
+  SLF4J API Module under MIT License
+  smart-http-common under The Apache License, Version 2.0
+  smart-http-server under The Apache License, Version 2.0
+  snack3 under The Apache Software License, Version 2.0
+  SnakeYAML under Apache License, Version 2.0
+  solon under The Apache Software License, Version 2.0
+  solon-ai under The Apache Software License, Version 2.0
+  solon-ai-bundle1 under The Apache Software License, Version 2.0
+  solon-ai-load-excel under The Apache Software License, Version 2.0
+  solon-ai-load-html under The Apache Software License, Version 2.0
+  solon-ai-load-markdown under The Apache Software License, Version 2.0
+  solon-ai-load-pdf under The Apache Software License, Version 2.0
+  solon-ai-repo-elasticsearch under The Apache Software License, Version 2.0
+  solon-ai-repo-milvus under The Apache Software License, Version 2.0
+  solon-ai-repo-redis under The Apache Software License, Version 2.0
+  solon-aot under The Apache Software License, Version 2.0
+  solon-boot under The Apache Software License, Version 2.0
+  solon-boot-smarthttp under The Apache Software License, Version 2.0
+  solon-config-plus under The Apache Software License, Version 2.0
+  solon-config-yaml under The Apache Software License, Version 2.0
+  solon-data under The Apache Software License, Version 2.0
+  solon-flow under The Apache Software License, Version 2.0
+  solon-lib under The Apache Software License, Version 2.0
+  solon-logging under The Apache Software License, Version 2.0
+  solon-logging-simple under The Apache Software License, Version 2.0
+  solon-mvc under The Apache Software License, Version 2.0
+  solon-net under The Apache Software License, Version 2.0
+  solon-net-httputils under The Apache Software License, Version 2.0
+  solon-proxy under The Apache Software License, Version 2.0
+  solon-rx under The Apache Software License, Version 2.0
+  solon-security-validation under The Apache Software License, Version 2.0
+  solon-security-vault under The Apache Software License, Version 2.0
+  solon-serialization under The Apache Software License, Version 2.0
+  solon-serialization-snack3 under The Apache Software License, Version 2.0
+  solon-sessionstate-local under The Apache Software License, Version 2.0
+  solon-test under The Apache Software License, Version 2.0
+  solon-web under The Apache Software License, Version 2.0
+  solon-web-cors under The Apache Software License, Version 2.0
+  solon-web-rx under The Apache Software License, Version 2.0
+  solon-web-sse under The Apache Software License, Version 2.0
+  solon-web-staticfiles under The Apache Software License, Version 2.0
+  SparseBitSet under The Apache Software License, Version 2.0
+  T-Digest under The Apache Software License, Version 2.0
+  XmlBeans under The Apache Software License, Version 2.0
+
