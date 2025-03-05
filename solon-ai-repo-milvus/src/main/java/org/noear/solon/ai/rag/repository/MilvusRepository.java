@@ -60,6 +60,10 @@ public class MilvusRepository implements RepositoryStorable {
     private final String collectionName;
     private final Gson gson = new Gson();
 
+    public MilvusRepository(EmbeddingModel embeddingModel, MilvusClientV2 client) {
+        this(embeddingModel, client, "solon-ai");
+    }
+
     public MilvusRepository(EmbeddingModel embeddingModel, MilvusClientV2 client, String collectionName) {
         this.embeddingModel = embeddingModel;
         //客户端的构建由外部完成
