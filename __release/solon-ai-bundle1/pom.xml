@@ -22,6 +22,7 @@
         <module>../../solon-ai-load-html</module>
         <module>../../solon-ai-load-markdown</module>
         <module>../../solon-ai-load-pdf</module>
+        <module>../../solon-ai-load-word</module>
 
         <module>../../solon-ai-repo-elasticsearch</module>
         <module>../../solon-ai-repo-milvus</module>
