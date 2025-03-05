@@ -1,3 +1,18 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.noear.solon.ai.rag.loader;
 
 import java.io.File;
@@ -10,13 +25,22 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.poi.sl.draw.geom.GuideIf.Op;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.core.util.SupplierEx;
+import org.noear.solon.lang.Preview;
 
+/**
+ * Word 文档加载器
+ * <p>
+ * 读取Word内容，并转换为文本
+ * </p>
+ *
+ * @author linziguan
+ * @since 3.1
+ */
+@Preview("3.1")
 public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options, WordLoader> {
     private final SupplierEx<InputStream> source;
 
@@ -51,25 +75,27 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
                     documents.add(doc);
                     extractor.close();
                 } else {
-                    /* 
-                    for (XWPFParagraph extractor : reader.getParagraphs()) {
-                        String content = extractor.getText();
-                        Document doc = new Document(content, metadata)
-                                .metadata(this.additionalMetadata);
-                        documents.add(doc);
-                    }
-                    */
+                    /*
+                     * for (XWPFParagraph extractor : reader.getParagraphs()) {
+                     * String content = extractor.getText();
+                     * Document doc = new Document(content, metadata)
+                     * .metadata(this.additionalMetadata);
+                     * documents.add(doc);
+                     * }
+                     */
                     XWPFWordExtractor extractor = new XWPFWordExtractor(reader);
                     String content = extractor.getText();
                     Integer pageSize = this.options.pageSize;
-                    int pageCount = (int) Math.ceil(content.length() / (double)pageSize);
+                    int pageCount = (int) Math.ceil(content.length() / (double) pageSize);
                     for (int i = 0; i < pageCount; i++) {
-                        String pageContent = content.substring(i * pageSize, Math.min((i + 1) * pageSize, content.length()));
+                        String pageContent = content.substring(i * pageSize,
+                                Math.min((i + 1) * pageSize, content.length()));
                         Document doc = new Document(pageContent, metadata)
-                               .metadata(this.additionalMetadata);
-                        documents.add(doc);;
+                                .metadata(this.additionalMetadata);
+                        documents.add(doc);
+                        ;
                     }
-                    
+
                     extractor.close();
                 }
             }
@@ -101,7 +127,6 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
         private LoadMode loadMode = LoadMode.PAGE;
         private Integer pageSize = 500;
 
-
         /**
          * WORD 加载模式，可以是单文档模式或分页模式
          */
@@ -114,6 +139,6 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
             this.pageSize = pageSize;
             return this;
         }
-        
+
     }
 }
