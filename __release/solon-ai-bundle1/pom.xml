@@ -29,5 +29,6 @@
         <module>../../solon-ai-repo-opensearch</module>
         <module>../../solon-ai-repo-pgvector</module>
         <module>../../solon-ai-repo-redis</module>
+        <module>../../solon-ai-repo-vectorex</module>
     </modules>
 </project>
