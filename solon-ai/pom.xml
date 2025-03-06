@@ -14,10 +14,6 @@
     <artifactId>solon-ai</artifactId>
     <packaging>jar</packaging>
 
-    <properties>
-        <jtokkit.version>1.1.0</jtokkit.version>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
