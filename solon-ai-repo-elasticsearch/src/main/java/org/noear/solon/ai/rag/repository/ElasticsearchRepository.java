@@ -190,9 +190,10 @@ public class ElasticsearchRepository implements RepositoryStorable {
     private Document createDocumentFromHit(Map<String, Object> hit) {
         Map<String, Object> source = (Map<String, Object>) hit.get("_source");
         Document doc = new Document(
+                (String) hit.get("_id"),
                 (String) source.get("content"),
-                (Map<String, Object>) source.get("metadata"));
-        doc.id((String) hit.get("_id"));
+                (Map<String, Object>) source.get("metadata"),
+                (Double) hit.get("_score"));
         doc.url((String) source.get("url"));
         return doc;
     }
@@ -283,7 +284,13 @@ public class ElasticsearchRepository implements RepositoryStorable {
 
     @Override
     public boolean exists(String id) {
-        return false;
+        try {
+            Request request = new Request("HEAD", "/" + indexName + "/_doc/" + id);
+            org.elasticsearch.client.Response response = client.getLowLevelClient().performRequest(request);
+            return response.getStatusLine().getStatusCode() == 200;
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     /**
