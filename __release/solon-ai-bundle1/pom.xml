@@ -25,7 +25,9 @@
         <module>../../solon-ai-load-word</module>
 
         <module>../../solon-ai-repo-elasticsearch</module>
+        <module>../../solon-ai-repo-mariadb</module>
         <module>../../solon-ai-repo-milvus</module>
+        <module>../../solon-ai-repo-mysql</module>
         <module>../../solon-ai-repo-opensearch</module>
         <module>../../solon-ai-repo-pgvector</module>
         <module>../../solon-ai-repo-redis</module>
