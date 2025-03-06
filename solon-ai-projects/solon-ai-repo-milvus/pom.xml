@@ -6,12 +6,12 @@
 
     <parent>
         <groupId>org.noear</groupId>
-        <artifactId>solon-parent</artifactId>
+        <artifactId>solon-ai-parent</artifactId>
         <version>3.1.1-SNAPSHOT</version>
-        <relativePath/>
+        <relativePath>../../solon-ai-parent/pom.xml</relativePath>
     </parent>
     
-    <artifactId>solon-ai-repo-redis</artifactId>
+    <artifactId>solon-ai-repo-milvus</artifactId>
     <packaging>jar</packaging>
 
     <dependencies>
@@ -21,9 +21,10 @@
         </dependency>
 
         <dependency>
-            <groupId>redis.clients</groupId>
-            <artifactId>jedis</artifactId>
-            <version>5.1.5</version>
+            <groupId>io.milvus</groupId>
+            <artifactId>milvus-sdk-java</artifactId>
+            <version>2.5.4</version>
+            <optional>true</optional>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -33,8 +34,21 @@
         </dependency>
 
         <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>redisx</artifactId>
+            <artifactId>solon-flow</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-logging-simple</artifactId>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
@@ -46,12 +60,6 @@
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-ai-load-html</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-logging-simple</artifactId>
             <scope>test</scope>
         </dependency>
 

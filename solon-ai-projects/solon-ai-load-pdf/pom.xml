@@ -6,12 +6,12 @@
 
     <parent>
         <groupId>org.noear</groupId>
-        <artifactId>solon-parent</artifactId>
+        <artifactId>solon-ai-parent</artifactId>
         <version>3.1.1-SNAPSHOT</version>
-        <relativePath/>
+        <relativePath>../../solon-ai-parent/pom.xml</relativePath>
     </parent>
-    
-    <artifactId>solon-ai-load-excel</artifactId>
+
+    <artifactId>solon-ai-load-pdf</artifactId>
     <packaging>jar</packaging>
 
     <dependencies>
@@ -31,12 +31,12 @@
             <artifactId>solon-test</artifactId>
             <scope>test</scope>
         </dependency>
-        
+
         <dependency>
-		    <groupId>org.apache.poi</groupId>
-		    <artifactId>poi-ooxml</artifactId>
-		    <version>${apache.poi.version}</version>
-		</dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${apache.pdfbox.version}</version>
+        </dependency>
     </dependencies>
 
 

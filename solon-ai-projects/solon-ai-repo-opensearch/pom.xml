@@ -6,12 +6,12 @@
 
     <parent>
         <groupId>org.noear</groupId>
-        <artifactId>solon-parent</artifactId>
+        <artifactId>solon-ai-parent</artifactId>
         <version>3.1.1-SNAPSHOT</version>
-        <relativePath/>
+        <relativePath>../../solon-ai-parent/pom.xml</relativePath>
     </parent>
-    
-    <artifactId>solon-ai-load-word</artifactId>
+
+    <artifactId>solon-ai-repo-opensearch</artifactId>
     <packaging>jar</packaging>
 
     <dependencies>
@@ -21,9 +21,9 @@
         </dependency>
 
         <dependency>
-            <groupId>org.apache.poi</groupId>
-            <artifactId>poi-ooxml</artifactId>
-            <version>${apache.poi.version}</version>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-test</artifactId>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
@@ -31,11 +31,6 @@
             <artifactId>solon-logging-simple</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-test</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
+
 </project>

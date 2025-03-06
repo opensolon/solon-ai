@@ -6,9 +6,9 @@
 
     <parent>
         <groupId>org.noear</groupId>
-        <artifactId>solon-parent</artifactId>
+        <artifactId>solon-ai-parent</artifactId>
         <version>3.1.1-SNAPSHOT</version>
-        <relativePath />
+        <relativePath>../../solon-ai-parent/pom.xml</relativePath>
     </parent>
 
     <groupId>org.noear.bundle</groupId>
@@ -17,20 +17,21 @@
 
     <modules>
         <module>../../solon-ai</module>
+        <module>../../solon-ai-parent</module>
 
-        <module>../../solon-ai-load-excel</module>
-        <module>../../solon-ai-load-html</module>
-        <module>../../solon-ai-load-markdown</module>
-        <module>../../solon-ai-load-pdf</module>
-        <module>../../solon-ai-load-word</module>
+        <module>../../solon-ai-projects/solon-ai-load-excel</module>
+        <module>../../solon-ai-projects/solon-ai-load-html</module>
+        <module>../../solon-ai-projects/solon-ai-load-markdown</module>
+        <module>../../solon-ai-projects/solon-ai-load-pdf</module>
+        <module>../../solon-ai-projects/solon-ai-load-word</module>
 
-        <module>../../solon-ai-repo-elasticsearch</module>
-        <module>../../solon-ai-repo-mariadb</module>
-        <module>../../solon-ai-repo-milvus</module>
-        <module>../../solon-ai-repo-mysql</module>
-        <module>../../solon-ai-repo-opensearch</module>
-        <module>../../solon-ai-repo-pgvector</module>
-        <module>../../solon-ai-repo-redis</module>
-        <module>../../solon-ai-repo-vectorex</module>
+        <module>../../solon-ai-projects/solon-ai-repo-elasticsearch</module>
+        <module>../../solon-ai-projects/solon-ai-repo-mariadb</module>
+        <module>../../solon-ai-projects/solon-ai-repo-milvus</module>
+        <module>../../solon-ai-projects/solon-ai-repo-mysql</module>
+        <module>../../solon-ai-projects/solon-ai-repo-opensearch</module>
+        <module>../../solon-ai-projects/solon-ai-repo-pgvector</module>
+        <module>../../solon-ai-projects/solon-ai-repo-redis</module>
+        <module>../../solon-ai-projects/solon-ai-repo-vectorex</module>
     </modules>
 </project>
