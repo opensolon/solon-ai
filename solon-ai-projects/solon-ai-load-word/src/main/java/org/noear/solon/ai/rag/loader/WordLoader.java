@@ -27,6 +27,7 @@ import java.util.Map;
 
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.core.util.SupplierEx;
 import org.noear.solon.lang.Preview;
@@ -65,9 +66,9 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
             try (XWPFDocument reader = new XWPFDocument(stream)) {
                 Map<String, Object> metadata = new HashMap<>();
                 metadata.put("type", "word");
-                // 读取文档内容
+
                 if (options.loadMode == LoadMode.SINGLE) {
-                    try(XWPFWordExtractor extractor = new XWPFWordExtractor(reader)) {
+                    try (XWPFWordExtractor extractor = new XWPFWordExtractor(reader)) {
                         // 一次性获取文档的全部文本内容
                         String content = extractor.getText();
 
@@ -76,27 +77,12 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
                         documents.add(doc);
                     }
                 } else {
-                    /*
-                     * for (XWPFParagraph extractor : reader.getParagraphs()) {
-                     * String content = extractor.getText();
-                     * Document doc = new Document(content, metadata)
-                     * .metadata(this.additionalMetadata);
-                     * documents.add(doc);
-                     * }
-                     */
-                    try(XWPFWordExtractor extractor = new XWPFWordExtractor(reader)) {
+                    for (XWPFParagraph extractor : reader.getParagraphs()) {
                         String content = extractor.getText();
-                        Integer pageSize = this.options.pageSize;
-                        int pageCount = (int) Math.ceil(content.length() / (double) pageSize);
 
-                        for (int i = 0; i < pageCount; i++) {
-                            String pageContent = content.substring(i * pageSize,
-                                    Math.min((i + 1) * pageSize, content.length()));
-
-                            Document doc = new Document(pageContent, metadata)
-                                    .metadata(this.additionalMetadata);
-                            documents.add(doc);
-                        }
+                        Document doc = new Document(content, metadata)
+                                .metadata(this.additionalMetadata);
+                        documents.add(doc);
                     }
                 }
             }
@@ -117,28 +103,22 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
          */
         SINGLE,
         /**
-         * 每页作为一个 Document
+         * 每段作为一个 Document
          */
-        PAGE
+        PARAGRAPH
     }
 
     /**
      * 选项
      */
     public static class Options {
-        private LoadMode loadMode = LoadMode.PAGE;
-        private Integer pageSize = 500;
+        private LoadMode loadMode = LoadMode.PARAGRAPH;
 
         /**
          * WORD 加载模式，可以是单文档模式或分页模式
          */
         public Options loadMode(LoadMode loadMode) {
             this.loadMode = loadMode;
-            return this;
-        }
-
-        public Options pageSize(Integer pageSize) {
-            this.pageSize = pageSize;
             return this;
         }
     }
