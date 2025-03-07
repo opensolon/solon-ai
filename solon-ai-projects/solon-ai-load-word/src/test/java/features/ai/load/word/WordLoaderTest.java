@@ -15,7 +15,7 @@ public class WordLoaderTest {
     @Test
     public void test1() throws Exception {
         WordLoader loader = new WordLoader(ResourceUtil.getResource("demo.docx"))
-        .options(opt -> opt.loadMode(WordLoader.LoadMode.Paragraph));
+        .options(opt -> opt.loadMode(WordLoader.LoadMode.PARAGRAPH));
         List<Document> docs = loader.load();
         System.out.println(docs);
     }
