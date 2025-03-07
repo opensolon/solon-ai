@@ -218,4 +218,11 @@ public class ChatOptions {
     public ChatOptions presence_penalty(float frequency_penalty) {
         return optionAdd(PRESENCE_PENALTY, frequency_penalty);
     }
+
+    /**
+     * 用户
+     */
+    public ChatOptions user(String user) {
+        return optionAdd("user", user);
+    }
 }
