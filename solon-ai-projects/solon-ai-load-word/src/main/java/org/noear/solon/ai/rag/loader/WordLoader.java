@@ -44,12 +44,12 @@ import org.noear.solon.lang.Preview;
 public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options, WordLoader> {
     private final SupplierEx<InputStream> source;
 
-    public WordLoader(File file) {
-        this(() -> new FileInputStream(file));
+    public WordLoader(File source) {
+        this(() -> new FileInputStream(source));
     }
 
-    public WordLoader(URL url) {
-        this(() -> url.openStream());
+    public WordLoader(URL source) {
+        this(() -> source.openStream());
     }
 
     public WordLoader(SupplierEx<InputStream> source) {

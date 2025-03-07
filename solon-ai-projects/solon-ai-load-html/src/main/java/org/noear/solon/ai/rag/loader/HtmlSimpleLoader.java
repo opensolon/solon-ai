@@ -15,10 +15,7 @@
  */
 package org.noear.solon.ai.rag.loader;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.URL;
 import java.util.*;
 import org.jsoup.Jsoup;
@@ -43,7 +40,7 @@ public class HtmlSimpleLoader extends AbstractOptionsDocumentLoader<HtmlSimpleLo
     }
 
     public HtmlSimpleLoader(File source) {
-        this(() -> source.toURI().toURL().openStream());
+        this(() -> new FileInputStream(source));
     }
 
     public HtmlSimpleLoader(URL source) {

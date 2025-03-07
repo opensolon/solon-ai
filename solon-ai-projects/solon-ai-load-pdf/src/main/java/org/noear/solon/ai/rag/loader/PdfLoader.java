@@ -46,13 +46,13 @@ public class PdfLoader extends AbstractOptionsDocumentLoader<PdfLoader.Options, 
     private final SupplierEx<InputStream> source;
 
 
-    public PdfLoader(File file) {
-        this(() -> new FileInputStream(file));
+    public PdfLoader(File source) {
+        this(() -> new FileInputStream(source));
     }
 
 
-    public PdfLoader(URL url) {
-        this(() -> url.openStream());
+    public PdfLoader(URL source) {
+        this(() -> source.openStream());
     }
 
     public PdfLoader(SupplierEx<InputStream> source) {

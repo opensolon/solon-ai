@@ -44,12 +44,12 @@ import java.util.*;
 public class ExcelLoader extends AbstractOptionsDocumentLoader<ExcelLoader.Options, ExcelLoader> {
     private final SupplierEx<InputStream> source;
 
-    public ExcelLoader(File file) {
-        this(() -> new FileInputStream(file));
+    public ExcelLoader(File source) {
+        this(() -> new FileInputStream(source));
     }
 
-    public ExcelLoader(URL url) {
-        this(() -> url.openStream());
+    public ExcelLoader(URL source) {
+        this(() -> source.openStream());
     }
 
     public ExcelLoader(SupplierEx<InputStream> source) {

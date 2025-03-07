@@ -41,8 +41,8 @@ public class MarkdownLoader extends AbstractOptionsDocumentLoader<MarkdownLoader
         this(() -> new ByteArrayInputStream(source));
     }
 
-    public MarkdownLoader(File file) {
-        this(() -> new FileInputStream(file));
+    public MarkdownLoader(File source) {
+        this(() -> new FileInputStream(source));
     }
 
     public MarkdownLoader(URL source) {
