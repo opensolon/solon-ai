@@ -23,7 +23,7 @@
         <jsoup.version>1.18.3</jsoup.version>
         <milvus.version>2.5.4</milvus.version>
         <jedis.version>5.1.5</jedis.version>
-        <elasticsearch.version>7.17.28</elasticsearch.version>
+        <elasticsearch.version>7.17.9</elasticsearch.version>
     </properties>
 
     <dependencyManagement>
@@ -31,56 +31,69 @@
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-load-excel</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-load-html</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-load-markdown</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-load-pdf</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-load-word</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-repo-elasticsearch</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-repo-mariadb</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-repo-milvus</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-repo-mysql</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-repo-opensearch</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-repo-pgvector</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-repo-redis</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
         </dependencies>
