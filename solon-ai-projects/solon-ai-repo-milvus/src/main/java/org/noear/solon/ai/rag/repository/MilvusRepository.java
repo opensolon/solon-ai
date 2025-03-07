@@ -23,6 +23,7 @@ import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.GetReq;
 import io.milvus.v2.service.vector.request.InsertReq;
 import io.milvus.v2.service.vector.request.SearchReq;
+import io.milvus.v2.service.vector.request.SearchReq.SearchReqBuilder;
 import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.SearchResp;
 
@@ -37,13 +38,13 @@ import org.noear.solon.ai.rag.util.QueryCondition;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.noear.solon.lang.Preview;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -59,17 +60,24 @@ public class MilvusRepository implements RepositoryStorable {
     private final MilvusClientV2 client;
     private final String collectionName;
     private final Gson gson = new Gson();
+    private BiConsumer<CreateCollectionReq.CollectionSchema,List<IndexParam>> onCreateCollection;
 
     public MilvusRepository(EmbeddingModel embeddingModel, MilvusClientV2 client) {
         this(embeddingModel, client, "solon-ai");
     }
 
     public MilvusRepository(EmbeddingModel embeddingModel, MilvusClientV2 client, String collectionName) {
+        this(embeddingModel, client, collectionName, null);
+    }
+
+    public MilvusRepository(EmbeddingModel embeddingModel, MilvusClientV2 client, String collectionName,BiConsumer<CreateCollectionReq.CollectionSchema,List<IndexParam>> onCreateCollection) {
         this.embeddingModel = embeddingModel;
         //客户端的构建由外部完成
         this.client = client;
         //指定集合
         this.collectionName = collectionName;
+
+        this.onCreateCollection = onCreateCollection;
 
         initRepository();
     }
@@ -126,6 +134,10 @@ public class MilvusRepository implements RepositoryStorable {
                 List<IndexParam> indexParams = new ArrayList<>();
                 indexParams.add(indexParamForIdField);
                 indexParams.add(indexParamForVectorField);
+
+                if(onCreateCollection != null){
+                    onCreateCollection.accept(schema,indexParams);  //允许外部扩展
+                }
 
                 CreateCollectionReq customizedSetupReq1 = CreateCollectionReq.builder()
                         .collectionName(collectionName)
@@ -200,12 +212,17 @@ public class MilvusRepository implements RepositoryStorable {
     @Override
     public List<Document> search(QueryCondition condition) throws IOException {
         FloatVec queryVector = new FloatVec(embeddingModel.embed(condition.getQuery()));
-        SearchReq searchReq = SearchReq.builder()
+        
+        SearchReqBuilder builder = SearchReq.builder()
                 .collectionName(collectionName)
                 .data(Collections.singletonList(queryVector))
                 .topK(condition.getLimit())
-                .outputFields(Arrays.asList("content", "metadata"))
-                .build();
+                .outputFields(Arrays.asList("content", "metadata"));
+
+        if (condition.getFilter() != null) {
+            builder.filter(condition.getFilterExpression());
+        }
+        SearchReq searchReq=builder.build();
 
         SearchResp searchResp = client.search(searchReq);
 

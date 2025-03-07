@@ -31,6 +31,7 @@ public class QueryCondition {
     private int limit = 4;
     private double similarityThreshold = 0.4D;
     private Predicate<Document> filter = (doc) -> true;
+    private String filterExpression;
 
     public QueryCondition(String query) {
         this.query = query;
@@ -73,6 +74,13 @@ public class QueryCondition {
         return filter;
     }
 
+    /**
+     * 获取过滤器表达式
+     */
+    public String getFilterExpression() {
+        return filterExpression;
+    }
+
     /// /////////////////
 
     /**
@@ -104,6 +112,14 @@ public class QueryCondition {
      */
     public QueryCondition similarityThreshold(double similarityThreshold) {
         this.similarityThreshold = similarityThreshold;
+        return this;
+    }
+
+    /*
+     * 配置过滤器表达式
+     */
+    public QueryCondition filterExpression(String filterExpression) {
+        this.filterExpression = filterExpression;
         return this;
     }
 }
