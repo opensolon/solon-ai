@@ -59,21 +59,22 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
 
     @Override
     public List<Document> load() throws IOException {
-        List<Document> documents = new ArrayList<>();
         try (InputStream stream = source.get()) {
-            try (
-                    XWPFDocument reader = new XWPFDocument(stream)) {
+            List<Document> documents = new ArrayList<>();
+
+            try (XWPFDocument reader = new XWPFDocument(stream)) {
                 Map<String, Object> metadata = new HashMap<>();
                 metadata.put("type", "word");
                 // 读取文档内容
                 if (options.loadMode == LoadMode.SINGLE) {
-                    XWPFWordExtractor extractor = new XWPFWordExtractor(reader);
-                    // 一次性获取文档的全部文本内容
-                    String content = extractor.getText();
-                    Document doc = new Document(content, metadata)
-                            .metadata(this.additionalMetadata);
-                    documents.add(doc);
-                    extractor.close();
+                    try(XWPFWordExtractor extractor = new XWPFWordExtractor(reader)) {
+                        // 一次性获取文档的全部文本内容
+                        String content = extractor.getText();
+
+                        Document doc = new Document(content, metadata)
+                                .metadata(this.additionalMetadata);
+                        documents.add(doc);
+                    }
                 } else {
                     /*
                      * for (XWPFParagraph extractor : reader.getParagraphs()) {
@@ -83,22 +84,24 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
                      * documents.add(doc);
                      * }
                      */
-                    XWPFWordExtractor extractor = new XWPFWordExtractor(reader);
-                    String content = extractor.getText();
-                    Integer pageSize = this.options.pageSize;
-                    int pageCount = (int) Math.ceil(content.length() / (double) pageSize);
-                    for (int i = 0; i < pageCount; i++) {
-                        String pageContent = content.substring(i * pageSize,
-                                Math.min((i + 1) * pageSize, content.length()));
-                        Document doc = new Document(pageContent, metadata)
-                                .metadata(this.additionalMetadata);
-                        documents.add(doc);
-                        ;
-                    }
+                    try(XWPFWordExtractor extractor = new XWPFWordExtractor(reader)) {
+                        String content = extractor.getText();
+                        Integer pageSize = this.options.pageSize;
+                        int pageCount = (int) Math.ceil(content.length() / (double) pageSize);
 
-                    extractor.close();
+                        for (int i = 0; i < pageCount; i++) {
+                            String pageContent = content.substring(i * pageSize,
+                                    Math.min((i + 1) * pageSize, content.length()));
+
+                            Document doc = new Document(pageContent, metadata)
+                                    .metadata(this.additionalMetadata);
+                            documents.add(doc);
+                        }
+                    }
                 }
             }
+
+            return documents;
         } catch (IOException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -106,7 +109,6 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
-        return documents;
     }
 
     public static enum LoadMode {
@@ -139,6 +141,5 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
             this.pageSize = pageSize;
             return this;
         }
-
     }
 }

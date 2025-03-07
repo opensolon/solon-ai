@@ -59,11 +59,12 @@ public class ExcelLoader extends AbstractOptionsDocumentLoader<ExcelLoader.Optio
 
     @Override
     public List<Document> load() throws IOException {
-        List<Document> docs = new ArrayList<>();
-
         try (InputStream stream = source.get()) {
+            List<Document> documents = new ArrayList<>();
+
             try (XSSFWorkbook reader = new XSSFWorkbook(stream)) {
                 int numberOfSheets = reader.getNumberOfSheets();
+
                 for (int num = 0; num < numberOfSheets; num++) {
                     XSSFSheet sheet = reader.getSheetAt(num);
 
@@ -86,7 +87,7 @@ public class ExcelLoader extends AbstractOptionsDocumentLoader<ExcelLoader.Optio
 
                     if (readAll.size() > 0) {
                         if (options.documentMaxRows < 0) {
-                            docs.add(new Document(ONode.stringify(readAll)).metadata(this.additionalMetadata));
+                            documents.add(new Document(ONode.stringify(readAll)).metadata(this.additionalMetadata));
                         } else {
                             int totalSize = readAll.size();
                             int numBatches = (totalSize + options.documentMaxRows - 1) / options.documentMaxRows; // 计算总批次数
@@ -96,12 +97,14 @@ public class ExcelLoader extends AbstractOptionsDocumentLoader<ExcelLoader.Optio
 
                                 List<Map<String, Object>> batch = readAll.subList(start, end);
 
-                                docs.add(new Document(ONode.stringify(batch)).metadata(this.additionalMetadata));
+                                documents.add(new Document(ONode.stringify(batch)).metadata(this.additionalMetadata));
                             }
                         }
                     }
                 }
             }
+
+            return documents;
         } catch (IOException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -109,8 +112,6 @@ public class ExcelLoader extends AbstractOptionsDocumentLoader<ExcelLoader.Optio
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
-
-        return docs;
     }
 
     private Map<String, Object> rowToMap(List<Object> titles, List<Object> values) {
