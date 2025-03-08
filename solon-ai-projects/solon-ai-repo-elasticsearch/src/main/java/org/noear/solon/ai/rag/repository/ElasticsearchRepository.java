@@ -32,6 +32,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
@@ -45,7 +46,7 @@ import org.noear.solon.lang.Preview;
  * @since 3.1
  */
 @Preview("3.1")
-public class ElasticsearchRepository implements RepositoryStorable {
+public class ElasticsearchRepository implements RepositoryStorable, RepositoryLifecycle {
     /**
      * 向量模型，用于将文档内容转换为向量表示
      */
@@ -80,6 +81,7 @@ public class ElasticsearchRepository implements RepositoryStorable {
     /**
      * 初始化仓库
      */
+    @Override
     public void initRepository() {
         try {
             GetIndexRequest getIndexRequest = new GetIndexRequest(indexName);
@@ -125,6 +127,7 @@ public class ElasticsearchRepository implements RepositoryStorable {
     /**
      * 注销仓库
      */
+    @Override
     public void dropRepository() throws IOException {
         Request request = new Request("POST", "/" + indexName + "/_delete_by_query");
         request.setJsonEntity("{\"query\":{\"match_all\":{}}}");

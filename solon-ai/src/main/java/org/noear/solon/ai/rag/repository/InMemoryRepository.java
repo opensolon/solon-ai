@@ -18,6 +18,7 @@ package org.noear.solon.ai.rag.repository;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
@@ -34,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author noear
  * @since 3.1
  */
-public class InMemoryRepository implements RepositoryStorable {
+public class InMemoryRepository implements RepositoryStorable, RepositoryLifecycle {
     private final EmbeddingModel embeddingModel;
     private final Map<String, Document> store = new ConcurrentHashMap<>();
 
@@ -60,6 +61,16 @@ public class InMemoryRepository implements RepositoryStorable {
 
             store.put(doc.getId(), doc);
         }
+    }
+
+    @Override
+    public void initRepository() {
+
+    }
+
+    @Override
+    public void dropRepository() {
+        store.clear();
     }
 
     @Override

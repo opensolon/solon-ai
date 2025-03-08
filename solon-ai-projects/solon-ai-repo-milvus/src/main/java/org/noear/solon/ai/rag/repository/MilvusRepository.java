@@ -30,6 +30,7 @@ import io.milvus.v2.service.vector.response.SearchResp;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.ai.rag.util.ListUtil;
@@ -55,7 +56,7 @@ import java.util.stream.Stream;
  * @since 3.1
  */
 @Preview("3.1")
-public class MilvusRepository implements RepositoryStorable {
+public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle {
     private final EmbeddingModel embeddingModel;
     private final MilvusClientV2 client;
     private final String collectionName;
@@ -85,6 +86,7 @@ public class MilvusRepository implements RepositoryStorable {
     /**
      * 初始化仓库
      */
+    @Override
     public void initRepository() {
         // 查询是否存在
         boolean exists = client.hasCollection(HasCollectionReq.builder()
@@ -161,6 +163,7 @@ public class MilvusRepository implements RepositoryStorable {
     /**
      * 注销仓库
      */
+    @Override
     public void dropRepository() {
         client.dropCollection(DropCollectionReq.builder()
                 .collectionName(collectionName)

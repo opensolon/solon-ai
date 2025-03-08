@@ -27,6 +27,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
@@ -51,7 +52,7 @@ import redis.clients.jedis.search.schemafields.VectorField;
  * @since 3.1
  */
 @Preview("3.1")
-public class RedisRepository implements RepositoryStorable {
+public class RedisRepository implements RepositoryStorable, RepositoryLifecycle {
     /**
      * 嵌入模型，用于生成文档的向量表示
      */
@@ -99,6 +100,7 @@ public class RedisRepository implements RepositoryStorable {
     /**
      * 初始化仓库
      */
+    @Override
     public void initRepository() {
         try {
             // 检查并初始化索引
@@ -137,6 +139,7 @@ public class RedisRepository implements RepositoryStorable {
     /**
      * 注销仓库
      */
+    @Override
     public void dropRepository() {
         client.ftDropIndex(indexName);
         client.flushDB();
