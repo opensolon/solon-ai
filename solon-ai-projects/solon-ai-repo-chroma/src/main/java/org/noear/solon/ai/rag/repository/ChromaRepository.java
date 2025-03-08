@@ -1,20 +1,19 @@
 package org.noear.solon.ai.rag.repository;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
-import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
-import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.lang.Preview;
-import org.noear.solon.net.http.HttpUtils;
 
 /**
  * Chroma 矢量存储知识库
@@ -24,20 +23,31 @@ import org.noear.solon.net.http.HttpUtils;
  */
 @Preview("3.1")
 public class ChromaRepository implements RepositoryStorable {
+
     /**
      * 向量模型，用于将文档内容转换为向量表示
      */
     private final EmbeddingModel embeddingModel;
 
     /**
-     * Chroma 服务器地址
+     * Chroma API 客户端
      */
-    private final String serverUrl;
+    private final ChromaApi chromaApi;
 
     /**
      * 集合名称，用于存储文档
      */
-    private final String collectionName;
+    private String collectionName;
+
+    /**
+     * 集合ID
+     */
+    private String collectionId;
+
+    /**
+     * 是否已初始化
+     */
+    private boolean initialized = false;
 
     /**
      * 构造函数
@@ -48,7 +58,7 @@ public class ChromaRepository implements RepositoryStorable {
      */
     public ChromaRepository(EmbeddingModel embeddingModel, String serverUrl, String collectionName) {
         this.embeddingModel = embeddingModel;
-        this.serverUrl = serverUrl.endsWith("/") ? serverUrl : serverUrl + "/";
+        this.chromaApi = new ChromaApi(serverUrl);
         this.collectionName = collectionName;
         initRepository();
     }
@@ -57,145 +67,201 @@ public class ChromaRepository implements RepositoryStorable {
      * 初始化仓库
      */
     public void initRepository() {
+        if (initialized) {
+            return;
+        }
+
         try {
-            // 检查集合是否存在
-            if (!collectionExists()) {
-                // 创建集合
-                createCollection();
+            // 检查服务是否可用
+            if (!isHealthy()) {
+                throw new IOException("Chroma server is not available");
             }
+
+
+            // 尝试查找现有集合
+            if (findExistingCollection()) {
+                initialized = true;
+                return;
+            }
+
+            // 创建新集合
+            createNewCollection();
+
+            // 验证集合是否创建成功
+            if (collectionId == null) {
+                throw new IOException("Failed to create or find collection: " + collectionName);
+            }
+
+            initialized = true;
         } catch (IOException e) {
-            throw new RuntimeException("Failed to initialize Chroma collection", e);
+            throw new RuntimeException("Failed to initialize Chroma repository: " + e.getMessage(), e);
         }
     }
 
     /**
-     * 检查集合是否存在
+     * 查找现有集合
      *
-     * @return 集合是否存在
-     * @throws IOException 如果检查过程发生IO错误
+     * @return 是否找到集合
      */
-    private boolean collectionExists() throws IOException {
-        String endpoint = serverUrl + "api/v1/collections";
-        String response = HttpUtils.http(endpoint)
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .get();
-        
-        Map<String, Object> responseMap = ONode.loadStr(response).toObject(Map.class);
-        List<Map<String, Object>> collections = (List<Map<String, Object>>) responseMap.get("collections");
-        
-        for (Map<String, Object> collection : collections) {
-            if (collectionName.equals(collection.get("name"))) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-
-    /**
-     * 创建集合
-     *
-     * @throws IOException 如果创建过程发生IO错误
-     */
-    private void createCollection() throws IOException {
-        String endpoint = serverUrl + "api/v1/collections";
-        
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("name", collectionName);
-        requestBody.put("metadata", new HashMap<>());
-        
-        String jsonBody = ONode.stringify(requestBody);
-        
+    private boolean findExistingCollection() {
         try {
-            HttpUtils.http(endpoint)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .bodyTxt(jsonBody)
-                    .post();
-        } catch (Exception e) {
-            throw new IOException("Failed to create collection: " + e.getMessage(), e);
+            // 获取所有集合
+            CollectionsResponse collectionsResponse = chromaApi.listCollections();
+            List<Map<String, Object>> collections = collectionsResponse.getCollections();
+
+            if (collections == null || collections.isEmpty()) {
+                return false;
+            }
+
+
+            // 查找匹配的集合
+            for (Map<String, Object> collection : collections) {
+                if (collectionName.equals(collection.get("name"))) {
+                    // 获取集合ID
+                    if (collection.containsKey("id")) {
+                        this.collectionId = (String) collection.get("id");
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        } catch (IOException e) {
+            return false;
         }
+    }
+
+    /**
+     * 创建新集合
+     *
+     * @throws IOException 如果创建失败
+     */
+    private void createNewCollection() throws IOException {
+        try {
+
+            // 创建集合元数据
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("description", "Collection created by Solon AI");
+            metadata.put("created_at", System.currentTimeMillis());
+            metadata.put("hnsw:space", "cosine"); // 使用余弦相似度
+
+            // 创建集合
+            CollectionResponse response = chromaApi.createCollection(collectionName, metadata);
+
+            // 获取集合ID
+            this.collectionId = response.getId();
+        } catch (IOException e) {
+            // 如果创建失败，可能是因为集合已存在，尝试再次查找
+            if (e.getMessage().contains("already exists")) {
+                if (findExistingCollection()) {
+                    return;
+                }
+            }
+
+            // 如果仍然失败，尝试创建带有唯一名称的集合
+            createUniqueCollection();
+        }
+    }
+
+    /**
+     * 创建带有唯一名称的集合
+     *
+     * @throws IOException 如果创建失败
+     */
+    private void createUniqueCollection() throws IOException {
+        String uuid = UUID.randomUUID().toString().substring(0, 8);
+        String uniqueCollectionName = collectionName + "_" + uuid;
+
+        // 创建集合元数据
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("description", "Collection created by Solon AI");
+        metadata.put("created_at", System.currentTimeMillis());
+        metadata.put("original_name", collectionName);
+        metadata.put("hnsw:space", "cosine"); // 使用余弦相似度
+
+        // 创建集合
+        CollectionResponse response = chromaApi.createCollection(uniqueCollectionName, metadata);
+
+        // 获取集合ID
+        this.collectionId = response.getId();
+        this.collectionName = uniqueCollectionName;
+    }
+
+    /**
+     * 检查服务是否健康
+     */
+    public boolean isHealthy() {
+        return chromaApi.isHealthy();
     }
 
     /**
      * 批量存储文档
-     *
-     * @param documents 要存储的文档列表
-     * @throws IOException 如果存储过程中发生IO错误
      */
     @Override
     public void insert(List<Document> documents) throws IOException {
-        if (Utils.isEmpty(documents)) {
+        if (documents == null || documents.isEmpty()) {
             return;
         }
 
-        // 批量embedding
-        for (List<Document> batch : ListUtil.partition(documents, 20)) {
-            embeddingModel.embed(batch);
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(UUID.randomUUID().toString());
+            }
+        }
+
+        // 生成文档的向量表示
+        embeddingModel.embed(documents);
+
+        // 批量添加文档
+        int batchSize = 100;
+        for (int i = 0; i < documents.size(); i += batchSize) {
+            int end = Math.min(i + batchSize, documents.size());
+            List<Document> batch = documents.subList(i, end);
             addDocuments(batch);
         }
     }
 
     /**
-     * 添加文档到Chroma
+     * 添加文档到集合
      *
      * @param documents 文档列表
-     * @throws IOException 如果添加过程发生IO错误
+     * @throws IOException 如果添加失败
      */
     private void addDocuments(List<Document> documents) throws IOException {
-        String endpoint = serverUrl + "api/v1/collections/" + collectionName + "/add";
-        
-        Map<String, Object> requestBody = new HashMap<>();
-        
+        if (collectionId == null) {
+            throw new IOException("Collection ID is not available");
+        }
+
         List<String> ids = new ArrayList<>();
         List<List<Float>> embeddings = new ArrayList<>();
         List<Map<String, Object>> metadatas = new ArrayList<>();
-        List<String> documents_content = new ArrayList<>();
+        List<String> contents = new ArrayList<>();
 
         for (Document doc : documents) {
-            if (doc.getId() == null) {
-                doc.id(Utils.uuid());
-            }
-            
             ids.add(doc.getId());
-            
-            float[] embedding = doc.getEmbedding();
-            List<Float> embeddingList = floatArrayToList(embedding);
-            embeddings.add(embeddingList);
-            
+
+            // 转换嵌入向量
+            List<Float> embedding = floatArrayToList(doc.getEmbedding());
+            embeddings.add(embedding);
+
+            // 准备元数据
             Map<String, Object> metadata = new HashMap<>(doc.getMetadata());
-            if (doc.getUrl() != null) {
+            if (!Utils.isEmpty(doc.getUrl())) {
                 metadata.put("url", doc.getUrl());
             }
             metadatas.add(metadata);
-            
-            documents_content.add(doc.getContent());
+
+            // 添加内容
+            contents.add(doc.getContent());
         }
 
-        requestBody.put("ids", ids);
-        requestBody.put("embeddings", embeddings);
-        requestBody.put("metadatas", metadatas);
-        requestBody.put("documents", documents_content);
-
-        String jsonBody = ONode.stringify(requestBody);
-        
-        try {
-            HttpUtils.http(endpoint)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .bodyTxt(jsonBody)
-                    .post();
-        } catch (Exception e) {
-            throw new IOException("Failed to add documents: " + e.getMessage(), e);
-        }
+        // 添加文档到集合
+        chromaApi.addDocuments(collectionId, ids, embeddings, contents, metadatas);
     }
 
     /**
      * 删除指定ID的文档
-     *
-     * @param ids 要删除的文档ID
-     * @throws IOException 如果删除过程发生IO错误
      */
     @Override
     public void delete(String... ids) throws IOException {
@@ -203,181 +269,150 @@ public class ChromaRepository implements RepositoryStorable {
             return;
         }
 
-        String endpoint = serverUrl + "api/v1/collections/" + collectionName + "/delete";
-        
-        Map<String, Object> requestBody = new HashMap<>();
-        List<String> idsList = new ArrayList<>();
-        for (String id : ids) {
-            idsList.add(id);
+        if (collectionId == null) {
+            throw new IOException("Collection ID is not available");
         }
-        requestBody.put("ids", idsList);
 
-        String jsonBody = ONode.stringify(requestBody);
-        
-        try {
-            HttpUtils.http(endpoint)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .bodyTxt(jsonBody)
-                    .post();
-        } catch (Exception e) {
-            throw new IOException("Failed to delete documents: " + e.getMessage(), e);
+        List<String> idList = new ArrayList<>();
+        for (String id : ids) {
+            idList.add(id);
         }
+
+        // 删除文档
+        chromaApi.deleteDocuments(collectionId, idList);
     }
 
     /**
      * 检查文档是否存在
-     *
-     * @param id 文档ID
-     * @return 文档是否存在
-     * @throws IOException 如果检查过程发生IO错误
      */
     @Override
     public boolean exists(String id) throws IOException {
-        String endpoint = serverUrl + "api/v1/collections/" + collectionName + "/get";
-        
-        Map<String, Object> requestBody = new HashMap<>();
-        List<String> ids = new ArrayList<>();
-        ids.add(id);
-        requestBody.put("ids", ids);
-
-        String jsonBody = ONode.stringify(requestBody);
-        
-        try {
-            String response = HttpUtils.http(endpoint)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .bodyTxt(jsonBody)
-                    .post();
-            
-            Map<String, Object> responseMap = ONode.loadStr(response).toObject(Map.class);
-            List<String> responseIds = (List<String>) responseMap.get("ids");
-            return responseIds != null && !responseIds.isEmpty();
-        } catch (Exception e) {
+        if (Utils.isEmpty(id)) {
             return false;
         }
+
+        if (collectionId == null) {
+            throw new IOException("Collection ID is not available");
+        }
+
+        return chromaApi.documentExists(collectionId, id);
     }
 
     /**
      * 搜索文档
-     *
-     * @param condition 查询条件
-     * @return 匹配的文档列表
-     * @throws IOException 如果搜索过程发生IO错误
      */
     @Override
     public List<Document> search(QueryCondition condition) throws IOException {
-        return searchWithMetadataFilter(condition, null);
-    }
-
-    /**
-     * 搜索文档，支持元数据过滤
-     */
-    public List<Document> searchWithMetadataFilter(QueryCondition condition, Map<String, Object> metadataFilter) throws IOException {
         // 如果查询条件为空，返回空列表
         if (condition == null || condition.getQuery() == null) {
             return new ArrayList<>();
+        }
+
+        if (collectionId == null) {
+            throw new IOException("Collection ID is not available");
         }
 
         // 使用文本查询生成向量
         Document queryDoc = new Document(condition.getQuery(), new HashMap<>());
         List<Document> docList = new ArrayList<>();
         docList.add(queryDoc);
-        embeddingModel.embed(docList);
-        
-        // float[] 转换为 List<Float>
-        float[] embedding = queryDoc.getEmbedding();
-        List<Float> queryEmbedding = floatArrayToList(embedding);
 
-        // 执行向量搜索，带元数据过滤
-        List<Document> results = queryByVectorWithFilter(queryEmbedding, condition.getLimit(), metadataFilter);
-        
-        // 应用过滤器（如果有）
-        if (condition.getFilter() != null) {
-            List<Document> filteredResults = new ArrayList<>();
-            for (Document doc : results) {
-                if (condition.getFilter().test(doc)) {
-                    filteredResults.add(doc);
-                }
-            }
-            return filteredResults;
-        }
-        
-        return results;
-    }
-
-    /**
-     * 通过向量查询文档，支持元数据过滤
-     */
-    private List<Document> queryByVectorWithFilter(List<Float> queryVector, int limit, Map<String, Object> metadataFilter) throws IOException {
-        String endpoint = serverUrl + "api/v1/collections/" + collectionName + "/query";
-        
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("query_embeddings", queryVector);
-        requestBody.put("n_results", limit > 0 ? limit : 10);
-        requestBody.put("include", new String[]{"documents", "metadatas", "distances"});
-        
-        // 添加元数据过滤
-        if (metadataFilter != null && !metadataFilter.isEmpty()) {
-            requestBody.put("where", metadataFilter);
-        }
-
-        String jsonBody = ONode.stringify(requestBody);
-        
         try {
-            String response = HttpUtils.http(endpoint)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .bodyTxt(jsonBody)
-                    .post();
-            
-            return parseQueryResponse(response);
+            embeddingModel.embed(docList);
+
+            // 检查嵌入是否成功生成
+            if (queryDoc.getEmbedding() == null) {
+                throw new IOException("Failed to generate embedding for query");
+            }
+
+            // 将float[]转换为List<Float>
+            List<Float> queryVector = floatArrayToList(queryDoc.getEmbedding());
+
+            // 执行查询
+            QueryResponse response = chromaApi.queryDocuments(
+                    collectionId,
+                    queryVector,
+                    condition.getLimit(),
+                    null);
+
+            // 解析查询结果
+            List<Document> results = parseQueryResponse(response);
+
+            // 应用过滤器（如果有）
+            if (condition.getFilter() != null) {
+                List<Document> filteredResults = new ArrayList<>();
+                for (Document doc : results) {
+                    if (condition.getFilter().test(doc)) {
+                        filteredResults.add(doc);
+                    }
+                }
+                return filteredResults;
+            }
+
+            return results;
         } catch (Exception e) {
-            throw new IOException("Failed to query documents: " + e.getMessage(), e);
+            throw new IOException("Failed to search documents: " + e.getMessage(), e);
         }
     }
 
     /**
      * 解析查询响应
      *
-     * @param responseBody 响应JSON字符串
+     * @param response 查询响应对象
      * @return 文档列表
      */
-    private List<Document> parseQueryResponse(String responseBody) {
-        Map<String, Object> responseMap = ONode.loadStr(responseBody).toObject(Map.class);
+    private List<Document> parseQueryResponse(QueryResponse response) {
         List<Document> results = new ArrayList<>();
 
-        List<List<String>> ids = (List<List<String>>) responseMap.get("ids");
-        List<List<String>> documents = (List<List<String>>) responseMap.get("documents");
-        List<List<Map<String, Object>>> metadatas = (List<List<Map<String, Object>>>) responseMap.get("metadatas");
-        List<List<Double>> distances = (List<List<Double>>) responseMap.get("distances");
+        // 检查是否有错误
+        if (response.hasError()) {
+            return results;
+        }
 
-        if (ids != null && !ids.isEmpty() && !ids.get(0).isEmpty()) {
-            List<String> batchIds = ids.get(0);
-            List<String> batchDocuments = documents.get(0);
-            List<Map<String, Object>> batchMetadatas = metadatas.get(0);
-            List<Double> batchDistances = distances.get(0);
+        // 获取结果数据
+        List<List<String>> ids = response.getIds();
+        List<List<String>> documents = response.getDocuments();
+        List<List<Map<String, Object>>> metadatas = response.getMetadatas();
+        List<List<BigDecimal>> distances = response.getDistances();
+
+        // 检查结果是否为空
+        if (ids == null || ids.isEmpty()) {
+            return results;
+        }
+
+
+        // 处理每个批次的结果
+        for (int batchIndex = 0; batchIndex < ids.size(); batchIndex++) {
+            List<String> batchIds = ids.get(batchIndex);
+
+            if (batchIds.isEmpty()) {
+                continue;
+            }
+
+            List<String> batchDocuments = documents.get(batchIndex);
+            List<Map<String, Object>> batchMetadatas = metadatas.get(batchIndex);
+            List<BigDecimal> batchDistances = distances.get(batchIndex);
 
             for (int i = 0; i < batchIds.size(); i++) {
                 String id = batchIds.get(i);
                 String content = batchDocuments.get(i);
                 Map<String, Object> metadata = batchMetadatas.get(i);
-                Double distance = batchDistances.get(i);
+                BigDecimal distance = batchDistances.get(i);
 
                 // 计算相似度分数 (1 - 距离)，确保分数在0-1之间
-                double score = 1.0 - Math.min(1.0, Math.max(0.0, distance));
-                
+                double score = 1.0 - Math.min(1.0, Math.max(0.0, distance.doubleValue()));
+
                 // 添加评分到元数据
                 metadata.put("score", score);
-                
+
                 Document doc = new Document(content, metadata);
                 doc.id(id);
-                
+
                 // 如果元数据中有URL，设置到文档
                 if (metadata.containsKey("url")) {
                     doc.url((String) metadata.get("url"));
                 }
-                
+
                 results.add(doc);
             }
         }
@@ -391,15 +426,13 @@ public class ChromaRepository implements RepositoryStorable {
      * @throws IOException 如果注销过程发生IO错误
      */
     public void dropRepository() throws IOException {
-        String endpoint = serverUrl + "api/v1/collections/" + collectionName;
-        
-        try {
-            HttpUtils.http(endpoint)
-                    .header("Accept", "application/json")
-                    .delete();
-        } catch (Exception e) {
-            throw new IOException("Failed to drop collection: " + e.getMessage(), e);
+        if (collectionId == null) {
+            throw new IOException("Collection ID is not available");
         }
+
+        chromaApi.deleteCollection(collectionId);
+        initialized = false;
+        collectionId = null;
     }
 
     /**
@@ -409,7 +442,7 @@ public class ChromaRepository implements RepositoryStorable {
         if (array == null) {
             return new ArrayList<>();
         }
-        
+
         List<Float> list = new ArrayList<>(array.length);
         for (float f : array) {
             list.add(f);
@@ -418,38 +451,19 @@ public class ChromaRepository implements RepositoryStorable {
     }
 
     /**
-     * 检查Chroma服务是否可用
-     */
-    public boolean isHealthy() {
-        try {
-            String endpoint = serverUrl + "api/v1/heartbeat";
-            HttpUtils.http(endpoint).get();
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
      * 获取集合统计信息
      */
-    public Map<String, Object> getCollectionStats() throws IOException {
-        String endpoint = serverUrl + "api/v1/collections/" + collectionName;
-        
-        try {
-            String response = HttpUtils.http(endpoint)
-                    .header("Accept", "application/json")
-                    .get();
-            
-            return ONode.loadStr(response).toObject(Map.class);
-        } catch (Exception e) {
-            throw new IOException("Failed to get collection stats: " + e.getMessage(), e);
+    public CollectionResponse getCollectionStats() throws IOException {
+        if (collectionId == null) {
+            throw new IOException("Collection ID is not available");
         }
+
+        return chromaApi.getCollectionStats(collectionId);
     }
 
     /**
      * 异步批量存储文档
-     * 
+     *
      * @param documents 要存储的文档列表
      * @return 异步任务
      */
