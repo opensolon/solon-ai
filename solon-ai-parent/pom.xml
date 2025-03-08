@@ -62,6 +62,11 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>solon-ai-repo-chroma</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-repo-elasticsearch</artifactId>
                 <version>${project.version}</version>
             </dependency>

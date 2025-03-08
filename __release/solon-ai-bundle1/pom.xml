@@ -25,6 +25,7 @@
         <module>../../solon-ai-projects/solon-ai-load-pdf</module>
         <module>../../solon-ai-projects/solon-ai-load-word</module>
 
+        <module>../../solon-ai-projects/solon-ai-repo-chroma</module>
         <module>../../solon-ai-projects/solon-ai-repo-elasticsearch</module>
         <module>../../solon-ai-projects/solon-ai-repo-mariadb</module>
         <module>../../solon-ai-projects/solon-ai-repo-milvus</module>
