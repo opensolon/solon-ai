@@ -2,11 +2,7 @@ package org.noear.solon.ai.rag.repository;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
@@ -273,10 +269,7 @@ public class ChromaRepository implements RepositoryStorable {
             throw new IOException("Collection ID is not available");
         }
 
-        List<String> idList = new ArrayList<>();
-        for (String id : ids) {
-            idList.add(id);
-        }
+        List<String> idList = new ArrayList<>(Arrays.asList(ids));
 
         // 删除文档
         chromaApi.deleteDocuments(collectionId, idList);
