@@ -43,7 +43,7 @@ public interface ChatDialect extends AiModelDialect {
      * @param config  聊天配置
      * @param options 聊天选项
      */
-    String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean stream);
+    String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream);
 
     /**
      * 分析响应数据
