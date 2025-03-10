@@ -218,7 +218,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return toolCalls;
     }
 
-    protected List<AssistantMessage> parseAssistantMessage(boolean isStream, ChatResponseDefault resp, ONode oMessage) {
+    protected List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
         List<AssistantMessage> messageList = new ArrayList<>();
 
         String content = oMessage.get("content").getRawString();
@@ -235,7 +235,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             //有思考专属内容的协议
             String reasoning_content = oMessage.get("reasoning_content").getRawString();
 
-            if (isStream) {
+            if (resp.isStream()) {
                 //如果是流返回（可能要拆成多条流消息）
                 if (content == null) {
                     if (resp.reasoning == false) {
@@ -267,7 +267,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
         } else {
             //分析 think 状态
-            if (isStream) {
+            if (resp.isStream()) {
                 //如果是流返回
                 if (content.startsWith("<think>")) {
                     resp.reasoning = true;

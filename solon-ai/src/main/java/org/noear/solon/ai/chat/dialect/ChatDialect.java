@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.lang.Preview;
 
 import java.util.List;
 
@@ -29,6 +30,7 @@ import java.util.List;
  * @author noear
  * @since 3.1
  */
+@Preview("3.1")
 public interface ChatDialect extends AiModelDialect {
     /**
      * 匹配检测
@@ -50,5 +52,5 @@ public interface ChatDialect extends AiModelDialect {
      *
      * @param config 聊天配置
      */
-    boolean parseResponseJson(ChatConfig config, boolean isStream, ChatResponseDefault resp, String respJson);
+    boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String respJson);
 }

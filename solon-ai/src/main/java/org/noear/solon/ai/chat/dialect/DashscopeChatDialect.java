@@ -71,7 +71,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
 
     @Override
-    public boolean parseResponseJson(ChatConfig config, boolean isStream, ChatResponseDefault resp, String json) {
+    public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         if (json.startsWith("data:")) {
             json = json.substring(6);
 
@@ -104,9 +104,9 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
                 List<AssistantMessage> messageList;
                 if (oChoice1.contains("delta")) {  //object=chat.completion.chunk
-                    messageList = parseAssistantMessage(isStream, resp, oChoice1.get("delta"));
+                    messageList = parseAssistantMessage(resp, oChoice1.get("delta"));
                 } else { //object=chat.completion
-                    messageList = parseAssistantMessage(isStream, resp, oChoice1.get("message"));
+                    messageList = parseAssistantMessage(resp, oChoice1.get("message"));
                 }
 
                 for (AssistantMessage msg1 : messageList) {
