@@ -108,8 +108,8 @@ public class ChatRequestDefault implements ChatRequest {
             log.trace("ai-response: {}", respJson);
         }
 
-        ChatResponseDefault resp = new ChatResponseDefault();
-        dialect.parseResponseJson(config, false, resp, respJson);
+        ChatResponseDefault resp = new ChatResponseDefault(false);
+        dialect.parseResponseJson(config, resp, respJson);
 
         if (resp.getError() != null) {
             throw resp.getError();
@@ -158,7 +158,7 @@ public class ChatRequestDefault implements ChatRequest {
     }
 
     private void parseResp(HttpResponse httpResp, Subscriber<? super ChatResponse> subscriber) throws IOException {
-        ChatResponseDefault resp = new ChatResponseDefault();
+        ChatResponseDefault resp = new ChatResponseDefault(true);
 
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(httpResp.body()))) {
             subscriber.onSubscribe(new SimpleSubscription().onRequest((subscription, l) -> {
@@ -183,7 +183,7 @@ public class ChatRequestDefault implements ChatRequest {
                         }
 
                         resp.reset();
-                        if (dialect.parseResponseJson(config, true, resp, respJson)) {
+                        if (dialect.parseResponseJson(config, resp, respJson)) {
                             if (resp.getError() != null) {
                                 subscriber.onError(resp.getError());
                                 return;
@@ -210,9 +210,10 @@ public class ChatRequestDefault implements ChatRequest {
                                             resp.reset();
                                             resp.addChoice(choice);
                                             subscriber.onNext(resp);
+                                            publishResponse(subscriber, resp, choice);
                                         }
                                     } else {
-                                        subscriber.onNext(resp);
+                                        publishResponse(subscriber,resp, resp.getChoices().get(0));
                                     }
                                 }
                             }
@@ -230,6 +231,11 @@ public class ChatRequestDefault implements ChatRequest {
                 }
             }));
         }
+    }
+
+    private void publishResponse(Subscriber<? super ChatResponse> subscriber, ChatResponseDefault resp, ChatChoice choice) {
+        resp.aggregationMessageContent.append(choice.getMessage().getContent());
+        subscriber.onNext(resp);
     }
 
     private void buildToolMessage(AssistantMessage acm) throws ChatException {
