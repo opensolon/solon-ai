@@ -16,6 +16,7 @@
 package org.noear.solon.expr.query;
 
 import java.util.Arrays;
+import java.util.function.BiConsumer;
 
 /**
  * 表达式构建器
@@ -60,5 +61,27 @@ public class ExprBuilder {
 
     public ComparisonNode in(String field, Object... values) {
         return new ComparisonNode(ComparisonOp.in, new FieldNode(field), new ValueNode(Arrays.asList(values)));
+    }
+
+    /// ////////////////
+
+    static void visit(ExprNode node, int level, BiConsumer<ExprNode, Integer> visitor) {
+        if (node instanceof FieldNode) {
+            visitor.accept(node, level);
+        } else if (node instanceof ValueNode) {
+            visitor.accept(node, level);
+        } else if (node instanceof ComparisonNode) {
+            ComparisonNode compNode = (ComparisonNode) node;
+            visitor.accept(node, level);
+            visit(compNode.getField(), level + 1, visitor);
+            visit(compNode.getValue(), level + 1, visitor);
+        } else if (node instanceof LogicalNode) {
+            LogicalNode opNode = (LogicalNode) node;
+            visitor.accept(node, level);
+            visit(opNode.getLeft(), level + 1, visitor);
+            if (opNode.getRight() != null) {
+                visit(opNode.getRight(), level + 1, visitor);
+            }
+        }
     }
 }
