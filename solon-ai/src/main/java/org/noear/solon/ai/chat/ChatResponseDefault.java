@@ -77,13 +77,20 @@ public class ChatResponseDefault implements ChatResponse {
     }
 
     /**
+     * 最后一个选择
+     */
+    public ChatChoice lastChoice() {
+        return choices.get(choices.size() - 1);
+    }
+
+    /**
      * 获取消息
      */
     @Override
     public AssistantMessage getMessage() {
         if (hasChoices()) {
             //取最后条消息
-            return choices.get(choices.size() - 1).getMessage();
+            return lastChoice().getMessage();
         } else {
             return null;
         }
@@ -96,9 +103,9 @@ public class ChatResponseDefault implements ChatResponse {
     public AssistantMessage getAggregationMessage() {
         if (hasChoices()) {
             if (stream) {
-                return new AssistantMessage(aggregationMessageContent.toString(), false, null, null);
+                return new AssistantMessage(aggregationMessageContent.toString(), lastChoice().getMessage().isThinking(), null, null);
             } else {
-                return choices.get(choices.size() - 1).getMessage();
+                return lastChoice().getMessage();
             }
         } else {
             return null;
@@ -123,7 +130,7 @@ public class ChatResponseDefault implements ChatResponse {
 
     /**
      * 是否为流响应
-     * */
+     */
     @Override
     public boolean isStream() {
         return stream;

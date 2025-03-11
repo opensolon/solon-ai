@@ -47,6 +47,11 @@ public interface ChatResponse {
     boolean hasChoices();
 
     /**
+     * 最后一个选择
+     */
+    ChatChoice lastChoice();
+
+    /**
      * 获取所有选择
      */
     List<ChatChoice> getChoices();
