@@ -25,4 +25,21 @@ public enum LogicalOp {
     and,
     or,
     not,
+    ;
+
+    /**
+     * 解析
+     */
+    public static LogicalOp parse(String op) {
+        switch (op) {
+            case "and":
+                return and;
+            case "or":
+                return or;
+            case "not":
+                return not;
+            default:
+                throw new IllegalArgumentException("Invalid comparison operator: " + op);
+        }
+    }
 }

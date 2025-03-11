@@ -30,4 +30,31 @@ public enum ComparisonOp {
     neq, // !=
     in,  // in
     nin, // not in
+    ;
+
+    /**
+     * 解析
+     */
+    public static ComparisonOp parse(String op) {
+        switch (op) {
+            case "<":
+                return lt;
+            case "<=":
+                return lte;
+            case ">":
+                return gt;
+            case ">=":
+                return gte;
+            case "==":
+                return eq;
+            case "!=":
+                return neq;
+            case "in":
+                return in;
+            case "not in":
+                return nin;
+            default:
+                throw new IllegalArgumentException("Invalid comparison operator: " + op);
+        }
+    }
 }

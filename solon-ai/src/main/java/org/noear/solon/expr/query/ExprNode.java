@@ -16,30 +16,16 @@
 package org.noear.solon.expr.query;
 
 /**
- * 条件树
+ * 表达式节点
  *
  * @author noear
  * @since 3.1
  */
-public class ConditionTree {
-    /**
-     * 评估
-     */
-    public static boolean eval(String expr, QueryContext context) {
-        return parse(expr).evaluate(context);
-    }
-
-    /**
-     * 解析
-     */
-    private static ConditionNode parse(String expr) {
-        return null;
-    }
-
+public interface ExprNode {
     /**
      * 打印
      */
-    public static void printTree(ConditionNode node, String prefix) {
+    static void printTree(ExprNode node, String prefix) {
         if (node instanceof FieldNode) {
             System.out.println(prefix + "Field: " + ((FieldNode) node).getFieldName());
         } else if (node instanceof ValueNode) {

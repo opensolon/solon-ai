@@ -23,7 +23,7 @@ import java.util.Collection;
  * @author noear
  * @since 3.1
  */
-public class ValueNode implements ConditionNode {
+public class ValueNode implements ExprNode {
     private Object value;
 
     public ValueNode(Object value) {
@@ -42,10 +42,5 @@ public class ValueNode implements ConditionNode {
      */
     public boolean isCollection() {
         return value instanceof Collection;
-    }
-
-    @Override
-    public boolean evaluate(QueryContext context) {
-        throw new UnsupportedOperationException("ValueNode cannot be evaluated directly");
     }
 }

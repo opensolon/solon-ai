@@ -21,7 +21,7 @@ package org.noear.solon.expr.query;
  * @author noear
  * @since 3.1
  */
-public class FieldNode implements ConditionNode {
+public class FieldNode implements ExprNode {
     private String fieldName;
 
     public FieldNode(String fieldName) {
@@ -30,13 +30,8 @@ public class FieldNode implements ConditionNode {
 
     /**
      * 获取字段名
-     * */
+     */
     public String getFieldName() {
         return fieldName;
-    }
-
-    @Override
-    public boolean evaluate(QueryContext context) {
-        throw new UnsupportedOperationException("FieldNode cannot be evaluated directly");
     }
 }
