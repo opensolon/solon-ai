@@ -15,6 +15,8 @@
  */
 package org.noear.solon.expr.query;
 
+import java.util.function.BiConsumer;
+
 /**
  * 表达式节点
  *
@@ -22,26 +24,7 @@ package org.noear.solon.expr.query;
  * @since 3.1
  */
 public interface ExprNode {
-    /**
-     * 打印
-     */
-    static void printTree(ExprNode node, String prefix) {
-        if (node instanceof FieldNode) {
-            System.out.println(prefix + "Field: " + ((FieldNode) node).getFieldName());
-        } else if (node instanceof ValueNode) {
-            System.out.println(prefix + "Value: " + ((ValueNode) node).getValue());
-        } else if (node instanceof ComparisonNode) {
-            ComparisonNode compNode = (ComparisonNode) node;
-            System.out.println(prefix + "Comparison: " + compNode.getOperator());
-            printTree(compNode.getField(), prefix + "  ");
-            printTree(compNode.getValue(), prefix + "  ");
-        } else if (node instanceof LogicalNode) {
-            LogicalNode opNode = (LogicalNode) node;
-            System.out.println(prefix + "Logical: " + opNode.getOperator());
-            printTree(opNode.getLeft(), prefix + "  ");
-            if (opNode.getRight() != null) {
-                printTree(opNode.getRight(), prefix + "  ");
-            }
-        }
+    default void visit(BiConsumer<ExprNode, Integer> visitor) {
+        ExprBuilder.visit(this, 0, visitor);
     }
 }

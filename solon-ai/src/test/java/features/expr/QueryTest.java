@@ -40,7 +40,7 @@ public class QueryTest {
         System.out.println("Result: " + result);  // 输出: Result: true
 
 
-        ExprNode.printTree(orNode, "");
+        printTree(orNode);
     }
 
     @Test
@@ -64,6 +64,34 @@ public class QueryTest {
         System.out.println("Result: " + result);  // 输出: Result: true
 
 
-        ExprNode.printTree(conditionNode, "");
+        printTree(conditionNode);
+    }
+
+    /**
+     * 打印
+     */
+    static void printTree(ExprNode n1) {
+        n1.visit((node, level) -> {
+            if (node instanceof FieldNode) {
+                System.out.println(prefix(level) + "Field: " + ((FieldNode) node).getFieldName());
+            } else if (node instanceof ValueNode) {
+                System.out.println(prefix(level) + "Value: " + ((ValueNode) node).getValue());
+            } else if (node instanceof ComparisonNode) {
+                ComparisonNode compNode = (ComparisonNode) node;
+                System.out.println(prefix(level) + "Comparison: " + compNode.getOperator());
+            } else if (node instanceof LogicalNode) {
+                LogicalNode opNode = (LogicalNode) node;
+                System.out.println(prefix(level) + "Logical: " + opNode.getOperator());
+            }
+        });
+    }
+
+    static String prefix(int n) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            sb.append("  ");
+        }
+
+        return sb.toString();
     }
 }
