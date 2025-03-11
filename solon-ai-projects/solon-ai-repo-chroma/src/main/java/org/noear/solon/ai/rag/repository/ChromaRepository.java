@@ -9,6 +9,7 @@ import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.QueryCondition;
+import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -329,20 +330,10 @@ public class ChromaRepository implements RepositoryStorable {
                     null);
 
             // 解析查询结果
-            List<Document> results = parseQueryResponse(response);
+            List<Document> result = parseQueryResponse(response);
 
-            // 应用过滤器（如果有）
-            if (condition.getFilter() != null) {
-                List<Document> filteredResults = new ArrayList<>();
-                for (Document doc : results) {
-                    if (condition.getFilter().test(doc)) {
-                        filteredResults.add(doc);
-                    }
-                }
-                return filteredResults;
-            }
-
-            return results;
+            // 再次过滤和排序
+            return SimilarityUtil.filter(condition, result.stream());
         } catch (Exception e) {
             throw new IOException("Failed to search documents: " + e.getMessage(), e);
         }
