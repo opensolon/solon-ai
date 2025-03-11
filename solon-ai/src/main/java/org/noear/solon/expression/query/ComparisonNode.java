@@ -13,7 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.query;
+package org.noear.solon.expression.query;
+
+import org.noear.solon.expression.ExpressionContext;
 
 /**
  * 比较运算节点（如 >, <, ==）
@@ -54,7 +56,7 @@ public class ComparisonNode implements ConditionNode {
     }
 
     @Override
-    public boolean evaluate(QueryContext context) {
+    public Boolean evaluate(ExpressionContext context) {
         Object fieldValue = context.getValue(field.getFieldName());
         Object conditionValue = value.getValue();
 

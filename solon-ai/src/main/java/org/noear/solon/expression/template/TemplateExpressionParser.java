@@ -13,25 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.query;
+package org.noear.solon.expression.template;
+
+import org.noear.solon.expression.Expression;
+import org.noear.solon.expression.ExpressionParser;
 
 /**
- * 字段节点（表示查询中的字段）
+ * 模板表达式解析器
  *
  * @author noear
  * @since 3.1
  */
-public class FieldNode implements ExpressionNode {
-    private String fieldName;
-
-    public FieldNode(String fieldName) {
-        this.fieldName = fieldName;
-    }
-
-    /**
-     * 获取字段名
-     */
-    public String getFieldName() {
-        return fieldName;
+public class TemplateExpressionParser implements ExpressionParser {
+    @Override
+    public Expression parse(String expr) {
+        return new TemplateExpression(expr);
     }
 }

@@ -13,43 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.query;
+package org.noear.solon.expression;
 
 /**
- * 逻辑操作符
+ * 表达式
  *
  * @author noear
  * @since 3.1
  */
-public enum LogicalOp {
-    and("&&"),
-    or("||"),
-    ;
-
-    LogicalOp(String code) {
-        this.code = code;
-    }
-
-    private final String code;
-
+public interface Expression<T> extends ExpressionNode {
     /**
-     * 代号
+     * 执行
      */
-    public String getCode() {
-        return code;
-    }
-
-    /**
-     * 解析
-     */
-    public static LogicalOp parse(String op) {
-        switch (op) {
-            case "and":
-                return and;
-            case "or":
-                return or;
-            default:
-                throw new IllegalArgumentException("Invalid comparison operator: " + op);
-        }
-    }
+    T evaluate(ExpressionContext context);
 }

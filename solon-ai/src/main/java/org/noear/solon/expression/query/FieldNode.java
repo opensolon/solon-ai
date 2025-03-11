@@ -13,34 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.query;
+package org.noear.solon.expression.query;
 
-import java.util.Collection;
+import org.noear.solon.expression.ExpressionNode;
 
 /**
- * 值节点（表示查询中的值）
+ * 字段节点（表示查询中的字段）
  *
  * @author noear
  * @since 3.1
  */
-public class ValueNode implements ExpressionNode {
-    private Object value;
+public class FieldNode implements ExpressionNode {
+    private String fieldName;
 
-    public ValueNode(Object value) {
-        this.value = value;
+    public FieldNode(String fieldName) {
+        this.fieldName = fieldName;
     }
 
     /**
-     * 获取值
+     * 获取字段名
      */
-    public Object getValue() {
-        return value;
-    }
-
-    /**
-     * 是否为集合
-     */
-    public boolean isCollection() {
-        return value instanceof Collection;
+    public String getFieldName() {
+        return fieldName;
     }
 }

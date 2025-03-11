@@ -13,17 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.query;
+package org.noear.solon.expression;
 
 /**
- * 条件节点
+ *  表达式上下文
  *
  * @author noear
  * @since 3.1
  */
-public interface ConditionNode extends ExpressionNode {
-    /*
-     * 评估
-     * */
-    boolean evaluate(QueryContext context);
+public interface ExpressionContext {
+    /**
+     * 是否有值
+     */
+    boolean hasValue(String key);
+
+    /**
+     * 获取值
+     */
+    Object getValue(String key);
 }

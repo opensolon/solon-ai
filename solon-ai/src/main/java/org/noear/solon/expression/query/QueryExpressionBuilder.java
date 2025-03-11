@@ -13,7 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.query;
+package org.noear.solon.expression.query;
+
+import org.noear.solon.expression.ExpressionNode;
 
 import java.util.Arrays;
 import java.util.function.BiConsumer;
@@ -24,7 +26,7 @@ import java.util.function.BiConsumer;
  * @author noear
  * @since 3.1
  */
-public class ExpressionBuilder {
+public class QueryExpressionBuilder {
     public LogicalNode and(ConditionNode left, ConditionNode right) {
         return new LogicalNode(LogicalOp.and, left, right);
     }
@@ -65,12 +67,12 @@ public class ExpressionBuilder {
 
     /// ////////////////
 
+    public static void visit(ConditionNode node, BiConsumer<ExpressionNode, Integer> visitor) {
+        visit(node, 0, visitor);
+    }
+
     static void visit(ExpressionNode node, int level, BiConsumer<ExpressionNode, Integer> visitor) {
-        if (node instanceof FieldNode) {
-            visitor.accept(node, level);
-        } else if (node instanceof ValueNode) {
-            visitor.accept(node, level);
-        } else if (node instanceof ComparisonNode) {
+        if (node instanceof ComparisonNode) {
             ComparisonNode compNode = (ComparisonNode) node;
             visitor.accept(node, level);
             visit(compNode.getField(), level + 1, visitor);
@@ -82,6 +84,8 @@ public class ExpressionBuilder {
             if (opNode.getRight() != null) {
                 visit(opNode.getRight(), level + 1, visitor);
             }
+        } else {
+            visitor.accept(node, level);
         }
     }
 }

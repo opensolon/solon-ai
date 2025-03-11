@@ -13,18 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.query;
+package org.noear.solon.expression.script;
 
-import java.util.function.BiConsumer;
+import org.noear.solon.expression.Expression;
+import org.noear.solon.expression.ExpressionParser;
 
 /**
- * 表达式节点
- *
  * @author noear
  * @since 3.1
  */
-public interface ExpressionNode {
-    default void visit(BiConsumer<ExpressionNode, Integer> visitor) {
-        ExpressionBuilder.visit(this, 0, visitor);
+public class ScriptExpressionParser implements ExpressionParser {
+    @Override
+    public Expression parse(String expr) {
+        return null;
     }
 }

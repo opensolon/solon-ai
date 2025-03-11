@@ -13,15 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.query;
+package org.noear.solon.expression.template;
+
+import org.noear.solon.core.util.TmplUtil;
+import org.noear.solon.expression.Expression;
+import org.noear.solon.expression.ExpressionContext;
 
 /**
+ * 模板表达式
+ *
  * @author noear
  * @since 3.1
  */
-public interface QueryContext {
-    /**
-     * 获取值
-     */
-    Object getValue(String name);
+public class TemplateExpression implements Expression<String> {
+    private String expr;
+
+    public TemplateExpression(String expr) {
+        this.expr = expr;
+    }
+
+    @Override
+    public String evaluate(ExpressionContext context) {
+        return TmplUtil.parse(expr, context::hasValue, context::getValue);
+    }
 }

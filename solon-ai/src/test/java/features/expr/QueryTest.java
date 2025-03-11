@@ -1,7 +1,7 @@
 package features.expr;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.expr.query.*;
+import org.noear.solon.expression.query.*;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -52,7 +52,7 @@ public class QueryTest {
         context.put("isMarried", true);
 
         // 构建条件查询表达式树: (age > 18 AND salary < 5000) OR (NOT isMarried)
-        ExpressionBuilder cb = new ExpressionBuilder();
+        QueryExpressionBuilder cb = new QueryExpressionBuilder();
 
         ConditionNode conditionNode = cb.or(
                 cb.and(cb.gt("age", 18), cb.lt("salary", 5000)),
@@ -70,8 +70,8 @@ public class QueryTest {
     /**
      * 打印
      */
-    static void printTree(ExpressionNode n1) {
-        n1.visit((node, level) -> {
+    static void printTree(ConditionNode n1) {
+        QueryExpressionBuilder.visit(n1, (node, level) -> {
             if (node instanceof FieldNode) {
                 System.out.println(prefix(level) + "Field: " + ((FieldNode) node).getFieldName());
             } else if (node instanceof ValueNode) {
