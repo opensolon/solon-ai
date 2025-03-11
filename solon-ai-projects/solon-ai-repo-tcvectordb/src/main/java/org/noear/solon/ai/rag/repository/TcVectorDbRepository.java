@@ -612,8 +612,8 @@ public class TcVectorDbRepository implements RepositoryStorable {
                     .withLimit(condition.getLimit() > 0 ? condition.getLimit() : 10);
 
             // 添加过滤表达式支持
-            if (Utils.isNotEmpty(condition.getFilterExpression())) {
-                searchParamBuilder.withFilter(condition.getFilterExpression());
+            if (Utils.isNotEmpty(condition.getNativeFilter())) {
+                searchParamBuilder.withFilter(condition.getNativeFilter());
             }
 
             // 执行搜索

@@ -31,7 +31,7 @@ public class QueryCondition {
     private int limit = 4;
     private double similarityThreshold = 0.4D;
     private Predicate<Document> filter = (doc) -> true;
-    private String filterExpression;
+    private String nativeFilter;
 
     public QueryCondition(String query) {
         this.query = query;
@@ -68,17 +68,17 @@ public class QueryCondition {
     }
 
     /**
-     * 获取过滤器
+     * 获取过滤器（用于查询结果的二次过滤）
      */
     public Predicate<Document> getFilter() {
         return filter;
     }
 
     /**
-     * 获取过滤器表达式
+     * 获取原生过滤器（用于库原生查询过滤）
      */
-    public String getFilterExpression() {
-        return filterExpression;
+    public String getNativeFilter() {
+        return nativeFilter;
     }
 
     /// /////////////////
@@ -100,10 +100,18 @@ public class QueryCondition {
     }
 
     /**
-     * 配置过滤器
+     * 配置过滤器（用于查询结果的二次过滤）
      */
     public QueryCondition filter(Predicate<Document> filter) {
         this.filter = filter;
+        return this;
+    }
+
+    /*
+     * 配置原生过滤器（用于库原生查询过滤）
+     */
+    public QueryCondition nativeFilter(String nativeFilter) {
+        this.nativeFilter = nativeFilter;
         return this;
     }
 
@@ -112,14 +120,6 @@ public class QueryCondition {
      */
     public QueryCondition similarityThreshold(double similarityThreshold) {
         this.similarityThreshold = similarityThreshold;
-        return this;
-    }
-
-    /*
-     * 配置过滤器表达式
-     */
-    public QueryCondition filterExpression(String filterExpression) {
-        this.filterExpression = filterExpression;
         return this;
     }
 }

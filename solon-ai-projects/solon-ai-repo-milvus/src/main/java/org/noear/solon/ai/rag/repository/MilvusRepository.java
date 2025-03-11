@@ -45,7 +45,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -211,8 +210,8 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                 .topK(condition.getLimit())
                 .outputFields(Arrays.asList("content", "metadata"));
 
-        if (Utils.isNotEmpty(condition.getFilterExpression())) {
-            builder.filter(condition.getFilterExpression());
+        if (Utils.isNotEmpty(condition.getNativeFilter())) {
+            builder.filter(condition.getNativeFilter());
         }
 
         SearchReq searchReq = builder.build();
