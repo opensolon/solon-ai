@@ -1,12 +1,9 @@
 package features.expr;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.expression.ExpressionContext;
 import org.noear.solon.expression.ExpressionContextDefault;
+import org.noear.solon.expression.ExpressionNode;
 import org.noear.solon.expression.query.*;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * @author noear 2025/3/11 created
@@ -45,47 +42,31 @@ public class QueryTest {
         printTree(orNode);
     }
 
-    @Test
-    public void case2() {
-        // 设置查询上下文
-        ExpressionContextDefault context = new ExpressionContextDefault();
-        context.put("age", 25);
-        context.put("salary", 4000);
-        context.put("isMarried", true);
-
-        // 构建条件查询表达式树: (age > 18 AND salary < 5000) OR (NOT isMarried)
-        QueryExpressionBuilder cb = new QueryExpressionBuilder();
-
-        ConditionNode conditionNode = cb.or(
-                cb.and(cb.gt("age", 18), cb.lt("salary", 5000)),
-                cb.eq("isMarried", "false")
-        );
-
-        // 计算条件查询表达式的值
-        boolean result = conditionNode.evaluate(context);
-        System.out.println("Result: " + result);  // 输出: Result: true
-
-
-        printTree(conditionNode);
-    }
-
     /**
      * 打印
      */
-    static void printTree(ConditionNode n1) {
-        QueryExpressionBuilder.visit(n1, (node, level) -> {
-            if (node instanceof FieldNode) {
-                System.out.println(prefix(level) + "Field: " + ((FieldNode) node).getFieldName());
-            } else if (node instanceof ValueNode) {
-                System.out.println(prefix(level) + "Value: " + ((ValueNode) node).getValue());
-            } else if (node instanceof ComparisonNode) {
-                ComparisonNode compNode = (ComparisonNode) node;
-                System.out.println(prefix(level) + "Comparison: " + compNode.getOperator());
-            } else if (node instanceof LogicalNode) {
-                LogicalNode opNode = (LogicalNode) node;
-                System.out.println(prefix(level) + "Logical: " + opNode.getOperator());
-            }
-        });
+    static void printTree(ConditionNode node) {
+        printTree(node, 0);
+    }
+
+    static void printTree(ExpressionNode node, int level) {
+        if (node instanceof FieldNode) {
+            System.out.println(prefix(level) + "Field: " + ((FieldNode) node).getFieldName());
+        } else if (node instanceof ValueNode) {
+            System.out.println(prefix(level) + "Value: " + ((ValueNode) node).getValue());
+        } else if (node instanceof ComparisonNode) {
+            ComparisonNode compNode = (ComparisonNode) node;
+            System.out.println(prefix(level) + "Comparison: " + compNode.getOperator());
+
+            printTree(compNode.getField(), level + 1);
+            printTree(compNode.getValue(), level + 1);
+        } else if (node instanceof LogicalNode) {
+            LogicalNode opNode = (LogicalNode) node;
+            System.out.println(prefix(level) + "Logical: " + opNode.getOperator());
+
+            printTree(opNode.getLeft(), level + 1);
+            printTree(opNode.getRight(), level + 1);
+        }
     }
 
     static String prefix(int n) {

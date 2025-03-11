@@ -15,10 +15,7 @@
  */
 package org.noear.solon.expression.query;
 
-import org.noear.solon.expression.ExpressionNode;
-
 import java.util.Arrays;
-import java.util.function.BiConsumer;
 
 /**
  * 表达式构建器
@@ -63,29 +60,5 @@ public class QueryExpressionBuilder {
 
     public ComparisonNode in(String field, Object... values) {
         return new ComparisonNode(ComparisonOp.in, new FieldNode(field), new ValueNode(Arrays.asList(values)));
-    }
-
-    /// ////////////////
-
-    public static void visit(ConditionNode node, BiConsumer<ExpressionNode, Integer> visitor) {
-        visit(node, 0, visitor);
-    }
-
-    static void visit(ExpressionNode node, int level, BiConsumer<ExpressionNode, Integer> visitor) {
-        if (node instanceof ComparisonNode) {
-            ComparisonNode compNode = (ComparisonNode) node;
-            visitor.accept(node, level);
-            visit(compNode.getField(), level + 1, visitor);
-            visit(compNode.getValue(), level + 1, visitor);
-        } else if (node instanceof LogicalNode) {
-            LogicalNode opNode = (LogicalNode) node;
-            visitor.accept(node, level);
-            visit(opNode.getLeft(), level + 1, visitor);
-            if (opNode.getRight() != null) {
-                visit(opNode.getRight(), level + 1, visitor);
-            }
-        } else {
-            visitor.accept(node, level);
-        }
     }
 }
