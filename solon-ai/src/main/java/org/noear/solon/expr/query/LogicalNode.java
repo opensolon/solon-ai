@@ -22,9 +22,9 @@ package org.noear.solon.expr.query;
  * @since 3.1
  */
 public class LogicalNode implements ConditionNode {
-    private LogicalOp operator; // 逻辑运算符，如 "AND", "OR", "NOT"
+    private LogicalOp operator; // 逻辑运算符，如 "AND", "OR"
     private ConditionNode left;  // 左子节点
-    private ConditionNode right; // 右子节点（对于 NOT 操作符，右子节点可以为 null）
+    private ConditionNode right; // 右子节点
 
     /**
      * 获取操作符
@@ -60,8 +60,6 @@ public class LogicalNode implements ConditionNode {
                 return left.evaluate(context) && right.evaluate(context);
             case or:
                 return left.evaluate(context) || right.evaluate(context);
-            case not:
-                return !left.evaluate(context); // NOT 操作符只需要左子节点
             default:
                 throw new IllegalArgumentException("Unknown operator: " + operator);
         }

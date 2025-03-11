@@ -22,15 +22,28 @@ package org.noear.solon.expr.query;
  * @since 3.1
  */
 public enum ComparisonOp {
-    lt,  // <
-    lte, // <=
-    gt,  // >
-    gte, // >=
-    eq,  // ==
-    neq, // !=
-    in,  // in
-    nin, // not in
+    lt("<"),  // <
+    lte("<="), // <=
+    gt(">"),  // >
+    gte(">="), // >=
+    eq("=="),  // ==
+    neq("!="), // !=
+    in("in"),  // in
+    nin("not in"), // not in
     ;
+
+    ComparisonOp(String code) {
+        this.code = code;
+    }
+
+    private final String code;
+
+    /**
+     * 代号
+     */
+    public String getCode() {
+        return code;
+    }
 
     /**
      * 解析

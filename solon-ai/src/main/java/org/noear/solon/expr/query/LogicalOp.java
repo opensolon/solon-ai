@@ -22,10 +22,22 @@ package org.noear.solon.expr.query;
  * @since 3.1
  */
 public enum LogicalOp {
-    and,
-    or,
-    not,
+    and("&&"),
+    or("||"),
     ;
+
+    LogicalOp(String code) {
+        this.code = code;
+    }
+
+    private final String code;
+
+    /**
+     * 代号
+     */
+    public String getCode() {
+        return code;
+    }
 
     /**
      * 解析
@@ -36,8 +48,6 @@ public enum LogicalOp {
                 return and;
             case "or":
                 return or;
-            case "not":
-                return not;
             default:
                 throw new IllegalArgumentException("Invalid comparison operator: " + op);
         }

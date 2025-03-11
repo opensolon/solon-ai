@@ -29,12 +29,11 @@ public class QueryTest {
 
         LogicalNode andNode = new LogicalNode(LogicalOp.and, ageComparison, salaryComparison);
 
-        FieldNode isMarriedField = new FieldNode("isMarried");
-        ValueNode isMarriedValue = new ValueNode(true);
-        ComparisonNode isMarriedComparison = new ComparisonNode(ComparisonOp.eq, isMarriedField, isMarriedValue);
-        LogicalNode notNode = new LogicalNode(LogicalOp.not, isMarriedComparison, null);
+        FieldNode notMarriedField = new FieldNode("isMarried");
+        ValueNode notMarriedValue = new ValueNode(false);
+        ComparisonNode notMarriedComparison = new ComparisonNode(ComparisonOp.eq, notMarriedField, notMarriedValue);
 
-        LogicalNode orNode = new LogicalNode(LogicalOp.or, andNode, notNode);
+        LogicalNode orNode = new LogicalNode(LogicalOp.or, andNode, notMarriedComparison);
 
         // 计算条件查询表达式的值
         boolean result = orNode.evaluate(context::get);
@@ -57,7 +56,7 @@ public class QueryTest {
 
         ConditionNode conditionNode = cb.or(
                 cb.and(cb.gt("age", 18), cb.lt("salary", 5000)),
-                cb.not("isMarried")
+                cb.eq("isMarried", "false")
         );
 
         // 计算条件查询表达式的值

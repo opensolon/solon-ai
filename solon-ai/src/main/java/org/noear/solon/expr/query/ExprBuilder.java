@@ -32,14 +32,6 @@ public class ExprBuilder {
         return new LogicalNode(LogicalOp.or, left, right);
     }
 
-    public LogicalNode not(ConditionNode left) {
-        return new LogicalNode(LogicalOp.not, left, null);
-    }
-
-    public LogicalNode not(String field) {
-        return new LogicalNode(LogicalOp.not, eq(field,true), null);
-    }
-
     /// /////////
 
     public ComparisonNode lt(String field, Number value) {
