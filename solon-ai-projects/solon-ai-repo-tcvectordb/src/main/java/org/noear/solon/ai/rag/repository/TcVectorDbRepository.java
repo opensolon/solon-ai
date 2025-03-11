@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * @since 3.1
  */
 @Preview("3.1")
-public class VectorDBRepository implements RepositoryStorable {
+public class TcVectorDbRepository implements RepositoryStorable {
 
     /**
      * 文本字段名
@@ -174,8 +174,8 @@ public class VectorDBRepository implements RepositoryStorable {
      * @param databaseName 数据库名称
      * @param collectionName 集合名称
      */
-    public VectorDBRepository(String embeddingModelName, String url, String username, String key,
-                              String databaseName, String collectionName) {
+    public TcVectorDbRepository(String embeddingModelName, String url, String username, String key,
+                                String databaseName, String collectionName) {
         this(new Builder(embeddingModelName, url, username, key, databaseName, collectionName));
     }
 
@@ -184,7 +184,7 @@ public class VectorDBRepository implements RepositoryStorable {
      *
      * @param builder 构建器
      */
-    private VectorDBRepository(Builder builder) {
+    private TcVectorDbRepository(Builder builder) {
         // 验证必要参数
         if (builder.embeddingModel == null) {
             throw new IllegalArgumentException("EmbeddingModel must not be null");
@@ -405,8 +405,8 @@ public class VectorDBRepository implements RepositoryStorable {
          *
          * @return VectorDBRepository 实例
          */
-        public VectorDBRepository build() {
-            return new VectorDBRepository(this);
+        public TcVectorDbRepository build() {
+            return new TcVectorDbRepository(this);
         }
     }
 

@@ -33,7 +33,7 @@
         <module>../../solon-ai-projects/solon-ai-repo-opensearch</module>
         <module>../../solon-ai-projects/solon-ai-repo-pgvector</module>
         <module>../../solon-ai-projects/solon-ai-repo-redis</module>
-        <module>../../solon-ai-projects/solon-ai-repo-vectordb</module>
+        <module>../../solon-ai-projects/solon-ai-repo-tcvectordb</module>
         <module>../../solon-ai-projects/solon-ai-repo-vectorex</module>
     </modules>
 </project>

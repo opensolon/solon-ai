@@ -3,7 +3,7 @@ package features.ai.repo.vectordb;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.rag.Document;
-import org.noear.solon.ai.rag.repository.VectorDBRepository;
+import org.noear.solon.ai.rag.repository.TcVectorDbRepository;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.net.http.HttpUtils;
@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class VectorDBRepositoryTest {
 
-    private VectorDBRepository repository;
+    private TcVectorDbRepository repository;
     private final String url = System.getProperty("vectordb.url", "http://sh-vdb-9th4700z.sql.tencentcdb.com:8100");
     private final String username = System.getProperty("vectordb.username", "root");
     private final String key = System.getProperty("vectordb.key", "XAazLvlbZxomhYoWqezz9S9SyrOC3TrxGE5Y0MMM");
@@ -39,7 +39,7 @@ public class VectorDBRepositoryTest {
 
         try {
             // 使用构建器模式创建 VectorDBRepository
-            repository = VectorDBRepository.builder(model, url, username, key, databaseName, collectionName).build();
+            repository = TcVectorDbRepository.builder(model, url, username, key, databaseName, collectionName).build();
 
 
             // 初始化测试数据
@@ -184,7 +184,7 @@ public class VectorDBRepositoryTest {
 
 
 
-    private void load(VectorDBRepository repository, String url) throws IOException {
+    private void load(TcVectorDbRepository repository, String url) throws IOException {
         System.out.println("Loading documents from: " + url);
         String text = HttpUtils.http(url).get(); // 加载文档
         System.out.println("Loaded text with length: " + text.length());
