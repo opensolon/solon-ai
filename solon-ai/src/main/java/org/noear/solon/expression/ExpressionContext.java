@@ -23,9 +23,9 @@ package org.noear.solon.expression;
  */
 public interface ExpressionContext {
     /**
-     * 是否有值
+     * 包含键
      */
-    boolean hasValue(String key);
+    boolean containsKey(String key);
 
     /**
      * 获取值

@@ -34,6 +34,6 @@ public class TemplateExpression implements Expression<String> {
 
     @Override
     public String evaluate(ExpressionContext context) {
-        return TmplUtil.parse(expr, context::hasValue, context::getValue);
+        return TmplUtil.parse(expr, context::containsKey, context::getValue);
     }
 }
