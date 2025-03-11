@@ -25,10 +25,10 @@ public interface ExpressionContext {
     /**
      * 包含键
      */
-    boolean containsKey(String key);
+    boolean containsKey(Object key);
 
     /**
      * 获取值
      */
-    Object getValue(String key);
+    Object get(Object key);
 }

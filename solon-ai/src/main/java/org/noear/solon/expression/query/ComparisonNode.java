@@ -57,7 +57,7 @@ public class ComparisonNode implements ConditionNode {
 
     @Override
     public Boolean evaluate(ExpressionContext context) {
-        Object fieldValue = context.getValue(field.getFieldName());
+        Object fieldValue = context.get(field.getFieldName());
         Object conditionValue = value.getValue();
 
         switch (operator) {

@@ -2,6 +2,7 @@ package features.expr;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.expression.ExpressionContext;
+import org.noear.solon.expression.ExpressionContextDefault;
 import org.noear.solon.expression.query.*;
 
 import java.util.HashMap;
@@ -14,7 +15,7 @@ public class QueryTest {
     @Test
     public void case1() {
         // 设置查询上下文
-        Map<String, Object> context = new HashMap<>();
+        ExpressionContextDefault context = new ExpressionContextDefault();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("isMarried", true);
@@ -37,17 +38,7 @@ public class QueryTest {
         LogicalNode orNode = new LogicalNode(LogicalOp.or, andNode, notMarriedComparison);
 
         // 计算条件查询表达式的值
-        boolean result = orNode.evaluate(new ExpressionContext() {
-            @Override
-            public boolean containsKey(String key) {
-                return context.containsKey(key);
-            }
-
-            @Override
-            public Object getValue(String key) {
-                return context.get(key);
-            }
-        });
+        boolean result = orNode.evaluate(context);
         System.out.println("Result: " + result);  // 输出: Result: true
 
 
@@ -57,7 +48,7 @@ public class QueryTest {
     @Test
     public void case2() {
         // 设置查询上下文
-        Map<String, Object> context = new HashMap<>();
+        ExpressionContextDefault context = new ExpressionContextDefault();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("isMarried", true);
@@ -71,17 +62,7 @@ public class QueryTest {
         );
 
         // 计算条件查询表达式的值
-        boolean result = conditionNode.evaluate(new ExpressionContext() {
-            @Override
-            public boolean containsKey(String key) {
-                return context.containsKey(key);
-            }
-
-            @Override
-            public Object getValue(String key) {
-                return context.get(key);
-            }
-        });
+        boolean result = conditionNode.evaluate(context);
         System.out.println("Result: " + result);  // 输出: Result: true
 
 

@@ -13,27 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expression.template;
+package org.noear.solon.expression;
 
-import org.noear.solon.core.util.TmplUtil;
-import org.noear.solon.expression.Expression;
-import org.noear.solon.expression.ExpressionContext;
+import java.util.HashMap;
 
 /**
- * 模板表达式
+ * 表达式上下文默认实现
  *
  * @author noear
  * @since 3.1
  */
-public class TemplateExpression implements Expression<String> {
-    private String expr;
+public class ExpressionContextDefault extends HashMap<String, Object> implements ExpressionContext {
 
-    public TemplateExpression(String expr) {
-        this.expr = expr;
-    }
-
-    @Override
-    public String evaluate(ExpressionContext context) {
-        return TmplUtil.parse(expr, context::containsKey, context::get);
-    }
 }
