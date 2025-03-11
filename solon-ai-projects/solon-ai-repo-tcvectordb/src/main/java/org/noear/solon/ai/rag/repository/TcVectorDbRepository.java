@@ -15,11 +15,11 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.QueryCondition;
+import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 腾讯云 VectorDB 矢量存储知识库
@@ -620,16 +620,10 @@ public class TcVectorDbRepository implements RepositoryStorable {
             SearchRes searchRes = collection.searchByEmbeddingItems(searchParamBuilder.build());
 
             // 解析搜索结果
-            List<Document> results = getDocuments(searchRes);
+            List<Document> result = getDocuments(searchRes);
 
-            // 应用过滤器（如果有）
-            if (condition.getFilter() != null) {
-                return results.stream()
-                        .filter(condition.getFilter())
-                        .collect(Collectors.toList());
-            }
-
-            return results;
+            // 再次过滤和排序
+            return SimilarityUtil.filter(condition, result.stream());
         } catch (Exception e) {
             throw new IOException("Failed to search documents: " + e.getMessage(), e);
         }
