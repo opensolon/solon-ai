@@ -24,7 +24,7 @@ import java.util.function.BiConsumer;
  * @author noear
  * @since 3.1
  */
-public class ExprBuilder {
+public class ExpressionBuilder {
     public LogicalNode and(ConditionNode left, ConditionNode right) {
         return new LogicalNode(LogicalOp.and, left, right);
     }
@@ -65,7 +65,7 @@ public class ExprBuilder {
 
     /// ////////////////
 
-    static void visit(ExprNode node, int level, BiConsumer<ExprNode, Integer> visitor) {
+    static void visit(ExpressionNode node, int level, BiConsumer<ExpressionNode, Integer> visitor) {
         if (node instanceof FieldNode) {
             visitor.accept(node, level);
         } else if (node instanceof ValueNode) {

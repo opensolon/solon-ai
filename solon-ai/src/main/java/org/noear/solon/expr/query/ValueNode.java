@@ -23,7 +23,7 @@ import java.util.Collection;
  * @author noear
  * @since 3.1
  */
-public class ValueNode implements ExprNode {
+public class ValueNode implements ExpressionNode {
     private Object value;
 
     public ValueNode(Object value) {

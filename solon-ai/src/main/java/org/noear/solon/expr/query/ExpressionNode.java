@@ -23,8 +23,8 @@ import java.util.function.BiConsumer;
  * @author noear
  * @since 3.1
  */
-public interface ExprNode {
-    default void visit(BiConsumer<ExprNode, Integer> visitor) {
-        ExprBuilder.visit(this, 0, visitor);
+public interface ExpressionNode {
+    default void visit(BiConsumer<ExpressionNode, Integer> visitor) {
+        ExpressionBuilder.visit(this, 0, visitor);
     }
 }

@@ -21,7 +21,7 @@ package org.noear.solon.expr.query;
  * @author noear
  * @since 3.1
  */
-public class FieldNode implements ExprNode {
+public class FieldNode implements ExpressionNode {
     private String fieldName;
 
     public FieldNode(String fieldName) {

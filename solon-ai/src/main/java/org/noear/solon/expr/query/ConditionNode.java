@@ -21,7 +21,7 @@ package org.noear.solon.expr.query;
  * @author noear
  * @since 3.1
  */
-public interface ConditionNode extends ExprNode{
+public interface ConditionNode extends ExpressionNode {
     /*
      * 评估
      * */

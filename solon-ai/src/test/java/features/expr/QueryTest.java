@@ -52,7 +52,7 @@ public class QueryTest {
         context.put("isMarried", true);
 
         // 构建条件查询表达式树: (age > 18 AND salary < 5000) OR (NOT isMarried)
-        ExprBuilder cb = new ExprBuilder();
+        ExpressionBuilder cb = new ExpressionBuilder();
 
         ConditionNode conditionNode = cb.or(
                 cb.and(cb.gt("age", 18), cb.lt("salary", 5000)),
@@ -70,7 +70,7 @@ public class QueryTest {
     /**
      * 打印
      */
-    static void printTree(ExprNode n1) {
+    static void printTree(ExpressionNode n1) {
         n1.visit((node, level) -> {
             if (node instanceof FieldNode) {
                 System.out.println(prefix(level) + "Field: " + ((FieldNode) node).getFieldName());
