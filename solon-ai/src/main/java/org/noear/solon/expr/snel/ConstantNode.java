@@ -13,34 +13,42 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.sel;
+package org.noear.solon.expr.snel;
 
 import org.noear.solon.expr.Expression;
 
+import java.util.Collection;
 import java.util.Map;
 
 /**
- * 变量表达式节点（表示查询中的变量或字段）
+ * 常量表达式节点（表示查询中的常量）
  *
  * @author noear
  * @since 3.1
  */
-public class VariableNode implements Expression {
-    private String name;
+public class ConstantNode implements Expression {
+    private Object value;
 
-    public VariableNode(String name) {
-        this.name = name;
+    public ConstantNode(Object value) {
+        this.value = value;
     }
 
     /**
-     * 获取字段名
+     * 获取值
      */
-    public String getName() {
-        return name;
+    public Object getValue() {
+        return value;
+    }
+
+    /**
+     * 是否为集合
+     */
+    public boolean isCollection() {
+        return value instanceof Collection;
     }
 
     @Override
     public Object evaluate(Map context) {
-        return context.get(name);
+        return value;
     }
 }

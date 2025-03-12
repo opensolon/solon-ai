@@ -1,7 +1,7 @@
 package features.expr;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.expr.sel.*;
+import org.noear.solon.expr.snel.*;
 
 import java.util.HashMap;
 import java.util.Map;
