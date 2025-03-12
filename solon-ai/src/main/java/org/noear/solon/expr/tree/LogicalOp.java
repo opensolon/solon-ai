@@ -22,8 +22,8 @@ package org.noear.solon.expr.tree;
  * @since 3.1
  */
 public enum LogicalOp {
-    and("&&"),
-    or("||"),
+    and("AND"),
+    or("OR"),
     not("NOT"),
     ;
 
@@ -45,9 +45,9 @@ public enum LogicalOp {
      */
     public static LogicalOp parse(String op) {
         switch (op) {
-            case "&&":
+            case "AND":
                 return and;
-            case "||":
+            case "OR":
                 return or;
             case "NOT":
                 return not;
