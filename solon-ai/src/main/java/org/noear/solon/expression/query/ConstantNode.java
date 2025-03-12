@@ -15,25 +15,40 @@
  */
 package org.noear.solon.expression.query;
 
-import org.noear.solon.expression.ExpressionNode;
+import org.noear.solon.expression.Expression;
+import org.noear.solon.expression.ExpressionContext;
+
+import java.util.Collection;
 
 /**
- * 字段节点（表示查询中的字段）
+ * 常量节点（表示查询中的常量）
  *
  * @author noear
  * @since 3.1
  */
-public class FieldNode implements ExpressionNode {
-    private String fieldName;
+public class ConstantNode implements Expression {
+    private Object value;
 
-    public FieldNode(String fieldName) {
-        this.fieldName = fieldName;
+    public ConstantNode(Object value) {
+        this.value = value;
     }
 
     /**
-     * 获取字段名
+     * 获取值
      */
-    public String getFieldName() {
-        return fieldName;
+    public Object getValue() {
+        return value;
+    }
+
+    /**
+     * 是否为集合
+     */
+    public boolean isCollection() {
+        return value instanceof Collection;
+    }
+
+    @Override
+    public Object evaluate(ExpressionContext context) {
+        return value;
     }
 }

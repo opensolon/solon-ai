@@ -15,6 +15,7 @@
  */
 package org.noear.solon.expression.query;
 
+import org.noear.solon.expression.Expression;
 import org.noear.solon.expression.ExpressionContext;
 
 import java.util.Collection;
@@ -27,8 +28,8 @@ import java.util.Collection;
  */
 public class ComparisonNode implements ConditionNode {
     private ComparisonOp operator; // 比较运算符，如 ">", "<", "=="
-    private FieldNode field;
-    private ValueNode value;
+    private Expression left;
+    private Expression right;
 
     /**
      * 获取操作符
@@ -38,47 +39,47 @@ public class ComparisonNode implements ConditionNode {
     }
 
     /**
-     * 获取字段
+     * 获取左侧
      */
-    public FieldNode getField() {
-        return field;
+    public Expression getLeft() {
+        return left;
     }
 
     /**
-     * 获取值
+     * 获取右侧
      */
-    public ValueNode getValue() {
-        return value;
+    public Expression getRight() {
+        return right;
     }
 
-    public ComparisonNode(ComparisonOp operator, FieldNode field, ValueNode value) {
+    public ComparisonNode(ComparisonOp operator, Expression left, Expression right) {
         this.operator = operator;
-        this.field = field;
-        this.value = value;
+        this.left = left;
+        this.right = right;
     }
 
     @Override
     public Boolean evaluate(ExpressionContext context) {
-        Object fieldValue = context.get(field.getFieldName());
-        Object conditionValue = value.getValue();
+        Object leftValue = left.evaluate(context);
+        Object rightValue = right.evaluate(context);
 
         switch (operator) {
             case gt:
-                return ((Comparable) fieldValue).compareTo(conditionValue) > 0;
+                return ((Comparable) leftValue).compareTo(rightValue) > 0;
             case gte:
-                return ((Comparable) fieldValue).compareTo(conditionValue) >= 0;
+                return ((Comparable) leftValue).compareTo(rightValue) >= 0;
             case lt:
-                return ((Comparable) fieldValue).compareTo(conditionValue) < 0;
+                return ((Comparable) leftValue).compareTo(rightValue) < 0;
             case lte:
-                return ((Comparable) fieldValue).compareTo(conditionValue) <= 0;
+                return ((Comparable) leftValue).compareTo(rightValue) <= 0;
             case eq:
-                return fieldValue.equals(conditionValue);
+                return leftValue.equals(rightValue);
             case neq:
-                return !fieldValue.equals(conditionValue);
+                return !leftValue.equals(rightValue);
             case in:
-                return ((Collection) conditionValue).contains(fieldValue);
+                return ((Collection) rightValue).contains(leftValue);
             case nin:
-                return ((Collection) conditionValue).contains(fieldValue) == false;
+                return ((Collection) rightValue).contains(leftValue) == false;
             default:
                 throw new IllegalArgumentException("Unknown operator: " + operator);
         }

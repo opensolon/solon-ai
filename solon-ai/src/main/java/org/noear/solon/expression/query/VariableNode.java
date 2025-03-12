@@ -15,34 +15,31 @@
  */
 package org.noear.solon.expression.query;
 
-import org.noear.solon.expression.ExpressionNode;
-
-import java.util.Collection;
+import org.noear.solon.expression.Expression;
+import org.noear.solon.expression.ExpressionContext;
 
 /**
- * 值节点（表示查询中的值）
+ * 变量节点（表示查询中的变量或字段）
  *
  * @author noear
  * @since 3.1
  */
-public class ValueNode implements ExpressionNode {
-    private Object value;
+public class VariableNode implements Expression {
+    private String name;
 
-    public ValueNode(Object value) {
-        this.value = value;
+    public VariableNode(String name) {
+        this.name = name;
     }
 
     /**
-     * 获取值
+     * 获取字段名
      */
-    public Object getValue() {
-        return value;
+    public String getName() {
+        return name;
     }
 
-    /**
-     * 是否为集合
-     */
-    public boolean isCollection() {
-        return value instanceof Collection;
+    @Override
+    public Object evaluate(ExpressionContext context) {
+        return context.get(name);
     }
 }

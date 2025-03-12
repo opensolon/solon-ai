@@ -17,18 +17,18 @@ public class Query1Test {
         context.put("isMarried", true);
 
         // 构建条件查询表达式树: (age > 18 AND salary < 5000) OR (NOT isMarried)
-        FieldNode ageField = new FieldNode("age");
-        ValueNode ageValue = new ValueNode(18);
+        VariableNode ageField = new VariableNode("age");
+        ConstantNode ageValue = new ConstantNode(18);
         ComparisonNode ageComparison = new ComparisonNode(ComparisonOp.gt, ageField, ageValue);
 
-        FieldNode salaryField = new FieldNode("salary");
-        ValueNode salaryValue = new ValueNode(5000);
+        VariableNode salaryField = new VariableNode("salary");
+        ConstantNode salaryValue = new ConstantNode(5000);
         ComparisonNode salaryComparison = new ComparisonNode(ComparisonOp.lt, salaryField, salaryValue);
 
         LogicalNode andNode = new LogicalNode(LogicalOp.and, ageComparison, salaryComparison);
 
-        FieldNode notMarriedField = new FieldNode("isMarried");
-        ValueNode notMarriedValue = new ValueNode(false);
+        VariableNode notMarriedField = new VariableNode("isMarried");
+        ConstantNode notMarriedValue = new ConstantNode(false);
         ComparisonNode notMarriedComparison = new ComparisonNode(ComparisonOp.eq, notMarriedField, notMarriedValue);
 
         LogicalNode orNode = new LogicalNode(LogicalOp.or, andNode, notMarriedComparison);

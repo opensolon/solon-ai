@@ -15,16 +15,16 @@ public class PrintUtil {
     }
 
     static void printTreeDo(ExpressionNode node, int level) {
-        if (node instanceof FieldNode) {
-            System.out.println(prefix(level) + "Field: " + ((FieldNode) node).getFieldName());
-        } else if (node instanceof ValueNode) {
-            System.out.println(prefix(level) + "Value: " + ((ValueNode) node).getValue());
+        if (node instanceof VariableNode) {
+            System.out.println(prefix(level) + "Field: " + ((VariableNode) node).getName());
+        } else if (node instanceof ConstantNode) {
+            System.out.println(prefix(level) + "Value: " + ((ConstantNode) node).getValue());
         } else if (node instanceof ComparisonNode) {
             ComparisonNode compNode = (ComparisonNode) node;
             System.out.println(prefix(level) + "Comparison: " + compNode.getOperator());
 
-            printTreeDo(compNode.getField(), level + 1);
-            printTreeDo(compNode.getValue(), level + 1);
+            printTreeDo(compNode.getLeft(), level + 1);
+            printTreeDo(compNode.getRight(), level + 1);
         } else if (node instanceof LogicalNode) {
             LogicalNode opNode = (LogicalNode) node;
             System.out.println(prefix(level) + "Logical: " + opNode.getOperator());
@@ -54,17 +54,17 @@ public class PrintUtil {
     }
 
     static void printTree2Do(ExpressionNode node, StringBuilder buf) {
-        if (node instanceof FieldNode) {
-            buf.append(((FieldNode) node).getFieldName());
-        } else if (node instanceof ValueNode) {
-            buf.append(((ValueNode) node).getValue());
+        if (node instanceof VariableNode) {
+            buf.append(((VariableNode) node).getName());
+        } else if (node instanceof ConstantNode) {
+            buf.append(((ConstantNode) node).getValue());
         } else if (node instanceof ComparisonNode) {
             ComparisonNode compNode = (ComparisonNode) node;
 
             buf.append("(");
-            printTree2Do(compNode.getField(), buf);
+            printTree2Do(compNode.getLeft(), buf);
             buf.append(" " + compNode.getOperator().getCode() + " ");
-            printTree2Do(compNode.getValue(), buf);
+            printTree2Do(compNode.getRight(), buf);
             buf.append(")");
 
         } else if (node instanceof LogicalNode) {

@@ -29,176 +29,208 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+
 public class QueryExpressionParser implements ExpressionParser {
 
-    private final StringReader reader;
-    private int ch; // 当前字符
+    private final String expression;
 
     public QueryExpressionParser(String expression) {
-        this.reader = new StringReader(expression);
-        nextChar(); // 初始化读取第一个字符
+        this.expression = expression;
     }
 
     @Override
     public Expression parse() {
-        ConditionNode result = parseExpression();
-        if (ch != -1) {
-            throw new RuntimeException("Unexpected character: " + (char) ch);
+        ParserState state = new ParserState(new StringReader(expression));
+        ConditionNode result = parseExpression(state);
+        if (state.getCurrentChar() != -1) {
+            throw new RuntimeException("Unexpected character: " + (char) state.getCurrentChar());
         }
         return result;
     }
 
-    private void nextChar() {
-        try {
-            ch = reader.read();
-        } catch (IOException e) {
-            throw new RuntimeException("Error reading character", e);
-        }
-    }
-
-    private ConditionNode parseExpression() {
-        ConditionNode result = parseTerm();
+    private ConditionNode parseExpression(ParserState state) {
+        ConditionNode result = parseTerm(state);
         while (true) {
-            if (eat("OR")) {
-                result = new LogicalNode(LogicalOp.or, result, parseTerm());
+            if (eat(state, "OR")) {
+                result = new LogicalNode(LogicalOp.or, result, parseTerm(state));
             } else {
                 return result;
             }
         }
     }
 
-    private ConditionNode parseTerm() {
-        ConditionNode result = parseFactor();
+    private ConditionNode parseTerm(ParserState state) {
+        ConditionNode result = parseFactor(state);
         while (true) {
-            if (eat("AND")) {
-                result = new LogicalNode(LogicalOp.and, result, parseFactor());
+            if (eat(state, "AND")) {
+                result = new LogicalNode(LogicalOp.and, result, parseFactor(state));
             } else {
                 return result;
             }
         }
     }
 
-    private ConditionNode parseFactor() {
-        skipWhitespace();
+    private ConditionNode parseFactor(ParserState state) {
+        state.skipWhitespace();
         ConditionNode result;
-        if (eat('(')) {
-            result = parseExpression();
-            eat(')');
-        } else if (eat("NOT")) {
-            result = new LogicalNode(LogicalOp.not, parseFactor(), null);
+        if (eat(state, '(')) {
+            result = parseExpression(state);
+            eat(state, ')');
+        } else if (eat(state, "NOT")) {
+            result = new LogicalNode(LogicalOp.not, parseFactor(state), null);
         } else {
-            String fieldName = parseIdentifier();
-            skipWhitespace();
-            if (ch == '>' || ch == '<' || ch == '=' || ch == '!') {
-                String operator = parseComparisonOperator();
-                Object value = parseValue();
-                result = new ComparisonNode(ComparisonOp.parse(operator), new FieldNode(fieldName), new ValueNode(value));
-            } else if (eat("IN")) {
-                List<Object> values = parseList();
-                result = new ComparisonNode(ComparisonOp.in, new FieldNode(fieldName), new ValueNode(values));
-            } else if (eat("NOT IN")) {
-                List<Object> values = parseList();
-                result = new ComparisonNode(ComparisonOp.nin, new FieldNode(fieldName), new ValueNode(values));
+            String fieldName = parseIdentifier(state);
+            state.skipWhitespace();
+            if (state.getCurrentChar() == '>' || state.getCurrentChar() == '<' || state.getCurrentChar() == '=' || state.getCurrentChar() == '!') {
+                String operator = parseComparisonOperator(state);
+                Object value = parseValue(state);
+                result = new ComparisonNode(ComparisonOp.parse(operator), new VariableNode(fieldName), new ConstantNode(value));
+            } else if (eat(state, "IN")) {
+                List<Object> values = parseList(state);
+                result = new ComparisonNode(ComparisonOp.in, new VariableNode(fieldName), new ConstantNode(values));
+            } else if (eat(state, "NOT IN")) {
+                List<Object> values = parseList(state);
+                result = new ComparisonNode(ComparisonOp.nin, new VariableNode(fieldName), new ConstantNode(values));
             } else {
-                result = new ComparisonNode(ComparisonOp.eq, new FieldNode(fieldName), new ValueNode(true));
+                result = new ComparisonNode(ComparisonOp.eq, new VariableNode(fieldName), new ConstantNode(true));
             }
         }
         return result;
     }
 
-    private String parseIdentifier() {
+    private String parseIdentifier(ParserState state) {
         StringBuilder sb = new StringBuilder();
-        while (Character.isLetterOrDigit(ch) || ch == '_') {
-            sb.append((char) ch);
-            nextChar();
+        while (state.isIdentifier()) {
+            sb.append((char) state.getCurrentChar());
+            state.nextChar();
         }
         return sb.toString();
     }
 
-    private String parseComparisonOperator() {
+    private String parseComparisonOperator(ParserState state) {
         StringBuilder sb = new StringBuilder();
-        sb.append((char) ch);
-        nextChar();
-        if (ch == '=') {
-            sb.append((char) ch);
-            nextChar();
+        sb.append((char) state.getCurrentChar());
+        state.nextChar();
+        if (state.getCurrentChar() == '=') {
+            sb.append((char) state.getCurrentChar());
+            state.nextChar();
         }
         return sb.toString();
     }
 
-    private Object parseValue() {
-        skipWhitespace();
-        if (ch == '\'' || ch == '"') {
-            return parseString();
-        } else if (Character.isDigit(ch)) {
-            return parseNumber();
+    private Object parseValue(ParserState state) {
+        state.skipWhitespace();
+        if (state.getCurrentChar() == '\'' || state.getCurrentChar() == '"') {
+            return parseString(state);
+        } else if (Character.isDigit(state.getCurrentChar())) {
+            return parseNumber(state);
+        } else if (state.isBoolean()) {
+            return parseIdentifier(state);
         } else {
-            throw new RuntimeException("Unexpected value: " + (char) ch);
+            throw new RuntimeException("Unexpected value: " + (char) state.getCurrentChar());
         }
     }
 
-    private String parseString() {
-        char quote = (char) ch;
-        nextChar();
+    private String parseString(ParserState state) {
+        char quote = (char) state.getCurrentChar();
+        state.nextChar();
         StringBuilder sb = new StringBuilder();
-        while (ch != quote) {
-            sb.append((char) ch);
-            nextChar();
+        while (state.getCurrentChar() != quote) {
+            sb.append((char) state.getCurrentChar());
+            state.nextChar();
         }
-        nextChar(); // 跳过结束引号
+        state.nextChar(); // 跳过结束引号
         return sb.toString();
     }
 
-    private int parseNumber() {
+    private int parseNumber(ParserState state) {
         StringBuilder sb = new StringBuilder();
-        while (Character.isDigit(ch)) {
-            sb.append((char) ch);
-            nextChar();
+        while (Character.isDigit(state.getCurrentChar())) {
+            sb.append((char) state.getCurrentChar());
+            state.nextChar();
         }
         return Integer.parseInt(sb.toString());
     }
 
-    private List<Object> parseList() {
+    private List<Object> parseList(ParserState state) {
         List<Object> values = new ArrayList<>();
-        eat('[');
-        while (ch != ']') {
-            values.add(parseValue());
-            skipWhitespace();
-            if (ch == ',') {
-                nextChar();
-                skipWhitespace();
+        eat(state, '[');
+        while (state.getCurrentChar() != ']') {
+            values.add(parseValue(state));
+            state.skipWhitespace();
+            if (state.getCurrentChar() == ',') {
+                state.nextChar();
+                state.skipWhitespace();
             }
         }
-        eat(']');
+        eat(state, ']');
         return values;
     }
 
-    private boolean eat(String expected) {
-        skipWhitespace();
-        if (ch == -1) return false;
+    private boolean eat(ParserState state, String expected) {
+        state.skipWhitespace();
+        if (state.getCurrentChar() == -1) return false;
 
         // 尝试匹配字符串
         for (int i = 0; i < expected.length(); i++) {
-            if (ch != expected.charAt(i)) {
+            if (state.getCurrentChar() != expected.charAt(i)) {
                 return false;
             }
-            nextChar();
+            state.nextChar();
         }
         return true;
     }
 
-    private boolean eat(char expected) {
-        skipWhitespace();
-        if (ch == expected) {
-            nextChar();
+    private boolean eat(ParserState state, char expected) {
+        state.skipWhitespace();
+        if (state.getCurrentChar() == expected) {
+            state.nextChar();
             return true;
         }
         return false;
     }
 
-    private void skipWhitespace() {
-        while (Character.isWhitespace(ch)) {
-            nextChar();
+    /**
+     * 封装解析器的状态，包括 StringReader 和当前字符。
+     */
+    private static class ParserState {
+        private final StringReader reader;
+        private int ch; // 当前字符
+
+        public ParserState(StringReader reader) {
+            this.reader = reader;
+            this.ch = -1; // 初始状态
+            nextChar(); // 初始化读取第一个字符
+        }
+
+        public int getCurrentChar() {
+            return ch;
+        }
+
+        public void nextChar() {
+            try {
+                ch = reader.read();
+            } catch (IOException e) {
+                throw new RuntimeException("Error reading character", e);
+            }
+        }
+
+        public void skipWhitespace() {
+            while (Character.isWhitespace(ch)) {
+                nextChar();
+            }
+        }
+
+        public boolean isString() {
+            return getCurrentChar() == '\'' || getCurrentChar() == '"';
+        }
+
+        public boolean isBoolean() {
+            return getCurrentChar() == 'f' || getCurrentChar() == 't';
+        }
+
+        public boolean isIdentifier() {
+            return Character.isLetterOrDigit(getCurrentChar()) || getCurrentChar() == '_';
         }
     }
 }

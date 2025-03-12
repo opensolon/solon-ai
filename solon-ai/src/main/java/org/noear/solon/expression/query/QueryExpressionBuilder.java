@@ -35,30 +35,30 @@ public class QueryExpressionBuilder {
     /// /////////
 
     public ComparisonNode lt(String field, Number value) {
-        return new ComparisonNode(ComparisonOp.lt, new FieldNode(field), new ValueNode(value));
+        return new ComparisonNode(ComparisonOp.lt, new VariableNode(field), new ConstantNode(value));
     }
 
     public ComparisonNode lte(String field, Number value) {
-        return new ComparisonNode(ComparisonOp.lte, new FieldNode(field), new ValueNode(value));
+        return new ComparisonNode(ComparisonOp.lte, new VariableNode(field), new ConstantNode(value));
     }
 
     public ComparisonNode gt(String field, Number value) {
-        return new ComparisonNode(ComparisonOp.gt, new FieldNode(field), new ValueNode(value));
+        return new ComparisonNode(ComparisonOp.gt, new VariableNode(field), new ConstantNode(value));
     }
 
     public ComparisonNode gte(String field, Number value) {
-        return new ComparisonNode(ComparisonOp.gte, new FieldNode(field), new ValueNode(value));
+        return new ComparisonNode(ComparisonOp.gte, new VariableNode(field), new ConstantNode(value));
     }
 
     public ComparisonNode eq(String field, Object value) {
-        return new ComparisonNode(ComparisonOp.eq, new FieldNode(field), new ValueNode(value));
+        return new ComparisonNode(ComparisonOp.eq, new VariableNode(field), new ConstantNode(value));
     }
 
     public ComparisonNode neq(String field, Object value) {
-        return new ComparisonNode(ComparisonOp.neq, new FieldNode(field), new ValueNode(value));
+        return new ComparisonNode(ComparisonOp.neq, new VariableNode(field), new ConstantNode(value));
     }
 
     public ComparisonNode in(String field, Object... values) {
-        return new ComparisonNode(ComparisonOp.in, new FieldNode(field), new ValueNode(Arrays.asList(values)));
+        return new ComparisonNode(ComparisonOp.in, new VariableNode(field), new ConstantNode(Arrays.asList(values)));
     }
 }
