@@ -83,8 +83,15 @@ public class QueryExpressionParser implements ExpressionParser {
             state.skipWhitespace();
             if (state.getCurrentChar() == '>' || state.getCurrentChar() == '<' || state.getCurrentChar() == '=' || state.getCurrentChar() == '!') {
                 String operator = parseComparisonOperator(state);
-                Object value = parseValue(state);
-                result = new ComparisonNode(ComparisonOp.parse(operator), new VariableNode(fieldName), new ConstantNode(value));
+                Object value = parseValue(state, true);
+                Expression rightNode = null;
+                if(value instanceof Expression){
+                    rightNode = (Expression) value;
+                }else{
+                    rightNode = new ConstantNode(value);
+                }
+
+                result = new ComparisonNode(ComparisonOp.parse(operator), new VariableNode(fieldName), rightNode);
             } else if (eat(state, "IN")) {
                 List<Object> values = parseList(state);
                 result = new ComparisonNode(ComparisonOp.in, new VariableNode(fieldName), new ConstantNode(values));
@@ -118,16 +125,23 @@ public class QueryExpressionParser implements ExpressionParser {
         return sb.toString();
     }
 
-    private Object parseValue(ParserState state) {
+    private Object parseValue(ParserState state, boolean allowVariable) {
         state.skipWhitespace();
         if (state.getCurrentChar() == '\'' || state.getCurrentChar() == '"') {
             return parseString(state);
         } else if (Character.isDigit(state.getCurrentChar())) {
             return parseNumber(state);
-        } else if (state.isBoolean()) {
-            return parseIdentifier(state);
         } else {
-            throw new RuntimeException("Unexpected value: " + (char) state.getCurrentChar());
+            String tmp = parseIdentifier(state);
+            if ("true".equals(tmp) || "false".equals(tmp)) {
+                return Boolean.parseBoolean(tmp);
+            } else {
+                if (allowVariable) {
+                    return new VariableNode(tmp);
+                } else {
+                    throw new RuntimeException("Unexpected value: " + tmp);
+                }
+            }
         }
     }
 
@@ -156,7 +170,7 @@ public class QueryExpressionParser implements ExpressionParser {
         List<Object> values = new ArrayList<>();
         eat(state, '[');
         while (state.getCurrentChar() != ']') {
-            values.add(parseValue(state));
+            values.add(parseValue(state, false));
             state.skipWhitespace();
             if (state.getCurrentChar() == ',') {
                 state.nextChar();

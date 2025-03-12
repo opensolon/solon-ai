@@ -3,6 +3,8 @@ package features.expr;
 import org.noear.solon.expression.ExpressionNode;
 import org.noear.solon.expression.query.*;
 
+import java.util.Collection;
+
 /**
  * @author noear 2025/3/12 created
  */
@@ -18,7 +20,13 @@ public class PrintUtil {
         if (node instanceof VariableNode) {
             System.out.println(prefix(level) + "Field: " + ((VariableNode) node).getName());
         } else if (node instanceof ConstantNode) {
-            System.out.println(prefix(level) + "Value: " + ((ConstantNode) node).getValue());
+            Object value = ((ConstantNode) node).getValue();
+            if (value instanceof String) {
+                System.out.println(prefix(level) + "Value: '" + value + "'");
+            } else {
+                System.out.println(prefix(level) + "Value: " + value);
+            }
+
         } else if (node instanceof ComparisonNode) {
             ComparisonNode compNode = (ComparisonNode) node;
             System.out.println(prefix(level) + "Comparison: " + compNode.getOperator());
@@ -57,7 +65,30 @@ public class PrintUtil {
         if (node instanceof VariableNode) {
             buf.append(((VariableNode) node).getName());
         } else if (node instanceof ConstantNode) {
-            buf.append(((ConstantNode) node).getValue());
+            ConstantNode node1 = ((ConstantNode) node);
+            Object value = node1.getValue();
+            if (value instanceof String) {
+                buf.append("'").append(value).append("'");
+            } else {
+                if (node1.isCollection()) {
+                    buf.append("[");
+                    for (Object item1 : ((Collection) value)) {
+                        if (item1 instanceof String) {
+                            buf.append("'").append(((String) item1)).append("'");
+                        } else {
+                            buf.append(item1);
+                        }
+                        buf.append(",");
+                    }
+
+                    if(buf.length() > 1) {
+                        buf.setLength(buf.length() - 1);
+                    }
+                    buf.append("]");
+                } else {
+                    buf.append(value);
+                }
+            }
         } else if (node instanceof ComparisonNode) {
             ComparisonNode compNode = (ComparisonNode) node;
 

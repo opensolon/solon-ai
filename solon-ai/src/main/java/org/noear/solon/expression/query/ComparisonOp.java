@@ -62,9 +62,9 @@ public enum ComparisonOp {
                 return eq;
             case "!=":
                 return neq;
-            case "in":
+            case "IN":
                 return in;
-            case "not in":
+            case "NOT IN":
                 return nin;
             default:
                 throw new IllegalArgumentException("Invalid comparison operator: " + op);
