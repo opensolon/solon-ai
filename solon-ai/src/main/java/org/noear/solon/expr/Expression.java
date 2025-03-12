@@ -13,16 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expression;
-
-import java.util.HashMap;
+package org.noear.solon.expr;
 
 /**
- * 表达式上下文默认实现
+ * 表达式
  *
  * @author noear
  * @since 3.1
  */
-public class ExpressionContextDefault extends HashMap<String, Object> implements ExpressionContext {
-
+public interface Expression<T> extends ExpressionNode {
+    /**
+     * 执行
+     */
+    T evaluate(ExpressionContext context);
 }

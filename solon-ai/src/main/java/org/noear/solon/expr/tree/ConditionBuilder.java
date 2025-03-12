@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expression.query;
+package org.noear.solon.expr.tree;
 
 import java.util.Arrays;
 
@@ -23,7 +23,7 @@ import java.util.Arrays;
  * @author noear
  * @since 3.1
  */
-public class QueryExpressionBuilder {
+public class ConditionBuilder {
     public LogicalNode and(ConditionNode left, ConditionNode right) {
         return new LogicalNode(LogicalOp.and, left, right);
     }

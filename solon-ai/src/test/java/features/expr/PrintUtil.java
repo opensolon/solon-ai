@@ -1,7 +1,10 @@
 package features.expr;
 
-import org.noear.solon.expression.ExpressionNode;
-import org.noear.solon.expression.query.*;
+import org.noear.solon.expr.ExpressionNode;
+import org.noear.solon.expr.tree.ComparisonNode;
+import org.noear.solon.expr.tree.ConstantNode;
+import org.noear.solon.expr.tree.LogicalNode;
+import org.noear.solon.expr.tree.VariableNode;
 
 import java.util.Collection;
 

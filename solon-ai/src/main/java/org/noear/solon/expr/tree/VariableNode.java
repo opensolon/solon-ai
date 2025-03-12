@@ -13,14 +13,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expression;
+package org.noear.solon.expr.tree;
+
+import org.noear.solon.expr.Expression;
+import org.noear.solon.expr.ExpressionContext;
 
 /**
- * 表达式节点
+ * 变量节点（表示查询中的变量或字段）
  *
  * @author noear
  * @since 3.1
  */
-public interface ExpressionNode {
+public class VariableNode implements Expression {
+    private String name;
 
+    public VariableNode(String name) {
+        this.name = name;
+    }
+
+    /**
+     * 获取字段名
+     */
+    public String getName() {
+        return name;
+    }
+
+    @Override
+    public Object evaluate(ExpressionContext context) {
+        return context.get(name);
+    }
 }

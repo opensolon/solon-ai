@@ -1,16 +1,16 @@
 package features.expr;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.expression.Expression;
-import org.noear.solon.expression.ExpressionContextDefault;
-import org.noear.solon.expression.ExpressionParser;
-import org.noear.solon.expression.query.QueryExpressionParser;
+import org.noear.solon.expr.Expression;
+import org.noear.solon.expr.ExpressionContextDefault;
+import org.noear.solon.expr.ExpressionParser;
+import org.noear.solon.expr.tree.ConditionParser;
 
 /**
  * @author noear 2025/3/12 created
  */
 public class Query3Test {
-    ExpressionParser parser = new QueryExpressionParser();
+    ExpressionParser parser = new ConditionParser();
 
     @Test
     public void case1() {

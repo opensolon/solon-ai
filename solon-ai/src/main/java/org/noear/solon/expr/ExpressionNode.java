@@ -13,22 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expression;
+package org.noear.solon.expr;
 
 /**
- *  表达式上下文
+ * 表达式节点
  *
  * @author noear
  * @since 3.1
  */
-public interface ExpressionContext {
-    /**
-     * 包含键
-     */
-    boolean containsKey(Object key);
+public interface ExpressionNode {
 
-    /**
-     * 获取值
-     */
-    Object get(Object key);
 }

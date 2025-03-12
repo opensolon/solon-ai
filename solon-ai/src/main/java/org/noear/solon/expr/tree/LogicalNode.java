@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expression.query;
+package org.noear.solon.expr.tree;
 
-import org.noear.solon.expression.ExpressionContext;
+import org.noear.solon.expr.ExpressionContext;
 
 /**
  * 逻辑运算节点（如 AND, OR, NOT）

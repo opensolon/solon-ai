@@ -13,21 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expression.script;
+package org.noear.solon.expr.tree;
 
-import org.noear.solon.expression.Expression;
-import org.noear.solon.expression.ExpressionParser;
-
-import java.io.Reader;
+import org.noear.solon.expr.Expression;
 
 /**
+ * 条件节点
+ *
  * @author noear
  * @since 3.1
  */
-public class ScriptExpressionParser implements ExpressionParser {
+public interface ConditionNode extends Expression<Boolean> {
 
-    @Override
-    public Expression parse(Reader reader) {
-        return null;
-    }
 }

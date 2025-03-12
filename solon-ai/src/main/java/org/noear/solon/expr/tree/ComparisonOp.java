@@ -13,21 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expression.query;
+package org.noear.solon.expr.tree;
 
 /**
- * 逻辑操作符
+ * 比较操作符
  *
  * @author noear
  * @since 3.1
  */
-public enum LogicalOp {
-    and("&&"),
-    or("||"),
-    not("NOT"),
+public enum ComparisonOp {
+    lt("<"),  // <
+    lte("<="), // <=
+    gt(">"),  // >
+    gte(">="), // >=
+    eq("=="),  // ==
+    neq("!="), // !=
+    in("in"),  // in
+    nin("not in"), // not in
     ;
 
-    LogicalOp(String code) {
+    ComparisonOp(String code) {
         this.code = code;
     }
 
@@ -43,14 +48,24 @@ public enum LogicalOp {
     /**
      * 解析
      */
-    public static LogicalOp parse(String op) {
+    public static ComparisonOp parse(String op) {
         switch (op) {
-            case "&&":
-                return and;
-            case "||":
-                return or;
-            case "NOT":
-                return not;
+            case "<":
+                return lt;
+            case "<=":
+                return lte;
+            case ">":
+                return gt;
+            case ">=":
+                return gte;
+            case "==":
+                return eq;
+            case "!=":
+                return neq;
+            case "IN":
+                return in;
+            case "NOT IN":
+                return nin;
             default:
                 throw new IllegalArgumentException("Invalid comparison operator: " + op);
         }

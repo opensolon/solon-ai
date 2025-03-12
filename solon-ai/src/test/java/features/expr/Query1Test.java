@@ -1,9 +1,8 @@
 package features.expr;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.expression.ExpressionContextDefault;
-import org.noear.solon.expression.ExpressionParser;
-import org.noear.solon.expression.query.*;
+import org.noear.solon.expr.ExpressionContextDefault;
+import org.noear.solon.expr.tree.*;
 
 /**
  * @author noear 2025/3/11 created

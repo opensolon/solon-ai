@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expression.query;
+package org.noear.solon.expr.tree;
 
-import org.noear.solon.expression.Expression;
-import org.noear.solon.expression.ExpressionParser;
+import org.noear.solon.expr.Expression;
+import org.noear.solon.expr.ExpressionParser;
 
 /**
  * 查询表达式解析器
@@ -30,7 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 
-public class QueryExpressionParser implements ExpressionParser {
+public class ConditionParser implements ExpressionParser {
 
     @Override
     public Expression parse(Reader reader) {
@@ -79,9 +79,9 @@ public class QueryExpressionParser implements ExpressionParser {
                 String operator = parseComparisonOperator(state);
                 Object value = parseValue(state, true);
                 Expression rightNode = null;
-                if(value instanceof Expression){
+                if (value instanceof Expression) {
                     rightNode = (Expression) value;
-                }else{
+                } else {
                     rightNode = new ConstantNode(value);
                 }
 
@@ -121,7 +121,7 @@ public class QueryExpressionParser implements ExpressionParser {
 
     private Object parseValue(ParserState state, boolean allowVariable) {
         state.skipWhitespace();
-        if (state.getCurrentChar() == '\'' || state.getCurrentChar() == '"') {
+        if (state.isString()) {
             return parseString(state);
         } else if (Character.isDigit(state.getCurrentChar())) {
             return parseNumber(state);
@@ -231,10 +231,6 @@ public class QueryExpressionParser implements ExpressionParser {
 
         public boolean isString() {
             return getCurrentChar() == '\'' || getCurrentChar() == '"';
-        }
-
-        public boolean isBoolean() {
-            return getCurrentChar() == 'f' || getCurrentChar() == 't';
         }
 
         public boolean isIdentifier() {

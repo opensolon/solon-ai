@@ -1,9 +1,9 @@
 package features.expr;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.expression.ExpressionContextDefault;
-import org.noear.solon.expression.ExpressionParser;
-import org.noear.solon.expression.query.*;
+import org.noear.solon.expr.ExpressionContextDefault;
+import org.noear.solon.expr.tree.ConditionBuilder;
+import org.noear.solon.expr.tree.ConditionNode;
 
 /**
  * @author noear 2025/3/11 created
@@ -18,7 +18,7 @@ public class Query2Test {
         context.put("isMarried", true);
 
         // 构建条件查询表达式树: (age > 18 AND salary < 5000) OR (NOT isMarried)
-        QueryExpressionBuilder cb = new QueryExpressionBuilder();
+        ConditionBuilder cb = new ConditionBuilder();
 
         ConditionNode conditionNode = cb.or(
                 cb.and(cb.gt("age", 18), cb.lt("salary", 5000)),
