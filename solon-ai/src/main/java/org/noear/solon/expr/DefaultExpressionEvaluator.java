@@ -18,7 +18,7 @@ package org.noear.solon.expr;
 import org.noear.solon.expr.tree.*;
 
 /**
- * 查询表达式解析器
+ * 表达式评估器默认实现
  *
  * @author noear
  * @since 3.1
@@ -31,15 +31,15 @@ import java.util.List;
 /**
  * 默认表达式解析器
  * */
-public class DefaultExpressionParser implements ExpressionParser {
-    private static final DefaultExpressionParser instance = new DefaultExpressionParser();
+public class DefaultExpressionEvaluator implements ExpressionEvaluator {
+    private static final DefaultExpressionEvaluator instance = new DefaultExpressionEvaluator();
 
-    public static DefaultExpressionParser getInstance() {
+    public static DefaultExpressionEvaluator getInstance() {
         return instance;
     }
 
     @Override
-    public Expression parse(Reader reader) {
+    public Expression compile(Reader reader) {
         ParserState state = new ParserState(reader);
         Expression result = parseTernaryExpression(state); // 解析三元表达式
         if (state.getCurrentChar() != -1) {

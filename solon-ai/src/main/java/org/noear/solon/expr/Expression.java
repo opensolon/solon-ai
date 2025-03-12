@@ -26,7 +26,7 @@ import java.util.Map;
  */
 public interface Expression<T> extends ExpressionNode {
     /**
-     * 执行
+     * 评估（即执行）
      */
-    T evaluate(Map context);
+    T eval(Map context);
 }

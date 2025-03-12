@@ -40,7 +40,7 @@ public class VariableNode implements Expression {
     }
 
     @Override
-    public Object evaluate(Map context) {
+    public Object eval(Map context) {
         return context.get(name);
     }
 }

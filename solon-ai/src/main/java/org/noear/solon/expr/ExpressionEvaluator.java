@@ -21,40 +21,40 @@ import java.util.Collections;
 import java.util.Map;
 
 /**
- * 表达式解析器
+ * 表达式评估器
  *
  * @author noear
  * @since 3.1
  */
-public interface ExpressionParser {
+public interface ExpressionEvaluator {
     /**
-     * 解析
+     * 编译（即解析）
      */
-    Expression parse(Reader reader);
+    Expression compile(Reader reader);
 
     /**
-     * 解析
+     * 编译（即解析）
      */
-    default Expression parse(String expr) {
-        return parse(new StringReader(expr));
+    default Expression compile(String expr) {
+        return compile(new StringReader(expr));
     }
 
     /**
-     * 执行
+     * 评估（即执行）
      *
      * @param expr    表达式
      * @param context 上下文
      */
-    default Object evaluate(String expr, Map context) {
-        return parse(expr).evaluate(context);
+    default Object eval(String expr, Map context) {
+        return compile(expr).eval(context);
     }
 
     /**
-     * 执行
+     * 评估（即执行）
      *
      * @param expr 表达式
      */
-    default Object evaluate(String expr) {
-        return parse(expr).evaluate(Collections.emptyMap());
+    default Object eval(String expr) {
+        return compile(expr).eval(Collections.emptyMap());
     }
 }

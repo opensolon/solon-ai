@@ -50,9 +50,9 @@ public class ArithmeticNode implements Expression {
     }
 
     @Override
-    public Object evaluate(Map context) {
-        Object leftValue = left.evaluate(context);
-        Object rightValue = right.evaluate(context);
+    public Object eval(Map context) {
+        Object leftValue = left.eval(context);
+        Object rightValue = right.eval(context);
 
         switch (operator) {
             case add: {
