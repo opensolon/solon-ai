@@ -1,10 +1,7 @@
 package features.expr;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.expr.Expression;
-import org.noear.solon.expr.ExpressionContextDefault;
-import org.noear.solon.expr.ExpressionParser;
-import org.noear.solon.expr.DefaultExpressionParser;
+import org.noear.solon.expr.*;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,7 +14,7 @@ public class Query3Test {
 
     @Test
     public void case1() {
-        ExpressionContextDefault context = new ExpressionContextDefault();
+        Map<String,Object> context = new HashMap<>();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("isMarried", false);
@@ -41,7 +38,7 @@ public class Query3Test {
 
     @Test
     public void case2() {
-        ExpressionContextDefault context = new ExpressionContextDefault();
+        Map<String,Object> context = new HashMap();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("isMarried", false);
@@ -66,7 +63,7 @@ public class Query3Test {
 
     @Test
     public void case3() {
-        ExpressionContextDefault context = new ExpressionContextDefault();
+        Map<String,Object> context = new HashMap();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("isMarried", false);
@@ -90,7 +87,7 @@ public class Query3Test {
 
     @Test
     public void case4() {
-        ExpressionContextDefault context = new ExpressionContextDefault();
+        Map<String,Object> context = new HashMap();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("salaryV", 5000);
@@ -138,12 +135,26 @@ public class Query3Test {
 
     @Test
     public void case6() {
-        ExpressionContextDefault context = new ExpressionContextDefault();
+        Map<String,Object> context = new HashMap();
         context.put("a", 1);
         context.put("b", 2);
 
         Integer rst = (Integer) parser.evaluate("(a + b) * 2", context);
 
         assert rst == 6;
+    }
+
+    @Test
+    public void case7() {
+        String expression = "(age > 18 AND salary < 5000) ? 'Eligible' : 'Not Eligible'";
+
+        Map<String,Object> context = new HashMap();
+        context.put("age", 20);
+        context.put("salary", 4000);
+
+        Object result = parser.evaluate(expression, context);
+        System.out.println("Result: " + result); // 输出: Result: Eligible
+
+        assert "Eligible".equals(result);
     }
 }

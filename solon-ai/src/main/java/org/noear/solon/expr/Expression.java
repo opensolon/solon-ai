@@ -15,6 +15,9 @@
  */
 package org.noear.solon.expr;
 
+
+import java.util.Map;
+
 /**
  * 表达式
  *
@@ -25,5 +28,5 @@ public interface Expression<T> extends ExpressionNode {
     /**
      * 执行
      */
-    T evaluate(ExpressionContext context);
+    T evaluate(Map context);
 }

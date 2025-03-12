@@ -2,8 +2,10 @@ package features.expr;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.expr.Expression;
-import org.noear.solon.expr.ExpressionContextDefault;
 import org.noear.solon.expr.tree.ConditionBuilder;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * @author noear 2025/3/11 created
@@ -12,7 +14,7 @@ public class Query2Test {
     @Test
     public void case1() {
         // 设置查询上下文
-        ExpressionContextDefault context = new ExpressionContextDefault();
+        Map<String,Object> context = new HashMap<>();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("isMarried", true);

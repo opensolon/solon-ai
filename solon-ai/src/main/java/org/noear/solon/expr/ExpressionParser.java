@@ -17,6 +17,8 @@ package org.noear.solon.expr;
 
 import java.io.Reader;
 import java.io.StringReader;
+import java.util.Collections;
+import java.util.Map;
 
 /**
  * 表达式解析器
@@ -43,7 +45,7 @@ public interface ExpressionParser {
      * @param expr    表达式
      * @param context 上下文
      */
-    default Object evaluate(String expr, ExpressionContext context) {
+    default Object evaluate(String expr, Map context) {
         return parse(expr).evaluate(context);
     }
 
@@ -53,6 +55,6 @@ public interface ExpressionParser {
      * @param expr 表达式
      */
     default Object evaluate(String expr) {
-        return parse(expr).evaluate(ExpressionContextDefault.READONLY_INSTANCE);
+        return parse(expr).evaluate(Collections.emptyMap());
     }
 }
