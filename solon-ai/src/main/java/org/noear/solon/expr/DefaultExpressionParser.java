@@ -41,11 +41,24 @@ public class DefaultExpressionParser implements ExpressionParser {
     @Override
     public Expression parse(Reader reader) {
         ParserState state = new ParserState(reader);
-        Expression result = parseLogicalOrExpression(state);
+        Expression result = parseTernaryExpression(state); // 解析三元表达式
         if (state.getCurrentChar() != -1) {
             throw new RuntimeException("Unexpected character: " + (char) state.getCurrentChar());
         }
         return result;
+    }
+
+    // 解析三元表达式
+    private Expression parseTernaryExpression(ParserState state) {
+        Expression condition = parseLogicalOrExpression(state);
+        if (eat(state, '?')) {
+            Expression trueExpression = parseLogicalOrExpression(state);
+            eat(state, ':');
+            Expression falseExpression = parseLogicalOrExpression(state);
+            return new TernaryNode(condition, trueExpression, falseExpression);
+        } else {
+            return condition; // 如果不是三元表达式，直接返回条件
+        }
     }
 
     // 解析逻辑 OR 表达式
@@ -155,7 +168,17 @@ public class DefaultExpressionParser implements ExpressionParser {
             return new ConstantNode(parseString(state));
         } else {
             String identifier = parseIdentifier(state);
-            return new VariableNode(identifier);
+            state.skipWhitespace();
+
+            // 检查是否是三元表达式
+            if (eat(state, '?')) {
+                Expression trueExpression = parseLogicalOrExpression(state); // 解析 true 分支
+                eat(state, ':'); // 跳过 :
+                Expression falseExpression = parseLogicalOrExpression(state); // 解析 false 分支
+                return new TernaryNode(new VariableNode(identifier), trueExpression, falseExpression);
+            } else {
+                return new VariableNode(identifier); // 普通变量
+            }
         }
     }
 

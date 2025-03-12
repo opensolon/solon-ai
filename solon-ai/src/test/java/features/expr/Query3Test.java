@@ -6,6 +6,9 @@ import org.noear.solon.expr.ExpressionContextDefault;
 import org.noear.solon.expr.ExpressionParser;
 import org.noear.solon.expr.DefaultExpressionParser;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * @author noear 2025/3/12 created
  */
@@ -128,8 +131,19 @@ public class Query3Test {
         assert result3 == true;
 
         // 三元运算
-        //String result4 = (String) parser.evaluate("4 > 3 ? \"4 > 3\" : 999");
-        //System.out.println(result4); // 4 > 3
+        String result4 = (String) parser.evaluate("4 > 3 ? \"4 > 3\" : 999");
+        System.out.println(result4); // 4 > 3
+        assert "4 > 3".equals(result4);
+    }
 
+    @Test
+    public void case6() {
+        ExpressionContextDefault context = new ExpressionContextDefault();
+        context.put("a", 1);
+        context.put("b", 2);
+
+        Integer rst = (Integer) parser.evaluate("(a + b) * 2", context);
+
+        assert rst == 6;
     }
 }
