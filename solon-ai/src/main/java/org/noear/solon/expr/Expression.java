@@ -16,6 +16,7 @@
 package org.noear.solon.expr;
 
 
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -24,9 +25,16 @@ import java.util.Map;
  * @author noear
  * @since 3.1
  */
-public interface Expression<T> extends ExpressionNode {
+public interface Expression<T> {
     /**
      * 评估（即执行）
      */
-    T eval(Map context);
+    T evaluate(Map context);
+
+    /**
+     * 评估（即执行）
+     */
+    default T evaluate() {
+        return evaluate(Collections.emptyMap());
+    }
 }

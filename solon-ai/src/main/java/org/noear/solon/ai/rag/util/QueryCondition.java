@@ -80,7 +80,7 @@ public class QueryCondition {
         if (filterExpression == null) {
             return true;
         } else {
-            return filterExpression.eval(doc.getMetadata());
+            return filterExpression.evaluate(doc.getMetadata());
         }
     }
 

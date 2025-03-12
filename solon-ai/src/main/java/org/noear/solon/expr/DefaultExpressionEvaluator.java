@@ -27,6 +27,8 @@ import java.io.Reader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 默认表达式解析器
@@ -37,6 +39,22 @@ public class DefaultExpressionEvaluator implements ExpressionEvaluator {
     public static DefaultExpressionEvaluator getInstance() {
         return instance;
     }
+
+    /// /////////////
+
+    private Map<String, Expression> exprCached = new ConcurrentHashMap<>();
+
+    @Override
+    public Object eval(String expr, Map context, boolean cached) {
+        if(cached) {
+            Expression expression = exprCached.computeIfAbsent(expr, k -> compile(expr));
+            return expression.evaluate(context);
+        }else{
+            return compile(expr).evaluate(context);
+        }
+    }
+
+    /// ////////////
 
     @Override
     public Expression compile(Reader reader) {

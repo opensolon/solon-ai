@@ -1,6 +1,6 @@
 package features.expr;
 
-import org.noear.solon.expr.ExpressionNode;
+import org.noear.solon.expr.Expression;
 import org.noear.solon.expr.tree.ComparisonNode;
 import org.noear.solon.expr.tree.ConstantNode;
 import org.noear.solon.expr.tree.LogicalNode;
@@ -15,11 +15,11 @@ public class PrintUtil {
     /**
      * 打印
      */
-    public static void printTree(ExpressionNode node) {
+    public static void printTree(Expression node) {
         printTreeDo(node, 0);
     }
 
-    static void printTreeDo(ExpressionNode node, int level) {
+    static void printTreeDo(Expression node, int level) {
         if (node instanceof VariableNode) {
             System.out.println(prefix(level) + "Field: " + ((VariableNode) node).getName());
         } else if (node instanceof ConstantNode) {
@@ -58,13 +58,13 @@ public class PrintUtil {
     /// ////////
 
 
-    public static void printTree2(ExpressionNode node) {
+    public static void printTree2(Expression node) {
         StringBuilder buf = new StringBuilder();
         printTree2Do(node, buf);
         System.out.println(buf);
     }
 
-    static void printTree2Do(ExpressionNode node, StringBuilder buf) {
+    static void printTree2Do(Expression node, StringBuilder buf) {
         if (node instanceof VariableNode) {
             buf.append(((VariableNode) node).getName());
         } else if (node instanceof ConstantNode) {
@@ -84,7 +84,7 @@ public class PrintUtil {
                         buf.append(",");
                     }
 
-                    if(buf.length() > 1) {
+                    if (buf.length() > 1) {
                         buf.setLength(buf.length() - 1);
                     }
                     buf.append("]");

@@ -59,9 +59,9 @@ public class ComparisonNode implements Expression<Boolean> {
     }
 
     @Override
-    public Boolean eval(Map context) {
-        Object leftValue = left.eval(context);
-        Object rightValue = right.eval(context);
+    public Boolean evaluate(Map context) {
+        Object leftValue = left.evaluate(context);
+        Object rightValue = right.evaluate(context);
 
         switch (operator) {
             case gt:
