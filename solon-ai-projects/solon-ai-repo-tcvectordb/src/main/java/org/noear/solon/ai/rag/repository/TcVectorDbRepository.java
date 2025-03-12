@@ -611,10 +611,11 @@ public class TcVectorDbRepository implements RepositoryStorable {
                     .withParams(new HNSWSearchParams(100))
                     .withLimit(condition.getLimit() > 0 ? condition.getLimit() : 10);
 
+            //todo: 要把 getFilterExpression 表达式转为 milvus 过滤表达式
             // 添加过滤表达式支持
-            if (Utils.isNotEmpty(condition.getNativeFilter())) {
-                searchParamBuilder.withFilter(condition.getNativeFilter());
-            }
+            //if (Utils.isNotEmpty(condition.getFilterExpression())) {
+            //    searchParamBuilder.withFilter(condition.getFilterExpression());
+            //}
 
             // 执行搜索
             SearchRes searchRes = collection.searchByEmbeddingItems(searchParamBuilder.build());

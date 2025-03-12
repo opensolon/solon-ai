@@ -28,8 +28,10 @@ public enum ComparisonOp {
     gte(">="), // >=
     eq("=="),  // ==
     neq("!="), // !=
-    in("in"),  // in
-    nin("not in"), // not in
+    lk("LIKE"),  // like
+    nlk("NOT LIKE"), // not like
+    in("IN"),  // in
+    nin("NO IN"), // not in
     ;
 
     ComparisonOp(String code) {
@@ -62,6 +64,10 @@ public enum ComparisonOp {
                 return eq;
             case "!=":
                 return neq;
+            case "LIKE":
+                return lk;
+            case "NOT LIKE":
+                return nlk;
             case "IN":
                 return in;
             case "NOT IN":

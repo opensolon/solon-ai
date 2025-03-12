@@ -210,9 +210,10 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                 .topK(condition.getLimit())
                 .outputFields(Arrays.asList("content", "metadata"));
 
-        if (Utils.isNotEmpty(condition.getNativeFilter())) {
-            builder.filter(condition.getNativeFilter());
-        }
+        //todo: 要把 getFilterExpression 表达式转为 milvus 过滤表达式
+//        if (Utils.isNotEmpty(condition.getFilterExpression())) {
+//            builder.filter(condition.getFilterExpression());
+//        }
 
         SearchReq searchReq = builder.build();
         SearchResp searchResp = client.search(searchReq);

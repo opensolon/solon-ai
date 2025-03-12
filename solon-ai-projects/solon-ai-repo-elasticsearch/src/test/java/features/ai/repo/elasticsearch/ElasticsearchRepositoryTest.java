@@ -66,7 +66,7 @@ public class ElasticsearchRepositoryTest {
 
             // 测试带过滤器的搜索
             condition = new QueryCondition("solon")
-                    .filter(doc -> doc.getUrl().contains("noear.org"));
+                    .filterExpression("url LIKE 'noear.org'");
             results = repository.search(condition);
             assertFalse(results.isEmpty(), "应该找到noear.org域名下的文档");
             assertTrue(results.get(0).getUrl().contains("noear.org"), "文档URL应该包含noear.org");
@@ -151,7 +151,7 @@ public class ElasticsearchRepositoryTest {
 
             // 4. 测试组合过滤条件
             QueryCondition combinedCondition = new QueryCondition("solon")
-                    .filter(doc -> doc.getUrl().contains("noear.org"))
+                    .filterExpression("url LIKE 'noear.org'")
                     .limit(5);
             results = repository.search(combinedCondition);
             assertTrue(results.size() <= 5, "返回结果不应超过限制数量");

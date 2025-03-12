@@ -23,11 +23,6 @@ package org.noear.solon.expr;
  */
 public interface ExpressionContext {
     /**
-     * 包含键
-     */
-    boolean containsKey(Object key);
-
-    /**
      * 获取值
      */
     Object get(Object key);

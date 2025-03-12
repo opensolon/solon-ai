@@ -76,6 +76,10 @@ public class ComparisonNode implements ConditionNode {
                 return leftValue.equals(rightValue);
             case neq:
                 return !leftValue.equals(rightValue);
+            case lk:
+                return (leftValue.toString()).contains(rightValue.toString());
+            case nlk:
+                return (leftValue.toString()).contains(rightValue.toString()) == false;
             case in:
                 return ((Collection) rightValue).contains(leftValue);
             case nin:

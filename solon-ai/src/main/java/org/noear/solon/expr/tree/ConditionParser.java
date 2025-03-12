@@ -31,6 +31,11 @@ import java.util.List;
 
 
 public class ConditionParser implements ExpressionParser {
+    private static final ConditionParser instance = new ConditionParser();
+
+    public static ConditionParser getInstance() {
+        return instance;
+    }
 
     @Override
     public Expression parse(Reader reader) {
@@ -73,30 +78,45 @@ public class ConditionParser implements ExpressionParser {
         } else if (eat(state, "NOT")) {
             result = new LogicalNode(LogicalOp.not, parseFactor(state), null);
         } else {
-            String fieldName = parseIdentifier(state);
+            String variableName = parseIdentifier(state);
             state.skipWhitespace();
             if (state.getCurrentChar() == '>' || state.getCurrentChar() == '<' || state.getCurrentChar() == '=' || state.getCurrentChar() == '!') {
                 String operator = parseComparisonOperator(state);
-                Object value = parseValue(state, true);
-                Expression rightNode = null;
-                if (value instanceof Expression) {
-                    rightNode = (Expression) value;
-                } else {
-                    rightNode = new ConstantNode(value);
-                }
-
-                result = new ComparisonNode(ComparisonOp.parse(operator), new VariableNode(fieldName), rightNode);
+                result = parseComparison(state, ComparisonOp.parse(operator), variableName);
+            } else if (eat(state, "LIKE")) {
+                result = parseComparison(state, ComparisonOp.lk, variableName);
             } else if (eat(state, "IN")) {
                 List<Object> values = parseList(state);
-                result = new ComparisonNode(ComparisonOp.in, new VariableNode(fieldName), new ConstantNode(values));
-            } else if (eat(state, "NOT IN")) {
-                List<Object> values = parseList(state);
-                result = new ComparisonNode(ComparisonOp.nin, new VariableNode(fieldName), new ConstantNode(values));
+                result = new ComparisonNode(ComparisonOp.in, new VariableNode(variableName), new ConstantNode(values));
+            } else if (eat(state, "NOT")) {
+                state.skipWhitespace();
+
+                if (eat(state, "IN")) {
+                    List<Object> values = parseList(state);
+                    result = new ComparisonNode(ComparisonOp.nin, new VariableNode(variableName), new ConstantNode(values));
+                } else if (eat(state, "LIKE")) {
+                    result = parseComparison(state, ComparisonOp.nlk, variableName);
+                } else {
+                    throw new IllegalArgumentException("Invalid expression!");
+                }
             } else {
-                result = new ComparisonNode(ComparisonOp.eq, new VariableNode(fieldName), new ConstantNode(true));
+                result = new ComparisonNode(ComparisonOp.eq, new VariableNode(variableName), new ConstantNode(true));
             }
         }
+
         return result;
+    }
+
+    private ComparisonNode parseComparison(ParserState state, ComparisonOp op, String variableName) {
+        Object value = parseValue(state, true);
+        Expression rightNode = null;
+        if (value instanceof Expression) {
+            rightNode = (Expression) value;
+        } else {
+            rightNode = new ConstantNode(value);
+        }
+
+        return new ComparisonNode(op, new VariableNode(variableName), rightNode);
     }
 
     private String parseIdentifier(ParserState state) {

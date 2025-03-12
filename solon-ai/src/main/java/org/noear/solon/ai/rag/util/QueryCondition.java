@@ -16,8 +16,8 @@
 package org.noear.solon.ai.rag.util;
 
 import org.noear.solon.ai.rag.Document;
-
-import java.util.function.Predicate;
+import org.noear.solon.expr.Expression;
+import org.noear.solon.expr.tree.ConditionParser;
 
 /**
  * 查询条件
@@ -30,8 +30,7 @@ public class QueryCondition {
     private Freshness freshness;
     private int limit = 4;
     private double similarityThreshold = 0.4D;
-    private Predicate<Document> filter = (doc) -> true;
-    private String nativeFilter;
+    private Expression<Boolean> filterExpression;
 
     public QueryCondition(String query) {
         this.query = query;
@@ -70,16 +69,21 @@ public class QueryCondition {
     /**
      * 获取过滤器（用于查询结果的二次过滤）
      */
-    public Predicate<Document> getFilter() {
-        return filter;
+    public Expression<Boolean> getFilterExpression() {
+        return filterExpression;
     }
 
     /**
-     * 获取原生过滤器（用于库原生查询过滤）
+     * 过滤
      */
-    public String getNativeFilter() {
-        return nativeFilter;
+    public boolean doFilter(Document doc) {
+        if (filterExpression == null) {
+            return true;
+        } else {
+            return filterExpression.evaluate(doc.getMetadata()::get);
+        }
     }
+
 
     /// /////////////////
 
@@ -100,18 +104,18 @@ public class QueryCondition {
     }
 
     /**
-     * 配置过滤器（用于查询结果的二次过滤）
+     * 配置过滤表达式
      */
-    public QueryCondition filter(Predicate<Document> filter) {
-        this.filter = filter;
+    public QueryCondition filterExpression(Expression<Boolean> filterExpression) {
+        this.filterExpression = filterExpression;
         return this;
     }
 
-    /*
-     * 配置原生过滤器（用于库原生查询过滤）
+    /**
+     * 配置过滤表达式
      */
-    public QueryCondition nativeFilter(String nativeFilter) {
-        this.nativeFilter = nativeFilter;
+    public QueryCondition filterExpression(String filterExpression) {
+        this.filterExpression = ConditionParser.getInstance().parse(filterExpression);
         return this;
     }
 

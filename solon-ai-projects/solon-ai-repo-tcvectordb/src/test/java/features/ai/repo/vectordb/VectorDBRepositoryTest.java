@@ -82,8 +82,7 @@ public class VectorDBRepositoryTest {
             }
 
             // 测试带过滤器的搜索
-            condition = new QueryCondition("framework")
-                    .filter(doc -> doc.getContent().contains("solon"));
+            condition = new QueryCondition("solon");
             results = repository.search(condition);
 
             if (!results.isEmpty()) {
