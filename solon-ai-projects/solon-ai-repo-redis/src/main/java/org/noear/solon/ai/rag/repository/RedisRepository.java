@@ -101,7 +101,6 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
     public void initRepository() {
         try {
             client.ftInfo(indexName);
-            System.out.println("索引已存在: " + indexName);
         } catch (Exception e) {
             try {
                 int dim = embeddingModel.dimensions();
@@ -111,14 +110,13 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                 vectorArgs.put("TYPE", "FLOAT32");
                 vectorArgs.put("DIM", dim);
                 vectorArgs.put("DISTANCE_METRIC", "COSINE");
-                vectorArgs.put("INITIAL_CAP", 10000);
 
                 SchemaField[] fields = new SchemaField[]{
                     TextField.of("$.content").as("content"),
                     VectorField.builder()
                         .fieldName("$.embedding")
                         .as("embedding")
-                        .algorithm(VectorField.VectorAlgorithm.FLAT)
+                        .algorithm(VectorField.VectorAlgorithm.HNSW)
                         .attributes(vectorArgs)
                         .build(),
                         TextField.of("$.metadata").as("metadata")
@@ -134,8 +132,6 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                 );
 
             } catch (Exception err) {
-                System.err.println("索引创建失败: " + err.getMessage());
-                err.printStackTrace();
                 throw new RuntimeException(err);
             }
         }
@@ -240,8 +236,6 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
 
         // 构建查询，注意字段名称需要与索引定义匹配
         String queryString = "*=>[KNN " + condition.getLimit() + " @embedding $BLOB AS score]";
-
-        // 返回字段
         String[] returnFields = {"content", "metadata", "score"};
 
         try {
@@ -251,7 +245,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                     .returnFields(returnFields)
                     .setSortBy("score", true) // true表示升序，相似度越高分数越低
                     .limit(0, condition.getLimit())
-                    .dialect(2).timeout(5000);
+                    .dialect(2);
 
             // 执行查询
             SearchResult result = client.ftSearch(indexName, query);

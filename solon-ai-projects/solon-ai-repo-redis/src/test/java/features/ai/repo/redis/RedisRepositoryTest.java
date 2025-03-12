@@ -65,7 +65,7 @@ public class RedisRepositoryTest {
         List<Document> list = repository.search("solon");
         assert list.size() == 4;
 
-        List<Document> list2 = repository.search("graphql");
+        List<Document> list2 = repository.search("temporal");
         assert list2.isEmpty();
 
         /// /////////////////////////////
