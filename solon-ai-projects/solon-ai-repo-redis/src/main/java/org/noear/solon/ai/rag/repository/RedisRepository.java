@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.rag.repository;
 
+import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
@@ -258,8 +259,8 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
     private Document toDocument(redis.clients.jedis.search.Document jDoc) {
         String id = jDoc.getId().substring(keyPrefix.length());
         String content = jDoc.getString("$.content");
-        Map<String, Object> metadata = (Map<String, Object>) jDoc.get("$.metadata");
-
+        String metadataStr = jDoc.getString("$.metadata");
+        Map<String, Object> metadata = ONode.deserialize(metadataStr, Map.class);
 
         // 添加相似度分数到元数据
         double similarity = similarityScore(jDoc);
