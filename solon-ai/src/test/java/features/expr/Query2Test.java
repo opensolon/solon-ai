@@ -2,7 +2,7 @@ package features.expr;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.expr.Expression;
-import org.noear.solon.expr.tree.ConditionBuilder;
+import org.noear.solon.expr.simple.ConditionBuilder;
 
 import java.util.HashMap;
 import java.util.Map;

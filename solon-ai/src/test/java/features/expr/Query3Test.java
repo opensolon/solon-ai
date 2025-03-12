@@ -2,6 +2,7 @@ package features.expr;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.expr.*;
+import org.noear.solon.expr.simple.SimpleExpressionEvaluator;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -10,11 +11,11 @@ import java.util.Map;
  * @author noear 2025/3/12 created
  */
 public class Query3Test {
-    ExpressionEvaluator evaluator = new DefaultExpressionEvaluator();
+    ExpressionEvaluator evaluator = new SimpleExpressionEvaluator();
 
     @Test
     public void case1() {
-        Map<String,Object> context = new HashMap<>();
+        Map<String, Object> context = new HashMap<>();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("isMarried", false);
@@ -38,7 +39,7 @@ public class Query3Test {
 
     @Test
     public void case2() {
-        Map<String,Object> context = new HashMap();
+        Map<String, Object> context = new HashMap();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("isMarried", false);
@@ -63,7 +64,7 @@ public class Query3Test {
 
     @Test
     public void case3() {
-        Map<String,Object> context = new HashMap();
+        Map<String, Object> context = new HashMap();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("isMarried", false);
@@ -87,7 +88,7 @@ public class Query3Test {
 
     @Test
     public void case4() {
-        Map<String,Object> context = new HashMap();
+        Map<String, Object> context = new HashMap();
         context.put("age", 25);
         context.put("salary", 4000);
         context.put("salaryV", 5000);
@@ -135,7 +136,7 @@ public class Query3Test {
 
     @Test
     public void case6() {
-        Map<String,Object> context = new HashMap();
+        Map<String, Object> context = new HashMap();
         context.put("a", 1);
         context.put("b", 2);
 
@@ -148,7 +149,7 @@ public class Query3Test {
     public void case7() {
         String expression = "(age > 18 AND salary < 5000) ? 'Eligible' : 'Not Eligible'";
 
-        Map<String,Object> context = new HashMap();
+        Map<String, Object> context = new HashMap();
         context.put("age", 20);
         context.put("salary", 4000);
 
@@ -156,5 +157,20 @@ public class Query3Test {
         System.out.println("Result: " + result); // 输出: Result: Eligible
 
         assert "Eligible".equals(result);
+    }
+
+    @Test
+    public void case8() {
+        Number result1 = (Number) evaluator.eval("1");
+        System.out.println(result1);
+        assert result1.intValue() == 1;
+
+        String result2 = (String) evaluator.eval("'2'");
+        System.out.println(result2);
+        assert "2".equals(result2);
+
+        String result3 = (String) evaluator.eval("'hello ' + 'world!'");
+        System.out.println(result3);
+        assert "hello world!".equals(result3);
     }
 }

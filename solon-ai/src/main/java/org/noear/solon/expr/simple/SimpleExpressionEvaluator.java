@@ -13,12 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr;
+package org.noear.solon.expr.simple;
 
-import org.noear.solon.expr.tree.*;
+import org.noear.solon.expr.Expression;
+import org.noear.solon.expr.ExpressionEvaluator;
 
 /**
- * 表达式评估器默认实现
+ * 简单表达式评估器
  *
  * @author noear
  * @since 3.1
@@ -33,10 +34,10 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 默认表达式解析器
  * */
-public class DefaultExpressionEvaluator implements ExpressionEvaluator {
-    private static final DefaultExpressionEvaluator instance = new DefaultExpressionEvaluator();
+public class SimpleExpressionEvaluator implements ExpressionEvaluator {
+    private static final SimpleExpressionEvaluator instance = new SimpleExpressionEvaluator();
 
-    public static DefaultExpressionEvaluator getInstance() {
+    public static SimpleExpressionEvaluator getInstance() {
         return instance;
     }
 

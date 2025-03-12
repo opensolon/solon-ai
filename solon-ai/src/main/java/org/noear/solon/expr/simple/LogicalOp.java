@@ -13,34 +13,46 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.tree;
-
-import org.noear.solon.expr.Expression;
-
-import java.util.Map;
+package org.noear.solon.expr.simple;
 
 /**
- * 变量节点（表示查询中的变量或字段）
+ * 逻辑操作符
  *
  * @author noear
  * @since 3.1
  */
-public class VariableNode implements Expression {
-    private String name;
+public enum LogicalOp {
+    and("AND"),
+    or("OR"),
+    not("NOT"),
+    ;
 
-    public VariableNode(String name) {
-        this.name = name;
+    LogicalOp(String code) {
+        this.code = code;
+    }
+
+    private final String code;
+
+    /**
+     * 代号
+     */
+    public String getCode() {
+        return code;
     }
 
     /**
-     * 获取字段名
+     * 解析
      */
-    public String getName() {
-        return name;
-    }
-
-    @Override
-    public Object evaluate(Map context) {
-        return context.get(name);
+    public static LogicalOp parse(String op) {
+        switch (op) {
+            case "AND":
+                return and;
+            case "OR":
+                return or;
+            case "NOT":
+                return not;
+            default:
+                throw new IllegalArgumentException("Invalid logical operator: " + op);
+        }
     }
 }
