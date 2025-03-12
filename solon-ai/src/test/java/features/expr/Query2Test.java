@@ -2,7 +2,6 @@ package features.expr;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.expression.ExpressionContextDefault;
-import org.noear.solon.expression.ExpressionNode;
 import org.noear.solon.expression.query.*;
 
 /**
@@ -29,7 +28,7 @@ public class Query2Test {
         // 计算条件查询表达式的值
         boolean result = conditionNode.evaluate(context);
         System.out.println("Result: " + result);  // 输出: Result: true
-
+        assert result;
 
         PrintUtil.printTree2(conditionNode);
     }

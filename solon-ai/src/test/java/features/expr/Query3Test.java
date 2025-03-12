@@ -55,7 +55,7 @@ public class Query3Test {
         // 计算表达式结果
         Object result = root.evaluate(context);
         System.out.println("Result: " + result); // Output: Result: true
-        assert result instanceof Boolean;
+        assert ((Boolean) result) == true;
 
         PrintUtil.printTree2(root);
     }
@@ -80,7 +80,7 @@ public class Query3Test {
         // 计算表达式结果
         Object result = root.evaluate(context);
         System.out.println("Result: " + result); // Output: Result: true
-        assert result instanceof Boolean;
+        assert ((Boolean) result) == true;
 
         PrintUtil.printTree2(root);
     }
@@ -106,7 +106,7 @@ public class Query3Test {
         // 计算表达式结果
         Object result = root.evaluate(context);
         System.out.println("Result: " + result); // Output: Result: true
-        assert result instanceof Boolean;
+        assert ((Boolean) result) == true;
 
         PrintUtil.printTree2(root);
     }

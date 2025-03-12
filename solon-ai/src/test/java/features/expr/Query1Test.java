@@ -36,7 +36,7 @@ public class Query1Test {
         // 计算条件查询表达式的值
         boolean result = orNode.evaluate(context);
         System.out.println("Result: " + result);  // 输出: Result: true
-
+        assert result;
 
         PrintUtil.printTree(orNode);
     }
