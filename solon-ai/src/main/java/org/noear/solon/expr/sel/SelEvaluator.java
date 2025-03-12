@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.simple;
+package org.noear.solon.expr.sel;
 
 import org.noear.solon.expr.Expression;
 import org.noear.solon.expr.ExpressionEvaluator;
@@ -32,15 +32,15 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 简单表达式解析器
+ * 简单表达式语言解析器
  *
  * @author noear
  * @since 3.1
  * */
-public class SimpleExpressionEvaluator implements ExpressionEvaluator {
-    private static final SimpleExpressionEvaluator instance = new SimpleExpressionEvaluator();
+public class SelEvaluator implements ExpressionEvaluator {
+    private static final SelEvaluator instance = new SelEvaluator();
 
-    public static SimpleExpressionEvaluator getInstance() {
+    public static SelEvaluator getInstance() {
         return instance;
     }
 
