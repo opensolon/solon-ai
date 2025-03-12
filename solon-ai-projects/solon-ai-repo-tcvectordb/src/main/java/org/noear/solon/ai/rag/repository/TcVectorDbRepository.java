@@ -15,11 +15,11 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.QueryCondition;
+import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 腾讯云 VectorDB 矢量存储知识库
@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * @since 3.1
  */
 @Preview("3.1")
-public class VectorDBRepository implements RepositoryStorable {
+public class TcVectorDbRepository implements RepositoryStorable {
 
     /**
      * 文本字段名
@@ -168,14 +168,14 @@ public class VectorDBRepository implements RepositoryStorable {
      * 简单构造函数
      *
      * @param embeddingModelName 向量模型名称
-     * @param url VectorDB 服务地址
-     * @param username 用户名
-     * @param key 密钥
-     * @param databaseName 数据库名称
-     * @param collectionName 集合名称
+     * @param url                VectorDB 服务地址
+     * @param username           用户名
+     * @param key                密钥
+     * @param databaseName       数据库名称
+     * @param collectionName     集合名称
      */
-    public VectorDBRepository(String embeddingModelName, String url, String username, String key,
-                              String databaseName, String collectionName) {
+    public TcVectorDbRepository(String embeddingModelName, String url, String username, String key,
+                                String databaseName, String collectionName) {
         this(new Builder(embeddingModelName, url, username, key, databaseName, collectionName));
     }
 
@@ -184,7 +184,7 @@ public class VectorDBRepository implements RepositoryStorable {
      *
      * @param builder 构建器
      */
-    private VectorDBRepository(Builder builder) {
+    private TcVectorDbRepository(Builder builder) {
         // 验证必要参数
         if (builder.embeddingModel == null) {
             throw new IllegalArgumentException("EmbeddingModel must not be null");
@@ -237,15 +237,15 @@ public class VectorDBRepository implements RepositoryStorable {
      * 创建构建器
      *
      * @param embeddingModelName 向量模型名称
-     * @param url VectorDB 服务地址
-     * @param username 用户名
-     * @param key 密钥
-     * @param databaseName 数据库名称
-     * @param collectionName 集合名称
+     * @param url                VectorDB 服务地址
+     * @param username           用户名
+     * @param key                密钥
+     * @param databaseName       数据库名称
+     * @param collectionName     集合名称
      * @return 构建器
      */
     public static Builder builder(String embeddingModelName, String url, String username, String key,
-                                 String databaseName, String collectionName) {
+                                  String databaseName, String collectionName) {
         return new Builder(embeddingModelName, url, username, key, databaseName, collectionName);
     }
 
@@ -276,14 +276,14 @@ public class VectorDBRepository implements RepositoryStorable {
          * 构造函数
          *
          * @param embeddingModelName 向量模型名称
-         * @param url VectorDB 服务地址
-         * @param username 用户名
-         * @param key 密钥
-         * @param databaseName 数据库名称
-         * @param collectionName 集合名称
+         * @param url                VectorDB 服务地址
+         * @param username           用户名
+         * @param key                密钥
+         * @param databaseName       数据库名称
+         * @param collectionName     集合名称
          */
         public Builder(String embeddingModelName, String url, String username, String key,
-                      String databaseName, String collectionName) {
+                       String databaseName, String collectionName) {
             if (Utils.isEmpty(embeddingModelName)) {
                 throw new IllegalArgumentException("EmbeddingModelName must not be null or empty");
             }
@@ -405,8 +405,8 @@ public class VectorDBRepository implements RepositoryStorable {
          *
          * @return VectorDBRepository 实例
          */
-        public VectorDBRepository build() {
-            return new VectorDBRepository(this);
+        public TcVectorDbRepository build() {
+            return new TcVectorDbRepository(this);
         }
     }
 
@@ -480,7 +480,7 @@ public class VectorDBRepository implements RepositoryStorable {
         if (indexParams != null) {
             // 使用自定义参数
             vectorIndex = new VectorIndex(VECTOR_FIELD_NAME, embeddingModel.getDimension(),
-                                         indexType, metricType, indexParams);
+                    indexType, metricType, indexParams);
         } else {
             // 对于其他索引类型
             vectorIndex = new VectorIndex(VECTOR_FIELD_NAME, embeddingModel.getDimension(),
@@ -519,9 +519,9 @@ public class VectorDBRepository implements RepositoryStorable {
                         // 确保文档内容被设置到TEXT_FIELD_NAME字段
                         .addDocField(new DocField(TEXT_FIELD_NAME, document.getContent()));
 
-                if (document.getMetadata() != null && !document.getMetadata().isEmpty()){
+                if (document.getMetadata() != null && !document.getMetadata().isEmpty()) {
                     for (Map.Entry<String, Object> entry : document.getMetadata().entrySet()) {
-                        builder.addDocField(new DocField(entry.getKey(),entry.getValue()));
+                        builder.addDocField(new DocField(entry.getKey(), entry.getValue()));
                     }
                 }
 
@@ -534,7 +534,7 @@ public class VectorDBRepository implements RepositoryStorable {
                     .withBuildIndex(true)
                     .build();
             AffectRes upsert = collection.upsert(insertParam);
-            if (upsert.getCode() != 0){
+            if (upsert.getCode() != 0) {
                 throw new IOException("Failed to insert documents: " + upsert.getMsg());
             }
 
@@ -606,26 +606,25 @@ public class VectorDBRepository implements RepositoryStorable {
 
         try {
             // 准备搜索参数
-            SearchByEmbeddingItemsParam searchParam = SearchByEmbeddingItemsParam.newBuilder()
+            SearchByEmbeddingItemsParam.Builder searchParamBuilder = SearchByEmbeddingItemsParam.newBuilder()
                     .withEmbeddingItems(Collections.singletonList(condition.getQuery()))
                     .withParams(new HNSWSearchParams(100))
-                    .withLimit(condition.getLimit() > 0 ? condition.getLimit() : 10)
-                    .build();
+                    .withLimit(condition.getLimit() > 0 ? condition.getLimit() : 10);
+
+            //todo: 要把 getFilterExpression 表达式转为 原生过滤表达式
+            // 添加过滤表达式支持
+            //if (Utils.isNotEmpty(condition.getFilterExpression())) {
+            //    searchParamBuilder.withFilter(condition.getFilterExpression());
+            //}
 
             // 执行搜索
-            SearchRes searchRes = collection.searchByEmbeddingItems(searchParam);
+            SearchRes searchRes = collection.searchByEmbeddingItems(searchParamBuilder.build());
 
             // 解析搜索结果
-            List<Document> results = getDocuments(searchRes);
+            List<Document> result = getDocuments(searchRes);
 
-            // 应用过滤器（如果有）
-            if (condition.getFilter() != null) {
-                return results.stream()
-                        .filter(condition.getFilter())
-                        .collect(Collectors.toList());
-            }
-
-            return results;
+            // 再次过滤和排序
+            return SimilarityUtil.sorted(condition, result.stream());
         } catch (Exception e) {
             throw new IOException("Failed to search documents: " + e.getMessage(), e);
         }
@@ -634,9 +633,9 @@ public class VectorDBRepository implements RepositoryStorable {
     /**
      * 结果转换
      *
-     * @author 小奶奶花生米
      * @param searchRes
      * @return java.util.List<org.noear.solon.ai.rag.Document>
+     * @author 小奶奶花生米
      */
     private static List<Document> getDocuments(SearchRes searchRes) {
         List<Document> results = new ArrayList<>();
@@ -658,5 +657,4 @@ public class VectorDBRepository implements RepositoryStorable {
         }
         return results;
     }
-
 }

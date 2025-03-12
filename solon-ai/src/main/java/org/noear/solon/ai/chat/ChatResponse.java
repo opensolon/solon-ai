@@ -47,6 +47,11 @@ public interface ChatResponse {
     boolean hasChoices();
 
     /**
+     * 最后一个选择
+     */
+    ChatChoice lastChoice();
+
+    /**
      * 获取所有选择
      */
     List<ChatChoice> getChoices();
@@ -58,6 +63,12 @@ public interface ChatResponse {
     AssistantMessage getMessage();
 
     /**
+     * 获取聚合消息（流响应完成时可用）
+     */
+    @Nullable
+    AssistantMessage getAggregationMessage();
+
+    /**
      * 获取使用情况（完成时，才会有使用情况）
      */
     @Nullable
@@ -67,4 +78,9 @@ public interface ChatResponse {
      * 是否完成
      */
     boolean isFinished();
+
+    /**
+     * 是否为流响应
+     */
+    boolean isStream();
 }

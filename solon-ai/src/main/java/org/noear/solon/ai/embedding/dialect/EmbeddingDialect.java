@@ -19,6 +19,7 @@ import org.noear.solon.ai.AiModelDialect;
 import org.noear.solon.ai.embedding.EmbeddingConfig;
 import org.noear.solon.ai.embedding.EmbeddingOptions;
 import org.noear.solon.ai.embedding.EmbeddingResponse;
+import org.noear.solon.lang.Preview;
 
 import java.util.List;
 
@@ -28,6 +29,7 @@ import java.util.List;
  * @author noear
  * @since 3.1
  */
+@Preview("3.1")
 public interface EmbeddingDialect extends AiModelDialect {
     /**
      * 匹配检测

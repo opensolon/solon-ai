@@ -75,7 +75,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public boolean parseResponseJson(ChatConfig config, boolean isStream, ChatResponseDefault resp, String json) {
+    public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         //解析
         ONode oResp = ONode.load(json);
 
@@ -95,7 +95,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
                 createdStr = createdStr.substring(0, createdStr.indexOf(".") + 4);
             }
             Date created = DateUtil.parseTry(createdStr);
-            List<AssistantMessage> messageList = parseAssistantMessage(isStream, resp, oResp.get("message"));
+            List<AssistantMessage> messageList = parseAssistantMessage(resp, oResp.get("message"));
             for (AssistantMessage msg1 : messageList) {
                 resp.addChoice(new ChatChoice(0, created, done_reason, msg1));
             }

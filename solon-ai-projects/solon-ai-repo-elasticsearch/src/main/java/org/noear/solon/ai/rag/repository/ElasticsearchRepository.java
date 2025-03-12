@@ -318,12 +318,12 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
             must.add(matchAll);
         }
 
-        // 构建过滤条件
-        if (condition.getFilter() != null) {
-            Map<String, Object> filter = new HashMap<>();
-            filter.put("match_all", new HashMap<>());
-            must.add(filter);
-        }
+        // todo: 构建过滤条件 //要进行转换
+//        if (condition.getFilterExpression() != null) {
+//            Map<String, Object> filter = new HashMap<>();
+//            filter.put("match_all", new HashMap<>());
+//            must.add(filter);
+//        }
 
         bool.put("must", must);
         query.put("bool", bool);

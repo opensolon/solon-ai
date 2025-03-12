@@ -82,7 +82,7 @@ public class ChromaRepositoryTest {
 
             // 测试带过滤器的搜索
             condition = new QueryCondition("solon")
-                    .filter(doc -> doc.getUrl().contains("noear.org"));
+                    .filterExpression("url LIKE 'noear.org'");
             results = repository.search(condition);
             assertFalse(results.isEmpty(), "应该找到noear.org域名下的文档");
             assertTrue(results.get(0).getUrl().contains("noear.org"), "文档URL应该包含noear.org");

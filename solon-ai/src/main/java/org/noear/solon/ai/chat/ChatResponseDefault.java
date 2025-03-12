@@ -30,11 +30,19 @@ import java.util.List;
  * @since 3.1
  */
 public class ChatResponseDefault implements ChatResponse {
+    private final boolean stream;
+
     protected final List<ChatChoice> choices = new ArrayList<>();
     protected ChatException error;
     protected AiUsage usage;
     protected String model;
     protected boolean finished;
+    //取合消息内容
+    protected StringBuilder aggregationMessageContent = new StringBuilder();
+
+    public ChatResponseDefault(boolean stream) {
+        this.stream = stream;
+    }
 
     /**
      * 获取模型
@@ -69,13 +77,36 @@ public class ChatResponseDefault implements ChatResponse {
     }
 
     /**
+     * 最后一个选择
+     */
+    public ChatChoice lastChoice() {
+        return choices.get(choices.size() - 1);
+    }
+
+    /**
      * 获取消息
      */
     @Override
     public AssistantMessage getMessage() {
         if (hasChoices()) {
             //取最后条消息
-            return choices.get(choices.size() - 1).getMessage();
+            return lastChoice().getMessage();
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * 获取聚合消息
+     */
+    @Override
+    public AssistantMessage getAggregationMessage() {
+        if (hasChoices()) {
+            if (stream) {
+                return new AssistantMessage(aggregationMessageContent.toString(), lastChoice().getMessage().isThinking(), null, null);
+            } else {
+                return lastChoice().getMessage();
+            }
         } else {
             return null;
         }
@@ -95,6 +126,14 @@ public class ChatResponseDefault implements ChatResponse {
     @Override
     public boolean isFinished() {
         return finished;
+    }
+
+    /**
+     * 是否为流响应
+     */
+    @Override
+    public boolean isStream() {
+        return stream;
     }
 
     /// //////////////////////////
