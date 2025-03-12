@@ -32,7 +32,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 默认表达式解析器
+ * 简单表达式解析器
+ *
+ * @author noear
+ * @since 3.1
  * */
 public class SimpleExpressionEvaluator implements ExpressionEvaluator {
     private static final SimpleExpressionEvaluator instance = new SimpleExpressionEvaluator();

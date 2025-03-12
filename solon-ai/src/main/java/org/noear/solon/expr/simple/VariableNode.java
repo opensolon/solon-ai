@@ -20,7 +20,7 @@ import org.noear.solon.expr.Expression;
 import java.util.Map;
 
 /**
- * 变量节点（表示查询中的变量或字段）
+ * 变量表达式节点（表示查询中的变量或字段）
  *
  * @author noear
  * @since 3.1

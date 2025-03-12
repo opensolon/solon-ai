@@ -20,7 +20,7 @@ import org.noear.solon.expr.Expression;
 import java.util.Map;
 
 /**
- * 逻辑运算节点（如 AND, OR, NOT）
+ * 逻辑表达式节点（如 AND, OR, NOT）
  *
  * @author noear
  * @since 3.1

@@ -21,7 +21,7 @@ import java.util.Collection;
 import java.util.Map;
 
 /**
- * 比较运算节点（如 >, <, ==）
+ * 比较表达式节点（如 >, <, ==）
  *
  * @author noear
  * @since 3.1

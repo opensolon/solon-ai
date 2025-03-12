@@ -21,7 +21,7 @@ import java.util.Collection;
 import java.util.Map;
 
 /**
- * 常量节点（表示查询中的常量）
+ * 常量表达式节点（表示查询中的常量）
  *
  * @author noear
  * @since 3.1

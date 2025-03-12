@@ -21,7 +21,7 @@ import java.util.Map;
 
 
 /**
- * 算数运算节点
+ * 算数表达式节点
  *
  * @author noear
  * @since 3.1

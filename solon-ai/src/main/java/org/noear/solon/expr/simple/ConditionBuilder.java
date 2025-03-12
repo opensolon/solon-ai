@@ -20,7 +20,7 @@ import org.noear.solon.expr.Expression;
 import java.util.Arrays;
 
 /**
- * 表达式构建器
+ * 条件表达式构建器
  *
  * @author noear
  * @since 3.1
