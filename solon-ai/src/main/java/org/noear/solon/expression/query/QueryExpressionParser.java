@@ -24,7 +24,7 @@ import org.noear.solon.expression.ExpressionParser;
  * @author noear
  * @since 3.1
  */
-import java.io.StringReader;
+import java.io.Reader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,15 +32,9 @@ import java.util.List;
 
 public class QueryExpressionParser implements ExpressionParser {
 
-    private final String expression;
-
-    public QueryExpressionParser(String expression) {
-        this.expression = expression;
-    }
-
     @Override
-    public Expression parse() {
-        ParserState state = new ParserState(new StringReader(expression));
+    public Expression parse(Reader reader) {
+        ParserState state = new ParserState(reader);
         ConditionNode result = parseExpression(state);
         if (state.getCurrentChar() != -1) {
             throw new RuntimeException("Unexpected character: " + (char) state.getCurrentChar());
@@ -208,10 +202,10 @@ public class QueryExpressionParser implements ExpressionParser {
      * 封装解析器的状态，包括 StringReader 和当前字符。
      */
     private static class ParserState {
-        private final StringReader reader;
+        private final Reader reader;
         private int ch; // 当前字符
 
-        public ParserState(StringReader reader) {
+        public ParserState(Reader reader) {
             this.reader = reader;
             this.ch = -1; // 初始状态
             nextChar(); // 初始化读取第一个字符

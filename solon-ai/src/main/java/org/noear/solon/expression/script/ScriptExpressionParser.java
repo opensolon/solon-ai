@@ -18,18 +18,16 @@ package org.noear.solon.expression.script;
 import org.noear.solon.expression.Expression;
 import org.noear.solon.expression.ExpressionParser;
 
+import java.io.Reader;
+
 /**
  * @author noear
  * @since 3.1
  */
 public class ScriptExpressionParser implements ExpressionParser {
-    private String expression;
-    public ScriptExpressionParser(String expression) {
-        this.expression = expression;
-    }
 
     @Override
-    public Expression parse() {
+    public Expression parse(Reader reader) {
         return null;
     }
 }

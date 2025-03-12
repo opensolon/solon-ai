@@ -10,6 +10,8 @@ import org.noear.solon.expression.query.QueryExpressionParser;
  * @author noear 2025/3/12 created
  */
 public class Query3Test {
+    ExpressionParser parser = new QueryExpressionParser();
+
     @Test
     public void case1() {
         ExpressionContextDefault context = new ExpressionContextDefault();
@@ -21,8 +23,7 @@ public class Query3Test {
         context.put("vip", "l3");
 
         String expression = "(((age > 18 AND salary < 5000) OR (NOT isMarried)) AND label IN ['aa','bb'] AND title NOT IN ['cc','dd']) OR vip=='l3'";
-        ExpressionParser parser = new QueryExpressionParser(expression);
-        Expression root = parser.parse();
+        Expression root = parser.parse(expression);
 
         // 打印表达式树
         System.out.println("Expression Tree: " + root);
@@ -46,8 +47,8 @@ public class Query3Test {
         context.put("vip", "l3");
 
         String expression = "((age > 18 OR salary < 5000) AND (NOT isMarried) AND label IN ['aa','bb'] AND title NOT IN ['cc','dd']) OR vip=='l3'";
-        ExpressionParser parser = new QueryExpressionParser(expression);
-        Expression root = parser.parse();
+
+        Expression root = parser.parse(expression);
 
         // 打印表达式树
         System.out.println("Expression Tree: " + root);
@@ -71,8 +72,7 @@ public class Query3Test {
         context.put("vip", "l3");
 
         String expression = "((age > 18 OR salary < 5000) AND (isMarried == false) AND label IN ['aa','bb'] AND title NOT IN ['cc','dd']) OR vip=='l3'";
-        ExpressionParser parser = new QueryExpressionParser(expression);
-        Expression root = parser.parse();
+        Expression root = parser.parse(expression);
 
         // 打印表达式树
         System.out.println("Expression Tree: " + root);
@@ -97,8 +97,7 @@ public class Query3Test {
         context.put("vip", "l3");
 
         String expression = "((age > 18 OR salary < salaryV) AND (isMarried == false) AND label IN ['aa','bb'] AND title NOT IN ['cc','dd']) OR vip=='l3'";
-        ExpressionParser parser = new QueryExpressionParser(expression);
-        Expression root = parser.parse();
+        Expression root = parser.parse(expression);
 
         // 打印表达式树
         System.out.println("Expression Tree: " + root);

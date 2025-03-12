@@ -15,6 +15,9 @@
  */
 package org.noear.solon.expression;
 
+import java.io.Reader;
+import java.io.StringReader;
+
 /**
  * 表达式解析器
  *
@@ -25,5 +28,12 @@ public interface ExpressionParser {
     /**
      * 解析
      */
-    Expression parse();
+    Expression parse(Reader reader);
+
+    /**
+     * 解析
+     */
+    default Expression parse(String expr) {
+        return parse(new StringReader(expr));
+    }
 }
