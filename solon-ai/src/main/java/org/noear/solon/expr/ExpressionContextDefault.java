@@ -24,5 +24,8 @@ import java.util.HashMap;
  * @since 3.1
  */
 public class ExpressionContextDefault extends HashMap<String, Object> implements ExpressionContext {
-
+    /**
+     * 只读实例
+     */
+    protected static final ExpressionContext READONLY_INSTANCE = new ExpressionContextDefault();
 }

@@ -17,7 +17,7 @@ package org.noear.solon.ai.rag.util;
 
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.expr.Expression;
-import org.noear.solon.expr.tree.ConditionParser;
+import org.noear.solon.expr.DefaultExpressionParser;
 
 /**
  * 查询条件
@@ -115,7 +115,7 @@ public class QueryCondition {
      * 配置过滤表达式
      */
     public QueryCondition filterExpression(String filterExpression) {
-        this.filterExpression = ConditionParser.getInstance().parse(filterExpression);
+        this.filterExpression = DefaultExpressionParser.getInstance().parse(filterExpression);
         return this;
     }
 

@@ -4,13 +4,13 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.expr.Expression;
 import org.noear.solon.expr.ExpressionContextDefault;
 import org.noear.solon.expr.ExpressionParser;
-import org.noear.solon.expr.tree.ConditionParser;
+import org.noear.solon.expr.DefaultExpressionParser;
 
 /**
  * @author noear 2025/3/12 created
  */
 public class Query3Test {
-    ExpressionParser parser = new ConditionParser();
+    ExpressionParser parser = new DefaultExpressionParser();
 
     @Test
     public void case1() {
@@ -108,5 +108,28 @@ public class Query3Test {
         assert ((Boolean) result) == true;
 
         PrintUtil.printTree2(root);
+    }
+
+    @Test
+    public void case5() {
+        // 数学运算 (Long)
+        Integer result = (Integer) parser.evaluate("1+2+3");
+        System.out.println(result); // 6
+        assert 6 == result;
+
+        // 数学运算 (Double)
+        Double result2 = (Double) parser.evaluate("1.1+2.2+3.3");
+        System.out.println(result2); // 6.6
+        assert 6.6D == result2;
+
+        // 包含关系运算和逻辑运算
+        Boolean result3 = (Boolean) parser.evaluate("(1>0||0<1)&&1!=0");
+        System.out.println(result3); // true
+        assert result3 == true;
+
+        // 三元运算
+        //String result4 = (String) parser.evaluate("4 > 3 ? \"4 > 3\" : 999");
+        //System.out.println(result4); // 4 > 3
+
     }
 }

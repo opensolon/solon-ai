@@ -15,6 +15,8 @@
  */
 package org.noear.solon.expr.tree;
 
+import org.noear.solon.expr.Expression;
+
 import java.util.Arrays;
 
 /**
@@ -24,12 +26,16 @@ import java.util.Arrays;
  * @since 3.1
  */
 public class ConditionBuilder {
-    public LogicalNode and(ConditionNode left, ConditionNode right) {
+    public LogicalNode and(Expression<Boolean> left, Expression<Boolean> right) {
         return new LogicalNode(LogicalOp.and, left, right);
     }
 
-    public LogicalNode or(ConditionNode left, ConditionNode right) {
+    public LogicalNode or(Expression<Boolean> left, Expression<Boolean> right) {
         return new LogicalNode(LogicalOp.or, left, right);
+    }
+
+    public LogicalNode not(Expression<Boolean> left) {
+        return new LogicalNode(LogicalOp.not, left, null);
     }
 
     /// /////////

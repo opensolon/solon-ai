@@ -36,4 +36,23 @@ public interface ExpressionParser {
     default Expression parse(String expr) {
         return parse(new StringReader(expr));
     }
+
+    /**
+     * 执行
+     *
+     * @param expr    表达式
+     * @param context 上下文
+     */
+    default Object evaluate(String expr, ExpressionContext context) {
+        return parse(expr).evaluate(context);
+    }
+
+    /**
+     * 执行
+     *
+     * @param expr 表达式
+     */
+    default Object evaluate(String expr) {
+        return parse(expr).evaluate(ExpressionContextDefault.READONLY_INSTANCE);
+    }
 }

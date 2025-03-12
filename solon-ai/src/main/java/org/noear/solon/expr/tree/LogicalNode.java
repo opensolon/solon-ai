@@ -15,6 +15,7 @@
  */
 package org.noear.solon.expr.tree;
 
+import org.noear.solon.expr.Expression;
 import org.noear.solon.expr.ExpressionContext;
 
 /**
@@ -23,10 +24,10 @@ import org.noear.solon.expr.ExpressionContext;
  * @author noear
  * @since 3.1
  */
-public class LogicalNode implements ConditionNode {
+public class LogicalNode implements Expression<Boolean> {
     private LogicalOp operator; // 逻辑运算符，如 "AND", "OR"
-    private ConditionNode left;  // 左子节点
-    private ConditionNode right; // 右子节点
+    private Expression left;  // 左子节点
+    private Expression right; // 右子节点
 
     /**
      * 获取操作符
@@ -38,18 +39,18 @@ public class LogicalNode implements ConditionNode {
     /**
      * 获取左节点
      */
-    public ConditionNode getLeft() {
+    public Expression getLeft() {
         return left;
     }
 
     /**
      * 获取右节点
      */
-    public ConditionNode getRight() {
+    public Expression getRight() {
         return right;
     }
 
-    public LogicalNode(LogicalOp operator, ConditionNode left, ConditionNode right) {
+    public LogicalNode(LogicalOp operator, Expression left, Expression right) {
         this.operator = operator;
         this.left = left;
         this.right = right;
@@ -59,11 +60,11 @@ public class LogicalNode implements ConditionNode {
     public Boolean evaluate(ExpressionContext context) {
         switch (operator) {
             case and:
-                return left.evaluate(context) && right.evaluate(context);
+                return ((Boolean) left.evaluate(context)) && ((Boolean) right.evaluate(context));
             case or:
-                return left.evaluate(context) || right.evaluate(context);
+                return ((Boolean) left.evaluate(context)) || ((Boolean) right.evaluate(context));
             case not:
-                return left.evaluate(context) == false;
+                return ((Boolean) left.evaluate(context)) == false;
             default:
                 throw new IllegalArgumentException("Unknown operator: " + operator);
         }

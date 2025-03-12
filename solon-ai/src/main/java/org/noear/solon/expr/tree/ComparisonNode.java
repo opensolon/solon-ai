@@ -26,7 +26,7 @@ import java.util.Collection;
  * @author noear
  * @since 3.1
  */
-public class ComparisonNode implements ConditionNode {
+public class ComparisonNode implements Expression<Boolean> {
     private ComparisonOp operator; // 比较运算符，如 ">", "<", "=="
     private Expression left;
     private Expression right;
