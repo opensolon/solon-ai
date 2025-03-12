@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.rag.repository;
 
-import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
@@ -33,7 +32,6 @@ import redis.clients.jedis.search.IndexDataType;
 import redis.clients.jedis.search.Query;
 import redis.clients.jedis.search.SearchResult;
 import redis.clients.jedis.search.schemafields.SchemaField;
-import redis.clients.jedis.search.schemafields.TextField;
 import redis.clients.jedis.search.schemafields.VectorField;
 
 import java.io.IOException;
@@ -112,14 +110,12 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                 vectorArgs.put("DISTANCE_METRIC", "COSINE");
 
                 SchemaField[] fields = new SchemaField[]{
-                    TextField.of("$.content").as("content"),
-                    VectorField.builder()
-                        .fieldName("$.embedding")
-                        .as("embedding")
-                        .algorithm(VectorField.VectorAlgorithm.HNSW)
-                        .attributes(vectorArgs)
-                        .build(),
-                        TextField.of("$.metadata").as("metadata")
+                        VectorField.builder()
+                                .fieldName("$.embedding")
+                                .as("embedding")
+                                .algorithm(VectorField.VectorAlgorithm.HNSW)
+                                .attributes(vectorArgs)
+                                .build()
                 };
 
                 // 创建索引
@@ -174,7 +170,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                     Map<String, Object> jsonDoc = new HashMap<>();
                     jsonDoc.put("content", doc.getContent());
                     jsonDoc.put("embedding", doc.getEmbedding());
-                    jsonDoc.put("metadata", ONode.stringify(doc.getMetadata() != null ? doc.getMetadata() : new HashMap<>()));
+                    jsonDoc.put("metadata", doc.getMetadata());
 
                     // 使用Jedis直接存储Map
                     pipeline.jsonSet(key, Path.ROOT_PATH, jsonDoc);
@@ -236,7 +232,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
 
         // 构建查询，注意字段名称需要与索引定义匹配
         String queryString = "*=>[KNN " + condition.getLimit() + " @embedding $BLOB AS score]";
-        String[] returnFields = {"content", "metadata", "score"};
+        String[] returnFields = {"$.content", "$.metadata", "score"};
 
         try {
             // 创建向量查询对象
@@ -261,9 +257,8 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
 
     private Document toDocument(redis.clients.jedis.search.Document jDoc) {
         String id = jDoc.getId().substring(keyPrefix.length());
-        String content = jDoc.getString("content");
-        Object metaObj = jDoc.get("metadata");
-        Map<String, Object> metadata = metaObj == null ? new HashMap<>() : ONode.deserialize((String) metaObj,Map.class);
+        String content = jDoc.getString("$.content");
+        Map<String, Object> metadata = (Map<String, Object>) jDoc.get("$.metadata");
 
 
         // 添加相似度分数到元数据
@@ -275,6 +270,6 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
     }
 
     private double similarityScore(redis.clients.jedis.search.Document jDoc) {
-        return 1.0D - Double.parseDouble(jDoc.getString("score"));
+        return 1.0D - (2.0D - Double.parseDouble(jDoc.getString("score")) / 2.0D);
     }
 }
