@@ -16,26 +16,25 @@
 package org.noear.solon.expr.tree;
 
 /**
- * 逻辑操作符
+ * 算数操作符
  *
  * @author noear
  * @since 3.1
  */
-public enum LogicalOp {
-    and("AND"),
-    or("OR"),
-    not("NOT"),
+public enum ArithmeticOp {
+    add("+"),
+    sub("-"),
+    mul("*"),
+    div("/"),
+    mod("%"),
     ;
 
-    LogicalOp(String code) {
+    ArithmeticOp(String code) {
         this.code = code;
     }
 
-    private final String code;
+    private String code;
 
-    /**
-     * 代号
-     */
     public String getCode() {
         return code;
     }
@@ -43,16 +42,20 @@ public enum LogicalOp {
     /**
      * 解析
      */
-    public static LogicalOp parse(String op) {
+    public static ArithmeticOp parse(String op) {
         switch (op) {
-            case "AND":
-                return and;
-            case "OR":
-                return or;
-            case "NOT":
-                return not;
+            case "+":
+                return add;
+            case "-":
+                return sub;
+            case "*":
+                return mul;
+            case "/":
+                return div;
+            case "%":
+                return mod;
             default:
-                throw new IllegalArgumentException("Invalid logical operator: " + op);
+                throw new IllegalArgumentException("Invalid arithmetic operator: " + op);
         }
     }
 }
