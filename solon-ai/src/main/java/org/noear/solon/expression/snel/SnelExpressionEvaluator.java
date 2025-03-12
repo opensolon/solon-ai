@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.snel;
+package org.noear.solon.expression.snel;
 
-import org.noear.solon.expr.Expression;
-import org.noear.solon.expr.ExpressionEvaluator;
+import org.noear.solon.expression.Expression;
+import org.noear.solon.expression.ExpressionEvaluator;
 
 /**
  * 简单表达式评估器
@@ -37,10 +37,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author noear
  * @since 3.1
  * */
-public class SnelEvaluator implements ExpressionEvaluator {
-    private static final SnelEvaluator instance = new SnelEvaluator();
+public class SnelExpressionEvaluator implements ExpressionEvaluator {
+    private static final SnelExpressionEvaluator instance = new SnelExpressionEvaluator();
 
-    public static SnelEvaluator getInstance() {
+    public static SnelExpressionEvaluator getInstance() {
         return instance;
     }
 

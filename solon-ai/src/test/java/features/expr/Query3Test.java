@@ -1,8 +1,8 @@
 package features.expr;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.expr.*;
-import org.noear.solon.expr.snel.SnelEvaluator;
+import org.noear.solon.expression.*;
+import org.noear.solon.expression.snel.SnelExpressionEvaluator;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -11,7 +11,7 @@ import java.util.Map;
  * @author noear 2025/3/12 created
  */
 public class Query3Test {
-    ExpressionEvaluator evaluator = new SnelEvaluator();
+    ExpressionEvaluator evaluator = new SnelExpressionEvaluator();
 
     @Test
     public void case1() {

@@ -13,42 +13,46 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.snel;
-
-import org.noear.solon.expr.Expression;
-
-import java.util.Collection;
-import java.util.Map;
+package org.noear.solon.expression.snel;
 
 /**
- * 常量表达式节点（表示查询中的常量）
+ * 逻辑操作符
  *
  * @author noear
  * @since 3.1
  */
-public class ConstantNode implements Expression {
-    private Object value;
+public enum LogicalOp {
+    and("AND"),
+    or("OR"),
+    not("NOT"),
+    ;
 
-    public ConstantNode(Object value) {
-        this.value = value;
+    LogicalOp(String code) {
+        this.code = code;
+    }
+
+    private final String code;
+
+    /**
+     * 代号
+     */
+    public String getCode() {
+        return code;
     }
 
     /**
-     * 获取值
+     * 解析
      */
-    public Object getValue() {
-        return value;
-    }
-
-    /**
-     * 是否为集合
-     */
-    public boolean isCollection() {
-        return value instanceof Collection;
-    }
-
-    @Override
-    public Object evaluate(Map context) {
-        return value;
+    public static LogicalOp parse(String op) {
+        switch (op) {
+            case "AND":
+                return and;
+            case "OR":
+                return or;
+            case "NOT":
+                return not;
+            default:
+                throw new IllegalArgumentException("Invalid logical operator: " + op);
+        }
     }
 }

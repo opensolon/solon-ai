@@ -1,8 +1,8 @@
 package features.expr;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.expr.Expression;
-import org.noear.solon.expr.snel.ConditionBuilder;
+import org.noear.solon.expression.Expression;
+import org.noear.solon.expression.snel.ConditionBuilder;
 
 import java.util.HashMap;
 import java.util.Map;

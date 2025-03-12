@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr.snel;
+package org.noear.solon.expression.snel;
 
-import org.noear.solon.expr.Expression;
+import org.noear.solon.expression.Expression;
 
 import java.util.Arrays;
 

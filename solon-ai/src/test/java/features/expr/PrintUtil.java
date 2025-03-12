@@ -1,10 +1,10 @@
 package features.expr;
 
-import org.noear.solon.expr.Expression;
-import org.noear.solon.expr.snel.ComparisonNode;
-import org.noear.solon.expr.snel.ConstantNode;
-import org.noear.solon.expr.snel.LogicalNode;
-import org.noear.solon.expr.snel.VariableNode;
+import org.noear.solon.expression.Expression;
+import org.noear.solon.expression.snel.ComparisonNode;
+import org.noear.solon.expression.snel.ConstantNode;
+import org.noear.solon.expression.snel.LogicalNode;
+import org.noear.solon.expression.snel.VariableNode;
 
 import java.util.Collection;
 

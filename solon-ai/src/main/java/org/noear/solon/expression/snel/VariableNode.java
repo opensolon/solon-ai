@@ -13,28 +13,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.expr;
+package org.noear.solon.expression.snel;
 
+import org.noear.solon.expression.Expression;
 
-import java.util.Collections;
 import java.util.Map;
 
 /**
- * 表达式
+ * 变量表达式节点（表示查询中的变量或字段）
  *
  * @author noear
  * @since 3.1
  */
-public interface Expression<T> {
-    /**
-     * 评估（即执行）
-     */
-    T evaluate(Map context);
+public class VariableNode implements Expression {
+    private String name;
+
+    public VariableNode(String name) {
+        this.name = name;
+    }
 
     /**
-     * 评估（即执行）
+     * 获取字段名
      */
-    default T evaluate() {
-        return evaluate(Collections.emptyMap());
+    public String getName() {
+        return name;
+    }
+
+    @Override
+    public Object evaluate(Map context) {
+        return context.get(name);
     }
 }
