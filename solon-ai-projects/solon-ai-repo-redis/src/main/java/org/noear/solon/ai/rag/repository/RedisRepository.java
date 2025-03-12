@@ -15,14 +15,6 @@
  */
 package org.noear.solon.ai.rag.repository;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
@@ -33,17 +25,22 @@ import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.lang.Preview;
-
 import redis.clients.jedis.PipelineBase;
 import redis.clients.jedis.UnifiedJedis;
+import redis.clients.jedis.json.Path;
 import redis.clients.jedis.search.FTCreateParams;
 import redis.clients.jedis.search.IndexDataType;
 import redis.clients.jedis.search.Query;
 import redis.clients.jedis.search.SearchResult;
 import redis.clients.jedis.search.schemafields.SchemaField;
-import redis.clients.jedis.search.schemafields.TagField;
 import redis.clients.jedis.search.schemafields.TextField;
 import redis.clients.jedis.search.schemafields.VectorField;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Redis 矢量存储知识库，基于 Redis Search 实现
@@ -103,33 +100,37 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
     @Override
     public void initRepository() {
         try {
-            // 检查并初始化索引
             client.ftInfo(indexName);
         } catch (Exception e) {
-            // 索引不存在时才创建
-
             try {
                 int dim = embeddingModel.dimensions();
 
-                // 配置向量索引参数
+                // 向量字段配置
                 Map<String, Object> vectorArgs = new HashMap<>();
-                vectorArgs.put("DISTANCE_METRIC", "COSINE");
                 vectorArgs.put("TYPE", "FLOAT32");
-                vectorArgs.put("DIM", String.valueOf(dim));
+                vectorArgs.put("DIM", dim);
+                vectorArgs.put("DISTANCE_METRIC", "COSINE");
 
-                // 定义索引字段
                 SchemaField[] fields = new SchemaField[]{
-                        new TextField("content"),  // 文本内容字段
-                        new VectorField("embedding", VectorField.VectorAlgorithm.HNSW, vectorArgs),  // 向量字段
-                        new TagField("metadata")  // 元数据字段
+                    TextField.of("$.content").as("content"),
+                    VectorField.builder()
+                        .fieldName("$.embedding")
+                        .as("embedding")
+                        .algorithm(VectorField.VectorAlgorithm.HNSW)
+                        .attributes(vectorArgs)
+                        .build(),
+                        TextField.of("$.metadata").as("metadata")
                 };
 
                 // 创建索引
-                client.ftCreate(indexName,
+                client.ftCreate(
+                        indexName,
                         FTCreateParams.createParams()
-                                .on(IndexDataType.HASH)
+                                .on(IndexDataType.JSON)
                                 .prefix(keyPrefix),
-                        fields);
+                        fields
+                );
+
             } catch (Exception err) {
                 throw new RuntimeException(err);
             }
@@ -159,7 +160,6 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
 
         for (List<Document> batch : ListUtil.partition(documents, 20)) {
             embeddingModel.embed(batch);
-
             PipelineBase pipeline = null;
             try {
                 pipeline = client.pipelined();
@@ -169,26 +169,19 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                     }
 
                     String key = keyPrefix + doc.getId();
-                    float[] embedding = doc.getEmbedding();
 
-                    // 将向量转换为字节数组
-                    byte[] bytes = new byte[embedding.length * 4];
-                    ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-                    for (float f : embedding) {
-                        buffer.putFloat(f);
-                    }
+                    // 存储为 JSON 格式，注意字段名称需要与索引定义匹配
+                    Map<String, Object> jsonDoc = new HashMap<>();
+                    jsonDoc.put("content", doc.getContent());
+                    jsonDoc.put("embedding", doc.getEmbedding());
+                    jsonDoc.put("metadata", ONode.stringify(doc.getMetadata() != null ? doc.getMetadata() : new HashMap<>()));
 
-                    String metadataJson = ONode.stringify(doc.getMetadata());
-
-                    // 存储文档字段
-                    Map<byte[], byte[]> fields = new HashMap<>(16);
-                    fields.put("content".getBytes(StandardCharsets.UTF_8), doc.getContent().getBytes(StandardCharsets.UTF_8));
-                    fields.put("embedding".getBytes(StandardCharsets.UTF_8), bytes);
-                    fields.put("metadata".getBytes(StandardCharsets.UTF_8), metadataJson.getBytes(StandardCharsets.UTF_8));
-
-                    pipeline.hmset(key.getBytes(StandardCharsets.UTF_8), fields);
+                    // 使用Jedis直接存储Map
+                    pipeline.jsonSet(key, Path.ROOT_PATH, jsonDoc);
                 }
                 pipeline.sync();
+            } catch (Exception e) {
+                throw new IOException("Error storing documents: " + e.getMessage(), e);
             } finally {
                 if (pipeline != null) {
                     pipeline.close();
@@ -204,6 +197,10 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
      */
     @Override
     public void delete(String... ids) throws IOException {
+        if (ids == null || ids.length == 0) {
+            return;
+        }
+
         PipelineBase pipeline = null;
         try {
             pipeline = client.pipelined();
@@ -232,38 +229,49 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
      */
     @Override
     public List<Document> search(QueryCondition condition) throws IOException {
-        // 生成查询向量
-        float[] queryEmbedding = embeddingModel.embed(condition.getQuery());
+        Document queryDoc = new Document(condition.getQuery(), new HashMap<>());
+        List<Document> documents = new ArrayList<>();
+        documents.add(queryDoc);
+        embeddingModel.embed(documents);
 
-        // 将向量转换为字节数组
-        byte[] vectorBytes = new byte[queryEmbedding.length * 4];
-        ByteBuffer buffer = ByteBuffer.wrap(vectorBytes).order(ByteOrder.LITTLE_ENDIAN);
-        for (float f : queryEmbedding) {
-            buffer.putFloat(f);
+        // 构建查询，注意字段名称需要与索引定义匹配
+        String queryString = "*=>[KNN " + condition.getLimit() + " @embedding $BLOB AS score]";
+        String[] returnFields = {"content", "metadata", "score"};
+
+        try {
+            // 创建向量查询对象
+            Query query = new Query(queryString)
+                    .addParam("BLOB", queryDoc.getEmbedding())
+                    .returnFields(returnFields)
+                    .setSortBy("score", true) // true表示升序，相似度越高分数越低
+                    .limit(0, condition.getLimit())
+                    .dialect(2);
+
+            // 执行查询
+            SearchResult result = client.ftSearch(indexName, query);
+
+            // 过滤并转换结果
+            return SimilarityUtil.filter(condition, result.getDocuments()
+                    .stream()
+                    .map(this::toDocument));
+        } catch (Exception e) {
+            throw new IOException("Error searching documents: " + e.getMessage(), e);
         }
-
-        //todo: 要把 getFilterExpression 表达式转为 原生过滤表达式（替换掉 *）
-        Query query = new Query("*=>[KNN " + condition.getLimit() + " @embedding $BLOB AS score]")
-                .addParam("BLOB", vectorBytes)
-                .returnFields("content", "metadata", "score")
-                .setSortBy("score", true)
-                .limit(0, condition.getLimit())
-                .dialect(2);
-
-        SearchResult result = client.ftSearch(indexName, query);
-
-        return SimilarityUtil.sorted(condition, result.getDocuments()
-                .stream()
-                .map(this::toDocument));
     }
 
     private Document toDocument(redis.clients.jedis.search.Document jDoc) {
         String id = jDoc.getId().substring(keyPrefix.length());
         String content = jDoc.getString("content");
-        Map<String, Object> metadata = ONode.deserialize(jDoc.getString("metadata"), Map.class);
+        Object metaObj = jDoc.get("metadata");
+        Map<String, Object> metadata = metaObj == null ? new HashMap<>() : ONode.deserialize((String) metaObj,Map.class);
 
 
-        return new Document(id, content, metadata, similarityScore(jDoc));
+        // 添加相似度分数到元数据
+        double similarity = similarityScore(jDoc);
+        metadata.put("score", similarity);
+        metadata.put("distance", 1.0 - similarity); // 添加距离信息，与Spring AI保持一致
+
+        return new Document(id, content, metadata, similarity);
     }
 
     private double similarityScore(redis.clients.jedis.search.Document jDoc) {
