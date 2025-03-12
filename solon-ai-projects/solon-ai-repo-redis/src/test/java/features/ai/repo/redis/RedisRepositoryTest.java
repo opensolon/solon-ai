@@ -46,10 +46,14 @@ public class RedisRepositoryTest {
         if (redisClient == null) {
             throw new IllegalStateException("Redis client configuration not found!");
         }
-        client = redisClient.openSession().jedis();
+        client = redisClient.jedis();
 
         // 创建测试用的 Repository
         repository = new RedisRepository(embeddingModel, client, "test_idx", "test_doc:");
+
+        repository.dropRepository();
+        repository.initRepository();
+
         load(repository, "https://solon.noear.org/article/about?format=md");
         load(repository, "https://h5.noear.org/more.htm");
         load(repository, "https://h5.noear.org/readme.htm");
@@ -57,7 +61,7 @@ public class RedisRepositoryTest {
 
     @AfterEach
     public void cleanup() {
-        repository.dropRepository();
+        //repository.dropRepository();
     }
 
     @Test
