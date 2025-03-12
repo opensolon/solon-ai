@@ -248,7 +248,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
             SearchResult result = client.ftSearch(indexName, query);
 
             // 过滤并转换结果
-            return SimilarityUtil.filter(condition, result.getDocuments()
+            return SimilarityUtil.sorted(condition, result.getDocuments()
                     .stream()
                     .map(this::toDocument));
         } catch (Exception e) {
@@ -265,12 +265,12 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         // 添加相似度分数到元数据
         double similarity = similarityScore(jDoc);
         metadata.put("score", similarity);
-        metadata.put("distance", 1.0 - similarity); // 添加距离信息，与Spring AI保持一致
+        metadata.put("distance", similarity); // 添加距离信息，与Spring AI保持一致
 
         return new Document(id, content, metadata, similarity);
     }
 
     private double similarityScore(redis.clients.jedis.search.Document jDoc) {
-        return 1.0D - (2.0D - Double.parseDouble(jDoc.getString("score")) / 2.0D);
+        return 1.0D - Double.parseDouble(jDoc.getString("score"));
     }
 }

@@ -34,7 +34,8 @@ public final class SimilarityUtil {
      * 排序
      */
     public static List<Document> sorted(QueryCondition condition, Stream<Document> docs) throws IOException {
-        return docs.sorted(Comparator.comparing(Document::getScore).reversed())
+        return docs.filter(doc -> similarityCheck(doc, condition))
+                .sorted(Comparator.comparing(Document::getScore).reversed())
                 .limit(condition.getLimit())
                 .collect(Collectors.toList());
     }
@@ -43,8 +44,7 @@ public final class SimilarityUtil {
      * 过滤（已经有评分的）
      */
     public static List<Document> filter(QueryCondition condition, Stream<Document> docs) throws IOException {
-        return sorted(condition, docs.filter(condition::doFilter)
-                .filter(doc -> similarityCheck(doc, condition)));
+        return sorted(condition, docs.filter(condition::doFilter));
     }
 
 
@@ -53,8 +53,7 @@ public final class SimilarityUtil {
      */
     public static List<Document> scoreAndfilter(QueryCondition condition, Stream<Document> docs, float[] queryEmbed) throws IOException {
         return sorted(condition, docs.filter(condition::doFilter)
-                .map(doc -> copyAndScore(doc, queryEmbed))
-                .filter(doc -> similarityCheck(doc, condition)));
+                .map(doc -> copyAndScore(doc, queryEmbed)));
     }
 
     /**
