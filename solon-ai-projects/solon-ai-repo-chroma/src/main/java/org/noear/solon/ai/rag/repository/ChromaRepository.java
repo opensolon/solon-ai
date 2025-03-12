@@ -322,6 +322,7 @@ public class ChromaRepository implements RepositoryStorable {
             // 将float[]转换为List<Float>
             List<Float> queryVector = floatArrayToList(queryDoc.getEmbedding());
 
+            //todo: 要把 getFilterExpression 表达式转为 原生过滤表达式
             // 执行查询
             QueryResponse response = chromaApi.queryDocuments(
                     collectionId,
@@ -333,7 +334,7 @@ public class ChromaRepository implements RepositoryStorable {
             List<Document> result = parseQueryResponse(response);
 
             // 再次过滤和排序
-            return SimilarityUtil.filter(condition, result.stream());
+            return SimilarityUtil.sorted(condition, result.stream());
         } catch (Exception e) {
             throw new IOException("Failed to search documents: " + e.getMessage(), e);
         }

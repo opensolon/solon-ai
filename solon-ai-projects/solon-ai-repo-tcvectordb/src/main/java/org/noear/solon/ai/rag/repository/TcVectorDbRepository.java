@@ -611,7 +611,7 @@ public class TcVectorDbRepository implements RepositoryStorable {
                     .withParams(new HNSWSearchParams(100))
                     .withLimit(condition.getLimit() > 0 ? condition.getLimit() : 10);
 
-            //todo: 要把 getFilterExpression 表达式转为 milvus 过滤表达式
+            //todo: 要把 getFilterExpression 表达式转为 原生过滤表达式
             // 添加过滤表达式支持
             //if (Utils.isNotEmpty(condition.getFilterExpression())) {
             //    searchParamBuilder.withFilter(condition.getFilterExpression());
@@ -624,7 +624,7 @@ public class TcVectorDbRepository implements RepositoryStorable {
             List<Document> result = getDocuments(searchRes);
 
             // 再次过滤和排序
-            return SimilarityUtil.filter(condition, result.stream());
+            return SimilarityUtil.sorted(condition, result.stream());
         } catch (Exception e) {
             throw new IOException("Failed to search documents: " + e.getMessage(), e);
         }

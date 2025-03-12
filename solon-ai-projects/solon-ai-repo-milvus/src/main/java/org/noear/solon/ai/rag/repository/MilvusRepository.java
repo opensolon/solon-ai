@@ -210,7 +210,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                 .topK(condition.getLimit())
                 .outputFields(Arrays.asList("content", "metadata"));
 
-        //todo: 要把 getFilterExpression 表达式转为 milvus 过滤表达式
+        //todo: 要把 getFilterExpression 表达式转为 原生过滤表达式
 //        if (Utils.isNotEmpty(condition.getFilterExpression())) {
 //            builder.filter(condition.getFilterExpression());
 //        }
@@ -223,7 +223,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                 .map(this::toDocument);
 
         //再次过滤下
-        return SimilarityUtil.filter(condition, docs);
+        return SimilarityUtil.sorted(condition, docs);
     }
 
     //文档转为 JsonObject

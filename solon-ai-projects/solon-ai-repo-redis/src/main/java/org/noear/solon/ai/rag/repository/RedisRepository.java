@@ -242,7 +242,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
             buffer.putFloat(f);
         }
 
-
+        //todo: 要把 getFilterExpression 表达式转为 原生过滤表达式（替换掉 *）
         Query query = new Query("*=>[KNN " + condition.getLimit() + " @embedding $BLOB AS score]")
                 .addParam("BLOB", vectorBytes)
                 .returnFields("content", "metadata", "score")
@@ -252,7 +252,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
 
         SearchResult result = client.ftSearch(indexName, query);
 
-        return SimilarityUtil.filter(condition, result.getDocuments()
+        return SimilarityUtil.sorted(condition, result.getDocuments()
                 .stream()
                 .map(this::toDocument));
     }
