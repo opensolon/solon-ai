@@ -17,6 +17,8 @@ package org.noear.solon.expression.query;
 
 import org.noear.solon.expression.ExpressionContext;
 
+import java.util.Collection;
+
 /**
  * 比较运算节点（如 >, <, ==）
  *
@@ -63,12 +65,20 @@ public class ComparisonNode implements ConditionNode {
         switch (operator) {
             case gt:
                 return ((Comparable) fieldValue).compareTo(conditionValue) > 0;
+            case gte:
+                return ((Comparable) fieldValue).compareTo(conditionValue) >= 0;
             case lt:
                 return ((Comparable) fieldValue).compareTo(conditionValue) < 0;
+            case lte:
+                return ((Comparable) fieldValue).compareTo(conditionValue) <= 0;
             case eq:
                 return fieldValue.equals(conditionValue);
             case neq:
                 return !fieldValue.equals(conditionValue);
+            case in:
+                return ((Collection) conditionValue).contains(fieldValue);
+            case nin:
+                return ((Collection) conditionValue).contains(fieldValue) == false;
             default:
                 throw new IllegalArgumentException("Unknown operator: " + operator);
         }

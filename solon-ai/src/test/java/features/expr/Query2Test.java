@@ -11,7 +11,7 @@ import org.noear.solon.expression.query.*;
 public class Query2Test {
 
     @Test
-    public void case2() {
+    public void case1() {
         // 设置查询上下文
         ExpressionContextDefault context = new ExpressionContextDefault();
         context.put("age", 25);
@@ -31,32 +31,6 @@ public class Query2Test {
         System.out.println("Result: " + result);  // 输出: Result: true
 
 
-        printTree2(conditionNode);
-        System.out.println("");
-    }
-
-    static void printTree2(ExpressionNode node) {
-        if (node instanceof FieldNode) {
-            System.out.print(((FieldNode) node).getFieldName());
-        } else if (node instanceof ValueNode) {
-            System.out.print(((ValueNode) node).getValue());
-        } else if (node instanceof ComparisonNode) {
-            ComparisonNode compNode = (ComparisonNode) node;
-
-            System.out.print("(");
-            printTree2(compNode.getField());
-            System.out.print(" " + compNode.getOperator().getCode() + " ");
-            printTree2(compNode.getValue());
-            System.out.print(")");
-
-        } else if (node instanceof LogicalNode) {
-            LogicalNode opNode = (LogicalNode) node;
-
-            System.out.print("(");
-            printTree2(opNode.getLeft());
-            System.out.print(" " + opNode.getOperator().getCode() + " ");
-            printTree2(opNode.getRight());
-            System.out.print(")");
-        }
+        PrintUtil.printTree2(conditionNode);
     }
 }

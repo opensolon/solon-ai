@@ -24,6 +24,7 @@ package org.noear.solon.expression.query;
 public enum LogicalOp {
     and("&&"),
     or("||"),
+    not("NOT"),
     ;
 
     LogicalOp(String code) {
@@ -44,10 +45,12 @@ public enum LogicalOp {
      */
     public static LogicalOp parse(String op) {
         switch (op) {
-            case "and":
+            case "&&":
                 return and;
-            case "or":
+            case "||":
                 return or;
+            case "NOT":
+                return not;
             default:
                 throw new IllegalArgumentException("Invalid comparison operator: " + op);
         }

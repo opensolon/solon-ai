@@ -25,5 +25,5 @@ public interface ExpressionParser {
     /**
      * 解析
      */
-    Expression parse(String expr);
+    Expression parse();
 }

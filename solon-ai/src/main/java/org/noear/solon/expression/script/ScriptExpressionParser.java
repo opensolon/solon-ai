@@ -23,8 +23,13 @@ import org.noear.solon.expression.ExpressionParser;
  * @since 3.1
  */
 public class ScriptExpressionParser implements ExpressionParser {
+    private String expression;
+    public ScriptExpressionParser(String expression) {
+        this.expression = expression;
+    }
+
     @Override
-    public Expression parse(String expr) {
+    public Expression parse() {
         return null;
     }
 }

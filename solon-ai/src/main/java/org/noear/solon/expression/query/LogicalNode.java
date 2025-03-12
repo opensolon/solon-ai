@@ -62,6 +62,8 @@ public class LogicalNode implements ConditionNode {
                 return left.evaluate(context) && right.evaluate(context);
             case or:
                 return left.evaluate(context) || right.evaluate(context);
+            case not:
+                return left.evaluate(context) == false;
             default:
                 throw new IllegalArgumentException("Unknown operator: " + operator);
         }
