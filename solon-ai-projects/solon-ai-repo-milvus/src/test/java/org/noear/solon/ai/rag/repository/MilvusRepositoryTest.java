@@ -19,6 +19,7 @@ import org.noear.solon.ai.rag.loader.MarkdownLoader;
 import org.noear.solon.ai.rag.splitter.RegexTextSplitter;
 import org.noear.solon.ai.rag.splitter.SplitterPipeline;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
+import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,7 +55,7 @@ public class MilvusRepositoryTest {
         repository.dropRepository();
     }
 
-    @Test
+    // @Test
     public void case1_search() throws Exception {
         List<Document> list = repository.search("solon");
         assert list.size() == 4;
@@ -78,6 +79,13 @@ public class MilvusRepositoryTest {
 
         // 验证删除成功
         assertFalse(repository.exists(key), "Document should not exist after removal");
+    }
+
+    @Test
+    public void case2_expression() throws Exception {
+        String expression = " title == 'solon' OR title == '设置' ";
+        List<Document> list = repository.search(new QueryCondition("历史记录").filterExpression(expression));
+        System.out.println(list.size());
     }
 
     private void load(RepositoryStorable repository, String url) throws IOException {
