@@ -18,7 +18,6 @@ package org.noear.solon.ai.rag.repository;
 import java.io.IOException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -33,9 +32,14 @@ import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
-
 import org.noear.solon.expression.Expression;
-import org.noear.solon.expression.snel.*;
+import org.noear.solon.expression.snel.ComparisonNode;
+import org.noear.solon.expression.snel.ComparisonOp;
+import org.noear.solon.expression.snel.ConstantNode;
+import org.noear.solon.expression.snel.LogicalNode;
+import org.noear.solon.expression.snel.LogicalOp;
+import org.noear.solon.expression.snel.VariableNode;
+
 import redis.clients.jedis.PipelineBase;
 import redis.clients.jedis.UnifiedJedis;
 import redis.clients.jedis.json.Path;
@@ -466,48 +470,58 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
             Expression right = node.getRight();
 
             // 比较节点
-            if (ComparisonOp.eq.equals(operator)) {
-                parseFilterExpression(left, buf);
-                buf.append(":");
-                parseFilterExpression(right, buf);
-            } else if (ComparisonOp.neq.equals(operator)) {
-                buf.append("-");
-                parseFilterExpression(left, buf);
-                buf.append(":");
-                parseFilterExpression(right, buf);
-            } else if (ComparisonOp.gt.equals(operator)) {
-                parseFilterExpression(left, buf);
-                buf.append(":[");
-                parseFilterExpression(right, buf);
-                buf.append(" +inf]");
-            } else if (ComparisonOp.gte.equals(operator)) {
-                parseFilterExpression(left, buf);
-                buf.append(":[");
-                parseFilterExpression(right, buf);
-                buf.append(" +inf]");
-            } else if (ComparisonOp.lt.equals(operator)) {
-                parseFilterExpression(left, buf);
-                buf.append(":[-inf ");
-                parseFilterExpression(right, buf);
-                buf.append("]");
-            } else if (ComparisonOp.lte.equals(operator)) {
-                parseFilterExpression(left, buf);
-                buf.append(":[-inf ");
-                parseFilterExpression(right, buf);
-                buf.append("]");
-            } else if (ComparisonOp.in.equals(operator)) {
-                parseFilterExpression(left, buf);
-                buf.append(":");
-                parseFilterExpression(right, buf);
-            } else if (ComparisonOp.nin.equals(operator)) {
-                buf.append("-");
-                parseFilterExpression(left, buf);
-                buf.append(":");
-                parseFilterExpression(right, buf);
-            } else {
-                parseFilterExpression(left, buf);
-                buf.append(":");
-                parseFilterExpression(right, buf);
+            switch (operator) {
+                case eq:
+                    parseFilterExpression(left, buf);
+                    buf.append(":");
+                    parseFilterExpression(right, buf);
+                    break;
+                case neq:
+                    buf.append("-");
+                    parseFilterExpression(left, buf);
+                    buf.append(":");
+                    parseFilterExpression(right, buf);
+                    break;
+                case gt:
+                    parseFilterExpression(left, buf);
+                    buf.append(":[");
+                    parseFilterExpression(right, buf);
+                    buf.append(" +inf]");
+                    break;
+                case gte:
+                    parseFilterExpression(left, buf);
+                    buf.append(":[");
+                    parseFilterExpression(right, buf);
+                    buf.append(" +inf]");
+                    break;
+                case lt:
+                    parseFilterExpression(left, buf);
+                    buf.append(":[-inf ");
+                    parseFilterExpression(right, buf);
+                    buf.append("]");
+                    break;
+                case lte:
+                    parseFilterExpression(left, buf);
+                    buf.append(":[-inf ");
+                    parseFilterExpression(right, buf);
+                    buf.append("]");
+                    break;
+                case in:
+                    parseFilterExpression(left, buf);
+                    buf.append(":");
+                    parseFilterExpression(right, buf);
+                    break;
+                case nin:
+                    buf.append("-");
+                    parseFilterExpression(left, buf);
+                    buf.append(":");
+                    parseFilterExpression(right, buf);
+                    break;
+                default:
+                    parseFilterExpression(left, buf);
+                    buf.append(":");
+                    parseFilterExpression(right, buf);
+                    break;
             }
         } else if (filterExpression instanceof LogicalNode) {
             LogicalNode node = (LogicalNode) filterExpression;
@@ -521,17 +535,29 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                 // 二元操作符 (AND, OR)
                 parseFilterExpression(left, buf);
                 
-                if (LogicalOp.and.equals(operator)) {
-                    buf.append(" "); // Redis Search 使用空格表示 AND
-                } else if (LogicalOp.or.equals(operator)) {
-                    buf.append(" | "); // Redis Search 使用 | 表示 OR
+                switch (operator) {
+                    case and:
+                        buf.append(" "); // Redis Search 使用空格表示 AND
+                        break;
+                    case or:
+                        buf.append(" | "); // Redis Search 使用 | 表示 OR
+                        break;
+                    default:
+                        // 其他操作符，默认用空格
+                        buf.append(" ");
+                        break;
                 }
                 
                 parseFilterExpression(right, buf);
             } else {
                 // 一元操作符 (NOT)
-                if (LogicalOp.not.equals(operator)) {
-                    buf.append("-"); // Redis Search 使用 - 表示 NOT
+                switch (operator) {
+                    case not:
+                        buf.append("-"); // Redis Search 使用 - 表示 NOT
+                        break;
+                    default:
+                        // 其他一元操作符，不添加前缀
+                        break;
                 }
                 parseFilterExpression(left, buf);
             }

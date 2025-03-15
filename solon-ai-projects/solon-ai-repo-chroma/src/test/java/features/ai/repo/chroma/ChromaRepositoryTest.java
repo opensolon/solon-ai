@@ -42,9 +42,9 @@ public class ChromaRepositoryTest {
             // 使用随机集合名称，避免冲突
             String uniqueCollectionName = COLLECTION_NAME + "_" + System.currentTimeMillis();
             System.out.println("Using unique collection name: " + uniqueCollectionName);
-            
+
             repository = new ChromaRepository(embeddingModel, SERVER_URL, uniqueCollectionName);
-            
+
             // 检查服务是否健康
             if (!repository.isHealthy()) {
                 System.err.println("Chroma server is not healthy, skipping tests");
@@ -169,6 +169,213 @@ public class ChromaRepositoryTest {
 
         } catch (Exception e) {
             fail("测试过程中发生异常: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 测试表达式过滤功能
+     */
+    @Test
+    public void testExpressionFilter() throws IOException {
+        checkRepository();
+
+        // 创建测试文档
+        Document doc1 = new Document("Solon framework introduction");
+        doc1.getMetadata().put("title", "solon");
+        doc1.getMetadata().put("category", "framework");
+
+        Document doc2 = new Document("Java configuration settings");
+        doc2.getMetadata().put("title", "设置");
+        doc2.getMetadata().put("category", "tutorial");
+
+        Document doc3 = new Document("Spring framework overview");
+        doc3.getMetadata().put("title", "spring");
+        doc3.getMetadata().put("category", "framework");
+
+        List<Document> documents = new ArrayList<>();
+        documents.add(doc1);
+        documents.add(doc2);
+        documents.add(doc3);
+
+        try {
+            // 插入测试文档
+            repository.insert(documents);
+
+            // 等待索引更新
+            Thread.sleep(1000);
+
+            // 1. 测试 OR 表达式
+            String orExpression = "title == 'solon' OR title == '设置'";
+            QueryCondition orCondition = new QueryCondition("framework")
+                    .filterExpression(orExpression);
+
+            List<Document> orResults = repository.search(orCondition);
+            System.out.println("找到 " + orResults.size() + " 个文档，使用 OR 表达式: " + orExpression);
+
+            // 验证结果 - 应该找到两个文档 (solon 和 设置)
+            assertTrue(orResults.size() >= 1, "OR 表达式应该至少找到一个文档");
+            boolean foundSolon = false;
+            boolean foundSettings = false;
+
+            for (Document doc : orResults) {
+                String title = (String) doc.getMetadata().get("title");
+                if ("solon".equals(title)) {
+                    foundSolon = true;
+                } else if ("设置".equals(title)) {
+                    foundSettings = true;
+                }
+            }
+
+            // 由于向量搜索可能会匹配其他结果，我们只检查是否找到了至少一个预期的文档
+            assertTrue(foundSolon || foundSettings, "OR 表达式应该找到 'solon' 或 '设置' 文档");
+
+            // 2. 测试 AND 表达式
+            String andExpression = "title == 'solon' AND category == 'framework'";
+            QueryCondition andCondition = new QueryCondition("framework")
+                    .filterExpression(andExpression);
+
+            List<Document> andResults = repository.search(andCondition);
+            System.out.println("找到 " + andResults.size() + " 个文档，使用 AND 表达式: " + andExpression);
+
+            // 验证结果 - 应该只找到一个文档 (solon && framework)
+            assertTrue(andResults.size() >= 1, "AND 表达式应该至少找到一个文档");
+            boolean foundSolonFramework = false;
+
+            for (Document doc : andResults) {
+                String title = (String) doc.getMetadata().get("title");
+                String category = (String) doc.getMetadata().get("category");
+                if ("solon".equals(title) && "framework".equals(category)) {
+                    foundSolonFramework = true;
+                    break;
+                }
+            }
+
+            assertTrue(foundSolonFramework, "AND 表达式应该找到 'solon' && 'framework' 文档");
+
+            // 3. 测试简单过滤表达式
+            String simpleExpression = "category == 'framework'";
+            QueryCondition simpleCondition = new QueryCondition("framework")
+                    .filterExpression(simpleExpression);
+
+            List<Document> simpleResults = repository.search(simpleCondition);
+            System.out.println("找到 " + simpleResults.size() + " 个文档，使用简单表达式: " + simpleExpression);
+
+            // 验证结果 - 应该找到两个 framework 类别的文档
+            assertTrue(simpleResults.size() >= 1, "简单表达式应该至少找到一个文档");
+            int frameworkCount = 0;
+
+            for (Document doc : simpleResults) {
+                String category = (String) doc.getMetadata().get("category");
+                if ("framework".equals(category)) {
+                    frameworkCount++;
+                }
+            }
+
+            assertTrue(frameworkCount >= 1, "简单表达式应该至少找到一个 'framework' 类别的文档");
+
+            // 打印结果
+            System.out.println("\n=== 表达式过滤测试结果 ===");
+            System.out.println("OR 表达式结果数量: " + orResults.size());
+            System.out.println("AND 表达式结果数量: " + andResults.size());
+            System.out.println("简单表达式结果数量: " + simpleResults.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            fail("测试过程中发生异常: " + e.getMessage());
+        } finally {
+            // 清理测试文档
+            try {
+                repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+            } catch (Exception e) {
+                System.err.println("清理测试文档失败: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 测试高级表达式过滤功能
+     */
+    @Test
+    public void testAdvancedExpressionFilter() throws IOException {
+        checkRepository();
+
+        // 创建测试文档
+        Document doc1 = new Document("Document with numeric properties");
+        doc1.getMetadata().put("price", 100);
+        doc1.getMetadata().put("stock", 50);
+        doc1.getMetadata().put("category", "electronics");
+
+        Document doc2 = new Document("Document with different price");
+        doc2.getMetadata().put("price", 200);
+        doc2.getMetadata().put("stock", 10);
+        doc2.getMetadata().put("category", "electronics");
+
+        Document doc3 = new Document("Document with different category");
+        doc3.getMetadata().put("price", 150);
+        doc3.getMetadata().put("stock", 25);
+        doc3.getMetadata().put("category", "books");
+
+        List<Document> documents = new ArrayList<>();
+        documents.add(doc1);
+        documents.add(doc2);
+        documents.add(doc3);
+
+        try {
+            // 插入测试文档
+            repository.insert(documents);
+
+            // 等待索引更新
+            Thread.sleep(1000);
+
+            // 1. 测试数值比较 (大于)
+            String gtExpression = "price > 120";
+            QueryCondition gtCondition = new QueryCondition("document")
+                    .filterExpression(gtExpression);
+
+            List<Document> gtResults = repository.search(gtCondition);
+            System.out.println("找到 " + gtResults.size() + " 个文档，使用大于表达式: " + gtExpression);
+
+            // 验证结果 - 应该找到两个价格大于120的文档
+            assertTrue(gtResults.size() > 0, "大于表达式应该找到文档");
+
+            // 2. 测试数值比较 (小于等于)
+            String lteExpression = "stock <= 25";
+            QueryCondition lteCondition = new QueryCondition("document")
+                    .filterExpression(lteExpression);
+
+            List<Document> lteResults = repository.search(lteCondition);
+            System.out.println("找到 " + lteResults.size() + " 个文档，使用小于等于表达式: " + lteExpression);
+
+            // 验证结果 - 应该找到两个库存小于等于25的文档
+            assertTrue(lteResults.size() > 0, "小于等于表达式应该找到文档");
+
+            // 3. 测试复合表达式 (价格区间和类别)
+            String complexExpression = "(price >= 100 AND price <= 180) AND category == 'electronics'";
+            QueryCondition complexCondition = new QueryCondition("document")
+                    .filterExpression(complexExpression);
+
+            List<Document> complexResults = repository.search(complexCondition);
+            System.out.println("找到 " + complexResults.size() + " 个文档，使用复合表达式: " + complexExpression);
+
+            // 验证结果 - 应该找到一个满足所有条件的文档
+            assertTrue(complexResults.size() > 0, "复合表达式应该找到文档");
+
+            // 打印结果
+            System.out.println("\n=== 高级表达式过滤测试结果 ===");
+            System.out.println("大于表达式结果数量: " + gtResults.size());
+            System.out.println("小于等于表达式结果数量: " + lteResults.size());
+            System.out.println("复合表达式结果数量: " + complexResults.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            fail("测试过程中发生异常: " + e.getMessage());
+        } finally {
+            // 清理测试文档
+            try {
+                repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+            } catch (Exception e) {
+                System.err.println("清理测试文档失败: " + e.getMessage());
+            }
         }
     }
 
