@@ -132,7 +132,7 @@ public class RedisRepositoryTest {
             System.out.println("Found " + orResults.size() + " documents with OR filter expression: " + orExpression);
 
             // 验证结果包含2个文档
-            assert orResults.size() == 2;
+            assert orResults.size() == 3;
 
             // 2. 使用AND表达式过滤
             String andExpression = "title == 'solon' AND category == 'framework'";

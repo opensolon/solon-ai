@@ -509,6 +509,34 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                 buf.append(":");
                 parseFilterExpression(right, buf);
             }
+        } else if (filterExpression instanceof LogicalNode) {
+            LogicalNode node = (LogicalNode) filterExpression;
+            LogicalOp operator = node.getOperator();
+            Expression left = node.getLeft();
+            Expression right = node.getRight();
+            
+            buf.append("(");
+            
+            if (right != null) {
+                // 二元操作符 (AND, OR)
+                parseFilterExpression(left, buf);
+                
+                if (LogicalOp.and.equals(operator)) {
+                    buf.append(" "); // Redis Search 使用空格表示 AND
+                } else if (LogicalOp.or.equals(operator)) {
+                    buf.append(" | "); // Redis Search 使用 | 表示 OR
+                }
+                
+                parseFilterExpression(right, buf);
+            } else {
+                // 一元操作符 (NOT)
+                if (LogicalOp.not.equals(operator)) {
+                    buf.append("-"); // Redis Search 使用 - 表示 NOT
+                }
+                parseFilterExpression(left, buf);
+            }
+            
+            buf.append(")");
         }
     }
 
