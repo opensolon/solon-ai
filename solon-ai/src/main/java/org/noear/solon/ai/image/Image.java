@@ -29,6 +29,8 @@ import java.util.Base64;
 public class Image implements AiMedia {
     private String b64_json; //就是 base64-str
     private String url;
+    private String mime;
+
 
     public Image() {
         //...用于反序列化
@@ -49,6 +51,26 @@ public class Image implements AiMedia {
     public static Image ofBase64(String base64String) {
         Image tmp = new Image();
         tmp.b64_json = base64String;
+        return tmp;
+    }
+
+    /**
+     * 由 base64 构建
+     */
+    public static Image ofBase64(String base64String, String mime) {
+        Image tmp = new Image();
+        tmp.b64_json = base64String;
+        tmp.mime = mime;
+        return tmp;
+    }
+
+    /**
+     * 由 base64 构建
+     */
+    public static Image ofBase64(byte[] base64, String mime) {
+        Image tmp = new Image();
+        tmp.b64_json = Base64.getEncoder().encodeToString(base64);
+        tmp.mime = mime;
         return tmp;
     }
 
@@ -76,6 +98,13 @@ public class Image implements AiMedia {
     }
 
     /**
+     * 获取 mime
+     */
+    public String getMime() {
+        return mime;
+    }
+
+    /**
      * 转为带媒体信息的字符串
      */
     @Override
@@ -84,7 +113,11 @@ public class Image implements AiMedia {
             return url;
         } else {
             if (useMime) {
-                return "data:image/jpeg;base64," + b64_json;
+                if(mime!=null){
+                    return "data:" + mime + ";base64," + b64_json;
+                }else{
+                    return "data:image/jpeg;base64," + b64_json;
+                }
             } else {
                 return b64_json;
             }
