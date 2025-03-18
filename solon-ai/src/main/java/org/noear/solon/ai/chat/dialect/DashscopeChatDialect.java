@@ -2,12 +2,16 @@ package org.noear.solon.ai.chat.dialect;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.AiUsage;
+import org.noear.solon.ai.audio.Audio;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.UserMessage;
+import org.noear.solon.ai.image.Image;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -127,5 +131,51 @@ public class DashscopeChatDialect extends AbstractChatDialect {
         }
 
         return true;
+    }
+
+    @Override
+    protected List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
+        String content = oMessage.get("content").getString();
+        if (oMessage.get("content").isArray()) {
+            ONode contentArray = oMessage.get("content");
+            if (contentArray.ary().size() > 0) {
+                content = contentArray.get(0).get("text").getString();
+            }
+        }
+        oMessage.set("content", content);
+        return super.parseAssistantMessage(resp, oMessage);
+    }
+
+    @Override
+    protected void buildChatMessageNodeDo(ONode oNode, UserMessage msg) {
+        List<AiMedia> medias = msg.getMedias();
+        String content = msg.getContent();
+
+        if (medias == null) {
+            medias = Arrays.asList();
+        }
+        final List<AiMedia> finalMedias = medias;
+        ONode contentNode = new ONode().build(n -> {
+            for (AiMedia media : finalMedias) {
+                if (media instanceof Image) {
+                    n.add(new ONode().build(n1 -> {
+                        n1.set("image", media.toDataString(true));
+                    }));
+                }else if (media instanceof Audio) {
+                    n.add(new ONode().build(n1 -> {
+                        n1.set("image", media.toDataString(true));
+                    }));
+                }
+            }
+
+            if (Utils.isNotEmpty(content)) {
+                n.add(new ONode().build(n1 -> {
+                    n1.set("text", content);
+                }));
+            }
+        });
+
+        oNode.set("role", msg.getRole().name().toLowerCase());
+        oNode.set("content", contentNode);
     }
 }
