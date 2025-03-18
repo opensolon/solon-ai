@@ -31,6 +31,18 @@
             <artifactId>solon-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- 引入 tika -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parsers-standard-package</artifactId>
+            <version>3.1.0</version>
+        </dependency>
     </dependencies>
 
 
