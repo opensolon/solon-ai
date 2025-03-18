@@ -158,9 +158,11 @@ public class QdrantRepository implements RepositoryStorable {
             float[] queryVector = embeddingModel.embed(condition.getQuery());
 
             List<ScoredPoint> points = client.queryAsync(QueryPoints.newBuilder().setCollectionName(collectionName)
-                    .setQuery(nearest(queryVector)).setLimit(condition.getLimit())
+                    .setQuery(nearest(queryVector))
+                    .setLimit(condition.getLimit())
                     .setScoreThreshold((float) condition.getSimilarityThreshold())
-                    .setWithPayload(include(Arrays.asList(contentKey, metadataKey))).setWithVectors(enable(true))
+                    .setWithPayload(include(Arrays.asList(contentKey, metadataKey)))
+                    .setWithVectors(enable(true))
                     .build()).get();
 
             Stream<Document> docs = points.stream().map(this::toDocument);
