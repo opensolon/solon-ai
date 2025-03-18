@@ -24,6 +24,7 @@
         <milvus.version>2.5.4</milvus.version>
         <jedis.version>5.1.5</jedis.version>
         <elasticsearch.version>7.17.9</elasticsearch.version>
+        <tika.version>2.9.3</tika.version>
     </properties>
 
     <dependencyManagement>
