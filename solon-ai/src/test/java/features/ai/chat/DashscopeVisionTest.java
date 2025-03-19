@@ -1,8 +1,11 @@
 package features.ai.chat;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.audio.Audio;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.net.http.HttpUtils;
@@ -62,4 +65,77 @@ public class DashscopeVisionTest {
         //打印消息
         log.info("{}", resp.getMessage());
     }
+
+    @Test
+    public void case3() throws IOException {
+        // 视觉理解模型
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .apiKey(apkKey) // 需要指定供应商，用于识别接口风格（也称为方言）
+                .model(model)
+                .provider(provider)
+                .timeout(Duration.ofSeconds(300))
+                .build();
+
+        // 音频理解模型
+        ChatModel chatModel2 = ChatModel.of(apiUrl)
+                .apiKey(apkKey) // 需要指定供应商，用于识别接口风格（也称为方言）
+                .model("qwen-audio-turbo-latest")
+                .provider(provider)
+                .timeout(Duration.ofSeconds(300))
+                .build();
+
+        String audioUrl = "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20240916/spvfxd/es.mp3";
+        String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
+
+        // session会话
+        ChatSession chatSession = new ChatSessionDefault("sessionID");
+
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", Image.ofUrl(imageUrl)))
+                .call();
+        // 保存问答
+        chatSession.addMessage(ChatMessage.ofUser("这图里有方块吗？"));
+        chatSession.addMessage(resp.getMessage());
+
+        // 切换模型类型
+        resp = chatModel2.prompt(ChatMessage.ofUser("可以把这一段话翻译成中文吗？", Audio.ofUrl(audioUrl)))
+                .call();
+        // 保存问答
+        chatSession.addMessage(ChatMessage.ofUser("可以把这一段话翻译成中文吗？"));
+        chatSession.addMessage(resp.getMessage());
+
+        chatSession.addMessage(ChatMessage.ofUser("请再回答一次"));
+        resp = chatModel.prompt(chatSession).call();
+        chatSession.addMessage(resp.getMessage());
+        // 打印消息
+        log.info("{}", resp.getMessage());
+
+        // 验证连续对话
+        chatSession.addMessage(ChatMessage.ofUser("请把我们的问答都告诉我"));
+        resp = chatModel.prompt(chatSession).call();
+        // 打印消息
+        log.info("{}", resp.getMessage());
+    }
+
+
+    @Test
+    public void case4() throws IOException {
+
+        // 音频理解模型
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .apiKey(apkKey) // 需要指定供应商，用于识别接口风格（也称为方言）
+                .model("qwen-audio-turbo-latest")
+                .provider(provider)
+                .timeout(Duration.ofSeconds(300))
+                .build();
+
+        String audioUrl = "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20240916/spvfxd/es.mp3";
+        byte[] bytes = HttpUtils.http(audioUrl).exec("GET").bodyAsBytes();
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("请把这一段话翻译成中文？", Audio.ofBase64(bytes)))
+                .call();
+
+        // 打印消息
+        log.info("{}", resp.getMessage());
+    }
+
+
 }
