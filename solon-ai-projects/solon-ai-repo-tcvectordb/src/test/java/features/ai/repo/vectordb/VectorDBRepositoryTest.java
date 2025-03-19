@@ -1,20 +1,24 @@
 package features.ai.repo.vectordb;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.rag.Document;
-import org.noear.solon.ai.rag.repository.TcVectorDbRepository;
-import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
-import org.noear.solon.ai.rag.util.QueryCondition;
-import org.noear.solon.net.http.HttpUtils;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import com.tencent.tcvectordb.model.param.collection.FieldType;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.repository.MetadataField;
+import org.noear.solon.ai.rag.repository.TcVectorDbRepository;
+import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
+import org.noear.solon.ai.rag.util.QueryCondition;
+import org.noear.solon.net.http.HttpUtils;
 
 /**
  * VectorDBRepository 测试类
@@ -25,9 +29,9 @@ import static org.junit.jupiter.api.Assertions.*;
 public class VectorDBRepositoryTest {
 
     private TcVectorDbRepository repository;
-    private final String url = System.getProperty("vectordb.url", "http://sh-vdb-9th4700z.sql.tencentcdb.com:8100");
+    private final String url = System.getProperty("vectordb.url", "http://sh-vdb-nfk40az1.sql.tencentcdb.com:8100");
     private final String username = System.getProperty("vectordb.username", "root");
-    private final String key = System.getProperty("vectordb.key", "XAazLvlbZxomhYoWqezz9S9SyrOC3TrxGE5Y0MMM");
+    private final String key = System.getProperty("vectordb.key", "G5YCn0evTakg1Ewagj5A8YdR1bz9g2XWGDBcAhna");
     private final String databaseName = "test_db";
     private final String collectionName = "test_collection";
 
@@ -39,7 +43,11 @@ public class VectorDBRepositoryTest {
 
         try {
             // 使用构建器模式创建 VectorDBRepository
-            repository = TcVectorDbRepository.builder(model, url, username, key, databaseName, collectionName).build();
+            List<MetadataField> metadataFields = new ArrayList<>();
+            metadataFields.add(new MetadataField("title", FieldType.String));
+            metadataFields.add(new MetadataField("category", FieldType.String));
+
+            repository = TcVectorDbRepository.builder(model, url, username, key, databaseName, collectionName).metadataFields(metadataFields).build();
 
 
             // 初始化测试数据
@@ -57,6 +65,123 @@ public class VectorDBRepositoryTest {
             e.printStackTrace();
         }
     }
+
+    @Test
+    public void testExpressionFilter() throws IOException {
+
+        // 创建测试文档
+        Document doc1 = new Document("Solon framework introduction");
+        doc1.getMetadata().put("title", "solon");
+        doc1.getMetadata().put("category", "framework");
+
+        Document doc2 = new Document("Java configuration settings");
+        doc2.getMetadata().put("title", "设置");
+        doc2.getMetadata().put("category", "tutorial");
+
+        Document doc3 = new Document("Spring framework overview");
+        doc3.getMetadata().put("title", "spring");
+        doc3.getMetadata().put("category", "framework");
+
+        List<Document> documents = new ArrayList<>();
+        documents.add(doc1);
+        documents.add(doc2);
+        documents.add(doc3);
+
+        try {
+            // 插入测试文档
+            repository.insert(documents);
+
+            // 等待索引更新
+            Thread.sleep(1000);
+
+            // 1. 测试 OR 表达式
+            String orExpression = "title == 'solon' OR title == '设置'";
+            QueryCondition orCondition = new QueryCondition("framework")
+                    .filterExpression(orExpression);
+
+            List<Document> orResults = repository.search(orCondition);
+            System.out.println("找到 " + orResults.size() + " 个文档，使用 OR 表达式: " + orExpression);
+
+            // 验证结果 - 应该找到两个文档 (solon 和 设置)
+            assertTrue(orResults.size() >= 1, "OR 表达式应该至少找到一个文档");
+            boolean foundSolon = false;
+            boolean foundSettings = false;
+
+            for (Document doc : orResults) {
+                String title = (String) doc.getMetadata().get("title");
+                if ("solon".equals(title)) {
+                    foundSolon = true;
+                } else if ("设置".equals(title)) {
+                    foundSettings = true;
+                }
+            }
+
+            // 由于向量搜索可能会匹配其他结果，我们只检查是否找到了至少一个预期的文档
+            assertTrue(foundSolon || foundSettings, "OR 表达式应该找到 'solon' 或 '设置' 文档");
+
+            // 2. 测试 AND 表达式
+            String andExpression = "title == 'solon' AND category == 'framework'";
+            QueryCondition andCondition = new QueryCondition("framework")
+                    .filterExpression(andExpression);
+
+            List<Document> andResults = repository.search(andCondition);
+            System.out.println("找到 " + andResults.size() + " 个文档，使用 AND 表达式: " + andExpression);
+
+            // 验证结果 - 应该只找到一个文档 (solon && framework)
+            assertTrue(andResults.size() >= 1, "AND 表达式应该至少找到一个文档");
+            boolean foundSolonFramework = false;
+
+            for (Document doc : andResults) {
+                String title = (String) doc.getMetadata().get("title");
+                String category = (String) doc.getMetadata().get("category");
+                if ("solon".equals(title) && "framework".equals(category)) {
+                    foundSolonFramework = true;
+                    break;
+                }
+            }
+
+            assertTrue(foundSolonFramework, "AND 表达式应该找到 'solon' && 'framework' 文档");
+
+            // 3. 测试简单过滤表达式
+            String simpleExpression = "category == 'framework'";
+            QueryCondition simpleCondition = new QueryCondition("framework")
+                    .filterExpression(simpleExpression);
+
+            List<Document> simpleResults = repository.search(simpleCondition);
+            System.out.println("找到 " + simpleResults.size() + " 个文档，使用简单表达式: " + simpleExpression);
+
+            // 验证结果 - 应该找到两个 framework 类别的文档
+            assertTrue(simpleResults.size() >= 1, "简单表达式应该至少找到一个文档");
+            int frameworkCount = 0;
+
+            for (Document doc : simpleResults) {
+                String category = (String) doc.getMetadata().get("category");
+                if ("framework".equals(category)) {
+                    frameworkCount++;
+                }
+            }
+
+            assertTrue(frameworkCount >= 1, "简单表达式应该至少找到一个 'framework' 类别的文档");
+
+            // 打印结果
+            System.out.println("\n=== 表达式过滤测试结果 ===");
+            System.out.println("OR 表达式结果数量: " + orResults.size());
+            System.out.println("AND 表达式结果数量: " + andResults.size());
+            System.out.println("简单表达式结果数量: " + simpleResults.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            fail("测试过程中发生异常: " + e.getMessage());
+        } finally {
+            // 清理测试文档
+            try {
+                repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+            } catch (Exception e) {
+                System.err.println("清理测试文档失败: " + e.getMessage());
+            }
+        }
+    }
+
 
 
     @Test

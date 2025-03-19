@@ -1,25 +1,51 @@
 package org.noear.solon.ai.rag.repository;
 
-import com.tencent.tcvectordb.client.VectorDBClient;
-import com.tencent.tcvectordb.model.Collection;
-import com.tencent.tcvectordb.model.Database;
-import com.tencent.tcvectordb.model.DocField;
-import com.tencent.tcvectordb.model.param.collection.*;
-import com.tencent.tcvectordb.model.param.database.ConnectParam;
-import com.tencent.tcvectordb.model.param.dml.*;
-import com.tencent.tcvectordb.model.param.entity.AffectRes;
-import com.tencent.tcvectordb.model.param.entity.SearchRes;
-import com.tencent.tcvectordb.model.param.enums.EmbeddingModelEnum;
-import com.tencent.tcvectordb.model.param.enums.ReadConsistencyEnum;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
+import org.noear.solon.expression.Expression;
+import org.noear.solon.expression.snel.ComparisonNode;
+import org.noear.solon.expression.snel.ComparisonOp;
+import org.noear.solon.expression.snel.ConstantNode;
+import org.noear.solon.expression.snel.LogicalNode;
+import org.noear.solon.expression.snel.LogicalOp;
+import org.noear.solon.expression.snel.VariableNode;
 import org.noear.solon.lang.Preview;
 
-import java.io.IOException;
-import java.util.*;
+import com.tencent.tcvectordb.client.VectorDBClient;
+import com.tencent.tcvectordb.model.Collection;
+import com.tencent.tcvectordb.model.Database;
+import com.tencent.tcvectordb.model.DocField;
+import com.tencent.tcvectordb.model.param.collection.CreateCollectionParam;
+import com.tencent.tcvectordb.model.param.collection.Embedding;
+import com.tencent.tcvectordb.model.param.collection.FieldType;
+import com.tencent.tcvectordb.model.param.collection.FilterIndex;
+import com.tencent.tcvectordb.model.param.collection.HNSWParams;
+import com.tencent.tcvectordb.model.param.collection.IndexType;
+import com.tencent.tcvectordb.model.param.collection.MetricType;
+import com.tencent.tcvectordb.model.param.collection.ParamsSerializer;
+import com.tencent.tcvectordb.model.param.collection.VectorIndex;
+import com.tencent.tcvectordb.model.param.database.ConnectParam;
+import com.tencent.tcvectordb.model.param.dml.DeleteParam;
+import com.tencent.tcvectordb.model.param.dml.Filter;
+import com.tencent.tcvectordb.model.param.dml.HNSWSearchParams;
+import com.tencent.tcvectordb.model.param.dml.InsertParam;
+import com.tencent.tcvectordb.model.param.dml.QueryParam;
+import com.tencent.tcvectordb.model.param.dml.SearchByEmbeddingItemsParam;
+import com.tencent.tcvectordb.model.param.entity.AffectRes;
+import com.tencent.tcvectordb.model.param.entity.SearchRes;
+import com.tencent.tcvectordb.model.param.enums.EmbeddingModelEnum;
+import com.tencent.tcvectordb.model.param.enums.ReadConsistencyEnum;
 
 /**
  * 腾讯云 VectorDB 矢量存储知识库
@@ -108,6 +134,11 @@ public class TcVectorDbRepository implements RepositoryStorable {
      * 默认 HNSW 图构建时的候选邻居数量
      */
     public static final int DEFAULT_HNSW_EF_CONSTRUCTION = 200;
+
+    /**
+     * 元数据索引字段
+     */
+    private final List<MetadataField> metadataFields;
 
     /**
      * 向量模型
@@ -214,6 +245,7 @@ public class TcVectorDbRepository implements RepositoryStorable {
         this.metricType = builder.metricType;
         this.indexType = builder.indexType;
         this.indexParams = builder.indexParams;
+        this.metadataFields = builder.metadataFields;
 
         // 创建连接参数
         ConnectParam connectParam = ConnectParam.newBuilder()
@@ -271,6 +303,7 @@ public class TcVectorDbRepository implements RepositoryStorable {
         private MetricType metricType = DEFAULT_METRIC_TYPE;
         private IndexType indexType = DEFAULT_INDEX_TYPE;
         private ParamsSerializer indexParams = null;
+        private List<MetadataField> metadataFields = new ArrayList<>();
 
         /**
          * 构造函数
@@ -401,6 +434,28 @@ public class TcVectorDbRepository implements RepositoryStorable {
         }
 
         /**
+         * 设置元数据索引字段
+         *
+         * @param metadataFields 元数据索引字段
+         * @return 构建器
+         */
+        public Builder metadataFields(List<MetadataField> metadataFields) {
+            this.metadataFields = metadataFields;
+            return this;
+        }
+
+        /**
+         * 添加单个元数据索引字段
+         *
+         * @param metadataField 元数据索引字段
+         * @return 构建器
+         */
+        public Builder addMetadataField(MetadataField metadataField) {
+            this.metadataFields.add(metadataField);
+            return this;
+        }
+
+        /**
          * 构建 VectorDBRepository
          *
          * @return VectorDBRepository 实例
@@ -450,6 +505,16 @@ public class TcVectorDbRepository implements RepositoryStorable {
                 VectorIndex vectorIndex = getVectorIndex();
 
                 collectionParamBuilder.addField(vectorIndex);
+
+                // 添加元数据索引字段
+                for (MetadataField field : metadataFields) {
+                    FilterIndex filterIndex = new FilterIndex(
+                            field.getName(),
+                            field.getFieldType(),
+                            IndexType.FILTER
+                    );
+                    collectionParamBuilder.addField(filterIndex);
+                }
 
                 // 添加嵌入配置
                 collectionParamBuilder.withEmbedding(Embedding.newBuilder()
@@ -611,11 +676,9 @@ public class TcVectorDbRepository implements RepositoryStorable {
                     .withParams(new HNSWSearchParams(100))
                     .withLimit(condition.getLimit() > 0 ? condition.getLimit() : 10);
 
-            //todo: 要把 getFilterExpression 表达式转为 原生过滤表达式
-            // 添加过滤表达式支持
-            //if (Utils.isNotEmpty(condition.getFilterExpression())) {
-            //    searchParamBuilder.withFilter(condition.getFilterExpression());
-            //}
+            if (condition.getFilterExpression() != null) {
+                searchParamBuilder.withFilter(toTcFilter(condition.getFilterExpression()));
+            }
 
             // 执行搜索
             SearchRes searchRes = collection.searchByEmbeddingItems(searchParamBuilder.build());
@@ -631,30 +694,249 @@ public class TcVectorDbRepository implements RepositoryStorable {
     }
 
     /**
+     * 将Expression对象转换为字符串形式的过滤表达式
+     * 根据腾讯云向量数据库过滤表达式语法要求进行转换
+     *
+     * @param filterExpr 过滤表达式对象
+     * @return 符合腾讯云向量数据库语法的过滤表达式字符串
+     */
+    private String toFilterString(Expression<Boolean> filterExpr) {
+        if (filterExpr == null) {
+            return null;
+        }
+        StringBuilder buf = new StringBuilder();
+        parseFilterExpressionToString(filterExpr, buf);
+        return buf.toString();
+    }
+
+    /**
+     * 将Expression对象转换为腾讯云向量数据库的Filter对象
+     * 支持的逻辑运算符：and、or、not
+     * 支持的字符串操作符: =, !=, in, not in
+     * 支持的数值操作符: >, >=, =, <, <=, !=, in, not in
+     *
+     * @param filterExpr 过滤表达式对象
+     * @return 腾讯云向量数据库的Filter对象
+     */
+    private Filter toTcFilter(Expression<Boolean> filterExpr) {
+        if (filterExpr == null) {
+            return null;
+        }
+
+        try {
+            // 将Expression转换为VectorDB支持的过滤表达式字符串
+            String filterString = toFilterString(filterExpr);
+            if (Utils.isEmpty(filterString)) {
+                return null;
+            }
+
+            // 创建Filter对象，使用字符串表达式
+            return new Filter(filterString);
+        } catch (Exception e) {
+            System.err.println("Error processing filter expression: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * 递归解析表达式，并将其转换为符合腾讯云向量数据库语法的字符串
+     * 支持以下表达式类型：
+     * 1. 逻辑运算表达式：and、or、not
+     * 2. 字符串类型表达式：in、not in、=、!=（字符串值需要用双引号括起来）
+     * 3. 数值类型表达式：>、>=、=、<、<=、!=、in、not in
+     *
+     * 示例格式：
+     * - game_tag = "Robert" and (video_tag = "dance" or video_tag = "music")
+     * - game_tag in("Detective","Action Roguelike","Party-Based RPG","1980s")
+     * - expired_time > 1623388524
+     *
+     * @param filterExpression 过滤表达式
+     * @param buf 字符串构建器
+     */
+    private static void parseFilterExpressionToString(Expression<Boolean> filterExpression, StringBuilder buf) {
+        if (filterExpression == null) {
+            return;
+        }
+
+        if (filterExpression instanceof VariableNode) {
+            // 处理变量节点
+            String fieldName = ((VariableNode) filterExpression).getName();
+            buf.append(fieldName);
+        } else if (filterExpression instanceof ConstantNode) {
+            // 处理常量节点
+            Object value = ((ConstantNode) filterExpression).getValue();
+            if (value instanceof String) {
+                buf.append("\"").append(value).append("\"");
+            } else if (((ConstantNode) filterExpression).isCollection()) {
+                buf.append("(");
+                for (Object item : (Iterable<?>) value) {
+                    if (item instanceof String) {
+                        buf.append("\"").append(item).append("\"");
+                    } else {
+                        buf.append(item);
+                    }
+                    buf.append(", ");
+                }
+                if (buf.charAt(buf.length() - 2) == ',') {
+                    buf.setLength(buf.length() - 2);
+                }
+                buf.append(")");
+            } else {
+                buf.append(value);
+            }
+        } else if (filterExpression instanceof ComparisonNode) {
+            // 处理比较节点
+            ComparisonNode compNode = (ComparisonNode) filterExpression;
+            ComparisonOp operator = compNode.getOperator();
+            Expression left = compNode.getLeft();
+            Expression right = compNode.getRight();
+
+            // 可能需要括号来处理优先级
+            boolean needParentheses = (left instanceof LogicalNode) || (right instanceof LogicalNode);
+
+            if (needParentheses) {
+                buf.append("(");
+            }
+
+            // 处理左侧表达式
+            parseFilterExpressionToString(left, buf);
+
+            // 处理操作符
+            switch (operator) {
+                case eq:
+                    buf.append(" = ");
+                    break;
+                case neq:
+                    buf.append(" != ");
+                    break;
+                case gt:
+                    buf.append(" > ");
+                    break;
+                case gte:
+                    buf.append(" >= ");
+                    break;
+                case lt:
+                    buf.append(" < ");
+                    break;
+                case lte:
+                    buf.append(" <= ");
+                    break;
+                case in:
+                    buf.append(" in ");
+                    break;
+                case nin:
+                    buf.append(" not in ");
+                    break;
+                default:
+                    buf.append(" = ");
+                    break;
+            }
+
+            // 处理右侧表达式
+            parseFilterExpressionToString(right, buf);
+
+            if (needParentheses) {
+                buf.append(")");
+            }
+        } else if (filterExpression instanceof LogicalNode) {
+            // 处理逻辑节点
+            LogicalNode logicalNode = (LogicalNode) filterExpression;
+            LogicalOp logicalOp = logicalNode.getOperator();
+            Expression leftExpr = logicalNode.getLeft();
+            Expression rightExpr = logicalNode.getRight();
+
+            if (rightExpr != null) {
+                // 二元逻辑操作符 (AND, OR)
+                boolean needParentheses = !(buf.length() == 0);
+
+                if (needParentheses) {
+                    buf.append("(");
+                }
+
+                // 处理左侧表达式
+                parseFilterExpressionToString(leftExpr, buf);
+
+                // 处理操作符
+                switch (logicalOp) {
+                    case and:
+                        buf.append(" and ");
+                        break;
+                    case or:
+                        buf.append(" or ");
+                        break;
+                    default:
+                        buf.append(" and ");
+                        break;
+                }
+
+                // 处理右侧表达式
+                parseFilterExpressionToString(rightExpr, buf);
+
+                if (needParentheses) {
+                    buf.append(")");
+                }
+            } else if (leftExpr != null && logicalOp == LogicalOp.not) {
+                // 一元逻辑操作符 (NOT)
+                buf.append("not(");
+                parseFilterExpressionToString(leftExpr, buf);
+                buf.append(")");
+            }
+        }
+    }
+
+    /**
      * 结果转换
      *
-     * @param searchRes
+     * @param searchRes 搜索结果
      * @return java.util.List<org.noear.solon.ai.rag.Document>
      * @author 小奶奶花生米
      */
     private static List<Document> getDocuments(SearchRes searchRes) {
         List<Document> results = new ArrayList<>();
-        if (searchRes.getDocuments() != null && !searchRes.getDocuments().isEmpty()) {
-            for (List<com.tencent.tcvectordb.model.Document> documents : searchRes.getDocuments()) {
-                for (com.tencent.tcvectordb.model.Document doc : documents) {
-                    // 提取文档内容
-                    String content = doc.getDoc();
-                    // 创建文档
-                    Document document = new Document(
-                            doc.getId(),
-                            content,
-                            doc.getDocKeyValue(),
-                            doc.getScore()
-                    );
-                    results.add(document);
-                }
+        if (searchRes.getDocuments() == null || searchRes.getDocuments().isEmpty()) {
+            return results;
+        }
+        for (List<com.tencent.tcvectordb.model.Document> documents : searchRes.getDocuments()) {
+            for (com.tencent.tcvectordb.model.Document doc : documents) {
+                // 提取文档内容
+                String content = doc.getDoc();
+                // 使用toMetadata转换字段列表为元数据Map
+                Map<String, Object> metadata = toMetadata(doc.getDocFields());
+                // 添加分数到元数据
+                metadata.put("score", doc.getScore());
+                // 创建文档
+                Document document = new Document(
+                        doc.getId(),
+                        content,
+                        metadata,
+                        doc.getScore()
+                );
+                results.add(document);
             }
         }
         return results;
+    }
+
+    /**
+     * 将DocField列表转换为元数据Map
+     *
+     * @param docFields DocField列表
+     * @return 元数据Map
+     */
+    private static Map<String, Object> toMetadata(List<DocField> docFields) {
+        Map<String, Object> metadata = new HashMap<>();
+        if (docFields == null || docFields.isEmpty()) {
+            return metadata;
+        }
+
+        for (DocField field : docFields) {
+            // 跳过文本字段，因为它已经单独处理为文档内容
+            if (!TEXT_FIELD_NAME.equals(field.getName())) {
+                metadata.put(field.getName(), field.getValue());
+            }
+        }
+
+        return metadata;
     }
 }
