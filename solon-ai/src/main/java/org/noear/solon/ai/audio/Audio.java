@@ -16,7 +16,10 @@
 package org.noear.solon.ai.audio;
 
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
+
+import java.util.Base64;
 
 /**
  * 音频
@@ -26,6 +29,8 @@ import org.noear.solon.ai.AiMedia;
  */
 public class Audio implements AiMedia {
     private String url;
+    private String b64_json; //就是 base64-str
+    private String mime;
 
     /**
      * 由 url 构建
@@ -47,6 +52,64 @@ public class Audio implements AiMedia {
     public String toString() {
         return "Audio{" +
                 "url='" + url + '\'' +
+                ", b64_json='" + b64_json + '\'' +
+                ", mime='" + mime + '\'' +
                 '}';
+    }
+
+    /**
+     * 由 base64String 构建
+     */
+    public static Audio ofBase64(String base64String) {
+        Audio tmp = new Audio();
+        tmp.b64_json = base64String;
+        return tmp;
+    }
+
+    /**
+     * 由 base64 构建
+     */
+    public static Audio ofBase64(String base64String, String mime) {
+        Audio tmp = new Audio();
+        tmp.b64_json = base64String;
+        tmp.mime = mime;
+        return tmp;
+    }
+
+    /**
+     * 由 base64 构建
+     */
+    public static Audio ofBase64(byte[] base64, String mime) {
+        Audio tmp = new Audio();
+        tmp.b64_json = Base64.getEncoder().encodeToString(base64);
+        tmp.mime = mime;
+        return tmp;
+    }
+
+    /**
+     * 由 base64 构建
+     */
+    public static Audio ofBase64(byte[] base64) {
+        Audio tmp = new Audio();
+        tmp.b64_json = Base64.getEncoder().encodeToString(base64);
+        return tmp;
+    }
+
+
+    @Override
+    public String toDataString(boolean useMime) {
+        if (Utils.isEmpty(b64_json)) {
+            return url;
+        } else {
+            if (useMime) {
+                if(mime!=null){
+                    return "data:" + mime + ";base64," + b64_json;
+                }else{
+                    return "data:audio/mpeg;base64," + b64_json;
+                }
+            } else {
+                return b64_json;
+            }
+        }
     }
 }

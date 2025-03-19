@@ -163,7 +163,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                     }));
                 }else if (media instanceof Audio) {
                     n.add(new ONode().build(n1 -> {
-                        n1.set("image", media.toDataString(true));
+                        n1.set("audio", media.toDataString(true));
                     }));
                 }
             }
