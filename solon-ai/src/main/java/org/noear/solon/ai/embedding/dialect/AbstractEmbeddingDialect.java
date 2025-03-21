@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 内嵌模型方言虚拟类
+ * 嵌入模型方言虚拟类
  *
  * @author noear
  * @since 3.1

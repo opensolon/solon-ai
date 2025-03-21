@@ -25,7 +25,7 @@ import org.noear.solon.ai.embedding.EmbeddingResponse;
 import java.util.List;
 
 /**
- * OpenAi 内嵌模型方言
+ * OpenAi 嵌入模型方言
  *
  * @author noear
  * @since 3.1

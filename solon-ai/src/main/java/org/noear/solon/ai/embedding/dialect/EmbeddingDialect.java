@@ -24,7 +24,7 @@ import org.noear.solon.lang.Preview;
 import java.util.List;
 
 /**
- * 内嵌模型方言
+ * 嵌入模型方言
  *
  * @author noear
  * @since 3.1

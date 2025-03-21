@@ -26,7 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Ollama 内嵌模型方言
+ * Ollama 嵌入模型方言
  *
  * @author noear
  * @since 3.1

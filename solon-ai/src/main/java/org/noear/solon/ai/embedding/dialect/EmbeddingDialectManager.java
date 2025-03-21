@@ -23,7 +23,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 内嵌模型方言管理
+ * 嵌入模型方言管理
  *
  * @author noear
  */
