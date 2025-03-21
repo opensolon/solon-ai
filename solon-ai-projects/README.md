@@ -1,0 +1,24 @@
+
+
+开发与测试情况
+
+|                             | 开发 | 测试 |
+|-----------------------------|----|----|
+| solon-ai-load-excel         | ok |    |
+| solon-ai-load-html          | ok |    |
+| solon-ai-load-markdown      | ok |    |
+| solon-ai-load-pdf           | ok |    |
+| solon-ai-load-ppt           | ok |    |
+| solon-ai-load-word          | ok |    |
+|                             |    |    |
+| solon-ai-load-chroma        | ok |    |
+| solon-ai-load-elasticsearch | ok |    |
+| solon-ai-load-mariadb       |    |    |
+| solon-ai-load-milvus        | ok |    |
+| solon-ai-load-mysql         |    |    |
+| solon-ai-load-opensearch    |    |    |
+| solon-ai-load-pgvector      |    |    |
+| solon-ai-load-qdrant        | ok |    |
+| solon-ai-load-redis         | ok |    |
+| solon-ai-load-tcvectordb    | ok |    |
+| solon-ai-load-vectorex      |    |    |
