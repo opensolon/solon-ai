@@ -25,9 +25,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.poi.poifs.filesystem.FileMagic;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.parser.microsoft.OfficeParser;
+import org.apache.tika.parser.microsoft.ooxml.OOXMLParser;
 import org.apache.tika.sax.BodyContentHandler;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
@@ -63,8 +65,10 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
     @Override
     public List<Document> load() throws IOException {
         TokenSizeTextSplitter splitter = new TokenSizeTextSplitter();
+        
         // 实现PPT文档的加载逻辑
-        try (InputStream stream = source.get()) {
+        try (InputStream stream = source.get();InputStream is = FileMagic.prepareToCheckMagic(stream);) {
+            FileMagic fm = FileMagic.valueOf(is);
             Map<String, Object> metadata = new HashMap<>();
 
             List<Document> documents = new ArrayList<>();
@@ -72,11 +76,15 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
             BodyContentHandler handler = new BodyContentHandler();
             Metadata docMetadata = new Metadata();
             ParseContext context = new ParseContext();
-            new OfficeParser().parse(stream, handler, docMetadata, context);
+            if (FileMagic.OOXML == fm) {
+                new OOXMLParser().parse(stream, handler, docMetadata, context);
+            }else{
+                new OfficeParser().parse(stream, handler, docMetadata, context);
+            }            
             String content = handler.toString();
             Document document = new Document(content, metadata).metadata(this.additionalMetadata);
             documents.add(document);
-            if (this.options.loadMode == LoadMode.PARAGRAPH) {
+            if (this.options.loadMode == LoadMode.TOKENSIZE) {
                 documents = splitter.split(documents);
             }
             return documents;
@@ -95,13 +103,13 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
          */
         SINGLE,
         /**
-         * 每段作为一个 Document
+         * 按照token大小分割为多个 Document
          */
-        PARAGRAPH
+        TOKENSIZE
     }
 
     public static class Options {
-        private LoadMode loadMode = LoadMode.PARAGRAPH;
+        private LoadMode loadMode = LoadMode.SINGLE;
 
         public Options loadMode(LoadMode loadMode) {
             this.loadMode = loadMode;

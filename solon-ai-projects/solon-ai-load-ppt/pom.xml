@@ -40,7 +40,7 @@
         </dependency>
         <dependency>
             <groupId>org.apache.tika</groupId>
-            <artifactId>tika-parsers-standard-package</artifactId>
+            <artifactId>tika-parser-microsoft-module</artifactId>
             <version>${tika.version}</version>
         </dependency>
     </dependencies>
