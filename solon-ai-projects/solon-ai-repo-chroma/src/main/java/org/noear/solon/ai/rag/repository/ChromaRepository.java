@@ -112,142 +112,133 @@ public class ChromaRepository implements RepositoryStorable {
             return;
         }
 
-        String className = filterExpression.getClass().getSimpleName();
-        
-        switch (className) {
-            case "VariableNode":
-                // 获取字段名
-                String fieldName = ((VariableNode) filterExpression).getName();
-                result.put("$field", fieldName);
-                break;
-            case "ConstantNode":
-                // 获取值
-                Object value = ((ConstantNode) filterExpression).getValue();
-                Boolean isCollection = ((ConstantNode) filterExpression).isCollection();
-                if (isCollection) {
-                    result.put("$value", value);
-                    result.put("$isCollection", true);
-                } else {
-                    result.put("$value", value);
+        //用类型识别（用字符串，未来可能会变）
+        if (filterExpression instanceof VariableNode) {
+            // 获取字段名
+            String fieldName = ((VariableNode) filterExpression).getName();
+            result.put("$field", fieldName);
+        } else if (filterExpression instanceof ConstantNode) {
+            // 获取值
+            Object value = ((ConstantNode) filterExpression).getValue();
+            Boolean isCollection = ((ConstantNode) filterExpression).isCollection();
+            if (isCollection) {
+                result.put("$value", value);
+                result.put("$isCollection", true);
+            } else {
+                result.put("$value", value);
+            }
+        } else if (filterExpression instanceof ComparisonNode) {
+            // 获取比较操作符和左右子节点
+            ComparisonOp operator = ((ComparisonNode) filterExpression).getOperator();
+            Expression left = ((ComparisonNode) filterExpression).getLeft();
+            Expression right = ((ComparisonNode) filterExpression).getRight();
+
+            // 解析左右子节点
+            Map<String, Object> leftMap = new HashMap<>();
+            parseFilterExpression(left, leftMap);
+
+            Map<String, Object> rightMap = new HashMap<>();
+            parseFilterExpression(right, rightMap);
+
+            // 提取字段名和值
+            String fieldName2 = (String) leftMap.get("$field");
+            Object value2 = rightMap.get("$value");
+
+            if (fieldName2 != null && value2 != null) {
+                switch (operator) {
+                    case eq:
+                        // 等于操作 - 直接设置字段值
+                        result.put(fieldName2, value2);
+                        break;
+                    case neq:
+                        // 不等于操作 - 使用$ne操作符
+                        Map<String, Object> neMap = new HashMap<>();
+                        neMap.put("$ne", value2);
+                        result.put(fieldName2, neMap);
+                        break;
+                    case gt:
+                        // 大于操作 - 使用$gt操作符
+                        Map<String, Object> gtMap = new HashMap<>();
+                        gtMap.put("$gt", value2);
+                        result.put(fieldName2, gtMap);
+                        break;
+                    case gte:
+                        // 大于等于操作 - 使用$gte操作符
+                        Map<String, Object> gteMap = new HashMap<>();
+                        gteMap.put("$gte", value2);
+                        result.put(fieldName2, gteMap);
+                        break;
+                    case lt:
+                        // 小于操作 - 使用$lt操作符
+                        Map<String, Object> ltMap = new HashMap<>();
+                        ltMap.put("$lt", value2);
+                        result.put(fieldName2, ltMap);
+                        break;
+                    case lte:
+                        // 小于等于操作 - 使用$lte操作符
+                        Map<String, Object> lteMap = new HashMap<>();
+                        lteMap.put("$lte", value2);
+                        result.put(fieldName2, lteMap);
+                        break;
+                    case in:
+                        // 包含操作 - 使用$in操作符
+                        Map<String, Object> inMap = new HashMap<>();
+                        inMap.put("$in", value2);
+                        result.put(fieldName2, inMap);
+                        break;
+                    case nin:
+                        // 不包含操作 - 使用$nin操作符
+                        Map<String, Object> ninMap = new HashMap<>();
+                        ninMap.put("$nin", value2);
+                        result.put(fieldName2, ninMap);
+                        break;
+                    default:
+                        // 未识别的操作符，忽略
+                        break;
                 }
-                break;
-            case "ComparisonNode":
-                // 获取比较操作符和左右子节点
-                ComparisonOp operator = ((ComparisonNode) filterExpression).getOperator();
-                Expression left = ((ComparisonNode) filterExpression).getLeft();
-                Expression right = ((ComparisonNode) filterExpression).getRight();
+            }
+        } else if (filterExpression instanceof LogicalNode) {
+            // 获取逻辑操作符和左右子节点
+            LogicalOp logicalOp = ((LogicalNode) filterExpression).getOperator();
+            Expression leftExpr = ((LogicalNode) filterExpression).getLeft();
+            Expression rightExpr = ((LogicalNode) filterExpression).getRight();
 
-                // 解析左右子节点
-                Map<String, Object> leftMap = new HashMap<>();
-                parseFilterExpression(left, leftMap);
+            if (rightExpr != null) {
+                // 二元逻辑操作符 (AND, OR)
+                Map<String, Object> leftMap2 = new HashMap<>();
+                parseFilterExpression(leftExpr, leftMap2);
 
-                Map<String, Object> rightMap = new HashMap<>();
-                parseFilterExpression(right, rightMap);
+                Map<String, Object> rightMap2 = new HashMap<>();
+                parseFilterExpression(rightExpr, rightMap2);
 
-                // 提取字段名和值
-                String fieldName2 = (String) leftMap.get("$field");
-                Object value2 = rightMap.get("$value");
-
-                if (fieldName2 != null && value2 != null) {
-                    switch (operator) {
-                        case eq:
-                            // 等于操作 - 直接设置字段值
-                            result.put(fieldName2, value2);
-                            break;
-                        case neq:
-                            // 不等于操作 - 使用$ne操作符
-                            Map<String, Object> neMap = new HashMap<>();
-                            neMap.put("$ne", value2);
-                            result.put(fieldName2, neMap);
-                            break;
-                        case gt:
-                            // 大于操作 - 使用$gt操作符
-                            Map<String, Object> gtMap = new HashMap<>();
-                            gtMap.put("$gt", value2);
-                            result.put(fieldName2, gtMap);
-                            break;
-                        case gte:
-                            // 大于等于操作 - 使用$gte操作符
-                            Map<String, Object> gteMap = new HashMap<>();
-                            gteMap.put("$gte", value2);
-                            result.put(fieldName2, gteMap);
-                            break;
-                        case lt:
-                            // 小于操作 - 使用$lt操作符
-                            Map<String, Object> ltMap = new HashMap<>();
-                            ltMap.put("$lt", value2);
-                            result.put(fieldName2, ltMap);
-                            break;
-                        case lte:
-                            // 小于等于操作 - 使用$lte操作符
-                            Map<String, Object> lteMap = new HashMap<>();
-                            lteMap.put("$lte", value2);
-                            result.put(fieldName2, lteMap);
-                            break;
-                        case in:
-                            // 包含操作 - 使用$in操作符
-                            Map<String, Object> inMap = new HashMap<>();
-                            inMap.put("$in", value2);
-                            result.put(fieldName2, inMap);
-                            break;
-                        case nin:
-                            // 不包含操作 - 使用$nin操作符
-                            Map<String, Object> ninMap = new HashMap<>();
-                            ninMap.put("$nin", value2);
-                            result.put(fieldName2, ninMap);
-                            break;
-                        default:
-                            // 未识别的操作符，忽略
-                            break;
-                    }
+                switch (logicalOp) {
+                    case and:
+                        // AND操作 - 使用$and操作符
+                        result.put("$and", Arrays.asList(leftMap2, rightMap2));
+                        break;
+                    case or:
+                        // OR操作 - 使用$or操作符
+                        result.put("$or", Arrays.asList(leftMap2, rightMap2));
+                        break;
+                    default:
+                        // 未识别的操作符，忽略
+                        break;
                 }
-                break;
-            case "LogicalNode":
-                // 获取逻辑操作符和左右子节点
-                LogicalOp logicalOp = ((LogicalNode) filterExpression).getOperator();
-                Expression leftExpr = ((LogicalNode) filterExpression).getLeft();
-                Expression rightExpr = ((LogicalNode) filterExpression).getRight();
+            } else if (leftExpr != null) {
+                // 一元逻辑操作符 (NOT)
+                Map<String, Object> leftMap2 = new HashMap<>();
+                parseFilterExpression(leftExpr, leftMap2);
 
-                if (rightExpr != null) {
-                    // 二元逻辑操作符 (AND, OR)
-                    Map<String, Object> leftMap2 = new HashMap<>();
-                    parseFilterExpression(leftExpr, leftMap2);
-
-                    Map<String, Object> rightMap2 = new HashMap<>();
-                    parseFilterExpression(rightExpr, rightMap2);
-
-                    switch (logicalOp) {
-                        case and:
-                            // AND操作 - 使用$and操作符
-                            result.put("$and", Arrays.asList(leftMap2, rightMap2));
-                            break;
-                        case or:
-                            // OR操作 - 使用$or操作符
-                            result.put("$or", Arrays.asList(leftMap2, rightMap2));
-                            break;
-                        default:
-                            // 未识别的操作符，忽略
-                            break;
-                    }
-                } else if (leftExpr != null) {
-                    // 一元逻辑操作符 (NOT)
-                    Map<String, Object> leftMap2 = new HashMap<>();
-                    parseFilterExpression(leftExpr, leftMap2);
-
-                    switch (logicalOp) {
-                        case not:
-                            // NOT操作 - 使用$not操作符
-                            result.put("$not", leftMap2);
-                            break;
-                        default:
-                            // 未识别的操作符，忽略
-                            break;
-                    }
+                switch (logicalOp) {
+                    case not:
+                        // NOT操作 - 使用$not操作符
+                        result.put("$not", leftMap2);
+                        break;
+                    default:
+                        // 未识别的操作符，忽略
+                        break;
                 }
-                break;
-            default:
-                // 未识别的表达式类型，忽略
-                break;
+            }
         }
     }
 
@@ -631,21 +622,5 @@ public class ChromaRepository implements RepositoryStorable {
         }
 
         return chromaApi.getCollectionStats(collectionId);
-    }
-
-    /**
-     * 异步批量存储文档
-     *
-     * @param documents 要存储的文档列表
-     * @return 异步任务
-     */
-    public Runnable insertAsync(List<Document> documents) {
-        return () -> {
-            try {
-                insert(documents);
-            } catch (IOException e) {
-                throw new RuntimeException("Failed to insert documents asynchronously", e);
-            }
-        };
     }
 }
