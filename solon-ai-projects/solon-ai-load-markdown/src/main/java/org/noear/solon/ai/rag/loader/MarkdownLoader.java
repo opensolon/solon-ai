@@ -57,6 +57,7 @@ public class MarkdownLoader extends AbstractOptionsDocumentLoader<MarkdownLoader
         this.source = source;
         this.parser = Parser.builder().build();
         this.options = new Options();
+        this.additionalMetadata.put("type", "markdown");
     }
 
     @Override

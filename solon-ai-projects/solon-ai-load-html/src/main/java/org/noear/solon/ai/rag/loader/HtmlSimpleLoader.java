@@ -50,6 +50,7 @@ public class HtmlSimpleLoader extends AbstractOptionsDocumentLoader<HtmlSimpleLo
     public HtmlSimpleLoader(SupplierEx<InputStream> source) {
         this.source = source;
         this.options = new Options();
+        this.additionalMetadata.put("type", "html");
     }
 
     @Override
