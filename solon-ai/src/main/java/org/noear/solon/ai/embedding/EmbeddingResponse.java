@@ -38,7 +38,10 @@ public class EmbeddingResponse {
         this.error = error;
         this.data = data;
         this.usage = usage;
-        Collections.sort(this.data);
+
+        if (data != null) {
+            Collections.sort(this.data);
+        }
     }
 
     /**

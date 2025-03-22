@@ -16,11 +16,14 @@
 package org.noear.solon.ai.reranking.dialect;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
+import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.reranking.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * DashScope 重排模型方言（阿里云产品）
@@ -30,8 +33,6 @@ import java.util.List;
  */
 
 public class DashscopeRerankingDialect extends AbstractRerankingDialect {
-    //https://help.aliyun.com/zh/model-studio/developer-reference
-
     private static DashscopeRerankingDialect instance = new DashscopeRerankingDialect();
 
     public static DashscopeRerankingDialect getInstance() {
@@ -46,7 +47,30 @@ public class DashscopeRerankingDialect extends AbstractRerankingDialect {
     @Override
     public boolean matched(RerankingConfig config) {
         return "dashscope".equals(config.getProvider());
+    }
 
+    @Override
+    public String buildRequestJson(RerankingConfig config, RerankingOptions options, String query, List<Document> documents) {
+        return new ONode().build(n -> {
+            if (Utils.isNotEmpty(config.getModel())) {
+                n.set("model", config.getModel());
+            }
+
+            n.getOrNew("input").build(n1->{
+                n1.set("query", query);
+
+                n1.getOrNew("documents").build(n2 -> {
+                    for (Document doc : documents) {
+                        n2.add(doc.getContent());
+                    }
+                });
+            });
+
+
+            for (Map.Entry<String, Object> kv : options.options().entrySet()) {
+                n.set(kv.getKey(), kv.getValue());
+            }
+        }).toJson();
     }
 
     @Override
@@ -55,8 +79,8 @@ public class DashscopeRerankingDialect extends AbstractRerankingDialect {
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("error")) {
-            return new RerankingResponse(model, new RerankingException(oResp.get("error").getString()), null, null);
+        if (oResp.contains("message")) {
+            return new RerankingResponse(model, new RerankingException(oResp.get("message").getString()), null, null);
         } else {
             List<Reranking> results = new ArrayList<>();
 

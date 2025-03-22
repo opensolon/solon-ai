@@ -11,10 +11,12 @@ import org.noear.solon.ai.rag.repository.InMemoryRepository;
 import org.noear.solon.ai.rag.splitter.RegexTextSplitter;
 import org.noear.solon.ai.rag.splitter.SplitterPipeline;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
+import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.ai.reranking.RerankingModel;
 import org.noear.solon.net.http.HttpUtils;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -22,7 +24,7 @@ import java.util.List;
  */
 public class DashscopeTest {
     public static RerankingModel getRerankingModel() {
-        final String apiUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1/rerank";
+        final String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank";
         final String apiKey = "sk-1ffe449611a74e61ad8e71e1b35a9858";
         final String provider = "dashscope";
         final String model = "gte-rerank";//
@@ -31,7 +33,22 @@ public class DashscopeTest {
     }
 
     @Test
-    public void rag_case1() throws Exception {
+    public void case0() throws Exception {
+        List<Document> documents = new ArrayList<>();
+        documents.add(new Document().content("Hello World"));
+        documents.add(new Document().content("Solon"));
+
+        RerankingModel rerankingModel = getRerankingModel();
+
+        //重排
+        documents = rerankingModel.rerank("solon", documents);
+        documents = SimilarityUtil.refilter(documents.stream());
+
+        assert documents.size() == 1;
+    }
+
+    @Test
+    public void case1() throws Exception {
         //1.构建模型
         ChatModel chatModel = TestUtils.getChatModel();
 

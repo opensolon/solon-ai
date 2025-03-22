@@ -38,7 +38,10 @@ public class RerankingResponse {
         this.error = error;
         this.results = results;
         this.usage = usage;
-        Collections.sort(this.results);
+
+        if (results != null) {
+            Collections.sort(this.results);
+        }
     }
 
     /**

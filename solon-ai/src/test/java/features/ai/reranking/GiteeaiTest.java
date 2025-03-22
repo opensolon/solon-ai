@@ -16,6 +16,7 @@ import org.noear.solon.ai.reranking.RerankingModel;
 import org.noear.solon.net.http.HttpUtils;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -32,7 +33,23 @@ public class GiteeaiTest {
     }
 
     @Test
-    public void rag_case1() throws Exception {
+    public void case0() throws Exception {
+        List<Document> documents = new ArrayList<>();
+        documents.add(new Document().content("Hello World"));
+        documents.add(new Document().content("Solon"));
+
+        RerankingModel rerankingModel = getRerankingModel();
+
+        //重排
+        documents = rerankingModel.rerank("solon", documents);
+        assert documents.size() == 2;
+
+        documents = SimilarityUtil.refilter(documents.stream());
+        assert documents.size() == 1;
+    }
+
+    @Test
+    public void case1() throws Exception {
         //1.构建模型
         ChatModel chatModel = TestUtils.getChatModel();
 
