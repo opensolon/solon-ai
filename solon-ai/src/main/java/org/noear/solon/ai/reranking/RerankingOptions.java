@@ -65,6 +65,13 @@ public class RerankingOptions {
 
 
     /**
+     * 是否返回文档原文
+     */
+    public RerankingOptions return_documents(boolean return_documents) {
+        return optionAdd("return_documents", return_documents);
+    }
+
+    /**
      * 用户
      */
     public RerankingOptions user(String user) {
