@@ -10,7 +10,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import com.tencent.tcvectordb.client.VectorDBClient;
 import com.tencent.tcvectordb.model.param.collection.FieldType;
+import com.tencent.tcvectordb.model.param.database.ConnectParam;
+import com.tencent.tcvectordb.model.param.enums.ReadConsistencyEnum;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.rag.Document;
@@ -37,6 +40,19 @@ public class VectorDBRepositoryTest {
 
     final String model = "bge-base-zh";
 
+    private VectorDBClient getClient() {
+        // 创建连接参数
+        ConnectParam connectParam = ConnectParam.newBuilder()
+                .withUrl(url)
+                .withUsername(username)
+                .withKey(key)
+                .build();
+
+        // 创建 VectorDB 客户端
+        VectorDBClient client = new VectorDBClient(connectParam, ReadConsistencyEnum.EVENTUAL_CONSISTENCY);
+        return client;
+    }
+
     @BeforeEach
     public void setup() {
         // 创建嵌入模型
@@ -47,7 +63,9 @@ public class VectorDBRepositoryTest {
             metadataFields.add(new MetadataField("title", FieldType.String));
             metadataFields.add(new MetadataField("category", FieldType.String));
 
-            repository = TcVectorDbRepository.builder(model, url, username, key, databaseName, collectionName).metadataFields(metadataFields).build();
+            repository = TcVectorDbRepository.builder(model, getClient(), databaseName, collectionName)
+                    .metadataFields(metadataFields)
+                    .build();
 
 
             // 初始化测试数据
@@ -183,7 +201,6 @@ public class VectorDBRepositoryTest {
     }
 
 
-
     @Test
     public void testSearch() throws IOException {
 
@@ -199,8 +216,8 @@ public class VectorDBRepositoryTest {
                 // 打印结果
                 for (Document doc : results) {
                     System.out.println(doc.getId() + ":" + doc.getScore() + ":" +
-                                      (doc.getUrl() != null ? doc.getUrl() : "no-url") +
-                                      "【" + doc.getContent() + "】");
+                            (doc.getUrl() != null ? doc.getUrl() : "no-url") +
+                            "【" + doc.getContent() + "】");
                 }
             } else {
                 System.out.println("No documents found containing 'solon'");
@@ -214,14 +231,14 @@ public class VectorDBRepositoryTest {
                 System.out.println("\nFound " + results.size() + " documents containing 'framework' filtered by 'solon'");
                 for (Document doc : results) {
                     System.out.println(doc.getId() + ":" + doc.getScore() + ":" +
-                                      (doc.getUrl() != null ? doc.getUrl() : "no-url") +
-                                      "【" + doc.getContent() + "】");
+                            (doc.getUrl() != null ? doc.getUrl() : "no-url") +
+                            "【" + doc.getContent() + "】");
                 }
 
                 // 验证过滤器生效
                 for (Document doc : results) {
                     assertTrue(doc.getContent().toLowerCase().contains("solon"),
-                              "过滤器应该确保所有结果包含'solon'");
+                            "过滤器应该确保所有结果包含'solon'");
                 }
             } else {
                 System.out.println("No documents found with filter");
@@ -305,7 +322,6 @@ public class VectorDBRepositoryTest {
             fail("测试过程中发生异常: " + e.getMessage());
         }
     }
-
 
 
     private void load(TcVectorDbRepository repository, String url) throws IOException {

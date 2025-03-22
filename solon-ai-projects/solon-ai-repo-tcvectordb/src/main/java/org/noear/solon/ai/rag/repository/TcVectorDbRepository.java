@@ -200,15 +200,12 @@ public class TcVectorDbRepository implements RepositoryStorable {
      * 简单构造函数
      *
      * @param embeddingModelName 向量模型名称
-     * @param url                VectorDB 服务地址
-     * @param username           用户名
-     * @param key                密钥
      * @param databaseName       数据库名称
      * @param collectionName     集合名称
      */
-    public TcVectorDbRepository(String embeddingModelName, String url, String username, String key,
+    public TcVectorDbRepository(String embeddingModelName, VectorDBClient client,
                                 String databaseName, String collectionName) {
-        this(new Builder(embeddingModelName, url, username, key, databaseName, collectionName));
+        this(new Builder(embeddingModelName, client, databaseName, collectionName));
     }
 
     /**
@@ -221,14 +218,8 @@ public class TcVectorDbRepository implements RepositoryStorable {
         if (builder.embeddingModel == null) {
             throw new IllegalArgumentException("EmbeddingModel must not be null");
         }
-        if (Utils.isEmpty(builder.url)) {
-            throw new IllegalArgumentException("URL must not be null or empty");
-        }
-        if (Utils.isEmpty(builder.username)) {
-            throw new IllegalArgumentException("Username must not be null or empty");
-        }
-        if (Utils.isEmpty(builder.key)) {
-            throw new IllegalArgumentException("Key must not be null or empty");
+        if (builder.client == null) {
+            throw new IllegalArgumentException("Client must not be null or empty");
         }
         if (Utils.isEmpty(builder.databaseName)) {
             throw new IllegalArgumentException("DatabaseName must not be null or empty");
@@ -247,20 +238,7 @@ public class TcVectorDbRepository implements RepositoryStorable {
         this.indexType = builder.indexType;
         this.indexParams = builder.indexParams;
         this.metadataFields = builder.metadataFields;
-
-        // 创建连接参数
-        ConnectParam connectParam = ConnectParam.newBuilder()
-                .withUrl(builder.url)
-                .withUsername(builder.username)
-                .withKey(builder.key)
-                .withTimeout(builder.timeout)
-                .withConnectTimeout(builder.connectTimeout)
-                .withMaxIdleConnections(builder.maxIdleConnections)
-                .withKeepAliveDuration(builder.keepAliveDuration)
-                .build();
-
-        // 创建 VectorDB 客户端
-        this.client = new VectorDBClient(connectParam, ReadConsistencyEnum.EVENTUAL_CONSISTENCY);
+        this.client = builder.client;
 
         // 初始化仓库
         initRepository();
@@ -270,16 +248,13 @@ public class TcVectorDbRepository implements RepositoryStorable {
      * 创建构建器
      *
      * @param embeddingModelName 向量模型名称
-     * @param url                VectorDB 服务地址
-     * @param username           用户名
-     * @param key                密钥
      * @param databaseName       数据库名称
      * @param collectionName     集合名称
      * @return 构建器
      */
-    public static Builder builder(String embeddingModelName, String url, String username, String key,
+    public static Builder builder(String embeddingModelName, VectorDBClient client,
                                   String databaseName, String collectionName) {
-        return new Builder(embeddingModelName, url, username, key, databaseName, collectionName);
+        return new Builder(embeddingModelName, client, databaseName, collectionName);
     }
 
     /**
@@ -288,17 +263,11 @@ public class TcVectorDbRepository implements RepositoryStorable {
     public static class Builder {
         // 必要参数
         private final EmbeddingModelEnum embeddingModel;
-        private final String url;
-        private final String username;
-        private final String key;
+        private final VectorDBClient client;
         private final String databaseName;
         private final String collectionName;
 
         // 可选参数（使用默认值）
-        private int timeout = DEFAULT_TIMEOUT;
-        private int connectTimeout = DEFAULT_CONNECT_TIMEOUT;
-        private int maxIdleConnections = DEFAULT_MAX_IDLE_CONNECTIONS;
-        private int keepAliveDuration = DEFAULT_KEEP_ALIVE_DURATION;
         private int shardNum = DEFAULT_SHARD_NUM;
         private int replicaNum = DEFAULT_REPLICA_NUM;
         private MetricType metricType = DEFAULT_METRIC_TYPE;
@@ -310,13 +279,10 @@ public class TcVectorDbRepository implements RepositoryStorable {
          * 构造函数
          *
          * @param embeddingModelName 向量模型名称
-         * @param url                VectorDB 服务地址
-         * @param username           用户名
-         * @param key                密钥
          * @param databaseName       数据库名称
          * @param collectionName     集合名称
          */
-        public Builder(String embeddingModelName, String url, String username, String key,
+        public Builder(String embeddingModelName, VectorDBClient client,
                        String databaseName, String collectionName) {
             if (Utils.isEmpty(embeddingModelName)) {
                 throw new IllegalArgumentException("EmbeddingModelName must not be null or empty");
@@ -328,55 +294,9 @@ public class TcVectorDbRepository implements RepositoryStorable {
             }
 
             this.embeddingModel = embeddingModelEnum;
-            this.url = url;
-            this.username = username;
-            this.key = key;
+            this.client = client;
             this.databaseName = databaseName;
             this.collectionName = collectionName;
-        }
-
-        /**
-         * 设置超时时间
-         *
-         * @param timeout 超时时间（秒）
-         * @return 构建器
-         */
-        public Builder timeout(int timeout) {
-            this.timeout = timeout;
-            return this;
-        }
-
-        /**
-         * 设置连接超时时间
-         *
-         * @param connectTimeout 连接超时时间（秒）
-         * @return 构建器
-         */
-        public Builder connectTimeout(int connectTimeout) {
-            this.connectTimeout = connectTimeout;
-            return this;
-        }
-
-        /**
-         * 设置最大空闲连接数
-         *
-         * @param maxIdleConnections 最大空闲连接数
-         * @return 构建器
-         */
-        public Builder maxIdleConnections(int maxIdleConnections) {
-            this.maxIdleConnections = maxIdleConnections;
-            return this;
-        }
-
-        /**
-         * 设置连接保持时间
-         *
-         * @param keepAliveDuration 连接保持时间（秒）
-         * @return 构建器
-         */
-        public Builder keepAliveDuration(int keepAliveDuration) {
-            this.keepAliveDuration = keepAliveDuration;
-            return this;
         }
 
         /**
@@ -746,14 +666,14 @@ public class TcVectorDbRepository implements RepositoryStorable {
      * 1. 逻辑运算表达式：and、or、not
      * 2. 字符串类型表达式：in、not in、=、!=（字符串值需要用双引号括起来）
      * 3. 数值类型表达式：>、>=、=、<、<=、!=、in、not in
-     *
+     * <p>
      * 示例格式：
      * - game_tag = "Robert" and (video_tag = "dance" or video_tag = "music")
      * - game_tag in("Detective","Action Roguelike","Party-Based RPG","1980s")
      * - expired_time > 1623388524
      *
      * @param filterExpression 过滤表达式
-     * @param buf 字符串构建器
+     * @param buf              字符串构建器
      */
     private static void parseFilterExpressionToString(Expression<Boolean> filterExpression, StringBuilder buf) {
         if (filterExpression == null) {
