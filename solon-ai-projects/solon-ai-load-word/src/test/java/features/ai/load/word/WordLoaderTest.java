@@ -15,7 +15,15 @@ public class WordLoaderTest {
     @Test
     public void test1() throws Exception {
         WordLoader loader = new WordLoader(ResourceUtil.getResource("demo.docx"))
-        .options(opt -> opt.loadMode(WordLoader.LoadMode.PARAGRAPH));
+                .options(opt -> opt.loadMode(WordLoader.LoadMode.PARAGRAPH));
+        List<Document> docs = loader.load();
+        System.out.println(docs);
+    }
+
+    @Test
+    public void test2() throws Exception {
+        WordLoader loader = new WordLoader(ResourceUtil.getResource("demo.doc"))
+                .options(opt -> opt.loadMode(WordLoader.LoadMode.PARAGRAPH));
         List<Document> docs = loader.load();
         System.out.println(docs);
     }

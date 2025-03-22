@@ -15,19 +15,25 @@
  */
 package org.noear.solon.ai.rag.loader;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.FileInputStream;
+import java.io.*;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.poi.EmptyFileException;
+import org.apache.poi.EncryptedDocumentException;
+import org.apache.poi.hwpf.HWPFDocument;
+import org.apache.poi.hwpf.usermodel.Paragraph;
+import org.apache.poi.hwpf.usermodel.Range;
+import org.apache.poi.poifs.filesystem.DirectoryNode;
+import org.apache.poi.poifs.filesystem.FileMagic;
+import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.core.util.SupplierEx;
 import org.noear.solon.lang.Preview;
@@ -56,6 +62,7 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
     public WordLoader(SupplierEx<InputStream> source) {
         this.source = source;
         this.options = new Options();
+        this.additionalMetadata.put("type", "word");
     }
 
     @Override
@@ -63,27 +70,11 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
         try (InputStream stream = source.get()) {
             List<Document> documents = new ArrayList<>();
 
-            try (XWPFDocument reader = new XWPFDocument(stream)) {
-                Map<String, Object> metadata = new HashMap<>();
-                metadata.put("type", "word");
-
-                if (options.loadMode == LoadMode.SINGLE) {
-                    try (XWPFWordExtractor extractor = new XWPFWordExtractor(reader)) {
-                        // 一次性获取文档的全部文本内容
-                        String content = extractor.getText();
-
-                        Document doc = new Document(content, metadata)
-                                .metadata(this.additionalMetadata);
-                        documents.add(doc);
-                    }
+            try (Closeable reader = create(stream)) {
+                if (reader instanceof XWPFDocument) {
+                    doRead((XWPFDocument) reader, documents);
                 } else {
-                    for (XWPFParagraph extractor : reader.getParagraphs()) {
-                        String content = extractor.getText();
-
-                        Document doc = new Document(content, metadata)
-                                .metadata(this.additionalMetadata);
-                        documents.add(doc);
-                    }
+                    doRead((HWPFDocument) reader, documents);
                 }
             }
 
@@ -94,6 +85,77 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
             throw e;
         } catch (Throwable e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private void doRead(XWPFDocument reader, List<Document> documents) throws IOException {
+        Map<String, Object> metadata = new HashMap<>();
+
+        if (options.loadMode == LoadMode.SINGLE) {
+            try (XWPFWordExtractor extractor = new XWPFWordExtractor(reader)) {
+                // 一次性获取文档的全部文本内容
+                String content = extractor.getText();
+
+                Document doc = new Document(content, metadata)
+                        .metadata(this.additionalMetadata);
+                documents.add(doc);
+            }
+        } else {
+            for (XWPFParagraph extractor : reader.getParagraphs()) {
+                String content = extractor.getText();
+
+                Document doc = new Document(content, metadata)
+                        .metadata(this.additionalMetadata);
+                documents.add(doc);
+            }
+        }
+    }
+
+    private void doRead(HWPFDocument reader, List<Document> documents) throws IOException {
+        Map<String, Object> metadata = new HashMap<>();
+
+        if (options.loadMode == LoadMode.SINGLE) {
+            // 一次性获取文档的全部文本内容
+            String content = reader.getDocumentText().trim();
+
+            if (Utils.isNotEmpty(content)) {
+                Document doc = new Document(content, metadata)
+                        .metadata(this.additionalMetadata);
+                documents.add(doc);
+            }
+        } else {
+            Range range = reader.getRange(); // 获取文档范围
+            int numParagraphs = range.numParagraphs(); // 获取段落数量
+
+            for (int i = 0; i < numParagraphs; i++) {
+                Paragraph paragraph = range.getParagraph(i); // 获取段落
+                String content = paragraph.text().trim();
+
+                if (Utils.isNotEmpty(content)) {
+                    Document doc = new Document(content, metadata)
+                            .metadata(this.additionalMetadata);
+                    documents.add(doc);
+                }
+            }
+        }
+    }
+
+    private Closeable create(InputStream inp) throws IOException, EncryptedDocumentException {
+        InputStream is = FileMagic.prepareToCheckMagic(inp);
+        byte[] emptyFileCheck = new byte[1];
+        is.mark(emptyFileCheck.length);
+        if (is.read(emptyFileCheck) < emptyFileCheck.length) {
+            throw new EmptyFileException();
+        } else {
+            is.reset();
+            FileMagic fm = FileMagic.valueOf(is);
+            if (FileMagic.OOXML == fm) {
+                return new XWPFDocument(inp);
+            } else if (FileMagic.OLE2 != fm) {
+                throw new IOException("Can't open word - unsupported file type: " + fm);
+            } else {
+                return new HWPFDocument(inp);
+            }
         }
     }
 
