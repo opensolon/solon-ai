@@ -52,8 +52,8 @@ public class Reranking implements Comparable<Reranking> {
     public String toString() {
         return "{" +
                 "index=" + index +
-                ", text='" + text + "'" +
                 ", relevance_score=" + relevance_score +
+                ", text='" + text + "'" +
                 '}';
     }
 

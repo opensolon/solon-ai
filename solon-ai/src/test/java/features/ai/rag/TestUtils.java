@@ -3,6 +3,7 @@ package features.ai.rag;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.repository.WebSearchRepository;
+import org.noear.solon.ai.reranking.RerankingModel;
 
 /**
  * @author noear 2025/2/19 created
@@ -29,5 +30,14 @@ public class TestUtils {
         final String model = "bge-m3";//
 
         return EmbeddingModel.of(apiUrl).provider(provider).model(model).build();
+    }
+
+    public static RerankingModel getRerankingModel() {
+        final String apiUrl = "https://ai.gitee.com/v1/rerank";
+        final String apiKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
+        final String provider = "giteeai";
+        final String model = "bge-reranker-v2-m3";//
+
+        return RerankingModel.of(apiUrl).apiKey(apiKey).provider(provider).model(model).build();
     }
 }

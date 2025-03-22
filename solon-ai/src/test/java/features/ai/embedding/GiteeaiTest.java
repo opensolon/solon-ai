@@ -11,8 +11,8 @@ import java.io.IOException;
 /**
  * @author noear 2025/1/28 created
  */
-public class GeteeaiTest {
-    private static final Logger log = LoggerFactory.getLogger(GeteeaiTest.class);
+public class GiteeaiTest {
+    private static final Logger log = LoggerFactory.getLogger(GiteeaiTest.class);
     private static final String apiUrl = "https://ai.gitee.com/v1/embeddings";
     private static final String apiKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
     private static final String provider = "giteeai";
