@@ -34,6 +34,7 @@ public class QueryCondition {
     private int limit = DEFAULT_LIMIT;
     private double similarityThreshold = DEFAULT_SIMILARITY_THRESHOLD;
     private Expression<Boolean> filterExpression;
+    private boolean disableRefilter;
 
     public QueryCondition(String query) {
         this.query = query;
@@ -74,6 +75,13 @@ public class QueryCondition {
      */
     public Expression<Boolean> getFilterExpression() {
         return filterExpression;
+    }
+
+    /**
+     * 禁用重过滤
+     */
+    public boolean isDisableRefilter() {
+        return disableRefilter;
     }
 
     /**
@@ -127,6 +135,14 @@ public class QueryCondition {
      */
     public QueryCondition similarityThreshold(double similarityThreshold) {
         this.similarityThreshold = similarityThreshold;
+        return this;
+    }
+
+    /**
+     * 配置禁用重过滤
+     */
+    public QueryCondition disableRefilter(boolean disableRefilter) {
+        this.disableRefilter = disableRefilter;
         return this;
     }
 }
