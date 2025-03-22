@@ -15,18 +15,18 @@ public class PptLoaderTest {
     @Test
     public void test1() throws Exception {
         PptLoader loader = new PptLoader(ResourceUtil.getResource("demo.pptx"))
-                .options(opt -> opt.loadMode(PptLoader.LoadMode.TOKENSIZE));
+                .options(opt -> opt.loadMode(PptLoader.LoadMode.PAGE));
         List<Document> docs = loader.load();
         System.out.println(docs);
-        assert docs.size()  == 1;
+        assert docs.size()  == 2;
     }
 
     @Test
     public void test2() throws Exception {
         PptLoader loader = new PptLoader(ResourceUtil.getResource("demo.ppt"))
-                .options(opt -> opt.loadMode(PptLoader.LoadMode.TOKENSIZE));
+                .options(opt -> opt.loadMode(PptLoader.LoadMode.PAGE));
         List<Document> docs = loader.load();
         System.out.println(docs);
-        assert docs.size()  == 1;
+        assert docs.size()  == 2;
     }
 }

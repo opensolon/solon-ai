@@ -8,7 +8,7 @@
 | solon-ai-load-html          | ok  | ok |
 | solon-ai-load-markdown      | ok  | ok |
 | solon-ai-load-pdf           | ok  | ok |
-| solon-ai-load-ppt           | ok  |    |
+| solon-ai-load-ppt           | ok  | ok |
 | solon-ai-load-word          | ok  | ok |
 |                             |     |    |
 | solon-ai-load-chroma        | ok  | ok |

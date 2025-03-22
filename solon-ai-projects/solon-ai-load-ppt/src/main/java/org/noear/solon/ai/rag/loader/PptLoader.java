@@ -25,14 +25,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.poi.poifs.filesystem.FileMagic;
 import org.apache.tika.metadata.Metadata;
+import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
-import org.apache.tika.parser.microsoft.OfficeParser;
-import org.apache.tika.parser.microsoft.ooxml.OOXMLParser;
 import org.apache.tika.sax.BodyContentHandler;
 import org.noear.solon.ai.rag.Document;
-import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.core.util.SupplierEx;
 import org.noear.solon.lang.Preview;
 
@@ -64,11 +61,8 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
 
     @Override
     public List<Document> load() throws IOException {
-        TokenSizeTextSplitter splitter = new TokenSizeTextSplitter();
-        
         // 实现PPT文档的加载逻辑
-        try (InputStream stream = source.get();InputStream is = FileMagic.prepareToCheckMagic(stream);) {
-            FileMagic fm = FileMagic.valueOf(is);
+        try (InputStream stream = source.get()) {
             Map<String, Object> metadata = new HashMap<>();
 
             List<Document> documents = new ArrayList<>();
@@ -76,17 +70,21 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
             BodyContentHandler handler = new BodyContentHandler();
             Metadata docMetadata = new Metadata();
             ParseContext context = new ParseContext();
-            if (FileMagic.OOXML == fm) {
-                new OOXMLParser().parse(stream, handler, docMetadata, context);
-            }else{
-                new OfficeParser().parse(stream, handler, docMetadata, context);
-            }            
+
+            new AutoDetectParser().parse(stream, handler, docMetadata, context);
+
             String content = handler.toString();
-            Document document = new Document(content, metadata).metadata(this.additionalMetadata);
-            documents.add(document);
-            if (this.options.loadMode == LoadMode.TOKENSIZE) {
-                documents = splitter.split(documents);
+
+            if (this.options.loadMode == LoadMode.PAGE) {
+                for (String pageText : content.split(options.pageDelimiter)) {
+                    Document document = new Document(pageText, metadata).metadata(this.additionalMetadata);
+                    documents.add(document);
+                }
+            } else {
+                Document document = new Document(content, metadata).metadata(this.additionalMetadata);
+                documents.add(document);
             }
+
             return documents;
         } catch (IOException e) {
             throw e;
@@ -103,13 +101,19 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
          */
         SINGLE,
         /**
-         * 按照token大小分割为多个 Document
+         * 每页作为一个 Document
          */
-        TOKENSIZE
+        PAGE
     }
 
     public static class Options {
         private LoadMode loadMode = LoadMode.SINGLE;
+        private String pageDelimiter = "\n\n\n";
+
+        public Options pageDelimiter(String pageDelimiter) {
+            this.pageDelimiter = pageDelimiter;
+            return this;
+        }
 
         public Options loadMode(LoadMode loadMode) {
             this.loadMode = loadMode;
