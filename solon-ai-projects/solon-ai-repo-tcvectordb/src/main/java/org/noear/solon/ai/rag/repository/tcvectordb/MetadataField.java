@@ -1,4 +1,4 @@
-package org.noear.solon.ai.rag.repository;
+package org.noear.solon.ai.rag.repository.tcvectordb;
 
 import com.tencent.tcvectordb.model.param.collection.FieldType;
 

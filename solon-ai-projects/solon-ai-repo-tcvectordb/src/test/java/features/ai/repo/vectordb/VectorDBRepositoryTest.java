@@ -14,7 +14,7 @@ import com.tencent.tcvectordb.model.param.collection.FieldType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.rag.Document;
-import org.noear.solon.ai.rag.repository.MetadataField;
+import org.noear.solon.ai.rag.repository.tcvectordb.MetadataField;
 import org.noear.solon.ai.rag.repository.TcVectorDbRepository;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.ai.rag.util.QueryCondition;

@@ -11,6 +11,7 @@ import java.util.Map;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
+import org.noear.solon.ai.rag.repository.tcvectordb.MetadataField;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.expression.Expression;
