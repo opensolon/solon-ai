@@ -29,7 +29,7 @@ public class ChromaRepositoryTest {
     private ChromaRepository repository;
     private static final String SERVER_URL = "http://localhost:8000";
     private static final String COLLECTION_NAME = "test_collection";
-    final String apiUrl = "http://192.168.1.16:11434/api/embed";
+    final String apiUrl = "http://localhost:11434/api/embed";
     final String provider = "ollama";
     final String model = "bge-m3";
 
