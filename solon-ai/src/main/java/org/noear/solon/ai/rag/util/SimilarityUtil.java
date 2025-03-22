@@ -58,7 +58,11 @@ public final class SimilarityUtil {
      * 再过滤
      */
     public static List<Document> refilter(Stream<Document> docs, QueryCondition condition) throws IOException {
-        return refilter(docs.filter(condition::doFilter), condition.getLimit(), condition.getSimilarityThreshold());
+        if (condition.isDisableRefilter()) {
+            return refilter(docs, condition.getLimit(), condition.getSimilarityThreshold());
+        } else {
+            return refilter(docs.filter(condition::doFilter), condition.getLimit(), condition.getSimilarityThreshold());
+        }
     }
 
     /**
