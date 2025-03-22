@@ -44,11 +44,13 @@ import org.noear.solon.lang.Preview;
 @Preview("3.1")
 public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, PptLoader> {
     private final SupplierEx<InputStream> source;
-    
+
     public PptLoader(SupplierEx<InputStream> source) {
         this.source = source;
         this.options = new Options();
+        this.additionalMetadata.put("type", "ppt");
     }
+
     public PptLoader(File source) {
         this(() -> new FileInputStream(source));
     }
@@ -57,15 +59,14 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
         this(() -> source.openStream());
     }
 
-    
+
     @Override
     public List<Document> load() throws IOException {
         TokenSizeTextSplitter splitter = new TokenSizeTextSplitter();
         // 实现PPT文档的加载逻辑
         try (InputStream stream = source.get()) {
             Map<String, Object> metadata = new HashMap<>();
-            metadata.put("type", "word");
-                
+
             List<Document> documents = new ArrayList<>();
             // 读取PPT内容并转换为文本
             BodyContentHandler handler = new BodyContentHandler();
@@ -75,7 +76,7 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
             String content = handler.toString();
             Document document = new Document(content, metadata).metadata(this.additionalMetadata);
             documents.add(document);
-            if(this.options.loadMode == LoadMode.PARAGRAPH){
+            if (this.options.loadMode == LoadMode.PARAGRAPH) {
                 documents = splitter.split(documents);
             }
             return documents;
@@ -102,15 +103,8 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
     public static class Options {
         private LoadMode loadMode = LoadMode.PARAGRAPH;
 
-        private int chunkSize = 500;
-
         public Options loadMode(LoadMode loadMode) {
             this.loadMode = loadMode;
-            return this;
-        }
-
-        public Options chunkSize(int chunkSize) {
-            this.chunkSize = chunkSize;
             return this;
         }
     }
