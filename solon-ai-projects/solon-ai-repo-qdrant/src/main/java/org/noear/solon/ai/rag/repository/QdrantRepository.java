@@ -22,6 +22,7 @@ import io.qdrant.client.grpc.Collections.VectorParams;
 import io.qdrant.client.grpc.JsonWithInt;
 import io.qdrant.client.grpc.Points.*;
 
+import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
@@ -30,7 +31,6 @@ import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 
-import com.google.gson.Gson;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
@@ -67,7 +67,6 @@ public class QdrantRepository implements RepositoryStorable {
     private final EmbeddingModel embeddingModel;
     private final QdrantClient client;
     private final String collectionName;
-    private final Gson gson = new Gson();
 
     public QdrantRepository(EmbeddingModel embeddingModel, QdrantClient client, String collectionName) {
         this(embeddingModel, client, collectionName, DEFAULT_CONTENT_KEY, DEFAULT_METADATA_KEY);
@@ -183,7 +182,7 @@ public class QdrantRepository implements RepositoryStorable {
         payload.put(contentKey, value(doc.getContent()));
 
         if (doc.getMetadata() != null) {
-            String metadataJson = gson.toJson(doc.getMetadata());
+            String metadataJson = ONode.stringify(doc.getMetadata());
             payload.put("metadata", value(metadataJson));
         }
 
@@ -203,7 +202,7 @@ public class QdrantRepository implements RepositoryStorable {
         Map<String, Object> metadata = null;
         if (payload.containsKey(metadataKey)) {
             String metadataJson = payload.get(metadataKey).getStringValue();
-            metadata = gson.fromJson(metadataJson, Map.class);
+            metadata = ONode.deserialize(metadataJson, Map.class);
         }
 
         float[] embedding = listToFloatArray(scoredPoint.getVectors().getVector().getDataList());
