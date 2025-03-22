@@ -53,7 +53,7 @@ public class GiteeaiTest {
         documents = rerankingModel.rerank(query, documents);
 
         //限制评分与数量
-        documents = SimilarityUtil.filter(documents.stream());
+        documents = SimilarityUtil.refilter(documents.stream());
 
         //3.应用
         ChatResponse resp = chatModel

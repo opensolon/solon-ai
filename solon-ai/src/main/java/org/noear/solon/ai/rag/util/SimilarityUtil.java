@@ -31,23 +31,23 @@ import java.util.stream.Stream;
  */
 public final class SimilarityUtil {
     /**
-     * 过滤（评分与数量并排序）
+     * 再过滤（评分与数量并排序）
      */
-    public static List<Document> filter(Stream<Document> docs) {
-        return filter(docs, QueryCondition.DEFAULT_LIMIT);
+    public static List<Document> refilter(Stream<Document> docs) {
+        return refilter(docs, QueryCondition.DEFAULT_LIMIT);
     }
 
     /**
-     * 过滤（评分与数量并排序）
+     * 再过滤（评分与数量并排序）
      */
-    public static List<Document> filter(Stream<Document> docs, int limit) {
-        return filter(docs, limit, QueryCondition.DEFAULT_SIMILARITY_THRESHOLD);
+    public static List<Document> refilter(Stream<Document> docs, int limit) {
+        return refilter(docs, limit, QueryCondition.DEFAULT_SIMILARITY_THRESHOLD);
     }
 
     /**
-     * 过滤（评分与数量并排序）
+     * 再过滤（评分与数量并排序）
      */
-    public static List<Document> filter(Stream<Document> docs, int limit, double similarityThreshold) {
+    public static List<Document> refilter(Stream<Document> docs, int limit, double similarityThreshold) {
         return docs.filter(doc -> similarityCheck(doc, similarityThreshold))
                 .sorted(Comparator.comparing(Document::getScore).reversed())
                 .limit(limit)
@@ -55,14 +55,14 @@ public final class SimilarityUtil {
     }
 
     /**
-     * 过滤
+     * 再过滤
      */
-    public static List<Document> filter(QueryCondition condition, Stream<Document> docs) throws IOException {
-        return filter(docs.filter(condition::doFilter), condition.getLimit(), condition.getSimilarityThreshold());
+    public static List<Document> refilter(Stream<Document> docs, QueryCondition condition) throws IOException {
+        return refilter(docs.filter(condition::doFilter), condition.getLimit(), condition.getSimilarityThreshold());
     }
 
     /**
-     * 评分
+     * 评分（评分与数量并排序）
      */
     public static Document score(Document doc, float[] queryEmbed) {
         //方便调试

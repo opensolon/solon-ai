@@ -90,7 +90,8 @@ public class InMemoryRepository implements RepositoryStorable, RepositoryLifecyc
         float[] queryEmbed = embeddingModel.embed(condition.getQuery());
 
 
-        return SimilarityUtil.filter(condition, store.values().stream()
-                .map(doc -> SimilarityUtil.copyAndScore(doc, queryEmbed)));
+        return SimilarityUtil.refilter(store.values().stream()
+                        .map(doc -> SimilarityUtil.copyAndScore(doc, queryEmbed)),
+                condition);
     }
 }

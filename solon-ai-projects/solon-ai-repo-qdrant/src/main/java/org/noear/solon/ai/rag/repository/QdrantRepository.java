@@ -167,7 +167,7 @@ public class QdrantRepository implements RepositoryStorable {
 
             Stream<Document> docs = points.stream().map(this::toDocument);
 
-            return SimilarityUtil.filter(condition, docs);
+            return SimilarityUtil.refilter(docs, condition);
         } catch (InterruptedException | ExecutionException e) {
             throw new IOException("Failed to search documents in Qdrant", e);
         }

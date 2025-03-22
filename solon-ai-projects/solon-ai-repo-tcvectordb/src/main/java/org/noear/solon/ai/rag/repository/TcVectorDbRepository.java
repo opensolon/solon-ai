@@ -687,7 +687,7 @@ public class TcVectorDbRepository implements RepositoryStorable {
             List<Document> result = getDocuments(searchRes);
 
             // 再次过滤和排序
-            return SimilarityUtil.filter(condition, result.stream());
+            return SimilarityUtil.refilter(result.stream(), condition);
         } catch (Exception e) {
             throw new IOException("Failed to search documents: " + e.getMessage(), e);
         }

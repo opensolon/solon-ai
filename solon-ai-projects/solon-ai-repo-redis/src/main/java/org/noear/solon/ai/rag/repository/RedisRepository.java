@@ -397,9 +397,10 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
             SearchResult result = client.ftSearch(indexName, query);
 
             // 过滤并转换结果
-            return SimilarityUtil.filter(condition, result.getDocuments()
+            return SimilarityUtil.refilter(result.getDocuments()
                     .stream()
-                    .map(this::toDocument));
+                    .map(this::toDocument),
+                    condition);
         } catch (Exception e) {
             throw new IOException("Error searching documents: " + e.getMessage(), e);
         }
