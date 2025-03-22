@@ -15,10 +15,7 @@
  */
 package org.noear.solon.ai.rag.loader;
 
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.xssf.usermodel.XSSFSheet;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.ss.usermodel.*;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
@@ -55,6 +52,7 @@ public class ExcelLoader extends AbstractOptionsDocumentLoader<ExcelLoader.Optio
     public ExcelLoader(SupplierEx<InputStream> source) {
         this.source = source;
         this.options = new Options();
+        this.additionalMetadata.put("type", "excel");
     }
 
     @Override
@@ -62,11 +60,14 @@ public class ExcelLoader extends AbstractOptionsDocumentLoader<ExcelLoader.Optio
         try (InputStream stream = source.get()) {
             List<Document> documents = new ArrayList<>();
 
-            try (XSSFWorkbook reader = new XSSFWorkbook(stream)) {
+            //HSSFWorkbook workbook = new HSSFWorkbook(stream);
+            //HSSFWorkbook workbook = new XSSFWorkbook(stream);
+
+            try (Workbook reader = WorkbookFactory.create(stream)) {
                 int numberOfSheets = reader.getNumberOfSheets();
 
                 for (int num = 0; num < numberOfSheets; num++) {
-                    XSSFSheet sheet = reader.getSheetAt(num);
+                    Sheet sheet = reader.getSheetAt(num);
 
                     List<Map<String, Object>> readAll = new ArrayList<>();
                     List<Object> titles = null;
