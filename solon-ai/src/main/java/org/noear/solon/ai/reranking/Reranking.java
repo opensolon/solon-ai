@@ -21,7 +21,7 @@ package org.noear.solon.ai.reranking;
  * @author noear
  * @since 3.1
  */
-public class Reranking {
+public class Reranking implements Comparable<Reranking> {
     private int index;
     private String text;
     private float relevance_score;
@@ -55,5 +55,16 @@ public class Reranking {
                 ", text='" + text + "'" +
                 ", relevance_score=" + relevance_score +
                 '}';
+    }
+
+    @Override
+    public int compareTo(Reranking o) {
+        if (this.index < o.index) {
+            return -1;
+        } else if (this.index > o.index) {
+            return 1;
+        } else {
+            return 0;
+        }
     }
 }

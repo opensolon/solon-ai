@@ -23,9 +23,9 @@ import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 重排模型
@@ -43,12 +43,30 @@ public class RerankingModel implements AiModel {
         this.config = config;
     }
 
+    /**
+     * 重排
+     */
+    public List<Document> rerank(String query, List<Document> documents) throws IOException {
+        RerankingResponse resp = input(query, documents).call();
+        if (resp.getError() != null) {
+            throw resp.getError();
+        }
+
+        for (int i = 0, len = documents.size(); i < len; i++) {
+            documents.get(i).score(resp.getResults().get(i).getRelevanceScore());
+        }
+
+        return documents.stream()
+                .sorted(Comparator.comparing(Document::getScore).reversed())
+                .collect(Collectors.toList());
+    }
+
 
     /**
      * 输入
      */
-    public RerankingRequest input(String query ,List<Document> documents) {
-        return new RerankingRequest(config, dialect,  query , documents);
+    public RerankingRequest input(String query, List<Document> documents) {
+        return new RerankingRequest(config, dialect, query, documents);
     }
 
 

@@ -18,6 +18,7 @@ package org.noear.solon.ai.reranking;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.lang.Nullable;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -37,6 +38,7 @@ public class RerankingResponse {
         this.error = error;
         this.results = results;
         this.usage = usage;
+        Collections.sort(this.results);
     }
 
     /**
