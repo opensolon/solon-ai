@@ -31,7 +31,6 @@ public class RerankingDialectManager {
     private static List<RankEntity<RerankingDialect>> dialects = new ArrayList<>();
 
     static {
-        register(OllamaRerankingDialect.getInstance());
         register(DashscopeRerankingDialect.getInstance());
     }
 
