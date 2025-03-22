@@ -62,6 +62,7 @@ public class PdfLoader extends AbstractOptionsDocumentLoader<PdfLoader.Options, 
 
         this.source = source;
         this.options = new Options();
+        this.additionalMetadata.put("type", "pdf");
     }
 
     @Override
@@ -71,7 +72,6 @@ public class PdfLoader extends AbstractOptionsDocumentLoader<PdfLoader.Options, 
             List<Document> documents = new ArrayList<>();
 
             Map<String, Object> metadata = new HashMap<>();
-            metadata.put("type", "pdf");
 
             if (options.loadMode == LoadMode.SINGLE) {
                 // 整个文档作为一个 Document
