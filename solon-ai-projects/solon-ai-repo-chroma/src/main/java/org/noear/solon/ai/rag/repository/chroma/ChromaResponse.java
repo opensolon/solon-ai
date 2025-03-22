@@ -1,4 +1,4 @@
-package org.noear.solon.ai.rag.repository;
+package org.noear.solon.ai.rag.repository.chroma;
 
 /**
  * Chroma 响应基类

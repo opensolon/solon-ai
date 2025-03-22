@@ -1,4 +1,4 @@
-package org.noear.solon.ai.rag.repository;
+package org.noear.solon.ai.rag.repository.chroma;
 
 import java.util.List;
 import java.util.Map;
