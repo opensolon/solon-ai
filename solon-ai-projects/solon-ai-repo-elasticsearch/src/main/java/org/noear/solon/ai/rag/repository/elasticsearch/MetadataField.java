@@ -1,4 +1,4 @@
-package org.noear.solon.ai.rag.repository;
+package org.noear.solon.ai.rag.repository.elasticsearch;
 
 /**
  * 元数据字段，用于定义Elasticsearch索引字段

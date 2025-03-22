@@ -16,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,7 +23,7 @@ import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.ElasticsearchRepository;
-import org.noear.solon.ai.rag.repository.MetadataField;
+import org.noear.solon.ai.rag.repository.elasticsearch.MetadataField;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.net.http.HttpUtils;
