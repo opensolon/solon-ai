@@ -31,7 +31,7 @@ public class Document {
     protected String id;
     protected String content;
     protected final Map<String, Object> metadata;
-    protected final transient double score; //不进行序列化（搜索时动态产生）
+    protected transient double score; //不进行序列化（搜索时动态产生）
 
     private float[] embedding;
 
@@ -104,6 +104,14 @@ public class Document {
      */
     public double getScore() {
         return score;
+    }
+
+    /**
+     * 设置评分
+     */
+    public Document score(double score) {
+        this.score = score;
+        return this;
     }
 
     /**
