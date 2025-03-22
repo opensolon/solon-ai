@@ -91,6 +91,6 @@ public class InMemoryRepository implements RepositoryStorable, RepositoryLifecyc
 
 
         return SimilarityUtil.filter(condition, store.values().stream()
-                .map(doc -> SimilarityUtil.score(doc, queryEmbed)));
+                .map(doc -> SimilarityUtil.copyAndScore(doc, queryEmbed)));
     }
 }

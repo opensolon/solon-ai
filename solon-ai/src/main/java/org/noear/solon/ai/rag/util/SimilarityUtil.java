@@ -70,6 +70,17 @@ public final class SimilarityUtil {
     }
 
     /**
+     * 复制并评分
+     */
+    public static Document copyAndScore(Document doc, float[] queryEmbed) {
+        //方便调试
+        return new Document(doc.getId(),
+                doc.getContent(),
+                doc.getMetadata(),
+                cosineSimilarity(queryEmbed, doc.getEmbedding()));
+    }
+
+    /**
      * 相似度检测
      */
     public static boolean similarityCheck(Document doc, double similarityThreshold) {
