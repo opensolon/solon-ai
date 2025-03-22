@@ -16,9 +16,9 @@
 package org.noear.solon.ai.embedding;
 
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.lang.Nullable;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -38,6 +38,7 @@ public class EmbeddingResponse {
         this.error = error;
         this.data = data;
         this.usage = usage;
+        Collections.sort(this.data);
     }
 
     /**

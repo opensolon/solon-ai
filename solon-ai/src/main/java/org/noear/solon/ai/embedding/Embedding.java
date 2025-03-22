@@ -23,7 +23,7 @@ import java.util.Arrays;
  * @author noear
  * @since 3.1
  */
-public class Embedding {
+public class Embedding implements Comparable<Embedding> {
     private int index;
     private float[] embedding;
 
@@ -50,5 +50,16 @@ public class Embedding {
                 "index=" + index +
                 ", embedding=" + Arrays.toString(embedding) +
                 '}';
+    }
+
+    @Override
+    public int compareTo(Embedding o) {
+        if (this.index < o.index) {
+            return -1;
+        } else if (this.index > o.index) {
+            return 1;
+        } else {
+            return 0;
+        }
     }
 }
