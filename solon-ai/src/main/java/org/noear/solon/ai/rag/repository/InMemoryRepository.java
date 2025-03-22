@@ -89,6 +89,8 @@ public class InMemoryRepository implements RepositoryStorable, RepositoryLifecyc
     public List<Document> search(QueryCondition condition) throws IOException {
         float[] queryEmbed = embeddingModel.embed(condition.getQuery());
 
-        return SimilarityUtil.scoreAndfilter(condition, store.values().stream(), queryEmbed);
+
+        return SimilarityUtil.filter(condition, store.values().stream()
+                .map(doc -> SimilarityUtil.score(doc, queryEmbed)));
     }
 }

@@ -26,10 +26,13 @@ import org.noear.solon.expression.snel.SnEL;
  * @since 3.1
  */
 public class QueryCondition {
+    public static final int DEFAULT_LIMIT = 4;
+    public static final double DEFAULT_SIMILARITY_THRESHOLD = 0.4D;
+
     private final String query;
     private Freshness freshness;
-    private int limit = 4;
-    private double similarityThreshold = 0.4D;
+    private int limit = DEFAULT_LIMIT;
+    private double similarityThreshold = DEFAULT_SIMILARITY_THRESHOLD;
     private Expression<Boolean> filterExpression;
 
     public QueryCondition(String query) {

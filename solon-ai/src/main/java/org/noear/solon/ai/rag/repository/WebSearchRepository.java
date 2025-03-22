@@ -86,7 +86,8 @@ public class WebSearchRepository implements Repository {
             embeddingModel.embed(docs);
 
             float[] queryEmbed = embeddingModel.embed(condition.getQuery());
-            return SimilarityUtil.scoreAndfilter(condition, docs.stream(), queryEmbed);
+            return SimilarityUtil.filter(condition, docs.stream()
+                    .map(doc -> SimilarityUtil.score(doc, queryEmbed)));
         } else {
             return docs;
         }

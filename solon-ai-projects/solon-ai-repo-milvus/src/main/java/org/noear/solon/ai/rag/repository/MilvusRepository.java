@@ -230,7 +230,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                 .map(this::toDocument);
 
         // 再次过滤下
-        return SimilarityUtil.sorted(condition, docs);
+        return SimilarityUtil.filter(condition, docs);
     }
 
     // 根据PringUtil的原理，解析QueryCondition中的filterExpression，转换为Milvus原生的过滤表达式

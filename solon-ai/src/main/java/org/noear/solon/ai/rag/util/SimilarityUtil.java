@@ -31,48 +31,50 @@ import java.util.stream.Stream;
  */
 public final class SimilarityUtil {
     /**
-     * 排序
+     * 过滤（评分与数量并排序）
      */
-    public static List<Document> sorted(QueryCondition condition, Stream<Document> docs) throws IOException {
-        return docs.filter(doc -> similarityCheck(doc, condition))
+    public static List<Document> filter(Stream<Document> docs) {
+        return filter(docs, QueryCondition.DEFAULT_LIMIT);
+    }
+
+    /**
+     * 过滤（评分与数量并排序）
+     */
+    public static List<Document> filter(Stream<Document> docs, int limit) {
+        return filter(docs, limit, QueryCondition.DEFAULT_SIMILARITY_THRESHOLD);
+    }
+
+    /**
+     * 过滤（评分与数量并排序）
+     */
+    public static List<Document> filter(Stream<Document> docs, int limit, double similarityThreshold) {
+        return docs.filter(doc -> similarityCheck(doc, similarityThreshold))
                 .sorted(Comparator.comparing(Document::getScore).reversed())
-                .limit(condition.getLimit())
+                .limit(limit)
                 .collect(Collectors.toList());
     }
 
     /**
-     * 过滤（已经有评分的）
+     * 过滤
      */
     public static List<Document> filter(QueryCondition condition, Stream<Document> docs) throws IOException {
-        return sorted(condition, docs.filter(condition::doFilter));
-    }
-
-
-    /**
-     * 评分并过滤
-     */
-    public static List<Document> scoreAndfilter(QueryCondition condition, Stream<Document> docs, float[] queryEmbed) throws IOException {
-        return sorted(condition, docs.filter(condition::doFilter)
-                .map(doc -> copyAndScore(doc, queryEmbed)));
+        return filter(docs.filter(condition::doFilter), condition.getLimit(), condition.getSimilarityThreshold());
     }
 
     /**
-     * 复制并评分
+     * 评分
      */
-    public static Document copyAndScore(Document doc, float[] queryEmbed) {
+    public static Document score(Document doc, float[] queryEmbed) {
         //方便调试
-        return new Document(doc.getId(),
-                doc.getContent(),
-                doc.getMetadata(),
-                cosineSimilarity(queryEmbed, doc.getEmbedding()));
+        return doc.score(cosineSimilarity(queryEmbed, doc.getEmbedding()));
     }
 
     /**
      * 相似度检测
      */
-    private static boolean similarityCheck(Document doc, QueryCondition condition) {
+    public static boolean similarityCheck(Document doc, double similarityThreshold) {
         //方便调试
-        return doc.getScore() >= condition.getSimilarityThreshold();
+        return doc.getScore() >= similarityThreshold;
     }
 
 

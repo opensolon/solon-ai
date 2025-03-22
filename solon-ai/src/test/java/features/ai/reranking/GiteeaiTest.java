@@ -11,6 +11,7 @@ import org.noear.solon.ai.rag.repository.InMemoryRepository;
 import org.noear.solon.ai.rag.splitter.RegexTextSplitter;
 import org.noear.solon.ai.rag.splitter.SplitterPipeline;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
+import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.ai.reranking.RerankingModel;
 import org.noear.solon.net.http.HttpUtils;
 
@@ -50,6 +51,9 @@ public class GiteeaiTest {
 
         //重排
         documents = rerankingModel.rerank(query, documents);
+
+        //限制评分与数量
+        documents = SimilarityUtil.filter(documents.stream());
 
         //3.应用
         ChatResponse resp = chatModel
