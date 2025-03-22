@@ -4,12 +4,12 @@
 
 |                             | 开发 | 测试 |
 |-----------------------------|----|----|
-| solon-ai-load-excel         | ok |    |
-| solon-ai-load-html          | ok |    |
-| solon-ai-load-markdown      | ok |    |
-| solon-ai-load-pdf           | ok |    |
+| solon-ai-load-excel         | ok | ok |
+| solon-ai-load-html          | ok | ok |
+| solon-ai-load-markdown      | ok | ok |
+| solon-ai-load-pdf           | ok | ok |
 | solon-ai-load-ppt           | ok |    |
-| solon-ai-load-word          | ok |    |
+| solon-ai-load-word          | ok | ok |
 |                             |    |    |
 | solon-ai-load-chroma        | ok |    |
 | solon-ai-load-elasticsearch | ok |    |

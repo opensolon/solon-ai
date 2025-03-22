@@ -18,6 +18,7 @@ public class PptLoaderTest {
                 .options(opt -> opt.loadMode(PptLoader.LoadMode.PARAGRAPH));
         List<Document> docs = loader.load();
         System.out.println(docs);
+        assert docs.size()  == 2;
     }
 
     @Test
@@ -26,5 +27,6 @@ public class PptLoaderTest {
                 .options(opt -> opt.loadMode(PptLoader.LoadMode.PARAGRAPH));
         List<Document> docs = loader.load();
         System.out.println(docs);
+        assert docs.size()  == 2;
     }
 }
