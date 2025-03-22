@@ -20,7 +20,7 @@ import org.noear.solon.ai.rag.DocumentLoader;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.loader.HtmlSimpleLoader;
 import org.noear.solon.ai.rag.loader.MarkdownLoader;
-import org.noear.solon.ai.rag.repository.MetadataField;
+import org.noear.solon.ai.rag.repository.redis.MetadataField;
 import org.noear.solon.ai.rag.repository.RedisRepository;
 import org.noear.solon.ai.rag.splitter.RegexTextSplitter;
 import org.noear.solon.ai.rag.splitter.SplitterPipeline;

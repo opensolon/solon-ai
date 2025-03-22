@@ -1,4 +1,4 @@
-package org.noear.solon.ai.rag.repository;
+package org.noear.solon.ai.rag.repository.redis;
 
 import redis.clients.jedis.search.Schema;
 
