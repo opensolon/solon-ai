@@ -31,13 +31,4 @@ public class TestUtils {
 
         return EmbeddingModel.of(apiUrl).provider(provider).model(model).build();
     }
-
-    public static RerankingModel getRerankingModel() {
-        final String apiUrl = "https://ai.gitee.com/v1/rerank";
-        final String apiKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
-        final String provider = "giteeai";
-        final String model = "bge-reranker-v2-m3";//
-
-        return RerankingModel.of(apiUrl).apiKey(apiKey).provider(provider).model(model).build();
-    }
 }

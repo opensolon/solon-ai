@@ -21,6 +21,15 @@ import java.util.List;
  * @author noear 2025/3/22 created
  */
 public class GiteeaiTest {
+    public static RerankingModel getRerankingModel() {
+        final String apiUrl = "https://ai.gitee.com/v1/rerank";
+        final String apiKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
+        final String provider = "giteeai";
+        final String model = "bge-reranker-v2-m3";//
+
+        return RerankingModel.of(apiUrl).apiKey(apiKey).provider(provider).model(model).build();
+    }
+
     @Test
     public void rag_case1() throws Exception {
         //1.构建模型
@@ -37,7 +46,7 @@ public class GiteeaiTest {
         //检索
         List<Document> documents = repository.search(query);
 
-        RerankingModel rerankingModel = TestUtils.getRerankingModel();
+        RerankingModel rerankingModel = getRerankingModel();
 
         //重排
         documents = rerankingModel.rerank(query, documents);
