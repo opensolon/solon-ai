@@ -29,6 +29,7 @@ import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.sax.BodyContentHandler;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.core.util.SupplierEx;
 import org.noear.solon.lang.Preview;
@@ -73,12 +74,15 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
 
             new AutoDetectParser().parse(stream, handler, docMetadata, context);
 
-            String content = handler.toString();
+            String content = handler.toString().trim();
 
             if (this.options.loadMode == LoadMode.PAGE) {
                 for (String pageText : content.split(options.pageDelimiter)) {
-                    Document document = new Document(pageText, metadata).metadata(this.additionalMetadata);
-                    documents.add(document);
+                    pageText = pageText.trim();
+                    if (Utils.isNotEmpty(pageText)) {
+                        Document document = new Document(pageText, metadata).metadata(this.additionalMetadata);
+                        documents.add(document);
+                    }
                 }
             } else {
                 Document document = new Document(content, metadata).metadata(this.additionalMetadata);
