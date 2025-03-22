@@ -14,7 +14,7 @@
 | solon-ai-load-chroma        | ok  | ok |
 | solon-ai-load-elasticsearch | ok  |    |
 | solon-ai-load-mariadb       |     |    |
-| solon-ai-load-milvus        | ok  |    |
+| solon-ai-load-milvus        | ok  | ok |
 | solon-ai-load-mysql         |     |    |
 | solon-ai-load-opensearch    |     |    |
 | solon-ai-load-pgvector      |     |    |
