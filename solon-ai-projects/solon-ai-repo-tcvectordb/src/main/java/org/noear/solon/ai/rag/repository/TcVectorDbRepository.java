@@ -74,46 +74,20 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
     public static final String VECTOR_FIELD_NAME = "vector";
 
     //构建配置
-    private Builder builder;
+    private Builder config;
     //集合对象
     private Collection collection;
     //是否已初始化
     private boolean initialized = false;
 
     /**
-     * 简单构造函数
-     *
-     * @param embeddingModelName 向量模型名称
-     * @param databaseName       数据库名称
-     * @param collectionName     集合名称
-     */
-    public TcVectorDbRepository(String embeddingModelName, VectorDBClient client,
-                                String databaseName, String collectionName) {
-        this(new Builder(embeddingModelName, client, databaseName, collectionName));
-    }
-
-    /**
      * 私有构造函数，通过 Builder 创建实例
      *
-     * @param builder 构建器
+     * @param config 配置
      */
-    private TcVectorDbRepository(Builder builder) {
-        // 验证必要参数
-        if (builder.embeddingModel == null) {
-            throw new IllegalArgumentException("EmbeddingModel must not be null");
-        }
-        if (builder.client == null) {
-            throw new IllegalArgumentException("Client must not be null or empty");
-        }
-        if (Utils.isEmpty(builder.databaseName)) {
-            throw new IllegalArgumentException("DatabaseName must not be null or empty");
-        }
-        if (Utils.isEmpty(builder.collectionName)) {
-            throw new IllegalArgumentException("CollectionName must not be null or empty");
-        }
-
+    private TcVectorDbRepository(Builder config) {
         // 设置属性
-        this.builder = builder;
+        this.config = config;
 
         // 初始化仓库
         initRepository();
@@ -130,29 +104,29 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
 
         try {
             // 检查数据库是否存在
-            List<String> databases = builder.client.listDatabase();
-            boolean databaseExists = databases.contains(builder.databaseName);
+            List<String> databases = config.client.listDatabase();
+            boolean databaseExists = databases.contains(config.databaseName);
 
             Database database;
             if (!databaseExists) {
                 // 创建数据库
-                database = builder.client.createDatabase(builder.databaseName);
+                database = config.client.createDatabase(config.databaseName);
             } else {
                 // 获取现有数据库
-                database = builder.client.database(builder.databaseName);
+                database = config.client.database(config.databaseName);
             }
 
             // 检查集合是否存在
             List<Collection> collections = database.listCollections();
             boolean collectionExists = collections.stream()
-                    .anyMatch(c -> builder.collectionName.equals(c.getCollection()));
+                    .anyMatch(c -> config.collectionName.equals(c.getCollection()));
 
             if (!collectionExists) {
                 // 创建集合
                 CreateCollectionParam.Builder collectionParamBuilder = CreateCollectionParam.newBuilder()
-                        .withName(builder.collectionName)
-                        .withShardNum(builder.shardNum)
-                        .withReplicaNum(builder.replicaNum)
+                        .withName(config.collectionName)
+                        .withShardNum(config.shardNum)
+                        .withReplicaNum(config.replicaNum)
                         .withDescription("Collection created by Solon AI")
                         .addField(new FilterIndex("id", FieldType.String, IndexType.PRIMARY_KEY));
 
@@ -162,7 +136,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
                 collectionParamBuilder.addField(vectorIndex);
 
                 // 添加元数据索引字段
-                for (MetadataField field : builder.metadataFields) {
+                for (MetadataField field : config.metadataFields) {
                     FilterIndex filterIndex = new FilterIndex(
                             field.getName(),
                             field.getFieldType(),
@@ -175,7 +149,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
                 collectionParamBuilder.withEmbedding(Embedding.newBuilder()
                         .withVectorField(VECTOR_FIELD_NAME)
                         .withField(TEXT_FIELD_NAME)
-                        .withModelName(builder.embeddingModel.getModelName())
+                        .withModelName(config.embeddingModel.getModelName())
                         .build());
 
                 // 创建集合
@@ -183,7 +157,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
             }
 
             // 获取集合
-            this.collection = database.describeCollection(builder.collectionName);
+            this.collection = database.describeCollection(config.collectionName);
             this.initialized = true;
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize VectorDB repository: " + e.getMessage(), e);
@@ -193,19 +167,19 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
     @Override
     public void dropRepository() {
         // 检查数据库是否存在
-        List<String> databases = builder.client.listDatabase();
-        boolean databaseExists = databases.contains(builder.databaseName);
+        List<String> databases = config.client.listDatabase();
+        boolean databaseExists = databases.contains(config.databaseName);
 
         Database database;
         if (!databaseExists) {
             // 创建数据库
-            database = builder.client.createDatabase(builder.databaseName);
+            database = config.client.createDatabase(config.databaseName);
         } else {
             // 获取现有数据库
-            database = builder.client.database(builder.databaseName);
+            database = config.client.database(config.databaseName);
         }
 
-        database.dropCollection(builder.collectionName);
+        database.dropCollection(config.collectionName);
         this.collection = null;
         this.initialized = false;
     }
@@ -217,15 +191,15 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
      */
     private VectorIndex getVectorIndex() {
         VectorIndex vectorIndex;
-        if (builder.indexParams != null) {
+        if (config.indexParams != null) {
             // 使用自定义参数
-            vectorIndex = new VectorIndex(VECTOR_FIELD_NAME, builder.embeddingModel.getDimension(),
-                    builder.indexType, builder.metricType, builder.indexParams);
+            vectorIndex = new VectorIndex(VECTOR_FIELD_NAME, config.embeddingModel.getDimension(),
+                    config.indexType, config.metricType, config.indexParams);
         } else {
             // 对于其他索引类型
-            vectorIndex = new VectorIndex(VECTOR_FIELD_NAME, builder.embeddingModel.getDimension(),
-                    builder.indexType, builder.metricType,
-                    new HNSWParams(builder.hnswM, builder.hnswConstructionEf));
+            vectorIndex = new VectorIndex(VECTOR_FIELD_NAME, config.embeddingModel.getDimension(),
+                    config.indexType, config.metricType,
+                    new HNSWParams(config.hnswM, config.hnswConstructionEf));
         }
         return vectorIndex;
     }
@@ -348,7 +322,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
             // 准备搜索参数
             SearchByEmbeddingItemsParam.Builder searchParamBuilder = SearchByEmbeddingItemsParam.newBuilder()
                     .withEmbeddingItems(Collections.singletonList(condition.getQuery()))
-                    .withParams(new HNSWSearchParams(builder.hnswSearchEf))
+                    .withParams(new HNSWSearchParams(config.hnswSearchEf))
                     .withLimit(condition.getLimit() > 0 ? condition.getLimit() : 10);
 
             if (condition.getFilterExpression() != null) {
@@ -428,14 +402,10 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
     /**
      * 创建构建器
      *
-     * @param embeddingModelName 向量模型名称
-     * @param databaseName       数据库名称
-     * @param collectionName     集合名称
      * @return 构建器
      */
-    public static Builder builder(String embeddingModelName, VectorDBClient client,
-                                  String databaseName, String collectionName) {
-        return new Builder(embeddingModelName, client, databaseName, collectionName);
+    public static Builder builder(VectorDBClient client) {
+        return new Builder(client);
     }
 
     /**
@@ -443,10 +413,10 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
      */
     public static class Builder {
         // 必要参数
-        private final EmbeddingModelEnum embeddingModel;
         private final VectorDBClient client;
-        private final String databaseName;
-        private final String collectionName;
+        private EmbeddingModelEnum embeddingModel = EmbeddingModelEnum.BGE_BASE_ZH;
+        private String databaseName = "solon_ai_db";
+        private String collectionName = "solon_ai";
 
         // 可选参数（使用默认值）
         /**
@@ -482,26 +452,43 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
 
         /**
          * 构造函数
-         *
-         * @param embeddingModelName 向量模型名称
-         * @param databaseName       数据库名称
-         * @param collectionName     集合名称
          */
-        public Builder(String embeddingModelName, VectorDBClient client,
-                       String databaseName, String collectionName) {
-            if (Utils.isEmpty(embeddingModelName)) {
-                throw new IllegalArgumentException("EmbeddingModelName must not be null or empty");
+        public Builder(VectorDBClient client) {
+            if (client == null) {
+                throw new IllegalArgumentException("Client must not be null or empty");
             }
 
-            EmbeddingModelEnum embeddingModelEnum = EmbeddingModelEnum.find(embeddingModelName);
-            if (embeddingModelEnum == null) {
-                throw new IllegalArgumentException("Invalid embedding model name: " + embeddingModelName);
-            }
-
-            this.embeddingModel = embeddingModelEnum;
             this.client = client;
-            this.databaseName = databaseName;
-            this.collectionName = collectionName;
+        }
+
+        /**
+         * 设置数据库名
+         */
+        public Builder databaseName(String databaseName) {
+            if (Utils.isNotEmpty(databaseName)) {
+                this.databaseName = databaseName;
+            }
+            return this;
+        }
+
+        /**
+         * 设置集合名
+         */
+        public Builder collectionName(String collectionName) {
+            if (Utils.isNotEmpty(collectionName)) {
+                this.collectionName = collectionName;
+            }
+            return this;
+        }
+
+        /**
+         * 设置向量模型
+         */
+        public Builder embeddingModel(EmbeddingModelEnum embeddingModel) {
+            if (embeddingModel != null) {
+                this.embeddingModel = embeddingModel;
+            }
+            return this;
         }
 
         /**
@@ -524,7 +511,9 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
          * 设置相似度度量类型
          */
         public Builder metricType(MetricType metricType) {
-            this.metricType = metricType;
+            if (metricType != null) {
+                this.metricType = metricType;
+            }
             return this;
         }
 
@@ -532,7 +521,9 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
          * 设置索引类型
          */
         public Builder indexType(IndexType indexType) {
-            this.indexType = indexType;
+            if (indexType != null) {
+                this.indexType = indexType;
+            }
             return this;
         }
 
@@ -540,7 +531,9 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
          * 设置向量索引参数
          */
         public Builder indexParams(ParamsSerializer indexParams) {
-            this.indexParams = indexParams;
+            if (indexParams != null) {
+                this.indexParams = indexParams;
+            }
             return this;
         }
 

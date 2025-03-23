@@ -35,10 +35,6 @@ public class TcVectorDBRepositoryTest {
     private final String url = System.getProperty("vectordb.url", "http://sh-vdb-1e6g45an.sql.tencentcdb.com:8100");
     private final String username = System.getProperty("vectordb.username", "root");
     private final String key = System.getProperty("vectordb.key", "82cQlN5GcUDo0oeVmPnIQHZWiJZK7taDmZKX8l2I");
-    private final String databaseName = "test_db";
-    private final String collectionName = "test_collection";
-
-    final String model = "bge-base-zh";
 
     private VectorDBClient getClient() {
         // 创建连接参数
@@ -65,7 +61,7 @@ public class TcVectorDBRepositoryTest {
             metadataFields.add(new MetadataField("price", FieldType.Uint64));
             metadataFields.add(new MetadataField("stock", FieldType.Uint64));
 
-            repository = TcVectorDbRepository.builder(model, getClient(), databaseName, collectionName)
+            repository = TcVectorDbRepository.builder(getClient())
                     .metadataFields(metadataFields)
                     .build();
 
@@ -87,7 +83,6 @@ public class TcVectorDBRepositoryTest {
             e.printStackTrace();
         }
     }
-
 
 
     @Test

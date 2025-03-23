@@ -158,7 +158,7 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     public static class Builder {
         private final EmbeddingModel embeddingModel;
         private final VectorRexClient client;
-        private String collectionName = "solon-ai";
+        private String collectionName = "solon_ai";
 
         public Builder(EmbeddingModel embeddingModel, VectorRexClient client) {
             this.embeddingModel = embeddingModel;
