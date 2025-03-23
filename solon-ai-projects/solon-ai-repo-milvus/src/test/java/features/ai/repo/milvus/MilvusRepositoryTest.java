@@ -36,15 +36,12 @@ public class MilvusRepositoryTest {
             .uri(milvusUri)
             .build();
     private MilvusClientV2 client = new MilvusClientV2(connectConfig);
-    private String collectionName = "solonAiRepo";
     private MilvusRepository repository;
 
     @BeforeEach
     public void setup() throws Exception {
-        repository = new MilvusRepository(
-                TestUtils.getEmbeddingModel(),
-                client,
-                collectionName); //3.初始化知识库
+        repository = MilvusRepository.builder(TestUtils.getEmbeddingModel(), client)
+                .build(); //3.初始化知识库
 
         load(repository, "https://solon.noear.org/article/about?format=md");
         load(repository, "https://h5.noear.org/readme.htm");
@@ -350,7 +347,7 @@ public class MilvusRepositoryTest {
 
     // 在每个测试方法开始时检查repository是否可用
     private void checkRepository() {
-        if (repository == null ) {
+        if (repository == null) {
             assumeTrue(false, "Chroma server is not available");
         }
     }

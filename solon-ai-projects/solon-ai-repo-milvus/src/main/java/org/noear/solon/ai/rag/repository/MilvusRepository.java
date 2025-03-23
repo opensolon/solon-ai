@@ -57,21 +57,11 @@ import java.util.stream.Stream;
  */
 @Preview("3.1")
 public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle {
-    private final EmbeddingModel embeddingModel;
-    private final MilvusClientV2 client;
-    private final String collectionName;
     private final Gson gson = new Gson();
+    private final Builder config;
 
-    public MilvusRepository(EmbeddingModel embeddingModel, MilvusClientV2 client) {
-        this(embeddingModel, client, "solon-ai");
-    }
-
-    public MilvusRepository(EmbeddingModel embeddingModel, MilvusClientV2 client, String collectionName) {
-        this.embeddingModel = embeddingModel;
-        // 客户端的构建由外部完成
-        this.client = client;
-        // 指定集合
-        this.collectionName = collectionName;
+    private MilvusRepository(Builder config) {
+        this.config = config;
 
         initRepository();
     }
@@ -82,14 +72,14 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
     @Override
     public void initRepository() {
         // 查询是否存在
-        boolean exists = client.hasCollection(HasCollectionReq.builder()
-                .collectionName(collectionName)
+        boolean exists = config.client.hasCollection(HasCollectionReq.builder()
+                .collectionName(config.collectionName)
                 .build());
 
         if (exists == false) {
             // 构建一个collection，用于存储document
             try {
-                CreateCollectionReq.CollectionSchema schema = client.createSchema();
+                CreateCollectionReq.CollectionSchema schema = config.client.createSchema();
                 schema.addField(AddFieldReq.builder()
                         .fieldName("id")
                         .dataType(DataType.VarChar)
@@ -98,7 +88,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                         .autoID(false)
                         .build());
 
-                int dim = embeddingModel.dimensions();
+                int dim = config.embeddingModel.dimensions();
                 schema.addField(AddFieldReq.builder()
                         .fieldName("embedding")
                         .dataType(DataType.FloatVector)
@@ -131,18 +121,18 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                 indexParams.add(indexParamForVectorField);
 
                 CreateCollectionReq customizedSetupReq1 = CreateCollectionReq.builder()
-                        .collectionName(collectionName)
+                        .collectionName(config.collectionName)
                         .collectionSchema(schema)
                         .indexParams(indexParams)
                         .build();
 
-                client.createCollection(customizedSetupReq1);
+                config.client.createCollection(customizedSetupReq1);
 
                 GetLoadStateReq customSetupLoadStateReq1 = GetLoadStateReq.builder()
-                        .collectionName(collectionName)
+                        .collectionName(config.collectionName)
                         .build();
 
-                client.getLoadState(customSetupLoadStateReq1);
+                config.client.getLoadState(customSetupLoadStateReq1);
             } catch (Exception err) {
                 throw new RuntimeException(err);
             }
@@ -154,8 +144,8 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
      */
     @Override
     public void dropRepository() {
-        client.dropCollection(DropCollectionReq.builder()
-                .collectionName(collectionName)
+        config.client.dropCollection(DropCollectionReq.builder()
+                .collectionName(config.collectionName)
                 .build());
     }
 
@@ -168,34 +158,34 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
         // 分块处理
         for (List<Document> sub : ListUtil.partition(documents, 20)) {
             // 批量embedding
-            embeddingModel.embed(sub);
+            config.embeddingModel.embed(sub);
 
             // 转换成json存储
             List<JsonObject> docObjs = sub.stream().map(this::toJsonObject)
                     .collect(Collectors.toList());
 
             InsertReq insertReq = InsertReq.builder()
-                    .collectionName(collectionName)
+                    .collectionName(config.collectionName)
                     .data(docObjs)
                     .build();
 
             // 如果需要更新，请先移除再插入（即不支持更新）
-            client.insert(insertReq);
+            config.client.insert(insertReq);
         }
     }
 
     @Override
     public void delete(String... ids) throws IOException {
-        client.delete(DeleteReq.builder()
-                .collectionName(collectionName)
+        config.client.delete(DeleteReq.builder()
+                .collectionName(config.collectionName)
                 .ids(Arrays.asList(ids))
                 .build());
     }
 
     @Override
     public boolean exists(String id) throws IOException {
-        return client.get(GetReq.builder()
-                .collectionName(collectionName)
+        return config.client.get(GetReq.builder()
+                .collectionName(config.collectionName)
                 .ids(Arrays.asList(id))
                 .build()).getGetResults().size() > 0;
 
@@ -203,10 +193,10 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
 
     @Override
     public List<Document> search(QueryCondition condition) throws IOException {
-        FloatVec queryVector = new FloatVec(embeddingModel.embed(condition.getQuery()));
+        FloatVec queryVector = new FloatVec(config.embeddingModel.embed(condition.getQuery()));
 
         SearchReqBuilder builder = SearchReq.builder()
-                .collectionName(collectionName)
+                .collectionName(config.collectionName)
                 .data(Collections.singletonList(queryVector))
                 .topK(condition.getLimit())
                 .outputFields(Arrays.asList("content", "metadata"));
@@ -219,7 +209,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
         }
 
         SearchReq searchReq = builder.build();
-        SearchResp searchResp = client.search(searchReq);
+        SearchResp searchResp = config.client.search(searchReq);
 
         Stream<Document> docs = searchResp.getSearchResults().stream()
                 .flatMap(r -> r.stream())
@@ -253,5 +243,29 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
 
         Document doc = new Document((String) result.getId(), content, metadata, result.getScore());
         return doc.embedding(embedding);
+    }
+
+    public static Builder builder(EmbeddingModel embeddingModel, MilvusClientV2 client) {
+        return new Builder(embeddingModel, client);
+    }
+
+    public static class Builder {
+        private final EmbeddingModel embeddingModel;
+        private final MilvusClientV2 client;
+        private String collectionName = "solon-ai";
+
+        public Builder(EmbeddingModel embeddingModel, MilvusClientV2 client) {
+            this.embeddingModel = embeddingModel;
+            this.client = client;
+        }
+
+        public Builder collectionName(String collectionName) {
+            this.collectionName = collectionName;
+            return this;
+        }
+
+        public MilvusRepository build() {
+            return new MilvusRepository(this);
+        }
     }
 }
