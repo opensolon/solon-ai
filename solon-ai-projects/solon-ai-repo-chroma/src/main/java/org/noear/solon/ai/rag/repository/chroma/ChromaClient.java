@@ -17,9 +17,7 @@ import org.noear.solon.net.http.HttpUtils;
 public class ChromaClient {
     private static final Logger logger = Logger.getLogger(ChromaClient.class.getName());
 
-    /**
-     * Chroma 服务器地址
-     */
+    //Chroma 服务器地址与账号
     private final String serverUrl;
     private final String username;
     private final String password;
