@@ -281,20 +281,11 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         }
 
         // 使用文本查询生成向量
-        Document queryDoc = new Document(condition.getQuery(), new HashMap<>());
-        List<Document> docList = new ArrayList<>();
-        docList.add(queryDoc);
+        float[] embedding = config.embeddingModel.embed(condition.getQuery());
 
         try {
-            config.embeddingModel.embed(docList);
-
-            // 检查嵌入是否成功生成
-            if (queryDoc.getEmbedding() == null) {
-                throw new IOException("Failed to generate embedding for query");
-            }
-
             // 将float[]转换为List<Float>
-            List<Float> queryVector = floatArrayToList(queryDoc.getEmbedding());
+            List<Float> queryVector = floatArrayToList(embedding);
 
             // 获取过滤表达式并转换为Chroma支持的格式
             Map<String, Object> filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());

@@ -126,24 +126,15 @@ public class ChromaRepositoryTest {
 
             // 验证每个文档都有评分
             for (Document doc : results) {
-                // 检查评分是否存在
-                Object scoreObj = doc.getMetadata().get("score");
-                assertNotNull(scoreObj, "文档应该包含评分信息");
+                assertTrue(doc.getScore() >= 0, "文档评分应该是非负数");
 
-                // 检查评分是否为数值类型
-                assertTrue(scoreObj instanceof Number, "评分应该是数值类型");
-
-                // 检查评分是否为正数
-                double score = ((Number) scoreObj).doubleValue();
-                assertTrue(score >= 0, "文档评分应该是非负数");
-
-                System.out.println("Document ID: " + doc.getId() + ", Score: " + score);
+                System.out.println("Document ID: " + doc.getId() + ", Score: " + doc.getScore());
             }
 
             // 验证评分排序（如果有多个结果）
             if (results.size() > 1) {
-                double firstScore = ((Number) results.get(0).getMetadata().get("score")).doubleValue();
-                double secondScore = ((Number) results.get(1).getMetadata().get("score")).doubleValue();
+                double firstScore = results.get(0).getScore();
+                double secondScore = results.get(1).getScore();
 
                 // 检查第一个结果的评分是否大于或等于第二个结果
                 assertTrue(firstScore >= secondScore, "结果应该按评分降序排序");

@@ -11,7 +11,7 @@
 | solon-ai-load-ppt           | ok  | ok |         |
 | solon-ai-load-word          | ok  | ok |         |
 |                             |     |    |         |
-| solon-ai-repo-chroma        | ok  | ok |         |
+| solon-ai-repo-chroma        | ok  | ok | 会不断fu集合 |
 | solon-ai-repo-elasticsearch | ok  | ok | 有个单测没过  |
 | solon-ai-repo-mariadb       |     |    |         |
 | solon-ai-repo-milvus        | ok  | ok |         |
