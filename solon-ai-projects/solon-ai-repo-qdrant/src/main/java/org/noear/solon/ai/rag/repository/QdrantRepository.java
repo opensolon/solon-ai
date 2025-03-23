@@ -26,6 +26,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.qdrant.FilterTransformer;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
@@ -58,7 +59,7 @@ import static io.qdrant.client.WithVectorsSelectorFactory.enable;
  * @since 3.1
  */
 @Preview("3.1")
-public class QdrantRepository implements RepositoryStorable {
+public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle {
     private static final String DEFAULT_CONTENT_KEY = "content";
     private static final String DEFAULT_METADATA_KEY = "metadata";
 
@@ -84,6 +85,7 @@ public class QdrantRepository implements RepositoryStorable {
         initRepository();
     }
 
+    @Override
     public void initRepository() {
         try {
             boolean exists = client.collectionExistsAsync(collectionName).get();
@@ -100,6 +102,7 @@ public class QdrantRepository implements RepositoryStorable {
         }
     }
 
+    @Override
     public void dropRepository() {
         try {
             client.deleteCollectionAsync(collectionName).get();

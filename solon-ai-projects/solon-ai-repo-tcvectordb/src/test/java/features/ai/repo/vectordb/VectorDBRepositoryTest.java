@@ -31,9 +31,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class VectorDBRepositoryTest {
 
     private TcVectorDbRepository repository;
-    private final String url = System.getProperty("vectordb.url", "http://sh-vdb-nfk40az1.sql.tencentcdb.com:8100");
+    private final String url = System.getProperty("vectordb.url", "http://sh-vdb-1e6g45an.sql.tencentcdb.com:8100");
     private final String username = System.getProperty("vectordb.username", "root");
-    private final String key = System.getProperty("vectordb.key", "G5YCn0evTakg1Ewagj5A8YdR1bz9g2XWGDBcAhna");
+    private final String key = System.getProperty("vectordb.key", "82cQlN5GcUDo0oeVmPnIQHZWiJZK7taDmZKX8l2I");
     private final String databaseName = "test_db";
     private final String collectionName = "test_collection";
 
@@ -61,10 +61,15 @@ public class VectorDBRepositoryTest {
             List<MetadataField> metadataFields = new ArrayList<>();
             metadataFields.add(new MetadataField("title", FieldType.String));
             metadataFields.add(new MetadataField("category", FieldType.String));
+            metadataFields.add(new MetadataField("price", FieldType.Uint64));
+            metadataFields.add(new MetadataField("stock", FieldType.Uint64));
 
             repository = TcVectorDbRepository.builder(model, getClient(), databaseName, collectionName)
                     .metadataFields(metadataFields)
                     .build();
+
+            repository.dropRepository();
+            repository.initRepository();
 
 
             // 初始化测试数据

@@ -1,4 +1,4 @@
-package org.noear.solon.ai.rag.repository;
+package features.ai.repo.milvus;
 
 import org.noear.solon.ai.embedding.EmbeddingModel;
 

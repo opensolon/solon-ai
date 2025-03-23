@@ -25,6 +25,7 @@ import java.util.Map;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.tcvectordb.FilterTransformer;
 import org.noear.solon.ai.rag.repository.tcvectordb.MetadataField;
@@ -61,7 +62,7 @@ import com.tencent.tcvectordb.model.param.enums.EmbeddingModelEnum;
  * @since 3.1
  */
 @Preview("3.1")
-public class TcVectorDbRepository implements RepositoryStorable {
+public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifecycle {
 
     /**
      * 文本字段名
@@ -395,7 +396,8 @@ public class TcVectorDbRepository implements RepositoryStorable {
     /**
      * 初始化仓库
      */
-    private void initRepository() {
+    @Override
+    public void initRepository() {
         if (initialized) {
             return;
         }
@@ -460,6 +462,26 @@ public class TcVectorDbRepository implements RepositoryStorable {
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize VectorDB repository: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public void dropRepository() {
+        // 检查数据库是否存在
+        List<String> databases = client.listDatabase();
+        boolean databaseExists = databases.contains(databaseName);
+
+        Database database;
+        if (!databaseExists) {
+            // 创建数据库
+            database = client.createDatabase(databaseName);
+        } else {
+            // 获取现有数据库
+            database = client.database(databaseName);
+        }
+
+        database.dropCollection(collectionName);
+        this.collection = null;
+        this.initialized = false;
     }
 
     /**

@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.chroma.*;
 import org.noear.solon.ai.rag.util.QueryCondition;
@@ -25,7 +26,7 @@ import org.noear.solon.lang.Preview;
  * @since 3.1
  */
 @Preview("3.1")
-public class ChromaRepository implements RepositoryStorable {
+public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle {
 
     /**
      * 向量模型，用于将文档内容转换为向量表示

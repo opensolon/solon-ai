@@ -1,14 +1,7 @@
-package org.noear.solon.ai.rag.repository;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+package features.ai.repo.milvus;
 
 import io.milvus.v2.client.ConnectConfig;
 import io.milvus.v2.client.MilvusClientV2;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +10,7 @@ import org.noear.solon.ai.rag.DocumentLoader;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.loader.HtmlSimpleLoader;
 import org.noear.solon.ai.rag.loader.MarkdownLoader;
+import org.noear.solon.ai.rag.repository.MilvusRepository;
 import org.noear.solon.ai.rag.splitter.RegexTextSplitter;
 import org.noear.solon.ai.rag.splitter.SplitterPipeline;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
@@ -25,8 +19,13 @@ import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class MilvusRepositoryTest {
