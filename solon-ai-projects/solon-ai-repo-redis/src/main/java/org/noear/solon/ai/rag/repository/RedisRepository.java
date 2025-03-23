@@ -408,11 +408,8 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         Map<String, Object> metadata = ONode.deserialize(metadataStr, Map.class);
 
         // 添加相似度分数到元数据
-        double similarity = similarityScore(jDoc);
-        metadata.put("score", similarity);
-        metadata.put("distance", similarity); // 添加距离信息，与Spring AI保持一致
-
-        return new Document(id, content, metadata, similarity);
+        double score = similarityScore(jDoc);
+        return new Document(id, content, metadata, score);
     }
 
     private double similarityScore(redis.clients.jedis.search.Document jDoc) {

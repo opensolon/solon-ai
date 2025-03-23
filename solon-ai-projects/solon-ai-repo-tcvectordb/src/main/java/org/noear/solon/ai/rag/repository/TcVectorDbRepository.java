@@ -387,8 +387,6 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
                 String content = doc.getDoc();
                 // 使用toMetadata转换字段列表为元数据Map
                 Map<String, Object> metadata = toMetadata(doc.getDocFields());
-                // 添加分数到元数据
-                metadata.put("score", doc.getScore());
                 // 创建文档
                 Document document = new Document(
                         doc.getId(),

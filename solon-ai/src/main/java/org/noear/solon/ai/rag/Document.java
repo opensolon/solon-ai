@@ -126,6 +126,7 @@ public class Document {
     public String toString() {
         return "Document{" +
                 "id='" + id + '\'' +
+                ", score=" + score +
                 ", content='" + content + '\'' +
                 ", metadata=" + metadata +
                 '}';

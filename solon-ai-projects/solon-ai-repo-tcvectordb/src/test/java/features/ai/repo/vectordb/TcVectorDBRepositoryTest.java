@@ -2,6 +2,7 @@ package features.ai.repo.vectordb;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -28,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * @author 小奶奶花生米
  * @since 3.1
  */
-public class VectorDBRepositoryTest {
+public class TcVectorDBRepositoryTest {
 
     private TcVectorDbRepository repository;
     private final String url = System.getProperty("vectordb.url", "http://sh-vdb-1e6g45an.sql.tencentcdb.com:8100");
@@ -395,50 +396,27 @@ public class VectorDBRepositoryTest {
 
     @Test
     public void testSearch() throws IOException {
+        List<Document> list = repository.search("solon");
+        assert list.size() == 4;
 
-        try {
-            // 测试基本搜索
-            QueryCondition condition = new QueryCondition("solon");
-            List<Document> results = repository.search(condition);
+        List<Document> list2 = repository.search("temporal");
+        assert list2.isEmpty();
 
-            // 如果有结果，验证结果不为空
-            if (!results.isEmpty()) {
-                System.out.println("Found " + results.size() + " documents containing 'solon'");
+        /// /////////////////////////////
 
-                // 打印结果
-                for (Document doc : results) {
-                    System.out.println(doc.getId() + ":" + doc.getScore() + ":" +
-                            (doc.getUrl() != null ? doc.getUrl() : "no-url") +
-                            "【" + doc.getContent() + "】");
-                }
-            } else {
-                System.out.println("No documents found containing 'solon'");
-            }
+        // 准备并存储文档，显式指定 ID
+        Document doc = new Document("Test content");
+        repository.insert(Collections.singletonList(doc));
+        String key = doc.getId();
 
-            // 测试带过滤器的搜索
-            condition = new QueryCondition("solon");
-            results = repository.search(condition);
+        // 验证存储成功
+        assertTrue(repository.exists(key), "Document should exist after storing");
 
-            if (!results.isEmpty()) {
-                System.out.println("\nFound " + results.size() + " documents containing 'framework' filtered by 'solon'");
-                for (Document doc : results) {
-                    System.out.println(doc.getId() + ":" + doc.getScore() + ":" +
-                            (doc.getUrl() != null ? doc.getUrl() : "no-url") +
-                            "【" + doc.getContent() + "】");
-                }
+        // 删除文档
+        repository.delete(doc.getId());
 
-                // 验证过滤器生效
-                for (Document doc : results) {
-                    assertTrue(doc.getContent().toLowerCase().contains("solon"),
-                            "过滤器应该确保所有结果包含'solon'");
-                }
-            } else {
-                System.out.println("No documents found with filter");
-            }
-
-        } catch (Exception e) {
-            fail("测试过程中发生异常: " + e.getMessage());
-        }
+        // 验证删除成功
+        assertFalse(repository.exists(key), "Document should not exist after removal");
     }
 
     @Test

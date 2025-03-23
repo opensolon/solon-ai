@@ -391,9 +391,6 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
                 // 计算相似度分数 (1 - 距离)，确保分数在0-1之间
                 double score = 1.0 - Math.min(1.0, Math.max(0.0, distance.doubleValue()));
 
-                // 添加评分到元数据
-                metadata.put("score", score);
-
                 Document doc = new Document(id,content, metadata, score);
 
                 // 如果元数据中有URL，设置到文档
