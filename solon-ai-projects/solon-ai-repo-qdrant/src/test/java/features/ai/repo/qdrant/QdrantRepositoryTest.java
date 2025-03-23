@@ -36,8 +36,10 @@ public class QdrantRepositoryTest {
     public void setup() throws Exception {
         repository = new QdrantRepository(TestUtils.getEmbeddingModel(), client, collectionName);
 
+        repository.dropRepository();
+        repository.initRepository();
+
         load(repository, "https://solon.noear.org/article/about?format=md");
-        load(repository, "https://h5.noear.org/more.htm");
         load(repository, "https://h5.noear.org/readme.htm");
     }
 

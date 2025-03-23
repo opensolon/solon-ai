@@ -49,6 +49,7 @@ public class OpenaiTest {
                     log.debug("::完成!");
                     doneLatch.countDown();
                 }).doOnError(err -> {
+                    doneLatch.countDown();
                     err.printStackTrace();
                 }));
 

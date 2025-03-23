@@ -63,7 +63,6 @@ import com.tencent.tcvectordb.model.param.enums.EmbeddingModelEnum;
  */
 @Preview("3.1")
 public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifecycle {
-
     /**
      * 文本字段名
      */
@@ -74,133 +73,11 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
      */
     public static final String VECTOR_FIELD_NAME = "vector";
 
-    /**
-     * 默认超时时间（秒）
-     */
-    public static final int DEFAULT_TIMEOUT = 30;
-
-    /**
-     * 默认连接超时时间（秒）
-     */
-    public static final int DEFAULT_CONNECT_TIMEOUT = 5;
-
-    /**
-     * 默认最大空闲连接数
-     */
-    public static final int DEFAULT_MAX_IDLE_CONNECTIONS = 10;
-
-    /**
-     * 默认连接保持时间（秒）
-     */
-    public static final int DEFAULT_KEEP_ALIVE_DURATION = 5 * 60;
-
-    /**
-     * 默认分片数
-     * 指定 Collection 的分片数。分片是把大数据集切成多个子数据集。
-     * 取值范围：[1,100]。例如：5。
-     * 配置建议：在搜索时，全部分片是并发执行的，分片数量越多，平均耗时越低，但是过多的分片会带来额外开销而影响性能。
-     * 单分片数据量建议控制在300万以内，例如500万向量，可设置2个分片。
-     * 如果数据量小于300万，建议使用1分片。系统对1分片有特定优化，可显著提升性能。
-     */
-    public static final int DEFAULT_SHARD_NUM = 1;
-
-    /**
-     * 默认副本数
-     * 指定 Collection 的副本数。副本数是指每个主分片有多个相同的备份，用来容灾和负载均衡。
-     * 取值范围如下所示。搜索请求量越高的索引，建议设置越多的副本数，避免负载不均衡。
-     * 单可用区实例：0。
-     * 两可用区实例：[1,节点数-1]。
-     * 三可用区实例：[2,节点数-1]。
-     */
-    public static final int DEFAULT_REPLICA_NUM = 0;
-
-    /**
-     * 默认相似度度量类型
-     * L2：全称是 Euclidean distance，指欧几里得距离，它计算向量之间的直线距离，所得的值越小，越与搜索值相似。L2在低维空间中表现良好，但是在高维空间中，由于维度灾难的影响，L2的效果会逐渐变差。
-     * IP：全称为 Inner Product，是一种计算向量之间相似度的度量算法，它计算两个向量之间的点积（内积），所得值越大越与搜索值相似。
-     * COSINE：余弦相似度（Cosine Similarity）算法，是一种常用的文本相似度计算方法。它通过计算两个向量在多维空间中的夹角余弦值来衡量它们的相似程度。所得值越大越与搜索值相似。
-     * HAMMING：汉明距离（Hamming Distance），计算两个二进制字符串对应位置上不同字符的数量，如果字符不同，两字符串的汉明距离就会加一。汉明距离越小，表示两个字符串之间的相似度越高。
-     */
-    public static final MetricType DEFAULT_METRIC_TYPE = MetricType.COSINE;
-
-    /**
-     * 默认索引类型
-     * 指定索引类型，取值如下所示。更多信息，请参见 https://cloud.tencent.com/document/product/1709/95428
-     * FLAT：暴力检索，召回率100%，但检索效率低，适用10万以内数据规模。
-     * HNSW：召回率95%+，可通过参数调整召回率，检索效率高，但数据量大后写入效率会变低，适用于10万-1亿区间数据规模。
-     * BIN_FLAT：二进制索引，暴力检索，召回率100%。
-     * IVF_FLAT、IVF_PQ、IVF_SQ4, IVF_SQ8, IVF_SQ16：IVF 系列索引，适用于上亿规模的数据集，检索效率高，内存占用低，写入效率高。
-     */
-    public static final IndexType DEFAULT_INDEX_TYPE = IndexType.HNSW;
-
-    /**
-     * 默认 HNSW 图的每层节点的邻居数量
-     */
-    public static final int DEFAULT_HNSW_M = 16;
-
-    /**
-     * 默认 HNSW 图构建时的候选邻居数量
-     */
-    public static final int DEFAULT_HNSW_EF_CONSTRUCTION = 200;
-
-    /**
-     * 元数据索引字段
-     */
-    private final List<MetadataField> metadataFields;
-
-    /**
-     * 向量模型
-     */
-    private final EmbeddingModelEnum embeddingModel;
-
-    /**
-     * VectorDB 客户端
-     */
-    private final VectorDBClient client;
-
-    /**
-     * 数据库名称
-     */
-    private final String databaseName;
-
-    /**
-     * 集合名称
-     */
-    private final String collectionName;
-
-    /**
-     * 分片数
-     */
-    private final int shardNum;
-
-    /**
-     * 副本数
-     */
-    private final int replicaNum;
-
-    /**
-     * 相似度度量类型
-     */
-    private final MetricType metricType;
-
-    /**
-     * 索引类型
-     */
-    private final IndexType indexType;
-
-    /**
-     * 向量索引参数序列化器
-     */
-    private final ParamsSerializer indexParams;
-
-    /**
-     * 集合对象
-     */
+    //构建配置
+    private Builder builder;
+    //集合对象
     private Collection collection;
-
-    /**
-     * 是否已初始化
-     */
+    //是否已初始化
     private boolean initialized = false;
 
     /**
@@ -236,161 +113,10 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
         }
 
         // 设置属性
-        this.embeddingModel = builder.embeddingModel;
-        this.databaseName = builder.databaseName;
-        this.collectionName = builder.collectionName;
-        this.shardNum = builder.shardNum;
-        this.replicaNum = builder.replicaNum;
-        this.metricType = builder.metricType;
-        this.indexType = builder.indexType;
-        this.indexParams = builder.indexParams;
-        this.metadataFields = builder.metadataFields;
-        this.client = builder.client;
+        this.builder = builder;
 
         // 初始化仓库
         initRepository();
-    }
-
-    /**
-     * 创建构建器
-     *
-     * @param embeddingModelName 向量模型名称
-     * @param databaseName       数据库名称
-     * @param collectionName     集合名称
-     * @return 构建器
-     */
-    public static Builder builder(String embeddingModelName, VectorDBClient client,
-                                  String databaseName, String collectionName) {
-        return new Builder(embeddingModelName, client, databaseName, collectionName);
-    }
-
-    /**
-     * VectorDBRepository 构建器
-     */
-    public static class Builder {
-        // 必要参数
-        private final EmbeddingModelEnum embeddingModel;
-        private final VectorDBClient client;
-        private final String databaseName;
-        private final String collectionName;
-
-        // 可选参数（使用默认值）
-        private int shardNum = DEFAULT_SHARD_NUM;
-        private int replicaNum = DEFAULT_REPLICA_NUM;
-        private MetricType metricType = DEFAULT_METRIC_TYPE;
-        private IndexType indexType = DEFAULT_INDEX_TYPE;
-        private ParamsSerializer indexParams = null;
-        private List<MetadataField> metadataFields = new ArrayList<>();
-
-        /**
-         * 构造函数
-         *
-         * @param embeddingModelName 向量模型名称
-         * @param databaseName       数据库名称
-         * @param collectionName     集合名称
-         */
-        public Builder(String embeddingModelName, VectorDBClient client,
-                       String databaseName, String collectionName) {
-            if (Utils.isEmpty(embeddingModelName)) {
-                throw new IllegalArgumentException("EmbeddingModelName must not be null or empty");
-            }
-
-            EmbeddingModelEnum embeddingModelEnum = EmbeddingModelEnum.find(embeddingModelName);
-            if (embeddingModelEnum == null) {
-                throw new IllegalArgumentException("Invalid embedding model name: " + embeddingModelName);
-            }
-
-            this.embeddingModel = embeddingModelEnum;
-            this.client = client;
-            this.databaseName = databaseName;
-            this.collectionName = collectionName;
-        }
-
-        /**
-         * 设置分片数
-         *
-         * @param shardNum 分片数
-         * @return 构建器
-         */
-        public Builder shardNum(int shardNum) {
-            this.shardNum = shardNum;
-            return this;
-        }
-
-        /**
-         * 设置副本数
-         *
-         * @param replicaNum 副本数
-         * @return 构建器
-         */
-        public Builder replicaNum(int replicaNum) {
-            this.replicaNum = replicaNum;
-            return this;
-        }
-
-        /**
-         * 设置相似度度量类型
-         *
-         * @param metricType 相似度度量类型
-         * @return 构建器
-         */
-        public Builder metricType(MetricType metricType) {
-            this.metricType = metricType;
-            return this;
-        }
-
-        /**
-         * 设置索引类型
-         *
-         * @param indexType 索引类型
-         * @return 构建器
-         */
-        public Builder indexType(IndexType indexType) {
-            this.indexType = indexType;
-            return this;
-        }
-
-        /**
-         * 设置向量索引参数
-         *
-         * @param indexParams 向量索引参数
-         * @return 构建器
-         */
-        public Builder indexParams(ParamsSerializer indexParams) {
-            this.indexParams = indexParams;
-            return this;
-        }
-
-        /**
-         * 设置元数据索引字段
-         *
-         * @param metadataFields 元数据索引字段
-         * @return 构建器
-         */
-        public Builder metadataFields(List<MetadataField> metadataFields) {
-            this.metadataFields = metadataFields;
-            return this;
-        }
-
-        /**
-         * 添加单个元数据索引字段
-         *
-         * @param metadataField 元数据索引字段
-         * @return 构建器
-         */
-        public Builder addMetadataField(MetadataField metadataField) {
-            this.metadataFields.add(metadataField);
-            return this;
-        }
-
-        /**
-         * 构建 VectorDBRepository
-         *
-         * @return VectorDBRepository 实例
-         */
-        public TcVectorDbRepository build() {
-            return new TcVectorDbRepository(this);
-        }
     }
 
     /**
@@ -404,29 +130,29 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
 
         try {
             // 检查数据库是否存在
-            List<String> databases = client.listDatabase();
-            boolean databaseExists = databases.contains(databaseName);
+            List<String> databases = builder.client.listDatabase();
+            boolean databaseExists = databases.contains(builder.databaseName);
 
             Database database;
             if (!databaseExists) {
                 // 创建数据库
-                database = client.createDatabase(databaseName);
+                database = builder.client.createDatabase(builder.databaseName);
             } else {
                 // 获取现有数据库
-                database = client.database(databaseName);
+                database = builder.client.database(builder.databaseName);
             }
 
             // 检查集合是否存在
             List<Collection> collections = database.listCollections();
             boolean collectionExists = collections.stream()
-                    .anyMatch(c -> collectionName.equals(c.getCollection()));
+                    .anyMatch(c -> builder.collectionName.equals(c.getCollection()));
 
             if (!collectionExists) {
                 // 创建集合
                 CreateCollectionParam.Builder collectionParamBuilder = CreateCollectionParam.newBuilder()
-                        .withName(collectionName)
-                        .withShardNum(shardNum)
-                        .withReplicaNum(replicaNum)
+                        .withName(builder.collectionName)
+                        .withShardNum(builder.shardNum)
+                        .withReplicaNum(builder.replicaNum)
                         .withDescription("Collection created by Solon AI")
                         .addField(new FilterIndex("id", FieldType.String, IndexType.PRIMARY_KEY));
 
@@ -436,7 +162,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
                 collectionParamBuilder.addField(vectorIndex);
 
                 // 添加元数据索引字段
-                for (MetadataField field : metadataFields) {
+                for (MetadataField field : builder.metadataFields) {
                     FilterIndex filterIndex = new FilterIndex(
                             field.getName(),
                             field.getFieldType(),
@@ -449,7 +175,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
                 collectionParamBuilder.withEmbedding(Embedding.newBuilder()
                         .withVectorField(VECTOR_FIELD_NAME)
                         .withField(TEXT_FIELD_NAME)
-                        .withModelName(embeddingModel.getModelName())
+                        .withModelName(builder.embeddingModel.getModelName())
                         .build());
 
                 // 创建集合
@@ -457,7 +183,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
             }
 
             // 获取集合
-            this.collection = database.describeCollection(collectionName);
+            this.collection = database.describeCollection(builder.collectionName);
             this.initialized = true;
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize VectorDB repository: " + e.getMessage(), e);
@@ -467,19 +193,19 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
     @Override
     public void dropRepository() {
         // 检查数据库是否存在
-        List<String> databases = client.listDatabase();
-        boolean databaseExists = databases.contains(databaseName);
+        List<String> databases = builder.client.listDatabase();
+        boolean databaseExists = databases.contains(builder.databaseName);
 
         Database database;
         if (!databaseExists) {
             // 创建数据库
-            database = client.createDatabase(databaseName);
+            database = builder.client.createDatabase(builder.databaseName);
         } else {
             // 获取现有数据库
-            database = client.database(databaseName);
+            database = builder.client.database(builder.databaseName);
         }
 
-        database.dropCollection(collectionName);
+        database.dropCollection(builder.collectionName);
         this.collection = null;
         this.initialized = false;
     }
@@ -491,15 +217,15 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
      */
     private VectorIndex getVectorIndex() {
         VectorIndex vectorIndex;
-        if (indexParams != null) {
+        if (builder.indexParams != null) {
             // 使用自定义参数
-            vectorIndex = new VectorIndex(VECTOR_FIELD_NAME, embeddingModel.getDimension(),
-                    indexType, metricType, indexParams);
+            vectorIndex = new VectorIndex(VECTOR_FIELD_NAME, builder.embeddingModel.getDimension(),
+                    builder.indexType, builder.metricType, builder.indexParams);
         } else {
             // 对于其他索引类型
-            vectorIndex = new VectorIndex(VECTOR_FIELD_NAME, embeddingModel.getDimension(),
-                    indexType, metricType,
-                    new HNSWParams(DEFAULT_HNSW_M, DEFAULT_HNSW_EF_CONSTRUCTION));
+            vectorIndex = new VectorIndex(VECTOR_FIELD_NAME, builder.embeddingModel.getDimension(),
+                    builder.indexType, builder.metricType,
+                    new HNSWParams(builder.hnswM, builder.hnswConstructionEf));
         }
         return vectorIndex;
     }
@@ -622,7 +348,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
             // 准备搜索参数
             SearchByEmbeddingItemsParam.Builder searchParamBuilder = SearchByEmbeddingItemsParam.newBuilder()
                     .withEmbeddingItems(Collections.singletonList(condition.getQuery()))
-                    .withParams(new HNSWSearchParams(100))
+                    .withParams(new HNSWSearchParams(builder.hnswSearchEf))
                     .withLimit(condition.getLimit() > 0 ? condition.getLimit() : 10);
 
             if (condition.getFilterExpression() != null) {
@@ -696,5 +422,177 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
         }
 
         return metadata;
+    }
+
+
+    /// /////////////////////////////////////////////
+
+    /**
+     * 创建构建器
+     *
+     * @param embeddingModelName 向量模型名称
+     * @param databaseName       数据库名称
+     * @param collectionName     集合名称
+     * @return 构建器
+     */
+    public static Builder builder(String embeddingModelName, VectorDBClient client,
+                                  String databaseName, String collectionName) {
+        return new Builder(embeddingModelName, client, databaseName, collectionName);
+    }
+
+    /**
+     * VectorDBRepository 构建器
+     */
+    public static class Builder {
+        // 必要参数
+        private final EmbeddingModelEnum embeddingModel;
+        private final VectorDBClient client;
+        private final String databaseName;
+        private final String collectionName;
+
+        // 可选参数（使用默认值）
+        /**
+         * 分片数
+         * 指定 Collection 的分片数。分片是把大数据集切成多个子数据集。
+         * 取值范围：[1,100]。例如：5。
+         * 配置建议：在搜索时，全部分片是并发执行的，分片数量越多，平均耗时越低，但是过多的分片会带来额外开销而影响性能。
+         * 单分片数据量建议控制在300万以内，例如500万向量，可设置2个分片。
+         * 如果数据量小于300万，建议使用1分片。系统对1分片有特定优化，可显著提升性能。
+         */
+        private int shardNum = 1;
+        /**
+         * 副本数
+         * 指定 Collection 的副本数。副本数是指每个主分片有多个相同的备份，用来容灾和负载均衡。
+         * 取值范围如下所示。搜索请求量越高的索引，建议设置越多的副本数，避免负载不均衡。
+         * 单可用区实例：0。
+         * 两可用区实例：[1,节点数-1]。
+         * 三可用区实例：[2,节点数-1]。
+         */
+        private int replicaNum = 0;
+        //默认相似度度量类型
+        private MetricType metricType = MetricType.COSINE;
+        //索引类型
+        private IndexType indexType = IndexType.HNSW;
+        private ParamsSerializer indexParams = null;
+        private List<MetadataField> metadataFields = new ArrayList<>();
+        //HNSW 图的每层节点的邻居数量
+        private int hnswM = 16;
+        //HNSW 图构搜索时的候选邻居数量
+        private int hnswSearchEf = 500;
+        //HNSW 图构建时的候选邻居数量
+        private int hnswConstructionEf = 400;
+
+        /**
+         * 构造函数
+         *
+         * @param embeddingModelName 向量模型名称
+         * @param databaseName       数据库名称
+         * @param collectionName     集合名称
+         */
+        public Builder(String embeddingModelName, VectorDBClient client,
+                       String databaseName, String collectionName) {
+            if (Utils.isEmpty(embeddingModelName)) {
+                throw new IllegalArgumentException("EmbeddingModelName must not be null or empty");
+            }
+
+            EmbeddingModelEnum embeddingModelEnum = EmbeddingModelEnum.find(embeddingModelName);
+            if (embeddingModelEnum == null) {
+                throw new IllegalArgumentException("Invalid embedding model name: " + embeddingModelName);
+            }
+
+            this.embeddingModel = embeddingModelEnum;
+            this.client = client;
+            this.databaseName = databaseName;
+            this.collectionName = collectionName;
+        }
+
+        /**
+         * 设置分片数
+         */
+        public Builder shardNum(int shardNum) {
+            this.shardNum = shardNum;
+            return this;
+        }
+
+        /**
+         * 设置副本数
+         */
+        public Builder replicaNum(int replicaNum) {
+            this.replicaNum = replicaNum;
+            return this;
+        }
+
+        /**
+         * 设置相似度度量类型
+         */
+        public Builder metricType(MetricType metricType) {
+            this.metricType = metricType;
+            return this;
+        }
+
+        /**
+         * 设置索引类型
+         */
+        public Builder indexType(IndexType indexType) {
+            this.indexType = indexType;
+            return this;
+        }
+
+        /**
+         * 设置向量索引参数
+         */
+        public Builder indexParams(ParamsSerializer indexParams) {
+            this.indexParams = indexParams;
+            return this;
+        }
+
+        /**
+         * 设置 HNSW 图的每层节点的邻居数量
+         */
+        public Builder hnswM(int hnswM) {
+            this.hnswM = hnswM;
+            return this;
+        }
+
+        /**
+         * 设置 HNSW 图构搜索时的候选邻居数量
+         */
+        public Builder hnswSearchEf(int hnswSearchEf) {
+            this.hnswSearchEf = hnswSearchEf;
+            return this;
+        }
+
+        /**
+         * 设置 HNSW 图构建时的候选邻居数量
+         */
+        public Builder hnswConstructionEf(int hnswConstructionEf) {
+            this.hnswConstructionEf = hnswConstructionEf;
+            return this;
+        }
+
+        /**
+         * 设置元数据索引字段
+         */
+        public Builder metadataFields(List<MetadataField> metadataFields) {
+            this.metadataFields = metadataFields;
+            return this;
+        }
+
+        /**
+         * 添加单个元数据索引字段
+         */
+        public Builder addMetadataField(MetadataField metadataField) {
+            this.metadataFields.add(metadataField);
+            return this;
+        }
+
+        /**
+         * 构建 VectorDBRepository
+         *
+         * @return VectorDBRepository 实例
+         */
+        public TcVectorDbRepository build() {
+            return new TcVectorDbRepository(this);
+        }
     }
 }
