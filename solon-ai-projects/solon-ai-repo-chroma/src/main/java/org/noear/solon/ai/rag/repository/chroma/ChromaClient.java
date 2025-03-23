@@ -80,15 +80,14 @@ public class ChromaClient {
     public CollectionsResponse listCollections() throws IOException {
         try {
             String endpoint = baseUrl + "api/v1/collections";
-            String response = http(endpoint).get();
 
-            CollectionsResponse collectionsResponse = ONode.loadStr(response).toObject(CollectionsResponse.class);
+            CollectionsResponse response = http(endpoint).getAs(CollectionsResponse.class);
 
-            if (collectionsResponse.hasError()) {
-                throw new IOException("Error listing collections: " + collectionsResponse.getMessage());
+            if (response.hasError()) {
+                throw new IOException("Error listing collections: " + response.getMessage());
             }
 
-            return collectionsResponse;
+            return response;
         } catch (Exception e) {
             if (e instanceof IOException) {
                 throw (IOException) e;
@@ -123,11 +122,7 @@ public class ChromaClient {
                 requestBody.put("metadata", defaultMetadata);
             }
 
-            String jsonBody = ONode.stringify(requestBody);
-
-            String responseStr = http(endpoint).bodyOfJson(jsonBody).post();
-
-            CollectionResponse response = ONode.loadStr(responseStr).toObject(CollectionResponse.class);
+            CollectionResponse response = http(endpoint).bodyOfBean(requestBody).postAs(CollectionResponse.class);
 
             if (response.hasError()) {
                 throw new IOException("Failed to create collection: " + response.getMessage());
@@ -153,9 +148,7 @@ public class ChromaClient {
         try {
             String endpoint = baseUrl + "api/v1/collections/" + collectionId;
 
-            String responseStr = http(endpoint).get();
-
-            CollectionResponse response = ONode.loadStr(responseStr).toObject(CollectionResponse.class);
+            CollectionResponse response = http(endpoint).getAs(CollectionResponse.class);
 
             if (response.hasError()) {
                 throw new IOException("Failed to get collection stats: " + response.getMessage());
@@ -297,10 +290,8 @@ public class ChromaClient {
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("ids", ids);
 
-            String jsonBody = ONode.stringify(requestBody);
-
             // Chroma API在成功时不返回任何内容
-            http(endpoint).bodyOfJson(jsonBody)
+            http(endpoint).bodyOfBean(requestBody)
                     .post();
 
         } catch (Exception e) {
@@ -325,11 +316,7 @@ public class ChromaClient {
             ids.add(id);
             requestBody.put("ids", ids);
 
-            String jsonBody = ONode.stringify(requestBody);
-
-            String responseStr = http(endpoint).bodyOfJson(jsonBody).post();
-
-            GetResponse response = ONode.loadStr(responseStr).toObject(GetResponse.class);
+            GetResponse response = http(endpoint).bodyOfBean(requestBody).postAs(GetResponse.class);
 
             if (response.hasError()) {
                 return false;
@@ -372,11 +359,9 @@ public class ChromaClient {
                 requestBody.put("where", metadataFilter);
             }
 
-            String jsonBody = ONode.stringify(requestBody);
+            QueryResponse response = http(endpoint).bodyOfBean(requestBody).postAs(QueryResponse.class);
 
-            String response = http(endpoint).bodyOfJson(jsonBody).post();
-
-            return ONode.loadStr(response).toObject(QueryResponse.class);
+            return response;
         } catch (Exception e) {
             throw new IOException("Failed to query documents: " + e.getMessage(), e);
         }
