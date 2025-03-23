@@ -92,78 +92,12 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      * @author 小奶奶花生米
      */
     public ElasticsearchRepository(EmbeddingModel embeddingModel, RestHighLevelClient client,
-                                  String indexName, List<MetadataField> metadataFields) {
+                                   String indexName, List<MetadataField> metadataFields) {
         this.embeddingModel = embeddingModel;
         this.client = client;
         this.indexName = indexName;
         this.metadataFields = metadataFields;
         initRepository();
-    }
-
-    /**
-     * 创建 Elasticsearch 知识库构建器
-     *
-     * @param embeddingModel 嵌入模型
-     * @param client Elasticsearch 客户端
-     * @param indexName 索引名称
-     * @return 构建器实例
-     */
-    public static Builder builder(EmbeddingModel embeddingModel, RestHighLevelClient client, String indexName) {
-        return new Builder(embeddingModel, client, indexName);
-    }
-
-    /**
-     * Elasticsearch 知识库构建器
-     */
-    public static class Builder {
-        private final EmbeddingModel embeddingModel;
-        private final RestHighLevelClient client;
-        private final String indexName;
-        private List<MetadataField> metadataFields = new ArrayList<>();
-
-        /**
-         * 构造函数
-         *
-         * @param embeddingModel 嵌入模型
-         * @param client Elasticsearch 客户端
-         * @param indexName 索引名称
-         */
-        public Builder(EmbeddingModel embeddingModel, RestHighLevelClient client, String indexName) {
-            this.embeddingModel = embeddingModel;
-            this.client = client;
-            this.indexName = indexName;
-        }
-
-        /**
-         * 设置需要索引的元数据字段
-         *
-         * @param metadataFields 元数据字段列表
-         * @return 构建器实例
-         */
-        public Builder metadataFields(List<MetadataField> metadataFields) {
-            this.metadataFields = metadataFields;
-            return this;
-        }
-
-        /**
-         * 添加需要索引的元数据字段
-         *
-         * @param metadataField 元数据字段
-         * @return 构建器实例
-         */
-        public Builder addMetadataField(MetadataField metadataField) {
-            this.metadataFields.add(metadataField);
-            return this;
-        }
-
-        /**
-         * 构建 ElasticsearchRepository 实例
-         *
-         * @return ElasticsearchRepository 实例
-         */
-        public ElasticsearchRepository build() {
-            return new ElasticsearchRepository(embeddingModel, client, indexName, metadataFields);
-        }
     }
 
     /**
@@ -178,7 +112,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
                 createIndexRequest.source(buildIndexMapping());
                 client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to initialize Elasticsearch index", e);
         }
     }
@@ -207,7 +141,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
                 .field("type", "dense_vector")
                 .field("dims", dims)
                 .endObject();
-                
+
         // 如果有元数据字段需要索引，将其平铺到顶层
         if (!metadataFields.isEmpty()) {
             for (MetadataField field : metadataFields) {
@@ -393,12 +327,12 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         source.put("content", doc.getContent());
         source.put("metadata", doc.getMetadata());
         source.put("embedding", doc.getEmbedding());
-        
+
         // 保存URL，如果存在
         if (doc.getUrl() != null) {
             source.put("url", doc.getUrl());
         }
-        
+
         // 将metadata内部字段平铺到顶层
         if (doc.getMetadata() != null) {
             for (Map.Entry<String, Object> entry : doc.getMetadata().entrySet()) {
@@ -473,5 +407,71 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         }
 
         return query;
+    }
+
+    /**
+     * 创建 Elasticsearch 知识库构建器
+     *
+     * @param embeddingModel 嵌入模型
+     * @param client         Elasticsearch 客户端
+     * @param indexName      索引名称
+     * @return 构建器实例
+     */
+    public static Builder builder(EmbeddingModel embeddingModel, RestHighLevelClient client, String indexName) {
+        return new Builder(embeddingModel, client, indexName);
+    }
+
+    /**
+     * Elasticsearch 知识库构建器
+     */
+    public static class Builder {
+        private final EmbeddingModel embeddingModel;
+        private final RestHighLevelClient client;
+        private final String indexName;
+        private List<MetadataField> metadataFields = new ArrayList<>();
+
+        /**
+         * 构造函数
+         *
+         * @param embeddingModel 嵌入模型
+         * @param client         Elasticsearch 客户端
+         * @param indexName      索引名称
+         */
+        public Builder(EmbeddingModel embeddingModel, RestHighLevelClient client, String indexName) {
+            this.embeddingModel = embeddingModel;
+            this.client = client;
+            this.indexName = indexName;
+        }
+
+        /**
+         * 设置需要索引的元数据字段
+         *
+         * @param metadataFields 元数据字段列表
+         * @return 构建器实例
+         */
+        public Builder metadataFields(List<MetadataField> metadataFields) {
+            this.metadataFields = metadataFields;
+            return this;
+        }
+
+        /**
+         * 添加需要索引的元数据字段
+         *
+         * @param metadataField 元数据字段
+         * @return 构建器实例
+         */
+        public Builder addMetadataField(MetadataField metadataField) {
+            this.metadataFields.add(metadataField);
+            return this;
+        }
+
+        /**
+         * 构建 ElasticsearchRepository 实例
+         *
+         * @return ElasticsearchRepository 实例
+         */
+        public ElasticsearchRepository build() {
+            return new ElasticsearchRepository(embeddingModel, client, indexName, metadataFields);
+        }
     }
 }
