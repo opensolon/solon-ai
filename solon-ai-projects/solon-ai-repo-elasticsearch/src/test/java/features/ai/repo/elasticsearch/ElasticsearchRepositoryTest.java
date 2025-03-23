@@ -485,6 +485,60 @@ public class ElasticsearchRepositoryTest {
     }
 
     @Test
+    public void case2_expression() throws Exception {
+        // 新增带有元数据的文档
+        Document doc1 = new Document("Document about Solon framework");
+        doc1.getMetadata().put("title", "solon");
+        doc1.getMetadata().put("category", "framework");
+
+        Document doc2 = new Document("Document about Java settings");
+        doc2.getMetadata().put("title", "设置");
+        doc2.getMetadata().put("category", "tutorial");
+
+        Document doc3 = new Document("Document about Spring framework");
+        doc3.getMetadata().put("title", "spring");
+        doc3.getMetadata().put("category", "framework");
+
+        List<Document> documents = new ArrayList<>();
+        documents.add(doc1);
+        documents.add(doc2);
+        documents.add(doc3);
+        repository.insert(documents);
+
+        try {
+            // 1. 使用OR表达式过滤进行搜索
+            String orExpression = "title == 'solon' OR title == '设置'";
+            List<Document> orResults = repository.search(new QueryCondition("framework").filterExpression(orExpression).disableRefilter(true));
+
+            System.out.println("Found " + orResults.size() + " documents with OR filter expression: " + orExpression);
+
+            // 验证结果包含2个文档
+            assert orResults.size() == 2;
+
+            // 2. 使用AND表达式过滤
+            String andExpression = "title == 'solon' AND category == 'framework'";
+            List<Document> andResults = repository.search(new QueryCondition("framework").filterExpression(andExpression).disableRefilter(true));
+
+            System.out.println("Found " + andResults.size() + " documents with AND filter expression: " + andExpression);
+
+            // 验证结果只包含1个文档
+            assertEquals(1, andResults.size());
+
+            // 3. 使用category过滤
+            String categoryExpression = "category == 'framework'";
+            List<Document> categoryResults = repository.search(new QueryCondition("framework").filterExpression(categoryExpression).disableRefilter(true));
+
+            System.out.println("Found " + categoryResults.size() + " documents with category filter: " + categoryExpression);
+
+            // 验证结果包含2个framework类别的文档
+            assertEquals(2, categoryResults.size());
+        } finally {
+            // 清理测试数据
+            repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+        }
+    }
+
+    @Test
     public void testAdvancedExpressionFilter() throws IOException {
         try {
             // 创建测试文档

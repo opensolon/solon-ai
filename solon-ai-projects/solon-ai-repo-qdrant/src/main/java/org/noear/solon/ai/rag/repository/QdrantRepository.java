@@ -31,6 +31,7 @@ import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 
+import org.noear.solon.expression.Expression;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
@@ -53,10 +54,9 @@ import static io.qdrant.client.WithVectorsSelectorFactory.enable;
  * Qdrant 矢量存储知识库
  *
  * @author Anush008
- *
- * @since 3.1.2
+ * @since 3.1
  */
-@Preview("3.1.2")
+@Preview("3.1")
 public class QdrantRepository implements RepositoryStorable {
     private static final String DEFAULT_CONTENT_KEY = "content";
     private static final String DEFAULT_METADATA_KEY = "metadata";
@@ -73,7 +73,7 @@ public class QdrantRepository implements RepositoryStorable {
     }
 
     public QdrantRepository(EmbeddingModel embeddingModel, QdrantClient client, String collectionName,
-            String contentKey, String metadataKey) {
+                            String contentKey, String metadataKey) {
         this.embeddingModel = embeddingModel;
         this.client = client;
         this.collectionName = collectionName;
@@ -156,13 +156,20 @@ public class QdrantRepository implements RepositoryStorable {
         try {
             float[] queryVector = embeddingModel.embed(condition.getQuery());
 
-            List<ScoredPoint> points = client.queryAsync(QueryPoints.newBuilder().setCollectionName(collectionName)
+            QueryPoints.Builder queryBuilder = QueryPoints.newBuilder().setCollectionName(collectionName)
                     .setQuery(nearest(queryVector))
                     .setLimit(condition.getLimit())
                     .setScoreThreshold((float) condition.getSimilarityThreshold())
                     .setWithPayload(include(Arrays.asList(contentKey, metadataKey)))
-                    .setWithVectors(enable(true))
-                    .build()).get();
+                    .setWithVectors(enable(true));
+
+            Filter filter = parseFilterExpression(condition.getFilterExpression());
+
+            if (filter != null) {
+                queryBuilder.setFilter(filter);
+            }
+
+            List<ScoredPoint> points = client.queryAsync(queryBuilder.build()).get();
 
             Stream<Document> docs = points.stream().map(this::toDocument);
 
@@ -170,6 +177,14 @@ public class QdrantRepository implements RepositoryStorable {
         } catch (InterruptedException | ExecutionException e) {
             throw new IOException("Failed to search documents in Qdrant", e);
         }
+    }
+
+    private Filter parseFilterExpression(Expression<Boolean> filterExpression) {
+        if (filterExpression == null) {
+            return null;
+        }
+
+        return null;
     }
 
     private PointStruct toPointStruct(Document doc) {

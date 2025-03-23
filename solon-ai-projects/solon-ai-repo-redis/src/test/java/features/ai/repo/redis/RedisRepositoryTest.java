@@ -7,9 +7,6 @@ import java.util.List;
 import java.util.ArrayList;
 
 import org.junit.jupiter.api.AfterEach;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.noear.redisx.RedisClient;
@@ -31,6 +28,8 @@ import org.noear.solon.test.SolonTest;
 
 import redis.clients.jedis.UnifiedJedis;
 import redis.clients.jedis.search.Schema;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * @author noear 2025/2/26 created
@@ -57,6 +56,8 @@ public class RedisRepositoryTest {
         List<MetadataField> metadataFields = new ArrayList<>();
         metadataFields.add(new MetadataField("title", Schema.FieldType.TAG)); // 使用TAG类型以支持精确匹配
         metadataFields.add(new MetadataField("category", Schema.FieldType.TAG));
+        metadataFields.add(MetadataField.numeric("price"));
+        metadataFields.add(MetadataField.numeric("stock"));
 
         // 创建测试用的 Repository - 使用 Builder 模式创建
         repository = RedisRepository.builder(embeddingModel, client)
@@ -153,6 +154,136 @@ public class RedisRepositoryTest {
         } finally {
             // 清理测试数据
             repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+        }
+    }
+
+    @Test
+    public void testAdvancedExpressionFilter() throws IOException {
+        try {
+            // 创建测试文档
+            List<Document> documents = new ArrayList<>();
+
+            Document doc1 = new Document("Document with numeric properties");
+            doc1.metadata("price", 100);
+            doc1.metadata("stock", 50);
+            doc1.metadata("category", "electronics");
+
+            Document doc2 = new Document("Document with different price");
+            doc2.metadata("price", 200);
+            doc2.metadata("stock", 10);
+            doc2.metadata("category", "electronics");
+
+            Document doc3 = new Document("Document with different category");
+            doc3.metadata("price", 150);
+            doc3.metadata("stock", 25);
+            doc3.metadata("category", "books");
+
+            documents.add(doc1);
+            documents.add(doc2);
+            documents.add(doc3);
+
+            // 插入测试文档
+            repository.insert(documents);
+
+            // 等待索引更新
+            Thread.sleep(1000);
+
+            // 1. 测试数值比较 (大于)
+            String gtExpression = "price > 120";
+            QueryCondition gtCondition = new QueryCondition("document")
+                    .filterExpression(gtExpression);
+
+            List<Document> gtResults = repository.search(gtCondition);
+            System.out.println("找到 " + gtResults.size() + " 个文档，使用大于表达式: " + gtExpression);
+
+            // 验证结果 - 应该找到两个价格大于120的文档
+            assertTrue(gtResults.size() > 0, "大于表达式应该找到文档");
+            int countGt120 = 0;
+            for (Document doc : gtResults) {
+                int price = ((Number) doc.getMetadata("price")).intValue();
+                if (price > 120) {
+                    countGt120++;
+                }
+            }
+            assertTrue(countGt120 > 0, "应该找到价格大于120的文档");
+
+            // 2. 测试数值比较 (小于等于)
+            String lteExpression = "stock <= 25";
+            QueryCondition lteCondition = new QueryCondition("document")
+                    .filterExpression(lteExpression);
+
+            List<Document> lteResults = repository.search(lteCondition);
+            System.out.println("找到 " + lteResults.size() + " 个文档，使用小于等于表达式: " + lteExpression);
+
+            // 验证结果 - 应该找到两个库存小于等于25的文档
+            assertTrue(lteResults.size() > 0, "小于等于表达式应该找到文档");
+            int countLte25 = 0;
+            for (Document doc : lteResults) {
+                int stock = ((Number) doc.getMetadata("stock")).intValue();
+                if (stock <= 25) {
+                    countLte25++;
+                }
+            }
+            assertTrue(countLte25 > 0, "应该找到库存小于等于25的文档");
+
+            // 3. 测试复合表达式 (价格区间和类别)
+            String complexExpression = "(price >= 100 AND price <= 180) AND category == 'electronics'";
+            QueryCondition complexCondition = new QueryCondition("document")
+                    .filterExpression(complexExpression);
+
+            List<Document> complexResults = repository.search(complexCondition);
+            System.out.println("找到 " + complexResults.size() + " 个文档，使用复合表达式: " + complexExpression);
+
+            // 验证结果 - 应该找到一个满足所有条件的文档
+            assertTrue(complexResults.size() > 0, "复合表达式应该找到文档");
+            boolean foundMatch = false;
+            for (Document doc : complexResults) {
+                int price = ((Number) doc.getMetadata("price")).intValue();
+                String category = (String) doc.getMetadata("category");
+                if (price >= 100 && price <= 180 && "electronics".equals(category)) {
+                    foundMatch = true;
+                    break;
+                }
+            }
+            assertTrue(foundMatch, "应该找到符合复合条件的文档");
+
+            // 4. 测试 IN 操作符
+            String inExpression = "category IN ['electronics', 'books']";
+            QueryCondition inCondition = new QueryCondition("document")
+                    .filterExpression(inExpression);
+
+            List<Document> inResults = repository.search(inCondition);
+            System.out.println("找到 " + inResults.size() + " 个文档，使用IN表达式: " + inExpression);
+            assertTrue(inResults.size() > 0, "IN表达式应该找到文档");
+
+            // 5. 测试 NOT 操作符
+            String notExpression = "NOT (category == 'books')";
+            QueryCondition notCondition = new QueryCondition("document")
+                    .filterExpression(notExpression);
+            List<Document> notResults = repository.search(notCondition);
+            System.out.println("找到 " + notResults.size() + " 个文档，使用NOT表达式: " + notExpression);
+            assertTrue(notResults.size() > 0, "NOT表达式应该找到文档");
+            boolean foundNonBooks = false;
+            for (Document doc : notResults) {
+                String category = (String) doc.getMetadata("category");
+                if (!"books".equals(category)) {
+                    foundNonBooks = true;
+                    break;
+                }
+            }
+            assertTrue(foundNonBooks, "应该找到非books类别的文档");
+
+            // 打印结果
+            System.out.println("\n=== 高级表达式过滤测试结果 ===");
+            System.out.println("大于表达式结果数量: " + gtResults.size());
+            System.out.println("小于等于表达式结果数量: " + lteResults.size());
+            System.out.println("复合表达式结果数量: " + complexResults.size());
+            System.out.println("IN表达式结果数量: " + inResults.size());
+            System.out.println("NOT表达式结果数量: " + notResults.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            fail("测试过程中发生异常: " + e.getMessage());
         }
     }
 
