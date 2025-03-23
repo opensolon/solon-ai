@@ -15,6 +15,7 @@ import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.chroma.*;
+import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.lang.Preview;
@@ -140,7 +141,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      * @throws IOException 如果创建失败
      */
     private void createUniqueCollection() throws IOException {
-        String uuid = UUID.randomUUID().toString().substring(0, 8);
+        String uuid = Utils.uuid().substring(0, 8);
         String uniqueCollectionName = config.collectionName + "_" + uuid;
 
         // 创建集合元数据
@@ -170,25 +171,20 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      */
     @Override
     public void insert(List<Document> documents) throws IOException {
-        if (documents == null || documents.isEmpty()) {
+        if (Utils.isEmpty(documents)) {
             return;
         }
 
         // 确保所有文档都有ID
         for (Document doc : documents) {
             if (Utils.isEmpty(doc.getId())) {
-                doc.id(UUID.randomUUID().toString());
+                doc.id(Utils.uuid());
             }
         }
 
-        // 生成文档的向量表示
-        config.embeddingModel.embed(documents);
-
-        // 批量添加文档
-        int batchSize = 100;
-        for (int i = 0; i < documents.size(); i += batchSize) {
-            int end = Math.min(i + batchSize, documents.size());
-            List<Document> batch = documents.subList(i, end);
+        // 分批处理
+        for(List<Document> batch: ListUtil.partition(documents)) {
+            config.embeddingModel.embed(batch);
             addDocuments(batch);
         }
     }

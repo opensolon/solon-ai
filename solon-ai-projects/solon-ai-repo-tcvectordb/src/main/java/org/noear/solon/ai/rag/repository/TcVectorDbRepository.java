@@ -220,7 +220,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
             // 确保所有文档都有ID
             for (Document doc : documents) {
                 if (Utils.isEmpty(doc.getId())) {
-                    doc.id(java.util.UUID.randomUUID().toString());
+                    doc.id(Utils.uuid());
                 }
             }
 

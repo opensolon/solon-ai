@@ -156,12 +156,12 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
         }
 
         // 分块处理
-        for (List<Document> sub : ListUtil.partition(documents, 20)) {
+        for (List<Document> batch : ListUtil.partition(documents)) {
             // 批量embedding
-            config.embeddingModel.embed(sub);
+            config.embeddingModel.embed(batch);
 
             // 转换成json存储
-            List<JsonObject> docObjs = sub.stream().map(this::toJsonObject)
+            List<JsonObject> docObjs = batch.stream().map(this::toJsonObject)
                     .collect(Collectors.toList());
 
             InsertReq insertReq = InsertReq.builder()

@@ -101,19 +101,16 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
             return;
         }
 
-        try {
-            for (List<Document> sub : ListUtil.partition(documents, 20)) {
-                config.embeddingModel.embed(sub);
+        // 分批处理
+        for (List<Document> batch : ListUtil.partition(documents)) {
+            config.embeddingModel.embed(batch);
 
-                List<PointStruct> points = sub.stream()
-                        .map(this::toPointStruct)
-                        .collect(Collectors.toList());
+            List<PointStruct> points = batch.stream()
+                    .map(this::toPointStruct)
+                    .collect(Collectors.toList());
 
-                config.client.upsertAsync(
-                        UpsertPoints.newBuilder().setCollectionName(config.collectionName).addAllPoints(points).build()).get();
-            }
-        } catch (InterruptedException | ExecutionException e) {
-            throw new IOException("Failed to insert documents into Qdrant", e);
+            config.client.upsertAsync(
+                    UpsertPoints.newBuilder().setCollectionName(config.collectionName).addAllPoints(points).build()).get();
         }
     }
 

@@ -155,7 +155,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
             return;
         }
 
-        for (List<Document> batch : ListUtil.partition(documents, 20)) {
+        for (List<Document> batch : ListUtil.partition(documents)) {
             config.embeddingModel.embed(batch);
             PipelineBase pipeline = null;
             try {
@@ -180,8 +180,6 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                     pipeline.jsonSet(key, Path.ROOT_PATH, jsonDoc);
                 }
                 pipeline.sync();
-            } catch (Exception e) {
-                throw new IOException("Error storing documents: " + e.getMessage(), e);
             } finally {
                 if (pipeline != null) {
                     pipeline.close();

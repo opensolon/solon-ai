@@ -27,7 +27,14 @@ import java.util.List;
  */
 public final class ListUtil {
     /**
-     * 分列
+     * 分页
+     */
+    public static <T> List<List<T>> partition(List<T> list) {
+        return partition(list, 20);//一切嵌入模型只接收20左右
+    }
+
+    /**
+     * 分页
      */
     public static <T> List<List<T>> partition(List<T> list, int pageSize) {
         if (list.size() <= pageSize) {
