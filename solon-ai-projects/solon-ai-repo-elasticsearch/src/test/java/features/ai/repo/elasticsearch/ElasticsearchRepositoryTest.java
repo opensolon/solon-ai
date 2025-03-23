@@ -85,7 +85,7 @@ public class ElasticsearchRepositoryTest {
         metadataFields.add(MetadataField.numeric("year"));
 
         // 使用Builder模式创建Repository
-        repository = ElasticsearchRepository.builder(embeddingModel, client, TEST_INDEX)
+        repository = ElasticsearchRepository.builder(embeddingModel, client)
                 .metadataFields(metadataFields)
                 .build();
 

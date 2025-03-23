@@ -43,7 +43,7 @@ public class ChromaRepositoryTest {
             String uniqueCollectionName = COLLECTION_NAME + "_" + System.currentTimeMillis();
             System.out.println("Using unique collection name: " + uniqueCollectionName);
 
-            repository = new ChromaRepository(embeddingModel, SERVER_URL, uniqueCollectionName);
+            repository = ChromaRepository.builder(embeddingModel, SERVER_URL).build();
 
             // 检查服务是否健康
             if (!repository.isHealthy()) {
