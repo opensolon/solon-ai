@@ -74,7 +74,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
     public static final String VECTOR_FIELD_NAME = "vector";
 
     //构建配置
-    private Builder config;
+    private final Builder config;
     //集合对象
     private Collection collection;
     //是否已初始化

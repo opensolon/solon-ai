@@ -44,7 +44,7 @@ import java.util.*;
  * @since 3.1
  */
 public class VectoRexRepository implements RepositoryStorable, RepositoryLifecycle {
-    private Builder config;
+    private final Builder config;
     private static final String idName = "id";
     private static final String vectorName = "embedding";
 

@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryLifecycle;
@@ -62,36 +63,222 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
     private static final String EMBEDDING_NAME = "embedding";
     private static final String VECTOR_TYPE = "FLOAT32";
     private static final String JSON_PATH = "$.";
-    /**
-     * 嵌入模型，用于生成文档的向量表示
-     */
-    private final EmbeddingModel embeddingModel;
-    /**
-     * Redis 客户端
-     */
-    private final UnifiedJedis client;
-    /**
-     * 索引名称
-     */
-    private final String indexName;
-    /**
-     * 键前缀
-     */
-    private final String keyPrefix;
-    /**
-     * metadata用于加索引的值
-     */
-    private final List<MetadataField> metadataIndexFields;
+    //配置
+    private final Builder config;
 
     /**
-     * 向量算法
+     * 私有构造函数，通过 Builder 模式创建
      */
-    private final VectorField.VectorAlgorithm algorithm;
+    private RedisRepository(Builder config) {
+        this.config = config;
+        initRepository();
+    }
 
     /**
-     * 距离度量方式
+     * 初始化仓库
      */
-    private final String distanceMetric;
+    @Override
+    public void initRepository() {
+        try {
+            config.client.ftInfo(config.indexName);
+        } catch (Exception e) {
+            try {
+                int dim = config.embeddingModel.dimensions();
+
+                // 向量字段配置
+                Map<String, Object> vectorArgs = new HashMap<>();
+                vectorArgs.put("TYPE", VECTOR_TYPE);
+                vectorArgs.put("DIM", dim);
+                vectorArgs.put("DISTANCE_METRIC", config.distanceMetric);
+
+                List<SchemaField> fields = new ArrayList<>();
+                fields.add(VectorField.builder()
+                        .fieldName(JSON_PATH + EMBEDDING_NAME)
+                        .as(EMBEDDING_NAME)
+                        .algorithm(config.algorithm)
+                        .attributes(vectorArgs)
+                        .build());
+
+                for (MetadataField metadataIndexField : config.metadataIndexFields) {
+                    fields.add(toSchemaField(metadataIndexField));
+                }
+
+
+                // 创建索引
+                config.client.ftCreate(
+                        config.indexName,
+                        FTCreateParams.createParams()
+                                .on(IndexDataType.JSON)
+                                .prefix(config.keyPrefix),
+                        fields
+                );
+
+            } catch (Exception err) {
+                throw new RuntimeException(err);
+            }
+        }
+    }
+
+    private SchemaField toSchemaField(MetadataField field) {
+        String fieldName = JSON_PATH + field.getName();
+        switch (field.getFieldType()) {
+            case NUMERIC:
+                return NumericField.of(fieldName).as(field.getName());
+            case TAG:
+                return TagField.of(fieldName).as(field.getName());
+            case TEXT:
+                return TextField.of(fieldName).as(field.getName());
+            default:
+                throw new IllegalArgumentException(
+                        MessageFormat.format("Field {0} has unsupported type {1}", field.getName(), field.getFieldType()));
+        }
+    }
+
+    /**
+     * 注销仓库
+     */
+    @Override
+    public void dropRepository() {
+        config.client.ftDropIndex(config.indexName);
+        config.client.flushDB();
+    }
+
+    /**
+     * 存储文档列表
+     *
+     * @param documents 待存储的文档列表
+     * @throws IOException 如果存储过程中发生 IO 错误
+     */
+    @Override
+    public void insert(List<Document> documents) throws IOException {
+        if (documents == null || documents.isEmpty()) {
+            return;
+        }
+
+        for (List<Document> batch : ListUtil.partition(documents, 20)) {
+            config.embeddingModel.embed(batch);
+            PipelineBase pipeline = null;
+            try {
+                pipeline = config.client.pipelined();
+                for (Document doc : batch) {
+                    if (doc.getId() == null) {
+                        doc.id(UUID.randomUUID().toString());
+                    }
+
+                    String key = config.keyPrefix + doc.getId();
+
+                    // 存储为 JSON 格式，注意字段名称需要与索引定义匹配
+                    Map<String, Object> jsonDoc = new HashMap<>();
+                    jsonDoc.put("content", doc.getContent());
+                    jsonDoc.put("embedding", doc.getEmbedding());
+                    jsonDoc.put("metadata", doc.getMetadata());
+                    if (Utils.isNotEmpty(config.metadataIndexFields)) {
+                        jsonDoc.putAll(doc.getMetadata());
+                    }
+
+                    // 使用Jedis直接存储Map
+                    pipeline.jsonSet(key, Path.ROOT_PATH, jsonDoc);
+                }
+                pipeline.sync();
+            } catch (Exception e) {
+                throw new IOException("Error storing documents: " + e.getMessage(), e);
+            } finally {
+                if (pipeline != null) {
+                    pipeline.close();
+                }
+            }
+        }
+    }
+
+    /**
+     * 删除指定 ID 的文档
+     *
+     * @param ids 文档 ID
+     */
+    @Override
+    public void delete(String... ids) throws IOException {
+        if (ids == null || ids.length == 0) {
+            return;
+        }
+
+        PipelineBase pipeline = null;
+        try {
+            pipeline = config.client.pipelined();
+            for (String id : ids) {
+                pipeline.del(config.keyPrefix + id);
+            }
+            pipeline.sync();
+        } finally {
+            if (pipeline != null) {
+                pipeline.close();
+            }
+        }
+    }
+
+    @Override
+    public boolean exists(String id) throws IOException {
+        return config.client.exists(config.keyPrefix + id);
+    }
+
+    /**
+     * 搜索文档
+     *
+     * @param condition 搜索条件
+     * @return 匹配的文档列表
+     * @throws IOException 如果搜索过程中发生 IO 错误
+     */
+    @Override
+    public List<Document> search(QueryCondition condition) throws IOException {
+        Document queryDoc = new Document(condition.getQuery(), new HashMap<>());
+        List<Document> documents = new ArrayList<>();
+        documents.add(queryDoc);
+        config.embeddingModel.embed(documents);
+
+        String filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
+
+        // 构建查询，注意字段名称需要与索引定义匹配
+        String queryString = String.format(QUERY_FORMAT, filter, condition.getLimit(), EMBEDDING_NAME,
+                BLOB, SCORE);
+
+        String[] returnFields = {JSON_PATH + CONTENT, JSON_PATH + METADATA, SCORE};
+
+        try {
+            // 创建向量查询对象
+            Query query = new Query(queryString)
+                    .addParam(BLOB, queryDoc.getEmbedding())
+                    .returnFields(returnFields)
+                    .setSortBy(SCORE, true) // true表示升序，相似度越高分数越低
+                    .limit(0, condition.getLimit())
+                    .dialect(2);
+
+            // 执行查询
+            SearchResult result = config.client.ftSearch(config.indexName, query);
+
+            // 过滤并转换结果
+            return SimilarityUtil.refilter(result.getDocuments()
+                            .stream()
+                            .map(this::toDocument),
+                    condition);
+        } catch (Exception e) {
+            throw new IOException("Error searching documents: " + e.getMessage(), e);
+        }
+    }
+
+
+    private Document toDocument(redis.clients.jedis.search.Document jDoc) {
+        String id = jDoc.getId().substring(config.keyPrefix.length());
+        String content = jDoc.getString("$.content");
+        String metadataStr = jDoc.getString("$.metadata");
+        Map<String, Object> metadata = ONode.deserialize(metadataStr, Map.class);
+
+        // 添加相似度分数到元数据
+        double score = similarityScore(jDoc);
+        return new Document(id, content, metadata, score);
+    }
+
+    private double similarityScore(redis.clients.jedis.search.Document jDoc) {
+        return 1.0D - Double.parseDouble(jDoc.getString("score"));
+    }
 
 
     /**
@@ -102,20 +289,6 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
      */
     public static Builder builder(EmbeddingModel embeddingModel, UnifiedJedis client) {
         return new Builder(embeddingModel, client);
-    }
-
-    /**
-     * 私有构造函数，通过 Builder 模式创建
-     */
-    private RedisRepository(Builder builder) {
-        this.embeddingModel = builder.embeddingModel;
-        this.client = builder.client;
-        this.indexName = builder.indexName;
-        this.keyPrefix = builder.keyPrefix;
-        this.metadataIndexFields = builder.metadataIndexFields;
-        this.algorithm = builder.algorithm;
-        this.distanceMetric = builder.distanceMetric;
-        initRepository();
     }
 
     /**
@@ -137,7 +310,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
          * 构造器
          *
          * @param embeddingModel 嵌入模型
-         * @param client Redis 客户端
+         * @param client         Redis 客户端
          */
         public Builder(EmbeddingModel embeddingModel, UnifiedJedis client) {
             this.embeddingModel = embeddingModel;
@@ -208,211 +381,5 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         public RedisRepository build() {
             return new RedisRepository(this);
         }
-    }
-
-    /**
-     * 初始化仓库
-     */
-    @Override
-    public void initRepository() {
-        try {
-            client.ftInfo(indexName);
-        } catch (Exception e) {
-            try {
-                int dim = embeddingModel.dimensions();
-
-                // 向量字段配置
-                Map<String, Object> vectorArgs = new HashMap<>();
-                vectorArgs.put("TYPE", VECTOR_TYPE);
-                vectorArgs.put("DIM", dim);
-                vectorArgs.put("DISTANCE_METRIC", distanceMetric);
-
-                List<SchemaField> fields = new ArrayList<>();
-                fields.add( VectorField.builder()
-                        .fieldName(JSON_PATH+EMBEDDING_NAME)
-                        .as(EMBEDDING_NAME)
-                        .algorithm(algorithm)
-                        .attributes(vectorArgs)
-                        .build());
-
-                for (MetadataField metadataIndexField : metadataIndexFields) {
-                    fields.add(toSchemaField(metadataIndexField));
-                }
-
-
-                // 创建索引
-                client.ftCreate(
-                        indexName,
-                        FTCreateParams.createParams()
-                                .on(IndexDataType.JSON)
-                                .prefix(keyPrefix),
-                        fields
-                );
-
-            } catch (Exception err) {
-                throw new RuntimeException(err);
-            }
-        }
-    }
-
-    private SchemaField toSchemaField(MetadataField field) {
-        String fieldName = JSON_PATH+field.getName();
-        switch (field.getFieldType()) {
-            case NUMERIC:
-                return NumericField.of(fieldName).as(field.getName());
-            case TAG:
-                return TagField.of(fieldName).as(field.getName());
-            case TEXT:
-                return TextField.of(fieldName).as(field.getName());
-            default:
-                throw new IllegalArgumentException(
-                    MessageFormat.format("Field {0} has unsupported type {1}", field.getName(), field.getFieldType()));
-        }
-    }
-
-    /**
-     * 注销仓库
-     */
-    @Override
-    public void dropRepository() {
-        client.ftDropIndex(indexName);
-        client.flushDB();
-    }
-
-    /**
-     * 存储文档列表
-     *
-     * @param documents 待存储的文档列表
-     * @throws IOException 如果存储过程中发生 IO 错误
-     */
-    @Override
-    public void insert(List<Document> documents) throws IOException {
-        if (documents == null || documents.isEmpty()) {
-            return;
-        }
-
-        for (List<Document> batch : ListUtil.partition(documents, 20)) {
-            embeddingModel.embed(batch);
-            PipelineBase pipeline = null;
-            try {
-                pipeline = client.pipelined();
-                for (Document doc : batch) {
-                    if (doc.getId() == null) {
-                        doc.id(UUID.randomUUID().toString());
-                    }
-
-                    String key = keyPrefix + doc.getId();
-
-                    // 存储为 JSON 格式，注意字段名称需要与索引定义匹配
-                    Map<String, Object> jsonDoc = new HashMap<>();
-                    jsonDoc.put("content", doc.getContent());
-                    jsonDoc.put("embedding", doc.getEmbedding());
-                    jsonDoc.put("metadata", doc.getMetadata());
-                    if (!this.metadataIndexFields.isEmpty()) {
-                        jsonDoc.putAll(doc.getMetadata());
-                    }
-
-                    // 使用Jedis直接存储Map
-                    pipeline.jsonSet(key, Path.ROOT_PATH, jsonDoc);
-                }
-                pipeline.sync();
-            } catch (Exception e) {
-                throw new IOException("Error storing documents: " + e.getMessage(), e);
-            } finally {
-                if (pipeline != null) {
-                    pipeline.close();
-                }
-            }
-        }
-    }
-
-    /**
-     * 删除指定 ID 的文档
-     *
-     * @param ids 文档 ID
-     */
-    @Override
-    public void delete(String... ids) throws IOException {
-        if (ids == null || ids.length == 0) {
-            return;
-        }
-
-        PipelineBase pipeline = null;
-        try {
-            pipeline = client.pipelined();
-            for (String id : ids) {
-                pipeline.del(keyPrefix + id);
-            }
-            pipeline.sync();
-        } finally {
-            if (pipeline != null) {
-                pipeline.close();
-            }
-        }
-    }
-
-    @Override
-    public boolean exists(String id) throws IOException {
-        return client.exists(keyPrefix + id);
-    }
-
-    /**
-     * 搜索文档
-     *
-     * @param condition 搜索条件
-     * @return 匹配的文档列表
-     * @throws IOException 如果搜索过程中发生 IO 错误
-     */
-    @Override
-    public List<Document> search(QueryCondition condition) throws IOException {
-        Document queryDoc = new Document(condition.getQuery(), new HashMap<>());
-        List<Document> documents = new ArrayList<>();
-        documents.add(queryDoc);
-        embeddingModel.embed(documents);
-
-        String filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
-
-        // 构建查询，注意字段名称需要与索引定义匹配
-        String queryString = String.format(QUERY_FORMAT, filter, condition.getLimit(), EMBEDDING_NAME,
-                BLOB, SCORE);
-
-        String[] returnFields = {JSON_PATH+CONTENT, JSON_PATH+METADATA, SCORE};
-
-        try {
-            // 创建向量查询对象
-            Query query = new Query(queryString)
-                    .addParam(BLOB, queryDoc.getEmbedding())
-                    .returnFields(returnFields)
-                    .setSortBy(SCORE, true) // true表示升序，相似度越高分数越低
-                    .limit(0, condition.getLimit())
-                    .dialect(2);
-
-            // 执行查询
-            SearchResult result = client.ftSearch(indexName, query);
-
-            // 过滤并转换结果
-            return SimilarityUtil.refilter(result.getDocuments()
-                    .stream()
-                    .map(this::toDocument),
-                    condition);
-        } catch (Exception e) {
-            throw new IOException("Error searching documents: " + e.getMessage(), e);
-        }
-    }
-
-
-    private Document toDocument(redis.clients.jedis.search.Document jDoc) {
-        String id = jDoc.getId().substring(keyPrefix.length());
-        String content = jDoc.getString("$.content");
-        String metadataStr = jDoc.getString("$.metadata");
-        Map<String, Object> metadata = ONode.deserialize(metadataStr, Map.class);
-
-        // 添加相似度分数到元数据
-        double score = similarityScore(jDoc);
-        return new Document(id, content, metadata, score);
-    }
-
-    private double similarityScore(redis.clients.jedis.search.Document jDoc) {
-        return 1.0D - Double.parseDouble(jDoc.getString("score"));
     }
 }
