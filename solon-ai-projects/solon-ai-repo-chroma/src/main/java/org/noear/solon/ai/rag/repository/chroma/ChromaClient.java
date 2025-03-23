@@ -1,13 +1,11 @@
 package org.noear.solon.ai.rag.repository.chroma;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.logging.Logger;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.net.http.HttpUtils;
 
 /**
@@ -23,14 +21,33 @@ public class ChromaClient {
      * Chroma 服务器地址
      */
     private final String serverUrl;
+    private final String username;
+    private final String password;
+
+    public ChromaClient(String serverUrl) {
+        this(serverUrl, null, null);
+    }
+
+    public ChromaClient(String serverUrl, String username, String password) {
+        this.serverUrl = serverUrl.endsWith("/") ? serverUrl : serverUrl + "/";
+        this.username = username;
+        this.password = password;
+    }
 
     /**
-     * 构造函数
-     *
-     * @param serverUrl Chroma 服务器地址
+     * 构建 http 工具
      */
-    public ChromaClient(String serverUrl) {
-        this.serverUrl = serverUrl.endsWith("/") ? serverUrl : serverUrl + "/";
+    private HttpUtils http(String endpoint) {
+        HttpUtils httpUtils = HttpUtils.http(endpoint)
+                .header("Accept", "application/json");
+
+        if (Utils.isNotEmpty(username) && Utils.isNotEmpty(password)) {
+            String plainCredentials = username + ":" + password;
+            String base64Credentials = Base64.getEncoder().encodeToString(plainCredentials.getBytes());
+            httpUtils.header("Authorization", "Basic " + base64Credentials);
+        }
+
+        return httpUtils;
     }
 
     /**
@@ -41,9 +58,7 @@ public class ChromaClient {
     public boolean isHealthy() {
         try {
             String endpoint = serverUrl + "api/v1/heartbeat";
-            String response = HttpUtils.http(endpoint)
-                    .header("Accept", "application/json")
-                    .get();
+            String response = http(endpoint).get();
 
             Map<String, Object> responseMap = ONode.loadStr(response).toObject(Map.class);
             return responseMap.containsKey("nanosecond heartbeat");
@@ -62,9 +77,7 @@ public class ChromaClient {
     public CollectionsResponse listCollections() throws IOException {
         try {
             String endpoint = serverUrl + "api/v1/collections";
-            String response = HttpUtils.http(endpoint)
-                    .header("Accept", "application/json")
-                    .get();
+            String response = http(endpoint).get();
 
             CollectionsResponse collectionsResponse = ONode.loadStr(response).toObject(CollectionsResponse.class);
 
@@ -84,7 +97,7 @@ public class ChromaClient {
     /**
      * 创建集合
      *
-     * @param name 集合名称
+     * @param name     集合名称
      * @param metadata 集合元数据
      * @return 集合ID
      * @throws IOException 如果创建失败
@@ -109,11 +122,7 @@ public class ChromaClient {
 
             String jsonBody = ONode.stringify(requestBody);
 
-            String responseStr = HttpUtils.http(endpoint)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .bodyOfTxt(jsonBody)
-                    .post();
+            String responseStr = http(endpoint).bodyOfJson(jsonBody).post();
 
             CollectionResponse response = ONode.loadStr(responseStr).toObject(CollectionResponse.class);
 
@@ -141,9 +150,7 @@ public class ChromaClient {
         try {
             String endpoint = serverUrl + "api/v1/collections/" + collectionId;
 
-            String responseStr = HttpUtils.http(endpoint)
-                    .header("Accept", "application/json")
-                    .get();
+            String responseStr = http(endpoint).get();
 
             CollectionResponse response = ONode.loadStr(responseStr).toObject(CollectionResponse.class);
 
@@ -170,9 +177,7 @@ public class ChromaClient {
         try {
             String endpoint = serverUrl + "api/v1/collections/" + collectionId;
 
-            String responseStr = HttpUtils.http(endpoint)
-                    .header("Accept", "application/json")
-                    .delete();
+            String responseStr = http(endpoint).delete();
 
             // 处理空响应
             if (responseStr == null || responseStr.trim().isEmpty()) {
@@ -213,10 +218,10 @@ public class ChromaClient {
      * 添加文档
      *
      * @param collectionId 集合ID
-     * @param ids 文档ID列表
-     * @param embeddings 文档向量列表
-     * @param documents 文档内容列表
-     * @param metadatas 文档元数据列表
+     * @param ids          文档ID列表
+     * @param embeddings   文档向量列表
+     * @param documents    文档内容列表
+     * @param metadatas    文档元数据列表
      * @throws IOException 如果添加失败
      */
     public void addDocuments(String collectionId, List<String> ids, List<List<Float>> embeddings,
@@ -238,11 +243,7 @@ public class ChromaClient {
 
             String jsonBody = ONode.stringify(requestBody);
 
-            String responseStr = HttpUtils.http(endpoint)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .bodyOfTxt(jsonBody)
-                    .post();
+            String responseStr = http(endpoint).bodyOfJson(jsonBody).post();
 
             // 处理空响应
             if (responseStr == null || responseStr.trim().isEmpty()) {
@@ -283,7 +284,7 @@ public class ChromaClient {
      * 删除文档
      *
      * @param collectionId 集合ID
-     * @param ids 文档ID列表
+     * @param ids          文档ID列表
      * @throws IOException 如果删除失败
      */
     public void deleteDocuments(String collectionId, List<String> ids) throws IOException {
@@ -296,10 +297,7 @@ public class ChromaClient {
             String jsonBody = ONode.stringify(requestBody);
 
             // Chroma API在成功时不返回任何内容
-           HttpUtils.http(endpoint)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .bodyOfTxt(jsonBody)
+            http(endpoint).bodyOfJson(jsonBody)
                     .post();
 
         } catch (Exception e) {
@@ -311,7 +309,7 @@ public class ChromaClient {
      * 检查文档是否存在
      *
      * @param collectionId 集合ID
-     * @param id 文档ID
+     * @param id           文档ID
      * @return 是否存在
      * @throws IOException 如果请求失败
      */
@@ -326,11 +324,7 @@ public class ChromaClient {
 
             String jsonBody = ONode.stringify(requestBody);
 
-            String responseStr = HttpUtils.http(endpoint)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .bodyOfTxt(jsonBody)
-                    .post();
+            String responseStr = http(endpoint).bodyOfJson(jsonBody).post();
 
             GetResponse response = ONode.loadStr(responseStr).toObject(GetResponse.class);
 
@@ -348,9 +342,9 @@ public class ChromaClient {
     /**
      * 查询文档
      *
-     * @param collectionId 集合ID
+     * @param collectionId   集合ID
      * @param queryEmbedding 查询向量
-     * @param limit 结果数量限制
+     * @param limit          结果数量限制
      * @param metadataFilter 元数据过滤条件
      * @return 查询响应
      * @throws IOException 如果查询失败
@@ -377,11 +371,7 @@ public class ChromaClient {
 
             String jsonBody = ONode.stringify(requestBody);
 
-            String response = HttpUtils.http(endpoint)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .bodyOfTxt(jsonBody)
-                    .post();
+            String response = http(endpoint).bodyOfJson(jsonBody).post();
 
             return ONode.loadStr(response).toObject(QueryResponse.class);
         } catch (Exception e) {
