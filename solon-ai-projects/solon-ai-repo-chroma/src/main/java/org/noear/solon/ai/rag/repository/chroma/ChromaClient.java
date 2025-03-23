@@ -19,17 +19,29 @@ public class ChromaClient {
 
     //Chroma 服务器地址与账号
     private final String serverUrl;
-    private final String username;
-    private final String password;
+
+    private String username;
+    private String password;
+    private String token;
+
 
     public ChromaClient(String serverUrl) {
-        this(serverUrl, null, null);
+        this.serverUrl = serverUrl.endsWith("/") ? serverUrl : serverUrl + "/";
     }
 
-    public ChromaClient(String serverUrl, String username, String password) {
-        this.serverUrl = serverUrl.endsWith("/") ? serverUrl : serverUrl + "/";
+    /**
+     * 设置基础鉴权
+     */
+    public void setBasicAuth(String username, String password) {
         this.username = username;
         this.password = password;
+    }
+
+    /**
+     * 设置令牌鉴权
+     */
+    public void setBearerAuth(String token) {
+        this.token = token;
     }
 
     /**
@@ -39,7 +51,9 @@ public class ChromaClient {
         HttpUtils httpUtils = HttpUtils.http(endpoint)
                 .header("Accept", "application/json");
 
-        if (Utils.isNotEmpty(username) && Utils.isNotEmpty(password)) {
+        if (Utils.isNotEmpty(token)) {
+            httpUtils.header("Authorization", "Bearer " + token);
+        } else if (Utils.isNotEmpty(username) && Utils.isNotEmpty(password)) {
             String plainCredentials = username + ":" + password;
             String base64Credentials = Base64.getEncoder().encodeToString(plainCredentials.getBytes());
             httpUtils.header("Authorization", "Basic " + base64Credentials);
