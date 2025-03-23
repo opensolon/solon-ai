@@ -78,6 +78,7 @@ public class ElasticsearchRepositoryTest {
         metadataFields.add(MetadataField.keyword("category"));
         metadataFields.add(MetadataField.numeric("priority"));
         metadataFields.add(MetadataField.text("content_summary"));
+        metadataFields.add(MetadataField.keyword("title"));
         metadataFields.add(MetadataField.keyword("source"));
         metadataFields.add(MetadataField.date("created_at"));
         metadataFields.add(MetadataField.keyword("relevance"));
