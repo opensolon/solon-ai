@@ -59,27 +59,10 @@ import static io.qdrant.client.WithVectorsSelectorFactory.enable;
  */
 @Preview("3.1")
 public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle {
-    private static final String DEFAULT_CONTENT_KEY = "content";
-    private static final String DEFAULT_METADATA_KEY = "metadata";
+    private final Builder config;
 
-    private final String contentKey;
-    private final String metadataKey;
-
-    private final EmbeddingModel embeddingModel;
-    private final QdrantClient client;
-    private final String collectionName;
-
-    public QdrantRepository(EmbeddingModel embeddingModel, QdrantClient client, String collectionName) {
-        this(embeddingModel, client, collectionName, DEFAULT_CONTENT_KEY, DEFAULT_METADATA_KEY);
-    }
-
-    public QdrantRepository(EmbeddingModel embeddingModel, QdrantClient client, String collectionName,
-                            String contentKey, String metadataKey) {
-        this.embeddingModel = embeddingModel;
-        this.client = client;
-        this.collectionName = collectionName;
-        this.contentKey = contentKey;
-        this.metadataKey = metadataKey;
+    private QdrantRepository(Builder config) {
+        this.config = config;
 
         initRepository();
     }
@@ -87,12 +70,12 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
     @Override
     public void initRepository() {
         try {
-            boolean exists = client.collectionExistsAsync(collectionName).get();
+            boolean exists = config.client.collectionExistsAsync(config.collectionName).get();
 
             if (!exists) {
-                int dimensions = embeddingModel.dimensions();
+                int dimensions = config.embeddingModel.dimensions();
 
-                client.createCollectionAsync(collectionName,
+                config.client.createCollectionAsync(config.collectionName,
                         VectorParams.newBuilder().setSize(dimensions)
                                 .setDistance(Distance.Cosine)
                                 .build()).get();
@@ -106,7 +89,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
     @Override
     public void dropRepository() {
         try {
-            client.deleteCollectionAsync(collectionName).get();
+            config.client.deleteCollectionAsync(config.collectionName).get();
         } catch (InterruptedException | ExecutionException e) {
             throw new RuntimeException("Failed to drop Qdrant repository", e);
         }
@@ -120,14 +103,14 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
 
         try {
             for (List<Document> sub : ListUtil.partition(documents, 20)) {
-                embeddingModel.embed(sub);
+                config.embeddingModel.embed(sub);
 
                 List<PointStruct> points = sub.stream()
                         .map(this::toPointStruct)
                         .collect(Collectors.toList());
 
-                client.upsertAsync(
-                        UpsertPoints.newBuilder().setCollectionName(collectionName).addAllPoints(points).build()).get();
+                config.client.upsertAsync(
+                        UpsertPoints.newBuilder().setCollectionName(config.collectionName).addAllPoints(points).build()).get();
             }
         } catch (InterruptedException | ExecutionException e) {
             throw new IOException("Failed to insert documents into Qdrant", e);
@@ -140,7 +123,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
             List<PointId> pointIds = Arrays.stream(ids).map(id -> PointId.newBuilder().setUuid(id).build())
                     .collect(Collectors.toList());
 
-            client.deleteAsync(collectionName, pointIds).get();
+            config.client.deleteAsync(config.collectionName, pointIds).get();
         } catch (InterruptedException | ExecutionException e) {
             throw new IOException("Failed to delete documents from Qdrant", e);
         }
@@ -149,7 +132,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
     @Override
     public boolean exists(String id) throws IOException {
         try {
-            List<RetrievedPoint> points = client.retrieveAsync(GetPoints.newBuilder().setCollectionName(collectionName)
+            List<RetrievedPoint> points = config.client.retrieveAsync(GetPoints.newBuilder().setCollectionName(config.collectionName)
                     .addIds(PointIdFactory.id(UUID.fromString(id))).build(), null).get();
 
             return points.size() > 0;
@@ -161,13 +144,13 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
     @Override
     public List<Document> search(QueryCondition condition) throws IOException {
         try {
-            float[] queryVector = embeddingModel.embed(condition.getQuery());
+            float[] queryVector = config.embeddingModel.embed(condition.getQuery());
 
-            QueryPoints.Builder queryBuilder = QueryPoints.newBuilder().setCollectionName(collectionName)
+            QueryPoints.Builder queryBuilder = QueryPoints.newBuilder().setCollectionName(config.collectionName)
                     .setQuery(nearest(queryVector))
                     .setLimit(condition.getLimit())
                     .setScoreThreshold((float) condition.getSimilarityThreshold())
-                    .setWithPayload(include(Arrays.asList(contentKey, metadataKey)))
+                    .setWithPayload(include(Arrays.asList(config.contentKey, config.metadataKey)))
                     .setWithVectors(enable(true));
 
             Filter filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
@@ -176,7 +159,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
                 queryBuilder.setFilter(filter);
             }
 
-            List<ScoredPoint> points = client.queryAsync(queryBuilder.build()).get();
+            List<ScoredPoint> points = config.client.queryAsync(queryBuilder.build()).get();
 
             Stream<Document> docs = points.stream().map(this::toDocument);
 
@@ -193,7 +176,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
 
         Map<String, JsonWithInt.Value> payload = QdrantValueUtil.fromMap(doc.getMetadata());
 
-        payload.put(contentKey, value(doc.getContent()));
+        payload.put(config.contentKey, value(doc.getContent()));
 
         if (doc.getMetadata() != null) {
             String metadataJson = ONode.stringify(doc.getMetadata());
@@ -211,11 +194,11 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
 
         Map<String, JsonWithInt.Value> payload = scoredPoint.getPayloadMap();
 
-        String content = payload.get(contentKey).getStringValue();
+        String content = payload.get(config.contentKey).getStringValue();
 
         Map<String, Object> metadata = null;
-        if (payload.containsKey(metadataKey)) {
-            String metadataJson = payload.get(metadataKey).getStringValue();
+        if (payload.containsKey(config.metadataKey)) {
+            String metadataJson = payload.get(config.metadataKey).getStringValue();
             metadata = ONode.deserialize(metadataJson, Map.class);
         }
 
@@ -231,5 +214,31 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
             array[i] = list.get(i);
         }
         return array;
+    }
+
+    public static Builder builder(EmbeddingModel embeddingModel, QdrantClient client) {
+        return new Builder(embeddingModel, client);
+    }
+
+    public static class Builder {
+        private final EmbeddingModel embeddingModel;
+        private final QdrantClient client;
+        private String collectionName = "solon_ai";
+        private String contentKey = "content";
+        private String metadataKey = "metadata";
+
+        public Builder(EmbeddingModel embeddingModel, QdrantClient client) {
+            this.embeddingModel = embeddingModel;
+            this.client = client;
+        }
+
+        public Builder collectionName(String collectionName) {
+            this.collectionName = collectionName;
+            return this;
+        }
+
+        public QdrantRepository build() {
+            return new QdrantRepository(this);
+        }
     }
 }

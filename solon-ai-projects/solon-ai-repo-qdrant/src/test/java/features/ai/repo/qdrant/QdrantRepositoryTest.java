@@ -30,12 +30,11 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @SolonTest
 public class QdrantRepositoryTest {
     private QdrantClient client = new QdrantClient(QdrantGrpcClient.newBuilder("localhost", 6334, false).build());
-    private String collectionName = "solonAiRepo";
     private QdrantRepository repository;
 
     @BeforeEach
     public void setup() throws Exception {
-        repository = new QdrantRepository(TestUtils.getEmbeddingModel(), client, collectionName);
+        repository = QdrantRepository.builder(TestUtils.getEmbeddingModel(), client).build();
 
         repository.dropRepository();
         repository.initRepository();
@@ -336,7 +335,7 @@ public class QdrantRepositoryTest {
 
     // 在每个测试方法开始时检查repository是否可用
     private void checkRepository() {
-        if (repository == null ) {
+        if (repository == null) {
             assumeTrue(false, "Chroma server is not available");
         }
     }
