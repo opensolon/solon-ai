@@ -29,16 +29,15 @@ import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.qdrant.FilterTransformer;
+import org.noear.solon.ai.rag.repository.qdrant.QdrantValueUtil;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 
-import org.noear.solon.expression.Expression;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -94,7 +93,9 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
                 int dimensions = embeddingModel.dimensions();
 
                 client.createCollectionAsync(collectionName,
-                        VectorParams.newBuilder().setSize(dimensions).setDistance(Distance.Cosine).build()).get();
+                        VectorParams.newBuilder().setSize(dimensions)
+                                .setDistance(Distance.Cosine)
+                                .build()).get();
 
             }
         } catch (InterruptedException | ExecutionException | IOException e) {
@@ -121,7 +122,9 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
             for (List<Document> sub : ListUtil.partition(documents, 20)) {
                 embeddingModel.embed(sub);
 
-                List<PointStruct> points = sub.stream().map(this::toPointStruct).collect(Collectors.toList());
+                List<PointStruct> points = sub.stream()
+                        .map(this::toPointStruct)
+                        .collect(Collectors.toList());
 
                 client.upsertAsync(
                         UpsertPoints.newBuilder().setCollectionName(collectionName).addAllPoints(points).build()).get();
@@ -188,7 +191,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
             doc.id(Utils.uuid());
         }
 
-        Map<String, JsonWithInt.Value> payload = new HashMap<>();
+        Map<String, JsonWithInt.Value> payload = QdrantValueUtil.fromMap(doc.getMetadata());
 
         payload.put(contentKey, value(doc.getContent()));
 
