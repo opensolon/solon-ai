@@ -12,7 +12,7 @@
 | solon-ai-load-word          | ok  | ok   |        |
 |                             |     |      |        |
 | solon-ai-repo-chroma        | ok  | ok   |        |
-| solon-ai-repo-elasticsearch | ok  |      |        |
+| solon-ai-repo-elasticsearch | ok  | ok   |        |
 | solon-ai-repo-mariadb       |     |      |        |
 | solon-ai-repo-milvus        | ok  | ok   |        |
 | solon-ai-repo-mysql         |     |      |        |

@@ -8,7 +8,13 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestClientBuilder;
 import org.elasticsearch.client.RestHighLevelClient;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -44,16 +50,30 @@ public class ElasticsearchRepositoryTest {
 
     @BeforeEach
     public void setup() throws IOException, InterruptedException {
-        // 创建ES客户端
-        client = new RestHighLevelClient(
-                RestClient.builder(new HttpHost("127.0.0.1", 9200, "http")));
+        // 阿里云Elasticsearch Serverless集群需要basic auth验证。
+        final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+        // 访问用户名和密码为您创建阿里云Elasticsearch Serverless实例时设置的用户名和密码，也是Kibana控制台的登录用户名和密码。
+        credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials("test-2ej", "aYa2Z8NrlIAbrIVKS3Zx2vGmCRF2Ts"));
+
+
+        // 通过builder创建rest client，配置http client的HttpClientConfigCallback。
+        // 单击所创建的Elasticsearch Serverless实例ID，在基本信息页面获取公网地址，即为ES集群地址。
+        RestClientBuilder builder = RestClient.builder(new HttpHost("test-2ej.public.cn-hangzhou.es-serverless.aliyuncs.com", 9200, "http"))
+                .setHttpClientConfigCallback(new RestClientBuilder.HttpClientConfigCallback() {
+                    @Override
+                    public HttpAsyncClientBuilder customizeHttpClient(HttpAsyncClientBuilder httpClientBuilder) {
+                        return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider);
+                    }
+                });
+
+        // RestHighLevelClient实例通过REST low-level client builder进行构造。
+         client = new RestHighLevelClient(builder);
 
         // 创建一个简单的 EmbeddingModel 实现用于测试
         EmbeddingModel embeddingModel = EmbeddingModel.of(apiUrl).provider(provider).model(model).build();
 
         // 创建元数据字段定义
         List<MetadataField> metadataFields = new ArrayList<>();
-        metadataFields.add(MetadataField.text("content"));
         metadataFields.add(MetadataField.keyword("url"));
         metadataFields.add(MetadataField.keyword("category"));
         metadataFields.add(MetadataField.numeric("priority"));
@@ -68,10 +88,12 @@ public class ElasticsearchRepositoryTest {
                 .metadataFields(metadataFields)
                 .build();
 
+        repository.dropRepository();
+        repository.initRepository();
+
         // 初始化测试数据
 //        repository.delete("*");  // 清空所有文档
         load(repository, "https://solon.noear.org/article/about?format=md");
-        load(repository, "https://h5.noear.org/more.htm");
         load(repository, "https://h5.noear.org/readme.htm");
         Thread.sleep(1000);
     }
@@ -92,7 +114,8 @@ public class ElasticsearchRepositoryTest {
 
             // 测试带过滤器的搜索
             condition = new QueryCondition("solon")
-                    .filterExpression("url LIKE 'noear.org'");
+                    .filterExpression("url LIKE 'noear.org'")
+                    .disableRefilter(true);
             results = repository.search(condition);
             assertFalse(results.isEmpty(), "应该找到noear.org域名下的文档");
             assertTrue(results.get(0).getUrl().contains("noear.org"), "文档URL应该包含noear.org");
@@ -178,6 +201,7 @@ public class ElasticsearchRepositoryTest {
             // 4. 测试组合过滤条件
             QueryCondition combinedCondition = new QueryCondition("solon")
                     .filterExpression("url LIKE 'noear.org'")
+                    .disableRefilter(true)
                     .limit(5);
             results = repository.search(combinedCondition);
             assertTrue(results.size() <= 5, "返回结果不应超过限制数量");
@@ -399,7 +423,8 @@ public class ElasticsearchRepositoryTest {
             // 1. 测试 OR 表达式
             String orExpression = "title == 'solon' OR title == '设置'";
             QueryCondition orCondition = new QueryCondition("framework")
-                    .filterExpression(orExpression);
+                    .filterExpression(orExpression)
+                    .disableRefilter(true);
 
             List<Document> orResults = repository.search(orCondition);
             System.out.println("找到 " + orResults.size() + " 个文档，使用 OR 表达式: " + orExpression);
@@ -424,7 +449,8 @@ public class ElasticsearchRepositoryTest {
             // 2. 测试 AND 表达式
             String andExpression = "title == 'solon' AND category == 'framework'";
             QueryCondition andCondition = new QueryCondition("framework")
-                    .filterExpression(andExpression);
+                    .filterExpression(andExpression)
+                    .disableRefilter(true);
 
             List<Document> andResults = repository.search(andCondition);
             System.out.println("找到 " + andResults.size() + " 个文档，使用 AND 表达式: " + andExpression);
@@ -447,7 +473,8 @@ public class ElasticsearchRepositoryTest {
             // 3. 测试简单过滤表达式
             String simpleExpression = "category == 'framework'";
             QueryCondition simpleCondition = new QueryCondition("framework")
-                    .filterExpression(simpleExpression);
+                    .filterExpression(simpleExpression)
+                    .disableRefilter(true);
 
             List<Document> simpleResults = repository.search(simpleCondition);
             System.out.println("找到 " + simpleResults.size() + " 个文档，使用简单表达式: " + simpleExpression);
@@ -572,7 +599,8 @@ public class ElasticsearchRepositoryTest {
             // 1. 测试数值比较 (大于)
             String gtExpression = "price > 120";
             QueryCondition gtCondition = new QueryCondition("document")
-                    .filterExpression(gtExpression);
+                    .filterExpression(gtExpression)
+                    .disableRefilter(true);
 
             List<Document> gtResults = repository.search(gtCondition);
             System.out.println("找到 " + gtResults.size() + " 个文档，使用大于表达式: " + gtExpression);
@@ -591,7 +619,8 @@ public class ElasticsearchRepositoryTest {
             // 2. 测试数值比较 (小于等于)
             String lteExpression = "stock <= 25";
             QueryCondition lteCondition = new QueryCondition("document")
-                    .filterExpression(lteExpression);
+                    .filterExpression(lteExpression)
+                    .disableRefilter(true);
 
             List<Document> lteResults = repository.search(lteCondition);
             System.out.println("找到 " + lteResults.size() + " 个文档，使用小于等于表达式: " + lteExpression);
@@ -610,7 +639,8 @@ public class ElasticsearchRepositoryTest {
             // 3. 测试复合表达式 (价格区间和类别)
             String complexExpression = "(price >= 100 AND price <= 180) AND category == 'electronics'";
             QueryCondition complexCondition = new QueryCondition("document")
-                    .filterExpression(complexExpression);
+                    .filterExpression(complexExpression)
+                    .disableRefilter(true);
 
             List<Document> complexResults = repository.search(complexCondition);
             System.out.println("找到 " + complexResults.size() + " 个文档，使用复合表达式: " + complexExpression);
@@ -631,7 +661,8 @@ public class ElasticsearchRepositoryTest {
             // 4. 测试 IN 操作符
             String inExpression = "category IN ['electronics', 'books']";
             QueryCondition inCondition = new QueryCondition("document")
-                    .filterExpression(inExpression);
+                    .filterExpression(inExpression)
+                    .disableRefilter(true);
 
             List<Document> inResults = repository.search(inCondition);
             System.out.println("找到 " + inResults.size() + " 个文档，使用IN表达式: " + inExpression);
@@ -640,7 +671,8 @@ public class ElasticsearchRepositoryTest {
             // 5. 测试 NOT 操作符
             String notExpression = "NOT (category == 'books')";
             QueryCondition notCondition = new QueryCondition("document")
-                    .filterExpression(notExpression);
+                    .filterExpression(notExpression)
+                    .disableRefilter(true);
             List<Document> notResults = repository.search(notCondition);
             System.out.println("找到 " + notResults.size() + " 个文档，使用NOT表达式: " + notExpression);
             assertTrue(notResults.size() > 0, "NOT表达式应该找到文档");
@@ -705,7 +737,8 @@ public class ElasticsearchRepositoryTest {
             // 1. 测试同时使用相似度阈值和简单过滤表达式
             QueryCondition combinedCondition1 = new QueryCondition("artificial intelligence machine learning")
                     .filterExpression("category == 'AI'")
-                    .similarityThreshold(0.1);
+                    .similarityThreshold(0.1)
+                    .disableRefilter(true);
 
             List<Document> combinedResults1 = repository.search(combinedCondition1);
             System.out.println("相似度+简单过滤结果数量: " + combinedResults1.size());
@@ -713,7 +746,8 @@ public class ElasticsearchRepositoryTest {
             // 2. 测试同时使用相似度阈值和复杂过滤表达式
             QueryCondition combinedCondition2 = new QueryCondition("artificial intelligence machine learning")
                     .filterExpression("year >= 2022 AND relevance == 'high'")
-                    .similarityThreshold(0.1);
+                    .similarityThreshold(0.1)
+                    .disableRefilter(true);
 
             List<Document> combinedResults2 = repository.search(combinedCondition2);
             System.out.println("相似度+复杂过滤结果数量: " + combinedResults2.size());
