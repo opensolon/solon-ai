@@ -23,6 +23,8 @@ import org.noear.solon.expression.snel.ConstantNode;
 import org.noear.solon.expression.snel.LogicalNode;
 import org.noear.solon.expression.snel.VariableNode;
 
+import java.util.List;
+
 /**
  * @author noear
  * @since 3.1
@@ -84,6 +86,8 @@ public class FilterTransformer implements Transformer<Boolean, QueryBuilder> {
                     return compQb.le(name, (Comparable) value);
                 case lk:
                     return compQb.like(name, (String) value);
+                case in:
+                    return compQb.in(name, (List<?>) value);
                 default: {
                     throw new IllegalStateException("not support " + compNode.getOperator());
                 }
