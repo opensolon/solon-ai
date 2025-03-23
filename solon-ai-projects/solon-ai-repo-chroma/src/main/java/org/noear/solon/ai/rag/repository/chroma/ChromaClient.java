@@ -5,7 +5,7 @@ import java.util.*;
 import java.util.logging.Logger;
 
 import org.noear.snack.ONode;
-import org.noear.solon.Utils;
+import org.noear.solon.core.util.MultiMap;
 import org.noear.solon.net.http.HttpUtils;
 
 /**
@@ -18,30 +18,28 @@ public class ChromaClient {
     private static final Logger logger = Logger.getLogger(ChromaClient.class.getName());
 
     //Chroma 服务器地址与账号
-    private final String serverUrl;
-
-    private String username;
-    private String password;
-    private String token;
+    private final String baseUrl;
+    private final MultiMap<String> headers = new MultiMap<>();
 
 
-    public ChromaClient(String serverUrl) {
-        this.serverUrl = serverUrl.endsWith("/") ? serverUrl : serverUrl + "/";
+    public ChromaClient(String baseUrl) {
+        this.baseUrl = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
     }
 
     /**
      * 设置基础鉴权
      */
     public void setBasicAuth(String username, String password) {
-        this.username = username;
-        this.password = password;
+        String plainCredentials = username + ":" + password;
+        String base64Credentials = Base64.getEncoder().encodeToString(plainCredentials.getBytes());
+        headers.put("Authorization", "Basic " + base64Credentials);
     }
 
     /**
      * 设置令牌鉴权
      */
     public void setBearerAuth(String token) {
-        this.token = token;
+        headers.put("Authorization", "Bearer " + token);
     }
 
     /**
@@ -49,15 +47,8 @@ public class ChromaClient {
      */
     private HttpUtils http(String endpoint) {
         HttpUtils httpUtils = HttpUtils.http(endpoint)
+                .headers(headers)
                 .header("Accept", "application/json");
-
-        if (Utils.isNotEmpty(token)) {
-            httpUtils.header("Authorization", "Bearer " + token);
-        } else if (Utils.isNotEmpty(username) && Utils.isNotEmpty(password)) {
-            String plainCredentials = username + ":" + password;
-            String base64Credentials = Base64.getEncoder().encodeToString(plainCredentials.getBytes());
-            httpUtils.header("Authorization", "Basic " + base64Credentials);
-        }
 
         return httpUtils;
     }
@@ -69,7 +60,7 @@ public class ChromaClient {
      */
     public boolean isHealthy() {
         try {
-            String endpoint = serverUrl + "api/v1/heartbeat";
+            String endpoint = baseUrl + "api/v1/heartbeat";
             String response = http(endpoint).get();
 
             Map<String, Object> responseMap = ONode.loadStr(response).toObject(Map.class);
@@ -88,7 +79,7 @@ public class ChromaClient {
      */
     public CollectionsResponse listCollections() throws IOException {
         try {
-            String endpoint = serverUrl + "api/v1/collections";
+            String endpoint = baseUrl + "api/v1/collections";
             String response = http(endpoint).get();
 
             CollectionsResponse collectionsResponse = ONode.loadStr(response).toObject(CollectionsResponse.class);
@@ -116,7 +107,7 @@ public class ChromaClient {
      */
     public CollectionResponse createCollection(String name, Map<String, Object> metadata) throws IOException {
         try {
-            String endpoint = serverUrl + "api/v1/collections";
+            String endpoint = baseUrl + "api/v1/collections";
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("name", name);
@@ -160,7 +151,7 @@ public class ChromaClient {
      */
     public CollectionResponse getCollectionStats(String collectionId) throws IOException {
         try {
-            String endpoint = serverUrl + "api/v1/collections/" + collectionId;
+            String endpoint = baseUrl + "api/v1/collections/" + collectionId;
 
             String responseStr = http(endpoint).get();
 
@@ -187,7 +178,7 @@ public class ChromaClient {
      */
     public void deleteCollection(String collectionId) throws IOException {
         try {
-            String endpoint = serverUrl + "api/v1/collections/" + collectionId;
+            String endpoint = baseUrl + "api/v1/collections/" + collectionId;
 
             String responseStr = http(endpoint).delete();
 
@@ -239,7 +230,7 @@ public class ChromaClient {
     public void addDocuments(String collectionId, List<String> ids, List<List<Float>> embeddings,
                              List<String> documents, List<Map<String, Object>> metadatas) throws IOException {
         try {
-            String endpoint = serverUrl + "api/v1/collections/" + collectionId + "/add";
+            String endpoint = baseUrl + "api/v1/collections/" + collectionId + "/add";
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("ids", ids);
@@ -301,7 +292,7 @@ public class ChromaClient {
      */
     public void deleteDocuments(String collectionId, List<String> ids) throws IOException {
         try {
-            String endpoint = serverUrl + "api/v1/collections/" + collectionId + "/delete";
+            String endpoint = baseUrl + "api/v1/collections/" + collectionId + "/delete";
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("ids", ids);
@@ -327,7 +318,7 @@ public class ChromaClient {
      */
     public boolean documentExists(String collectionId, String id) throws IOException {
         try {
-            String endpoint = serverUrl + "api/v1/collections/" + collectionId + "/get";
+            String endpoint = baseUrl + "api/v1/collections/" + collectionId + "/get";
 
             Map<String, Object> requestBody = new HashMap<>();
             List<String> ids = new ArrayList<>();
@@ -364,7 +355,7 @@ public class ChromaClient {
     public QueryResponse queryDocuments(String collectionId, List<Float> queryEmbedding,
                                         int limit, Map<String, Object> metadataFilter) throws IOException {
         try {
-            String endpoint = serverUrl + "api/v1/collections/" + collectionId + "/query";
+            String endpoint = baseUrl + "api/v1/collections/" + collectionId + "/query";
 
             Map<String, Object> requestBody = new HashMap<>();
 
