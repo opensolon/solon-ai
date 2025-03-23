@@ -34,7 +34,6 @@ import org.noear.solon.ai.rag.repository.vectorex.FilterTransformer;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 
-import javax.print.Doc;
 import java.io.IOException;
 import java.util.*;
 
@@ -45,16 +44,12 @@ import java.util.*;
  * @since 3.1
  */
 public class VectoRexRepository implements RepositoryStorable, RepositoryLifecycle {
-    private EmbeddingModel embeddingModel;
-    private VectorRexClient client;
-    private String collectionName;
+    private Builder config;
     private static final String idName = "id";
     private static final String vectorName = "embedding";
 
-    public VectoRexRepository(EmbeddingModel embeddingModel, VectorRexClient client, String collectionName) {
-        this.embeddingModel = embeddingModel;
-        this.client = client;
-        this.collectionName = collectionName;
+    private VectoRexRepository(Builder config) {
+        this.config = config;
     }
 
     @Override
@@ -71,13 +66,13 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
                 .build();
 
         vectorFileds.add(vector);
-        ServerResponse<Void> face = client.createCollection(VectoRexCollectionReq.builder().collectionName("face").scalarFields(scalarFields).vectorFileds(vectorFileds).build());
+        ServerResponse<Void> face = config.client.createCollection(VectoRexCollectionReq.builder().collectionName("face").scalarFields(scalarFields).vectorFileds(vectorFileds).build());
 
     }
 
     @Override
     public void dropRepository() throws Exception {
-        ServerResponse<Void> response = client.delCollection(collectionName);
+        ServerResponse<Void> response = config.client.delCollection(config.collectionName);
 
         if (response.isSuccess() == false) {
             throw new IOException(response.getMsg());
@@ -88,10 +83,10 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     public void insert(List<Document> documents) throws IOException {
         for (Document doc : documents) {
             doc.id(Utils.uuid());
-            doc.embedding(embeddingModel.embed(doc.getContent()));
+            doc.embedding(config.embeddingModel.embed(doc.getContent()));
 
             CollectionDataAddReq req = CollectionDataAddReq.builder()
-                    .collectionName(collectionName)
+                    .collectionName(config.collectionName)
                     .metadata(new HashMap<String, Object>() {{
                         put(idName, doc.getId());
                         put(vectorName, doc.getEmbedding());
@@ -100,7 +95,7 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
                     }})
                     .build();
 
-            ServerResponse<Void> response = client.addCollectionData(req);
+            ServerResponse<Void> response = config.client.addCollectionData(req);
 
             if (response.isSuccess() == false) {
                 throw new IOException(response.getMsg());
@@ -111,8 +106,8 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     @Override
     public void delete(String... ids) throws IOException {
         for (String id : ids) {
-            CollectionDataDelReq req = new CollectionDataDelReq(collectionName, id);
-            ServerResponse<Void> response = client.deleteCollectionData(req);
+            CollectionDataDelReq req = new CollectionDataDelReq(config.collectionName, id);
+            ServerResponse<Void> response = config.client.deleteCollectionData(req);
 
             if (response.isSuccess() == false) {
                 throw new IOException(response.getMsg());
@@ -122,24 +117,24 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
 
     @Override
     public boolean exists(String id) throws IOException {
-        QueryBuilder builder = QueryBuilder.lambda(collectionName);
-        builder.eq(idName, id);
-        ServerResponse<List<VectorSearchResult>> response = client.queryCollectionData(builder);
+        QueryBuilder queryBuilder = QueryBuilder.lambda(config.collectionName);
+        queryBuilder.eq(idName, id);
+        ServerResponse<List<VectorSearchResult>> response = config.client.queryCollectionData(queryBuilder);
 
         return response.isSuccess() && Utils.isNotEmpty(response.getData());
     }
 
     @Override
     public List<Document> search(QueryCondition condition) throws IOException {
-        float[] embed = embeddingModel.embed(condition.getQuery());
+        float[] embed = config.embeddingModel.embed(condition.getQuery());
 
-        QueryBuilder builder = new FilterTransformer(collectionName)
+        QueryBuilder queryBuilder = new FilterTransformer(config.collectionName)
                 .transform(condition.getFilterExpression());
 
-        builder.vector(vectorName, Arrays.asList(embed))
+        queryBuilder.vector(vectorName, Arrays.asList(embed))
                 .topK(condition.getLimit());
 
-        ServerResponse<List<VectorSearchResult>> response = client.queryCollectionData(builder);
+        ServerResponse<List<VectorSearchResult>> response = config.client.queryCollectionData(queryBuilder);
 
         if (response.isSuccess() == false) {
             throw new IOException(response.getMsg());
@@ -154,5 +149,29 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
                 (String) rst.getData().getMetadata().get("content"),
                 (Map<String, Object>) rst.getData().getMetadata().get("metadata"),
                 rst.getScore());
+    }
+
+    public static Builder builder(EmbeddingModel embeddingModel, VectorRexClient client) {
+        return new Builder(embeddingModel, client);
+    }
+
+    public static class Builder {
+        private final EmbeddingModel embeddingModel;
+        private final VectorRexClient client;
+        private String collectionName = "solon-ai";
+
+        public Builder(EmbeddingModel embeddingModel, VectorRexClient client) {
+            this.embeddingModel = embeddingModel;
+            this.client = client;
+        }
+
+        public Builder collectionName(String collectionName) {
+            this.collectionName = collectionName;
+            return this;
+        }
+
+        public VectoRexRepository build() {
+            return new VectoRexRepository(this);
+        }
     }
 }
