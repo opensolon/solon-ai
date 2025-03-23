@@ -109,8 +109,13 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
                     .map(this::toPointStruct)
                     .collect(Collectors.toList());
 
-            config.client.upsertAsync(
-                    UpsertPoints.newBuilder().setCollectionName(config.collectionName).addAllPoints(points).build()).get();
+            try {
+                config.client.upsertAsync(UpsertPoints.newBuilder()
+                        .setCollectionName(config.collectionName)
+                        .addAllPoints(points).build()).get();
+            } catch (InterruptedException | ExecutionException e) {
+                throw new IOException("Failed to insert documents from Qdrant", e);
+            }
         }
     }
 
