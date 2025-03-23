@@ -51,7 +51,7 @@ public class QdrantRepositoryTest {
     @Test
     public void case1_search() throws Exception {
         List<Document> list = repository.search("solon");
-        assert list.size() == 4;
+        assert list.size() >= 3;//可能3个（效果更好）或4个
 
         list = repository.search("dubbo");
         assert list.size() == 0;

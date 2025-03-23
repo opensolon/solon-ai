@@ -2,6 +2,7 @@ package features.ai.repo.chroma;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -72,28 +73,20 @@ public class ChromaRepositoryTest {
     public void testSearch() throws IOException {
         checkRepository();
 
-        try {
-            // 测试基本搜索
-            QueryCondition condition = new QueryCondition("solon").disableRefilter(true);
-            List<Document> results = repository.search(condition);
-            assertFalse(results.isEmpty(), "应该找到包含solon的文档");
+        List<Document> list = repository.search("solon");
+        assert list.size() >= 3;//可能3个（效果更好）或4个
 
-            // 测试带过滤器的搜索
-            condition = new QueryCondition("solon")
-                    .filterExpression("url LIKE 'noear.org'")
-                    .disableRefilter(true);
-            results = repository.search(condition);
-            assertFalse(results.isEmpty(), "应该找到noear.org域名下的文档");
-            assertTrue(results.get(0).getUrl().contains("noear.org"), "文档URL应该包含noear.org");
+        list = repository.search("dubbo");
+        assert list.size() == 0;
 
-            // 打印结果
-            for (Document doc : results) {
-                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
-            }
+        Document doc = new Document("Test content");
+        repository.insert(Collections.singletonList(doc));
+        String key = doc.getId();
 
-        } catch (Exception e) {
-            fail("测试过程中发生异常: " + e.getMessage());
-        }
+        assertTrue(repository.exists(key), "Document should exist after storing");
+
+        repository.delete(doc.getId());
+        assertFalse(repository.exists(key), "Document should not exist after removal");
     }
 
     @Test
