@@ -6,10 +6,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.embedding.EmbeddingModel;
@@ -18,6 +14,9 @@ import org.noear.solon.ai.rag.repository.ChromaRepository;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.net.http.HttpUtils;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * ChromaRepository 测试类
@@ -53,7 +52,6 @@ public class ChromaRepositoryTest {
 
             // 初始化测试数据
             load(repository, "https://solon.noear.org/article/about?format=md");
-            load(repository, "https://h5.noear.org/more.htm");
             load(repository, "https://h5.noear.org/readme.htm");
             Thread.sleep(1000);
         } catch (Exception e) {
@@ -76,13 +74,14 @@ public class ChromaRepositoryTest {
 
         try {
             // 测试基本搜索
-            QueryCondition condition = new QueryCondition("solon");
+            QueryCondition condition = new QueryCondition("solon").disableRefilter(true);
             List<Document> results = repository.search(condition);
             assertFalse(results.isEmpty(), "应该找到包含solon的文档");
 
             // 测试带过滤器的搜索
             condition = new QueryCondition("solon")
-                    .filterExpression("url LIKE 'noear.org'");
+                    .filterExpression("url LIKE 'noear.org'")
+                    .disableRefilter(true);
             results = repository.search(condition);
             assertFalse(results.isEmpty(), "应该找到noear.org域名下的文档");
             assertTrue(results.get(0).getUrl().contains("noear.org"), "文档URL应该包含noear.org");
@@ -126,7 +125,7 @@ public class ChromaRepositoryTest {
 
         try {
             // 执行搜索查询
-            QueryCondition condition = new QueryCondition("solon");
+            QueryCondition condition = new QueryCondition("solon").disableRefilter(true);
             List<Document> results = repository.search(condition);
 
             // 验证结果不为空
@@ -172,6 +171,60 @@ public class ChromaRepositoryTest {
         }
     }
 
+    @Test
+    public void case2_expression() throws Exception {
+        // 新增带有元数据的文档
+        Document doc1 = new Document("Document about Solon framework");
+        doc1.getMetadata().put("title", "solon");
+        doc1.getMetadata().put("category", "framework");
+
+        Document doc2 = new Document("Document about Java settings");
+        doc2.getMetadata().put("title", "设置");
+        doc2.getMetadata().put("category", "tutorial");
+
+        Document doc3 = new Document("Document about Spring framework");
+        doc3.getMetadata().put("title", "spring");
+        doc3.getMetadata().put("category", "framework");
+
+        List<Document> documents = new ArrayList<>();
+        documents.add(doc1);
+        documents.add(doc2);
+        documents.add(doc3);
+        repository.insert(documents);
+
+        try {
+            // 1. 使用OR表达式过滤进行搜索
+            String orExpression = "title == 'solon' OR title == '设置'";
+            List<Document> orResults = repository.search(new QueryCondition("framework").filterExpression(orExpression).disableRefilter(true));
+
+            System.out.println("Found " + orResults.size() + " documents with OR filter expression: " + orExpression);
+
+            // 验证结果包含2个文档
+            assert orResults.size() == 2;
+
+            // 2. 使用AND表达式过滤
+            String andExpression = "title == 'solon' AND category == 'framework'";
+            List<Document> andResults = repository.search(new QueryCondition("framework").filterExpression(andExpression).disableRefilter(true));
+
+            System.out.println("Found " + andResults.size() + " documents with AND filter expression: " + andExpression);
+
+            // 验证结果只包含1个文档
+            assertEquals(1, andResults.size());
+
+            // 3. 使用category过滤
+            String categoryExpression = "category == 'framework'";
+            List<Document> categoryResults = repository.search(new QueryCondition("framework").filterExpression(categoryExpression).disableRefilter(true));
+
+            System.out.println("Found " + categoryResults.size() + " documents with category filter: " + categoryExpression);
+
+            // 验证结果包含2个framework类别的文档
+            assertEquals(2, categoryResults.size());
+        } finally {
+            // 清理测试数据
+            repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+        }
+    }
+
     /**
      * 测试表达式过滤功能
      */
@@ -207,7 +260,8 @@ public class ChromaRepositoryTest {
             // 1. 测试 OR 表达式
             String orExpression = "title == 'solon' OR title == '设置'";
             QueryCondition orCondition = new QueryCondition("framework")
-                    .filterExpression(orExpression);
+                    .filterExpression(orExpression)
+                    .disableRefilter(true);
 
             List<Document> orResults = repository.search(orCondition);
             System.out.println("找到 " + orResults.size() + " 个文档，使用 OR 表达式: " + orExpression);
@@ -232,7 +286,8 @@ public class ChromaRepositoryTest {
             // 2. 测试 AND 表达式
             String andExpression = "title == 'solon' AND category == 'framework'";
             QueryCondition andCondition = new QueryCondition("framework")
-                    .filterExpression(andExpression);
+                    .filterExpression(andExpression)
+                    .disableRefilter(true);
 
             List<Document> andResults = repository.search(andCondition);
             System.out.println("找到 " + andResults.size() + " 个文档，使用 AND 表达式: " + andExpression);
@@ -255,7 +310,8 @@ public class ChromaRepositoryTest {
             // 3. 测试简单过滤表达式
             String simpleExpression = "category == 'framework'";
             QueryCondition simpleCondition = new QueryCondition("framework")
-                    .filterExpression(simpleExpression);
+                    .filterExpression(simpleExpression)
+                    .disableRefilter(true);
 
             List<Document> simpleResults = repository.search(simpleCondition);
             System.out.println("找到 " + simpleResults.size() + " 个文档，使用简单表达式: " + simpleExpression);
@@ -330,7 +386,8 @@ public class ChromaRepositoryTest {
             // 1. 测试数值比较 (大于)
             String gtExpression = "price > 120";
             QueryCondition gtCondition = new QueryCondition("document")
-                    .filterExpression(gtExpression);
+                    .filterExpression(gtExpression)
+                    .disableRefilter(true);
 
             List<Document> gtResults = repository.search(gtCondition);
             System.out.println("找到 " + gtResults.size() + " 个文档，使用大于表达式: " + gtExpression);
@@ -341,7 +398,8 @@ public class ChromaRepositoryTest {
             // 2. 测试数值比较 (小于等于)
             String lteExpression = "stock <= 25";
             QueryCondition lteCondition = new QueryCondition("document")
-                    .filterExpression(lteExpression);
+                    .filterExpression(lteExpression)
+                    .disableRefilter(true);
 
             List<Document> lteResults = repository.search(lteCondition);
             System.out.println("找到 " + lteResults.size() + " 个文档，使用小于等于表达式: " + lteExpression);
@@ -352,7 +410,8 @@ public class ChromaRepositoryTest {
             // 3. 测试复合表达式 (价格区间和类别)
             String complexExpression = "(price >= 100 AND price <= 180) AND category == 'electronics'";
             QueryCondition complexCondition = new QueryCondition("document")
-                    .filterExpression(complexExpression);
+                    .filterExpression(complexExpression)
+                    .disableRefilter(true);
 
             List<Document> complexResults = repository.search(complexCondition);
             System.out.println("找到 " + complexResults.size() + " 个文档，使用复合表达式: " + complexExpression);

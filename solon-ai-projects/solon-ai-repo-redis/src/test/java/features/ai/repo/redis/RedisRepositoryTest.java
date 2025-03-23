@@ -69,7 +69,6 @@ public class RedisRepositoryTest {
         repository.initRepository();
 
         load(repository, "https://solon.noear.org/article/about?format=md");
-        load(repository, "https://h5.noear.org/more.htm");
         load(repository, "https://h5.noear.org/readme.htm");
     }
 
@@ -127,16 +126,16 @@ public class RedisRepositoryTest {
         try {
             // 1. 使用OR表达式过滤进行搜索
             String orExpression = "title == 'solon' OR title == '设置'";
-            List<Document> orResults = repository.search(new QueryCondition("framework").filterExpression(orExpression));
+            List<Document> orResults = repository.search(new QueryCondition("framework").filterExpression(orExpression).disableRefilter(true));
 
             System.out.println("Found " + orResults.size() + " documents with OR filter expression: " + orExpression);
 
             // 验证结果包含2个文档
-            assert orResults.size() == 3;
+            assert orResults.size() == 2;
 
             // 2. 使用AND表达式过滤
             String andExpression = "title == 'solon' AND category == 'framework'";
-            List<Document> andResults = repository.search(new QueryCondition("framework").filterExpression(andExpression));
+            List<Document> andResults = repository.search(new QueryCondition("framework").filterExpression(andExpression).disableRefilter(true));
 
             System.out.println("Found " + andResults.size() + " documents with AND filter expression: " + andExpression);
 
@@ -145,7 +144,7 @@ public class RedisRepositoryTest {
 
             // 3. 使用category过滤
             String categoryExpression = "category == 'framework'";
-            List<Document> categoryResults = repository.search(new QueryCondition("framework").filterExpression(categoryExpression));
+            List<Document> categoryResults = repository.search(new QueryCondition("framework").filterExpression(categoryExpression).disableRefilter(true));
 
             System.out.println("Found " + categoryResults.size() + " documents with category filter: " + categoryExpression);
 

@@ -48,7 +48,6 @@ public class MilvusRepositoryTest {
                 collectionName); //3.初始化知识库
 
         load(repository, "https://solon.noear.org/article/about?format=md");
-        load(repository, "https://h5.noear.org/more.htm");
         load(repository, "https://h5.noear.org/readme.htm");
     }
 
@@ -85,9 +84,56 @@ public class MilvusRepositoryTest {
 
     @Test
     public void case2_expression() throws Exception {
-        String expression = " title == 'solon' OR title == '设置' ";
-        List<Document> list = repository.search(new QueryCondition("历史记录").filterExpression(expression));
-        System.out.println(list.size());
+        // 新增带有元数据的文档
+        Document doc1 = new Document("Document about Solon framework");
+        doc1.getMetadata().put("title", "solon");
+        doc1.getMetadata().put("category", "framework");
+
+        Document doc2 = new Document("Document about Java settings");
+        doc2.getMetadata().put("title", "设置");
+        doc2.getMetadata().put("category", "tutorial");
+
+        Document doc3 = new Document("Document about Spring framework");
+        doc3.getMetadata().put("title", "spring");
+        doc3.getMetadata().put("category", "framework");
+
+        List<Document> documents = new ArrayList<>();
+        documents.add(doc1);
+        documents.add(doc2);
+        documents.add(doc3);
+        repository.insert(documents);
+
+        try {
+            // 1. 使用OR表达式过滤进行搜索
+            String orExpression = "title == 'solon' OR title == '设置'";
+            List<Document> orResults = repository.search(new QueryCondition("framework").filterExpression(orExpression).disableRefilter(true));
+
+            System.out.println("Found " + orResults.size() + " documents with OR filter expression: " + orExpression);
+
+            // 验证结果包含2个文档
+            assert orResults.size() == 2;
+
+            // 2. 使用AND表达式过滤
+            String andExpression = "title == 'solon' AND category == 'framework'";
+            List<Document> andResults = repository.search(new QueryCondition("framework").filterExpression(andExpression).disableRefilter(true));
+
+            System.out.println("Found " + andResults.size() + " documents with AND filter expression: " + andExpression);
+
+            // 验证结果只包含1个文档
+            assertEquals(1, andResults.size());
+
+            // 3. 使用category过滤
+            String categoryExpression = "category == 'framework'";
+            List<Document> categoryResults = repository.search(new QueryCondition("framework").filterExpression(categoryExpression).disableRefilter(true));
+
+            System.out.println("Found " + categoryResults.size() + " documents with category filter: " + categoryExpression);
+
+            // 验证结果包含2个framework类别的文档
+            assertEquals(2, categoryResults.size());
+        } finally {
+            // 清理测试数据
+            repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+        }
     }
 
     /**
@@ -125,7 +171,8 @@ public class MilvusRepositoryTest {
             // 1. 测试 OR 表达式
             String orExpression = "title == 'solon' OR title == '设置'";
             QueryCondition orCondition = new QueryCondition("framework")
-                    .filterExpression(orExpression);
+                    .filterExpression(orExpression)
+                    .disableRefilter(true);
 
             List<Document> orResults = repository.search(orCondition);
             System.out.println("找到 " + orResults.size() + " 个文档，使用 OR 表达式: " + orExpression);
@@ -150,7 +197,8 @@ public class MilvusRepositoryTest {
             // 2. 测试 AND 表达式
             String andExpression = "title == 'solon' AND category == 'framework'";
             QueryCondition andCondition = new QueryCondition("framework")
-                    .filterExpression(andExpression);
+                    .filterExpression(andExpression)
+                    .disableRefilter(true);
 
             List<Document> andResults = repository.search(andCondition);
             System.out.println("找到 " + andResults.size() + " 个文档，使用 AND 表达式: " + andExpression);
@@ -173,7 +221,8 @@ public class MilvusRepositoryTest {
             // 3. 测试简单过滤表达式
             String simpleExpression = "category == 'framework'";
             QueryCondition simpleCondition = new QueryCondition("framework")
-                    .filterExpression(simpleExpression);
+                    .filterExpression(simpleExpression)
+                    .disableRefilter(true);
 
             List<Document> simpleResults = repository.search(simpleCondition);
             System.out.println("找到 " + simpleResults.size() + " 个文档，使用简单表达式: " + simpleExpression);
@@ -248,7 +297,8 @@ public class MilvusRepositoryTest {
             // 1. 测试数值比较 (大于)
             String gtExpression = "price > 120";
             QueryCondition gtCondition = new QueryCondition("document")
-                    .filterExpression(gtExpression);
+                    .filterExpression(gtExpression)
+                    .disableRefilter(true);
 
             List<Document> gtResults = repository.search(gtCondition);
             System.out.println("找到 " + gtResults.size() + " 个文档，使用大于表达式: " + gtExpression);
@@ -259,7 +309,8 @@ public class MilvusRepositoryTest {
             // 2. 测试数值比较 (小于等于)
             String lteExpression = "stock <= 25";
             QueryCondition lteCondition = new QueryCondition("document")
-                    .filterExpression(lteExpression);
+                    .filterExpression(lteExpression)
+                    .disableRefilter(true);
 
             List<Document> lteResults = repository.search(lteCondition);
             System.out.println("找到 " + lteResults.size() + " 个文档，使用小于等于表达式: " + lteExpression);
@@ -270,7 +321,8 @@ public class MilvusRepositoryTest {
             // 3. 测试复合表达式 (价格区间和类别)
             String complexExpression = "(price >= 100 AND price <= 180) AND category == 'electronics'";
             QueryCondition complexCondition = new QueryCondition("document")
-                    .filterExpression(complexExpression);
+                    .filterExpression(complexExpression)
+                    .disableRefilter(true);
 
             List<Document> complexResults = repository.search(complexCondition);
             System.out.println("找到 " + complexResults.size() + " 个文档，使用复合表达式: " + complexExpression);
