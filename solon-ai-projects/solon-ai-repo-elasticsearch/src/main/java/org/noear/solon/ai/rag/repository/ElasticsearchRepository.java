@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
@@ -182,9 +183,8 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      */
     @Override
     public void dropRepository() throws IOException {
-        Request request = new Request("POST", "/" + indexName + "/_delete_by_query");
-        request.setJsonEntity("{\"query\":{\"match_all\":{}}}");
-        client.getLowLevelClient().performRequest(request);
+        DeleteIndexRequest request = new DeleteIndexRequest(indexName);
+        client.indices().delete(request, RequestOptions.DEFAULT);
     }
 
 
