@@ -50,54 +50,10 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.1")
 public class ElasticsearchRepository implements RepositoryStorable, RepositoryLifecycle {
-    /**
-     * 向量模型，用于将文档内容转换为向量表示
-     */
-    private final EmbeddingModel embeddingModel;
+    private final Builder config;
 
-    /**
-     * Elasticsearch 客户端，用于与 ES 服务器交互
-     */
-    private final RestHighLevelClient client;
-
-    /**
-     * ES 索引名称，用于存储文档
-     */
-    private final String indexName;
-
-    /**
-     * metadata需要索引的字段列表
-     */
-    private final List<MetadataField> metadataFields;
-
-
-    /**
-     * 构造函数
-     *
-     * @param embeddingModel 向量模型，用于生成文档的向量表示
-     * @param client         ES客户端
-     * @param indexName      索引名称
-     * @author 小奶奶花生米
-     */
-    public ElasticsearchRepository(EmbeddingModel embeddingModel, RestHighLevelClient client, String indexName) {
-        this(embeddingModel, client, indexName, new ArrayList<>());
-    }
-
-    /**
-     * 构造函数
-     *
-     * @param embeddingModel 向量模型，用于生成文档的向量表示
-     * @param client         ES客户端
-     * @param indexName      索引名称
-     * @param metadataFields 需要索引的元数据字段列表
-     * @author 小奶奶花生米
-     */
-    public ElasticsearchRepository(EmbeddingModel embeddingModel, RestHighLevelClient client,
-                                   String indexName, List<MetadataField> metadataFields) {
-        this.embeddingModel = embeddingModel;
-        this.client = client;
-        this.indexName = indexName;
-        this.metadataFields = metadataFields;
+    private ElasticsearchRepository(Builder config) {
+        this.config = config;
         initRepository();
     }
 
@@ -107,11 +63,11 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     @Override
     public void initRepository() {
         try {
-            GetIndexRequest getIndexRequest = new GetIndexRequest(indexName);
-            if (client.indices().exists(getIndexRequest, RequestOptions.DEFAULT) == false) {
-                CreateIndexRequest createIndexRequest = new CreateIndexRequest(indexName);
+            GetIndexRequest getIndexRequest = new GetIndexRequest(config.indexName);
+            if (config.client.indices().exists(getIndexRequest, RequestOptions.DEFAULT) == false) {
+                CreateIndexRequest createIndexRequest = new CreateIndexRequest(config.indexName);
                 createIndexRequest.source(buildIndexMapping());
-                client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
+                config.client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize Elasticsearch index", e);
@@ -126,7 +82,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      * @throws IOException 如果构建过程发生IO错误
      */
     private XContentBuilder buildIndexMapping() throws IOException {
-        int dims = embeddingModel.dimensions();
+        int dims = config.embeddingModel.dimensions();
 
         XContentBuilder builder = XContentFactory.jsonBuilder()
                 .startObject()
@@ -144,8 +100,8 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
                 .endObject();
 
         // 如果有元数据字段需要索引，将其平铺到顶层
-        if (!metadataFields.isEmpty()) {
-            for (MetadataField field : metadataFields) {
+        if (Utils.isNotEmpty(config.metadataFields)) {
+            for (MetadataField field : config.metadataFields) {
                 builder.startObject(field.getName());
                 switch (field.getFieldType()) {
                     case NUMERIC:
@@ -183,8 +139,8 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      */
     @Override
     public void dropRepository() throws IOException {
-        DeleteIndexRequest request = new DeleteIndexRequest(indexName);
-        client.indices().delete(request, RequestOptions.DEFAULT);
+        DeleteIndexRequest request = new DeleteIndexRequest(config.indexName);
+        config.client.indices().delete(request, RequestOptions.DEFAULT);
     }
 
 
@@ -207,7 +163,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      * 执行搜索请求
      */
     private String executeSearch(QueryCondition condition) throws IOException {
-        Request request = new Request("POST", "/" + indexName + "/_search");
+        Request request = new Request("POST", "/" + config.indexName + "/_search");
 
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("query", translate(condition));
@@ -219,7 +175,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         }
 
         request.setJsonEntity(ONode.stringify(requestBody));
-        org.elasticsearch.client.Response response = client.getLowLevelClient().performRequest(request);
+        org.elasticsearch.client.Response response = config.client.getLowLevelClient().performRequest(request);
         return IoUtil.transferToString(response.getEntity().getContent(), "UTF-8");
     }
 
@@ -269,7 +225,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     private void executeBulkRequest(String bulkBody) throws IOException {
         Request request = new Request("POST", "/_bulk");
         request.setJsonEntity(bulkBody);
-        client.getLowLevelClient().performRequest(request);
+        config.client.getLowLevelClient().performRequest(request);
     }
 
     /**
@@ -279,8 +235,8 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      * @throws IOException 如果刷新过程发生IO错误
      */
     private void refreshIndex() throws IOException {
-        Request request = new Request("POST", "/" + indexName + "/_refresh");
-        client.getLowLevelClient().performRequest(request);
+        Request request = new Request("POST", "/" + config.indexName + "/_refresh");
+        config.client.getLowLevelClient().performRequest(request);
     }
 
     /**
@@ -299,7 +255,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
 
         // 批量embedding
         for (List<Document> sub : ListUtil.partition(documents, 20)) {
-            embeddingModel.embed(sub);
+            config.embeddingModel.embed(sub);
 
             StringBuilder buf = new StringBuilder();
             for (Document doc : sub) {
@@ -320,7 +276,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
             doc.id(Utils.uuid());
         }
 
-        buf.append("{\"index\":{\"_index\":\"").append(indexName)
+        buf.append("{\"index\":{\"_index\":\"").append(config.indexName)
                 .append("\",\"_id\":\"").append(doc.getId()).append("\"}}\n");
 
         Map<String, Object> source = new HashMap<>();
@@ -350,8 +306,8 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     public void delete(String... ids) throws IOException {
         for (String id : ids) {
             //不支持星号删除
-            Request request = new Request("DELETE", "/" + indexName + "/_doc/" + id);
-            client.getLowLevelClient().performRequest(request);
+            Request request = new Request("DELETE", "/" + config.indexName + "/_doc/" + id);
+            config.client.getLowLevelClient().performRequest(request);
             refreshIndex();
         }
     }
@@ -359,8 +315,8 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     @Override
     public boolean exists(String id) {
         try {
-            Request request = new Request("HEAD", "/" + indexName + "/_doc/" + id);
-            org.elasticsearch.client.Response response = client.getLowLevelClient().performRequest(request);
+            Request request = new Request("HEAD", "/" + config.indexName + "/_doc/" + id);
+            org.elasticsearch.client.Response response = config.client.getLowLevelClient().performRequest(request);
             return response.getStatusLine().getStatusCode() == 200;
         } catch (IOException e) {
             return false;
@@ -414,11 +370,10 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      *
      * @param embeddingModel 嵌入模型
      * @param client         Elasticsearch 客户端
-     * @param indexName      索引名称
      * @return 构建器实例
      */
-    public static Builder builder(EmbeddingModel embeddingModel, RestHighLevelClient client, String indexName) {
-        return new Builder(embeddingModel, client, indexName);
+    public static Builder builder(EmbeddingModel embeddingModel, RestHighLevelClient client) {
+        return new Builder(embeddingModel, client);
     }
 
     /**
@@ -427,7 +382,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     public static class Builder {
         private final EmbeddingModel embeddingModel;
         private final RestHighLevelClient client;
-        private final String indexName;
+        private String indexName = "solon_ai";
         private List<MetadataField> metadataFields = new ArrayList<>();
 
         /**
@@ -435,12 +390,20 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
          *
          * @param embeddingModel 嵌入模型
          * @param client         Elasticsearch 客户端
-         * @param indexName      索引名称
          */
-        public Builder(EmbeddingModel embeddingModel, RestHighLevelClient client, String indexName) {
+        public Builder(EmbeddingModel embeddingModel, RestHighLevelClient client) {
             this.embeddingModel = embeddingModel;
             this.client = client;
-            this.indexName = indexName;
+        }
+
+        /**
+         * 设置索引名
+         */
+        public Builder indexName(String indexName) {
+            if (indexName != null) {
+                this.indexName = indexName;
+            }
+            return this;
         }
 
         /**
@@ -471,7 +434,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
          * @return ElasticsearchRepository 实例
          */
         public ElasticsearchRepository build() {
-            return new ElasticsearchRepository(embeddingModel, client, indexName, metadataFields);
+            return new ElasticsearchRepository(this);
         }
     }
 }
