@@ -27,43 +27,15 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.1")
 public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle {
-
-    /**
-     * 向量模型，用于将文档内容转换为向量表示
-     */
-    private final EmbeddingModel embeddingModel;
-
-    /**
-     * Chroma API 客户端
-     */
-    private final ChromaApi chromaApi;
-
-    /**
-     * 集合名称，用于存储文档
-     */
-    private String collectionName;
-
-    /**
-     * 集合ID
-     */
+    private final Builder config;
+    //集合ID
     private String collectionId;
 
-    /**
-     * 是否已初始化
-     */
+    //是否已初始化
     private boolean initialized = false;
 
-    /**
-     * 构造函数
-     *
-     * @param embeddingModel 向量模型，用于生成文档的向量表示
-     * @param serverUrl      Chroma 服务器地址
-     * @param collectionName 集合名称
-     */
-    public ChromaRepository(EmbeddingModel embeddingModel, String serverUrl, String collectionName) {
-        this.embeddingModel = embeddingModel;
-        this.chromaApi = new ChromaApi(serverUrl);
-        this.collectionName = collectionName;
+    private ChromaRepository(Builder config) {
+        this.config = config;
         initRepository();
     }
 
@@ -88,7 +60,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
 
             // 验证集合是否创建成功
             if (collectionId == null) {
-                throw new IOException("Failed to create or find collection: " + collectionName);
+                throw new IOException("Failed to create or find collection: " + config.collectionName);
             }
 
             initialized = true;
@@ -105,7 +77,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
     private boolean findExistingCollection() {
         try {
             // 获取所有集合
-            CollectionsResponse collectionsResponse = chromaApi.listCollections();
+            CollectionsResponse collectionsResponse = config.client.listCollections();
             List<Map<String, Object>> collections = collectionsResponse.getCollections();
 
             if (collections == null || collections.isEmpty()) {
@@ -115,7 +87,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
 
             // 查找匹配的集合
             for (Map<String, Object> collection : collections) {
-                if (collectionName.equals(collection.get("name"))) {
+                if (config.collectionName.equals(collection.get("name"))) {
                     // 获取集合ID
                     if (collection.containsKey("id")) {
                         this.collectionId = (String) collection.get("id");
@@ -145,7 +117,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
             metadata.put("hnsw:space", "cosine"); // 使用余弦相似度
 
             // 创建集合
-            CollectionResponse response = chromaApi.createCollection(collectionName, metadata);
+            CollectionResponse response = config.client.createCollection(config.collectionName, metadata);
 
             // 获取集合ID
             this.collectionId = response.getId();
@@ -169,28 +141,28 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      */
     private void createUniqueCollection() throws IOException {
         String uuid = UUID.randomUUID().toString().substring(0, 8);
-        String uniqueCollectionName = collectionName + "_" + uuid;
+        String uniqueCollectionName = config.collectionName + "_" + uuid;
 
         // 创建集合元数据
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("description", "Collection created by Solon AI");
         metadata.put("created_at", System.currentTimeMillis());
-        metadata.put("original_name", collectionName);
+        metadata.put("original_name", config.collectionName);
         metadata.put("hnsw:space", "cosine"); // 使用余弦相似度
 
         // 创建集合
-        CollectionResponse response = chromaApi.createCollection(uniqueCollectionName, metadata);
+        CollectionResponse response = config.client.createCollection(uniqueCollectionName, metadata);
 
         // 获取集合ID
         this.collectionId = response.getId();
-        this.collectionName = uniqueCollectionName;
+        config.collectionName = uniqueCollectionName;
     }
 
     /**
      * 检查服务是否健康
      */
     public boolean isHealthy() {
-        return chromaApi.isHealthy();
+        return config.client.isHealthy();
     }
 
     /**
@@ -210,7 +182,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         }
 
         // 生成文档的向量表示
-        embeddingModel.embed(documents);
+        config.embeddingModel.embed(documents);
 
         // 批量添加文档
         int batchSize = 100;
@@ -256,7 +228,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         }
 
         // 添加文档到集合
-        chromaApi.addDocuments(collectionId, ids, embeddings, contents, metadatas);
+        config.client.addDocuments(collectionId, ids, embeddings, contents, metadatas);
     }
 
     /**
@@ -275,7 +247,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         List<String> idList = new ArrayList<>(Arrays.asList(ids));
 
         // 删除文档
-        chromaApi.deleteDocuments(collectionId, idList);
+        config.client.deleteDocuments(collectionId, idList);
     }
 
     /**
@@ -291,7 +263,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
             throw new IOException("Collection ID is not available");
         }
 
-        return chromaApi.documentExists(collectionId, id);
+        return config.client.documentExists(collectionId, id);
     }
 
     /**
@@ -314,7 +286,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         docList.add(queryDoc);
 
         try {
-            embeddingModel.embed(docList);
+            config.embeddingModel.embed(docList);
 
             // 检查嵌入是否成功生成
             if (queryDoc.getEmbedding() == null) {
@@ -328,7 +300,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
             Map<String, Object> filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
 
             // 执行查询
-            QueryResponse response = chromaApi.queryDocuments(
+            QueryResponse response = config.client.queryDocuments(
                     collectionId,
                     queryVector,
                     condition.getLimit(),
@@ -391,7 +363,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
                 // 计算相似度分数 (1 - 距离)，确保分数在0-1之间
                 double score = 1.0 - Math.min(1.0, Math.max(0.0, distance.doubleValue()));
 
-                Document doc = new Document(id,content, metadata, score);
+                Document doc = new Document(id, content, metadata, score);
 
                 // 如果元数据中有URL，设置到文档
                 if (metadata.containsKey("url")) {
@@ -415,7 +387,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
             throw new IOException("Collection ID is not available");
         }
 
-        chromaApi.deleteCollection(collectionId);
+        config.client.deleteCollection(collectionId);
         initialized = false;
         collectionId = null;
     }
@@ -443,6 +415,41 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
             throw new IOException("Collection ID is not available");
         }
 
-        return chromaApi.getCollectionStats(collectionId);
+        return config.client.getCollectionStats(collectionId);
+    }
+
+    public static Builder builder(EmbeddingModel embeddingModel, String serverUrl) {
+        return new Builder(embeddingModel, serverUrl);
+    }
+
+    public static class Builder {
+        /**
+         * 向量模型，用于将文档内容转换为向量表示
+         */
+        private final EmbeddingModel embeddingModel;
+
+        /**
+         * Chroma API 客户端
+         */
+        private final ChromaClient client;
+
+        /**
+         * 集合名称，用于存储文档
+         */
+        private String collectionName = "solon_ai";
+
+        private Builder(EmbeddingModel embeddingModel, String serverUrl) {
+            this.embeddingModel = embeddingModel;
+            this.client = new ChromaClient(serverUrl);
+        }
+
+        public Builder collectionName(String collectionName) {
+            this.collectionName = collectionName;
+            return this;
+        }
+
+        public ChromaRepository build() {
+            return new ChromaRepository(this);
+        }
     }
 }

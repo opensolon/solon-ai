@@ -16,8 +16,8 @@ import org.noear.solon.net.http.HttpUtils;
  * @author 小奶奶花生米
  * @since 3.1
  */
-public class ChromaApi {
-    private static final Logger logger = Logger.getLogger(ChromaApi.class.getName());
+public class ChromaClient {
+    private static final Logger logger = Logger.getLogger(ChromaClient.class.getName());
 
     /**
      * Chroma 服务器地址
@@ -29,7 +29,7 @@ public class ChromaApi {
      *
      * @param serverUrl Chroma 服务器地址
      */
-    public ChromaApi(String serverUrl) {
+    public ChromaClient(String serverUrl) {
         this.serverUrl = serverUrl.endsWith("/") ? serverUrl : serverUrl + "/";
     }
 
