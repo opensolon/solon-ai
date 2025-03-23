@@ -18,7 +18,6 @@ package org.noear.solon.ai.rag.repository;
 import java.io.IOException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,17 +28,11 @@ import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
+import org.noear.solon.ai.rag.repository.redis.FilterTransformer;
 import org.noear.solon.ai.rag.repository.redis.MetadataField;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
-import org.noear.solon.expression.Expression;
-import org.noear.solon.expression.snel.ComparisonNode;
-import org.noear.solon.expression.snel.ComparisonOp;
-import org.noear.solon.expression.snel.ConstantNode;
-import org.noear.solon.expression.snel.LogicalNode;
-import org.noear.solon.expression.snel.LogicalOp;
-import org.noear.solon.expression.snel.VariableNode;
 
 import redis.clients.jedis.PipelineBase;
 import redis.clients.jedis.UnifiedJedis;
@@ -377,7 +370,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         documents.add(queryDoc);
         embeddingModel.embed(documents);
 
-        String filter = getExpressionFilter(condition);
+        String filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
 
         // 构建查询，注意字段名称需要与索引定义匹配
         String queryString = String.format(QUERY_FORMAT, filter, condition.getLimit(), EMBEDDING_NAME,
@@ -407,166 +400,6 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         }
     }
 
-    private String getExpressionFilter(QueryCondition condition) {
-        if (condition.getFilterExpression() == null) {
-            return "*";
-        }
-
-        try {
-            Expression<Boolean> filterExpression = condition.getFilterExpression();
-            StringBuilder buf = new StringBuilder();
-            parseFilterExpression(filterExpression, buf);
-
-            if (buf.length() == 0) {
-                return "*";
-            }
-
-            return buf.toString();
-        } catch (Exception e) {
-            System.err.println("Error processing filter expression: " + e.getMessage());
-            return "*";
-        }
-    }
-
-   /**
-    *  解析QueryCondition中的filterExpression，转换为Redis Search语法
-    * @param filterExpression
-    * @param buf
-    */
-    private void parseFilterExpression(Expression<Boolean> filterExpression, StringBuilder buf) {
-        if (filterExpression == null) {
-            return;
-        }
-
-        if (filterExpression instanceof VariableNode) {
-            // 变量节点，获取字段名 - 为Redis添加@前缀
-            String name = ((VariableNode) filterExpression).getName();
-            buf.append("@").append(name);
-        } else if (filterExpression instanceof ConstantNode) {
-            ConstantNode node = (ConstantNode) filterExpression;
-            // 常量节点，获取值
-            Object value = node.getValue();
-
-            if (node.isCollection()) {
-                // 集合使用Redis的OR语法 {val1|val2|val3}
-                buf.append("{");
-                boolean first = true;
-                for (Object item : (Collection<?>) value) {
-                    if (!first) {
-                        buf.append("|"); // Redis 使用 | 分隔OR条件
-                    }
-                    buf.append(item);
-                    first = false;
-                }
-                buf.append("}");
-            } else if (value instanceof String) {
-                // 字符串值使用大括号
-                buf.append("{").append(value).append("}");
-            } else {
-                buf.append(value);
-            }
-        } else if (filterExpression instanceof ComparisonNode) {
-            ComparisonNode node = (ComparisonNode) filterExpression;
-            ComparisonOp operator = node.getOperator();
-            Expression left = node.getLeft();
-            Expression right = node.getRight();
-
-            // 比较节点
-            switch (operator) {
-                case eq:
-                    parseFilterExpression(left, buf);
-                    buf.append(":");
-                    parseFilterExpression(right, buf);
-                    break;
-                case neq:
-                    buf.append("-");
-                    parseFilterExpression(left, buf);
-                    buf.append(":");
-                    parseFilterExpression(right, buf);
-                    break;
-                case gt:
-                    parseFilterExpression(left, buf);
-                    buf.append(":[");
-                    parseFilterExpression(right, buf);
-                    buf.append(" +inf]");
-                    break;
-                case gte:
-                    parseFilterExpression(left, buf);
-                    buf.append(":[");
-                    parseFilterExpression(right, buf);
-                    buf.append(" +inf]");
-                    break;
-                case lt:
-                    parseFilterExpression(left, buf);
-                    buf.append(":[-inf ");
-                    parseFilterExpression(right, buf);
-                    buf.append("]");
-                    break;
-                case lte:
-                    parseFilterExpression(left, buf);
-                    buf.append(":[-inf ");
-                    parseFilterExpression(right, buf);
-                    buf.append("]");
-                    break;
-                case in:
-                    parseFilterExpression(left, buf);
-                    buf.append(":");
-                    parseFilterExpression(right, buf);
-                    break;
-                case nin:
-                    buf.append("-");
-                    parseFilterExpression(left, buf);
-                    buf.append(":");
-                    parseFilterExpression(right, buf);
-                    break;
-                default:
-                    parseFilterExpression(left, buf);
-                    buf.append(":");
-                    parseFilterExpression(right, buf);
-                    break;
-            }
-        } else if (filterExpression instanceof LogicalNode) {
-            LogicalNode node = (LogicalNode) filterExpression;
-            LogicalOp operator = node.getOperator();
-            Expression left = node.getLeft();
-            Expression right = node.getRight();
-            
-            buf.append("(");
-            
-            if (right != null) {
-                // 二元操作符 (AND, OR)
-                parseFilterExpression(left, buf);
-                
-                switch (operator) {
-                    case and:
-                        buf.append(" "); // Redis Search 使用空格表示 AND
-                        break;
-                    case or:
-                        buf.append(" | "); // Redis Search 使用 | 表示 OR
-                        break;
-                    default:
-                        // 其他操作符，默认用空格
-                        buf.append(" ");
-                        break;
-                }
-                
-                parseFilterExpression(right, buf);
-            } else {
-                // 一元操作符 (NOT)
-                switch (operator) {
-                    case not:
-                        buf.append("-"); // Redis Search 使用 - 表示 NOT
-                        break;
-                    default:
-                        // 其他一元操作符，不添加前缀
-                        break;
-                }
-                parseFilterExpression(left, buf);
-            }
-            
-            buf.append(")");
-        }
-    }
 
     private Document toDocument(redis.clients.jedis.search.Document jDoc) {
         String id = jDoc.getId().substring(keyPrefix.length());

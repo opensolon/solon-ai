@@ -32,12 +32,8 @@ import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
+import org.noear.solon.ai.rag.repository.milvus.FilterTransformer;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
-import org.noear.solon.expression.Expression;
-import org.noear.solon.expression.snel.ComparisonNode;
-import org.noear.solon.expression.snel.ConstantNode;
-import org.noear.solon.expression.snel.LogicalNode;
-import org.noear.solon.expression.snel.VariableNode;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 
@@ -216,7 +212,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                 .outputFields(Arrays.asList("content", "metadata"));
 
         if (condition.getFilterExpression() != null) {
-            String filterEl = parseFilterExpression(condition.getFilterExpression());
+            String filterEl = FilterTransformer.getInstance().transform(condition.getFilterExpression());
             if (Utils.isNotEmpty(filterEl)) {
                 builder.filter(filterEl);
             }
@@ -231,60 +227,6 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
 
         // 再次过滤下
         return SimilarityUtil.refilter(docs, condition);
-    }
-
-    // 根据PringUtil的原理，解析QueryCondition中的filterExpression，转换为Milvus原生的过滤表达式
-    public String parseFilterExpression(Expression<Boolean> filterExpression) {
-        StringBuilder buf = new StringBuilder();
-        parseFilterExpression(filterExpression, buf);
-        return buf.toString();
-    }
-
-    private void parseFilterExpression(Expression<Boolean> filterExpression, StringBuilder buf) {
-        if (filterExpression instanceof VariableNode) {
-            buf.append("metadata[\"").append(((VariableNode) filterExpression).getName()).append("\"]");
-        } else if (filterExpression instanceof ConstantNode) {
-            Object value = ((ConstantNode) filterExpression).getValue();
-            // 判断是否为Collection类型
-            if (((ConstantNode) filterExpression).isCollection()) {
-                buf.append("[");
-                for (Object item : (Iterable<?>) value) {
-                    if (item instanceof String) {
-                        buf.append("\"").append(item).append("\"");
-                    } else {
-                        buf.append(item);
-                    }
-                    buf.append(", ");
-                }
-                if (buf.length() > 1) {
-                    buf.setLength(buf.length() - 1);
-                }
-                buf.append("]");
-            } else if (value instanceof String) {
-                buf.append("\"").append(value).append("\"");
-            } else {
-                buf.append(value);
-            }
-        } else if (filterExpression instanceof ComparisonNode) {
-            ComparisonNode compNode = (ComparisonNode) filterExpression;
-            buf.append("(");
-            parseFilterExpression(compNode.getLeft(), buf);
-            buf.append(" ").append(compNode.getOperator().getCode().toLowerCase()).append(" ");
-            parseFilterExpression(compNode.getRight(), buf);
-            buf.append(")");
-        } else if (filterExpression instanceof LogicalNode) {
-            LogicalNode opNode = (LogicalNode) filterExpression;
-            buf.append("(");
-            if (opNode.getRight() != null) {
-                parseFilterExpression(opNode.getLeft(), buf);
-                buf.append(" ").append(opNode.getOperator().getCode().toLowerCase()).append(" ");
-                parseFilterExpression(opNode.getRight(), buf);
-            } else {
-                buf.append(opNode.getOperator().getCode()).append(" ");
-                parseFilterExpression(opNode.getLeft(), buf);
-            }
-            buf.append(")");
-        }
     }
 
     // 文档转为 JsonObject

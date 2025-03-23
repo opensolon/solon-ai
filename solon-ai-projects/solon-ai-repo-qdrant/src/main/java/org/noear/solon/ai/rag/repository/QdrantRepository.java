@@ -27,6 +27,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
+import org.noear.solon.ai.rag.repository.qdrant.FilterTransformer;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
@@ -163,7 +164,7 @@ public class QdrantRepository implements RepositoryStorable {
                     .setWithPayload(include(Arrays.asList(contentKey, metadataKey)))
                     .setWithVectors(enable(true));
 
-            Filter filter = parseFilterExpression(condition.getFilterExpression());
+            Filter filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
 
             if (filter != null) {
                 queryBuilder.setFilter(filter);
@@ -177,14 +178,6 @@ public class QdrantRepository implements RepositoryStorable {
         } catch (InterruptedException | ExecutionException e) {
             throw new IOException("Failed to search documents in Qdrant", e);
         }
-    }
-
-    private Filter parseFilterExpression(Expression<Boolean> filterExpression) {
-        if (filterExpression == null) {
-            return null;
-        }
-
-        return null;
     }
 
     private PointStruct toPointStruct(Document doc) {
