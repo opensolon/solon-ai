@@ -143,7 +143,7 @@ public class ChromaRepositoryTest {
             // 打印所有结果的评分
             System.out.println("\n=== 评分测试结果 ===");
             for (Document doc : results) {
-                double score = ((Number) doc.getMetadata().get("score")).doubleValue();
+                double score = doc.getScore();
                 System.out.println("ID: " + doc.getId());
                 System.out.println("Score: " + score);
                 System.out.println("Content: " + doc.getContent().substring(0, Math.min(50, doc.getContent().length())) + "...");
