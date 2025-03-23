@@ -7,7 +7,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
@@ -183,7 +182,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         }
 
         // 分批处理
-        for(List<Document> batch: ListUtil.partition(documents)) {
+        for (List<Document> batch : ListUtil.partition(documents)) {
             config.embeddingModel.embed(batch);
             addDocuments(batch);
         }
@@ -405,8 +404,8 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         return config.client.getCollectionStats(collectionId);
     }
 
-    public static Builder builder(EmbeddingModel embeddingModel, String serverUrl) {
-        return new Builder(embeddingModel, serverUrl);
+    public static Builder builder(EmbeddingModel embeddingModel, ChromaClient client) {
+        return new Builder(embeddingModel, client);
     }
 
     public static class Builder {
@@ -425,9 +424,9 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
          */
         private String collectionName = "solon_ai";
 
-        private Builder(EmbeddingModel embeddingModel, String serverUrl) {
+        private Builder(EmbeddingModel embeddingModel, ChromaClient client) {
             this.embeddingModel = embeddingModel;
-            this.client = new ChromaClient(serverUrl);
+            this.client = client;
         }
 
         public Builder collectionName(String collectionName) {

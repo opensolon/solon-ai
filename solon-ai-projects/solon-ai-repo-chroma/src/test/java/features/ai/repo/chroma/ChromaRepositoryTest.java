@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.repository.ChromaRepository;
+import org.noear.solon.ai.rag.repository.chroma.ChromaClient;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.net.http.HttpUtils;
@@ -43,7 +44,7 @@ public class ChromaRepositoryTest {
             String uniqueCollectionName = COLLECTION_NAME + "_" + System.currentTimeMillis();
             System.out.println("Using unique collection name: " + uniqueCollectionName);
 
-            repository = ChromaRepository.builder(embeddingModel, SERVER_URL).build();
+            repository = ChromaRepository.builder(embeddingModel, new ChromaClient(SERVER_URL)).build();
 
             // 检查服务是否健康
             if (!repository.isHealthy()) {
