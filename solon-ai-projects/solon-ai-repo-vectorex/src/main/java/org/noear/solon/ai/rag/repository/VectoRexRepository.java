@@ -45,8 +45,6 @@ import java.util.*;
  */
 public class VectoRexRepository implements RepositoryStorable, RepositoryLifecycle {
     private final Builder config;
-    private static final String idName = "id";
-    private static final String vectorName = "embedding";
 
     private VectoRexRepository(Builder config) {
         this.config = config;
@@ -56,11 +54,11 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     public void initRepository() throws Exception {
         List<ScalarField> scalarFields = new ArrayList();
 
-        ScalarField id = ScalarField.builder().name(idName).isPrimaryKey(true).build();
+        ScalarField id = ScalarField.builder().name(config.idFieldName).isPrimaryKey(true).build();
         scalarFields.add(id);
 
         List<VectorFiled> vectorFileds = new ArrayList();
-        VectorFiled vector = VectorFiled.builder().name(vectorName)
+        VectorFiled vector = VectorFiled.builder().name(config.embeddingFieldName)
                 .metricType(MetricType.FLOAT_CANBERRA_DISTANCE)
                 .dimensions(3)
                 .build();
@@ -88,10 +86,10 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
             CollectionDataAddReq req = CollectionDataAddReq.builder()
                     .collectionName(config.collectionName)
                     .metadata(new HashMap<String, Object>() {{
-                        put(idName, doc.getId());
-                        put(vectorName, doc.getEmbedding());
-                        put("content", doc.getContent());
-                        put("metadata", doc.getMetadata());
+                        put(config.idFieldName, doc.getId());
+                        put(config.embeddingFieldName, doc.getEmbedding());
+                        put(config.contentFieldName, doc.getContent());
+                        put(config.metadataFieldName, doc.getMetadata());
                     }})
                     .build();
 
@@ -118,7 +116,7 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     @Override
     public boolean exists(String id) throws IOException {
         QueryBuilder queryBuilder = QueryBuilder.lambda(config.collectionName);
-        queryBuilder.eq(idName, id);
+        queryBuilder.eq(config.idFieldName, id);
         ServerResponse<List<VectorSearchResult>> response = config.client.queryCollectionData(queryBuilder);
 
         return response.isSuccess() && Utils.isNotEmpty(response.getData());
@@ -131,7 +129,7 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
         QueryBuilder queryBuilder = new FilterTransformer(config.collectionName)
                 .transform(condition.getFilterExpression());
 
-        queryBuilder.vector(vectorName, Arrays.asList(embed))
+        queryBuilder.vector(config.embeddingFieldName, Arrays.asList(embed))
                 .topK(condition.getLimit());
 
         ServerResponse<List<VectorSearchResult>> response = config.client.queryCollectionData(queryBuilder);
@@ -145,9 +143,9 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
 
     private Document toDocument(VectorSearchResult rst) {
         return new Document(
-                (String) rst.getData().getMetadata().get("id"),
-                (String) rst.getData().getMetadata().get("content"),
-                (Map<String, Object>) rst.getData().getMetadata().get("metadata"),
+                (String) rst.getData().getMetadata().get(config.idFieldName),
+                (String) rst.getData().getMetadata().get(config.contentFieldName),
+                (Map<String, Object>) rst.getData().getMetadata().get(config.metadataFieldName),
                 rst.getScore());
     }
 
@@ -159,6 +157,11 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
         private final EmbeddingModel embeddingModel;
         private final VectorRexClient client;
         private String collectionName = "solon_ai";
+
+        private final String idFieldName = "id";
+        private final String embeddingFieldName = "embedding";
+        private final String contentFieldName = "content";
+        private final String metadataFieldName = "metadata";
 
         public Builder(EmbeddingModel embeddingModel, VectorRexClient client) {
             this.embeddingModel = embeddingModel;

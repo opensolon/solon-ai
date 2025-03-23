@@ -134,7 +134,8 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
     @Override
     public boolean exists(String id) throws IOException {
         try {
-            List<RetrievedPoint> points = config.client.retrieveAsync(GetPoints.newBuilder().setCollectionName(config.collectionName)
+            List<RetrievedPoint> points = config.client.retrieveAsync(
+                    GetPoints.newBuilder().setCollectionName(config.collectionName)
                     .addIds(PointIdFactory.id(UUID.fromString(id))).build(), null).get();
 
             return points.size() > 0;
@@ -152,7 +153,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
                     .setQuery(nearest(queryVector))
                     .setLimit(condition.getLimit())
                     .setScoreThreshold((float) condition.getSimilarityThreshold())
-                    .setWithPayload(include(Arrays.asList(config.contentKey, config.metadataKey)))
+                    .setWithPayload(include(Arrays.asList(config.contentFieldName, config.metadataFieldName)))
                     .setWithVectors(enable(true));
 
             Filter filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
@@ -178,7 +179,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
 
         Map<String, JsonWithInt.Value> payload = QdrantValueUtil.fromMap(doc.getMetadata());
 
-        payload.put(config.contentKey, value(doc.getContent()));
+        payload.put(config.contentFieldName, value(doc.getContent()));
 
         if (doc.getMetadata() != null) {
             String metadataJson = ONode.stringify(doc.getMetadata());
@@ -196,11 +197,11 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
 
         Map<String, JsonWithInt.Value> payload = scoredPoint.getPayloadMap();
 
-        String content = payload.get(config.contentKey).getStringValue();
+        String content = payload.get(config.contentFieldName).getStringValue();
 
         Map<String, Object> metadata = null;
-        if (payload.containsKey(config.metadataKey)) {
-            String metadataJson = payload.get(config.metadataKey).getStringValue();
+        if (payload.containsKey(config.metadataFieldName)) {
+            String metadataJson = payload.get(config.metadataFieldName).getStringValue();
             metadata = ONode.deserialize(metadataJson, Map.class);
         }
 
@@ -226,8 +227,9 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
         private final EmbeddingModel embeddingModel;
         private final QdrantClient client;
         private String collectionName = "solon_ai";
-        private String contentKey = "content";
-        private String metadataKey = "metadata";
+
+        private String contentFieldName = "content";
+        private String metadataFieldName = "metadata";
 
         public Builder(EmbeddingModel embeddingModel, QdrantClient client) {
             this.embeddingModel = embeddingModel;

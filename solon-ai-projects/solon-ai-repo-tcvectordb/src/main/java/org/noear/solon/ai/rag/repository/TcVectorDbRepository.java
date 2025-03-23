@@ -29,6 +29,7 @@ import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.tcvectordb.FilterTransformer;
 import org.noear.solon.ai.rag.repository.tcvectordb.MetadataField;
+import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.lang.Preview;
@@ -216,17 +217,19 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
             return;
         }
 
-        try {
-            // 确保所有文档都有ID
-            for (Document doc : documents) {
-                if (Utils.isEmpty(doc.getId())) {
-                    doc.id(Utils.uuid());
-                }
-            }
 
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
+            }
+        }
+
+        // 分批处理
+        for (List<Document> batch : ListUtil.partition(documents)) {
             // 准备上传到VectorDB的文档
-            List<com.tencent.tcvectordb.model.Document> vectorDbDocs = new ArrayList<>();
-            for (Document document : documents) {
+            List<com.tencent.tcvectordb.model.Document> batchDocs = new ArrayList<>();
+            for (Document document : batch) {
                 com.tencent.tcvectordb.model.Document.Builder builder = com.tencent.tcvectordb.model.Document.newBuilder()
                         .withId(document.getId())
                         .withDoc(document.getContent())
@@ -239,21 +242,19 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
                     }
                 }
 
-                vectorDbDocs.add(builder.build());
+                batchDocs.add(builder.build());
             }
 
             // 插入文档
             InsertParam insertParam = InsertParam.newBuilder()
-                    .addAllDocument(vectorDbDocs)
+                    .addAllDocument(batchDocs)
                     .withBuildIndex(true)
                     .build();
             AffectRes upsert = collection.upsert(insertParam);
+
             if (upsert.getCode() != 0) {
                 throw new IOException("Failed to insert documents: " + upsert.getMsg());
             }
-
-        } catch (Exception e) {
-            throw new IOException("Failed to insert documents: " + e.getMessage(), e);
         }
     }
 
@@ -298,8 +299,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
                     .withLimit(1)
                     .build();
 
-            List<com.tencent.tcvectordb.model.Document> documents = collection.query(queryParam);
-            return documents != null && !documents.isEmpty();
+            return Utils.isNotEmpty(collection.query(queryParam));
         } catch (Exception e) {
             throw new IOException("Failed to check document existence: " + e.getMessage(), e);
         }
@@ -352,9 +352,10 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
      */
     private static List<Document> getDocuments(SearchRes searchRes) {
         List<Document> results = new ArrayList<>();
-        if (searchRes.getDocuments() == null || searchRes.getDocuments().isEmpty()) {
+        if (Utils.isEmpty(searchRes.getDocuments())) {
             return results;
         }
+
         for (List<com.tencent.tcvectordb.model.Document> documents : searchRes.getDocuments()) {
             for (com.tencent.tcvectordb.model.Document doc : documents) {
                 // 提取文档内容

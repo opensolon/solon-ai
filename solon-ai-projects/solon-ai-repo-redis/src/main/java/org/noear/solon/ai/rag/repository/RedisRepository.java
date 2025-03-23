@@ -55,8 +55,6 @@ import redis.clients.jedis.search.schemafields.VectorField;
  * @since 3.1
  */
 public class RedisRepository implements RepositoryStorable, RepositoryLifecycle {
-    private static final String CONTENT = "content";
-    private static final String METADATA = "metadata";
     public static final String BLOB = "BLOB";
     public static final String SCORE = "score";
     private static final String QUERY_FORMAT = "%s=>[KNN %s @%s $%s AS %s]";
@@ -238,7 +236,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         String queryString = String.format(QUERY_FORMAT, filter, condition.getLimit(), EMBEDDING_NAME,
                 BLOB, SCORE);
 
-        String[] returnFields = {JSON_PATH + CONTENT, JSON_PATH + METADATA, SCORE};
+        String[] returnFields = {JSON_PATH + config.contentFieldName, JSON_PATH + config.metadataFieldName, SCORE};
 
         try {
             // 创建向量查询对象
@@ -303,6 +301,9 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         private List<MetadataField> metadataIndexFields = new ArrayList<>();
         private VectorField.VectorAlgorithm algorithm = VectorField.VectorAlgorithm.HNSW;
         private String distanceMetric = "COSINE";
+
+        private String contentFieldName = "content";
+        private String metadataFieldName = "metadata";
 
         /**
          * 构造器
