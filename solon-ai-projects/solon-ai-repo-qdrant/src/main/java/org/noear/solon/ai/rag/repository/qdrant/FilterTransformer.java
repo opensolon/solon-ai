@@ -55,14 +55,14 @@ public class FilterTransformer implements Transformer<Boolean, Points.Filter> {
             LogicalNode logicalNode = (LogicalNode) operand;
 
             switch (logicalNode.getOperator()) {
-                case not:
+                case NOT:
                     mustNotClauses.add(io.qdrant.client.ConditionFactory.filter(transformDo(logicalNode.getLeft())));
                     break;
-                case and:
+                case AND:
                     mustClauses.add(io.qdrant.client.ConditionFactory.filter(transformDo(logicalNode.getLeft())));
                     mustClauses.add(io.qdrant.client.ConditionFactory.filter(transformDo(logicalNode.getRight())));
                     break;
-                case or:
+                case OR:
                     shouldClauses.add(io.qdrant.client.ConditionFactory.filter(transformDo(logicalNode.getLeft())));
                     shouldClauses.add(io.qdrant.client.ConditionFactory.filter(transformDo(logicalNode.getRight())));
                     break;

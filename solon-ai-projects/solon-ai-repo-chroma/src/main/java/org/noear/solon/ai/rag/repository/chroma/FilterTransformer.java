@@ -171,11 +171,11 @@ public class FilterTransformer implements Transformer<Boolean, Map<String, Objec
                 parseFilterExpression(rightExpr, rightMap2);
 
                 switch (logicalOp) {
-                    case and:
+                    case AND:
                         // AND操作 - 使用$and操作符
                         result.put("$and", Arrays.asList(leftMap2, rightMap2));
                         break;
-                    case or:
+                    case OR:
                         // OR操作 - 使用$or操作符
                         result.put("$or", Arrays.asList(leftMap2, rightMap2));
                         break;
@@ -189,7 +189,7 @@ public class FilterTransformer implements Transformer<Boolean, Map<String, Objec
                 parseFilterExpression(leftExpr, leftMap2);
 
                 switch (logicalOp) {
-                    case not:
+                    case NOT:
                         // NOT操作 - 使用$not操作符
                         result.put("$not", leftMap2);
                         break;

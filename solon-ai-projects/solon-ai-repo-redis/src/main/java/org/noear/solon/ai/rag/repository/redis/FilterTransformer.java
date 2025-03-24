@@ -166,10 +166,10 @@ public class FilterTransformer implements Transformer<Boolean, String> {
                 parseFilterExpression(left, buf);
 
                 switch (operator) {
-                    case and:
+                    case AND:
                         buf.append(" "); // Redis Search 使用空格表示 AND
                         break;
-                    case or:
+                    case OR:
                         buf.append(" | "); // Redis Search 使用 | 表示 OR
                         break;
                     default:
@@ -182,7 +182,7 @@ public class FilterTransformer implements Transformer<Boolean, String> {
             } else {
                 // 一元操作符 (NOT)
                 switch (operator) {
-                    case not:
+                    case NOT:
                         buf.append("-"); // Redis Search 使用 - 表示 NOT
                         break;
                     default:

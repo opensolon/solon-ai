@@ -203,10 +203,10 @@ public class FilterTransformer implements Transformer<Boolean,Filter> {
 
                 // 处理操作符
                 switch (logicalOp) {
-                    case and:
+                    case AND:
                         buf.append(" and ");
                         break;
-                    case or:
+                    case OR:
                         buf.append(" or ");
                         break;
                     default:
@@ -220,7 +220,7 @@ public class FilterTransformer implements Transformer<Boolean,Filter> {
                 if (needParentheses) {
                     buf.append(")");
                 }
-            } else if (leftExpr != null && logicalOp == LogicalOp.not) {
+            } else if (leftExpr != null && logicalOp == LogicalOp.NOT) {
                 // 一元逻辑操作符 (NOT)
                 buf.append("not(");
                 parseFilterExpressionToString(leftExpr, buf);

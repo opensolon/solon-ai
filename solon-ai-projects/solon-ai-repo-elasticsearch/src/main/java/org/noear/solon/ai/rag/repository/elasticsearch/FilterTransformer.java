@@ -146,10 +146,10 @@ public class FilterTransformer implements Transformer<Boolean, Map<String, Objec
                 conditions.add(rightQuery);
 
                 switch (operator) {
-                    case and:
+                    case AND:
                         boolQuery.put("must", conditions);
                         break;
-                    case or:
+                    case OR:
                         boolQuery.put("should", conditions);
                         break;
                     default:
@@ -167,7 +167,7 @@ public class FilterTransformer implements Transformer<Boolean, Map<String, Objec
                     return null;
                 }
 
-                if (operator == LogicalOp.not) {
+                if (operator == LogicalOp.NOT) {
                     return createMustNotQuery(operandQuery);
                 }
             }

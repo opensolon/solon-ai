@@ -97,12 +97,12 @@ public class FilterTransformer implements Transformer<Boolean, QueryBuilder> {
             LogicalNode opNode = (LogicalNode) node;
 
             switch (opNode.getOperator()) {
-                case and: {
+                case AND: {
                     QueryBuilder leftQb = transformDo(opNode.getLeft());
                     QueryBuilder rightQb = transformDo(opNode.getRight());
                     return leftQb.and(rightQb);
                 }
-                case or: {
+                case OR: {
                     QueryBuilder leftQb = transformDo(opNode.getLeft());
                     QueryBuilder rightQb = transformDo(opNode.getRight());
                     return leftQb.or(rightQb);
