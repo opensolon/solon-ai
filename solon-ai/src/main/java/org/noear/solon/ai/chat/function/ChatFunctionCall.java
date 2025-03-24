@@ -26,19 +26,31 @@ import java.util.Map;
  * @since 3.1
  */
 public class ChatFunctionCall implements Serializable {
+    private int index;
     private String id;
     private String name;
-    private Map<String, Object> arguments;
+    private String argumentsStr;
+    private Map<String, Object> argumentsMap;
 
-    public ChatFunctionCall(String id, String name, Map<String, Object> arguments) {
+    public ChatFunctionCall(int index, String id, String name, String argumentsStr, Map<String, Object> argumentsMap) {
+        this.index = index;
         this.id = id;
         this.name = name;
 
-        if (arguments == null) {
-            this.arguments = Collections.emptyMap();
+        this.argumentsStr = argumentsStr;
+
+        if (argumentsMap == null) {
+            this.argumentsMap = Collections.emptyMap();
         } else {
-            this.arguments = Collections.unmodifiableMap(arguments);
+            this.argumentsMap = Collections.unmodifiableMap(argumentsMap);
         }
+    }
+
+    /**
+     * 索引位（流式调用时）
+     */
+    public int index() {
+        return index;
     }
 
     /**
@@ -56,9 +68,16 @@ public class ChatFunctionCall implements Serializable {
     }
 
     /**
-     * 调用参数
+     * 调用参数（字符串型式）
+     */
+    public String argumentsStr() {
+        return argumentsStr;
+    }
+
+    /**
+     * 调用参数（字典型式）
      */
     public Map<String, Object> arguments() {
-        return arguments;
+        return argumentsMap;
     }
 }

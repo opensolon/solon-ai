@@ -15,9 +15,11 @@
  */
 package org.noear.solon.ai.chat.dialect;
 
+import org.noear.snack.ONode;
 import org.noear.solon.ai.AiModelDialect;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.function.ChatFunctionCall;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.lang.Preview;
@@ -53,4 +55,9 @@ public interface ChatDialect extends AiModelDialect {
      * @param config 聊天配置
      */
     boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String respJson);
+
+    /**
+     * 分析工具调用
+     */
+    List<ChatFunctionCall> parseToolCalls(ONode toolCallsNode);
 }

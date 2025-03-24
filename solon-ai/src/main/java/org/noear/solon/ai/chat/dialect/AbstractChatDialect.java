@@ -195,7 +195,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }).toJson();
     }
 
-    protected List<ChatFunctionCall> parseToolCalls(ONode toolCallsNode) {
+    public List<ChatFunctionCall> parseToolCalls(ONode toolCallsNode) {
         if (toolCallsNode == null) {
             return null;
         }
@@ -203,21 +203,31 @@ public abstract class AbstractChatDialect implements ChatDialect {
         List<ChatFunctionCall> toolCalls = new ArrayList<>();
 
         for (ONode n1 : toolCallsNode.ary()) {
-            String callId = n1.get("id").getString();
-
-            ONode n1f = n1.get("function");
-            String name = n1f.get("name").getString();
-            ONode n1fArgs = n1f.get("arguments");
-            if (n1fArgs.isValue()) {
-                //有可能是 json string
-                n1fArgs = ONode.loadStr(n1fArgs.getString());
-            }
-
-            Map<String, Object> args = n1fArgs.toObject(Map.class);
-            toolCalls.add(new ChatFunctionCall(callId, name, args));
+            toolCalls.add(parseFunctionCall(n1));
         }
 
         return toolCalls;
+    }
+
+    protected ChatFunctionCall parseFunctionCall(ONode n1) {
+        int index = n1.get("index").getInt();
+        String callId = n1.get("id").getString();
+
+        ONode n1f = n1.get("function");
+        String name = n1f.get("name").getString();
+        ONode n1fArgs = n1f.get("arguments");
+        String argStr = n1fArgs.getString();
+
+        if (n1fArgs.isValue()) {
+            //有可能是 json string
+            n1fArgs = ONode.loadStr(argStr);
+        }
+
+        Map<String, Object> argMap = null;
+        if (n1fArgs.isObject()) {
+            argMap = n1fArgs.toObject(Map.class);
+        }
+        return new ChatFunctionCall(index, callId, name, argStr, argMap);
     }
 
     protected List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {

@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.function.ChatFunction;
 import org.noear.solon.ai.chat.function.ChatFunctionCall;
 import org.noear.solon.ai.chat.function.ChatFunctionParam;
+import org.noear.solon.ai.chat.function.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.MimeType;
@@ -120,7 +121,7 @@ public class ChatRequestDefault implements ChatRequest {
             AssistantMessage choiceMessage = resp.getMessage();
             if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
                 messages.add(choiceMessage);
-                buildToolMessage(choiceMessage);
+                buildToolMessage(resp, choiceMessage);
 
                 return call();
             }
@@ -165,19 +166,34 @@ public class ChatRequestDefault implements ChatRequest {
         try {
             if (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE)) {
                 TextStreamUtil.parseEventStream(httpResp.body(), new SimpleSubscriber<ServerSentEvent>()
+                        .doOnSubscribe(subscriber::onSubscribe)
                         .doOnNext(event -> {
-                            return onEventStream(resp, event, subscriber);
+                            onEventStream(resp, event, subscriber);
+                        })
+                        .doOnComplete(() -> {
+                            onEnd(resp, subscriber);
                         })
                         .doOnError(subscriber::onError));
             } else {
                 TextStreamUtil.parseTextStream(httpResp.body(), new SimpleSubscriber<String>()
+                        .doOnSubscribe(subscriber::onSubscribe)
                         .doOnNext(data -> {
-                            return onEventStream(resp, new ServerSentEvent(null, data), subscriber);
+                            onEventStream(resp, new ServerSentEvent(null, data), subscriber);
+                        })
+                        .doOnComplete(() -> {
+                            onEnd(resp, subscriber);
                         })
                         .doOnError(subscriber::onError));
             }
         } catch (Throwable ex) {
             subscriber.onError(ex);
+        }
+    }
+
+    private void onEnd(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
+        if(resp.isFinished() == false &&  resp.toolCallBuilders.size() > 0) {
+            buildStreamToolMessage(resp);
+            stream().subscribe(subscriber);
         }
     }
 
@@ -200,11 +216,8 @@ public class ChatRequestDefault implements ChatRequest {
             if (resp.hasChoices()) {
                 AssistantMessage choiceMessage = resp.getMessage();
                 if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
-                    messages.add(choiceMessage);
-                    buildToolMessage(choiceMessage);
-
-                    stream().subscribe(subscriber);
-                    return false;
+                    //messages.add(choiceMessage);
+                    buildToolCallBuilder(resp, choiceMessage);
                 }
 
                 if (choiceMessage != null) {
@@ -224,19 +237,70 @@ public class ChatRequestDefault implements ChatRequest {
             }
 
             if (resp.isFinished()) {
-                subscriber.onComplete();
+                if (resp.toolCallBuilders.size() > 0) {
+                    buildStreamToolMessage(resp);
+                    stream().subscribe(subscriber);
+                } else {
+                    subscriber.onComplete();
+                }
             }
         }
 
         return true;
     }
 
+    private void buildStreamToolMessage(ChatResponseDefault resp) {
+        ONode toolCallsNode = new ONode().asArray();
+        toolCallsNode.build(n1 -> {
+            for (Map.Entry<Integer, ToolCallBuilder> kv : resp.toolCallBuilders.entrySet()) {
+                n1.addNew().set("id", kv.getValue().idBuilder.toString())
+                        .set("type", "function")
+                        .getOrNew("function").build(n2 -> {
+                            n2.set("name", kv.getValue().nameBuilder.toString())
+                                    .set("arguments", kv.getValue().argumentsBuilder.toString());
+                        });
+            }
+        });
+
+        List<ChatFunctionCall> functionCalls = dialect.parseToolCalls(toolCallsNode);
+
+        AssistantMessage assistantMessage = new AssistantMessage("", false,
+                toolCallsNode.toObjectList(Map.class),
+                functionCalls);
+
+        buildToolMessage(resp, assistantMessage);
+    }
+
     private void publishResponse(Subscriber<? super ChatResponse> subscriber, ChatResponseDefault resp, ChatChoice choice) {
-        resp.aggregationMessageContent.append(choice.getMessage().getContent());
+        if (choice.getMessage().getContent() != null) {
+            resp.aggregationMessageContent.append(choice.getMessage().getContent());
+        }
         subscriber.onNext(resp);
     }
 
-    private void buildToolMessage(AssistantMessage acm) throws ChatException {
+    private void buildToolCallBuilder(ChatResponseDefault resp, AssistantMessage acm){
+        if (Utils.isEmpty(acm.getToolCalls())) {
+            return;
+        }
+
+        for (ChatFunctionCall call : acm.getToolCalls()) {
+            ToolCallBuilder callBuilder =  resp.toolCallBuilders.computeIfAbsent(call.index(), k->new ToolCallBuilder());
+
+            if(call.id() != null){
+                callBuilder.idBuilder.append(call.id());
+            }
+
+            if(call.name() != null){
+                callBuilder.nameBuilder.append(call.name());
+            }
+
+            if(call.argumentsStr() != null){
+                callBuilder.argumentsBuilder.append(call.argumentsStr());
+            }
+        }
+    }
+
+    private void buildToolMessage(ChatResponseDefault resp, AssistantMessage acm) throws ChatException {
         if (Utils.isEmpty(acm.getToolCalls())) {
             return;
         }
