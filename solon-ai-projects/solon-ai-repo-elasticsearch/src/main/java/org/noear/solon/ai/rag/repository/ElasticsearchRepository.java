@@ -15,12 +15,6 @@
  */
 package org.noear.solon.ai.rag.repository;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
@@ -41,6 +35,9 @@ import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.core.util.IoUtil;
 import org.noear.solon.lang.Preview;
+
+import java.io.IOException;
+import java.util.*;
 
 /**
  * Elasticsearch 矢量存储知识库
@@ -64,7 +61,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     public void initRepository() {
         try {
             GetIndexRequest getIndexRequest = new GetIndexRequest(config.indexName);
-            if (config.client.indices().exists(getIndexRequest, RequestOptions.DEFAULT) == false) {
+            if (!config.client.indices().exists(getIndexRequest, RequestOptions.DEFAULT)) {
                 CreateIndexRequest createIndexRequest = new CreateIndexRequest(config.indexName);
                 createIndexRequest.source(buildIndexMapping());
                 config.client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
@@ -97,6 +94,8 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
                 .startObject("embedding")
                 .field("type", "dense_vector")
                 .field("dims", dims)
+                .field("index",true)
+                .field("similarity","cosine")
                 .endObject();
 
         // 如果有元数据字段需要索引，将其平铺到顶层
@@ -106,10 +105,6 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
                 switch (field.getFieldType()) {
                     case NUMERIC:
                         builder.field("type", "float");
-                        break;
-                    case TAG:
-                    case KEYWORD:
-                        builder.field("type", "keyword");
                         break;
                     case TEXT:
                         builder.field("type", "text");
@@ -146,7 +141,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
 
     /**
      * 搜索文档
-     * 支持文本搜索、向量相似度搜索和元数据过滤
+     * 支持向量相似度搜索和元数据过滤
      *
      * @param condition 查询条件，包含查询文本、过滤器等
      * @return 匹配的文档列表
@@ -155,18 +150,28 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      */
     @Override
     public List<Document> search(QueryCondition condition) throws IOException {
-        String responseBody = executeSearch(condition);
+        if (condition.getQuery() == null || condition.getQuery().isEmpty()) {
+            throw new IllegalArgumentException("Query text cannot be empty for vector search");
+        }
+
+        // 生成查询向量
+        Document queryDoc = new Document(condition.getQuery());
+        config.embeddingModel.embed(Collections.singletonList(queryDoc));
+        float[] queryVector = queryDoc.getEmbedding();
+
+        String responseBody = executeSearch(condition, queryVector);
         return parseSearchResponse(responseBody);
     }
 
     /**
      * 执行搜索请求
      */
-    private String executeSearch(QueryCondition condition) throws IOException {
+    private String executeSearch(QueryCondition condition, float[] queryVector) throws IOException {
         Request request = new Request("POST", "/" + config.indexName + "/_search");
 
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("query", translate(condition));
+        Map<String, Object> query = translate(condition, queryVector);
+        requestBody.put("query", query);
         requestBody.put("size", condition.getLimit() > 0 ? condition.getLimit() : 10);
 
         // 将min_score作为顶层参数添加到请求体中
@@ -326,41 +331,46 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     /**
      * 转换查询条件为 ES 查询语句
      */
-    private Map<String, Object> translate(QueryCondition condition) {
+    private Map<String, Object> translate(QueryCondition condition, float[] queryVector) {
         Map<String, Object> query = new HashMap<>();
-        Map<String, Object> bool = new HashMap<>();
-        List<Map<String, Object>> must = new ArrayList<>();
+        Map<String, Object> scriptScore = new HashMap<>();
 
-        // 构建文本查询
-        if (condition.getQuery() != null && !condition.getQuery().isEmpty()) {
-            Map<String, Object> match = new HashMap<>();
-            Map<String, Object> matchQuery = new HashMap<>();
-            matchQuery.put("content", condition.getQuery());
-            match.put("match", matchQuery);
-            must.add(match);
-        } else {
-            // 空查询时返回所有文档
-            Map<String, Object> matchAll = new HashMap<>();
-            matchAll.put("match_all", new HashMap<>());
-            must.add(matchAll);
-        }
-
-        // 构建过滤条件
+        // 创建基础查询
+        Map<String, Object> baseQuery = new HashMap<>();
         if (condition.getFilterExpression() != null) {
             Map<String, Object> filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
             if (filter != null) {
-                bool.put("filter", filter);
+                baseQuery = filter;
+            } else {
+                // 如果没有过滤条件，使用match_all
+                Map<String, Object> matchAll = new HashMap<>();
+                baseQuery.put("match_all", matchAll);
             }
+        } else {
+            // 如果没有过滤条件，使用match_all
+            Map<String, Object> matchAll = new HashMap<>();
+            baseQuery.put("match_all", matchAll);
         }
 
-        bool.put("must", must);
-        query.put("bool", bool);
+        // 设置基础查询
+        scriptScore.put("query", baseQuery);
 
-        // 处理最小相似度过滤
-        if (condition.getSimilarityThreshold() > 0) {
-            // 不要创建嵌套的query结构，直接在外层添加min_score
-            return query;
-        }
+        // 构建脚本计算余弦相似度
+        Map<String, Object> script = new HashMap<>();
+
+        // 在ES 7.x中使用内置的cosineSimilarity函数
+        String scriptContent = "cosineSimilarity(params.query_vector, 'embedding') + 1.0";
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("query_vector", queryVector);
+
+        script.put("source", scriptContent);
+        script.put("params", params);
+
+        scriptScore.put("script", script);
+
+        // 设置最终查询
+        query.put("script_score", scriptScore);
 
         return query;
     }
