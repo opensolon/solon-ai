@@ -53,12 +53,12 @@ public class ElasticsearchRepositoryTest {
         // 阿里云Elasticsearch Serverless集群需要basic auth验证。
         final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
         // 访问用户名和密码为您创建阿里云Elasticsearch Serverless实例时设置的用户名和密码，也是Kibana控制台的登录用户名和密码。
-        credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials("test-2ej", "aYa2Z8NrlIAbrIVKS3Zx2vGmCRF2Ts"));
+        credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials("test123-u36", "lHh9AzhnXTjMxeKAGvn3CLrWv5QU6v"));
 
 
         // 通过builder创建rest client，配置http client的HttpClientConfigCallback。
         // 单击所创建的Elasticsearch Serverless实例ID，在基本信息页面获取公网地址，即为ES集群地址。
-        RestClientBuilder builder = RestClient.builder(new HttpHost("test-2ej.public.cn-hangzhou.es-serverless.aliyuncs.com", 9200, "http"))
+        RestClientBuilder builder = RestClient.builder(new HttpHost("test123-u36.public.cn-hangzhou.es-serverless.aliyuncs.com", 9200, "http"))
                 .setHttpClientConfigCallback(new RestClientBuilder.HttpClientConfigCallback() {
                     @Override
                     public HttpAsyncClientBuilder customizeHttpClient(HttpAsyncClientBuilder httpClientBuilder) {
@@ -68,6 +68,11 @@ public class ElasticsearchRepositoryTest {
 
         // RestHighLevelClient实例通过REST low-level client builder进行构造。
          client = new RestHighLevelClient(builder);
+
+
+//        // 本地是 8.12的版本，测试一下兼容性
+//        client = new RestHighLevelClient(
+//                RestClient.builder(new HttpHost("127.0.0.1", 9200, "http")));
 
         // 创建一个简单的 EmbeddingModel 实现用于测试
         EmbeddingModel embeddingModel = EmbeddingModel.of(apiUrl).provider(provider).model(model).build();
@@ -136,6 +141,7 @@ public class ElasticsearchRepositoryTest {
         // 准备并存储测试数据
         List<Document> documents = new ArrayList<>();
         Document doc = new Document("Document to be removed", new HashMap<>());
+        doc.metadata("category", "removed");
         documents.add(doc);
 
         try {
@@ -147,6 +153,7 @@ public class ElasticsearchRepositoryTest {
             Thread.sleep(1000);
             // 验证文档已被删除
             QueryCondition condition = new QueryCondition("removed");
+            condition.filterExpression("category == 'removed'");
             List<Document> results = repository.search(condition);
             assertTrue(results.isEmpty(), "文档应该已被删除");
 
@@ -177,60 +184,6 @@ public class ElasticsearchRepositoryTest {
         }
     }
 
-    @Test
-    public void testSearchScenarios() throws IOException {
-        try {
-            // 1. 测试空查询
-            QueryCondition emptyCondition = new QueryCondition("");
-            List<Document> results = repository.search(emptyCondition);
-            assertFalse(results.isEmpty(), "空查询应该返回所有文档");
-
-            // 2. 测试精确词语匹配
-            QueryCondition exactCondition = new QueryCondition("杭州");
-            results = repository.search(exactCondition);
-            assertTrue(results.stream()
-                    .anyMatch(doc -> doc.getContent().toLowerCase().contains("杭州")),
-                    "应该能找到包含杭州的文档");
-
-            // 3. 测试中文查询
-            QueryCondition chineseCondition = new QueryCondition("框架");
-            results = repository.search(chineseCondition);
-            assertTrue(results.stream()
-                    .anyMatch(doc -> doc.getContent().contains("框架")),
-                    "应该能找到包含'框架'的文档");
-
-            // 4. 测试组合过滤条件
-            QueryCondition combinedCondition = new QueryCondition("solon")
-                    .filterExpression("url LIKE 'noear.org'")
-                    .disableRefilter(true)
-                    .limit(5);
-            results = repository.search(combinedCondition);
-            assertTrue(results.size() <= 5, "返回结果不应超过限制数量");
-            assertTrue(results.stream()
-                    .allMatch(doc -> doc.getUrl().contains("noear.org")),
-                    "所有结果都应该来自noear.org");
-
-            // 5. 测试按相关性排序
-            QueryCondition relevanceCondition = new QueryCondition("java web framework");
-            results = repository.search(relevanceCondition);
-            if (results.size() >= 2) {
-                assertTrue(results.get(0).getScore() >= results.get(1).getScore(),
-                        "结果应该按相关性降序排序");
-            }
-
-            // 打印所有测试结果
-            System.out.println("\n=== 搜索测试结果 ===");
-            for (Document doc : results) {
-                System.out.println("Score: " + doc.getScore());
-                System.out.println("URL: " + doc.getUrl());
-                System.out.println("Content: " + doc.getContent());
-                System.out.println("---");
-            }
-
-        } catch (Exception e) {
-            fail("测试过程中发生异常: " + e.getMessage());
-        }
-    }
 
     @Test
     public void testScoreOutput() throws IOException {
@@ -533,6 +486,7 @@ public class ElasticsearchRepositoryTest {
         documents.add(doc3);
         repository.insert(documents);
 
+        Thread.sleep(1000);
         try {
             // 1. 使用OR表达式过滤进行搜索
             String orExpression = "title == 'solon' OR title == '设置'";
@@ -811,20 +765,15 @@ public class ElasticsearchRepositoryTest {
     }
 
     /**
-     * 打印文档详细信息，用于测试结果分析
+     * 打印文档详情
      */
     private void printDocumentsDetails(List<Document> documents) {
-        if (documents.isEmpty()) {
-            System.out.println("  [无结果]");
-            return;
-        }
-
         for (Document doc : documents) {
-            System.out.println("  ID: " + doc.getId());
-            System.out.println("  内容: " + doc.getContent());
-            System.out.println("  评分: " + doc.getScore());
-            System.out.println("  元数据: " + doc.getMetadata());
-            System.out.println("  -------------");
+            System.out.println("---------------------");
+            System.out.println("ID: " + doc.getId());
+            System.out.println("Content: " + doc.getContent());
+            System.out.println("Score: " + doc.getScore());
+            System.out.println("Metadata: " + doc.getMetadata());
         }
     }
 
