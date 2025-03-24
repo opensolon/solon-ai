@@ -5,6 +5,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ChatSessionDefault;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
@@ -15,6 +16,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author noear 2025/1/28 created
@@ -106,29 +108,23 @@ public class OllamaTest {
                 .options(o -> o.functionAdd(new Tools()))
                 .stream();
 
+        AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
         CountDownLatch doneLatch = new CountDownLatch(1);
         publisher.subscribe(new SimpleSubscriber<ChatResponse>()
                 .doOnNext(resp -> {
-                    //chatSession.addMessage(resp.getMessage());
-                    log.info("{}", resp.getMessage());
+                    msgHolder.set(resp.getAggregationMessage());
+                    log.info("{}", resp.getAggregationMessage());
                 }).doOnComplete(() -> {
                     log.debug("::完成!");
                     doneLatch.countDown();
                 }).doOnError(err -> {
                     err.printStackTrace();
+                    msgHolder.set(null);
+                    doneLatch.countDown();
                 }));
 
         doneLatch.await();
-
-
-        //序列化测试
-        String ndjson1 = chatSession.toNdjson();
-        System.out.println(ndjson1);
-
-        chatSession.clear();
-        chatSession.loadNdjson(ndjson1);
-        String ndjson2 = chatSession.toNdjson();
-        System.out.println(ndjson2);
-        assert ndjson1.length() == ndjson2.length();
+        assert msgHolder.get() != null;
+        System.out.println(msgHolder.get());
     }
 }

@@ -84,8 +84,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
         oNode.getOrNew("tool_calls").asArray().build(n1 -> {
             for (Map.Entry<Integer, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
-                n1.addNew().set("index", kv.getKey())
-                        .set("id", kv.getValue().idBuilder.toString())
+                n1.addNew().set("id", kv.getValue().idBuilder.toString())
                         .set("type", "function")
                         .getOrNew("function").build(n2 -> {
                             n2.set("name", kv.getValue().nameBuilder.toString());
