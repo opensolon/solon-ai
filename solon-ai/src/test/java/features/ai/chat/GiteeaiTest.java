@@ -3,6 +3,7 @@ package features.ai.chat;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.rx.SimpleSubscriber;
@@ -12,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author noear 2025/1/28 created
@@ -20,7 +22,7 @@ public class GiteeaiTest {
     private static final Logger log = LoggerFactory.getLogger(GiteeaiTest.class);
     private static final String apiUrl = "https://ai.gitee.com/v1/chat/completions";
     private static final String apkKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
-    private static final String model = "Qwen2.5-72B-Instruct";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
+    private static final String model = "QwQ-32B";//"Qwen2.5-72B-Instruct";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
 
     @Test
     public void case1() throws IOException {
@@ -119,18 +121,23 @@ public class GiteeaiTest {
                 .options(o -> o.functionAdd(new Tools()))
                 .stream();
 
+        AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
         CountDownLatch doneLatch = new CountDownLatch(1);
         publisher.subscribe(new SimpleSubscriber<ChatResponse>()
                 .doOnNext(resp -> {
-                    log.info("{}", resp.getMessage());
+                    log.info("{}", resp.getAggregationMessage());
+                    msgHolder.set(resp.getAggregationMessage());
                 }).doOnComplete(() -> {
                     log.debug("::完成!");
                     doneLatch.countDown();
                 }).doOnError(err -> {
                     err.printStackTrace();
+                    msgHolder.set(null);
                     doneLatch.countDown();
                 }));
 
         doneLatch.await();
+        assert msgHolder.get() != null;
+        System.out.println(msgHolder.get());
     }
 }

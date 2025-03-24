@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.function;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,7 +38,7 @@ public interface ChatFunction {
     /**
      * 函数参数
      */
-    Iterable<ChatFunctionParam> params();
+    List<ChatFunctionParam> params();
 
     /**
      * 函数处理

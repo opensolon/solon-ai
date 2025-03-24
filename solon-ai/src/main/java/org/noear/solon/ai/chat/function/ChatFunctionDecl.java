@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.function;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -130,8 +131,8 @@ public class ChatFunctionDecl implements ChatFunction {
      * 函数参数
      */
     @Override
-    public Iterable<ChatFunctionParam> params() {
-        return params;
+    public List<ChatFunctionParam> params() {
+        return Collections.unmodifiableList(params);
     }
 
     /**

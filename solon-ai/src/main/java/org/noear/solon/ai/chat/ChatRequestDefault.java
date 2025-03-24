@@ -259,7 +259,7 @@ public class ChatRequestDefault implements ChatRequest {
                 }
             } else {
                 //会存在调用的call实际上不存在的情况
-                log.warn("tool call 名称 {} 不存在", call.name());
+                log.warn("Tool call not found: {}", call.name());
             }
         }
     }

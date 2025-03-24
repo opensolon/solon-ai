@@ -265,7 +265,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     content = "<think>\n\n" + reasoning_content + "</think>\n\n" + content;
                 }
             }
-        } else {
+        } else if (content != null) {
             //分析 think 状态
             if (resp.isStream()) {
                 //如果是流返回

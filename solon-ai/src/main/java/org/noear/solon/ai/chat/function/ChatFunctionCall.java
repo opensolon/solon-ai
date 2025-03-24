@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.function;
 
 import java.io.Serializable;
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -32,7 +33,12 @@ public class ChatFunctionCall implements Serializable {
     public ChatFunctionCall(String id, String name, Map<String, Object> arguments) {
         this.id = id;
         this.name = name;
-        this.arguments = arguments;
+
+        if (arguments == null) {
+            this.arguments = Collections.emptyMap();
+        } else {
+            this.arguments = Collections.unmodifiableMap(arguments);
+        }
     }
 
     /**

@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.annotation.FunctionParam;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -36,7 +37,7 @@ public class MethodChatFunction implements ChatFunction {
     private final Method method;
     private final String description;
     private final String name;
-    private final List<ChatFunctionParam> params;
+    private final List<ChatFunctionParam> params = new ArrayList<>();
 
     public MethodChatFunction(Object target, Method method) {
         this.target = target;
@@ -45,8 +46,6 @@ public class MethodChatFunction implements ChatFunction {
         FunctionMapping m1Anno = method.getAnnotation(FunctionMapping.class);
         this.name = Utils.annoAlias(m1Anno.name(), method.getName());
         this.description = m1Anno.description();
-
-        this.params = new ArrayList<>();
 
         for (Parameter p1 : method.getParameters()) {
             FunctionParam p1Anno = p1.getAnnotation(FunctionParam.class);
@@ -76,8 +75,8 @@ public class MethodChatFunction implements ChatFunction {
      * 函数参数
      */
     @Override
-    public Iterable<ChatFunctionParam> params() {
-        return params;
+    public List<ChatFunctionParam> params() {
+        return Collections.unmodifiableList(params);
     }
 
     /**
