@@ -26,7 +26,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
-import org.noear.solon.net.http.textstream.ServerSseEvent;
+import org.noear.solon.net.http.textstream.ServerSentEvent;
 import org.noear.solon.net.http.textstream.TextStreamUtil;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
@@ -164,7 +164,7 @@ public class ChatRequestDefault implements ChatRequest {
 
         try {
             if (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE)) {
-                TextStreamUtil.parseEventStream(httpResp.body(), new SimpleSubscriber<ServerSseEvent>()
+                TextStreamUtil.parseEventStream(httpResp.body(), new SimpleSubscriber<ServerSentEvent>()
                         .doOnNext(event -> {
                             return onEventStream(resp, event, subscriber);
                         })
@@ -172,7 +172,7 @@ public class ChatRequestDefault implements ChatRequest {
             } else {
                 TextStreamUtil.parseTextStream(httpResp.body(), new SimpleSubscriber<String>()
                         .doOnNext(data -> {
-                            return onEventStream(resp, new ServerSseEvent(null, data), subscriber);
+                            return onEventStream(resp, new ServerSentEvent(null, data), subscriber);
                         })
                         .doOnError(subscriber::onError));
             }
@@ -181,7 +181,7 @@ public class ChatRequestDefault implements ChatRequest {
         }
     }
 
-    private boolean onEventStream(ChatResponseDefault resp,ServerSseEvent event, Subscriber<? super ChatResponse> subscriber) {
+    private boolean onEventStream(ChatResponseDefault resp,ServerSentEvent event, Subscriber<? super ChatResponse> subscriber) {
         if (log.isTraceEnabled()) {
             log.trace("ai-response: {}", event.data());
         }
