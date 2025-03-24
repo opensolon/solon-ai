@@ -168,7 +168,7 @@ public class ChatRequestDefault implements ChatRequest {
                 TextStreamUtil.parseEventStream(httpResp.body(), new SimpleSubscriber<ServerSentEvent>()
                         .doOnSubscribe(subscriber::onSubscribe)
                         .doOnNext(event -> {
-                            onEventStream(resp, event, subscriber);
+                            return onEventStream(resp, event, subscriber);
                         })
                         .doOnComplete(() -> {
                             onEnd(resp, subscriber);
@@ -178,7 +178,7 @@ public class ChatRequestDefault implements ChatRequest {
                 TextStreamUtil.parseTextStream(httpResp.body(), new SimpleSubscriber<String>()
                         .doOnSubscribe(subscriber::onSubscribe)
                         .doOnNext(data -> {
-                            onEventStream(resp, new ServerSentEvent(null, data), subscriber);
+                            return onEventStream(resp, new ServerSentEvent(null, data), subscriber);
                         })
                         .doOnComplete(() -> {
                             onEnd(resp, subscriber);
@@ -250,20 +250,7 @@ public class ChatRequestDefault implements ChatRequest {
     }
 
     private void buildStreamToolMessage(ChatResponseDefault resp) {
-        ONode oNode = new ONode();
-        oNode.set("role", "assistant");
-        oNode.set("content", "");
-        oNode.getOrNew("tool_calls").asArray().build(n1 -> {
-            for (Map.Entry<Integer, ToolCallBuilder> kv : resp.toolCallBuilders.entrySet()) {
-                n1.addNew().set("index", kv.getKey())
-                        .set("id", kv.getValue().idBuilder.toString())
-                        .set("type", "function")
-                        .getOrNew("function").build(n2 -> {
-                            n2.set("name", kv.getValue().nameBuilder.toString())
-                                    .set("arguments", kv.getValue().argumentsBuilder.toString());
-                        });
-            }
-        });
+        ONode oNode = dialect.buildAssistantMessageNode(resp.toolCallBuilders);
 
         List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
 

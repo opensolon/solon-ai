@@ -22,6 +22,7 @@ import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.audio.Audio;
 import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.*;
+import org.noear.solon.ai.chat.function.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.image.Image;
@@ -30,6 +31,7 @@ import org.noear.solon.core.util.DateUtil;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -72,6 +74,27 @@ public class OllamaChatDialect extends AbstractChatDialect {
                 oNode.set("videos", msg.getMedias().stream().map(i -> i.toDataString(false)).collect(Collectors.toList()));
             }
         }
+    }
+
+    @Override
+    public ONode buildAssistantMessageNode(Map<Integer, ToolCallBuilder> toolCallBuilders) {
+        ONode oNode = new ONode();
+        oNode.set("role", "assistant");
+        oNode.set("content", "");
+        oNode.getOrNew("tool_calls").asArray().build(n1 -> {
+            for (Map.Entry<Integer, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
+                //有可能没有
+                n1.addNew().set("index", kv.getKey())
+                        .set("id", kv.getValue().idBuilder.toString())
+                        .set("type", "function")
+                        .getOrNew("function").build(n2 -> {
+                            n2.set("name", kv.getValue().nameBuilder.toString());
+                            n2.set("arguments", ONode.loadStr(kv.getValue().argumentsBuilder.toString()));
+                        });
+            }
+        });
+
+        return oNode;
     }
 
     @Override

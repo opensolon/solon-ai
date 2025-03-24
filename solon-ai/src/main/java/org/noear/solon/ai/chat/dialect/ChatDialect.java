@@ -19,12 +19,14 @@ import org.noear.snack.ONode;
 import org.noear.solon.ai.AiModelDialect;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.function.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.lang.Preview;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 聊天模型方言
@@ -48,6 +50,9 @@ public interface ChatDialect extends AiModelDialect {
      * @param options 聊天选项
      */
     String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream);
+
+
+    ONode buildAssistantMessageNode(Map<Integer, ToolCallBuilder> toolCallBuilders);
 
     /**
      * 分析响应数据
