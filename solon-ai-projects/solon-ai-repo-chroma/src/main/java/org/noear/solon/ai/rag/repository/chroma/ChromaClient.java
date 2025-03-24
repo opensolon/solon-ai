@@ -20,6 +20,7 @@ public class ChromaClient {
     //Chroma 服务器地址与账号
     private final String baseUrl;
     private final MultiMap<String> headers = new MultiMap<>();
+    private final StringSerializer serializer = new StringSerializer();
 
 
     public ChromaClient(String baseUrl) {
@@ -47,6 +48,7 @@ public class ChromaClient {
      */
     private HttpUtils http(String endpoint) {
         HttpUtils httpUtils = HttpUtils.http(endpoint)
+                .serializer(serializer)
                 .headers(headers)
                 .header("Accept", "application/json");
 
