@@ -23,17 +23,18 @@ import org.noear.solon.ai.chat.function.ChatFunctionCall;
 import org.noear.solon.ai.chat.function.ChatFunctionParam;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.core.util.MimeType;
 import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
-import org.noear.solon.rx.SimpleSubscription;
+import org.noear.solon.net.http.textstream.ServerSseEvent;
+import org.noear.solon.net.http.textstream.TextStreamUtil;
+import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -159,78 +160,75 @@ public class ChatRequestDefault implements ChatRequest {
 
     private void parseResp(HttpResponse httpResp, Subscriber<? super ChatResponse> subscriber) throws IOException {
         ChatResponseDefault resp = new ChatResponseDefault(true);
+        String contentType = httpResp.header("Content-Type");
 
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(httpResp.body()))) {
-            subscriber.onSubscribe(new SimpleSubscription().onRequest((subscription, l) -> {
-                try {
-                    while (l > 0) {
-                        if (subscription.isCancelled()) {
-                            break;
-                        }
-
-                        String respJson = reader.readLine();
-
-                        if (respJson == null) {
-                            break;
-                        }
-
-                        if (respJson.length() == 0) {
-                            continue;
-                        }
-
-                        if (log.isTraceEnabled()) {
-                            log.trace("ai-response: {}", respJson);
-                        }
-
-                        resp.reset();
-                        if (dialect.parseResponseJson(config, resp, respJson)) {
-                            if (resp.getError() != null) {
-                                subscriber.onError(resp.getError());
-                                return;
-                            }
-
-                            if (resp.hasChoices()) {
-                                AssistantMessage choiceMessage = resp.getMessage();
-                                if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
-                                    messages.add(choiceMessage);
-                                    buildToolMessage(choiceMessage);
-
-                                    //空读一行（流读取时，一行a）
-                                    reader.readLine();
-
-                                    stream().subscribe(subscriber);
-                                    return;
-                                }
-
-                                if (choiceMessage != null) {
-                                    if (resp.getChoices().size() > 1) {
-                                        //有多个选择时，拆成多个。
-                                        List<ChatChoice> choices = new ArrayList<>(resp.getChoices());
-                                        for (ChatChoice choice : choices) {
-                                            resp.reset();
-                                            resp.addChoice(choice);
-                                            subscriber.onNext(resp);
-                                            publishResponse(subscriber, resp, choice);
-                                        }
-                                    } else {
-                                        publishResponse(subscriber,resp, resp.getChoices().get(0));
-                                    }
-                                }
-                            }
-
-                            if (resp.isFinished()) {
-                                subscriber.onComplete();
-                                break;
-                            } else {
-                                l--;
-                            }
-                        }
-                    }
-                } catch (Throwable err) {
-                    subscriber.onError(err);
-                }
-            }));
+        try {
+            if (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE)) {
+                TextStreamUtil.parseEventStream(httpResp.body(), new SimpleSubscriber<ServerSseEvent>()
+                        .doOnNext(event -> {
+                            return onEventStream(resp, event, subscriber);
+                        })
+                        .doOnError(subscriber::onError));
+            } else {
+                TextStreamUtil.parseTextStream(httpResp.body(), new SimpleSubscriber<String>()
+                        .doOnNext(data -> {
+                            return onEventStream(resp, new ServerSseEvent(null, data), subscriber);
+                        })
+                        .doOnError(subscriber::onError));
+            }
+        } catch (Throwable ex) {
+            subscriber.onError(ex);
         }
+    }
+
+    private boolean onEventStream(ChatResponseDefault resp,ServerSseEvent event, Subscriber<? super ChatResponse> subscriber) {
+        if (log.isTraceEnabled()) {
+            log.trace("ai-response: {}", event.data());
+        }
+
+        if (Utils.isEmpty(event.data())) {
+            return true;
+        }
+
+        resp.reset();
+        if (dialect.parseResponseJson(config, resp, event.data())) {
+            if (resp.getError() != null) {
+                subscriber.onError(resp.getError());
+                return false;
+            }
+
+            if (resp.hasChoices()) {
+                AssistantMessage choiceMessage = resp.getMessage();
+                if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
+                    messages.add(choiceMessage);
+                    buildToolMessage(choiceMessage);
+
+                    stream().subscribe(subscriber);
+                    return false;
+                }
+
+                if (choiceMessage != null) {
+                    if (resp.getChoices().size() > 1) {
+                        //有多个选择时，拆成多个。
+                        List<ChatChoice> choices = new ArrayList<>(resp.getChoices());
+                        for (ChatChoice choice : choices) {
+                            resp.reset();
+                            resp.addChoice(choice);
+                            subscriber.onNext(resp);
+                            publishResponse(subscriber, resp, choice);
+                        }
+                    } else {
+                        publishResponse(subscriber, resp, resp.getChoices().get(0));
+                    }
+                }
+            }
+
+            if (resp.isFinished()) {
+                subscriber.onComplete();
+            }
+        }
+
+        return true;
     }
 
     private void publishResponse(Subscriber<? super ChatResponse> subscriber, ChatResponseDefault resp, ChatChoice choice) {

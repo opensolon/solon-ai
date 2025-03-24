@@ -123,7 +123,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                         n3.set("description", func.description());
                         n3.getOrNew("parameters").build(n4 -> {
                             n4.set("type", "object");
-                            ONode n4r = n4.getOrNew("required").asArray();
+                            ONode n4r = new ONode(n4.options()).asArray();
                             n4.getOrNew("properties").build(n5 -> {
                                 for (ChatFunctionParam p1 : func.params()) {
                                     n5.getOrNew(p1.name()).build(n6 -> {
@@ -135,6 +135,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                                     }
                                 }
                             });
+                            n4.set("required", n4r);
                         });
                     });
                 });
@@ -170,8 +171,6 @@ public abstract class AbstractChatDialect implements ChatDialect {
     @Override
     public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
         return new ONode().build(n -> {
-            n.set("stream", isStream);
-
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
@@ -183,6 +182,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     }
                 }
             });
+
+            n.set("stream", isStream);
+            n.getOrNew("stream_options").set("include_usage", true);
 
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {
                 n.set(kv.getKey(), kv.getValue());

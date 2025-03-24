@@ -47,8 +47,6 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     @Override
     public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
         return new ONode().build(n -> {
-            n.set("stream", isStream);
-
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
@@ -60,6 +58,9 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                     }
                 }
             });
+
+            n.set("stream", isStream);
+            n.getOrNew("stream_options").set("include_usage", true);
 
             n.getOrNew("parameters").build(n1 -> {
                 for (Map.Entry<String, Object> kv : options.options().entrySet()) {
@@ -76,13 +77,9 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
     @Override
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
-        if (json.startsWith("data:")) {
-            json = json.substring(6);
-
-            if ("[DONE]".equals(json)) { //不是数据结构
-                resp.setFinished(true);
-                return true;
-            }
+        if ("[DONE]".equals(json)) { //不是数据结构
+            resp.setFinished(true);
+            return true;
         }
 
         //解析
