@@ -195,7 +195,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }).toJson();
     }
 
-    public List<ChatFunctionCall> parseToolCalls(ONode toolCallsNode) {
+    protected List<ChatFunctionCall> parseToolCalls(ONode toolCallsNode) {
         if (toolCallsNode == null) {
             return null;
         }
@@ -230,7 +230,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return new ChatFunctionCall(index, callId, name, argStr, argMap);
     }
 
-    protected List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
+    public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
         List<AssistantMessage> messageList = new ArrayList<>();
 
         String content = oMessage.get("content").getRawString();

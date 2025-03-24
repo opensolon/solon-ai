@@ -250,10 +250,13 @@ public class ChatRequestDefault implements ChatRequest {
     }
 
     private void buildStreamToolMessage(ChatResponseDefault resp) {
-        ONode toolCallsNode = new ONode().asArray();
-        toolCallsNode.build(n1 -> {
+        ONode oNode = new ONode();
+        oNode.set("role", "assistant");
+        oNode.set("content", "");
+        oNode.getOrNew("tool_calls").asArray().build(n1 -> {
             for (Map.Entry<Integer, ToolCallBuilder> kv : resp.toolCallBuilders.entrySet()) {
-                n1.addNew().set("id", kv.getValue().idBuilder.toString())
+                n1.addNew().set("index", kv.getKey())
+                        .set("id", kv.getValue().idBuilder.toString())
                         .set("type", "function")
                         .getOrNew("function").build(n2 -> {
                             n2.set("name", kv.getValue().nameBuilder.toString())
@@ -262,13 +265,11 @@ public class ChatRequestDefault implements ChatRequest {
             }
         });
 
-        List<ChatFunctionCall> functionCalls = dialect.parseToolCalls(toolCallsNode);
+        List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
 
-        AssistantMessage assistantMessage = new AssistantMessage("", false,
-                toolCallsNode.toObjectList(Map.class),
-                functionCalls);
+        messages.addAll(assistantMessages);
 
-        buildToolMessage(resp, assistantMessage);
+        buildToolMessage(resp, assistantMessages.get(0));
     }
 
     private void publishResponse(Subscriber<? super ChatResponse> subscriber, ChatResponseDefault resp, ChatChoice choice) {
