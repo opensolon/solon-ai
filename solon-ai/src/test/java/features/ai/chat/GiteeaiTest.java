@@ -69,6 +69,7 @@ public class GiteeaiTest {
 
         //打印消息
         log.info("{}", resp.getMessage());
+        assert resp.getMessage() != null;
     }
 
     @Test

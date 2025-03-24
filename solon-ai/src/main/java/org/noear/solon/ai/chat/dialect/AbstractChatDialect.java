@@ -284,7 +284,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
         }
 
-        if (content != null) {
+        if (content != null || toolCallsRaw != null) {
             messageList.add(new AssistantMessage(content, resp.reasoning, toolCallsRaw, toolCalls));
         }
 
