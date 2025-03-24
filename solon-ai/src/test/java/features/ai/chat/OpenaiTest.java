@@ -3,6 +3,7 @@ package features.ai.chat;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.rx.SimpleSubscriber;
@@ -12,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author noear 2025/1/28 created
@@ -70,6 +72,7 @@ public class OpenaiTest {
 
         //打印消息
         log.info("{}", resp.getMessage());
+        assert resp.getMessage() != null;
     }
 
     @Test
@@ -118,6 +121,7 @@ public class OpenaiTest {
                 .options(o -> o.functionAdd(new Tools()))
                 .stream();
 
+        AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
         CountDownLatch doneLatch = new CountDownLatch(1);
         publisher.subscribe(new SimpleSubscriber<ChatResponse>()
                 .doOnNext(resp -> {
@@ -127,9 +131,12 @@ public class OpenaiTest {
                     doneLatch.countDown();
                 }).doOnError(err -> {
                     err.printStackTrace();
+                    msgHolder.set(null);
                     doneLatch.countDown();
                 }));
 
         doneLatch.await();
+        assert msgHolder.get() != null;
+        System.out.println(msgHolder.get());
     }
 }

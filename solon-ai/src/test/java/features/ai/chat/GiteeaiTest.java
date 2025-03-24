@@ -22,7 +22,7 @@ public class GiteeaiTest {
     private static final Logger log = LoggerFactory.getLogger(GiteeaiTest.class);
     private static final String apiUrl = "https://ai.gitee.com/v1/chat/completions";
     private static final String apkKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
-    private static final String model = "QwQ-32B";//"Qwen2.5-72B-Instruct";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
+    private static final String model = "Qwen2.5-72B-Instruct";//"QwQ-32B";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
 
     @Test
     public void case1() throws IOException {
