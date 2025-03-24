@@ -125,7 +125,8 @@ public class OpenaiTest {
         CountDownLatch doneLatch = new CountDownLatch(1);
         publisher.subscribe(new SimpleSubscriber<ChatResponse>()
                 .doOnNext(resp -> {
-                    log.info("{}", resp.getMessage());
+                    msgHolder.set(resp.getAggregationMessage());
+                    log.info("{}", resp.getAggregationMessage());
                 }).doOnComplete(() -> {
                     log.debug("::完成!");
                     doneLatch.countDown();

@@ -184,7 +184,6 @@ public abstract class AbstractChatDialect implements ChatDialect {
             });
 
             n.set("stream", isStream);
-            n.getOrNew("stream_options").set("include_usage", true);
 
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {
                 n.set(kv.getKey(), kv.getValue());

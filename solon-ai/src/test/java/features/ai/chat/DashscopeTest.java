@@ -3,6 +3,7 @@ package features.ai.chat;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author noear 2025/1/28 created
@@ -24,7 +26,7 @@ public class DashscopeTest {
     private static final String provider = "dashscope";
     private static final String model = "qwen-turbo-latest";//"llama3.2"; //deepseek-r1:1.5b;
 
-    ChatModel.Builder configChatModelBuilder(){
+    ChatModel.Builder configChatModelBuilder() {
         return ChatModel.of(apiUrl)
                 .apiKey(apiKey)
                 .provider(provider)
@@ -111,19 +113,24 @@ public class DashscopeTest {
                 .options(o -> o.functionAdd(new Tools()))
                 .stream();
 
+        AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
         CountDownLatch doneLatch = new CountDownLatch(1);
         publisher.subscribe(new SimpleSubscriber<ChatResponse>()
                 .doOnNext(resp -> {
-                    messageList.add(resp.getMessage());
+                    msgHolder.set(resp.getAggregationMessage());
                     log.info("{}", resp.getMessage());
                     log.info("\n-----------答案-----------\n{}", resp.getMessage().getContent());
                 }).doOnComplete(() -> {
                     log.debug("::完成!");
                     doneLatch.countDown();
                 }).doOnError(err -> {
+                    msgHolder.set(null);
                     err.printStackTrace();
+                    doneLatch.countDown();
                 }));
 
         doneLatch.await();
+        assert msgHolder.get() != null;
+        System.out.println(msgHolder.get());
     }
 }

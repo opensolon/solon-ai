@@ -60,7 +60,6 @@ public class DashscopeChatDialect extends AbstractChatDialect {
             });
 
             n.set("stream", isStream);
-            n.getOrNew("stream_options").set("include_usage", true);
 
             n.getOrNew("parameters").build(n1 -> {
                 for (Map.Entry<String, Object> kv : options.options().entrySet()) {
