@@ -54,13 +54,13 @@ public class OllamaTest {
         CountDownLatch doneLatch = new CountDownLatch(1);
         publisher.subscribe(new SimpleSubscriber<ChatResponse>()
                 .doOnNext(resp -> {
-                    chatSession.addMessage(resp.getMessage());
                     log.info("{}", resp.getMessage());
                 }).doOnComplete(() -> {
                     log.debug("::完成!");
                     doneLatch.countDown();
                 }).doOnError(err -> {
                     err.printStackTrace();
+                    doneLatch.countDown();
                 }));
 
         doneLatch.await();
@@ -126,7 +126,11 @@ public class OllamaTest {
         assert msgHolder.get() != null;
         System.out.println(msgHolder.get());
 
+        System.out.println("-----------------------------------");
+
         System.out.println(chatSession.toNdjson());
+
+        assert chatSession.getMessages().size() == 4;
     }
 
     @Test

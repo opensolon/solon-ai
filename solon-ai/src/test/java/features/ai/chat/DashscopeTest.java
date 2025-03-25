@@ -106,12 +106,12 @@ public class DashscopeTest {
     public void case4() throws Throwable {
         ChatModel chatModel = configChatModelBuilder().build();
 
-        List<ChatMessage> messageList = new ArrayList<>();
-        messageList.add(ChatMessage.ofUser("今天杭州的天气情况？"));
+        ChatSession chatSession = new ChatSessionDefault();
+        chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
 
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
-                .prompt(messageList)
+                .prompt(chatSession)
                 .options(o -> o.functionAdd(new Tools()))
                 .stream();
 
@@ -120,19 +120,24 @@ public class DashscopeTest {
         publisher.subscribe(new SimpleSubscriber<ChatResponse>()
                 .doOnNext(resp -> {
                     msgHolder.set(resp.getAggregationMessage());
-                    log.info("{}", resp.getMessage());
                 }).doOnComplete(() -> {
                     log.debug("::完成!");
                     doneLatch.countDown();
                 }).doOnError(err -> {
-                    msgHolder.set(null);
                     err.printStackTrace();
+                    msgHolder.set(null);
                     doneLatch.countDown();
                 }));
 
         doneLatch.await();
         assert msgHolder.get() != null;
         System.out.println(msgHolder.get());
+
+        System.out.println("-----------------------------------");
+
+        System.out.println(chatSession.toNdjson());
+
+        assert chatSession.getMessages().size() == 4;
     }
 
     @Test
