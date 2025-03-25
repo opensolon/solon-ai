@@ -29,20 +29,20 @@ public class ChatFunctionCall implements Serializable {
     private int index;
     private String id;
     private String name;
-    private String argumentsStr;
-    private Map<String, Object> argumentsMap;
+    private transient String argumentsStr;
+    private Map<String, Object> arguments;
 
-    public ChatFunctionCall(int index, String id, String name, String argumentsStr, Map<String, Object> argumentsMap) {
+    public ChatFunctionCall(int index, String id, String name, String argumentsStr, Map<String, Object> arguments) {
         this.index = index;
         this.id = id;
         this.name = name;
 
         this.argumentsStr = argumentsStr;
 
-        if (argumentsMap == null) {
-            this.argumentsMap = Collections.emptyMap();
+        if (arguments == null) {
+            this.arguments = Collections.emptyMap();
         } else {
-            this.argumentsMap = Collections.unmodifiableMap(argumentsMap);
+            this.arguments = Collections.unmodifiableMap(arguments);
         }
     }
 
@@ -78,6 +78,6 @@ public class ChatFunctionCall implements Serializable {
      * 调用参数（字典型式）
      */
     public Map<String, Object> arguments() {
-        return argumentsMap;
+        return arguments;
     }
 }

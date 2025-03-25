@@ -77,7 +77,7 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
         StringBuilder buf = new StringBuilder();
         buf.append("{");
 
-        buf.append(", role=").append(getRole().name().toLowerCase());
+        buf.append("role=").append(getRole().name().toLowerCase());
 
         if (content != null) {
             buf.append(", content='").append(content).append('\'');
