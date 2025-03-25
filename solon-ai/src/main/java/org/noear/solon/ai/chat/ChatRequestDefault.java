@@ -119,8 +119,8 @@ public class ChatRequestDefault implements ChatRequest {
 
         if (resp.hasChoices()) {
             AssistantMessage choiceMessage = resp.getMessage();
+            messages.add(choiceMessage); //添加到记忆
             if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
-                messages.add(choiceMessage);
                 buildToolMessage(resp, choiceMessage);
 
                 return call();
@@ -171,7 +171,7 @@ public class ChatRequestDefault implements ChatRequest {
                             return onEventStream(resp, event, subscriber);
                         })
                         .doOnComplete(() -> {
-                            onEnd(resp, subscriber);
+                            onEventEnd(resp, subscriber);
                         })
                         .doOnError(subscriber::onError));
             } else {
@@ -181,7 +181,7 @@ public class ChatRequestDefault implements ChatRequest {
                             return onEventStream(resp, new ServerSentEvent(null, data), subscriber);
                         })
                         .doOnComplete(() -> {
-                            onEnd(resp, subscriber);
+                            onEventEnd(resp, subscriber);
                         })
                         .doOnError(subscriber::onError));
             }
@@ -190,11 +190,20 @@ public class ChatRequestDefault implements ChatRequest {
         }
     }
 
-    private void onEnd(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
-        if(resp.isFinished() == false &&  resp.toolCallBuilders.size() > 0) {
+    private void onEventEnd(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
+        if (resp.isFinished() == false && resp.toolCallBuilders.size() > 0) {
             buildStreamToolMessage(resp);
             stream().subscribe(subscriber);
+            return;
         }
+
+        //添加到记忆（最后的聚合消息）
+        AssistantMessage aggregationMessage = resp.getAggregationMessage();
+        if (aggregationMessage != null) {
+            messages.add(aggregationMessage);
+        }
+
+        subscriber.onComplete();
     }
 
     private boolean onEventStream(ChatResponseDefault resp,ServerSentEvent event, Subscriber<? super ChatResponse> subscriber) {
@@ -240,8 +249,7 @@ public class ChatRequestDefault implements ChatRequest {
                 if (resp.toolCallBuilders.size() > 0) {
                     buildStreamToolMessage(resp);
                     stream().subscribe(subscriber);
-                } else {
-                    subscriber.onComplete();
+                    return false; //这样，不会触发外层的完成事件
                 }
             }
         }

@@ -113,7 +113,11 @@ public class ChatResponseDefault implements ChatResponse {
                 return lastChoice().getMessage();
             }
         } else {
-            return null;
+            if (aggregationMessageContent.length() > 0) {
+                return new AssistantMessage(aggregationMessageContent.toString(), false, null, null);
+            } else {
+                return null;
+            }
         }
     }
 
