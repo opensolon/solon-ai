@@ -12,7 +12,7 @@
 | solon-ai-load-word          | ok | ok |         |
 |                             |    |    |         |
 | solon-ai-repo-chroma        | ok | ok | 会不断fu集合 |
-| solon-ai-repo-elasticsearch | ok | ok | 有个单测没过  |
+| solon-ai-repo-elasticsearch | ok | ok |         |
 | solon-ai-repo-mariadb       |    |    |         |
 | solon-ai-repo-milvus        | ok | ok |         |
 | solon-ai-repo-mysql         |    |    |         |
