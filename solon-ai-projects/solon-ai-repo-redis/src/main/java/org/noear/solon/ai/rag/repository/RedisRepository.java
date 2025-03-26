@@ -225,10 +225,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
      */
     @Override
     public List<Document> search(QueryCondition condition) throws IOException {
-        Document queryDoc = new Document(condition.getQuery(), new HashMap<>());
-        List<Document> documents = new ArrayList<>();
-        documents.add(queryDoc);
-        config.embeddingModel.embed(documents);
+        float[] embedding = config.embeddingModel.embed(condition.getQuery());
 
         String filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
 
@@ -241,7 +238,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         try {
             // 创建向量查询对象
             Query query = new Query(queryString)
-                    .addParam(BLOB, queryDoc.getEmbedding())
+                    .addParam(BLOB, embedding)
                     .returnFields(returnFields)
                     .setSortBy(SCORE, true) // true表示升序，相似度越高分数越低
                     .limit(0, condition.getLimit())
