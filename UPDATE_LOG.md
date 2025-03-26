@@ -4,6 +4,7 @@
 * 新增 solon-ai-load-word 插件，添加对 doc, docx 文档的解析
 * 新增 solon-ai-repo-qdrant 插件
 * 新增 solon-ai-repo-tcvectordb 插件
+* 新增solon-ai-repo-elasticsearch 插件
 * 添加 solon-ai ChatResponse:getAggregationMessage(), isStream() 方法
 * 添加 solon-ai ChatSession 自动登记处理
 * 调整 solon-ai ChatDialect:parseResponseJson 定义
