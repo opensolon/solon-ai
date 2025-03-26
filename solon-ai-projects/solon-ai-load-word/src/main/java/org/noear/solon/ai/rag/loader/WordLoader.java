@@ -89,14 +89,12 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
     }
 
     private void doRead(XWPFDocument reader, List<Document> documents) throws IOException {
-        Map<String, Object> metadata = new HashMap<>();
-
         if (options.loadMode == LoadMode.SINGLE) {
             try (XWPFWordExtractor extractor = new XWPFWordExtractor(reader)) {
                 // 一次性获取文档的全部文本内容
                 String content = extractor.getText();
 
-                Document doc = new Document(content, metadata)
+                Document doc = new Document(content)
                         .metadata(this.additionalMetadata);
                 documents.add(doc);
             }
@@ -104,7 +102,7 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
             for (XWPFParagraph extractor : reader.getParagraphs()) {
                 String content = extractor.getText();
 
-                Document doc = new Document(content, metadata)
+                Document doc = new Document(content)
                         .metadata(this.additionalMetadata);
                 documents.add(doc);
             }
@@ -112,14 +110,12 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
     }
 
     private void doRead(HWPFDocument reader, List<Document> documents) throws IOException {
-        Map<String, Object> metadata = new HashMap<>();
-
         if (options.loadMode == LoadMode.SINGLE) {
             // 一次性获取文档的全部文本内容
             String content = reader.getDocumentText().trim();
 
             if (Utils.isNotEmpty(content)) {
-                Document doc = new Document(content, metadata)
+                Document doc = new Document(content)
                         .metadata(this.additionalMetadata);
                 documents.add(doc);
             }
@@ -132,7 +128,7 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
                 String content = paragraph.text().trim();
 
                 if (Utils.isNotEmpty(content)) {
-                    Document doc = new Document(content, metadata)
+                    Document doc = new Document(content)
                             .metadata(this.additionalMetadata);
                     documents.add(doc);
                 }

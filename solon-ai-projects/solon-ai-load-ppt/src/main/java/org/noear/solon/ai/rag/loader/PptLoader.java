@@ -64,8 +64,6 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
     public List<Document> load() throws IOException {
         // 实现PPT文档的加载逻辑
         try (InputStream stream = source.get()) {
-            Map<String, Object> metadata = new HashMap<>();
-
             List<Document> documents = new ArrayList<>();
             // 读取PPT内容并转换为文本
             BodyContentHandler handler = new BodyContentHandler();
@@ -80,12 +78,12 @@ public class PptLoader extends AbstractOptionsDocumentLoader<PptLoader.Options, 
                 for (String pageText : content.split(options.pageDelimiter)) {
                     pageText = pageText.trim();
                     if (Utils.isNotEmpty(pageText)) {
-                        Document document = new Document(pageText, metadata).metadata(this.additionalMetadata);
+                        Document document = new Document(pageText).metadata(this.additionalMetadata);
                         documents.add(document);
                     }
                 }
             } else {
-                Document document = new Document(content, metadata).metadata(this.additionalMetadata);
+                Document document = new Document(content).metadata(this.additionalMetadata);
                 documents.add(document);
             }
 

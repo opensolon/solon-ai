@@ -71,8 +71,6 @@ public class PdfLoader extends AbstractOptionsDocumentLoader<PdfLoader.Options, 
         try (InputStream stream = source.get(); PDDocument pdf = PDDocument.load(stream)) {
             List<Document> documents = new ArrayList<>();
 
-            Map<String, Object> metadata = new HashMap<>();
-
             if (options.loadMode == LoadMode.SINGLE) {
                 // 整个文档作为一个 Document
                 PDFTextStripper stripper = new PDFTextStripper();
@@ -80,7 +78,7 @@ public class PdfLoader extends AbstractOptionsDocumentLoader<PdfLoader.Options, 
                 stripper.setPageEnd(options.pageDelimiter);
                 String text = stripper.getText(pdf);
 
-                Document doc = new Document(text, metadata)
+                Document doc = new Document(text)
                         .metadata(this.additionalMetadata)
                         .metadata("pages", pdf.getNumberOfPages());
                 documents.add(doc);
@@ -93,7 +91,7 @@ public class PdfLoader extends AbstractOptionsDocumentLoader<PdfLoader.Options, 
                     stripper.setEndPage(pageNum);
                     String pageText = stripper.getText(pdf);
 
-                    Map<String, Object> pageMetadata = new HashMap<>(metadata);
+                    Map<String, Object> pageMetadata = new HashMap<>();
                     pageMetadata.put("page", pageNum);
                     pageMetadata.put("total_pages", pdf.getNumberOfPages());
 
