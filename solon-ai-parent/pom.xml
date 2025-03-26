@@ -12,6 +12,7 @@
     </parent>
 
     <artifactId>solon-ai-parent</artifactId>
+    <version>3.1.2-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <properties>
