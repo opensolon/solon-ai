@@ -1,12 +1,13 @@
-package org.noear.solon.ai.rag.loader;
-
-import java.util.List;
+package features.ai.load.excel;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.loader.ExcelLoader;
 import org.noear.solon.core.util.ResourceUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 public class ExcelLoaderTest {
     private static final Logger log = LoggerFactory.getLogger(ExcelLoaderTest.class);
