@@ -30,7 +30,7 @@ import java.util.Map;
 public class Document {
     protected String id;
     protected String content;
-    protected final Map<String, Object> metadata;
+    protected final Map<String, Object> metadata = new HashMap<>();
     protected transient double score; //不进行序列化（搜索时动态产生）
 
     private float[] embedding;
@@ -50,8 +50,11 @@ public class Document {
     public Document(String id, String content, Map<String, Object> metadata, double score) {
         this.id = id;
         this.content = content;
-        this.metadata = (metadata == null ? new HashMap<>() : metadata);
         this.score = score;
+
+        if (metadata != null) {
+            this.metadata.putAll(metadata);
+        }
     }
 
     /**
