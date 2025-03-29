@@ -142,13 +142,13 @@ public class ChromaClient {
     /**
      * 获取集合信息
      *
-     * @param collectionId 集合ID
+     * @param collectionName 集合Name
      * @return 集合信息
      * @throws IOException 如果请求失败
      */
-    public CollectionResponse getCollectionStats(String collectionId) throws IOException {
+    public CollectionResponse getCollectionStats(String collectionName) throws IOException {
         try {
-            String endpoint = baseUrl + "api/v1/collections/" + collectionId;
+            String endpoint = baseUrl + "api/v1/collections/" + collectionName;
 
             CollectionResponse response = http(endpoint).getAs(CollectionResponse.class);
 

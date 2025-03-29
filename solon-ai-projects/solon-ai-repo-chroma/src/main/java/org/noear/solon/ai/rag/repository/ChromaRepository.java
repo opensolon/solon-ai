@@ -31,74 +31,41 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
     //集合ID
     private String collectionId;
 
-    //是否已初始化
-    private boolean initialized = false;
-
     private ChromaRepository(Builder config) {
         this.config = config;
-        initRepository();
-    }
-
-    /**
-     * 初始化仓库
-     */
-    public void initRepository() {
-        if (initialized) {
-            return;
-        }
 
         try {
-
-            // 尝试查找现有集合
-            if (findExistingCollection()) {
-                initialized = true;
-                return;
-            }
-
-            // 创建新集合
-            createNewCollection();
-
-            // 验证集合是否创建成功
-            if (collectionId == null) {
-                throw new IOException("Failed to create or find collection: " + config.collectionName);
-            }
-
-            initialized = true;
+            initRepository();
         } catch (IOException e) {
             throw new RuntimeException("Failed to initialize Chroma repository: " + e.getMessage(), e);
         }
     }
 
     /**
-     * 查找现有集合
-     *
-     * @return 是否找到集合
+     * 初始化仓库
      */
-    private boolean findExistingCollection() {
-        try {
-            // 获取所有集合
-            CollectionsResponse collectionsResponse = config.client.listCollections();
-            List<Map<String, Object>> collections = collectionsResponse.getCollections();
+    public void initRepository() throws IOException {
+        if (collectionId != null) {
+            return;
+        }
 
-            if (collections == null || collections.isEmpty()) {
-                return false;
-            }
+        // 尝试查找现有集合
+        CollectionResponse collection = config.client.getCollectionStats(config.collectionName);
 
+        if (collection != null) {
+            collectionId = collection.getId();
+        }
 
-            // 查找匹配的集合
-            for (Map<String, Object> collection : collections) {
-                if (config.collectionName.equals(collection.get("name"))) {
-                    // 获取集合ID
-                    if (collection.containsKey("id")) {
-                        this.collectionId = (String) collection.get("id");
-                        return true;
-                    }
-                }
-            }
+        if (collectionId != null) {
+            return;
+        }
 
-            return false;
-        } catch (IOException e) {
-            return false;
+        // 创建新集合
+        createNewCollection();
+
+        // 验证集合是否创建成功
+        if (collectionId == null) {
+            throw new IOException("Failed to create or find collection: " + config.collectionName);
         }
     }
 
@@ -108,54 +75,17 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      * @throws IOException 如果创建失败
      */
     private void createNewCollection() throws IOException {
-        try {
-
-            // 创建集合元数据
-            Map<String, Object> metadata = new HashMap<>();
-            metadata.put("description", "Collection created by Solon AI");
-            metadata.put("created_at", System.currentTimeMillis());
-            metadata.put("hnsw:space", "cosine"); // 使用余弦相似度
-
-            // 创建集合
-            CollectionResponse response = config.client.createCollection(config.collectionName, metadata);
-
-            // 获取集合ID
-            this.collectionId = response.getId();
-        } catch (IOException e) {
-            // 如果创建失败，可能是因为集合已存在，尝试再次查找
-            if (e.getMessage().contains("already exists")) {
-                if (findExistingCollection()) {
-                    return;
-                }
-            }
-
-            // 如果仍然失败，尝试创建带有唯一名称的集合
-            createUniqueCollection();
-        }
-    }
-
-    /**
-     * 创建带有唯一名称的集合
-     *
-     * @throws IOException 如果创建失败
-     */
-    private void createUniqueCollection() throws IOException {
-        String uuid = Utils.uuid().substring(0, 8);
-        String uniqueCollectionName = config.collectionName + "_" + uuid;
-
         // 创建集合元数据
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("description", "Collection created by Solon AI");
         metadata.put("created_at", System.currentTimeMillis());
-        metadata.put("original_name", config.collectionName);
         metadata.put("hnsw:space", "cosine"); // 使用余弦相似度
 
         // 创建集合
-        CollectionResponse response = config.client.createCollection(uniqueCollectionName, metadata);
+        CollectionResponse response = config.client.createCollection(config.collectionName, metadata);
 
         // 获取集合ID
         this.collectionId = response.getId();
-        config.collectionName = uniqueCollectionName;
     }
 
     /**
@@ -195,10 +125,6 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      * @throws IOException 如果添加失败
      */
     private void addDocuments(List<Document> documents) throws IOException {
-        if (collectionId == null) {
-            throw new IOException("Collection ID is not available");
-        }
-
         List<String> ids = new ArrayList<>();
         List<List<Float>> embeddings = new ArrayList<>();
         List<Map<String, Object>> metadatas = new ArrayList<>();
@@ -235,10 +161,6 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
             return;
         }
 
-        if (collectionId == null) {
-            throw new IOException("Collection ID is not available");
-        }
-
         List<String> idList = new ArrayList<>(Arrays.asList(ids));
 
         // 删除文档
@@ -254,10 +176,6 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
             return false;
         }
 
-        if (collectionId == null) {
-            throw new IOException("Collection ID is not available");
-        }
-
         return config.client.documentExists(collectionId, id);
     }
 
@@ -269,10 +187,6 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         // 如果查询条件为空，返回空列表
         if (condition == null || condition.getQuery() == null) {
             return new ArrayList<>();
-        }
-
-        if (collectionId == null) {
-            throw new IOException("Collection ID is not available");
         }
 
         // 使用文本查询生成向量
@@ -369,13 +283,10 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      * @throws IOException 如果注销过程发生IO错误
      */
     public void dropRepository() throws IOException {
-        if (collectionId == null) {
-            throw new IOException("Collection ID is not available");
+        if (collectionId != null) {
+            config.client.deleteCollection(collectionId);
+            collectionId = null;
         }
-
-        config.client.deleteCollection(collectionId);
-        initialized = false;
-        collectionId = null;
     }
 
     /**
@@ -391,17 +302,6 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
             list.add(f);
         }
         return list;
-    }
-
-    /**
-     * 获取集合统计信息
-     */
-    public CollectionResponse getCollectionStats() throws IOException {
-        if (collectionId == null) {
-            throw new IOException("Collection ID is not available");
-        }
-
-        return config.client.getCollectionStats(collectionId);
     }
 
     public static Builder builder(EmbeddingModel embeddingModel, ChromaClient client) {
