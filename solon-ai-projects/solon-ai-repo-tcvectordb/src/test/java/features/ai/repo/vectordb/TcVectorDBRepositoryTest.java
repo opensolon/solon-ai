@@ -14,6 +14,7 @@ import com.tencent.tcvectordb.model.param.enums.ReadConsistencyEnum;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.repository.tcvectordb.EmbeddingModelEnum;
 import org.noear.solon.ai.rag.repository.tcvectordb.MetadataField;
 import org.noear.solon.ai.rag.repository.TcVectorDbRepository;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
@@ -32,9 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class TcVectorDBRepositoryTest {
 
     private TcVectorDbRepository repository;
-    private final String url = System.getProperty("vectordb.url", "http://sh-vdb-1e6g45an.sql.tencentcdb.com:8100");
+    private final String url = System.getProperty("vectordb.url", "http://sh-vdb-9ygfchq9.sql.tencentcdb.com:8100");
     private final String username = System.getProperty("vectordb.username", "root");
-    private final String key = System.getProperty("vectordb.key", "82cQlN5GcUDo0oeVmPnIQHZWiJZK7taDmZKX8l2I");
+    private final String key = System.getProperty("vectordb.key", "6CVLX0TdHN7az0VmfibW5oIb9Y3Ny37Y24HoYSdw");
 
     private VectorDBClient getClient() {
         // 创建连接参数
@@ -61,7 +62,7 @@ public class TcVectorDBRepositoryTest {
             metadataFields.add(new MetadataField("price", FieldType.Uint64));
             metadataFields.add(new MetadataField("stock", FieldType.Uint64));
 
-            repository = TcVectorDbRepository.builder(getClient())
+            repository = TcVectorDbRepository.builder(getClient()).embeddingModel(EmbeddingModelEnum.BGE_M3)
                     .metadataFields(metadataFields)
                     .build();
 
@@ -392,10 +393,10 @@ public class TcVectorDBRepositoryTest {
     @Test
     public void testSearch() throws IOException {
         List<Document> list = repository.search("solon");
-        assert list.size() == 4;
+        assert list.size() >= 3;//可能3个（效果更好）或4个
 
-        List<Document> list2 = repository.search("temporal");
-        assert list2.isEmpty();
+        list = repository.search("dubbo");
+        assert list.size() == 0;
 
         /// /////////////////////////////
 

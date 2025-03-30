@@ -27,6 +27,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
+import org.noear.solon.ai.rag.repository.tcvectordb.EmbeddingModelEnum;
 import org.noear.solon.ai.rag.repository.tcvectordb.FilterTransformer;
 import org.noear.solon.ai.rag.repository.tcvectordb.MetadataField;
 import org.noear.solon.ai.rag.util.ListUtil;
@@ -54,7 +55,6 @@ import com.tencent.tcvectordb.model.param.dml.QueryParam;
 import com.tencent.tcvectordb.model.param.dml.SearchByEmbeddingItemsParam;
 import com.tencent.tcvectordb.model.param.entity.AffectRes;
 import com.tencent.tcvectordb.model.param.entity.SearchRes;
-import com.tencent.tcvectordb.model.param.enums.EmbeddingModelEnum;
 
 /**
  * 腾讯云 VectorDB 矢量存储知识库
@@ -415,7 +415,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
     public static class Builder {
         // 必要参数
         private final VectorDBClient client;
-        private EmbeddingModelEnum embeddingModel = EmbeddingModelEnum.BGE_BASE_ZH;
+        private EmbeddingModelEnum embeddingModel = EmbeddingModelEnum.BGE_LARGE_ZH_V1P5;
         private String databaseName = "solon_ai_db";
         private String collectionName = "solon_ai";
 
