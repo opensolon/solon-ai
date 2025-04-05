@@ -1,3 +1,9 @@
+### v3.1.2
+
+* 新增 solon-ai-repo-chroma 插件
+* 优化 solon-ai-repo-tcvectordb 插件相似度处理
+* 优化 solon-ai-repo-elasticsearch 插件相似度处理
+
 ### v3.1.1
 
 * 新增 solon-ai-load-ppt 插件，添加对 ppt, pptx 文档的解析
