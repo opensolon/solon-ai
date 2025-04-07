@@ -27,6 +27,10 @@ public class ChromaClient {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
     }
 
+    public ChromaClient(Properties properties) {
+        this(properties.getProperty("url"));
+    }
+
     /**
      * 设置基础鉴权
      */
