@@ -54,8 +54,8 @@ public class RedisRepositoryTest {
 
         // 创建元数据索引字段列表
         List<MetadataField> metadataFields = new ArrayList<>();
-        metadataFields.add(new MetadataField("title", Schema.FieldType.TAG)); // 使用TAG类型以支持精确匹配
-        metadataFields.add(new MetadataField("category", Schema.FieldType.TAG));
+        metadataFields.add(MetadataField.tag("title")); // 使用TAG类型以支持精确匹配
+        metadataFields.add(MetadataField.tag("category"));
         metadataFields.add(MetadataField.numeric("price"));
         metadataFields.add(MetadataField.numeric("stock"));
 
