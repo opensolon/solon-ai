@@ -62,7 +62,8 @@ public class TcVectorDBRepositoryTest {
             metadataFields.add(new MetadataField("price", FieldType.Uint64));
             metadataFields.add(new MetadataField("stock", FieldType.Uint64));
 
-            repository = TcVectorDbRepository.builder(getClient()).embeddingModel(EmbeddingModelEnum.BGE_M3)
+            repository = TcVectorDbRepository.builder(getClient())
+                    .embeddingModel(EmbeddingModelEnum.BGE_M3)
                     .metadataFields(metadataFields)
                     .build();
 
