@@ -5,6 +5,7 @@ import java.util.*;
 import java.util.logging.Logger;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.core.util.MultiMap;
 import org.noear.solon.net.http.HttpUtils;
 
@@ -24,6 +25,10 @@ public class ChromaClient {
 
 
     public ChromaClient(String baseUrl) {
+        if (Utils.isEmpty(baseUrl)) {
+            throw new IllegalArgumentException("The baseurl cannot be empty.");
+        }
+
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
     }
 
