@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.tool.ChatFunctionCall;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.lang.Preview;
 
@@ -32,7 +32,7 @@ import java.util.*;
 public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     private final ChatRole role = ChatRole.ASSISTANT;
     private String content;
-    private List<ChatFunctionCall> toolCalls;
+    private List<ToolCall> toolCalls;
     private List<Map> toolCallsRaw;
 
     //纯思考；纯内容；混合内容
@@ -42,7 +42,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         //用于序列化
     }
 
-    public AssistantMessage(String content, boolean isThinking, List<Map> toolCallsRaw, List<ChatFunctionCall> toolCalls) {
+    public AssistantMessage(String content, boolean isThinking, List<Map> toolCallsRaw, List<ToolCall> toolCalls) {
         this.content = content;
         this.isThinking = isThinking;
         this.toolCallsRaw = toolCallsRaw;
@@ -97,7 +97,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     /**
      * 工具调用
      */
-    public List<ChatFunctionCall> getToolCalls() {
+    public List<ToolCall> getToolCalls() {
         return toolCalls;
     }
 

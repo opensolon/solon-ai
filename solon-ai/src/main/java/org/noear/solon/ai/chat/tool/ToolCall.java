@@ -25,14 +25,14 @@ import java.util.Map;
  * @author noear
  * @since 3.1
  */
-public class ChatFunctionCall implements Serializable {
+public class ToolCall implements Serializable {
     private int index;
     private String id;
     private String name;
     private transient String argumentsStr;
     private Map<String, Object> arguments;
 
-    public ChatFunctionCall(int index, String id, String name, String argumentsStr, Map<String, Object> arguments) {
+    public ToolCall(int index, String id, String name, String argumentsStr, Map<String, Object> arguments) {
         this.index = index;
         this.id = id;
         this.name = name;

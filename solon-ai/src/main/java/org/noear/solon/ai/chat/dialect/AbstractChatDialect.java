@@ -170,12 +170,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return oNode;
     }
 
-    protected List<ChatFunctionCall> parseToolCalls(ONode toolCallsNode) {
+    protected List<ToolCall> parseToolCalls(ONode toolCallsNode) {
         if (toolCallsNode == null) {
             return null;
         }
 
-        List<ChatFunctionCall> toolCalls = new ArrayList<>();
+        List<ToolCall> toolCalls = new ArrayList<>();
 
         for (ONode n1 : toolCallsNode.ary()) {
             toolCalls.add(parseFunctionCall(n1));
@@ -184,7 +184,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return toolCalls;
     }
 
-    protected ChatFunctionCall parseFunctionCall(ONode n1) {
+    protected ToolCall parseFunctionCall(ONode n1) {
         int index = n1.get("index").getInt();
         String callId = n1.get("id").getString();
 
@@ -202,7 +202,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (n1fArgs.isObject()) {
             argMap = n1fArgs.toObject(Map.class);
         }
-        return new ChatFunctionCall(index, callId, name, argStr, argMap);
+        return new ToolCall(index, callId, name, argStr, argMap);
     }
 
     public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
@@ -212,7 +212,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         ONode toolCallsNode = oMessage.getOrNull("tool_calls");
 
         List<Map> toolCallsRaw = null;
-        List<ChatFunctionCall> toolCalls = parseToolCalls(toolCallsNode);
+        List<ToolCall> toolCalls = parseToolCalls(toolCallsNode);
 
         if (Utils.isNotEmpty(toolCalls)) {
             toolCallsRaw = toolCallsNode.toObject(List.class);

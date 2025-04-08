@@ -19,7 +19,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.tool.ChatFunction;
-import org.noear.solon.ai.chat.tool.ChatFunctionCall;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ChatFunctionParam;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -279,7 +279,7 @@ public class ChatRequestDefault implements ChatRequest {
             return;
         }
 
-        for (ChatFunctionCall call : acm.getToolCalls()) {
+        for (ToolCall call : acm.getToolCalls()) {
             ToolCallBuilder callBuilder =  resp.toolCallBuilders.computeIfAbsent(call.index(), k->new ToolCallBuilder());
 
             if(call.id() != null){
@@ -301,7 +301,7 @@ public class ChatRequestDefault implements ChatRequest {
             return;
         }
 
-        for (ChatFunctionCall call : acm.getToolCalls()) {
+        for (ToolCall call : acm.getToolCalls()) {
             ChatFunction func = config.getGlobalFunction(call.name());
 
             if (func == null) {
