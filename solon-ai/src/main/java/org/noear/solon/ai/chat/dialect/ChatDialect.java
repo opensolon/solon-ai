@@ -19,7 +19,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.ai.AiModelDialect;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatResponseDefault;
-import org.noear.solon.ai.chat.function.ToolCallBuilder;
+import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.ChatOptions;

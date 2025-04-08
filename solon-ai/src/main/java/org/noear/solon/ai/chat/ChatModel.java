@@ -19,9 +19,9 @@ import org.noear.solon.ai.AiModel;
 import org.noear.solon.ai.chat.annotation.FunctionMapping;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
-import org.noear.solon.ai.chat.function.ChatFunction;
-import org.noear.solon.ai.chat.function.ChatFunctionDecl;
-import org.noear.solon.ai.chat.function.MethodChatFunction;
+import org.noear.solon.ai.chat.tool.ChatFunction;
+import org.noear.solon.ai.chat.tool.ChatFunctionDecl;
+import org.noear.solon.ai.chat.tool.MethodChatFunction;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 

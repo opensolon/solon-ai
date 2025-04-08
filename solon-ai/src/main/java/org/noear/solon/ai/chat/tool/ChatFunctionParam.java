@@ -13,16 +13,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.function;
+package org.noear.solon.ai.chat.tool;
 
 /**
- * 工具调用构建器
+ * 聊天函数的参数
  *
  * @author noear
  * @since 3.1
  */
-public class ToolCallBuilder {
-    public final StringBuffer idBuilder = new StringBuffer();
-    public final StringBuffer nameBuilder = new StringBuffer();
-    public final StringBuffer argumentsBuilder = new StringBuffer();
+public interface ChatFunctionParam {
+    /**
+     * 参数名字
+     */
+    String name();
+
+    /**
+     * 参数类型
+     */
+    Class<?> type();
+
+    /**
+     * 参数描述
+     */
+    String description();
+
+    /**
+     * 是否必须
+     */
+    boolean required();
 }

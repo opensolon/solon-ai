@@ -16,9 +16,9 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.annotation.FunctionMapping;
-import org.noear.solon.ai.chat.function.ChatFunction;
-import org.noear.solon.ai.chat.function.ChatFunctionDecl;
-import org.noear.solon.ai.chat.function.MethodChatFunction;
+import org.noear.solon.ai.chat.tool.ChatFunction;
+import org.noear.solon.ai.chat.tool.ChatFunctionDecl;
+import org.noear.solon.ai.chat.tool.MethodChatFunction;
 import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Method;

@@ -22,7 +22,7 @@ import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.audio.Audio;
 import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.*;
-import org.noear.solon.ai.chat.function.ToolCallBuilder;
+import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.image.Image;
