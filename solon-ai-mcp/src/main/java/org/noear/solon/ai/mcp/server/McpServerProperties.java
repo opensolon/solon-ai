@@ -36,7 +36,7 @@ public class McpServerProperties {
     /**
      * 服务名称
      */
-    private String name = "solon-ai-mcp-server";
+    private String name = "Solon-Ai-Mcp-Server";
     /**
      * 服务版本号
      */

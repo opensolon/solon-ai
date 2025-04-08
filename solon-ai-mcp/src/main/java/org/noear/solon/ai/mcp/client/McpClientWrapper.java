@@ -48,7 +48,7 @@ public class McpClientWrapper implements Closeable {
                 .build();
 
         this.real = McpClient.sync(mcpClientTransport)
-                .clientInfo(new McpSchema.Implementation("Solon-Mcp-Client", "0.0.1"))
+                .clientInfo(new McpSchema.Implementation("Solon-Ai-Mcp-Client", "1.0.0"))
                 .build();
         this.real.initialize();
     }
