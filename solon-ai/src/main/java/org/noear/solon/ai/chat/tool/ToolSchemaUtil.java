@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
 
+import java.net.URI;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -124,25 +125,31 @@ public class ToolSchemaUtil {
         String typeStr = funcParam.type().getSimpleName().toLowerCase();
 
         if (funcParam.type().isArray()) {
+            //数组
             paramNode.set("type", TYPE_ARRAY);
-            String typeItemStr = typeStr.substring(0, typeStr.length() - 2); //int[]
 
+            String typeItemStr = typeStr.substring(0, typeStr.length() - 2); //int[]
             paramNode.getOrNew("items").set("type", jsonTypeCorrection(typeItemStr));
         } else if (funcParam.type().isEnum()) {
-            paramNode.set("type", typeStr);
+            //枚举
+            paramNode.set("type", TYPE_STRING);
 
             paramNode.getOrNew("enum").build(n7 -> {
                 for (Object e : funcParam.type().getEnumConstants()) {
                     n7.add(e.toString());
                 }
             });
+        } else if (Date.class.isAssignableFrom(funcParam.type())) {
+            //日期
+            paramNode.set("type", TYPE_STRING);
+            paramNode.set("format", "date");
+        } else if (URI.class.isAssignableFrom(funcParam.type())) {
+            //URI
+            paramNode.set("type", TYPE_STRING);
+            paramNode.set("format", "uri");
         } else {
+            //其它
             paramNode.set("type", jsonTypeCorrection(typeStr));
-
-            //日期增加格式申明
-            if ("date".equals(typeStr)) {
-                paramNode.set("format", "date");
-            }
         }
 
         paramNode.set("description", funcParam.description());
@@ -173,8 +180,23 @@ public class ToolSchemaUtil {
             case "date":
                 return Date.class;
 
-            case "string":
+            case "string": {
+                ONode formatNode = paramNode.getOrNull("format");
+                ONode enumNode = paramNode.getOrNull("enum");
+
+                if (formatNode != null) {
+                    if ("date".equals(formatNode.getString())) {
+                        return Date.class;
+                    } else if ("uri".equals(formatNode.getString())) {
+                        return URI.class;
+                    }
+                } else if (enumNode != null && enumNode.isArray()) {
+                    //不好反转
+                    return String.class;
+                }
+
                 return String.class;
+            }
 
             case "array": {
                 String typeItemStr = jsonTypeCorrection(paramNode.get("items").getString());
