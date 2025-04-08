@@ -32,7 +32,7 @@ public class McpServerProperties {
     /**
      * 是否启用
      */
-    private boolean enabled = true;
+    private boolean enabled = false;
     /**
      * 服务名称
      */

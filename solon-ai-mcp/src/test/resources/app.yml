@@ -1,5 +1,6 @@
 
 solon.ai.mcp.server:
+  enabled: true
   sseEndpoint: "/mcp/sse"
 
 solon.logging.logger.root.level: INFO

@@ -6,7 +6,7 @@
 
 ```yaml
 solon.ai.mcp.server:
-  enabled: true //默认为 true
+  enabled: true //默认为 false
   sseEndpoint: "/mcp/sse" # 默认为 /mcp/sse
 
 ```
