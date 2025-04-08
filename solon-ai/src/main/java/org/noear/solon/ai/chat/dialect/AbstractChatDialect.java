@@ -20,10 +20,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.audio.Audio;
 import org.noear.solon.ai.chat.*;
-import org.noear.solon.ai.chat.function.ChatFunction;
-import org.noear.solon.ai.chat.function.ChatFunctionCall;
-import org.noear.solon.ai.chat.function.ChatFunctionParam;
-import org.noear.solon.ai.chat.function.ToolCallBuilder;
+import org.noear.solon.ai.chat.function.*;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.video.Video;
@@ -120,53 +117,11 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 n1.addNew().build(n2 -> {
                     n2.set("type", "function");
                     n2.getOrNew("function").build(n3 -> {
-                        n3.set("name", func.name());
-                        n3.set("description", func.description());
-                        n3.getOrNew("parameters").build(n4 -> {
-                            n4.set("type", "object");
-                            ONode n4r = new ONode(n4.options()).asArray();
-                            n4.getOrNew("properties").build(n5 -> {
-                                for (ChatFunctionParam p1 : func.params()) {
-                                    n5.getOrNew(p1.name()).build(n6 -> {
-                                        buildReqFunctionParamNodeDo(p1, n6);
-                                    });
-
-                                    if (p1.required()) {
-                                        n4r.add(p1.name());
-                                    }
-                                }
-                            });
-                            n4.set("required", n4r);
-                        });
+                        ToolSchemaUtil.buildToolNode(func, n3);
                     });
                 });
             }
         });
-    }
-
-    /**
-     * 字符串形态
-     */
-    protected void buildReqFunctionParamNodeDo(ChatFunctionParam p1, ONode n6) {
-        String typeStr = p1.type().getSimpleName().toLowerCase();
-        if (p1.type().isArray()) {
-            n6.set("type", "array");
-            String typeItem = typeStr.substring(0, typeStr.length() - 2); //int[]
-
-            n6.getOrNew("items").set("type", typeItem);
-        } else if (p1.type().isEnum()) {
-            n6.set("type", typeStr);
-
-            n6.getOrNew("enum").build(n7 -> {
-                for (Object e : p1.type().getEnumConstants()) {
-                    n7.add(e.toString());
-                }
-            });
-        } else {
-            n6.set("type", typeStr);
-        }
-
-        n6.set("description", p1.description());
     }
 
     @Override

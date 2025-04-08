@@ -56,6 +56,23 @@ public class ChatFunctionDecl implements ChatFunction {
      *
      * @param name        参数名字
      * @param type        参数类型
+     * @param required    是否必须
+     * @param description 参数描述
+     */
+    public ChatFunctionDecl param(String name, Class<?> type, boolean required, String description) {
+        if (type.isPrimitive() == false) {
+            throw new IllegalArgumentException("type must be primitive");
+        }
+
+        params.add(new ChatFunctionParamDecl(name, type, required, description));
+        return this;
+    }
+
+    /**
+     * 申明函数参数
+     *
+     * @param name        参数名字
+     * @param type        参数类型
      * @param description 参数描述
      */
     public ChatFunctionDecl param(String name, Class<?> type, String description) {
