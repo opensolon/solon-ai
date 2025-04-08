@@ -78,6 +78,18 @@ public class ChatOptions {
         return functionAdd(functionObj.getClass(), functionObj);
     }
 
+
+    /**
+     * 函数添加
+     */
+    public ChatOptions functionAdd(Collection<ChatFunction> functionColl) {
+        for (ChatFunction f : functionColl) {
+            functions.put(f.name(), f);
+        }
+
+        return this;
+    }
+
     /**
      * 函数添加
      *

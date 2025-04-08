@@ -37,6 +37,15 @@ public class ChatConfig extends AiConfig {
     }
 
     /**
+     * 添加全局函数
+     */
+    public void addGlobalFunction(Collection<ChatFunction> functionColl) {
+        for (ChatFunction f : functionColl) {
+            globalFunctions.put(f.name(), f);
+        }
+    }
+
+    /**
      * 获取单个全局函数
      */
     public ChatFunction getGlobalFunction(String name) {
