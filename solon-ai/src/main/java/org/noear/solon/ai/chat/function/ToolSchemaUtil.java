@@ -37,7 +37,7 @@ public class ToolSchemaUtil {
     public static final String TYPE_NULL = "null";
 
     /**
-     * 解析工具实例
+     * 解析工具完整节点
      *
      * @param funcNode 函数节点
      */
@@ -46,8 +46,20 @@ public class ToolSchemaUtil {
         functionDecl.description(funcNode.get("description").getString());
 
         ONode parametersNode = funcNode.get("parameters");
-        List<String> requiredList = funcNode.get("required").toObjectList(String.class);
+
+        return parseToolParametersNode(functionDecl, parametersNode);
+    }
+
+    /**
+     * 解析工具参数节点
+     *
+     * @param functionDecl   函数申明
+     * @param parametersNode 函数参数节点
+     */
+    public static ChatFunctionDecl parseToolParametersNode(ChatFunctionDecl functionDecl, ONode parametersNode) {
+        List<String> requiredList = parametersNode.get("required").toObjectList(String.class);
         ONode propertiesNode = parametersNode.get("properties");
+
         for (Map.Entry<String, ONode> entry : propertiesNode.obj().entrySet()) {
             ONode paramNode = entry.getValue();
             String name = entry.getKey();
@@ -61,31 +73,45 @@ public class ToolSchemaUtil {
     }
 
     /**
-     * 构建工具节点
+     * 构建工具完整节点
      *
      * @param func     函数
      * @param funcNode 函数节点（待构建）
      */
-    public static void buildToolNode(ChatFunction func, ONode funcNode) {
+    public static ONode buildToolNode(ChatFunction func, ONode funcNode) {
         funcNode.set("name", func.name());
         funcNode.set("description", func.description());
 
         funcNode.getOrNew("parameters").build(parametersNode -> {
-            parametersNode.set("type", TYPE_OBJECT);
-            ONode requiredNode = new ONode(parametersNode.options()).asArray();
-            parametersNode.getOrNew("properties").build(propertiesNode -> {
-                for (ChatFunctionParam fp : func.params()) {
-                    propertiesNode.getOrNew(fp.name()).build(paramNode -> {
-                        buildToolParamNode(fp, paramNode);
-                    });
-
-                    if (fp.required()) {
-                        requiredNode.add(fp.name());
-                    }
-                }
-            });
-            parametersNode.set("required", requiredNode);
+            buildToolParametersNode(func, parametersNode);
         });
+
+        return funcNode;
+    }
+
+    /**
+     * 构建工具参数节点
+     *
+     * @param func           函数
+     * @param parametersNode 函数参数节点（待构建）
+     */
+    public static ONode buildToolParametersNode(ChatFunction func, ONode parametersNode) {
+        parametersNode.set("type", TYPE_OBJECT);
+        ONode requiredNode = new ONode(parametersNode.options()).asArray();
+        parametersNode.getOrNew("properties").build(propertiesNode -> {
+            for (ChatFunctionParam fp : func.params()) {
+                propertiesNode.getOrNew(fp.name()).build(paramNode -> {
+                    buildToolParamNode(fp, paramNode);
+                });
+
+                if (fp.required()) {
+                    requiredNode.add(fp.name());
+                }
+            }
+        });
+        parametersNode.set("required", requiredNode);
+
+        return parametersNode;
     }
 
     /**
