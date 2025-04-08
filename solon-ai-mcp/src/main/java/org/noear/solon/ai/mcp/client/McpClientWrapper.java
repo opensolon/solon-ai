@@ -140,14 +140,18 @@ public class McpClientWrapper implements Closeable {
                 String type = entry.getValue().get("type").getString();
                 String description = entry.getValue().get("description").getString();
 
+                //后续要扩展更我类型
                 switch (type) {
                     case "string":
                         decl.stringParam(entry.getKey(), description);
                         break;
                     case "int":
+                    case "integer":
+                    case "long":
                         decl.intParam(entry.getKey(), description);
                         break;
                     case "float":
+                    case "double":
                         decl.floatParam(entry.getKey(), description);
                         break;
                 }
