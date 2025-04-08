@@ -2,10 +2,12 @@
 
 ### Server
 
+引用插件后，所有的组件的 FunctionMapping 方法，会自动发布为 mcp 服务内容（可以配置不启用，则不发布）
+
 ```yaml
 solon.ai.mcp.server:
-  enabled: true
-  sseEndpoint: "/mcp/sse"
+  enabled: true //默认为 true
+  sseEndpoint: "/mcp/sse" # 默认为 /mcp/sse
 
 ```
 
@@ -30,6 +32,8 @@ public class McpServerApp {
 ```
 
 ### Client
+
+客户端可以使用原生的 modelcontextprotocol 接口，也可以使用 McpClientSimp (简化过)
 
 ```java
 public void test(){
