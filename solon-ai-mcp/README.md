@@ -31,10 +31,9 @@ public class McpServerTool {
     //
     // 建议开启编译参数：-parameters （否则，要再配置参数的 name）
     //
-    @FunctionMapping(description = "整数求和函数")
-    public int sum(@FunctionParam(description = "参数a") int a,
-                   @FunctionParam(description = "参数b") int b) {
-        return a + b;
+    @FunctionMapping(description = "查询天气预报")
+    public String getWeather(@FunctionParam(description = "城市位置") String location) {
+        return "晴，14度";
     }
 }
 
@@ -49,22 +48,26 @@ public class McpServerApp {
 
 客户端可以使用原生的 modelcontextprotocol 接口，也可以使用 McpClientWrapper (包装简化过)
 
+* 直接调用
+
 ```java
-//直接调用
 public void case1(){
     McpClientWrapper mcpClient = new McpClientWrapper("http://localhost:8080", "/mcp/sse");
 
-    String rst = mcpClient.callToolAsText("sum", Map.of("a", 1, "b", 2));
+    String rst = mcpClient.callToolAsText("getWeather", Map.of("location", "杭州"));
 }
+```
 
-//绑定给模型使用
+* 绑定给模型使用
+
+```java
 public void case2(){
     ChatModel chatModel = null;
     McpClientWrapper mcpClient = null;
 
-    chatModel.prompt("杭州今天的天气情况如何？")
+    chatModel.prompt("杭州今天的天气怎么样？")
             .options(options -> {
-                //转为函数集用于绑定（后续会不断完善）
+                //转为函数集合用于绑定
                 options.functionAdd(mcpClient.toFunctions());
             })
             .call();

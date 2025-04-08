@@ -50,7 +50,7 @@ public class McpClientTest {
 
         McpClientWrapper mcpClient = new McpClientWrapper(baseUri, "/mcp/sse");
 
-        String response = mcpClient.callToolAsText("sum", Map.of("a", 1, "b", 2));
+        String response = mcpClient.callToolAsText("getWeather", Map.of("location", "杭州"));
 
         assert response != null;
         log.warn("{}", response);
@@ -63,7 +63,7 @@ public class McpClientTest {
         ChatModel chatModel = null;
         McpClientWrapper mcpClient = null;
 
-        chatModel.prompt("1+1 求和是多少？")
+        chatModel.prompt("杭州今天的天气怎么样？")
                 .options(options -> {
                     //转为函数集用于绑定
                     options.functionAdd(mcpClient.toFunctions());
