@@ -60,10 +60,6 @@ public class ChatFunctionDecl implements ChatFunction {
      * @param description 参数描述
      */
     public ChatFunctionDecl param(String name, Class<?> type, boolean required, String description) {
-        if (type.isPrimitive() == false) {
-            throw new IllegalArgumentException("type must be primitive");
-        }
-
         params.add(new ChatFunctionParamDecl(name, type, required, description));
         return this;
     }
@@ -76,11 +72,7 @@ public class ChatFunctionDecl implements ChatFunction {
      * @param description 参数描述
      */
     public ChatFunctionDecl param(String name, Class<?> type, String description) {
-        if (type.isPrimitive() == false) {
-            throw new IllegalArgumentException("type must be primitive");
-        }
-
-        params.add(new ChatFunctionParamDecl(name, type, description));
+        params.add(new ChatFunctionParamDecl(name, type, true, description));
         return this;
     }
 
