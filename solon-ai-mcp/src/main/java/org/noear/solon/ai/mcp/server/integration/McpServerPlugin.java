@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.annotation.FunctionMapping;
 import org.noear.solon.ai.chat.function.ChatFunction;
 import org.noear.solon.ai.chat.function.ChatFunctionParam;
 import org.noear.solon.ai.chat.function.MethodChatFunction;
+import org.noear.solon.ai.chat.function.ToolSchemaUtil;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.core.*;
 import reactor.core.publisher.Mono;
@@ -100,48 +101,8 @@ public class McpServerPlugin implements Plugin {
     protected ONode buildJsonSchema(ChatFunction chatFunction) {
         ONode jsonSchema = new ONode();
         jsonSchema.set("$schema", "http://json-schema.org/draft-07/schema#");
-        jsonSchema.set("type", "object");
-
-
-        ONode n4r = new ONode(jsonSchema.options()).asArray();
-        jsonSchema.getOrNew("properties").build(n5 -> {
-            for (ChatFunctionParam p1 : chatFunction.params()) {
-                n5.getOrNew(p1.name()).build(n6 -> {
-                    buildJsonSchemaParamNodeDo(p1, n6);
-                });
-
-                if (p1.required()) {
-                    n4r.add(p1.name());
-                }
-            }
-        });
-        jsonSchema.set("required", n4r);
+        ToolSchemaUtil.buildToolParametersNode(chatFunction, jsonSchema);
 
         return jsonSchema;
-    }
-
-    /**
-     * 字符串形态
-     */
-    protected void buildJsonSchemaParamNodeDo(ChatFunctionParam p1, ONode paramNode) {
-        String typeStr = p1.type().getSimpleName().toLowerCase();
-        if (p1.type().isArray()) {
-            paramNode.set("type", "array");
-            String typeItem = typeStr.substring(0, typeStr.length() - 2); //int[]
-
-            paramNode.getOrNew("items").set("type", typeItem);
-        } else if (p1.type().isEnum()) {
-            paramNode.set("type", typeStr);
-
-            paramNode.getOrNew("enum").build(n7 -> {
-                for (Object e : p1.type().getEnumConstants()) {
-                    n7.add(e.toString());
-                }
-            });
-        } else {
-            paramNode.set("type", typeStr);
-        }
-
-        paramNode.set("description", p1.description());
     }
 }

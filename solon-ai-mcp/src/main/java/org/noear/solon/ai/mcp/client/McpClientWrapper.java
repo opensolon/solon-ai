@@ -23,6 +23,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.function.ChatFunction;
 import org.noear.solon.ai.chat.function.ChatFunctionDecl;
+import org.noear.solon.ai.chat.function.ToolSchemaUtil;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.mcp.exception.McpException;
 import java.io.Closeable;
@@ -132,36 +133,18 @@ public class McpClientWrapper implements Closeable {
 
         McpSchema.ListToolsResult result = real.listTools();
         for (McpSchema.Tool tool : result.tools()) {
-            ChatFunctionDecl decl = new ChatFunctionDecl(tool.name());
-            decl.description(tool.description());
-            ONode propertiesNode = ONode.load(tool.inputSchema().properties());
+            ChatFunctionDecl functionDecl = new ChatFunctionDecl(tool.name());
+            functionDecl.description(tool.description());
 
-            for (Map.Entry<String, ONode> entry : propertiesNode.obj().entrySet()) {
-                String type = entry.getValue().get("type").getString();
-                String description = entry.getValue().get("description").getString();
+            ONode parametersNode = ONode.load(tool.inputSchema());
 
-                //后续要扩展更我类型
-                switch (type) {
-                    case "string":
-                        decl.stringParam(entry.getKey(), description);
-                        break;
-                    case "int":
-                    case "integer":
-                    case "long":
-                        decl.intParam(entry.getKey(), description);
-                        break;
-                    case "float":
-                    case "double":
-                        decl.floatParam(entry.getKey(), description);
-                        break;
-                }
-            }
+            ToolSchemaUtil.parseToolParametersNode(functionDecl, parametersNode);
 
-            decl.handle((arg) -> {
-                return callToolAsText(tool.name(), arg);
+            functionDecl.handle((arg) -> {
+                return callToolAsText(functionDecl.name(), arg);
             });
 
-            functionList.add(decl);
+            functionList.add(functionDecl);
         }
 
         return functionList;
