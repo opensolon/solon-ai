@@ -2,6 +2,13 @@
 
 ### Server
 
+```yaml
+solon.ai.mcp.server:
+  enabled: true
+  sseEndpoint: "/mcp/sse"
+
+```
+
 ```java
 @Component
 public class McpServerTool {
