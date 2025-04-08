@@ -21,7 +21,7 @@ import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
 import org.noear.solon.ai.chat.tool.ChatFunction;
 import org.noear.solon.ai.chat.tool.ChatFunctionDecl;
-import org.noear.solon.ai.chat.tool.ChatFunctionMethod;
+import org.noear.solon.ai.chat.tool.MethodChatFunction;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
@@ -174,7 +174,7 @@ public class ChatModel implements AiModel {
                 int count = 0;
                 for (Method method : functionClz.getMethods()) {
                     if (method.isAnnotationPresent(FunctionMapping.class)) {
-                        ChatFunctionMethod func = new ChatFunctionMethod(functionObj, method);
+                        MethodChatFunction func = new MethodChatFunction(functionObj, method);
                         config.addGlobalFunction(func);
                         count++;
                     }
