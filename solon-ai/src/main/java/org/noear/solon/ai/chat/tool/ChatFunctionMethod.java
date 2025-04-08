@@ -32,14 +32,14 @@ import java.util.Map;
  * @author noear
  * @since 3.1
  */
-public class MethodChatFunction implements ChatFunction {
+public class ChatFunctionMethod implements ChatFunction {
     private final Object target;
     private final Method method;
     private final String description;
     private final String name;
     private final List<ChatFunctionParam> params = new ArrayList<>();
 
-    public MethodChatFunction(Object target, Method method) {
+    public ChatFunctionMethod(Object target, Method method) {
         this.target = target;
         this.method = method;
 

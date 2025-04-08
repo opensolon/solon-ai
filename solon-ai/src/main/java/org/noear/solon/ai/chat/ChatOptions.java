@@ -18,7 +18,7 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.ai.chat.annotation.FunctionMapping;
 import org.noear.solon.ai.chat.tool.ChatFunction;
 import org.noear.solon.ai.chat.tool.ChatFunctionDecl;
-import org.noear.solon.ai.chat.tool.MethodChatFunction;
+import org.noear.solon.ai.chat.tool.ChatFunctionMethod;
 import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Method;
@@ -104,7 +104,7 @@ public class ChatOptions {
             int count = 0;
             for (Method method : functionClz.getMethods()) {
                 if (method.isAnnotationPresent(FunctionMapping.class)) {
-                    MethodChatFunction func = new MethodChatFunction(functionObj, method);
+                    ChatFunctionMethod func = new ChatFunctionMethod(functionObj, method);
                     functions.put(func.name(), func);
                     count++;
                 }
