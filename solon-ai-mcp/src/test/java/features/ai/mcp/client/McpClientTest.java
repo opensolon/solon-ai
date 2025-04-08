@@ -8,10 +8,10 @@ import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Solon;
-import org.noear.solon.ai.mcp.client.McpClientSimp;
+import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.mcp.client.McpClientWrapper;
 import org.noear.solon.test.SolonTest;
 
-import java.util.List;
 import java.util.Map;
 
 
@@ -48,7 +48,7 @@ public class McpClientTest {
     public void case2() throws Exception {
         String baseUri = "http://localhost:" + Solon.cfg().serverPort();
 
-        McpClientSimp mcpClient = new McpClientSimp(baseUri, "/mcp/sse");
+        McpClientWrapper mcpClient = new McpClientWrapper(baseUri, "/mcp/sse");
 
         String response = mcpClient.callToolAsText("sum", Map.of("a", 1, "b", 2));
 
@@ -56,5 +56,18 @@ public class McpClientTest {
         log.warn("{}", response);
 
         mcpClient.close();
+    }
+
+    //与模型绑定
+    public void case3() throws Exception {
+        ChatModel chatModel = null;
+        McpClientWrapper mcpClient = null;
+
+        chatModel.prompt("1+1 求和是多少？")
+                .options(options -> {
+                    //转为函数集用于绑定
+                    options.functionAdd(mcpClient.toFunctions());
+                })
+                .call();
     }
 }
