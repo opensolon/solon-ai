@@ -1,4 +1,4 @@
-
+提示：需要 JDK 17 支持（modelcontextprotocol sdk 需要 java 17 支持）
 
 ### Server
 
