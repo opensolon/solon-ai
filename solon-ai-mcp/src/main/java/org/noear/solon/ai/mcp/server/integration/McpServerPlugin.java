@@ -24,7 +24,6 @@ import org.noear.snack.ONode;
 import org.noear.solon.ai.chat.annotation.FunctionMapping;
 import org.noear.solon.ai.chat.tool.ChatFunction;
 import org.noear.solon.ai.chat.tool.MethodChatFunction;
-import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.core.*;
 import reactor.core.publisher.Mono;
@@ -100,7 +99,7 @@ public class McpServerPlugin implements Plugin {
     protected ONode buildJsonSchema(ChatFunction chatFunction) {
         ONode jsonSchema = new ONode();
         jsonSchema.set("$schema", "http://json-schema.org/draft-07/schema#");
-        ToolSchemaUtil.buildToolParametersNode(chatFunction, jsonSchema);
+        jsonSchema.setAll(chatFunction.inputSchema());
 
         return jsonSchema;
     }

@@ -138,7 +138,6 @@ public class ChatFunctionDecl implements ChatFunction {
     /**
      * 函数参数
      */
-    @Override
     public List<ChatFunctionParam> params() {
         return Collections.unmodifiableList(params);
     }
@@ -148,7 +147,7 @@ public class ChatFunctionDecl implements ChatFunction {
      */
     @Override
     public ONode inputSchema() {
-        return ToolSchemaUtil.buildToolParametersNode(this, new ONode());
+        return ToolSchemaUtil.buildToolParametersNode(this, params, new ONode());
     }
 
     /**

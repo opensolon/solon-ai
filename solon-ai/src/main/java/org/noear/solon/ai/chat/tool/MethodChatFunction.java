@@ -72,7 +72,6 @@ public class MethodChatFunction implements ChatFunction {
     /**
      * 参数
      */
-    @Override
     public List<ChatFunctionParam> params() {
         return Collections.unmodifiableList(params);
     }
@@ -82,7 +81,7 @@ public class MethodChatFunction implements ChatFunction {
      */
     @Override
     public ONode inputSchema() {
-        return ToolSchemaUtil.buildToolParametersNode(this, new ONode());
+        return ToolSchemaUtil.buildToolParametersNode(this, params, new ONode());
     }
 
     /**

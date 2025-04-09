@@ -38,20 +38,6 @@ public class ToolSchemaUtil {
     public static final String TYPE_NULL = "null";
 
     /**
-     * 解析工具完整节点
-     *
-     * @param funcNode 函数节点
-     */
-    public static ChatFunctionDecl parseToolNode(ONode funcNode) {
-        ChatFunctionDecl functionDecl = new ChatFunctionDecl(funcNode.get("name").getString());
-        functionDecl.description(funcNode.get("description").getString());
-
-        ONode parametersNode = funcNode.get("parameters");
-
-        return parseToolParametersNode(functionDecl, parametersNode);
-    }
-
-    /**
      * 解析工具参数节点
      *
      * @param functionDecl   函数申明
@@ -74,33 +60,16 @@ public class ToolSchemaUtil {
     }
 
     /**
-     * 构建工具完整节点
-     *
-     * @param func     函数
-     * @param funcNode 函数节点（待构建）
-     */
-    public static ONode buildToolNode(ChatFunction func, ONode funcNode) {
-        funcNode.set("name", func.name());
-        funcNode.set("description", func.description());
-
-        funcNode.getOrNew("parameters").build(parametersNode -> {
-            buildToolParametersNode(func, parametersNode);
-        });
-
-        return funcNode;
-    }
-
-    /**
      * 构建工具参数节点
      *
      * @param func           函数
      * @param parametersNode 函数参数节点（待构建）
      */
-    public static ONode buildToolParametersNode(ChatFunction func, ONode parametersNode) {
+    public static ONode buildToolParametersNode(ChatFunction func, List<ChatFunctionParam> funcParams, ONode parametersNode) {
         parametersNode.set("type", TYPE_OBJECT);
         ONode requiredNode = new ONode(parametersNode.options()).asArray();
         parametersNode.getOrNew("properties").build(propertiesNode -> {
-            for (ChatFunctionParam fp : func.params()) {
+            for (ChatFunctionParam fp : funcParams) {
                 propertiesNode.getOrNew(fp.name()).build(paramNode -> {
                     buildToolParamNode(fp, paramNode);
                 });

@@ -15,7 +15,8 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import java.util.List;
+import org.noear.snack.ONode;
+
 import java.util.Map;
 
 /**
@@ -24,9 +25,24 @@ import java.util.Map;
  * @author noear
  * @since 3.1
  */
-public interface ChatFunction extends Tool {
+public interface ChatFunction {
     /**
-     * 函数参数
+     * 名字
      */
-    List<ChatFunctionParam> params();
+    String name();
+
+    /**
+     * 描述
+     */
+    String description();
+
+    /**
+     * 输入架构
+     */
+    ONode inputSchema();
+
+    /**
+     * 处理
+     */
+    String handle(Map<String, Object> args) throws Throwable;
 }

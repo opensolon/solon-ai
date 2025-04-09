@@ -22,8 +22,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.ChatFunction;
-import org.noear.solon.ai.chat.tool.ChatFunctionDecl;
-import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
+import org.noear.solon.ai.chat.tool.ChatFunctionRefer;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.mcp.exception.McpException;
 import java.io.Closeable;
@@ -133,18 +132,17 @@ public class McpClientWrapper implements Closeable {
 
         McpSchema.ListToolsResult result = real.listTools();
         for (McpSchema.Tool tool : result.tools()) {
-            ChatFunctionDecl functionDecl = new ChatFunctionDecl(tool.name());
-            functionDecl.description(tool.description());
-
+            String name = tool.name();
+            String description = tool.description();
             ONode parametersNode = ONode.load(tool.inputSchema());
 
-            ToolSchemaUtil.parseToolParametersNode(functionDecl, parametersNode);
+            ChatFunctionRefer functionRefer = new ChatFunctionRefer(
+                    name,
+                    description,
+                    parametersNode,
+                    args -> callToolAsText(name, args));
 
-            functionDecl.handle((arg) -> {
-                return callToolAsText(functionDecl.name(), arg);
-            });
-
-            functionList.add(functionDecl);
+            functionList.add(functionRefer);
         }
 
         return functionList;
