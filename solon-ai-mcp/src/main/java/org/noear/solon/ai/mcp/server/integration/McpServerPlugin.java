@@ -53,8 +53,14 @@ public class McpServerPlugin implements Plugin {
             mcpServerSpec = McpServer.async(mcpTransportProvider)
                     .serverInfo(serverProperties.getName(), serverProperties.getVersion());
 
+            //从组件中提取
             context.beanExtractorAdd(ToolMapping.class, (bw, method, anno) -> {
                 FunctionTool functionTool = new MethodFunctionTool(bw.raw(), method);
+                addToolSpec(mcpServerSpec, functionTool);
+            });
+
+            //订阅接口实现
+            context.subBeansOfType(FunctionTool.class, functionTool -> {
                 addToolSpec(mcpServerSpec, functionTool);
             });
 
