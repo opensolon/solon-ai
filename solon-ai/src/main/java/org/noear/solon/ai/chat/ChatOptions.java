@@ -74,8 +74,8 @@ public class ChatOptions {
      *
      * @param toolObj 工具对象
      */
-    public ChatOptions toolAdd(Object toolObj) {
-        return toolAdd(toolObj.getClass(), toolObj);
+    public ChatOptions toolsAdd(Object toolObj) {
+        return toolsAdd(toolObj.getClass(), toolObj);
     }
 
 
@@ -96,7 +96,7 @@ public class ChatOptions {
      * @param toolClz 工具类（如果工具对象为代理时，必须传入原始类）
      * @param toolObj 工具对象
      */
-    public ChatOptions toolAdd(Class<?> toolClz, Object toolObj) {
+    public ChatOptions toolsAdd(Class<?> toolClz, Object toolObj) {
         if (toolObj instanceof FunctionTool) {
             FunctionTool func = (FunctionTool) toolObj;
             tools.put(func.name(), func);
@@ -124,10 +124,10 @@ public class ChatOptions {
      * @param name        名字
      * @param toolBuilder 工具构建器
      */
-    public ChatOptions toolAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
+    public ChatOptions toolsAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
         FunctionToolDesc decl = new FunctionToolDesc(name);
         toolBuilder.accept(decl);
-        toolAdd(decl);
+        toolsAdd(decl);
         return this;
     }
 
@@ -163,7 +163,7 @@ public class ChatOptions {
      *
      * @param choiceOrName 选项或特定函数名
      */
-    public ChatOptions function_choice(String choiceOrName) {
+    public ChatOptions tool_choice(String choiceOrName) {
         if (choiceOrName == null) {
             optionAdd(TOOL_CHOICE, "none");
         } else {

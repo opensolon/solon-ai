@@ -32,7 +32,7 @@ public class ChatConfig extends AiConfig {
     /**
      * 添加默认工具（即每次请求都会带上）
      */
-    public void addDefaultTool(FunctionTool tool) {
+    public void addDefaultTools(FunctionTool tool) {
         defaultTools.put(tool.name(), tool);
     }
 

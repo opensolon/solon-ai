@@ -159,7 +159,7 @@ public class ChatModel implements AiModel {
          */
         public Builder defaultToolsAdd(Collection<FunctionTool> toolColl) {
             for (FunctionTool f : toolColl) {
-                config.addDefaultTool(f);
+                config.addDefaultTools(f);
             }
 
             return this;
@@ -170,8 +170,8 @@ public class ChatModel implements AiModel {
          *
          * @param toolObj 工具对象
          */
-        public Builder defaultToolAdd(Object toolObj) {
-            return defaultToolAdd(toolObj.getClass(), toolObj);
+        public Builder defaultToolsAdd(Object toolObj) {
+            return defaultToolsAdd(toolObj.getClass(), toolObj);
         }
 
         /**
@@ -180,16 +180,16 @@ public class ChatModel implements AiModel {
          * @param toolClz 工具类（如果工具对象为代理时，必须传入原始类）
          * @param toolObj 工具对象
          */
-        public Builder defaultToolAdd(Class<?> toolClz, Object toolObj) {
+        public Builder defaultToolsAdd(Class<?> toolClz, Object toolObj) {
             if (toolObj instanceof FunctionTool) {
                 FunctionTool func = (FunctionTool) toolObj;
-                config.addDefaultTool(func);
+                config.addDefaultTools(func);
             } else {
                 int count = 0;
                 for (Method method : toolClz.getMethods()) {
                     if (method.isAnnotationPresent(ToolMapping.class)) {
                         MethodFunctionTool func = new MethodFunctionTool(toolObj, method);
-                        config.addDefaultTool(func);
+                        config.addDefaultTools(func);
                         count++;
                     }
                 }
@@ -208,10 +208,10 @@ public class ChatModel implements AiModel {
          * @param name        名字
          * @param toolBuilder 工具构建器
          */
-        public Builder defaultToolAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
+        public Builder defaultToolsAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
             FunctionToolDesc decl = new FunctionToolDesc(name);
             toolBuilder.accept(decl);
-            defaultToolAdd(decl);
+            defaultToolsAdd(decl);
             return this;
         }
 

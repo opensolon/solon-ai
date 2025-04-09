@@ -65,7 +65,7 @@ public class OpenaiTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apkKey)
                 .model(model)
-                .defaultToolAdd(new Tools())
+                .defaultToolsAdd(new Tools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -82,7 +82,7 @@ public class OpenaiTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apkKey)
                 .model(model)
-                .defaultToolAdd(new Tools())
+                .defaultToolsAdd(new Tools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -123,7 +123,7 @@ public class OpenaiTest {
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.toolAdd(new Tools()))
+                .options(o -> o.toolsAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
@@ -164,7 +164,7 @@ public class OpenaiTest {
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.toolAdd(new Tools()))
+                .options(o -> o.toolsAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
@@ -192,7 +192,7 @@ public class OpenaiTest {
         //流返回(sse)
         publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.toolAdd(new Tools()))
+                .options(o -> o.toolsAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder2 = new AtomicReference<>();
