@@ -27,6 +27,13 @@ import java.util.Map;
  */
 public interface FunctionTool extends Tool {
     /**
+     * 工具类型
+     */
+    default String type() {
+        return "function";
+    }
+
+    /**
      * 名字
      */
     String name();

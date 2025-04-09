@@ -22,4 +22,8 @@ package org.noear.solon.ai.chat.tool;
  * @since 3.1
  */
 public interface Tool {
+    /**
+     * 工具类型
+     */
+    String type();
 }
