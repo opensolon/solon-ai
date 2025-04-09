@@ -3,5 +3,7 @@
 
 * ChatFunction(聊天函数) -> FunctionTool（函数工具）
   * ChatFunctionDecl（聊天函数申明） -> FunctionToolDesc（函数工具描述）
-* ChatModel:GlobalFunction -> ChatModel:DefaultTool
-* ChatOptions:Fuction - > ChatModel:Tool
+* ChatModel:globalFunctionAdd(...) -> ChatModel:defaultToolAdd(...)
+  * ChatOptions:functionAdd(...) - > ChatModel:toolAdd(...)
+* `@FunctionMapping` -> `@ToolMapping`
+  * `@FunctionParam` -> `@ToolParam`
