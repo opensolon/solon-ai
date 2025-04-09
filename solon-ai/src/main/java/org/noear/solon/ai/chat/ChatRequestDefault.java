@@ -18,7 +18,7 @@ package org.noear.solon.ai.chat;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
-import org.noear.solon.ai.chat.tool.ChatFunction;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -299,7 +299,7 @@ public class ChatRequestDefault implements ChatRequest {
         }
 
         for (ToolCall call : acm.getToolCalls()) {
-            ChatFunction func = config.getGlobalFunction(call.name());
+            FunctionTool func = config.getGlobalFunction(call.name());
 
             if (func == null) {
                 func = options.function(call.name());

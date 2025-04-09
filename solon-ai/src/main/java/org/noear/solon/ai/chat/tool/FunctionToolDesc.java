@@ -21,21 +21,21 @@ import java.util.*;
 import java.util.function.Function;
 
 /**
- * 聊天函数申明（相当于构建器）
+ * 函数工具描述（相当于构建器）
  *
  * @author noear
  * @since 3.1
  */
-public class ChatFunctionDecl implements ChatFunction {
+public class FunctionToolDesc implements FunctionTool {
     private final String name;
-    private final List<ChatFunctionParam> params;
+    private final List<FunctionToolParam> params;
     private String description;
     private Function<Map<String, Object>, String> doHandle;
 
     /**
      * @param name 函数名字
      */
-    public ChatFunctionDecl(String name) {
+    public FunctionToolDesc(String name) {
         this.name = name;
         this.params = new ArrayList<>();
     }
@@ -45,7 +45,7 @@ public class ChatFunctionDecl implements ChatFunction {
      *
      * @param description 参数
      */
-    public ChatFunctionDecl description(String description) {
+    public FunctionToolDesc description(String description) {
         this.description = description;
         return this;
     }
@@ -58,8 +58,8 @@ public class ChatFunctionDecl implements ChatFunction {
      * @param required    是否必须
      * @param description 参数描述
      */
-    public ChatFunctionDecl param(String name, Class<?> type, boolean required, String description) {
-        params.add(new ChatFunctionParamDecl(name, type, required, description));
+    public FunctionToolDesc param(String name, Class<?> type, boolean required, String description) {
+        params.add(new FunctionToolParamDesc(name, type, required, description));
         return this;
     }
 
@@ -70,8 +70,8 @@ public class ChatFunctionDecl implements ChatFunction {
      * @param type        参数类型
      * @param description 参数描述
      */
-    public ChatFunctionDecl param(String name, Class<?> type, String description) {
-        params.add(new ChatFunctionParamDecl(name, type, true, description));
+    public FunctionToolDesc param(String name, Class<?> type, String description) {
+        params.add(new FunctionToolParamDesc(name, type, true, description));
         return this;
     }
 
@@ -81,7 +81,7 @@ public class ChatFunctionDecl implements ChatFunction {
      * @param name        参数名字
      * @param description 参数描述
      */
-    public ChatFunctionDecl stringParam(String name, String description) {
+    public FunctionToolDesc stringParam(String name, String description) {
         return param(name, String.class, description);
     }
 
@@ -91,7 +91,7 @@ public class ChatFunctionDecl implements ChatFunction {
      * @param name        参数名字
      * @param description 参数描述
      */
-    public ChatFunctionDecl intParam(String name, String description) {
+    public FunctionToolDesc intParam(String name, String description) {
         return param(name, int.class, description);
     }
 
@@ -101,8 +101,28 @@ public class ChatFunctionDecl implements ChatFunction {
      * @param name        参数名字
      * @param description 参数描述
      */
-    public ChatFunctionDecl floatParam(String name, String description) {
+    public FunctionToolDesc floatParam(String name, String description) {
         return param(name, float.class, description);
+    }
+
+    /**
+     * 申明函数布尔参数
+     *
+     * @param name        参数名字
+     * @param description 参数描述
+     */
+    public FunctionToolDesc boolParam(String name, String description) {
+        return param(name, Boolean.class, description);
+    }
+
+    /**
+     * 申明函数时间参数
+     *
+     * @param name        参数名字
+     * @param description 参数描述
+     */
+    public FunctionToolDesc dateParam(String name, String description) {
+        return param(name, Date.class, description);
     }
 
     /**
@@ -110,7 +130,7 @@ public class ChatFunctionDecl implements ChatFunction {
      *
      * @param handler 处理器
      */
-    public ChatFunctionDecl doHandle(Function<Map<String, Object>, String> handler) {
+    public FunctionToolDesc doHandle(Function<Map<String, Object>, String> handler) {
         this.doHandle = handler;
         return this;
     }
@@ -138,7 +158,7 @@ public class ChatFunctionDecl implements ChatFunction {
     /**
      * 函数参数
      */
-    public List<ChatFunctionParam> params() {
+    public List<FunctionToolParam> params() {
         return Collections.unmodifiableList(params);
     }
 
@@ -158,7 +178,7 @@ public class ChatFunctionDecl implements ChatFunction {
         Map<String, Object> argsNew = new HashMap<>();
 
         ONode argsNode = ONode.load(args);
-        for (ChatFunctionParam p1 : this.params()) {
+        for (FunctionToolParam p1 : this.params()) {
             ONode v1 = argsNode.getOrNull(p1.name());
             if (v1 == null) {
                 //null

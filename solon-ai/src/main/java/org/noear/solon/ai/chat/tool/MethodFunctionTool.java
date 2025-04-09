@@ -25,19 +25,19 @@ import java.lang.reflect.Parameter;
 import java.util.*;
 
 /**
- * 基于方法构建的聊天函数
+ * 方法构建的函数工具
  *
  * @author noear
  * @since 3.1
  */
-public class MethodChatFunction implements ChatFunction {
+public class MethodFunctionTool implements FunctionTool {
     private final Object target;
     private final Method method;
     private final String description;
     private final String name;
-    private final List<ChatFunctionParam> params = new ArrayList<>();
+    private final List<FunctionToolParam> params = new ArrayList<>();
 
-    public MethodChatFunction(Object target, Method method) {
+    public MethodFunctionTool(Object target, Method method) {
         this.target = target;
         this.method = method;
 
@@ -49,7 +49,7 @@ public class MethodChatFunction implements ChatFunction {
             FunctionParam p1Anno = p1.getAnnotation(FunctionParam.class);
 
             String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-            params.add(new ChatFunctionParamDecl(name, p1.getType(), p1Anno.required(), p1Anno.description()));
+            params.add(new FunctionToolParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description()));
         }
     }
 
@@ -72,7 +72,7 @@ public class MethodChatFunction implements ChatFunction {
     /**
      * 参数
      */
-    public List<ChatFunctionParam> params() {
+    public List<FunctionToolParam> params() {
         return Collections.unmodifiableList(params);
     }
 
@@ -92,7 +92,7 @@ public class MethodChatFunction implements ChatFunction {
         Map<String, Object> argsNew = new HashMap<>();
 
         ONode argsNode = ONode.load(args);
-        for (ChatFunctionParam p1 : this.params()) {
+        for (FunctionToolParam p1 : this.params()) {
             ONode v1 = argsNode.getOrNull(p1.name());
             if (v1 == null) {
                 //null

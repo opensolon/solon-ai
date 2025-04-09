@@ -16,12 +16,12 @@
 package org.noear.solon.ai.chat.tool;
 
 /**
- * 聊天函数的参数
+ * 函数工具参数
  *
  * @author noear
  * @since 3.1
  */
-public interface ChatFunctionParam {
+public interface FunctionToolParam {
     /**
      * 参数名字
      */

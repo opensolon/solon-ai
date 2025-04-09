@@ -16,9 +16,9 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.annotation.FunctionMapping;
-import org.noear.solon.ai.chat.tool.ChatFunction;
-import org.noear.solon.ai.chat.tool.ChatFunctionDecl;
-import org.noear.solon.ai.chat.tool.MethodChatFunction;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
+import org.noear.solon.ai.chat.tool.MethodFunctionTool;
 import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Method;
@@ -48,7 +48,7 @@ public class ChatOptions {
     }
 
 
-    private final Map<String, ChatFunction> functions = new LinkedHashMap<>();
+    private final Map<String, FunctionTool> functions = new LinkedHashMap<>();
     private Map<String, Object> options = new LinkedHashMap<>();
 
     /// ////////////
@@ -56,7 +56,7 @@ public class ChatOptions {
     /**
      * 所有函数
      */
-    public Collection<ChatFunction> functions() {
+    public Collection<FunctionTool> functions() {
         return functions.values();
     }
 
@@ -65,7 +65,7 @@ public class ChatOptions {
      *
      * @param name 函数名
      */
-    public ChatFunction function(String name) {
+    public FunctionTool function(String name) {
         return functions.get(name);
     }
 
@@ -82,8 +82,8 @@ public class ChatOptions {
     /**
      * 函数添加
      */
-    public ChatOptions functionAdd(Collection<ChatFunction> functionColl) {
-        for (ChatFunction f : functionColl) {
+    public ChatOptions functionAdd(Collection<FunctionTool> functionColl) {
+        for (FunctionTool f : functionColl) {
             functions.put(f.name(), f);
         }
 
@@ -97,14 +97,14 @@ public class ChatOptions {
      * @param functionObj 函数对象
      */
     public ChatOptions functionAdd(Class<?> functionClz, Object functionObj) {
-        if (functionObj instanceof ChatFunction) {
-            ChatFunction func = (ChatFunction) functionObj;
+        if (functionObj instanceof FunctionTool) {
+            FunctionTool func = (FunctionTool) functionObj;
             functions.put(func.name(), func);
         } else {
             int count = 0;
             for (Method method : functionClz.getMethods()) {
                 if (method.isAnnotationPresent(FunctionMapping.class)) {
-                    MethodChatFunction func = new MethodChatFunction(functionObj, method);
+                    MethodFunctionTool func = new MethodFunctionTool(functionObj, method);
                     functions.put(func.name(), func);
                     count++;
                 }
@@ -121,8 +121,8 @@ public class ChatOptions {
     /**
      * 函数添加（构建形式）
      */
-    public ChatOptions functionAdd(String name, Consumer<ChatFunctionDecl> functionBuilder) {
-        ChatFunctionDecl decl = new ChatFunctionDecl(name);
+    public ChatOptions functionAdd(String name, Consumer<FunctionToolDesc> functionBuilder) {
+        FunctionToolDesc decl = new FunctionToolDesc(name);
         functionBuilder.accept(decl);
         functionAdd(decl);
         return this;

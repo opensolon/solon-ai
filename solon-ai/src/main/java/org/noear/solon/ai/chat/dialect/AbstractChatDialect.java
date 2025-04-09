@@ -107,13 +107,13 @@ public abstract class AbstractChatDialect implements ChatDialect {
         buildReqFunctionsNodeDo(n, options.functions());
     }
 
-    protected void buildReqFunctionsNodeDo(ONode n, Collection<ChatFunction> funcs) {
+    protected void buildReqFunctionsNodeDo(ONode n, Collection<FunctionTool> funcs) {
         if (Utils.isEmpty(funcs)) {
             return;
         }
 
         n.getOrNew("tools").build(n1 -> {
-            for (ChatFunction func : funcs) {
+            for (FunctionTool func : funcs) {
                 n1.addNew().build(n2 -> {
                     n2.set("type", "function");
                     n2.getOrNew("function").build(funcNode -> {

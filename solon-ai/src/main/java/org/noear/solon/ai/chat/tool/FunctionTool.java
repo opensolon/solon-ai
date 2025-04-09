@@ -20,12 +20,12 @@ import org.noear.snack.ONode;
 import java.util.Map;
 
 /**
- * 聊天函数
+ * 函数工具
  *
  * @author noear
  * @since 3.1
  */
-public interface ChatFunction {
+public interface FunctionTool {
     /**
      * 名字
      */

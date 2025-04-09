@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.AiConfig;
-import org.noear.solon.ai.chat.tool.ChatFunction;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 
 import java.util.*;
 
@@ -27,20 +27,20 @@ import java.util.*;
  * @since 3.1
  */
 public class ChatConfig extends AiConfig {
-    private final Map<String, ChatFunction> globalFunctions = new LinkedHashMap<>();
+    private final Map<String, FunctionTool> globalFunctions = new LinkedHashMap<>();
 
     /**
      * 添加全局函数
      */
-    public void addGlobalFunction(ChatFunction function) {
+    public void addGlobalFunction(FunctionTool function) {
         globalFunctions.put(function.name(), function);
     }
 
     /**
      * 添加全局函数
      */
-    public void addGlobalFunction(Collection<ChatFunction> functionColl) {
-        for (ChatFunction f : functionColl) {
+    public void addGlobalFunction(Collection<FunctionTool> functionColl) {
+        for (FunctionTool f : functionColl) {
             globalFunctions.put(f.name(), f);
         }
     }
@@ -48,14 +48,14 @@ public class ChatConfig extends AiConfig {
     /**
      * 获取单个全局函数
      */
-    public ChatFunction getGlobalFunction(String name) {
+    public FunctionTool getGlobalFunction(String name) {
         return globalFunctions.get(name);
     }
 
     /**
      * 获取所有全局函数
      */
-    public Collection<ChatFunction> getGlobalFunctions() {
+    public Collection<FunctionTool> getGlobalFunctions() {
         return globalFunctions.values();
     }
 }

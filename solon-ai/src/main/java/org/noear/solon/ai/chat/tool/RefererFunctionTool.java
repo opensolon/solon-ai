@@ -15,58 +15,47 @@
  */
 package org.noear.solon.ai.chat.tool;
 
+import org.noear.snack.ONode;
+
+import java.util.Map;
+import java.util.function.Function;
+
 /**
- * 聊天函数的参数申明
+ * 引用的函数工具（用于 mcp 场景）
  *
  * @author noear
  * @since 3.1
  */
-public class ChatFunctionParamDecl implements ChatFunctionParam {
+public class RefererFunctionTool implements FunctionTool {
     private final String name;
-    private final Class<?> type;
-    private final boolean required;
     private final String description;
+    private final ONode inputSchema;
+    private final Function<Map<String, Object>, String> handler;
 
-    public ChatFunctionParamDecl(String name, Class<?> type, String description) {
-        this(name, type, false, description);
-    }
-
-    public ChatFunctionParamDecl(String name, Class<?> type, boolean required, String description) {
+    public RefererFunctionTool(String name, String description, ONode inputSchema, Function<Map<String, Object>, String> handler) {
         this.name = name;
-        this.type = type;
-        this.required = required;
         this.description = description;
+        this.inputSchema = inputSchema;
+        this.handler = handler;
     }
 
-    /**
-     * 参数名字
-     */
     @Override
     public String name() {
         return name;
     }
 
-    /**
-     * 参数类型
-     */
-    @Override
-    public Class<?> type() {
-        return type;
-    }
-
-    /**
-     * 参数描述
-     */
     @Override
     public String description() {
         return description;
     }
 
-    /**
-     * 是否必须
-     */
     @Override
-    public boolean required() {
-        return required;
+    public ONode inputSchema() {
+        return inputSchema;
+    }
+
+    @Override
+    public String handle(Map<String, Object> args) throws Throwable {
+        return handler.apply(args);
     }
 }

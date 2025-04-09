@@ -19,9 +19,9 @@ import org.noear.solon.ai.AiModel;
 import org.noear.solon.ai.chat.annotation.FunctionMapping;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
-import org.noear.solon.ai.chat.tool.ChatFunction;
-import org.noear.solon.ai.chat.tool.ChatFunctionDecl;
-import org.noear.solon.ai.chat.tool.MethodChatFunction;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
+import org.noear.solon.ai.chat.tool.MethodFunctionTool;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
@@ -167,14 +167,14 @@ public class ChatModel implements AiModel {
          * @param functionObj 函数对象
          */
         public Builder globalFunctionAdd(Class<?> functionClz, Object functionObj) {
-            if (functionObj instanceof ChatFunction) {
-                ChatFunction func = (ChatFunction) functionObj;
+            if (functionObj instanceof FunctionTool) {
+                FunctionTool func = (FunctionTool) functionObj;
                 config.addGlobalFunction(func);
             } else {
                 int count = 0;
                 for (Method method : functionClz.getMethods()) {
                     if (method.isAnnotationPresent(FunctionMapping.class)) {
-                        MethodChatFunction func = new MethodChatFunction(functionObj, method);
+                        MethodFunctionTool func = new MethodFunctionTool(functionObj, method);
                         config.addGlobalFunction(func);
                         count++;
                     }
@@ -194,8 +194,8 @@ public class ChatModel implements AiModel {
          * @param name            函数名
          * @param functionBuilder 函数构建器
          */
-        public Builder globalFunctionAdd(String name, Consumer<ChatFunctionDecl> functionBuilder) {
-            ChatFunctionDecl decl = new ChatFunctionDecl(name);
+        public Builder globalFunctionAdd(String name, Consumer<FunctionToolDesc> functionBuilder) {
+            FunctionToolDesc decl = new FunctionToolDesc(name);
             functionBuilder.accept(decl);
             globalFunctionAdd(decl);
             return this;

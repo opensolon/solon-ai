@@ -43,7 +43,7 @@ public class ToolSchemaUtil {
      * @param functionDecl   函数申明
      * @param parametersNode 函数参数节点
      */
-    public static ChatFunctionDecl parseToolParametersNode(ChatFunctionDecl functionDecl, ONode parametersNode) {
+    public static FunctionToolDesc parseToolParametersNode(FunctionToolDesc functionDecl, ONode parametersNode) {
         List<String> requiredList = parametersNode.get("required").toObjectList(String.class);
         ONode propertiesNode = parametersNode.get("properties");
 
@@ -65,11 +65,11 @@ public class ToolSchemaUtil {
      * @param func           函数
      * @param parametersNode 函数参数节点（待构建）
      */
-    public static ONode buildToolParametersNode(ChatFunction func, List<ChatFunctionParam> funcParams, ONode parametersNode) {
+    public static ONode buildToolParametersNode(FunctionTool func, List<FunctionToolParam> funcParams, ONode parametersNode) {
         parametersNode.set("type", TYPE_OBJECT);
         ONode requiredNode = new ONode(parametersNode.options()).asArray();
         parametersNode.getOrNew("properties").build(propertiesNode -> {
-            for (ChatFunctionParam fp : funcParams) {
+            for (FunctionToolParam fp : funcParams) {
                 propertiesNode.getOrNew(fp.name()).build(paramNode -> {
                     buildToolParamNode(fp, paramNode);
                 });
@@ -90,7 +90,7 @@ public class ToolSchemaUtil {
      * @param funcParam 函数参数
      * @param paramNode 参数节点
      */
-    public static void buildToolParamNode(ChatFunctionParam funcParam, ONode paramNode) {
+    public static void buildToolParamNode(FunctionToolParam funcParam, ONode paramNode) {
         String typeStr = funcParam.type().getSimpleName().toLowerCase();
 
         if (funcParam.type().isArray()) {

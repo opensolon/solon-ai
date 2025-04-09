@@ -15,47 +15,54 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.snack.ONode;
-
-import java.util.Map;
-import java.util.function.Function;
-
 /**
- * 聊天函数引用
+ * 函数工具参数描述
  *
  * @author noear
  * @since 3.1
  */
-public class ChatFunctionRefer implements ChatFunction {
+public class FunctionToolParamDesc implements FunctionToolParam {
     private final String name;
+    private final Class<?> type;
+    private final boolean required;
     private final String description;
-    private final ONode inputSchema;
-    private final Function<Map<String, Object>, String> handler;
 
-    public ChatFunctionRefer(String name, String description, ONode inputSchema, Function<Map<String, Object>, String> handler) {
+    public FunctionToolParamDesc(String name, Class<?> type, boolean required, String description) {
         this.name = name;
+        this.type = type;
+        this.required = required;
         this.description = description;
-        this.inputSchema = inputSchema;
-        this.handler = handler;
     }
 
+    /**
+     * 参数名字
+     */
     @Override
     public String name() {
         return name;
     }
 
+    /**
+     * 参数类型
+     */
+    @Override
+    public Class<?> type() {
+        return type;
+    }
+
+    /**
+     * 参数描述
+     */
     @Override
     public String description() {
         return description;
     }
 
+    /**
+     * 是否必须
+     */
     @Override
-    public ONode inputSchema() {
-        return inputSchema;
-    }
-
-    @Override
-    public String handle(Map<String, Object> args) throws Throwable {
-        return handler.apply(args);
+    public boolean required() {
+        return required;
     }
 }
