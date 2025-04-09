@@ -116,8 +116,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
             for (ChatFunction func : funcs) {
                 n1.addNew().build(n2 -> {
                     n2.set("type", "function");
-                    n2.getOrNew("function").build(n3 -> {
-                        ToolSchemaUtil.buildToolNode(func, n3);
+                    n2.getOrNew("function").build(funcNode -> {
+                        funcNode.set("name", func.name());
+                        funcNode.set("description", func.description());
+                        funcNode.set("parameters", func.inputSchema());
                     });
                 });
             }

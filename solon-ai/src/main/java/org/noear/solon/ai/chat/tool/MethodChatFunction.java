@@ -15,16 +15,14 @@
  */
 package org.noear.solon.ai.chat.tool;
 
+import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.annotation.FunctionMapping;
 import org.noear.solon.ai.chat.annotation.FunctionParam;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 基于方法构建的聊天函数
@@ -56,7 +54,7 @@ public class MethodChatFunction implements ChatFunction {
     }
 
     /**
-     * 函数名字
+     * 名字
      */
     @Override
     public String name() {
@@ -64,7 +62,7 @@ public class MethodChatFunction implements ChatFunction {
     }
 
     /**
-     * 函数描述
+     * 描述
      */
     @Override
     public String description() {
@@ -72,7 +70,7 @@ public class MethodChatFunction implements ChatFunction {
     }
 
     /**
-     * 函数参数
+     * 参数
      */
     @Override
     public List<ChatFunctionParam> params() {
@@ -80,10 +78,36 @@ public class MethodChatFunction implements ChatFunction {
     }
 
     /**
+     * 输入架构
+     */
+    @Override
+    public ONode inputSchema() {
+        return ToolSchemaUtil.buildToolParametersNode(this, new ONode());
+    }
+
+    /**
      * 执行处理
      */
     @Override
     public String handle(Map<String, Object> args) throws Throwable {
+        Map<String, Object> argsNew = new HashMap<>();
+
+        ONode argsNode = ONode.load(args);
+        for (ChatFunctionParam p1 : this.params()) {
+            ONode v1 = argsNode.getOrNull(p1.name());
+            if (v1 == null) {
+                //null
+                argsNew.put(p1.name(), null);
+            } else {
+                //用 ONode 可以自动转换类型
+                argsNew.put(p1.name(), v1.toObject(p1.type()));
+            }
+        }
+
+        return doHandle(argsNew);
+    }
+
+    private String doHandle(Map<String, Object> args) throws Throwable {
         Object[] vals = new Object[params.size()];
 
         for (int i = 0; i < params.size(); ++i) {

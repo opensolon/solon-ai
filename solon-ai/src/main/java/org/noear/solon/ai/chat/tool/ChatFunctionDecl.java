@@ -15,10 +15,9 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import org.noear.snack.ONode;
+
+import java.util.*;
 import java.util.function.Function;
 
 /**
@@ -31,7 +30,7 @@ public class ChatFunctionDecl implements ChatFunction {
     private final String name;
     private final List<ChatFunctionParam> params;
     private String description;
-    private Function<Map<String, Object>, String> handler;
+    private Function<Map<String, Object>, String> doHandle;
 
     /**
      * @param name 函数名字
@@ -111,8 +110,8 @@ public class ChatFunctionDecl implements ChatFunction {
      *
      * @param handler 处理器
      */
-    public ChatFunctionDecl handle(Function<Map<String, Object>, String> handler) {
-        this.handler = handler;
+    public ChatFunctionDecl doHandle(Function<Map<String, Object>, String> handler) {
+        this.doHandle = handler;
         return this;
     }
 
@@ -145,10 +144,32 @@ public class ChatFunctionDecl implements ChatFunction {
     }
 
     /**
+     * 输入架构
+     */
+    @Override
+    public ONode inputSchema() {
+        return ToolSchemaUtil.buildToolParametersNode(this, new ONode());
+    }
+
+    /**
      * 执行处理
      */
     @Override
     public String handle(Map<String, Object> args) throws Throwable {
-        return handler.apply(args);
+        Map<String, Object> argsNew = new HashMap<>();
+
+        ONode argsNode = ONode.load(args);
+        for (ChatFunctionParam p1 : this.params()) {
+            ONode v1 = argsNode.getOrNull(p1.name());
+            if (v1 == null) {
+                //null
+                argsNew.put(p1.name(), null);
+            } else {
+                //用 ONode 可以自动转换类型
+                argsNew.put(p1.name(), v1.toObject(p1.type()));
+            }
+        }
+
+        return doHandle.apply(argsNew);
     }
 }

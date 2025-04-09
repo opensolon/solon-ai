@@ -24,24 +24,9 @@ import java.util.Map;
  * @author noear
  * @since 3.1
  */
-public interface ChatFunction {
-    /**
-     * 函数名字
-     */
-    String name();
-
-    /**
-     * 函数描述
-     */
-    String description();
-
+public interface ChatFunction extends Tool {
     /**
      * 函数参数
      */
     List<ChatFunctionParam> params();
-
-    /**
-     * 函数处理
-     */
-    String handle(Map<String, Object> args) throws Throwable;
 }

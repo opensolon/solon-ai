@@ -20,7 +20,6 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.tool.ChatFunction;
 import org.noear.solon.ai.chat.tool.ToolCall;
-import org.noear.solon.ai.chat.tool.ChatFunctionParam;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -37,9 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -206,7 +203,7 @@ public class ChatRequestDefault implements ChatRequest {
         subscriber.onComplete();
     }
 
-    private boolean onEventStream(ChatResponseDefault resp,ServerSentEvent event, Subscriber<? super ChatResponse> subscriber) {
+    private boolean onEventStream(ChatResponseDefault resp, ServerSentEvent event, Subscriber<? super ChatResponse> subscriber) {
         if (log.isTraceEnabled()) {
             log.trace("ai-response: {}", event.data());
         }
@@ -274,23 +271,23 @@ public class ChatRequestDefault implements ChatRequest {
         subscriber.onNext(resp);
     }
 
-    private void buildToolCallBuilder(ChatResponseDefault resp, AssistantMessage acm){
+    private void buildToolCallBuilder(ChatResponseDefault resp, AssistantMessage acm) {
         if (Utils.isEmpty(acm.getToolCalls())) {
             return;
         }
 
         for (ToolCall call : acm.getToolCalls()) {
-            ToolCallBuilder callBuilder =  resp.toolCallBuilders.computeIfAbsent(call.index(), k->new ToolCallBuilder());
+            ToolCallBuilder callBuilder = resp.toolCallBuilders.computeIfAbsent(call.index(), k -> new ToolCallBuilder());
 
-            if(call.id() != null){
+            if (call.id() != null) {
                 callBuilder.idBuilder.append(call.id());
             }
 
-            if(call.name() != null){
+            if (call.name() != null) {
                 callBuilder.nameBuilder.append(call.name());
             }
 
-            if(call.argumentsStr() != null){
+            if (call.argumentsStr() != null) {
                 callBuilder.argumentsBuilder.append(call.argumentsStr());
             }
         }
@@ -310,7 +307,7 @@ public class ChatRequestDefault implements ChatRequest {
 
             if (func != null) {
                 try {
-                    String content = callFunction(func, call.arguments());
+                    String content = func.handle(call.arguments());
                     messages.add(ChatMessage.ofTool(content, call.name(), call.id()));
                 } catch (Throwable ex) {
                     throw new ChatException("The function call failed!", ex);
@@ -320,26 +317,5 @@ public class ChatRequestDefault implements ChatRequest {
                 log.warn("Tool call not found: {}", call.name());
             }
         }
-    }
-
-    /**
-     * 调用函数
-     */
-    private String callFunction(ChatFunction func, Map<String, Object> args) throws Throwable {
-        Map<String, Object> argsNew = new HashMap<>();
-
-        ONode argsNode = ONode.load(args);
-        for (ChatFunctionParam p1 : func.params()) {
-            ONode v1 = argsNode.getOrNull(p1.name());
-            if (v1 == null) {
-                //null
-                argsNew.put(p1.name(), null);
-            } else {
-                //用 ONode 可以自动转换类型
-                argsNew.put(p1.name(), v1.toObject(p1.type()));
-            }
-        }
-
-        return func.handle(argsNew);
     }
 }
