@@ -31,8 +31,8 @@ public class McpServerTool {
     //
     // 建议开启编译参数：-parameters （否则，要再配置参数的 name）
     //
-    @FunctionMapping(description = "查询天气预报")
-    public String getWeather(@FunctionParam(description = "城市位置") String location) {
+    @ToolMapping(description = "查询天气预报")
+    public String getWeather(@ToolParam(description = "城市位置") String location) {
         return "晴，14度";
     }
 }
@@ -68,7 +68,7 @@ public void case2(){
     chatModel.prompt("杭州今天的天气怎么样？")
             .options(options -> {
                 //转为函数集合用于绑定
-                options.functionAdd(mcpClient.toFunctions());
+                options.toolsAdd(mcpClient.toTools());
             })
             .call();
 }

@@ -72,7 +72,7 @@ public class McpClientTest {
         ChatResponse resp = chatModel
                 .prompt("今天杭州的天气情况？")
                 .options(options -> {
-                    //转为函数集用于绑定
+                    //转为工具集合用于绑定
                     options.toolsAdd(mcpClient.toTools());
                 })
                 .call();
