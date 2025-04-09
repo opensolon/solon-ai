@@ -1,3 +1,8 @@
+### 3.1.3
+
+* 新增 solon-ai-mcp
+* 调整 函数(Function)相关的概念改为工具概念(Tool)。调整后适合 mcp 的相关概念
+
 ### v3.1.2
 
 * 新增 solon-ai-repo-chroma 插件
