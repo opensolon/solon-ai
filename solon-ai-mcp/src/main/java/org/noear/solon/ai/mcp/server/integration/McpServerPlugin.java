@@ -21,9 +21,9 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
-import org.noear.solon.ai.chat.annotation.FunctionMapping;
-import org.noear.solon.ai.chat.tool.ChatFunction;
-import org.noear.solon.ai.chat.tool.MethodChatFunction;
+import org.noear.solon.ai.chat.annotation.ToolMapping;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodFunctionTool;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.core.*;
 import reactor.core.publisher.Mono;
@@ -53,9 +53,9 @@ public class McpServerPlugin implements Plugin {
             mcpServerSpec = McpServer.async(mcpTransportProvider)
                     .serverInfo(serverProperties.getName(), serverProperties.getVersion());
 
-            context.beanExtractorAdd(FunctionMapping.class, (bw, method, anno) -> {
-                ChatFunction chatFunction = new MethodChatFunction(bw.raw(), method);
-                addToolSpec(mcpServerSpec, chatFunction);
+            context.beanExtractorAdd(ToolMapping.class, (bw, method, anno) -> {
+                FunctionTool functionTool = new MethodFunctionTool(bw.raw(), method);
+                addToolSpec(mcpServerSpec, functionTool);
             });
 
             mcpTransportProvider.toHttpHandler(context.app());
@@ -75,16 +75,16 @@ public class McpServerPlugin implements Plugin {
     }
 
 
-    private void addToolSpec(McpServer.AsyncSpecification mcpServerSpec, ChatFunction chatFunction) {
-        ONode jsonSchema = buildJsonSchema(chatFunction);
+    private void addToolSpec(McpServer.AsyncSpecification mcpServerSpec, FunctionTool functionTool) {
+        ONode jsonSchema = buildJsonSchema(functionTool);
         String jsonSchemaStr = jsonSchema.toJson();
 
         McpServerFeatures.AsyncToolSpecification toolSpec = new McpServerFeatures.AsyncToolSpecification(
-                new McpSchema.Tool(chatFunction.name(), chatFunction.description(), jsonSchemaStr),
+                new McpSchema.Tool(functionTool.name(), functionTool.description(), jsonSchemaStr),
                 (exchange, request) -> {
                     McpSchema.CallToolResult toolResult = null;
                     try {
-                        String rst = chatFunction.handle(request);
+                        String rst = functionTool.handle(request);
                         toolResult = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
                     } catch (Throwable ex) {
                         toolResult = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(ex.getMessage())), true);
@@ -96,10 +96,10 @@ public class McpServerPlugin implements Plugin {
         mcpServerSpec.tools(toolSpec);
     }
 
-    protected ONode buildJsonSchema(ChatFunction chatFunction) {
+    protected ONode buildJsonSchema(FunctionTool functionTool) {
         ONode jsonSchema = new ONode();
         jsonSchema.set("$schema", "http://json-schema.org/draft-07/schema#");
-        jsonSchema.setAll(chatFunction.inputSchema());
+        jsonSchema.setAll(functionTool.inputSchema());
 
         return jsonSchema;
     }

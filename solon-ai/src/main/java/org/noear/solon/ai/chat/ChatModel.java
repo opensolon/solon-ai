@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.AiModel;
-import org.noear.solon.ai.chat.annotation.FunctionMapping;
+import org.noear.solon.ai.chat.annotation.ToolMapping;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -29,6 +29,7 @@ import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -152,30 +153,43 @@ public class ChatModel implements AiModel {
         }
 
         /**
-         * 函数添加
+         * 默认工具添加（即每次请求都会带上）
          *
-         * @param functionObj 函数对象
+         * @param toolColl 工具集合
          */
-        public Builder globalFunctionAdd(Object functionObj) {
-            return globalFunctionAdd(functionObj.getClass(), functionObj);
+        public Builder defaultToolsAdd(Collection<FunctionTool> toolColl) {
+            for (FunctionTool f : toolColl) {
+                config.addDefaultTool(f);
+            }
+
+            return this;
         }
 
         /**
-         * 函数添加
+         * 默认工具添加（即每次请求都会带上）
          *
-         * @param functionClz 函数类（如果函数对象为代理时，必须传入原始类）
-         * @param functionObj 函数对象
+         * @param toolObj 工具对象
          */
-        public Builder globalFunctionAdd(Class<?> functionClz, Object functionObj) {
-            if (functionObj instanceof FunctionTool) {
-                FunctionTool func = (FunctionTool) functionObj;
-                config.addGlobalFunction(func);
+        public Builder defaultToolAdd(Object toolObj) {
+            return defaultToolAdd(toolObj.getClass(), toolObj);
+        }
+
+        /**
+         * 默认工具添加（即每次请求都会带上）
+         *
+         * @param toolClz 工具类（如果工具对象为代理时，必须传入原始类）
+         * @param toolObj 工具对象
+         */
+        public Builder defaultToolAdd(Class<?> toolClz, Object toolObj) {
+            if (toolObj instanceof FunctionTool) {
+                FunctionTool func = (FunctionTool) toolObj;
+                config.addDefaultTool(func);
             } else {
                 int count = 0;
-                for (Method method : functionClz.getMethods()) {
-                    if (method.isAnnotationPresent(FunctionMapping.class)) {
-                        MethodFunctionTool func = new MethodFunctionTool(functionObj, method);
-                        config.addGlobalFunction(func);
+                for (Method method : toolClz.getMethods()) {
+                    if (method.isAnnotationPresent(ToolMapping.class)) {
+                        MethodFunctionTool func = new MethodFunctionTool(toolObj, method);
+                        config.addDefaultTool(func);
                         count++;
                     }
                 }
@@ -189,15 +203,15 @@ public class ChatModel implements AiModel {
         }
 
         /**
-         * 函数添加
+         * 默认工具添加（即每次请求都会带上）
          *
-         * @param name            函数名
-         * @param functionBuilder 函数构建器
+         * @param name        名字
+         * @param toolBuilder 工具构建器
          */
-        public Builder globalFunctionAdd(String name, Consumer<FunctionToolDesc> functionBuilder) {
+        public Builder defaultToolAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
             FunctionToolDesc decl = new FunctionToolDesc(name);
-            functionBuilder.accept(decl);
-            globalFunctionAdd(decl);
+            toolBuilder.accept(decl);
+            defaultToolAdd(decl);
             return this;
         }
 

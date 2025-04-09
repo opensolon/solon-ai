@@ -21,8 +21,8 @@ import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.tool.ChatFunction;
-import org.noear.solon.ai.chat.tool.ChatFunctionRefer;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.RefererFunctionTool;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.mcp.exception.McpException;
 import java.io.Closeable;
@@ -104,31 +104,31 @@ public class McpClientWrapper implements Closeable {
         }
     }
 
-    private Collection<ChatFunction> functions;
+    private Collection<FunctionTool> tools;
 
     /**
      * 转为聊天函数（用于模型绑定）
      */
-    public Collection<ChatFunction> toFunctions() {
-        return toFunctions(true);
+    public Collection<FunctionTool> toTools() {
+        return toTools(true);
     }
 
     /**
      * 转为聊天函数（用于模型绑定）
      */
-    public Collection<ChatFunction> toFunctions(boolean cached) {
+    public Collection<FunctionTool> toTools(boolean cached) {
         if (cached) {
-            if (functions != null) {
-                return functions;
+            if (tools != null) {
+                return tools;
             }
         }
 
-        functions = buildFunctions();
-        return functions;
+        tools = buildTools();
+        return tools;
     }
 
-    protected Collection<ChatFunction> buildFunctions() {
-        List<ChatFunction> functionList = new ArrayList<>();
+    protected Collection<FunctionTool> buildTools() {
+        List<FunctionTool> toolList = new ArrayList<>();
 
         McpSchema.ListToolsResult result = real.listTools();
         for (McpSchema.Tool tool : result.tools()) {
@@ -136,16 +136,16 @@ public class McpClientWrapper implements Closeable {
             String description = tool.description();
             ONode parametersNode = ONode.load(tool.inputSchema());
 
-            ChatFunctionRefer functionRefer = new ChatFunctionRefer(
+            RefererFunctionTool functionRefer = new RefererFunctionTool(
                     name,
                     description,
                     parametersNode,
                     args -> callToolAsText(name, args));
 
-            functionList.add(functionRefer);
+            toolList.add(functionRefer);
         }
 
-        return functionList;
+        return toolList;
     }
 
     @Override

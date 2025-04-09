@@ -18,15 +18,15 @@ package org.noear.solon.ai.chat.annotation;
 import java.lang.annotation.*;
 
 /**
- * 函数参数
+ * 工具映射
  *
  * @author noear
  * @since 3.1
  */
-@Target({ElementType.PARAMETER})
+@Target({ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface FunctionParam {
+public @interface ToolMapping {
     /**
      * 名字
      */
@@ -36,9 +36,4 @@ public @interface FunctionParam {
      * 描述
      */
     String description();
-
-    /**
-     * 是否必须
-     */
-    boolean required() default true;
 }

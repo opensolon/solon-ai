@@ -64,7 +64,7 @@ public class GiteeaiTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apkKey)
                 .model(model)
-                .globalFunctionAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -81,7 +81,7 @@ public class GiteeaiTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apkKey)
                 .model(model)
-                .globalFunctionAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -123,7 +123,7 @@ public class GiteeaiTest {
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.functionAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
@@ -164,7 +164,7 @@ public class GiteeaiTest {
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.functionAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
@@ -192,7 +192,7 @@ public class GiteeaiTest {
         //流返回(sse)
         publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.functionAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder2 = new AtomicReference<>();

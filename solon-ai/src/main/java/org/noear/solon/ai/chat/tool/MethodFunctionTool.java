@@ -17,8 +17,8 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.annotation.FunctionMapping;
-import org.noear.solon.ai.chat.annotation.FunctionParam;
+import org.noear.solon.ai.chat.annotation.ToolMapping;
+import org.noear.solon.ai.chat.annotation.ToolParam;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -41,12 +41,12 @@ public class MethodFunctionTool implements FunctionTool {
         this.target = target;
         this.method = method;
 
-        FunctionMapping m1Anno = method.getAnnotation(FunctionMapping.class);
+        ToolMapping m1Anno = method.getAnnotation(ToolMapping.class);
         this.name = Utils.annoAlias(m1Anno.name(), method.getName());
         this.description = m1Anno.description();
 
         for (Parameter p1 : method.getParameters()) {
-            FunctionParam p1Anno = p1.getAnnotation(FunctionParam.class);
+            ToolParam p1Anno = p1.getAnnotation(ToolParam.class);
 
             String name = Utils.annoAlias(p1Anno.name(), p1.getName());
             params.add(new FunctionToolParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description()));

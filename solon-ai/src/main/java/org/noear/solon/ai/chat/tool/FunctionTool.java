@@ -25,7 +25,7 @@ import java.util.Map;
  * @author noear
  * @since 3.1
  */
-public interface FunctionTool {
+public interface FunctionTool{
     /**
      * 名字
      */

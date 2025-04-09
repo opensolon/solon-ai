@@ -13,8 +13,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -81,7 +79,7 @@ public class OllamaTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .provider(provider)
                 .model(model)
-                .globalFunctionAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -105,7 +103,7 @@ public class OllamaTest {
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.functionAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
@@ -146,7 +144,7 @@ public class OllamaTest {
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.functionAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
@@ -174,7 +172,7 @@ public class OllamaTest {
         //流返回(sse)
         publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.functionAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder2 = new AtomicReference<>();

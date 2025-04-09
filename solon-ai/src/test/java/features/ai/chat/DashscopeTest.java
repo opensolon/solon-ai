@@ -75,7 +75,7 @@ public class DashscopeTest {
     @Test
     public void case3_wather() throws IOException {
         ChatModel chatModel = configChatModelBuilder()
-                .globalFunctionAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -90,7 +90,7 @@ public class DashscopeTest {
     @Test
     public void case3_www() throws IOException {
         ChatModel chatModel = configChatModelBuilder()
-                .globalFunctionAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -112,7 +112,7 @@ public class DashscopeTest {
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.functionAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
@@ -150,7 +150,7 @@ public class DashscopeTest {
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.functionAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
@@ -178,7 +178,7 @@ public class DashscopeTest {
         //流返回(sse)
         publisher = chatModel
                 .prompt(chatSession)
-                .options(o -> o.functionAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder2 = new AtomicReference<>();

@@ -49,11 +49,11 @@ public class OpenaiChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    protected void buildReqFunctionsNode(ONode n, ChatConfig config, ChatOptions options, ChatMessage lastMessage) {
+    protected void buildReqToolsNode(ONode n, ChatConfig config, ChatOptions options, ChatMessage lastMessage) {
         if (lastMessage.getRole() != ChatRole.TOOL) {
             //如果是 tool ，后面不跟 funcs
-            buildReqFunctionsNodeDo(n, config.getGlobalFunctions());
-            buildReqFunctionsNodeDo(n, options.functions());
+            buildReqToolsNodeDo(n, config.getDefaultTools());
+            buildReqToolsNodeDo(n, options.tools());
         }
     }
 

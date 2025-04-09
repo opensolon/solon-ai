@@ -299,10 +299,10 @@ public class ChatRequestDefault implements ChatRequest {
         }
 
         for (ToolCall call : acm.getToolCalls()) {
-            FunctionTool func = config.getGlobalFunction(call.name());
+            FunctionTool func = config.getDefaultTool(call.name());
 
             if (func == null) {
-                func = options.function(call.name());
+                func = options.tool(call.name());
             }
 
             if (func != null) {

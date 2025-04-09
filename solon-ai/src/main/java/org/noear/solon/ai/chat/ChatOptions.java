@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat;
 
-import org.noear.solon.ai.chat.annotation.FunctionMapping;
+import org.noear.solon.ai.chat.annotation.ToolMapping;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.MethodFunctionTool;
@@ -48,64 +48,64 @@ public class ChatOptions {
     }
 
 
-    private final Map<String, FunctionTool> functions = new LinkedHashMap<>();
+    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     private Map<String, Object> options = new LinkedHashMap<>();
 
     /// ////////////
 
     /**
-     * 所有函数
+     * 所有工具
      */
-    public Collection<FunctionTool> functions() {
-        return functions.values();
+    public Collection<FunctionTool> tools() {
+        return tools.values();
     }
 
     /**
-     * 函数获取
+     * 工具获取
      *
-     * @param name 函数名
+     * @param name 名字
      */
-    public FunctionTool function(String name) {
-        return functions.get(name);
+    public FunctionTool tool(String name) {
+        return tools.get(name);
     }
 
     /**
-     * 函数添加
+     * 工具添加
      *
-     * @param functionObj 函数对象
+     * @param toolObj 工具对象
      */
-    public ChatOptions functionAdd(Object functionObj) {
-        return functionAdd(functionObj.getClass(), functionObj);
+    public ChatOptions toolAdd(Object toolObj) {
+        return toolAdd(toolObj.getClass(), toolObj);
     }
 
 
     /**
-     * 函数添加
+     * 工具添加
      */
-    public ChatOptions functionAdd(Collection<FunctionTool> functionColl) {
-        for (FunctionTool f : functionColl) {
-            functions.put(f.name(), f);
+    public ChatOptions toolsAdd(Collection<FunctionTool> toolColl) {
+        for (FunctionTool f : toolColl) {
+            tools.put(f.name(), f);
         }
 
         return this;
     }
 
     /**
-     * 函数添加
+     * 工具添加
      *
-     * @param functionClz 函数类（如果函数对象为代理时，必须传入原始类）
-     * @param functionObj 函数对象
+     * @param toolClz 工具类（如果工具对象为代理时，必须传入原始类）
+     * @param toolObj 工具对象
      */
-    public ChatOptions functionAdd(Class<?> functionClz, Object functionObj) {
-        if (functionObj instanceof FunctionTool) {
-            FunctionTool func = (FunctionTool) functionObj;
-            functions.put(func.name(), func);
+    public ChatOptions toolAdd(Class<?> toolClz, Object toolObj) {
+        if (toolObj instanceof FunctionTool) {
+            FunctionTool func = (FunctionTool) toolObj;
+            tools.put(func.name(), func);
         } else {
             int count = 0;
-            for (Method method : functionClz.getMethods()) {
-                if (method.isAnnotationPresent(FunctionMapping.class)) {
-                    MethodFunctionTool func = new MethodFunctionTool(functionObj, method);
-                    functions.put(func.name(), func);
+            for (Method method : toolClz.getMethods()) {
+                if (method.isAnnotationPresent(ToolMapping.class)) {
+                    MethodFunctionTool func = new MethodFunctionTool(toolObj, method);
+                    tools.put(func.name(), func);
                     count++;
                 }
             }
@@ -119,12 +119,15 @@ public class ChatOptions {
     }
 
     /**
-     * 函数添加（构建形式）
+     * 工具添加（构建形式）
+     *
+     * @param name        名字
+     * @param toolBuilder 工具构建器
      */
-    public ChatOptions functionAdd(String name, Consumer<FunctionToolDesc> functionBuilder) {
+    public ChatOptions toolAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
         FunctionToolDesc decl = new FunctionToolDesc(name);
-        functionBuilder.accept(decl);
-        functionAdd(decl);
+        toolBuilder.accept(decl);
+        toolAdd(decl);
         return this;
     }
 

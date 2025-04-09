@@ -27,35 +27,37 @@ import java.util.*;
  * @since 3.1
  */
 public class ChatConfig extends AiConfig {
-    private final Map<String, FunctionTool> globalFunctions = new LinkedHashMap<>();
+    private final Map<String, FunctionTool> defaultTools = new LinkedHashMap<>();
 
     /**
-     * 添加全局函数
+     * 添加默认工具（即每次请求都会带上）
      */
-    public void addGlobalFunction(FunctionTool function) {
-        globalFunctions.put(function.name(), function);
+    public void addDefaultTool(FunctionTool tool) {
+        defaultTools.put(tool.name(), tool);
     }
 
     /**
-     * 添加全局函数
+     * 添加默认工具（即每次请求都会带上）
      */
-    public void addGlobalFunction(Collection<FunctionTool> functionColl) {
-        for (FunctionTool f : functionColl) {
-            globalFunctions.put(f.name(), f);
+    public void addDefaultTools(Collection<FunctionTool> toolColl) {
+        for (FunctionTool f : toolColl) {
+            defaultTools.put(f.name(), f);
         }
     }
 
     /**
-     * 获取单个全局函数
+     * 获取单个默认工具（即每次请求都会带上）
+     *
+     * @param name 名字
      */
-    public FunctionTool getGlobalFunction(String name) {
-        return globalFunctions.get(name);
+    public FunctionTool getDefaultTool(String name) {
+        return defaultTools.get(name);
     }
 
     /**
-     * 获取所有全局函数
+     * 获取所有默认工具（即每次请求都会带上）
      */
-    public Collection<FunctionTool> getGlobalFunctions() {
-        return globalFunctions.values();
+    public Collection<FunctionTool> getDefaultTools() {
+        return defaultTools.values();
     }
 }

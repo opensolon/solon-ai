@@ -67,8 +67,8 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                 }
 
                 n1.set("result_format", "message");
-                buildReqFunctionsNodeDo(n1, config.getGlobalFunctions());
-                buildReqFunctionsNodeDo(n1, options.functions());
+                buildReqToolsNodeDo(n1, config.getDefaultTools());
+                buildReqToolsNodeDo(n1, options.tools());
             });
         }).toJson();
     }

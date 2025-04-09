@@ -73,7 +73,7 @@ public class McpClientTest {
                 .prompt("今天杭州的天气情况？")
                 .options(options -> {
                     //转为函数集用于绑定
-                    options.functionAdd(mcpClient.toFunctions());
+                    options.toolsAdd(mcpClient.toTools());
                 })
                 .call();
 

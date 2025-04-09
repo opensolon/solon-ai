@@ -102,24 +102,27 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return oNode;
     }
 
-    protected void buildReqFunctionsNode(ONode n, ChatConfig config, ChatOptions options, ChatMessage lastMessage) {
-        buildReqFunctionsNodeDo(n, config.getGlobalFunctions());
-        buildReqFunctionsNodeDo(n, options.functions());
+    /**
+     * 构建请求工具节点
+     */
+    protected void buildReqToolsNode(ONode n, ChatConfig config, ChatOptions options, ChatMessage lastMessage) {
+        buildReqToolsNodeDo(n, config.getDefaultTools());
+        buildReqToolsNodeDo(n, options.tools());
     }
 
-    protected void buildReqFunctionsNodeDo(ONode n, Collection<FunctionTool> funcs) {
-        if (Utils.isEmpty(funcs)) {
+    protected void buildReqToolsNodeDo(ONode n, Collection<FunctionTool> tools) {
+        if (Utils.isEmpty(tools)) {
             return;
         }
 
         n.getOrNew("tools").build(n1 -> {
-            for (FunctionTool func : funcs) {
+            for (FunctionTool func : tools) {
                 n1.addNew().build(n2 -> {
                     n2.set("type", "function");
-                    n2.getOrNew("function").build(funcNode -> {
-                        funcNode.set("name", func.name());
-                        funcNode.set("description", func.description());
-                        funcNode.set("parameters", func.inputSchema());
+                    n2.getOrNew("function").build(toolNode -> {
+                        toolNode.set("name", func.name());
+                        toolNode.set("description", func.description());
+                        toolNode.set("parameters", func.inputSchema());
                     });
                 });
             }
@@ -148,12 +151,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
 
             ChatMessage lastMessage = messages.get(messages.size() - 1);
-            buildReqFunctionsNode(n, config, options, lastMessage);
+            buildReqToolsNode(n, config, options, lastMessage);
         }).toJson();
     }
 
     @Override
-    public ONode buildAssistantMessageNode(Map<Integer, ToolCallBuilder> toolCallBuilders ) {
+    public ONode buildAssistantMessageNode(Map<Integer, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
         oNode.set("content", "");
@@ -172,6 +175,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return oNode;
     }
 
+    /**
+     * 解析工具调用
+     */
     protected List<ToolCall> parseToolCalls(ONode toolCallsNode) {
         if (toolCallsNode == null) {
             return null;
@@ -180,13 +186,13 @@ public abstract class AbstractChatDialect implements ChatDialect {
         List<ToolCall> toolCalls = new ArrayList<>();
 
         for (ONode n1 : toolCallsNode.ary()) {
-            toolCalls.add(parseFunctionCall(n1));
+            toolCalls.add(parseToolCall(n1));
         }
 
         return toolCalls;
     }
 
-    protected ToolCall parseFunctionCall(ONode n1) {
+    protected ToolCall parseToolCall(ONode n1) {
         int index = n1.get("index").getInt();
         String callId = n1.get("id").getString();
 
