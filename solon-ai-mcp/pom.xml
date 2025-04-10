@@ -35,9 +35,9 @@
         </dependency>
 
         <dependency>
-            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <groupId>org.noear.mcp.sdk</groupId>
             <artifactId>mcp</artifactId>
-            <version>0.9.0-SNAPSHOT</version>
+            <version>0.9.0-M1</version>
         </dependency>
 
         <dependency>
