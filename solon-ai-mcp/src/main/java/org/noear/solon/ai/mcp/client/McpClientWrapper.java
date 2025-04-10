@@ -55,7 +55,7 @@ public class McpClientWrapper implements Closeable {
     }
 
     public McpClientWrapper(String baseUri, String sseEndpoint) {
-        HttpClientSseClientTransport clientTransport = HttpClientSseClientTransport.builder(baseUri)
+        McpClientTransport clientTransport = HttpClientSseClientTransport.builder(baseUri)
                 .sseEndpoint(sseEndpoint)
                 .build();
 
