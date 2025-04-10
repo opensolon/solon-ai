@@ -18,6 +18,7 @@ package org.noear.solon.ai.mcp.client;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
@@ -41,12 +42,24 @@ import java.util.Map;
 public class McpClientWrapper implements Closeable {
     private McpSyncClient real;
 
+    public McpClientWrapper(McpSyncClient client) {
+        this.real = client;
+        this.real.initialize();
+    }
+
+    public McpClientWrapper(McpClientTransport clientTransport) {
+        this.real = McpClient.sync(clientTransport)
+                .clientInfo(new McpSchema.Implementation("Solon-Ai-Mcp-Client", "1.0.0"))
+                .build();
+        this.real.initialize();
+    }
+
     public McpClientWrapper(String baseUri, String sseEndpoint) {
-        HttpClientSseClientTransport mcpClientTransport = HttpClientSseClientTransport.builder(baseUri)
+        HttpClientSseClientTransport clientTransport = HttpClientSseClientTransport.builder(baseUri)
                 .sseEndpoint(sseEndpoint)
                 .build();
 
-        this.real = McpClient.sync(mcpClientTransport)
+        this.real = McpClient.sync(clientTransport)
                 .clientInfo(new McpSchema.Implementation("Solon-Ai-Mcp-Client", "1.0.0"))
                 .build();
         this.real.initialize();
