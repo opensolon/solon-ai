@@ -162,7 +162,7 @@ public class ChatRequestDefault implements ChatRequest {
 
         try {
             if (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE)) {
-                TextStreamUtil.parseEventStream(httpResp.body(), new SimpleSubscriber<ServerSentEvent>()
+                TextStreamUtil.parseSseStream(httpResp.body(), new SimpleSubscriber<ServerSentEvent>()
                         //.doOnSubscribe(subscriber::onSubscribe)//不要做订阅（外部不支持多次触发）
                         .doOnNext(event -> {
                             return onEventStream(resp, event, subscriber);
@@ -172,7 +172,7 @@ public class ChatRequestDefault implements ChatRequest {
                         })
                         .doOnError(subscriber::onError));
             } else {
-                TextStreamUtil.parseTextStream(httpResp.body(), new SimpleSubscriber<String>()
+                TextStreamUtil.parseLineStream(httpResp.body(), new SimpleSubscriber<String>()
                         //.doOnSubscribe(subscriber::onSubscribe)
                         .doOnNext(data -> {
                             return onEventStream(resp, new ServerSentEvent(null, data), subscriber);
