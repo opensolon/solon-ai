@@ -76,6 +76,10 @@ public class EmbeddingModel implements AiModel {
 
         List<Embedding> embeddings = resp.getData();
 
+        if(embeddings.size() != documents.size()) {
+            throw new EmbeddingException("The embedded data is not equal to the number of documents");
+        }
+
         for (int i = 0; i < embeddings.size(); ++i) {
             Document doc = documents.get(i);
             doc.embedding(embeddings.get(i).getEmbedding());
