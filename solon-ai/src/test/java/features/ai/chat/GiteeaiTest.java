@@ -23,12 +23,12 @@ import java.util.concurrent.atomic.AtomicReference;
 public class GiteeaiTest {
     private static final Logger log = LoggerFactory.getLogger(GiteeaiTest.class);
     private static final String apiUrl = "https://ai.gitee.com/v1/chat/completions";
-    private static final String apkKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
+    private static final String apiKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
     private static final String model = "Qwen2.5-72B-Instruct";//"QwQ-32B";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
 
     @Test
     public void case1() throws IOException {
-        ChatModel chatModel = ChatModel.of(apiUrl).apiKey(apkKey).model(model).build();
+        ChatModel chatModel = ChatModel.of(apiUrl).apiKey(apiKey).model(model).build();
 
         //一次性返回
         ChatResponse resp = chatModel.prompt("hello").call();
@@ -39,7 +39,7 @@ public class GiteeaiTest {
 
     @Test
     public void case2() throws Exception {
-        ChatModel chatModel = ChatModel.of(apiUrl).apiKey(apkKey).model(model).build();
+        ChatModel chatModel = ChatModel.of(apiUrl).apiKey(apiKey).model(model).build();
 
         //流返回
         Publisher<ChatResponse> publisher = chatModel.prompt("hello").stream();
@@ -62,7 +62,7 @@ public class GiteeaiTest {
     @Test
     public void case3_wather() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apkKey)
+                .apiKey(apiKey)
                 .model(model)
                 .defaultToolsAdd(new Tools())
                 .build();
@@ -79,7 +79,7 @@ public class GiteeaiTest {
     @Test
     public void case3_www() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apkKey)
+                .apiKey(apiKey)
                 .model(model)
                 .defaultToolsAdd(new Tools())
                 .build();
@@ -95,7 +95,7 @@ public class GiteeaiTest {
     @Test
     public void case3_www_2() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apkKey)
+                .apiKey(apiKey)
                 .model(model)
                 .build();
 
@@ -113,7 +113,7 @@ public class GiteeaiTest {
     @Test
     public void case4() throws Throwable {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apkKey)
+                .apiKey(apiKey)
                 .model(model)
                 .build();
 
@@ -154,7 +154,7 @@ public class GiteeaiTest {
     @Test
     public void case5() throws Throwable {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apkKey)
+                .apiKey(apiKey)
                 .model(model)
                 .build();
 
