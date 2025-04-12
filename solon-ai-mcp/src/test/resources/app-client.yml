@@ -1,17 +1,17 @@
 
-server.port: 8081
+server.port: 8082
 
 solon.ai:
   chat:
     demo:
-      apiUrl: "https://ai.gitee.com/v1/chat/completions"
-      apiKey: "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18"
-      provider: "gitee"
-      model: "Qwen2.5-72B-Instruct"
+      apiUrl: "https://api.deepseek.com/v1/chat/completions"
+      apiKey: "sk-9f4415ddc570496581897c22e3d41a54"
+      provider: "deepseek"
+      model: "deepseek-chat"
   mcp:
     client:
       demo:
-        baseUri: "http://localhost:8080"
-        sseEndpoint: "/mcp/sse"
+        baseUri: "http://localhost:8081"
+        sseEndpoint: "/sse"
 
 solon.logging.logger.root.level: TRACE
