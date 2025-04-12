@@ -28,10 +28,7 @@ import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.mcp.exception.McpException;
 import java.io.Closeable;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Mcp 客户端简化版
@@ -55,6 +52,14 @@ public class McpClientWrapper implements Closeable {
     }
 
     public McpClientWrapper(String baseUri, String sseEndpoint) {
+        if (Utils.isEmpty(sseEndpoint)) {
+            sseEndpoint = "/mcp/sse";
+        }
+
+        if (Utils.isEmpty(baseUri)) {
+            throw new IllegalArgumentException("BaseUri is empty!");
+        }
+
         McpClientTransport clientTransport = HttpClientSseClientTransport.builder(baseUri)
                 .sseEndpoint(sseEndpoint)
                 .build();
@@ -63,6 +68,10 @@ public class McpClientWrapper implements Closeable {
                 .clientInfo(new McpSchema.Implementation("Solon-Ai-Mcp-Client", "1.0.0"))
                 .build();
         this.real.initialize();
+    }
+
+    public McpClientWrapper(Properties properties) {
+        this(properties.getProperty("baseUri"), properties.getProperty("sseEndpoint"));
     }
 
     /**
