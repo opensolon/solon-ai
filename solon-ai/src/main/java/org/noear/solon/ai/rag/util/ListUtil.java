@@ -30,7 +30,7 @@ public final class ListUtil {
      * 分页
      */
     public static <T> List<List<T>> partition(List<T> list) {
-        return partition(list, 20);//一切嵌入模型只接收20左右
+        return partition(list, 10);//一切嵌入模型只接收10左右
     }
 
     /**

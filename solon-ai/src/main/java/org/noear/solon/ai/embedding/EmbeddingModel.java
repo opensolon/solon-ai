@@ -56,6 +56,13 @@ public class EmbeddingModel implements AiModel {
     }
 
     /**
+     * 嵌入批次大小
+     */
+    public int batchSize() {
+        return config.getBatchSize();
+    }
+
+    /**
      * 维度
      */
     public int dimensions() throws IOException {
@@ -76,8 +83,8 @@ public class EmbeddingModel implements AiModel {
 
         List<Embedding> embeddings = resp.getData();
 
-        if(embeddings.size() != documents.size()) {
-            throw new EmbeddingException("The embedded data is not equal to the number of documents");
+        if (embeddings.size() != documents.size()) {
+            throw new EmbeddingException("The embedded data is not equal to the size of documents");
         }
 
         for (int i = 0; i < embeddings.size(); ++i) {
@@ -157,6 +164,14 @@ public class EmbeddingModel implements AiModel {
 
         public Builder timeout(Duration timeout) {
             config.setTimeout(timeout);
+            return this;
+        }
+
+        /**
+         * 批次大小（一批文档大小）
+         */
+        public Builder batchSize(int batchSize) {
+            config.setBatchSize(batchSize);
             return this;
         }
 

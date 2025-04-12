@@ -50,7 +50,7 @@ public class InMemoryRepository implements RepositoryStorable, RepositoryLifecyc
         }
 
         // 批量embedding
-        for (List<Document> sub : ListUtil.partition(documents, 20)) {
+        for (List<Document> sub : ListUtil.partition(documents, embeddingModel.batchSize())) {
             embeddingModel.embed(sub);
         }
 

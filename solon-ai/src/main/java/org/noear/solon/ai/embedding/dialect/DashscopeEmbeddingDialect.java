@@ -80,8 +80,8 @@ public class DashscopeEmbeddingDialect extends AbstractEmbeddingDialect {
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("error")) {
-            return new EmbeddingResponse(model, new EmbeddingException(oResp.get("error").getString()), null, null);
+        if (oResp.contains("code") && !Utils.isEmpty(oResp.get("code").getString())) {
+            return new EmbeddingResponse(model, new EmbeddingException(oResp.get("code").getString() + ": " + oResp.get("message").getString()), null, null);
         } else {
             List<Embedding> data = new ArrayList<>();
             for (ONode n1 : oResp.get("output").get("embeddings").ary()) {

@@ -259,7 +259,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         }
 
         // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents)) {
+        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
             config.embeddingModel.embed(batch);
 
             StringBuilder buf = new StringBuilder();

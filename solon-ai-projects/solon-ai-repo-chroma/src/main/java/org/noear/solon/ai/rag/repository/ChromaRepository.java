@@ -112,7 +112,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         }
 
         // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents)) {
+        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
             config.embeddingModel.embed(batch);
             addDocuments(batch);
         }

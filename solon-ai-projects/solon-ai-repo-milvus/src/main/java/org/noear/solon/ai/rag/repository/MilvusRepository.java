@@ -156,7 +156,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
         }
 
         // 分块处理
-        for (List<Document> batch : ListUtil.partition(documents)) {
+        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
             // 批量embedding
             config.embeddingModel.embed(batch);
 

@@ -226,7 +226,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
         }
 
         // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents)) {
+        for (List<Document> batch : ListUtil.partition(documents, config.embeddingBatchSize)) {
             // 准备上传到VectorDB的文档
             List<com.tencent.tcvectordb.model.Document> batchDocs = new ArrayList<>();
             for (Document document : batch) {
@@ -450,6 +450,8 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
         private int hnswSearchEf = 500;
         //HNSW 图构建时的候选邻居数量
         private int hnswConstructionEf = 400;
+        //嵌入批次大小
+        private int embeddingBatchSize = 10;
 
         /**
          * 构造函数
@@ -575,6 +577,13 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
          */
         public Builder addMetadataField(MetadataField metadataField) {
             this.metadataFields.add(metadataField);
+            return this;
+        }
+
+        public Builder embeddingBatchSize(int batchSize) {
+            if (batchSize > 0) {
+                this.embeddingBatchSize = batchSize;
+            }
             return this;
         }
 

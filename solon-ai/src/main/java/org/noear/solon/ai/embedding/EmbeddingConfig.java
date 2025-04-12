@@ -26,5 +26,21 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.1")
 public class EmbeddingConfig extends AiConfig {
+    protected int batchSize = 10;
 
+    /**
+     * 获取批次大数
+     */
+    public int getBatchSize() {
+        return batchSize;
+    }
+
+    /**
+     * 设置批次大数
+     */
+    public void setBatchSize(int batchSize) {
+        if (batchSize > 0) {
+            this.batchSize = batchSize;
+        }
+    }
 }

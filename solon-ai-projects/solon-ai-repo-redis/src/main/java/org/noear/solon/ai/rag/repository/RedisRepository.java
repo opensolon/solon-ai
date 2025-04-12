@@ -153,7 +153,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
             return;
         }
 
-        for (List<Document> batch : ListUtil.partition(documents)) {
+        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
             config.embeddingModel.embed(batch);
             PipelineBase pipeline = null;
             try {
