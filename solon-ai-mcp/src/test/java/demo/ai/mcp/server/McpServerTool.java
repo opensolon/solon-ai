@@ -1,4 +1,4 @@
-package demo.ai.mcp;
+package demo.ai.mcp.server;
 
 import org.noear.solon.ai.chat.annotation.ToolMapping;
 import org.noear.solon.ai.chat.annotation.ToolParam;

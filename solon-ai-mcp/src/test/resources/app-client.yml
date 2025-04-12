@@ -1,0 +1,17 @@
+
+server.port: 8081
+
+solon.ai:
+  chat:
+    demo:
+      apiUrl: "https://ai.gitee.com/v1/chat/completions"
+      apiKey: "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18"
+      provider: "gitee"
+      model: "Qwen2.5-72B-Instruct"
+  mcp:
+    client:
+      demo:
+        baseUri: "http://localhost:8080"
+        sseEndpoint: "/mcp/sse"
+
+solon.logging.logger.root.level: TRACE

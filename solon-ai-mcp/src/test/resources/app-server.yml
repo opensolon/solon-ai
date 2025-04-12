@@ -1,6 +1,8 @@
 
+server.port: 8080
+
 solon.ai.mcp.server:
   enabled: true
   sseEndpoint: "/mcp/sse"
 
-solon.logging.logger.root.level: INFO
+solon.logging.logger.root.level: TRACE

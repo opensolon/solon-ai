@@ -1,6 +1,6 @@
 package features.ai.mcp.client;
 
-import demo.ai.mcp.McpServerApp;
+import demo.ai.mcp.server.McpServerApp;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
