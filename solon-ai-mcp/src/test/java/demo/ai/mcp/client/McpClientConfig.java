@@ -2,7 +2,7 @@ package demo.ai.mcp.client;
 
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.mcp.client.McpClientWrapper;
+import org.noear.solon.ai.mcp.client.McpToolProvider;
 import org.noear.solon.annotation.Bean;
 import org.noear.solon.annotation.Configuration;
 import org.noear.solon.annotation.Inject;
@@ -19,7 +19,7 @@ public class McpClientConfig {
     }
 
     @Bean
-    public McpClientWrapper clientWrapper(@Inject("${solon.ai.mcp.client.demo}") McpClientWrapper client) {
+    public McpToolProvider clientWrapper(@Inject("${solon.ai.mcp.client.demo}") McpToolProvider client) {
         return client;
     }
 }

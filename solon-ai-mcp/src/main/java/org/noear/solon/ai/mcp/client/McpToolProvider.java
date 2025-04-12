@@ -24,11 +24,12 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.RefererFunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.mcp.exception.McpException;
 import java.io.Closeable;
-import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Mcp 客户端简化版
@@ -36,22 +37,20 @@ import java.util.*;
  * @author noear
  * @since 3.1
  */
-public class McpClientWrapper implements Closeable {
-    private McpSyncClient real;
+public class McpToolProvider implements Closeable, ToolProvider {
+    private final McpSyncClient client;
 
-    public McpClientWrapper(McpSyncClient client) {
-        this.real = client;
-        this.real.initialize();
+    public McpToolProvider(McpSyncClient client) {
+        this.client = client;
     }
 
-    public McpClientWrapper(McpClientTransport clientTransport) {
-        this.real = McpClient.sync(clientTransport)
+    public McpToolProvider(McpClientTransport clientTransport) {
+        this.client = McpClient.sync(clientTransport)
                 .clientInfo(new McpSchema.Implementation("Solon-Ai-Mcp-Client", "1.0.0"))
                 .build();
-        this.real.initialize();
     }
 
-    public McpClientWrapper(String baseUri, String sseEndpoint) {
+    public McpToolProvider(String baseUri, String sseEndpoint) {
         if (Utils.isEmpty(sseEndpoint)) {
             sseEndpoint = "/mcp/sse";
         }
@@ -64,14 +63,25 @@ public class McpClientWrapper implements Closeable {
                 .sseEndpoint(sseEndpoint)
                 .build();
 
-        this.real = McpClient.sync(clientTransport)
+        this.client = McpClient.sync(clientTransport)
                 .clientInfo(new McpSchema.Implementation("Solon-Ai-Mcp-Client", "1.0.0"))
                 .build();
-        this.real.initialize();
     }
 
-    public McpClientWrapper(Properties properties) {
+    public McpToolProvider(Properties properties) {
         this(properties.getProperty("baseUri"), properties.getProperty("sseEndpoint"));
+    }
+
+    /**
+     * 初始化
+     */
+    protected AtomicBoolean initialized = new AtomicBoolean(false);
+
+    protected McpSyncClient getClient() {
+        if (initialized.compareAndSet(false, true)) {
+            client.initialize();
+        }
+        return client;
     }
 
     /**
@@ -113,7 +123,7 @@ public class McpClientWrapper implements Closeable {
      */
     public McpSchema.CallToolResult callTool(String name, Map<String, Object> args) {
         McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
-        McpSchema.CallToolResult response = real.callTool(callToolRequest);
+        McpSchema.CallToolResult response = getClient().callTool(callToolRequest);
 
         if (response.isError() == null || response.isError() == false) {
             return response;
@@ -131,14 +141,15 @@ public class McpClientWrapper implements Closeable {
     /**
      * 转为聊天函数（用于模型绑定）
      */
-    public Collection<FunctionTool> toTools() {
-        return toTools(true);
+    @Override
+    public Collection<FunctionTool> getTools() {
+        return getTools(true);
     }
 
     /**
      * 转为聊天函数（用于模型绑定）
      */
-    public Collection<FunctionTool> toTools(boolean cached) {
+    public Collection<FunctionTool> getTools(boolean cached) {
         if (cached) {
             if (tools != null) {
                 return tools;
@@ -152,7 +163,7 @@ public class McpClientWrapper implements Closeable {
     protected Collection<FunctionTool> buildTools() {
         List<FunctionTool> toolList = new ArrayList<>();
 
-        McpSchema.ListToolsResult result = real.listTools();
+        McpSchema.ListToolsResult result = getClient().listTools();
         for (McpSchema.Tool tool : result.tools()) {
             String name = tool.name();
             String description = tool.description();
@@ -171,9 +182,9 @@ public class McpClientWrapper implements Closeable {
     }
 
     @Override
-    public void close() throws IOException {
-        if (real != null) {
-            real.close();
+    public void close() {
+        if (client != null) {
+            client.close();
         }
     }
 }
