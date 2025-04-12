@@ -1,5 +1,7 @@
-
-server.port: 8082
+server:
+  http:
+    port: 8082
+    idleTimeout: 120000
 
 solon.ai:
   chat:

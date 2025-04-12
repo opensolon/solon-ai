@@ -1,5 +1,7 @@
-
-server.port: 8081
+server:
+  http:
+    port: 8081
+    idleTimeout: 120000
 
 solon.ai.mcp.server:
   enabled: true
