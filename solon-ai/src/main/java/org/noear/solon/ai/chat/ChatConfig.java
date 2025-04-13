@@ -30,6 +30,15 @@ public class ChatConfig extends AiConfig {
     private final Map<String, FunctionTool> defaultTools = new LinkedHashMap<>();
 
     /**
+     * 设置默认工具（用于属性提示）
+     */
+    public void setDefaultTools(Map<String, FunctionTool> tools) {
+        if (tools != null) {
+            defaultTools.putAll(tools);
+        }
+    }
+
+    /**
      * 添加默认工具（即每次请求都会带上）
      */
     public void addDefaultTools(FunctionTool tool) {

@@ -80,6 +80,12 @@ public class AiConfig {
         this.model = model;
     }
 
+    public void setHeaders(Map<String, String> headers) {
+        if (headers != null) {
+            this.headers.putAll(headers);
+        }
+    }
+
     public void setTimeout(Duration timeout) {
         if (timeout != null) {
             this.timeout = timeout;
