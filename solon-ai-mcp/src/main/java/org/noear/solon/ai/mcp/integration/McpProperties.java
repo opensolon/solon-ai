@@ -18,8 +18,6 @@ import java.util.LinkedHashMap;
 @Getter
 @BindProps(prefix = "solon.ai.mcp")
 public class McpProperties {
-    public static final String SERVER_PREFIX = "solon.ai.mcp.server";
-
     private McpServerProperties server;
     private LinkedHashMap<String, McpClientProperties> client;
 }

@@ -27,6 +27,7 @@ import org.noear.solon.annotation.BindProps;
  */
 @Setter
 @Getter
+@BindProps(prefix = "solon.ai.mcp.server")
 public class McpServerProperties {
     /**
      * 是否启用

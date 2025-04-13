@@ -29,7 +29,7 @@ import org.noear.solon.core.*;
 public class McpPlugin implements Plugin {
     @Override
     public void start(AppContext context) throws Throwable {
-        McpServerProperties serverProperties = context.cfg().getProp(McpProperties.SERVER_PREFIX).bindTo(new McpServerProperties());
+        McpServerProperties serverProperties = context.cfg().bindTo(McpServerProperties.class);
 
         if (serverProperties.isEnabled()) {
             //如果服务端被启用

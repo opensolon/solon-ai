@@ -17,6 +17,7 @@ package org.noear.solon.ai.mcp.client;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.noear.solon.annotation.BindProps;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -30,6 +31,7 @@ import java.util.Map;
  */
 @Setter
 @Getter
+@BindProps(prefix = "solon.ai.mcp.client.*")
 public class McpClientProperties {
     /**
      * 客户端名称

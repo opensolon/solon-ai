@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.AiConfig;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.annotation.BindProps;
 
 import java.util.*;
 
@@ -26,6 +27,7 @@ import java.util.*;
  * @author noear
  * @since 3.1
  */
+@BindProps(prefix = "solon.ai.chat.*")
 public class ChatConfig extends AiConfig {
     private final Map<String, FunctionTool> defaultTools = new LinkedHashMap<>();
 
