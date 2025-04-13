@@ -19,6 +19,7 @@ import org.noear.solon.ai.AiModel;
 import org.noear.solon.ai.embedding.dialect.EmbeddingDialect;
 import org.noear.solon.ai.embedding.dialect.EmbeddingDialectManager;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.core.Props;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 
 /**
  * 嵌入模型（相当于翻译器）
@@ -38,7 +40,12 @@ public class EmbeddingModel implements AiModel {
     private final EmbeddingConfig config;
     private final EmbeddingDialect dialect;
 
-    protected EmbeddingModel(EmbeddingConfig config) {
+    public EmbeddingModel(Properties properties) {
+        //支持直接注入
+        this(Props.from(properties).bindTo(new EmbeddingConfig()));
+    }
+
+    public EmbeddingModel(EmbeddingConfig config) {
         this.dialect = EmbeddingDialectManager.select(config);
         this.config = config;
     }

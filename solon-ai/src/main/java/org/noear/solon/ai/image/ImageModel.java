@@ -18,11 +18,11 @@ package org.noear.solon.ai.image;
 import org.noear.solon.ai.AiModel;
 import org.noear.solon.ai.image.dialect.ImageDialect;
 import org.noear.solon.ai.image.dialect.ImageDialectManager;
+import org.noear.solon.core.Props;
 import org.noear.solon.lang.Preview;
 
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.List;
+import java.util.Properties;
 
 /**
  * 图像模型
@@ -35,7 +35,12 @@ public class ImageModel implements AiModel {
     private final ImageConfig config;
     private final ImageDialect dialect;
 
-    protected ImageModel(ImageConfig config) {
+    public ImageModel(Properties properties) {
+        //支持直接注入
+        this(Props.from(properties).bindTo(new ImageConfig()));
+    }
+
+    public ImageModel(ImageConfig config) {
         this.dialect = ImageDialectManager.select(config);
         this.config = config;
     }

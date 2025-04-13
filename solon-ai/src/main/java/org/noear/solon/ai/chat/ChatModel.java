@@ -23,14 +23,12 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.MethodFunctionTool;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.core.Props;
 import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 import java.util.function.Consumer;
 
 /**
@@ -43,6 +41,11 @@ import java.util.function.Consumer;
 public class ChatModel implements AiModel {
     private final ChatConfig config;
     private final ChatDialect dialect;
+
+    public ChatModel(Properties properties) {
+        //支持直接注入
+        this(Props.from(properties).bindTo(new ChatConfig()));
+    }
 
     public ChatModel(ChatConfig config) {
         this.dialect = ChatDialectManager.select(config);

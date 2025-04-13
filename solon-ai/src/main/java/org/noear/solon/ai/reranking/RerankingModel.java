@@ -19,12 +19,14 @@ import org.noear.solon.ai.AiModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.reranking.dialect.RerankingDialect;
 import org.noear.solon.ai.reranking.dialect.RerankingDialectManager;
+import org.noear.solon.core.Props;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Properties;
 import java.util.stream.Collectors;
 
 /**
@@ -38,7 +40,12 @@ public class RerankingModel implements AiModel {
     private final RerankingConfig config;
     private final RerankingDialect dialect;
 
-    protected RerankingModel(RerankingConfig config) {
+    public RerankingModel(Properties properties) {
+        //支持直接注入
+        this(Props.from(properties).bindTo(new RerankingConfig()));
+    }
+
+    public RerankingModel(RerankingConfig config) {
         this.dialect = RerankingDialectManager.select(config);
         this.config = config;
     }
