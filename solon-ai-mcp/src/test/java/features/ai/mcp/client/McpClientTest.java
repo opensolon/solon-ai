@@ -8,6 +8,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Solon;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.mcp.client.McpClientToolProvider;
@@ -47,8 +48,9 @@ public class McpClientTest {
     //简化客户端
     @Test
     public void case2() throws Exception {
-        String apiUrl = "http://localhost:" + Solon.cfg().serverPort() + "/sse";
-        McpClientToolProvider mcpClient = new McpClientToolProvider(apiUrl);
+        McpClientToolProvider mcpClient = Utils.loadProps("app-client.yml")
+                .getProp("solon.ai.mcp.client.demo")
+                .toBean(McpClientToolProvider.class);
 
         String response = mcpClient.callToolAsText("getWeather", Map.of("location", "杭州"));
 
@@ -61,7 +63,9 @@ public class McpClientTest {
     //与模型绑定
     @Test
     public void case3() throws Exception {
-        McpClientToolProvider mcpClient = new McpClientToolProvider("http://localhost:" + Solon.cfg().serverPort() + "/sse");
+        McpClientToolProvider mcpClient = Utils.loadProps("app-client.yml")
+                .getProp("solon.ai.mcp.client.demo")
+                .toBean(McpClientToolProvider.class);
 
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .provider(provider)
