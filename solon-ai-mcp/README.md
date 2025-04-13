@@ -46,15 +46,15 @@ public class McpServerApp {
 
 ### 3、客户端示例
 
-客户端可以使用原生的 modelcontextprotocol 接口，也可以使用 McpClientWrapper (包装简化过)
+客户端可以使用原生的 modelcontextprotocol 接口，也可以使用 McpClientToolProvider (更简单些)
 
 * 直接调用
 
 ```java
 public void case1(){
-    McpClientWrapper mcpClient = new McpClientWrapper("http://localhost:8080", "/mcp/sse");
+    McpClientToolProvider toolProvider = new McpClientToolProvider("http://localhost:8080/mcp/sse");
 
-    String rst = mcpClient.callToolAsText("getWeather", Map.of("location", "杭州"));
+    String rst = toolProvider.callToolAsText("getWeather", Map.of("location", "杭州"));
 }
 ```
 
@@ -62,13 +62,13 @@ public void case1(){
 
 ```java
 public void case2(){
+    McpClientToolProvider toolProvider = new McpClientToolProvider("http://localhost:8080/mcp/sse");
     ChatModel chatModel = null;
-    McpClientWrapper mcpClient = null;
 
     chatModel.prompt("杭州今天的天气怎么样？")
             .options(options -> {
                 //转为函数集合用于绑定
-                options.toolsAdd(mcpClient.toTools());
+                options.toolsAdd(toolProvider.getTools());
             })
             .call();
 }

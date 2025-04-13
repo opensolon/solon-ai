@@ -63,7 +63,7 @@ public class McpClientTest {
     //与模型绑定
     @Test
     public void case3() throws Exception {
-        McpClientToolProvider mcpClient = Utils.loadProps("app-client.yml")
+        McpClientToolProvider toolProvider = Utils.loadProps("app-client.yml")
                 .getProp("solon.ai.mcp.client.demo")
                 .toBean(McpClientToolProvider.class);
 
@@ -76,7 +76,7 @@ public class McpClientTest {
                 .prompt("今天杭州的天气情况？")
                 .options(options -> {
                     //转为工具集合用于绑定
-                    options.toolsAdd(mcpClient.getTools());
+                    options.toolsAdd(toolProvider);
                 })
                 .call();
 
