@@ -15,14 +15,9 @@
  */
 package org.noear.solon.ai.chat;
 
-import org.noear.solon.ai.chat.annotation.ToolMapping;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.FunctionToolDesc;
-import org.noear.solon.ai.chat.tool.MethodFunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.lang.Preview;
 
-import java.lang.reflect.Method;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -72,19 +67,17 @@ public class ChatOptions {
 
     /**
      * 工具添加
-     *
-     * @param toolObj 工具对象
      */
-    public ChatOptions toolsAdd(Object toolObj) {
-        return toolsAdd(toolObj.getClass(), toolObj);
+    public ChatOptions toolsAdd(FunctionTool tool) {
+        tools.put(tool.name(), tool);
+        return this;
     }
-
 
     /**
      * 工具添加
      */
-    public ChatOptions toolsAdd(Collection<FunctionTool> toolColl) {
-        for (FunctionTool f : toolColl) {
+    public ChatOptions toolsAdd(ToolProvider toolProvider) {
+        for (FunctionTool f : toolProvider.getTools()) {
             tools.put(f.name(), f);
         }
 
@@ -94,33 +87,10 @@ public class ChatOptions {
     /**
      * 工具添加
      *
-     * @param toolClz 工具类（如果工具对象为代理时，必须传入原始类）
      * @param toolObj 工具对象
      */
-    public ChatOptions toolsAdd(Class<?> toolClz, Object toolObj) {
-        if (toolObj instanceof FunctionTool) {
-            FunctionTool func = (FunctionTool) toolObj;
-            tools.put(func.name(), func);
-        } else if (toolObj instanceof ToolProvider) {
-            for (FunctionTool func : ((ToolProvider) toolObj).getTools()) {
-                tools.put(func.name(), func);
-            }
-        } else {
-            int count = 0;
-            for (Method method : toolClz.getMethods()) {
-                if (method.isAnnotationPresent(ToolMapping.class)) {
-                    MethodFunctionTool func = new MethodFunctionTool(toolObj, method);
-                    tools.put(func.name(), func);
-                    count++;
-                }
-            }
-
-            if (count == 0) {
-                throw new IllegalArgumentException("This toolObj is not FunctionTool");
-            }
-        }
-
-        return this;
+    public ChatOptions toolsAdd(Object toolObj) {
+        return toolsAdd(new MethodToolProvider(toolObj));
     }
 
     /**
@@ -132,7 +102,7 @@ public class ChatOptions {
     public ChatOptions toolsAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
         FunctionToolDesc decl = new FunctionToolDesc(name);
         toolBuilder.accept(decl);
-        toolsAdd(decl);
+        tools.put(decl.name(), decl);
         return this;
     }
 

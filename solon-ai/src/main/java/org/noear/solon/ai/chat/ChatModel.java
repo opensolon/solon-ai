@@ -16,14 +16,10 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.AiModel;
-import org.noear.solon.ai.chat.annotation.ToolMapping;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.FunctionToolDesc;
-import org.noear.solon.ai.chat.tool.MethodFunctionTool;
+import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.Props;
 import org.noear.solon.lang.Preview;
 
@@ -159,10 +155,20 @@ public class ChatModel implements AiModel {
         /**
          * 默认工具添加（即每次请求都会带上）
          *
-         * @param toolColl 工具集合
+         * @param tool 工具对象
          */
-        public Builder defaultToolsAdd(Collection<FunctionTool> toolColl) {
-            for (FunctionTool f : toolColl) {
+        public Builder defaultToolsAdd(FunctionTool tool) {
+            config.addDefaultTools(tool);
+            return this;
+        }
+
+        /**
+         * 默认工具添加（即每次请求都会带上）
+         *
+         * @param toolProvider 工具提供者
+         */
+        public Builder defaultToolsAdd(ToolProvider toolProvider) {
+            for (FunctionTool f : toolProvider.getTools()) {
                 config.addDefaultTools(f);
             }
 
@@ -175,39 +181,7 @@ public class ChatModel implements AiModel {
          * @param toolObj 工具对象
          */
         public Builder defaultToolsAdd(Object toolObj) {
-            return defaultToolsAdd(toolObj.getClass(), toolObj);
-        }
-
-        /**
-         * 默认工具添加（即每次请求都会带上）
-         *
-         * @param toolClz 工具类（如果工具对象为代理时，必须传入原始类）
-         * @param toolObj 工具对象
-         */
-        public Builder defaultToolsAdd(Class<?> toolClz, Object toolObj) {
-            if (toolObj instanceof FunctionTool) {
-                FunctionTool func = (FunctionTool) toolObj;
-                config.addDefaultTools(func);
-            } else if (toolObj instanceof ToolProvider) {
-                for (FunctionTool f : ((ToolProvider) toolObj).getTools()) {
-                    config.addDefaultTools(f);
-                }
-            } else {
-                int count = 0;
-                for (Method method : toolClz.getMethods()) {
-                    if (method.isAnnotationPresent(ToolMapping.class)) {
-                        MethodFunctionTool func = new MethodFunctionTool(toolObj, method);
-                        config.addDefaultTools(func);
-                        count++;
-                    }
-                }
-
-                if (count == 0) {
-                    throw new IllegalArgumentException("This toolObj is not FunctionTool");
-                }
-            }
-
-            return this;
+            return defaultToolsAdd(new MethodToolProvider(toolObj));
         }
 
         /**
@@ -219,7 +193,7 @@ public class ChatModel implements AiModel {
         public Builder defaultToolsAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
             FunctionToolDesc decl = new FunctionToolDesc(name);
             toolBuilder.accept(decl);
-            defaultToolsAdd(decl);
+            config.addDefaultTools(decl);
             return this;
         }
 
