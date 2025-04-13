@@ -10,8 +10,6 @@ solon.ai:
       model: "deepseek-chat"
   mcp:
     client:
-      enabled: true
-      connections:
         demo:
           apiUrl: "http://localhost:8081/sse"
 

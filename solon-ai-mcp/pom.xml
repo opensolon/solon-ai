@@ -60,13 +60,7 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-lib</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-boot-smarthttp</artifactId>
+            <artifactId>solon-web</artifactId>
             <scope>test</scope>
         </dependency>
 

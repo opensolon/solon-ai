@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.mcp.client.McpConnectionToolProvider;
+import org.noear.solon.ai.mcp.client.McpClientToolProvider;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Map;
@@ -48,7 +48,7 @@ public class McpClientTest {
     @Test
     public void case2() throws Exception {
         String apiUrl = "http://localhost:" + Solon.cfg().serverPort() + "/sse";
-        McpConnectionToolProvider mcpClient = new McpConnectionToolProvider(apiUrl);
+        McpClientToolProvider mcpClient = new McpClientToolProvider(apiUrl);
 
         String response = mcpClient.callToolAsText("getWeather", Map.of("location", "杭州"));
 
@@ -62,7 +62,7 @@ public class McpClientTest {
     @Test
     public void case3() throws Exception {
         String apiUrl = "http://localhost:" + Solon.cfg().serverPort() + "/sse";
-        McpConnectionToolProvider mcpClient = new McpConnectionToolProvider(apiUrl);
+        McpClientToolProvider mcpClient = new McpClientToolProvider(apiUrl);
 
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .provider(provider)

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.client.properties;
+package org.noear.solon.ai.mcp.client;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -23,14 +23,23 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Mcp 连接属性
+ * Mcp 客户端属性
  *
  * @author noear
  * @since 3.1
  */
 @Setter
 @Getter
-public class McpConnectionProperties {
+public class McpClientProperties {
+    /**
+     * 客户端名称
+     */
+    private String name = "Solon-Ai-Mcp-Client";
+    /**
+     * 客户端版本号
+     */
+    private String version = "1.0.0";
+
     /**
      * 接口完整地址
      */
@@ -40,22 +49,23 @@ public class McpConnectionProperties {
      */
     private String apiKey;
     /**
-     * 连接头信息
+     * 请求头信息
      */
     private final Map<String, String> headers = new LinkedHashMap<>();
     /**
-     * 连接超时
+     * 请求超时
      */
-    private Duration timeout;
+    private Duration timeout = Duration.ofSeconds(60);
 
-    public McpConnectionProperties() {
-        // 用于序列化
+
+    public McpClientProperties() {
+        //用于序列化
     }
 
     /**
      * @param apiUrl 接口地址
      */
-    public McpConnectionProperties(String apiUrl) {
+    public McpClientProperties(String apiUrl) {
         this.apiUrl = apiUrl;
     }
 }

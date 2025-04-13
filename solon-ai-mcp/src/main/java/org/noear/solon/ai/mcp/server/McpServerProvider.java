@@ -24,26 +24,28 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
-import org.noear.solon.ai.mcp.server.properties.McpServerProperties;
 import org.noear.solon.core.AppContext;
 import org.noear.solon.core.Lifecycle;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 
 /**
- * Mcp 服务生命周期
+ * Mcp 服务端提供者
  *
  * @author noear
  * @since 3.1
  */
-public class McpServerLifecycle implements Lifecycle {
+public class McpServerProvider implements Lifecycle {
+    private static Logger log = LoggerFactory.getLogger(McpServerProvider.class);
     private final AppContext appContext;
-    private final McpServerProperties serverProperties;
     private final WebRxSseServerTransportProvider mcpTransportProvider;
     private final McpServer.AsyncSpecification mcpServerSpec;
+    private final McpServerProperties serverProperties;
 
-    public McpServerLifecycle(AppContext appContext, McpServerProperties serverProperties) {
+    public McpServerProvider(AppContext appContext, McpServerProperties serverProperties) {
         this.appContext = appContext;
         this.serverProperties = serverProperties;
 
@@ -84,6 +86,11 @@ public class McpServerLifecycle implements Lifecycle {
     @Override
     public void postStart() throws Throwable {
         server = mcpServerSpec.build();
+
+        log.info("Mcp-Server started, name={}, version={}, sseEndpoint={}",
+                serverProperties.getName(),
+                serverProperties.getVersion(),
+                serverProperties.getSseEndpoint());
     }
 
     @Override
