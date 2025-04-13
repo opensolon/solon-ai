@@ -19,6 +19,7 @@ import org.noear.solon.ai.chat.annotation.ToolMapping;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.MethodFunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Method;
@@ -100,6 +101,10 @@ public class ChatOptions {
         if (toolObj instanceof FunctionTool) {
             FunctionTool func = (FunctionTool) toolObj;
             tools.put(func.name(), func);
+        } else if (toolObj instanceof ToolProvider) {
+            for (FunctionTool func : ((ToolProvider) toolObj).getTools()) {
+                tools.put(func.name(), func);
+            }
         } else {
             int count = 0;
             for (Method method : toolClz.getMethods()) {
@@ -111,7 +116,7 @@ public class ChatOptions {
             }
 
             if (count == 0) {
-                throw new IllegalArgumentException("This functionBean is not ChatFunction");
+                throw new IllegalArgumentException("This toolObj is not FunctionTool");
             }
         }
 
