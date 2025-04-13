@@ -27,7 +27,7 @@ public class McpClientTest {
     public void case1() throws Exception {
         String baseUri = "http://localhost:" + Solon.cfg().serverPort();
         HttpClientSseClientTransport clientTransport = HttpClientSseClientTransport.builder(baseUri)
-                .sseEndpoint("/mcp/sse")
+                .sseEndpoint("/sse")
                 .build();
 
         McpSyncClient mcpClient = McpClient.sync(clientTransport).clientInfo(new McpSchema.Implementation("Sample " + "client", "0.0.0"))
@@ -61,8 +61,7 @@ public class McpClientTest {
     //与模型绑定
     @Test
     public void case3() throws Exception {
-        String apiUrl = "http://localhost:" + Solon.cfg().serverPort() + "/sse";
-        McpClientToolProvider mcpClient = new McpClientToolProvider(apiUrl);
+        McpClientToolProvider mcpClient = new McpClientToolProvider("http://localhost:" + Solon.cfg().serverPort() + "/sse");
 
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .provider(provider)
