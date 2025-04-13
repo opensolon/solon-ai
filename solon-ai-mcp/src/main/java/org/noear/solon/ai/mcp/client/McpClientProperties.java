@@ -31,7 +31,6 @@ import java.util.Map;
  */
 @Setter
 @Getter
-@BindProps(prefix = "solon.ai.mcp.client.*")
 public class McpClientProperties {
     /**
      * 客户端名称

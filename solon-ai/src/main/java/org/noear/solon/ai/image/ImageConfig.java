@@ -25,7 +25,6 @@ import org.noear.solon.lang.Preview;
  * @author noear
  * @since 3.1
  */
-@BindProps(prefix = "solon.ai.image.*")
 @Preview("3.1")
 public class ImageConfig extends AiConfig {
 

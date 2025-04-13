@@ -27,7 +27,6 @@ import java.util.*;
  * @author noear
  * @since 3.1
  */
-@BindProps(prefix = "solon.ai.chat.*")
 public class ChatConfig extends AiConfig {
     private final Map<String, FunctionTool> defaultTools = new LinkedHashMap<>();
 

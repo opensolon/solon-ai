@@ -25,7 +25,6 @@ import org.noear.solon.lang.Preview;
  * @author noear
  * @since 3.1
  */
-@BindProps(prefix = "solon.ai.embed.*")
 @Preview("3.1")
 public class EmbeddingConfig extends AiConfig {
     protected int batchSize = 10;
