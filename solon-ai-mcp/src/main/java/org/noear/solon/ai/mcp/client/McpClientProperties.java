@@ -17,7 +17,6 @@ package org.noear.solon.ai.mcp.client;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.noear.solon.annotation.BindProps;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
