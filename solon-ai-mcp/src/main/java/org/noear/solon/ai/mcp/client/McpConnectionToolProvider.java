@@ -26,37 +26,46 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.RefererFunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.image.Image;
+import org.noear.solon.ai.mcp.client.properties.McpConnectionProperties;
+import org.noear.solon.ai.mcp.client.properties.McpClientProperties;
 import org.noear.solon.ai.mcp.exception.McpException;
 import java.io.Closeable;
+import java.net.URI;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Mcp 客户端简化版
+ * Mcp 连接工具提供者
  *
  * @author noear
  * @since 3.1
  */
-public class McpToolProvider implements Closeable, ToolProvider {
+public class McpConnectionToolProvider implements ToolProvider, Closeable {
     private final McpSyncClient client;
 
-    public McpToolProvider(McpSyncClient client) {
-        this.client = client;
+    public McpConnectionToolProvider(String apiUrl) {
+        this(new McpClientProperties(), new McpConnectionProperties(apiUrl));
     }
 
-    public McpToolProvider(McpClientTransport clientTransport) {
-        this.client = McpClient.sync(clientTransport)
-                .clientInfo(new McpSchema.Implementation("Solon-Ai-Mcp-Client", "1.0.0"))
-                .build();
-    }
-
-    public McpToolProvider(String baseUri, String sseEndpoint) {
-        if (Utils.isEmpty(sseEndpoint)) {
-            sseEndpoint = "/mcp/sse";
+    public McpConnectionToolProvider(McpClientProperties clientProps,
+                                     McpConnectionProperties connProps) {
+        if (Utils.isEmpty(connProps.getApiUrl())) {
+            throw new IllegalArgumentException("ApiUrl is empty!");
         }
 
-        if (Utils.isEmpty(baseUri)) {
-            throw new IllegalArgumentException("BaseUri is empty!");
+        URI url = URI.create(connProps.getApiUrl());
+        String baseUri = url.getScheme() + "://" + url.getAuthority();
+        String sseEndpoint = url.getPath();
+
+        if (Utils.isEmpty(sseEndpoint)) {
+            throw new IllegalArgumentException("SseEndpoint is empty!");
+        }
+
+        //超时
+        Duration timeout = connProps.getTimeout();
+        if (timeout == null) {
+            timeout = clientProps.getTimeout();
         }
 
         McpClientTransport clientTransport = HttpClientSseClientTransport.builder(baseUri)
@@ -64,12 +73,8 @@ public class McpToolProvider implements Closeable, ToolProvider {
                 .build();
 
         this.client = McpClient.sync(clientTransport)
-                .clientInfo(new McpSchema.Implementation("Solon-Ai-Mcp-Client", "1.0.0"))
+                .clientInfo(new McpSchema.Implementation(clientProps.getName(), clientProps.getVersion()))
                 .build();
-    }
-
-    public McpToolProvider(Properties properties) {
-        this(properties.getProperty("baseUri"), properties.getProperty("sseEndpoint"));
     }
 
     /**
@@ -136,31 +141,11 @@ public class McpToolProvider implements Closeable, ToolProvider {
         }
     }
 
-    private Collection<FunctionTool> tools;
-
     /**
      * 转为聊天函数（用于模型绑定）
      */
     @Override
     public Collection<FunctionTool> getTools() {
-        return getTools(true);
-    }
-
-    /**
-     * 转为聊天函数（用于模型绑定）
-     */
-    public Collection<FunctionTool> getTools(boolean cached) {
-        if (cached) {
-            if (tools != null) {
-                return tools;
-            }
-        }
-
-        tools = buildTools();
-        return tools;
-    }
-
-    protected Collection<FunctionTool> buildTools() {
         List<FunctionTool> toolList = new ArrayList<>();
 
         McpSchema.ListToolsResult result = getClient().listTools();

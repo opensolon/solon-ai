@@ -13,25 +13,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.server.integration;
+package org.noear.solon.ai.mcp.integration;
 
 import org.noear.solon.ai.chat.annotation.ToolMapping;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodFunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.mcp.client.McpClientToolProvider;
+import org.noear.solon.ai.mcp.client.properties.McpClientProperties;
 import org.noear.solon.ai.mcp.server.McpServerLifecycle;
-import org.noear.solon.ai.mcp.server.McpServerProperties;
+import org.noear.solon.ai.mcp.server.properties.McpServerProperties;
 import org.noear.solon.core.*;
 
 /**
  * @author noear
  * @since 3.1
  */
-public class McpServerPlugin implements Plugin {
+public class McpPlugin implements Plugin {
     @Override
     public void start(AppContext context) throws Throwable {
         McpServerProperties serverProperties = context.cfg().bindTo(McpServerProperties.class);
+        McpClientProperties clientProperties = context.cfg().bindTo(McpClientProperties.class);
 
         if (serverProperties.isEnabled()) {
+            //如果服务端被启用
             McpServerLifecycle mcpServerLifecycle = new McpServerLifecycle(context, serverProperties);
 
             //从组件中提取
@@ -47,6 +52,15 @@ public class McpServerPlugin implements Plugin {
 
             //注册生命周期
             context.lifecycle(mcpServerLifecycle);
+        }
+
+        if (clientProperties.isEnabled()) {
+            //如果客户端被启用
+            McpClientToolProvider mcpClientToolProvider = new McpClientToolProvider(clientProperties);
+            BeanWrap beanWrap = context.wrap(McpClientToolProvider.class, mcpClientToolProvider);
+
+            context.putWrap(McpClientToolProvider.class, beanWrap);
+            context.putWrap(ToolProvider.class, beanWrap);
         }
     }
 }

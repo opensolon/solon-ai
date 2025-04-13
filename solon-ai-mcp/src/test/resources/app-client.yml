@@ -10,8 +10,9 @@ solon.ai:
       model: "deepseek-chat"
   mcp:
     client:
-      demo:
-        baseUri: "http://localhost:8081"
-        sseEndpoint: "/sse"
+      enabled: true
+      connections:
+        demo:
+          apiUrl: "http://localhost:8081/sse"
 
 solon.logging.logger.root.level: TRACE

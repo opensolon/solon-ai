@@ -24,6 +24,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.mcp.server.properties.McpServerProperties;
 import org.noear.solon.core.AppContext;
 import org.noear.solon.core.Lifecycle;
 import reactor.core.publisher.Mono;

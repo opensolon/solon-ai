@@ -13,40 +13,50 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.server;
+package org.noear.solon.ai.mcp.client.properties;
 
 import lombok.Getter;
 import lombok.Setter;
 import org.noear.solon.annotation.BindProps;
 
+import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
- * Mcp 服务端属性
+ * Mcp 客户端属性
  *
  * @author noear
  * @since 3.1
  */
 @Setter
 @Getter
-@BindProps(prefix = "solon.ai.mcp.server")
-public class McpServerProperties {
+@BindProps(prefix = "solon.ai.mcp.client")
+public class McpClientProperties {
     /**
      * 是否启用
      */
     private boolean enabled = false;
     /**
-     * 服务名称
+     * 客户端名称
      */
-    private String name = "Solon-Ai-Mcp-Server";
+    private String name = "Solon-Ai-Mcp-Client";
     /**
-     * 服务版本号
+     * 客户端版本号
      */
     private String version = "1.0.0";
+
     /**
-     * 消息端点（路径）
+     * 公共超时
      */
-    private String messageEndpoint = "/mcp/message";
+    private Duration timeout;
     /**
-     * 服务器派发事件端点（路径）
+     * 公共头
      */
-    private String sseEndpoint = "/mcp/sse";
+    private final Map<String, String> headers = new LinkedHashMap<>();
+
+    /**
+     * 连接配置
+     */
+    private Map<String, McpConnectionProperties> connections = new LinkedHashMap<>();
 }

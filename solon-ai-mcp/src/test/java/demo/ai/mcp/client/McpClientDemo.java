@@ -3,7 +3,7 @@ package demo.ai.mcp.client;
 import lombok.extern.slf4j.Slf4j;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.mcp.client.McpToolProvider;
+import org.noear.solon.ai.mcp.client.McpClientToolProvider;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Inject;
 import org.noear.solon.annotation.Mapping;
@@ -21,7 +21,7 @@ public class McpClientDemo {
     ChatModel chatModel;
 
     @Inject
-    McpToolProvider mcpClient;
+    McpClientToolProvider mcpClient;
 
     @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
     @Mapping("mcp/test")
