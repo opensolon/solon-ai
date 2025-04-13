@@ -80,6 +80,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
         this.client = McpClient.sync(clientTransport)
                 .clientInfo(new McpSchema.Implementation(clientProps.getName(), clientProps.getVersion()))
+                .requestTimeout(timeout)
                 .build();
     }
 
