@@ -76,12 +76,19 @@ public class ChatOptions {
     /**
      * 工具添加
      */
-    public ChatOptions toolsAdd(ToolProvider toolProvider) {
-        for (FunctionTool f : toolProvider.getTools()) {
+    public ChatOptions toolsAdd(Iterable<FunctionTool> toolColl) {
+        for (FunctionTool f : toolColl) {
             tools.put(f.name(), f);
         }
 
         return this;
+    }
+
+    /**
+     * 工具添加
+     */
+    public ChatOptions toolsAdd(ToolProvider toolProvider) {
+        return toolsAdd(toolProvider.getTools());
     }
 
     /**

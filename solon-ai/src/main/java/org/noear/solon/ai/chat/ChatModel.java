@@ -165,14 +165,23 @@ public class ChatModel implements AiModel {
         /**
          * 默认工具添加（即每次请求都会带上）
          *
-         * @param toolProvider 工具提供者
+         * @param toolColl 工具集合
          */
-        public Builder defaultToolsAdd(ToolProvider toolProvider) {
-            for (FunctionTool f : toolProvider.getTools()) {
+        public Builder defaultToolsAdd(Iterable<FunctionTool> toolColl) {
+            for (FunctionTool f : toolColl) {
                 config.addDefaultTools(f);
             }
 
             return this;
+        }
+
+        /**
+         * 默认工具添加（即每次请求都会带上）
+         *
+         * @param toolProvider 工具提供者
+         */
+        public Builder defaultToolsAdd(ToolProvider toolProvider) {
+            return defaultToolsAdd(toolProvider.getTools());
         }
 
         /**
