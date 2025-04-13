@@ -18,9 +18,8 @@ import java.io.IOException;
 @SolonTest
 public class App {
     @Bean
-    public ChatModel build(@Inject("${solon.ai.chat.llama3}") ChatConfig config) {
-        return ChatModel.of(config)
-                .build();
+    public ChatModel build(@Inject("${solon.ai.chat.llama3}") ChatModel chatModel) {
+        return chatModel;
     }
 
     @Inject

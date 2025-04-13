@@ -15,12 +15,12 @@ import org.noear.solon.annotation.Inject;
 public class Config {
 
     @Bean
-    public ChatModel chatModel(@Inject("${solon.ai.chat.qwen}") ChatConfig config) {
-        return ChatModel.of(config).build();
+    public ChatModel chatModel(@Inject("${solon.ai.chat.qwen}") ChatModel chatModel) {
+        return chatModel;
     }
 
     @Bean
-    public EmbeddingModel embeddingModel(@Inject("${solon.ai.embed.bge-m3}") EmbeddingConfig config) {
-        return EmbeddingModel.of(config).build();
+    public EmbeddingModel embeddingModel(@Inject("${solon.ai.embed.bge-m3}") EmbeddingModel embeddingModel) {
+        return embeddingModel;
     }
 }
