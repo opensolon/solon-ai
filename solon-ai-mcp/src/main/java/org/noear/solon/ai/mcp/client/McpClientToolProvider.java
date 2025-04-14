@@ -33,7 +33,6 @@ import org.noear.solon.net.http.HttpUtilsBuilder;
 
 import java.io.Closeable;
 import java.net.URI;
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
