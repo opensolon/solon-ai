@@ -11,6 +11,7 @@ import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.ServerMcpTransport;
 import io.modelcontextprotocol.util.Assert;
+import lombok.var;
 import reactor.core.publisher.Mono;
 
 import java.util.*;

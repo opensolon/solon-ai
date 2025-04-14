@@ -10,6 +10,7 @@ import io.modelcontextprotocol.util.Utils;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.var;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 

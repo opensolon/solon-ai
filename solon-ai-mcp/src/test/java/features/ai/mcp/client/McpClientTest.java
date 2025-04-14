@@ -6,6 +6,7 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
+import org.noear.liquor.eval.Maps;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
@@ -29,7 +30,7 @@ public class McpClientTest {
                 .getProp("solon.ai.mcp.client.demo")
                 .toBean(McpClientToolProvider.class);
 
-        String response = mcpClient.callToolAsText("getWeather", Map.of("location", "杭州"));
+        String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州"));
 
         assert response != null;
         log.warn("{}", response);
