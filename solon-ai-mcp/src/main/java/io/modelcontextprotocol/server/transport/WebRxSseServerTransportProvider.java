@@ -124,8 +124,18 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	}
 
 	public void toHttpHandler(SolonApp app) {
-		app.get(this.sseEndpoint, this::handleSseConnection);
-		app.post(this.messageEndpoint, this::handleMessage);
+		if (app != null) {
+			app.get(this.sseEndpoint, this::handleSseConnection);
+			app.post(this.messageEndpoint, this::handleMessage);
+		}
+	}
+
+	public String getSseEndpoint() {
+		return sseEndpoint;
+	}
+
+	public String getMessageEndpoint() {
+		return messageEndpoint;
 	}
 
 	/**
@@ -212,7 +222,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * @param ctx The incoming server context
 	 * @return A Mono which emits a response with the SSE event stream
 	 */
-	private void handleSseConnection(Context ctx) throws Throwable{
+	public void handleSseConnection(Context ctx) throws Throwable{
 		if (isClosing) {
 			ctx.status(503);
 			ctx.output("Server is shutting down");
@@ -260,7 +270,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * @param request The incoming server request containing the JSON-RPC message
 	 * @return A Mono emitting the response indicating the message processing result
 	 */
-	private void handleMessage(Context request) throws Throwable {
+	public void handleMessage(Context request) throws Throwable {
 		if (isClosing) {
 			request.status(503);
 			request.output("Server is shutting down");

@@ -33,7 +33,7 @@ public class McpPlugin implements Plugin {
 
         if (serverProperties.isEnabled()) {
             //如果服务端被启用
-            McpServerProvider mcpServerProvider = new McpServerProvider(context, serverProperties);
+            McpServerProvider mcpServerProvider = new McpServerProvider(serverProperties);
 
             //从组件中提取
             context.beanExtractorAdd(ToolMapping.class, (bw, method, anno) -> {

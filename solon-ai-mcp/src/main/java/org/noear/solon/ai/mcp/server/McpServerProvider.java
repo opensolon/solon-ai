@@ -22,9 +22,9 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
+import org.noear.solon.Solon;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
-import org.noear.solon.core.AppContext;
 import org.noear.solon.core.Lifecycle;
 import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
@@ -41,13 +41,11 @@ import java.util.Arrays;
  */
 public class McpServerProvider implements Lifecycle {
     private static Logger log = LoggerFactory.getLogger(McpServerProvider.class);
-    private final AppContext appContext;
     private final WebRxSseServerTransportProvider mcpTransportProvider;
     private final McpServer.AsyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
 
-    public McpServerProvider(AppContext appContext, McpServerProperties serverProperties) {
-        this.appContext = appContext;
+    public McpServerProvider(McpServerProperties serverProperties) {
         this.serverProperties = serverProperties;
 
         //如果启用了
@@ -59,6 +57,10 @@ public class McpServerProvider implements Lifecycle {
 
         this.mcpServerSpec = McpServer.async(this.mcpTransportProvider)
                 .serverInfo(serverProperties.getName(), serverProperties.getVersion());
+    }
+
+    public WebRxSseServerTransportProvider getTransport() {
+        return mcpTransportProvider;
     }
 
     /**
@@ -77,16 +79,9 @@ public class McpServerProvider implements Lifecycle {
         }
     }
 
-    /**
-     * 发送心跳
-     */
-    public void sendHeartbeat() {
-        mcpTransportProvider.sendHeartbeat();
-    }
-
     @Override
     public void start() throws Throwable {
-        mcpTransportProvider.toHttpHandler(appContext.app());
+        mcpTransportProvider.toHttpHandler(Solon.app());
     }
 
     private McpAsyncServer server;
