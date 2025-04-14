@@ -92,7 +92,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * Map of active client sessions, keyed by session ID.
 	 */
 	private final ConcurrentHashMap<String, McpServerSession> sessions = new ConcurrentHashMap<>();
-
+	private final ConcurrentHashMap<String, WebRxMcpSessionTransport> sessionTransports = new ConcurrentHashMap<>();
 	/**
 	 * Flag indicating if the transport is shutting down.
 	 */
@@ -115,6 +115,12 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		this.objectMapper = objectMapper;
 		this.messageEndpoint = messageEndpoint;
 		this.sseEndpoint = sseEndpoint;
+	}
+
+	public void sendHeartbeat(){
+		for (WebRxMcpSessionTransport transport : sessionTransports.values()) {
+			transport.sendHeartbeat();
+		}
 	}
 
 	public void toHttpHandler(SolonApp app) {
@@ -221,6 +227,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 			logger.debug("Created new SSE connection for session: {}", sessionId);
 			sessions.put(sessionId, session);
+			sessionTransports.put(sessionId, sessionTransport);
 
 			// Send initial endpoint event
 			logger.debug("Sending initial endpoint event to session: {}", sessionId);
@@ -230,6 +237,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 			sink.onCancel(() -> {
 				logger.debug("Session {} cancelled", sessionId);
 				sessions.remove(sessionId);
+				sessionTransports.remove(sessionId);
 			});
 		});
 
@@ -297,6 +305,10 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 		public WebRxMcpSessionTransport(FluxSink<SseEvent> sink) {
 			this.sink = sink;
+		}
+
+		public void sendHeartbeat() {
+			sink.next(new SseEvent().comment("heartbeat"));
 		}
 
 		@Override
