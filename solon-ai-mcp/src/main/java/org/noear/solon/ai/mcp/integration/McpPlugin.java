@@ -33,21 +33,22 @@ public class McpPlugin implements Plugin {
 
         if (serverProperties.isEnabled()) {
             //如果服务端被启用
-            McpServerProvider mcpServerLifecycle = new McpServerProvider(context, serverProperties);
+            McpServerProvider mcpServerProvider = new McpServerProvider(context, serverProperties);
 
             //从组件中提取
             context.beanExtractorAdd(ToolMapping.class, (bw, method, anno) -> {
                 FunctionTool functionTool = new MethodFunctionTool(bw.raw(), method);
-                mcpServerLifecycle.addTool(functionTool);
+                mcpServerProvider.addTool(functionTool);
             });
 
             //订阅接口实现
             context.subBeansOfType(FunctionTool.class, functionTool -> {
-                mcpServerLifecycle.addTool(functionTool);
+                mcpServerProvider.addTool(functionTool);
             });
 
             //注册生命周期
-            context.lifecycle(mcpServerLifecycle);
+            context.wrapAndPut(McpServerProvider.class, mcpServerProvider);
+            context.lifecycle(mcpServerProvider);
         }
     }
 }
