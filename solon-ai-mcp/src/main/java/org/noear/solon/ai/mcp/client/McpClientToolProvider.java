@@ -120,10 +120,10 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      */
     public String callToolAsText(String name, Map<String, Object> args) {
         McpSchema.CallToolResult result = callTool(name, args);
-        if (Utils.isEmpty(result.content())) {
+        if (Utils.isEmpty(result.getContent())) {
             return null;
         } else {
-            return ((McpSchema.TextContent) result.content().get(0)).text();
+            return ((McpSchema.TextContent) result.getContent().get(0)).getText();
         }
     }
 
@@ -135,11 +135,11 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      */
     public Image callToolAsImage(String name, Map<String, Object> args) {
         McpSchema.CallToolResult result = callTool(name, args);
-        if (Utils.isEmpty(result.content())) {
+        if (Utils.isEmpty(result.getContent())) {
             return null;
         } else {
-            McpSchema.ImageContent imageContent = ((McpSchema.ImageContent) result.content().get(0));
-            return Image.ofBase64(imageContent.data(), imageContent.mimeType());
+            McpSchema.ImageContent imageContent = ((McpSchema.ImageContent) result.getContent().get(0));
+            return Image.ofBase64(imageContent.getData(), imageContent.getMimeType());
         }
     }
 
@@ -153,13 +153,13 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
         McpSchema.CallToolResult response = getClient().callTool(callToolRequest);
 
-        if (response.isError() == null || response.isError() == false) {
+        if (response.getIsError() == null || response.getIsError() == false) {
             return response;
         } else {
-            if (Utils.isEmpty(response.content())) {
+            if (Utils.isEmpty(response.getContent())) {
                 throw new McpException("Call Toll Failed");
             } else {
-                throw new McpException(response.content().get(0).toString());
+                throw new McpException(response.getContent().get(0).toString());
             }
         }
     }
@@ -172,10 +172,10 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         List<FunctionTool> toolList = new ArrayList<>();
 
         McpSchema.ListToolsResult result = getClient().listTools();
-        for (McpSchema.Tool tool : result.tools()) {
-            String name = tool.name();
-            String description = tool.description();
-            ONode parametersNode = ONode.load(tool.inputSchema());
+        for (McpSchema.Tool tool : result.getTools()) {
+            String name = tool.getName();
+            String description = tool.getDescription();
+            ONode parametersNode = ONode.load(tool.getInputSchema());
 
             RefererFunctionTool functionRefer = new RefererFunctionTool(
                     name,

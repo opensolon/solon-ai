@@ -160,7 +160,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * errors if any session fails to receive the message
 	 */
 	@Override
-	public Mono<Void> notifyClients(String method, Object params) {
+	public Mono<Void> notifyClients(String method, Map<String,Object> params) {
 		if (sessions.isEmpty()) {
 			logger.debug("No active sessions to broadcast message to");
 			return Mono.empty();
