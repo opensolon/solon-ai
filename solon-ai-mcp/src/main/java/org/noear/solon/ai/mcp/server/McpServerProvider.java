@@ -26,6 +26,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.AppContext;
 import org.noear.solon.core.Lifecycle;
+import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -76,6 +77,13 @@ public class McpServerProvider implements Lifecycle {
         }
     }
 
+    /**
+     * 发送心跳
+     */
+    public void sendHeartbeat() {
+        mcpTransportProvider.sendHeartbeat();
+    }
+
     @Override
     public void start() throws Throwable {
         mcpTransportProvider.toHttpHandler(appContext.app());
@@ -87,10 +95,21 @@ public class McpServerProvider implements Lifecycle {
     public void postStart() throws Throwable {
         server = mcpServerSpec.build();
 
-        log.info("Mcp-Server started, name={}, version={}, sseEndpoint={}",
+        log.info("Mcp-Server started, name={}, version={}, sseEndpoint={}, messageEndpoint={}, sseHeartbeat={}",
                 serverProperties.getName(),
                 serverProperties.getVersion(),
-                serverProperties.getSseEndpoint());
+                serverProperties.getSseEndpoint(),
+                serverProperties.getMessageEndpoint(),
+                serverProperties.isEnabledSseHeartbeat());
+
+        if (serverProperties.isEnabledSseHeartbeat()) {
+            //启用 sse 心跳（保持客户端不断开）
+            RunUtil.delayAndRepeat(() -> {
+                RunUtil.runAndTry(() -> {
+                    mcpTransportProvider.sendHeartbeat();
+                });
+            }, serverProperties.getSseHeartbeatInterval().toMillis());
+        }
     }
 
     @Override

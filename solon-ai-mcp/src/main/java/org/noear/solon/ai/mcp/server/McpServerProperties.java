@@ -19,6 +19,8 @@ import lombok.Getter;
 import lombok.Setter;
 import org.noear.solon.annotation.BindProps;
 
+import java.time.Duration;
+
 /**
  * Mcp 服务端属性
  *
@@ -49,4 +51,12 @@ public class McpServerProperties {
      * 服务器派发事件端点（路径）
      */
     private String sseEndpoint = "/mcp/sse";
+    /**
+     * 是否启用服务器SSE心跳
+     */
+    private boolean enabledSseHeartbeat = false;
+    /**
+     * 服务器SSE心跳间隔（启用后才有效）
+     */
+    private Duration sseHeartbeatInterval = Duration.ofSeconds(30);
 }

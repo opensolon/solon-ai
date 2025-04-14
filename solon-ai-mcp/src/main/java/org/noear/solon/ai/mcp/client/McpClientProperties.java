@@ -56,7 +56,7 @@ public class McpClientProperties {
     /**
      * http 超时
      */
-    private HttpTimeout httpTimeout = HttpTimeout.of(10, 10, 0);
+    private HttpTimeout httpTimeout = HttpTimeout.of(10, 60, 60);
     /**
      * 请求超时
      */
