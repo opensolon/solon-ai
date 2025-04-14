@@ -17,7 +17,7 @@ package org.noear.solon.ai.mcp.client;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
+import io.modelcontextprotocol.client.transport.WebRxSseClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
@@ -28,6 +28,7 @@ import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
+import org.noear.solon.net.http.HttpUtilsBuilder;
 
 import java.io.Closeable;
 import java.net.URI;
@@ -74,7 +75,22 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         //超时
         Duration timeout = clientProps.getTimeout();
 
-        McpClientTransport clientTransport = HttpClientSseClientTransport.builder(baseUri)
+        HttpUtilsBuilder webBuilder = new HttpUtilsBuilder();
+        webBuilder.baseUri(baseUri);
+
+        if (Utils.isNotEmpty(clientProps.getApiKey())) {
+            webBuilder.headerSet("Authorization", "Bearer " + clientProps.getApiKey());
+        }
+
+        clientProps.getHeaders().forEach((k, v) -> {
+            webBuilder.headerSet(k, v);
+        });
+
+        if (timeout != null) {
+            webBuilder.timeout((int) timeout.getSeconds());
+        }
+
+        McpClientTransport clientTransport = WebRxSseClientTransport.builder(webBuilder)
                 .sseEndpoint(sseEndpoint)
                 .build();
 
