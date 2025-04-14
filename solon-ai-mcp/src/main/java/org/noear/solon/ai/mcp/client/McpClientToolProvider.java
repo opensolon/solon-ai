@@ -28,6 +28,7 @@ import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
+import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
 
 import java.io.Closeable;
@@ -73,7 +74,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         }
 
         //超时
-        Duration timeout = clientProps.getTimeout();
+        HttpTimeout httpTimeout = clientProps.getHttpTimeout();
 
         HttpUtilsBuilder webBuilder = new HttpUtilsBuilder();
         webBuilder.baseUri(baseUri);
@@ -86,8 +87,8 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
             webBuilder.headerSet(k, v);
         });
 
-        if (timeout != null) {
-            webBuilder.timeout((int) timeout.getSeconds());
+        if (httpTimeout != null) {
+            webBuilder.timeout(httpTimeout);
         }
 
         McpClientTransport clientTransport = WebRxSseClientTransport.builder(webBuilder)
@@ -96,7 +97,8 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
         this.client = McpClient.sync(clientTransport)
                 .clientInfo(new McpSchema.Implementation(clientProps.getName(), clientProps.getVersion()))
-                .requestTimeout(timeout)
+                .requestTimeout(clientProps.getRequestTimeout())
+                .initializationTimeout(clientProps.getInitializationTimeout())
                 .build();
     }
 

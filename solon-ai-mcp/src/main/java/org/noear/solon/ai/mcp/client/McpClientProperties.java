@@ -17,6 +17,7 @@ package org.noear.solon.ai.mcp.client;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.noear.solon.net.http.HttpTimeout;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -53,9 +54,17 @@ public class McpClientProperties {
      */
     private final Map<String, String> headers = new LinkedHashMap<>();
     /**
+     * http 超时
+     */
+    private HttpTimeout httpTimeout = HttpTimeout.of(10);
+    /**
      * 请求超时
      */
-    private Duration timeout = Duration.ofSeconds(60);
+    private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
+    /**
+     * 初始化超时
+     */
+    private Duration initializationTimeout = Duration.ofSeconds(20);
 
 
     public McpClientProperties() {

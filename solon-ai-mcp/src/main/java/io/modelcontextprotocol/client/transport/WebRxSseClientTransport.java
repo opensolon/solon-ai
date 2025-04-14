@@ -228,7 +228,7 @@ public class WebRxSseClientTransport implements McpClientTransport {
 							}
 						}).doOnError(error -> {
 							if (!isClosing) {
-								logger.error("SSE connection error", error);
+								logger.warn("SSE connection error", error);
 								future.completeExceptionally(error);
 							}
 						}));
