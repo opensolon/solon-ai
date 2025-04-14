@@ -52,7 +52,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * This implementation is thread-safe and can handle multiple concurrent client
  * connections. It uses {@link ConcurrentHashMap} for session management and Project
- * Reactor's non-blocking APIs for message processing and delivery.
+ * Reactor's non-blocking APIs for message processing and delivery. and base JDK8
  *
  * @author Christian Tzolov
  * @author Alexandros Pappas
@@ -169,11 +169,11 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		logger.debug("Attempting to broadcast message to {} active sessions", sessions.size());
 
 		return Flux.fromStream(sessions.values().stream())
-			.flatMap(session -> session.sendNotification(method, params)
-				.doOnError(e -> logger.error("Failed to " + "send message to session " + "{}: {}", session.getId(),
-						e.getMessage()))
-				.onErrorComplete())
-			.then();
+				.flatMap(session -> session.sendNotification(method, params)
+						.doOnError(e -> logger.error("Failed to " + "send message to session " + "{}: {}", session.getId(),
+								e.getMessage()))
+						.onErrorComplete())
+				.then();
 	}
 
 	// FIXME: This javadoc makes claims about using isClosing flag but it's not actually
@@ -195,9 +195,9 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	@Override
 	public Mono<Void> closeGracefully() {
 		return Flux.fromIterable(sessions.values())
-			.doFirst(() -> logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size()))
-			.flatMap(McpServerSession::closeGracefully)
-			.then();
+				.doFirst(() -> logger.debug("Initiating graceful shutdown with {} active sessions", sessions.size()))
+				.flatMap(McpServerSession::closeGracefully)
+				.then();
 	}
 
 	/**
@@ -276,12 +276,12 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 						return Mono.just(new Entity());
 					})
 					.onErrorResume(error -> {
-                        logger.error("Error processing  message: {}", error.getMessage());
-                        // TODO: instead of signalling the error, just respond with 200 OK
-                        // - the error is signalled on the SSE connection
-                        // return ServerResponse.ok().build();
-                        return Mono.just(new Entity().status(500).body(new McpError(error.getMessage())));
-                    });
+						logger.error("Error processing  message: {}", error.getMessage());
+						// TODO: instead of signalling the error, just respond with 200 OK
+						// - the error is signalled on the SSE connection
+						// return ServerResponse.ok().build();
+						return Mono.just(new Entity().status(500).body(new McpError(error.getMessage())));
+					});
 
 			request.returnValue(mono);
 		} catch (IllegalArgumentException | IOException e) {
@@ -310,8 +310,8 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 				}
 			}).doOnNext(jsonText -> {
 				SseEvent event = new SseEvent()
-					.name(MESSAGE_EVENT_TYPE)
-					.data(jsonText);
+						.name(MESSAGE_EVENT_TYPE)
+						.data(jsonText);
 				sink.next(event);
 			}).doOnError(e -> {
 				// TODO log with sessionid
