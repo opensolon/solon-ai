@@ -149,7 +149,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      * @param name 工具名
      * @param args 调用参数
      */
-    public McpSchema.CallToolResult callTool(String name, Map<String, Object> args) {
+    protected McpSchema.CallToolResult callTool(String name, Map<String, Object> args) {
         McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
         McpSchema.CallToolResult response = getClient().callTool(callToolRequest);
 
@@ -164,29 +164,53 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         }
     }
 
+    /// ///////////
+
+    protected Map<String, FunctionTool> toolsCached;
+
+    protected Map<String, FunctionTool> getToolsCached() {
+        if (toolsCached == null) {
+            Utils.locker().lock();
+            try {
+                if (toolsCached == null) {
+                    toolsCached = new LinkedHashMap<>();
+
+                    McpSchema.ListToolsResult result = getClient().listTools();
+                    for (McpSchema.Tool tool : result.getTools()) {
+                        String name = tool.getName();
+                        String description = tool.getDescription();
+                        ONode parametersNode = ONode.load(tool.getInputSchema());
+
+                        RefererFunctionTool functionRefer = new RefererFunctionTool(
+                                name,
+                                description,
+                                parametersNode,
+                                args -> callToolAsText(name, args));
+
+                        toolsCached.put(functionRefer.name(), functionRefer);
+                    }
+                }
+            } finally {
+                Utils.locker().unlock();
+            }
+        }
+
+        return toolsCached;
+    }
+
+    /**
+     * 获取工具
+     */
+    public FunctionTool getTool(String name) {
+        return getToolsCached().get(name);
+    }
+
     /**
      * 转为聊天函数（用于模型绑定）
      */
     @Override
     public Collection<FunctionTool> getTools() {
-        List<FunctionTool> toolList = new ArrayList<>();
-
-        McpSchema.ListToolsResult result = getClient().listTools();
-        for (McpSchema.Tool tool : result.getTools()) {
-            String name = tool.getName();
-            String description = tool.getDescription();
-            ONode parametersNode = ONode.load(tool.getInputSchema());
-
-            RefererFunctionTool functionRefer = new RefererFunctionTool(
-                    name,
-                    description,
-                    parametersNode,
-                    args -> callToolAsText(name, args));
-
-            toolList.add(functionRefer);
-        }
-
-        return toolList;
+        return getToolsCached().values();
     }
 
     @Override
