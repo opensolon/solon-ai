@@ -26,12 +26,14 @@ import org.noear.solon.Solon;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.Lifecycle;
+import org.noear.solon.core.Props;
 import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
+import java.util.Properties;
 
 /**
  * Mcp 服务端提供者
@@ -44,6 +46,10 @@ public class McpServerProvider implements Lifecycle {
     private final WebRxSseServerTransportProvider mcpTransportProvider;
     private final McpServer.AsyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
+
+    public McpServerProvider(Properties properties) {
+        this(Props.from(properties).bindTo(new McpServerProperties()));
+    }
 
     public McpServerProvider(McpServerProperties serverProperties) {
         this.serverProperties = serverProperties;

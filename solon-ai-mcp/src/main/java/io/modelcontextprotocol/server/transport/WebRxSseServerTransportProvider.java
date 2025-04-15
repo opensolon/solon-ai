@@ -267,25 +267,25 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * <li>Returns appropriate HTTP responses based on processing results</li>
 	 * <li>Handles various error conditions with appropriate error responses</li>
 	 * </ul>
-	 * @param request The incoming server request containing the JSON-RPC message
+	 * @param ctx The incoming server request context containing the JSON-RPC message
 	 * @return A Mono emitting the response indicating the message processing result
 	 */
-	public void handleMessage(Context request) throws Throwable {
+	public void handleMessage(Context ctx) throws Throwable {
 		if (isClosing) {
-			request.status(503);
-			request.output("Server is shutting down");
+			ctx.status(503);
+			ctx.output("Server is shutting down");
 			return;
 		}
 
-		if (Utils.isEmpty(request.param("sessionId"))) {
-			request.status(404);
-			request.render(new McpError("Session ID missing in message endpoint"));
+		if (Utils.isEmpty(ctx.param("sessionId"))) {
+			ctx.status(404);
+			ctx.render(new McpError("Session ID missing in message endpoint"));
 			return;
 		}
 
-		McpServerSession session = sessions.get(request.param("sessionId"));
+		McpServerSession session = sessions.get(ctx.param("sessionId"));
 
-		String body = request.body();
+		String body = ctx.body();
 		try {
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
 
@@ -301,11 +301,11 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 						return Mono.just(new Entity().status(500).body(new McpError(error.getMessage())));
 					});
 
-			request.returnValue(mono);
+			ctx.returnValue(mono);
 		} catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
-			request.status(400);
-			request.render(new McpError("Invalid message format"));
+			ctx.status(400);
+			ctx.render(new McpError("Invalid message format"));
 		}
 	}
 
