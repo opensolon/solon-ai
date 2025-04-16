@@ -85,6 +85,24 @@ public class McpServerProvider implements Lifecycle {
         }
     }
 
+    /**
+     * 移除工具
+     */
+    public void removeTool(String toolName) {
+        if (server != null) {
+            server.removeTool(toolName);
+        }
+    }
+
+    /**
+     * 通知工具变化
+     */
+    public void notifyToolsListChanged() {
+        if (server != null) {
+            server.notifyToolsListChanged();
+        }
+    }
+
     @Override
     public void start() throws Throwable {
         mcpTransportProvider.toHttpHandler(Solon.app());
@@ -96,6 +114,7 @@ public class McpServerProvider implements Lifecycle {
     public void postStart() throws Throwable {
         server = mcpServerSpec.build();
 
+        log.info("Mcp-Server tool registered: {}", toolCount);
         log.info("Mcp-Server started, name={}, version={}, sseEndpoint={}, messageEndpoint={}, sseHeartbeat={}",
                 serverProperties.getName(),
                 serverProperties.getVersion(),
@@ -120,7 +139,7 @@ public class McpServerProvider implements Lifecycle {
         }
     }
 
-
+    private int toolCount = 0;
     protected void addToolSpec(McpServer.AsyncSpecification mcpServerSpec, FunctionTool functionTool) {
         ONode jsonSchema = buildJsonSchema(functionTool);
         String jsonSchemaStr = jsonSchema.toJson();
@@ -139,7 +158,12 @@ public class McpServerProvider implements Lifecycle {
                     return Mono.just(toolResult);
                 });
 
-        mcpServerSpec.tools(toolSpec);
+        toolCount++;
+        if (server != null) {
+            server.addTool(toolSpec);
+        } else {
+            mcpServerSpec.tools(toolSpec);
+        }
     }
 
     protected ONode buildJsonSchema(FunctionTool functionTool) {
