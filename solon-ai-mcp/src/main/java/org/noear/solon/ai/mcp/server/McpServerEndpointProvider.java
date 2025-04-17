@@ -38,24 +38,24 @@ import java.util.Arrays;
 import java.util.Properties;
 
 /**
- * Mcp 服务端点
+ * Mcp 服务端点提供者
  *
  * @author noear
  * @since 3.1
  */
-public class McpServerEndpoint implements LifecycleBean {
-    private static Logger log = LoggerFactory.getLogger(McpServerEndpoint.class);
+public class McpServerEndpointProvider implements LifecycleBean {
+    private static Logger log = LoggerFactory.getLogger(McpServerEndpointProvider.class);
     private final WebRxSseServerTransportProvider mcpTransportProvider;
     private final McpServer.AsyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
     private final String sseEndpoint;
     private final String messageEndpoint;
 
-    public McpServerEndpoint(Properties properties) {
+    public McpServerEndpointProvider(Properties properties) {
         this(Props.from(properties).bindTo(new McpServerProperties()));
     }
 
-    public McpServerEndpoint(McpServerProperties serverProperties) {
+    public McpServerEndpointProvider(McpServerProperties serverProperties) {
         this.serverProperties = serverProperties;
         this.sseEndpoint = serverProperties.getSseEndpoint();
         this.messageEndpoint = PathUtil.mergePath(this.sseEndpoint, "message");
@@ -130,20 +130,12 @@ public class McpServerEndpoint implements LifecycleBean {
 
     @Override
     public void start() throws Throwable {
-        if (serverProperties.isEnabled() == false) {
-            return;
-        }
-
         mcpTransportProvider.toHttpHandler(Solon.app());
     }
 
 
     @Override
     public void postStart() throws Throwable {
-        if (serverProperties.isEnabled() == false) {
-            return;
-        }
-
         server = mcpServerSpec.build();
 
         log.info("Mcp-Server tool registered: {}", toolCount);
@@ -217,14 +209,6 @@ public class McpServerEndpoint implements LifecycleBean {
         private McpServerProperties props = new McpServerProperties();
 
         /**
-         * 是否启用
-         */
-        public Builder enabled(boolean enabled) {
-            props.setEnabled(enabled);
-            return this;
-        }
-
-        /**
          * 名字
          */
         public Builder name(String name) {
@@ -267,8 +251,8 @@ public class McpServerEndpoint implements LifecycleBean {
         /**
          * 构建
          */
-        public McpServerEndpoint build() {
-            return new McpServerEndpoint(props);
+        public McpServerEndpointProvider build() {
+            return new McpServerEndpointProvider(props);
         }
     }
 }

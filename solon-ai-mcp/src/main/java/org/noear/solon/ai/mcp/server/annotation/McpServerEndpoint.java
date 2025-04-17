@@ -13,41 +13,42 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.server;
+package org.noear.solon.ai.mcp.server.annotation;
 
-import lombok.Getter;
-import lombok.Setter;
-import org.noear.solon.annotation.BindProps;
-
-import java.time.Duration;
+import java.lang.annotation.*;
 
 /**
- * Mcp 服务属性
+ * Mcp 服务端点注解
  *
  * @author noear
  * @since 3.1
  */
-@Setter
-@Getter
-public class McpServerProperties {
+@Target({ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface McpServerEndpoint {
     /**
-     * 服务名称
+     * 名字（没有时类名即为名）
      */
-    private String name = "Solon-Ai-Mcp-Server";
+    String name() default "";
+
     /**
-     * 服务端版本号
+     * 版本
      */
-    private String version = "1.0.0";
+    String version() default "1.0.0";
+
     /**
-     * 端点（路径）
+     * SSE 端点
      */
-    private String sseEndpoint = "/sse";
+    String sseEndpoint() default "/sse";
+
     /**
      * 是否启用服务器SSE心跳
      */
-    private boolean enabledSseHeartbeat = false;
+    boolean enabledSseHeartbeat() default false;
+
     /**
      * 服务器SSE心跳间隔（启用后才有效）
      */
-    private Duration sseHeartbeatInterval = Duration.ofSeconds(30);
+    String sseHeartbeatInterval() default "30s";
 }

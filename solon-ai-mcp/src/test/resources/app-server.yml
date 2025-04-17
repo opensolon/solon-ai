@@ -3,10 +3,8 @@ server.idleTimeout: 120000
 
 solon.ai.mcp.server:
   demo1:
-    enabled: true
     sseEndpoint: "/sse"
   demo2:
-    enabled: true
     sseEndpoint: "/demo2/sse"
 
 solon.logging.logger:
