@@ -1,20 +1,14 @@
 package features.ai.mcp.client;
 
 import demo.ai.mcp.server.McpServerApp;
-import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.liquor.eval.Maps;
-import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.mcp.client.McpClientToolProvider;
 import org.noear.solon.test.SolonTest;
-
-import java.util.Map;
 
 
 /**
@@ -40,7 +34,9 @@ public class McpClientTest {
 
     @Test
     public void case2_2() throws Exception {
-        McpClientToolProvider mcpClient = new McpClientToolProvider("http://localhost:8081/demo2/sse");
+        McpClientToolProvider mcpClient = McpClientToolProvider.builder()
+                .apiUrl("http://localhost:8081/demo2/sse")
+                .build();
 
         String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州"));
 
