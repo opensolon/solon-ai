@@ -168,13 +168,28 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
     /// ///////////
     /**
-     * 转为函数工具（可用于模型绑定）
+     * 获取函数工具（可用于模型绑定）
      */
     @Override
     public Collection<FunctionTool> getTools() {
+        return getTools(null);
+    }
+
+    /**
+     * 获取函数工具（可用于模型绑定）
+     *
+     * @param cursor 游标
+     */
+    public Collection<FunctionTool> getTools(String cursor) {
         List<FunctionTool> toolList = new ArrayList<>();
 
-        McpSchema.ListToolsResult result = getClient().listTools();
+        McpSchema.ListToolsResult result = null;
+        if (cursor == null) {
+            result = getClient().listTools();
+        } else {
+            result = getClient().listTools(cursor);
+        }
+
         for (McpSchema.Tool tool : result.getTools()) {
             String name = tool.getName();
             String description = tool.getDescription();
@@ -199,7 +214,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         }
     }
 
-    public static Builder builder(){
+    public static Builder builder() {
         return new Builder();
     }
 
