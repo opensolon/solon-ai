@@ -22,14 +22,13 @@ import org.noear.solon.annotation.BindProps;
 import java.time.Duration;
 
 /**
- * Mcp 服务端属性
+ * Mcp 服务属性
  *
  * @author noear
  * @since 3.1
  */
 @Setter
 @Getter
-@BindProps(prefix = "solon.ai.mcp.server")
 public class McpServerProperties {
     /**
      * 是否启用
@@ -44,13 +43,9 @@ public class McpServerProperties {
      */
     private String version = "1.0.0";
     /**
-     * 消息端端点（路径）
+     * 端点（路径）
      */
-    private String messageEndpoint = "/mcp/message";
-    /**
-     * 服务器派发事件端点（路径）
-     */
-    private String sseEndpoint = "/mcp/sse";
+    private String sseEndpoint = "/sse";
     /**
      * 是否启用服务器SSE心跳
      */

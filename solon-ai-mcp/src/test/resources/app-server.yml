@@ -2,7 +2,12 @@ server.port: 8081
 server.idleTimeout: 120000
 
 solon.ai.mcp.server:
-  enabled: true
-  sseEndpoint: "/sse"
+  demo1:
+    enabled: true
+    sseEndpoint: "/sse"
+  demo2:
+    enabled: true
+    sseEndpoint: "/demo2/sse"
 
-solon.logging.logger.root.level: TRACE
+solon.logging.logger:
+  root.level: TRACE

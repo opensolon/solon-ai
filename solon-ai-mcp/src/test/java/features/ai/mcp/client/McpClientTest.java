@@ -27,10 +27,22 @@ public class McpClientTest {
     @Test
     public void case2() throws Exception {
         McpClientToolProvider mcpClient = Utils.loadProps("app-client.yml")
-                .getProp("solon.ai.mcp.client.demo")
+                .getProp("solon.ai.mcp.client.demo1")
                 .toBean(McpClientToolProvider.class);
 
         String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州"));
+
+        assert response != null;
+        log.warn("{}", response);
+
+        mcpClient.close();
+    }
+
+    @Test
+    public void case2_2() throws Exception {
+        McpClientToolProvider mcpClient = new McpClientToolProvider("http://localhost:8081/demo2/sse");
+
+        String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州"));
 
         assert response != null;
         log.warn("{}", response);
@@ -42,7 +54,7 @@ public class McpClientTest {
     @Test
     public void case3() throws Exception {
         McpClientToolProvider toolProvider = Utils.loadProps("app-client.yml")
-                .getProp("solon.ai.mcp.client.demo")
+                .getProp("solon.ai.mcp.client.demo1")
                 .toBean(McpClientToolProvider.class);
 
         ChatModel chatModel = ChatModel.of(apiUrl)

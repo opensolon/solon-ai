@@ -4,7 +4,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.annotation.ToolMapping;
 import org.noear.solon.ai.chat.annotation.ToolParam;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
-import org.noear.solon.ai.mcp.server.McpServerProvider;
+import org.noear.solon.ai.mcp.server.McpServerEndpoint;
 import org.noear.solon.core.handle.Context;
 
 /**
@@ -12,9 +12,9 @@ import org.noear.solon.core.handle.Context;
  */
 public class DemoApp {
     public static void main(String[] args) throws Throwable {
-        McpServerProvider serverProvider = Utils.loadProps("classpath:demo.yml")
+        McpServerEndpoint serverProvider = Utils.loadProps("classpath:demo.yml")
                 .getProp("solon.ai.mcp.server")
-                .toBean(McpServerProvider.class);
+                .toBean(McpServerEndpoint.class);
 
         //添加工具
         serverProvider.addTool(new MethodToolProvider(new DemoTool()));

@@ -25,39 +25,45 @@ import org.noear.snack.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
-import org.noear.solon.core.Lifecycle;
 import org.noear.solon.core.Props;
+import org.noear.solon.core.bean.LifecycleBean;
+import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Properties;
 
 /**
- * Mcp 服务端提供者
+ * Mcp 服务端点
  *
  * @author noear
  * @since 3.1
  */
-public class McpServerProvider implements Lifecycle {
-    private static Logger log = LoggerFactory.getLogger(McpServerProvider.class);
+public class McpServerEndpoint implements LifecycleBean {
+    private static Logger log = LoggerFactory.getLogger(McpServerEndpoint.class);
     private final WebRxSseServerTransportProvider mcpTransportProvider;
     private final McpServer.AsyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
+    private final String sseEndpoint;
+    private final String messageEndpoint;
 
-    public McpServerProvider(Properties properties) {
+    public McpServerEndpoint(Properties properties) {
         this(Props.from(properties).bindTo(new McpServerProperties()));
     }
 
-    public McpServerProvider(McpServerProperties serverProperties) {
+    public McpServerEndpoint(McpServerProperties serverProperties) {
         this.serverProperties = serverProperties;
+        this.sseEndpoint = serverProperties.getSseEndpoint();
+        this.messageEndpoint = PathUtil.mergePath(this.sseEndpoint, "message");
 
         //如果启用了
         this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
-                .messageEndpoint(serverProperties.getMessageEndpoint())
-                .sseEndpoint(serverProperties.getSseEndpoint())
+                .messageEndpoint(this.messageEndpoint)
+                .sseEndpoint(this.sseEndpoint)
                 .objectMapper(new ObjectMapper())
                 .build();
 
@@ -65,6 +71,23 @@ public class McpServerProvider implements Lifecycle {
                 .serverInfo(serverProperties.getName(), serverProperties.getVersion());
     }
 
+    /**
+     * 名字
+     */
+    public String getName() {
+        return serverProperties.getName();
+    }
+
+    /**
+     * 端点
+     */
+    public String getSseEndpoint() {
+        return sseEndpoint;
+    }
+
+    /**
+     * 获取传输提供者
+     */
     public WebRxSseServerTransportProvider getTransport() {
         return mcpTransportProvider;
     }
@@ -103,23 +126,32 @@ public class McpServerProvider implements Lifecycle {
         }
     }
 
-    @Override
-    public void start() throws Throwable {
-        mcpTransportProvider.toHttpHandler(Solon.app());
-    }
-
     private McpAsyncServer server;
 
     @Override
+    public void start() throws Throwable {
+        if (serverProperties.isEnabled() == false) {
+            return;
+        }
+
+        mcpTransportProvider.toHttpHandler(Solon.app());
+    }
+
+
+    @Override
     public void postStart() throws Throwable {
+        if (serverProperties.isEnabled() == false) {
+            return;
+        }
+
         server = mcpServerSpec.build();
 
         log.info("Mcp-Server tool registered: {}", toolCount);
         log.info("Mcp-Server started, name={}, version={}, sseEndpoint={}, messageEndpoint={}, sseHeartbeat={}",
                 serverProperties.getName(),
                 serverProperties.getVersion(),
-                serverProperties.getSseEndpoint(),
-                serverProperties.getMessageEndpoint(),
+                this.sseEndpoint,
+                this.messageEndpoint,
                 serverProperties.isEnabledSseHeartbeat());
 
         if (serverProperties.isEnabledSseHeartbeat()) {
@@ -140,6 +172,7 @@ public class McpServerProvider implements Lifecycle {
     }
 
     private int toolCount = 0;
+
     protected void addToolSpec(McpServer.AsyncSpecification mcpServerSpec, FunctionTool functionTool) {
         ONode jsonSchema = buildJsonSchema(functionTool);
         String jsonSchemaStr = jsonSchema.toJson();
@@ -172,5 +205,70 @@ public class McpServerProvider implements Lifecycle {
         jsonSchema.setAll(functionTool.inputSchema());
 
         return jsonSchema;
+    }
+
+    /// //////////////////////////////////////////////
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private McpServerProperties props = new McpServerProperties();
+
+        /**
+         * 是否启用
+         */
+        public Builder enabled(boolean enabled) {
+            props.setEnabled(enabled);
+            return this;
+        }
+
+        /**
+         * 名字
+         */
+        public Builder name(String name) {
+            props.setName(name);
+            return this;
+        }
+
+        /**
+         * 版本号
+         */
+        public Builder version(String version) {
+            props.setVersion(version);
+            return this;
+        }
+
+        /**
+         * SSE 端点
+         */
+        public Builder sseEndpoint(String sseEndpoint) {
+            props.setSseEndpoint(sseEndpoint);
+            return this;
+        }
+
+        /**
+         * 是否启用 SSE 心跳（保活）
+         */
+        public Builder enabledSseHeartbeat(boolean enabledSseHeartbeat) {
+            props.setEnabledSseHeartbeat(enabledSseHeartbeat);
+            return this;
+        }
+
+        /**
+         * SSE 心跳间隔
+         */
+        public Builder sseHeartbeatInterval(Duration sseHeartbeatInterval) {
+            props.setSseHeartbeatInterval(sseHeartbeatInterval);
+            return this;
+        }
+
+        /**
+         * 构建
+         */
+        public McpServerEndpoint build() {
+            return new McpServerEndpoint(props);
+        }
     }
 }
