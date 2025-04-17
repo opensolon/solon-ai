@@ -58,4 +58,13 @@ public class RefererFunctionTool implements FunctionTool {
     public String handle(Map<String, Object> args) throws Throwable {
         return handler.apply(args);
     }
+
+    @Override
+    public String toString() {
+        return "RefererFunctionTool{" +
+                "name='" + name + '\'' +
+                ", description='" + description + '\'' +
+                ", inputSchema=" + inputSchema +
+                '}';
+    }
 }

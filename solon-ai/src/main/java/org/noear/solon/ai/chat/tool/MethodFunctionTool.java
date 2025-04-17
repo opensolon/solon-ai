@@ -116,4 +116,13 @@ public class MethodFunctionTool implements FunctionTool {
         Object rst = method.invoke(target, vals);
         return String.valueOf(rst);
     }
+
+    @Override
+    public String toString() {
+        return "MethodFunctionTool{" +
+                "name='" + name + '\'' +
+                ", description='" + description + '\'' +
+                ", inputSchema=" + inputSchema() +
+                '}';
+    }
 }
