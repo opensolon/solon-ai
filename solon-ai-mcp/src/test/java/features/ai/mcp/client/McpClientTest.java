@@ -67,7 +67,6 @@ public class McpClientTest {
 
 
         assert mcpClient.getTools().size() == 2;
-        //serverEndpointProvider.notifyToolsListChanged();
 
         serverEndpointProvider.addTool(new FunctionToolDesc("hello2")
                 .description("打招呼")
@@ -78,15 +77,38 @@ public class McpClientTest {
 
         assert mcpClient.getTools().size() == 3;
 
+        serverEndpointProvider.removeTool("hello2");
+        serverEndpointProvider.addTool(new FunctionToolDesc("hello2")
+                .description("打招呼2222")
+                .doHandle((args) -> {
+                    return "hello world";
+                }));
+
+        String rst2 = mcpClient.getTools().toString();
+        System.out.println(rst2);
+        assert rst2.contains("打招呼2222");
+
+
         serverEndpointProvider.removeTool("hello");
         serverEndpointProvider.removeTool("hello2");
 
         assert mcpClient.getTools().size() == 1;
     }
 
-    //与模型绑定
     @Test
     public void case3() throws Exception {
+        McpClientToolProvider mcpClient = McpClientToolProvider.builder()
+                .apiUrl("http://localhost:8081/demo2/sse")
+                .build();
+
+        assert mcpClient.getTools().size() == 1;
+        assert mcpClient.getTools().size() == 1;
+        assert mcpClient.getTools().size() == 1;
+    }
+
+    //与模型绑定
+    @Test
+    public void case4() throws Exception {
         McpClientToolProvider toolProvider = Utils.loadProps("app-client.yml")
                 .getProp("solon.ai.mcp.client.demo1")
                 .toBean(McpClientToolProvider.class);
