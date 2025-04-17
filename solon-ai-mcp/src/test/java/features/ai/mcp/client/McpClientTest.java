@@ -7,7 +7,10 @@ import org.noear.liquor.eval.Maps;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.mcp.client.McpClientToolProvider;
+import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
+import org.noear.solon.annotation.Inject;
 import org.noear.solon.test.SolonTest;
 
 
@@ -19,7 +22,7 @@ import org.noear.solon.test.SolonTest;
 public class McpClientTest {
     //简化客户端
     @Test
-    public void case2() throws Exception {
+    public void case1() throws Exception {
         McpClientToolProvider mcpClient = Utils.loadProps("app-client.yml")
                 .getProp("solon.ai.mcp.client.demo1")
                 .toBean(McpClientToolProvider.class);
@@ -33,7 +36,7 @@ public class McpClientTest {
     }
 
     @Test
-    public void case2_2() throws Exception {
+    public void case1_2() throws Exception {
         McpClientToolProvider mcpClient = McpClientToolProvider.builder()
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
@@ -44,6 +47,41 @@ public class McpClientTest {
         log.warn("{}", response);
 
         mcpClient.close();
+    }
+
+    @Inject("McpServerTool2")
+    private McpServerEndpointProvider serverEndpointProvider;
+
+    @Test
+    public void case2() throws Exception {
+        McpClientToolProvider mcpClient = McpClientToolProvider.builder()
+                .apiUrl("http://localhost:8081/demo2/sse")
+                .build();
+
+        assert mcpClient.getTools().size() == 1;
+        serverEndpointProvider.addTool(new FunctionToolDesc("hello")
+                .description("打招呼")
+                .doHandle((args) -> {
+                    return "hello world";
+                }));
+
+
+        assert mcpClient.getTools().size() == 2;
+        //serverEndpointProvider.notifyToolsListChanged();
+
+        serverEndpointProvider.addTool(new FunctionToolDesc("hello2")
+                .description("打招呼")
+                .doHandle((args) -> {
+                    return "hello world";
+                }));
+
+
+        assert mcpClient.getTools().size() == 3;
+
+        serverEndpointProvider.removeTool("hello");
+        serverEndpointProvider.removeTool("hello2");
+
+        assert mcpClient.getTools().size() == 1;
     }
 
     //与模型绑定

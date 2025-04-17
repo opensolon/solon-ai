@@ -16,9 +16,9 @@
 package org.noear.solon.ai.mcp.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
+import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
@@ -31,7 +31,6 @@ import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -46,7 +45,7 @@ import java.util.Properties;
 public class McpServerEndpointProvider implements LifecycleBean {
     private static Logger log = LoggerFactory.getLogger(McpServerEndpointProvider.class);
     private final WebRxSseServerTransportProvider mcpTransportProvider;
-    private final McpServer.AsyncSpecification mcpServerSpec;
+    private final McpServer.SyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
     private final String sseEndpoint;
     private final String messageEndpoint;
@@ -67,8 +66,9 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 .objectMapper(new ObjectMapper())
                 .build();
 
-        this.mcpServerSpec = McpServer.async(this.mcpTransportProvider)
+        this.mcpServerSpec = McpServer.sync(this.mcpTransportProvider)
                 .serverInfo(serverProperties.getName(), serverProperties.getVersion());
+
     }
 
     /**
@@ -96,7 +96,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记工具
      */
     public void addTool(FunctionTool functionTool) {
-        addToolSpec(mcpServerSpec, functionTool);
+        addToolSpec(functionTool);
     }
 
     /**
@@ -104,7 +104,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      */
     public void addTool(ToolProvider toolProvider) {
         for (FunctionTool functionTool : toolProvider.getTools()) {
-            addToolSpec(mcpServerSpec, functionTool);
+            addToolSpec(functionTool);
         }
     }
 
@@ -118,6 +118,17 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     /**
+     * 移除工具
+     */
+    public void removeTool(ToolProvider toolProvider) {
+        if (server != null) {
+            for (FunctionTool functionTool : toolProvider.getTools()) {
+                server.removeTool(functionTool.name());
+            }
+        }
+    }
+
+    /**
      * 通知工具变化
      */
     public void notifyToolsListChanged() {
@@ -126,7 +137,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
         }
     }
 
-    private McpAsyncServer server;
+    private McpSyncServer server;
 
     @Override
     public void start() throws Throwable {
@@ -138,13 +149,12 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void postStart() throws Throwable {
         server = mcpServerSpec.build();
 
-        log.info("Mcp-Server tool registered: {}", toolCount);
-        log.info("Mcp-Server started, name={}, version={}, sseEndpoint={}, messageEndpoint={}, sseHeartbeat={}",
+        log.info("Mcp-Server started, name={}, version={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}",
                 serverProperties.getName(),
                 serverProperties.getVersion(),
                 this.sseEndpoint,
                 this.messageEndpoint,
-                serverProperties.isEnabledSseHeartbeat());
+                toolCount);
 
         if (serverProperties.isEnabledSseHeartbeat()) {
             //启用 sse 心跳（保持客户端不断开）
@@ -165,11 +175,11 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     private int toolCount = 0;
 
-    protected void addToolSpec(McpServer.AsyncSpecification mcpServerSpec, FunctionTool functionTool) {
+    protected void addToolSpec(FunctionTool functionTool) {
         ONode jsonSchema = buildJsonSchema(functionTool);
         String jsonSchemaStr = jsonSchema.toJson();
 
-        McpServerFeatures.AsyncToolSpecification toolSpec = new McpServerFeatures.AsyncToolSpecification(
+        McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(
                 new McpSchema.Tool(functionTool.name(), functionTool.description(), jsonSchemaStr),
                 (exchange, request) -> {
                     McpSchema.CallToolResult toolResult = null;
@@ -180,7 +190,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                         toolResult = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(ex.getMessage())), true);
                     }
 
-                    return Mono.just(toolResult);
+                    return toolResult;
                 });
 
         toolCount++;
