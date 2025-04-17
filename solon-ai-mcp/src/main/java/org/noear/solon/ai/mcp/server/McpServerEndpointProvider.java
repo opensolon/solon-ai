@@ -156,13 +156,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 this.messageEndpoint,
                 toolCount);
 
-        if (serverProperties.isEnabledSseHeartbeat()) {
+        if (serverProperties.getHeartbeatInterval() != null
+                && serverProperties.getHeartbeatInterval().getSeconds() > 0) {
             //启用 sse 心跳（保持客户端不断开）
             RunUtil.delayAndRepeat(() -> {
                 RunUtil.runAndTry(() -> {
                     mcpTransportProvider.sendHeartbeat();
                 });
-            }, serverProperties.getSseHeartbeatInterval().toMillis());
+            }, serverProperties.getHeartbeatInterval().toMillis());
         }
     }
 
@@ -243,18 +244,10 @@ public class McpServerEndpointProvider implements LifecycleBean {
         }
 
         /**
-         * 是否启用 SSE 心跳（保活）
-         */
-        public Builder enabledSseHeartbeat(boolean enabledSseHeartbeat) {
-            props.setEnabledSseHeartbeat(enabledSseHeartbeat);
-            return this;
-        }
-
-        /**
          * SSE 心跳间隔
          */
-        public Builder sseHeartbeatInterval(Duration sseHeartbeatInterval) {
-            props.setSseHeartbeatInterval(sseHeartbeatInterval);
+        public Builder heartbeatInterval(Duration sseHeartbeatInterval) {
+            props.setHeartbeatInterval(sseHeartbeatInterval);
             return this;
         }
 

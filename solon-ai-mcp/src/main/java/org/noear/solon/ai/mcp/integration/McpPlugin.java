@@ -48,8 +48,12 @@ public class McpPlugin implements Plugin {
 
             props.setVersion(anno.version());
             props.setSseEndpoint(anno.sseEndpoint());
-            props.setEnabledSseHeartbeat(anno.enabledSseHeartbeat());
-            props.setSseHeartbeatInterval(ConvertUtil.durationOf(anno.sseHeartbeatInterval()));
+
+            if (Utils.isEmpty(anno.heartbeatInterval())) {
+                props.setHeartbeatInterval(null); //表示不启用
+            } else {
+                props.setHeartbeatInterval(ConvertUtil.durationOf(anno.heartbeatInterval()));
+            }
 
             //构建端点提供者
             McpServerEndpointProvider serverEndpointProvider = new McpServerEndpointProvider(props);

@@ -43,12 +43,7 @@ public @interface McpServerEndpoint {
     String sseEndpoint() default "/sse";
 
     /**
-     * 是否启用服务器SSE心跳
+     * 服务器SSE心跳间隔（空表示不启用）
      */
-    boolean enabledSseHeartbeat() default false;
-
-    /**
-     * 服务器SSE心跳间隔（启用后才有效）
-     */
-    String sseHeartbeatInterval() default "30s";
+    String heartbeatInterval() default "30s";
 }

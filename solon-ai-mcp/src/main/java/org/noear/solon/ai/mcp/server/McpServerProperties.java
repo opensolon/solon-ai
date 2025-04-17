@@ -34,20 +34,19 @@ public class McpServerProperties {
      * 服务名称
      */
     private String name = "Solon-Ai-Mcp-Server";
+
     /**
      * 服务端版本号
      */
     private String version = "1.0.0";
+
     /**
      * 端点（路径）
      */
     private String sseEndpoint = "/sse";
+
     /**
-     * 是否启用服务器SSE心跳
+     * 服务器SSE心跳间隔（空表示不启用）
      */
-    private boolean enabledSseHeartbeat = false;
-    /**
-     * 服务器SSE心跳间隔（启用后才有效）
-     */
-    private Duration sseHeartbeatInterval = Duration.ofSeconds(30);
+    private Duration heartbeatInterval = Duration.ofSeconds(30);
 }
