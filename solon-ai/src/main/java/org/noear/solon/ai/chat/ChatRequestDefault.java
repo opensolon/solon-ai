@@ -24,6 +24,7 @@ import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.MimeType;
+import org.noear.solon.net.http.HttpException;
 import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.textstream.ServerSentEvent;
@@ -145,7 +146,11 @@ public class ChatRequestDefault implements ChatRequest {
                     .whenComplete((resp, err) -> {
                         if (err == null) {
                             try {
-                                parseResp(resp, subscriber);
+                                if (resp.code() < 400) {
+                                    parseResp(resp, subscriber);
+                                } else {
+                                    subscriber.onError(new HttpException("Error code:" + resp.code()));
+                                }
                             } catch (IOException e) {
                                 subscriber.onError(e);
                             }
