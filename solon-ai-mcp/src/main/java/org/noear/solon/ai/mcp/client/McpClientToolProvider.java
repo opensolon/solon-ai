@@ -67,7 +67,13 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
         URI url = URI.create(clientProps.getApiUrl());
         String baseUri = url.getScheme() + "://" + url.getAuthority();
-        String sseEndpoint = url.getPath();
+        String sseEndpoint = null;
+        if (Utils.isEmpty(url.getRawQuery())) {
+            sseEndpoint = url.getRawPath();
+        } else {
+            sseEndpoint = url.getRawPath() + "?" + url.getRawQuery();
+        }
+
 
         if (Utils.isEmpty(sseEndpoint)) {
             throw new IllegalArgumentException("SseEndpoint is empty!");
