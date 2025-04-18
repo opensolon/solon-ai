@@ -1,4 +1,8 @@
-### 3.1.3
+### 3.2.1
+
+* 修复 solon-ai-mcp McpClientToolProvider 会丢失 queryString 的问题
+
+### 3.2.0
 
 * 新增 solon-ai-mcp
 * 调整 函数(Function)相关的概念改为工具概念(Tool)。调整后适合 mcp 的相关概念
