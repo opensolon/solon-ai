@@ -1,5 +1,6 @@
 ### 3.2.1
 
+* 添加 solon-ai ChatRequestDefault http 状态异常处理
 * 修复 solon-ai-mcp McpClientToolProvider 会丢失 queryString 的问题
 
 ### 3.2.0
