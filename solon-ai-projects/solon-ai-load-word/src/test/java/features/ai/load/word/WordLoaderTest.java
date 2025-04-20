@@ -18,6 +18,7 @@ public class WordLoaderTest {
                 .options(opt -> opt.loadMode(WordLoader.LoadMode.PARAGRAPH));
         List<Document> docs = loader.load();
         System.out.println(docs);
+        assert docs.size() > 0;
     }
 
     @Test
@@ -26,5 +27,6 @@ public class WordLoaderTest {
                 .options(opt -> opt.loadMode(WordLoader.LoadMode.PARAGRAPH));
         List<Document> docs = loader.load();
         System.out.println(docs);
+        assert docs.size() > 0;
     }
 }

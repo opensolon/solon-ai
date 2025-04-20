@@ -146,11 +146,11 @@ public class WordLoader extends AbstractOptionsDocumentLoader<WordLoader.Options
             is.reset();
             FileMagic fm = FileMagic.valueOf(is);
             if (FileMagic.OOXML == fm) {
-                return new XWPFDocument(inp);
+                return new XWPFDocument(is);
             } else if (FileMagic.OLE2 != fm) {
                 throw new IOException("Can't open word - unsupported file type: " + fm);
             } else {
-                return new HWPFDocument(inp);
+                return new HWPFDocument(is);
             }
         }
     }
