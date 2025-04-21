@@ -68,7 +68,7 @@ Solon-AI
 
 ## 体验示例
 
-* ChatModel
+* ChatModel（通用接口，基于方言适配实现不同提供商与模型的集成）
 
 ```java
 ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
