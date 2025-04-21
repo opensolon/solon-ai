@@ -56,6 +56,7 @@ Solon-AI
 其中 solon-mcp 的嵌入示例：
 
 * https://gitee.com/opensolon/solon-ai-mcp-embedded-examples
+* https://gitcode.com/opensolon/solon-ai-mcp-embedded-examples
 * https://github.com/opensolon/solon-ai-mcp-embedded-examples
 
 ## 主要接口体验示例
