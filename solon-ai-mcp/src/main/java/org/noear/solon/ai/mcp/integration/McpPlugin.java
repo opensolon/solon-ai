@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.integration;
 
+import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
@@ -40,19 +41,28 @@ public class McpPlugin implements Plugin {
             //构建属性
             McpServerProperties props = new McpServerProperties();
 
-            if (Utils.isEmpty(anno.name())) {
+            //支持${配置}
+            String name = Solon.cfg().getByTmpl(anno.name());
+            String version = Solon.cfg().getByTmpl(anno.version());
+            String sseEndpoint = Solon.cfg().getByTmpl(anno.sseEndpoint());
+            String heartbeatInterval = Solon.cfg().getByTmpl(anno.heartbeatInterval());
+
+
+            if (Utils.isEmpty(name)) {
                 props.setName(clz.getSimpleName());
             } else {
-                props.setName(anno.name());
+                //支持${配置}
+                props.setName(name);
             }
 
-            props.setVersion(anno.version());
-            props.setSseEndpoint(anno.sseEndpoint());
+            props.setVersion(version);
+            props.setSseEndpoint(sseEndpoint);
 
-            if (Utils.isEmpty(anno.heartbeatInterval())) {
+            if (Utils.isEmpty(heartbeatInterval)) {
                 props.setHeartbeatInterval(null); //表示不启用
             } else {
-                props.setHeartbeatInterval(ConvertUtil.durationOf(anno.heartbeatInterval()));
+                //支持${配置}
+                props.setHeartbeatInterval(ConvertUtil.durationOf(heartbeatInterval));
             }
 
             //构建端点提供者
@@ -65,8 +75,8 @@ public class McpPlugin implements Plugin {
             bw.context().lifecycle(serverEndpointProvider);
 
             //按名字注册到容器（如果有名字）
-            if (Utils.isNotEmpty(anno.name())) {
-                bw.context().wrapAndPut(anno.name(), serverEndpointProvider);
+            if (Utils.isNotEmpty(name)) {
+                bw.context().wrapAndPut(name, serverEndpointProvider);
             }
         });
     }
