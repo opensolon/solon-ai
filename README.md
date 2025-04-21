@@ -154,6 +154,7 @@ layout:
 * MCP server
 
 ```java
+//组件方式构建
 @McpServerEndpoint(name="mcp-case1", sseEndpoint = "/case1/sse") 
 public class McpServerTool {
     @ToolMapping(description = "查询天气预报")
@@ -161,6 +162,15 @@ public class McpServerTool {
         return "晴，14度";
     }
 }
+
+//原生 java 方式构建
+McpServerEndpointProvider serverEndpoint = McpServerEndpointProvider.builder()
+        .name("mcp-case2")
+        .sseEndpoint("/case2/sse")
+        .build();
+
+serverEndpoint.addTool(new MethodToolProvider(new McpServerTool()));
+serverEndpoint.postStart();
 ```
 
 * MCP client
