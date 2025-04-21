@@ -6,10 +6,10 @@ Solon-AI
 <p align="center">
 	<strong>面向全场景的 Java AI 应用开发框架（支持已知 AI 开发的各种能力）</strong>
     <br/>
-    <strong>【开放原子开源基金会，孵化项目】</strong>
+    <strong>【基于 Solon 应用开发框架构建】</strong>
 </p>
 <p align="center">
-	<a href="https://solon.noear.org/">https://solon.noear.org</a>
+	<a href="https://solon.noear.org/article/learn-solon-ai">https://solon.noear.org/article/learn-solon-ai</a>
 </p>
 
 <p align="center">
@@ -48,15 +48,6 @@ Solon-AI
 
 <hr />
 
-<p align="center">
-基于 Solon 应用开发框架构建
-<br/>
-并发高 700%；内存省 50%；启动快 10 倍；打包小 90%；同时支持 java8 ~ java24, native 运行时。
-<br/>
-从零开始构建，有更灵活的接口规范与开放生态
-</p>
-
-<hr />
 
 ## 简介
 
