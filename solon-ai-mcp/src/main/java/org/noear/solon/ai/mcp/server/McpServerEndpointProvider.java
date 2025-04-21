@@ -141,12 +141,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     @Override
     public void start() throws Throwable {
-        mcpTransportProvider.toHttpHandler(Solon.app());
-    }
 
+    }
 
     @Override
     public void postStart() throws Throwable {
+        mcpTransportProvider.toHttpHandler(Solon.app());
+
         server = mcpServerSpec.build();
 
         log.info("Mcp-Server started, name={}, version={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}",
