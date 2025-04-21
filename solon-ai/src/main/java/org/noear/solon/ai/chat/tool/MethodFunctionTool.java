@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.annotation.ToolMapping;
 import org.noear.solon.ai.chat.annotation.ToolParam;
@@ -36,6 +37,7 @@ public class MethodFunctionTool implements FunctionTool {
     private final String description;
     private final String name;
     private final List<FunctionToolParam> params = new ArrayList<>();
+    private final ToolCallResultConverter resultConverter;
 
     public MethodFunctionTool(Object target, Method method) {
         this.target = target;
@@ -44,6 +46,12 @@ public class MethodFunctionTool implements FunctionTool {
         ToolMapping m1Anno = method.getAnnotation(ToolMapping.class);
         this.name = Utils.annoAlias(m1Anno.name(), method.getName());
         this.description = m1Anno.description();
+
+        if (m1Anno.resultConverter() == ToolCallResultConverter.class) {
+            resultConverter = null;
+        } else {
+            resultConverter = Solon.context().getBeanOrNew(m1Anno.resultConverter());
+        }
 
         for (Parameter p1 : method.getParameters()) {
             ToolParam p1Anno = p1.getAnnotation(ToolParam.class);
@@ -114,7 +122,12 @@ public class MethodFunctionTool implements FunctionTool {
         }
 
         Object rst = method.invoke(target, vals);
-        return String.valueOf(rst);
+
+        if (resultConverter == null) {
+            return String.valueOf(rst);
+        } else {
+            return resultConverter.convert(rst);
+        }
     }
 
     @Override

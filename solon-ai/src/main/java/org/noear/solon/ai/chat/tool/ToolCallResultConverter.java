@@ -13,34 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.annotation;
+package org.noear.solon.ai.chat.tool;
 
-import org.noear.solon.ai.chat.tool.ToolCallResultConverter;
-
-import java.lang.annotation.*;
+import org.noear.solon.core.convert.Converter;
 
 /**
- * 工具映射
+ * 工具调用结果转换器
  *
  * @author noear
  * @since 3.1
  */
-@Target({ElementType.METHOD})
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-public @interface ToolMapping {
-    /**
-     * 名字
-     */
-    String name() default "";
-
-    /**
-     * 描述
-     */
-    String description();
-
-    /**
-     * 结果转换器
-     */
-    Class<? extends ToolCallResultConverter> resultConverter() default ToolCallResultConverter.class;
+@FunctionalInterface
+public interface ToolCallResultConverter extends Converter<Object, String> {
 }
