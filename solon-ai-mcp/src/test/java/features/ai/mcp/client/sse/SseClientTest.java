@@ -1,4 +1,4 @@
-package features.ai.mcp.client;
+package features.ai.mcp.client.sse;
 
 import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;

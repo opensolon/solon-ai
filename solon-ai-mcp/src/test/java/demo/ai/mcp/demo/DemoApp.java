@@ -25,10 +25,10 @@ public class DemoApp {
 
         Context ctx = Context.current();
 
-        serverProvider.getTransport().getSseEndpoint();
-        serverProvider.getTransport().getMessageEndpoint();
-        serverProvider.getTransport().handleSseConnection(ctx);
-        serverProvider.getTransport().handleMessage(ctx);
+//        serverProvider.getTransport().getSseEndpoint();
+//        serverProvider.getTransport().getMessageEndpoint();
+//        serverProvider.getTransport().handleSseConnection(ctx);
+//        serverProvider.getTransport().handleMessage(ctx);
     }
 
     public static class DemoTool {

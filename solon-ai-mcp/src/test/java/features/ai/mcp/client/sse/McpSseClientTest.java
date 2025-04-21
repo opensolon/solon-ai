@@ -1,4 +1,4 @@
-package features.ai.mcp.client;
+package features.ai.mcp.client.sse;
 
 import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +19,7 @@ import org.noear.solon.test.SolonTest;
  */
 @Slf4j
 @SolonTest(McpServerApp.class)
-public class McpClientTest {
+public class McpSseClientTest {
     //简化客户端
     @Test
     public void case1() throws Exception {

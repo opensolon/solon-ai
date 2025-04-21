@@ -17,6 +17,8 @@ package org.noear.solon.ai.mcp.client;
 
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.client.transport.ServerParameters;
+import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.client.transport.WebRxSseClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -64,42 +66,51 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         if (Utils.isEmpty(clientProps.getApiUrl())) {
             throw new IllegalArgumentException("ApiUrl is empty!");
         }
+        McpClientTransport clientTransport;
 
-        URI url = URI.create(clientProps.getApiUrl());
-        String baseUri = url.getScheme() + "://" + url.getAuthority();
-        String sseEndpoint = null;
-        if (Utils.isEmpty(url.getRawQuery())) {
-            sseEndpoint = url.getRawPath();
+        if (clientProps.getApiUrl().equals(":")) {
+            if(clientProps.getServerParameters() == null) {
+                throw new IllegalArgumentException("ServerParameters is null!");
+            }
+
+            clientTransport = new StdioClientTransport(clientProps.getServerParameters());
         } else {
-            sseEndpoint = url.getRawPath() + "?" + url.getRawQuery();
+            URI url = URI.create(clientProps.getApiUrl());
+            String baseUri = url.getScheme() + "://" + url.getAuthority();
+            String sseEndpoint = null;
+            if (Utils.isEmpty(url.getRawQuery())) {
+                sseEndpoint = url.getRawPath();
+            } else {
+                sseEndpoint = url.getRawPath() + "?" + url.getRawQuery();
+            }
+
+
+            if (Utils.isEmpty(sseEndpoint)) {
+                throw new IllegalArgumentException("SseEndpoint is empty!");
+            }
+
+            //超时
+            HttpTimeout httpTimeout = clientProps.getHttpTimeout();
+
+            HttpUtilsBuilder webBuilder = new HttpUtilsBuilder();
+            webBuilder.baseUri(baseUri);
+
+            if (Utils.isNotEmpty(clientProps.getApiKey())) {
+                webBuilder.headerSet("Authorization", "Bearer " + clientProps.getApiKey());
+            }
+
+            clientProps.getHeaders().forEach((k, v) -> {
+                webBuilder.headerSet(k, v);
+            });
+
+            if (httpTimeout != null) {
+                webBuilder.timeout(httpTimeout);
+            }
+
+            clientTransport = WebRxSseClientTransport.builder(webBuilder)
+                    .sseEndpoint(sseEndpoint)
+                    .build();
         }
-
-
-        if (Utils.isEmpty(sseEndpoint)) {
-            throw new IllegalArgumentException("SseEndpoint is empty!");
-        }
-
-        //超时
-        HttpTimeout httpTimeout = clientProps.getHttpTimeout();
-
-        HttpUtilsBuilder webBuilder = new HttpUtilsBuilder();
-        webBuilder.baseUri(baseUri);
-
-        if (Utils.isNotEmpty(clientProps.getApiKey())) {
-            webBuilder.headerSet("Authorization", "Bearer " + clientProps.getApiKey());
-        }
-
-        clientProps.getHeaders().forEach((k, v) -> {
-            webBuilder.headerSet(k, v);
-        });
-
-        if (httpTimeout != null) {
-            webBuilder.timeout(httpTimeout);
-        }
-
-        McpClientTransport clientTransport = WebRxSseClientTransport.builder(webBuilder)
-                .sseEndpoint(sseEndpoint)
-                .build();
 
         this.client = McpClient.sync(clientTransport)
                 .clientInfo(new McpSchema.Implementation(clientProps.getName(), clientProps.getVersion()))
@@ -264,6 +275,14 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
         public Builder initializationTimeout(Duration initializationTimeout) {
             props.setInitializationTimeout(initializationTimeout);
+            return this;
+        }
+
+        /**
+         * 服务端参数（用于 stdio）
+         */
+        public Builder serverParameters(ServerParameters serverParameters) {
+            props.setServerParameters(serverParameters);
             return this;
         }
 

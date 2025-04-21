@@ -19,8 +19,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
+import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.noear.snack.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -44,7 +46,7 @@ import java.util.Properties;
  */
 public class McpServerEndpointProvider implements LifecycleBean {
     private static Logger log = LoggerFactory.getLogger(McpServerEndpointProvider.class);
-    private final WebRxSseServerTransportProvider mcpTransportProvider;
+    private final McpServerTransportProvider mcpTransportProvider;
     private final McpServer.SyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
     private final String sseEndpoint;
@@ -59,16 +61,18 @@ public class McpServerEndpointProvider implements LifecycleBean {
         this.sseEndpoint = serverProperties.getSseEndpoint();
         this.messageEndpoint = PathUtil.mergePath(this.sseEndpoint, "message");
 
-        //如果启用了
-        this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
-                .messageEndpoint(this.messageEndpoint)
-                .sseEndpoint(this.sseEndpoint)
-                .objectMapper(new ObjectMapper())
-                .build();
+        if (this.sseEndpoint.equals(":")) {
+            this.mcpTransportProvider = new StdioServerTransportProvider();
+        } else {
+            this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
+                    .messageEndpoint(this.messageEndpoint)
+                    .sseEndpoint(this.sseEndpoint)
+                    .objectMapper(new ObjectMapper())
+                    .build();
+        }
 
         this.mcpServerSpec = McpServer.sync(this.mcpTransportProvider)
                 .serverInfo(serverProperties.getName(), serverProperties.getVersion());
-
     }
 
     /**
@@ -83,13 +87,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
      */
     public String getSseEndpoint() {
         return sseEndpoint;
-    }
-
-    /**
-     * 获取传输提供者
-     */
-    public WebRxSseServerTransportProvider getTransport() {
-        return mcpTransportProvider;
     }
 
     /**
@@ -146,8 +143,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     @Override
     public void postStart() throws Throwable {
-        mcpTransportProvider.toHttpHandler(Solon.app());
-
         server = mcpServerSpec.build();
 
         log.info("Mcp-Server started, name={}, version={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}",
@@ -157,14 +152,20 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 this.messageEndpoint,
                 toolCount);
 
-        if (serverProperties.getHeartbeatInterval() != null
-                && serverProperties.getHeartbeatInterval().getSeconds() > 0) {
-            //启用 sse 心跳（保持客户端不断开）
-            RunUtil.delayAndRepeat(() -> {
-                RunUtil.runAndTry(() -> {
-                    mcpTransportProvider.sendHeartbeat();
-                });
-            }, serverProperties.getHeartbeatInterval().toMillis());
+        //如果是 web 类的
+        if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
+            WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
+            tmp.toHttpHandler(Solon.app());
+
+            if (serverProperties.getHeartbeatInterval() != null
+                    && serverProperties.getHeartbeatInterval().getSeconds() > 0) {
+                //启用 sse 心跳（保持客户端不断开）
+                RunUtil.delayAndRepeat(() -> {
+                    RunUtil.runAndTry(() -> {
+                        tmp.sendHeartbeat();
+                    });
+                }, serverProperties.getHeartbeatInterval().toMillis());
+            }
         }
     }
 
@@ -219,6 +220,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     public static class Builder {
         private McpServerProperties props = new McpServerProperties();
+        private McpServerTransportProvider transportProvider;
 
         /**
          * 名字

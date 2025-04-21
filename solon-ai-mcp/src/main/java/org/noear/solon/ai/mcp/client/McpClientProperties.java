@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.client;
 
+import io.modelcontextprotocol.client.transport.ServerParameters;
 import lombok.Getter;
 import lombok.Setter;
 import org.noear.solon.net.http.HttpTimeout;
@@ -65,6 +66,11 @@ public class McpClientProperties {
      * 初始化超时
      */
     private Duration initializationTimeout = Duration.ofSeconds(20);
+
+    /**
+     * 服务端参数（用于 stdio）
+     */
+    private ServerParameters serverParameters;
 
 
     public McpClientProperties() {
