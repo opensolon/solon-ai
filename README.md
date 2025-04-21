@@ -151,7 +151,7 @@ layout:
 # flowEngine.eval("demo1");
 ```
 
-* MCP server
+* MCP server（支持多端点）
 
 ```java
 //组件方式构建
