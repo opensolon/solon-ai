@@ -113,7 +113,7 @@ chatModel.prompt(message)
     .call();
 ```
 
-* Ai Flow
+* Ai Flow（模拟实现 Dify 的流程应用）
 
 ```yaml
 id: demo1
