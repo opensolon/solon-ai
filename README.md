@@ -66,9 +66,9 @@ Solon-AI
 
 * https://gitee.com/opensolon/solon-ai-mcp-embedded-examples
 
-## 体验示例
+## 主要接口体验示例
 
-* ChatModel（通用接口，基于方言适配实现不同提供商与模型的集成）
+* ChatModel（通用接口，基于方言适配实现不同提供商与模型的扩展）
 
 ```java
 ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
