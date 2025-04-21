@@ -19,7 +19,7 @@ public class McpStdioClientTest {
     public void case1() throws Exception {
         //服务端不能开启控制台的日志，不然会污染协议流
         McpClientToolProvider mcpClient = McpClientToolProvider.builder()
-                .apiUrl(":")
+                .apiUrl(":") //表示使用 stdio
                 .serverParameters(ServerParameters.builder("java")
                         .args("-jar", "/Users/noear/Downloads/demo-mcp-s/target/demo-mcp-s.jar")
                         .build())
@@ -28,7 +28,7 @@ public class McpStdioClientTest {
         String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州"));
 
         assert response != null;
-        System.out.println(response);
+        log.warn(response);
 
         mcpClient.close();
     }
