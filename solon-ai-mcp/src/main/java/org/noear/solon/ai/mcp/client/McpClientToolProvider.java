@@ -31,6 +31,7 @@ import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
+import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
 
@@ -39,6 +40,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Mcp 连接工具提供者
@@ -47,7 +49,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @since 3.1
  */
 public class McpClientToolProvider implements ToolProvider, Closeable {
-    private final McpSyncClient client;
+    private final ReentrantLock LOCKER = new ReentrantLock();
+
+    private final AtomicBoolean isClosed = new AtomicBoolean(false);
+    private final McpClientProperties clientProps;
+    private McpSyncClient client;
 
     /**
      * 用于支持注入
@@ -64,17 +70,32 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
     }
 
     public McpClientToolProvider(McpClientProperties clientProps) {
-        if (Utils.isEmpty(clientProps.getApiUrl()) && McpChannel.SSE.equalsIgnoreCase(clientProps.getChannel())) {
-            throw new IllegalArgumentException("ApiUrl is empty!");
-        }
-        McpClientTransport clientTransport;
-
         if (McpChannel.STDIO.equals(clientProps.getChannel())) {
             //stdio 通道
             if (clientProps.getServerParameters() == null) {
                 throw new IllegalArgumentException("ServerParameters is null!");
             }
+        } else {
+            //sse 通道
+            if (Utils.isEmpty(clientProps.getApiUrl())) {
+                throw new IllegalArgumentException("ApiUrl is empty!");
+            }
+        }
 
+        this.clientProps = clientProps;
+
+        //开始心跳
+        this.heartbeatHandle();
+    }
+
+    /**
+     * 构建客户端
+     */
+    private McpSyncClient buildClient() {
+        McpClientTransport clientTransport;
+
+        if (McpChannel.STDIO.equals(clientProps.getChannel())) {
+            //stdio 通道
             clientTransport = new StdioClientTransport(clientProps.getServerParameters());
         } else {
             //sse 通道
@@ -115,24 +136,86 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
                     .build();
         }
 
-        this.client = McpClient.sync(clientTransport)
+        return McpClient.sync(clientTransport)
                 .clientInfo(new McpSchema.Implementation(clientProps.getName(), clientProps.getVersion()))
                 .requestTimeout(clientProps.getRequestTimeout())
                 .initializationTimeout(clientProps.getInitializationTimeout())
                 .build();
     }
 
-    /**
-     * 初始化
-     */
-    private AtomicBoolean initialized = new AtomicBoolean(false);
 
+    /**
+     * 获取客户端
+     */
     public McpSyncClient getClient() {
-        if (initialized.compareAndSet(false, true)) {
-            client.initialize();
+        if (isClosed.get()) {
+            //如果已关闭
+            return null;
         }
-        return client;
+
+        LOCKER.lock();
+
+        try {
+            if (client == null) {
+                client = buildClient();
+            }
+
+            if (client.isInitialized() == false) {
+                client.initialize();
+            }
+
+            return client;
+        } finally {
+            LOCKER.unlock();
+        }
     }
+
+    /**
+     * 心跳处理
+     */
+    private void heartbeatHandle() {
+        RunUtil.delay(() -> {
+            RunUtil.runAndTry(() -> {
+                try {
+                    getClient().ping();
+                } catch (Throwable ex) {
+                    //如果失败，重置（下次会尝试重连）
+                    this.reset();
+                }
+            });
+
+            if (isClosed.get() == false) {
+                //如果未关闭，再次心跳
+                heartbeatHandle();
+            }
+        }, this.clientProps.getHeartbeatInterval().toMillis());
+    }
+
+    /**
+     * 关闭
+     */
+    @Override
+    public void close() {
+        isClosed.set(true);
+        this.reset();
+    }
+
+    /**
+     * 重置
+     */
+    private void reset() {
+        LOCKER.lock();
+        try {
+            if (client != null) {
+                client.close();
+                client = null;
+            }
+        } finally {
+            LOCKER.unlock();
+        }
+    }
+
+    /// /////////////////////////////
 
     /**
      * 调用工具并转为文本
@@ -172,17 +255,22 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      * @param args 调用参数
      */
     protected McpSchema.CallToolResult callTool(String name, Map<String, Object> args) {
-        McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
-        McpSchema.CallToolResult response = getClient().callTool(callToolRequest);
+        try {
+            McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
+            McpSchema.CallToolResult response = getClient().callTool(callToolRequest);
 
-        if (response.getIsError() == null || response.getIsError() == false) {
-            return response;
-        } else {
-            if (Utils.isEmpty(response.getContent())) {
-                throw new McpException("Call Toll Failed");
+            if (response.getIsError() == null || response.getIsError() == false) {
+                return response;
             } else {
-                throw new McpException(response.getContent().get(0).toString());
+                if (Utils.isEmpty(response.getContent())) {
+                    throw new McpException("Call Toll Failed");
+                } else {
+                    throw new McpException(response.getContent().get(0).toString());
+                }
             }
+        } catch (RuntimeException ex) {
+            this.reset();
+            throw ex;
         }
     }
 
@@ -225,13 +313,6 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         }
 
         return toolList;
-    }
-
-    @Override
-    public void close() {
-        if (client != null) {
-            client.close();
-        }
     }
 
     public static Builder builder() {
@@ -283,6 +364,11 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
         public Builder initializationTimeout(Duration initializationTimeout) {
             props.setInitializationTimeout(initializationTimeout);
+            return this;
+        }
+
+        public Builder heartbeatInterval(Duration heartbeatInterval) {
+            props.setHeartbeatInterval(heartbeatInterval);
             return this;
         }
 

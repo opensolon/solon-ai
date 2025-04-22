@@ -80,6 +80,11 @@ public class McpClientProperties {
     private Duration initializationTimeout = Duration.ofSeconds(20);
 
     /**
+     * 心跳间隔（辅助自动重连）
+     */
+    private Duration heartbeatInterval = Duration.ofSeconds(15);
+
+    /**
      * 服务端参数（用于 stdio）
      */
     private ServerParameters serverParameters;
