@@ -13,7 +13,6 @@ import org.noear.solon.test.SolonTest;
  * @author noear 2025/4/21 created
  */
 @Slf4j
-@SolonTest
 public class McpStdioClientTest {
     @Test
     public void case1() throws Exception {
