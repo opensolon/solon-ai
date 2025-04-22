@@ -46,23 +46,34 @@ public interface ChatDialect extends AiModelDialect {
     /**
      * 构建请求数据
      *
-     * @param config  聊天配置
-     * @param options 聊天选项
+     * @param config   聊天配置
+     * @param options  聊天选项
+     * @param messages 消息
+     * @param isStream 是否流式获取
      */
     String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream);
 
-
+    /**
+     * 构建助理消息节点
+     *
+     * @param toolCallBuilders 工具调用构建器集合
+     */
     ONode buildAssistantMessageNode(Map<Integer, ToolCallBuilder> toolCallBuilders);
 
     /**
      * 分析响应数据
      *
-     * @param config 聊天配置
+     * @param config   聊天配置
+     * @param resp     响应体
+     * @param respJson 响应数据
      */
     boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String respJson);
 
     /**
      * 分析工具调用
+     *
+     * @param resp     响应体
+     * @param oMessage 消息节点
      */
     List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage);
 }
