@@ -64,7 +64,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
     }
 
     public McpClientToolProvider(McpClientProperties clientProps) {
-        if (Utils.isEmpty(clientProps.getApiUrl())) {
+        if (Utils.isEmpty(clientProps.getApiUrl()) && McpChannel.SSE.equalsIgnoreCase(clientProps.getChannel())) {
             throw new IllegalArgumentException("ApiUrl is empty!");
         }
         McpClientTransport clientTransport;

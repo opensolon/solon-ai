@@ -21,7 +21,7 @@ public class McpStdioClientTest {
         McpClientToolProvider mcpClient = McpClientToolProvider.builder()
                 .channel(McpChannel.STDIO) //表示使用 stdio
                 .serverParameters(ServerParameters.builder("java")
-                        .args("-jar", "/Users/noear/Downloads/demo-mcp-s/target/demo-mcp-s.jar")
+                        .args("-jar", "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar")
                         .build())
                 .build();
 
