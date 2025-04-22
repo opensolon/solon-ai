@@ -1,6 +1,8 @@
 ### 3.2.1
 
 * 添加 solon-ai ChatRequestDefault http 状态异常处理
+* 添加 solon-ai-mcp McpChannel 通道（stdio, sse），实现不通道的支持
+* 添加 solon-ai-mcp stdio 通道交换流支持
 * 修复 solon-ai-mcp McpClientToolProvider 会丢失 queryString 的问题
 
 ### 3.2.0
