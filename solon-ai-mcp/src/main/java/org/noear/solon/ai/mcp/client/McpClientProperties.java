@@ -18,6 +18,7 @@ package org.noear.solon.ai.mcp.client;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import lombok.Getter;
 import lombok.Setter;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.net.http.HttpTimeout;
 
 import java.time.Duration;
@@ -37,31 +38,42 @@ public class McpClientProperties {
      * 客户端名称
      */
     private String name = "Solon-Ai-Mcp-Client";
+
     /**
      * 客户端版本号
      */
     private String version = "1.0.0";
 
     /**
+     * 通道
+     */
+    private String channel = McpChannel.SSE;
+
+    /**
      * 接口完整地址
      */
     private String apiUrl;
+
     /**
      * 接口密钥
      */
     private String apiKey;
+
     /**
      * 请求头信息
      */
     private final Map<String, String> headers = new LinkedHashMap<>();
+
     /**
      * http 超时
      */
     private HttpTimeout httpTimeout = HttpTimeout.of(10, 60, 60);
+
     /**
      * 请求超时
      */
     private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
+
     /**
      * 初始化超时
      */

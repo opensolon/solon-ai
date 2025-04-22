@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.mcp.server.annotation;
 
+import org.noear.solon.ai.mcp.McpChannel;
+
 import java.lang.annotation.*;
 
 /**
@@ -36,6 +38,11 @@ public @interface McpServerEndpoint {
      * 版本
      */
     String version() default "1.0.0";
+
+    /**
+     * 通道
+     */
+    String channel() default McpChannel.SSE;
 
     /**
      * SSE 端点

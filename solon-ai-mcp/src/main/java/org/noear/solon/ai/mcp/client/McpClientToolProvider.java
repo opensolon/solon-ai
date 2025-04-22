@@ -28,6 +28,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.RefererFunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.image.Image;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
 import org.noear.solon.net.http.HttpTimeout;
@@ -68,13 +69,15 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         }
         McpClientTransport clientTransport;
 
-        if (clientProps.getApiUrl().equals(":")) {
-            if(clientProps.getServerParameters() == null) {
+        if (McpChannel.STDIO.equals(clientProps.getChannel())) {
+            //stdio 通道
+            if (clientProps.getServerParameters() == null) {
                 throw new IllegalArgumentException("ServerParameters is null!");
             }
 
             clientTransport = new StdioClientTransport(clientProps.getServerParameters());
         } else {
+            //sse 通道
             URI url = URI.create(clientProps.getApiUrl());
             String baseUri = url.getScheme() + "://" + url.getAuthority();
             String sseEndpoint = null;
@@ -245,6 +248,11 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
         public Builder version(String version) {
             props.setVersion(version);
+            return this;
+        }
+
+        public Builder channel(String channel) {
+            props.setChannel(channel);
             return this;
         }
 

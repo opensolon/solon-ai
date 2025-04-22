@@ -27,6 +27,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
 import org.noear.solon.core.util.PathUtil;
@@ -61,9 +62,11 @@ public class McpServerEndpointProvider implements LifecycleBean {
         this.sseEndpoint = serverProperties.getSseEndpoint();
         this.messageEndpoint = PathUtil.mergePath(this.sseEndpoint, "message");
 
-        if (this.sseEndpoint.equals(":")) {
+        if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
+            //stdio 通道
             this.mcpTransportProvider = new StdioServerTransportProvider();
         } else {
+            //sse 通道
             this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
                     .messageEndpoint(this.messageEndpoint)
                     .sseEndpoint(this.sseEndpoint)
@@ -145,12 +148,21 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void postStart() throws Throwable {
         server = mcpServerSpec.build();
 
-        log.info("Mcp-Server started, name={}, version={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}",
-                serverProperties.getName(),
-                serverProperties.getVersion(),
-                this.sseEndpoint,
-                this.messageEndpoint,
-                toolCount);
+        if(McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
+            log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}",
+                    serverProperties.getName(),
+                    serverProperties.getVersion(),
+                    McpChannel.STDIO,
+                    toolCount);
+        }else {
+            log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}",
+                    serverProperties.getName(),
+                    serverProperties.getVersion(),
+                    McpChannel.SSE,
+                    this.sseEndpoint,
+                    this.messageEndpoint,
+                    toolCount);
+        }
 
         //如果是 web 类的
         if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {

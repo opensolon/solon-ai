@@ -44,6 +44,7 @@ public class McpPlugin implements Plugin {
             //支持${配置}
             String name = Solon.cfg().getByTmpl(anno.name());
             String version = Solon.cfg().getByTmpl(anno.version());
+            String channel = Solon.cfg().getByTmpl(anno.channel());
             String sseEndpoint = Solon.cfg().getByTmpl(anno.sseEndpoint());
             String heartbeatInterval = Solon.cfg().getByTmpl(anno.heartbeatInterval());
 
@@ -56,6 +57,7 @@ public class McpPlugin implements Plugin {
             }
 
             props.setVersion(version);
+            props.setChannel(channel);
             props.setSseEndpoint(sseEndpoint);
 
             if (Utils.isEmpty(heartbeatInterval)) {

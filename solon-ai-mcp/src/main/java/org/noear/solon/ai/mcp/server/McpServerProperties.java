@@ -17,6 +17,7 @@ package org.noear.solon.ai.mcp.server;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.annotation.BindProps;
 
 import java.time.Duration;
@@ -39,6 +40,11 @@ public class McpServerProperties {
      * 服务端版本号
      */
     private String version = "1.0.0";
+
+    /**
+     * 通道
+     */
+    private String channel = McpChannel.SSE;
 
     /**
      * 端点（路径）

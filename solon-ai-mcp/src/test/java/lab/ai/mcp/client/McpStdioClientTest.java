@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.liquor.eval.Maps;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientToolProvider;
 import org.noear.solon.test.SolonTest;
 
@@ -18,7 +19,7 @@ public class McpStdioClientTest {
     public void case1() throws Exception {
         //服务端不能开启控制台的日志，不然会污染协议流
         McpClientToolProvider mcpClient = McpClientToolProvider.builder()
-                .apiUrl(":") //表示使用 stdio
+                .channel(McpChannel.STDIO) //表示使用 stdio
                 .serverParameters(ServerParameters.builder("java")
                         .args("-jar", "/Users/noear/Downloads/demo-mcp-s/target/demo-mcp-s.jar")
                         .build())
