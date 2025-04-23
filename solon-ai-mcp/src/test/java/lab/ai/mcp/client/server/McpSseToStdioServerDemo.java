@@ -24,6 +24,6 @@ public class McpSseToStdioServerDemo implements ToolProvider {
     }
 
     public static void main(String[] args) {
-        Solon.start(McpSseToStdioServerDemo.class, new String[]{"-server.port=8081"});
+        Solon.start(McpSseToStdioServerDemo.class, args);
     }
 }
