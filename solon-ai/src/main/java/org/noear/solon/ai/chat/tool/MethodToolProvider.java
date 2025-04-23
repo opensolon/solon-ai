@@ -36,10 +36,18 @@ public class MethodToolProvider implements ToolProvider {
     }
 
     public MethodToolProvider(Class<?> toolClz, Object toolObj) {
+        //添加带注释的工具
         for (Method method : toolClz.getMethods()) {
             if (method.isAnnotationPresent(ToolMapping.class)) {
                 MethodFunctionTool func = new MethodFunctionTool(toolObj, method);
                 tools.add(func);
+            }
+        }
+
+        //如果自己就是工具集，再添加
+        if (toolObj instanceof ToolProvider) {
+            for (FunctionTool t1 : ((ToolProvider) toolObj).getTools()) {
+                tools.add(t1);
             }
         }
 
