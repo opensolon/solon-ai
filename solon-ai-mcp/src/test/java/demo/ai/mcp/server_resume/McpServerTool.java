@@ -17,13 +17,15 @@ public class McpServerTool {
         return "晴，14度";
     }
 
+    //注入当前工具对应的端点提供者
     @Inject("mcp-server1")
     private McpServerEndpointProvider serverEndpointProvider;
 
+    //30秒为间隔（暂停或恢复）//或者用 web 控制
     @Scheduled(fixedRate = 30_000)
     public void pauseAndResume() {
         if (serverEndpointProvider.pause() == false) {
-            //如果要不能赞停说明，之前已经停了
+            //如果暂停失败，说明之前已经暂停
             serverEndpointProvider.resume();
         }
     }
