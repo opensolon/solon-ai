@@ -76,10 +76,8 @@ public class McpPlugin implements Plugin {
             //加入容器生命周期
             bw.context().lifecycle(serverEndpointProvider);
 
-            //按名字注册到容器（如果有名字）
-            if (Utils.isNotEmpty(name)) {
-                bw.context().wrapAndPut(name, serverEndpointProvider);
-            }
+            //按名字注册到容器
+            bw.context().wrapAndPut(props.getName(), serverEndpointProvider);
         });
     }
 }
