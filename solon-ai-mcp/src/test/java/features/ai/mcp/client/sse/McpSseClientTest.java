@@ -29,7 +29,15 @@ public class McpSseClientTest {
 
         String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州"));
 
-        assert response != null;
+        assert Utils.isNotEmpty(response);
+        log.warn("{}", response);
+
+        mcpClient.close();
+        mcpClient.reopen();
+
+        response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州"));
+
+        assert Utils.isNotEmpty(response);
         log.warn("{}", response);
 
         mcpClient.close();
@@ -43,7 +51,7 @@ public class McpSseClientTest {
 
         String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州"));
 
-        assert response != null;
+        assert Utils.isNotEmpty(response);
         log.warn("{}", response);
 
         mcpClient.close();

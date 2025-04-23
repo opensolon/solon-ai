@@ -39,6 +39,7 @@ import java.io.Closeable;
 import java.net.URI;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -54,6 +55,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
     private final McpClientProperties clientProps;
     private McpSyncClient client;
+    private ScheduledFuture<?> heartbeatFuture;
 
     /**
      * 用于支持注入
@@ -89,7 +91,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
     }
 
     /**
-     * 构建客户端
+     * 构建同步客户端
      */
     private McpSyncClient buildClient() {
         McpClientTransport clientTransport;
@@ -148,14 +150,14 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      * 获取客户端
      */
     public McpSyncClient getClient() {
-        if (isClosed.get()) {
-            //如果已关闭
-            return null;
-        }
-
         LOCKER.lock();
 
         try {
+            if (isClosed.get()) {
+                //如果已关闭
+                throw new IllegalStateException("The current status has been closed.");
+            }
+
             if (client == null) {
                 client = buildClient();
             }
@@ -174,18 +176,23 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      * 心跳处理
      */
     private void heartbeatHandle() {
-        RunUtil.delay(() -> {
-            RunUtil.runAndTry(() -> {
-                try {
-                    getClient().ping();
-                } catch (Throwable ex) {
-                    //如果失败，重置（下次会尝试重连）
-                    this.reset();
-                }
-            });
+        heartbeatFuture = RunUtil.delay(() -> {
+            if (Thread.currentThread().isInterrupted()) {
+                //如果中断
+                return;
+            }
 
             if (isClosed.get() == false) {
                 //如果未关闭，再次心跳
+                RunUtil.runAndTry(() -> {
+                    try {
+                        getClient().ping();
+                    } catch (Throwable ex) {
+                        //如果失败，重置（下次会尝试重连）
+                        this.reset();
+                    }
+                });
+
                 heartbeatHandle();
             }
         }, this.clientProps.getHeartbeatInterval().toMillis());
@@ -196,8 +203,39 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      */
     @Override
     public void close() {
-        isClosed.set(true);
-        this.reset();
+        LOCKER.lock();
+        try {
+            if (isClosed.get() == false) {
+                //如果未关闭
+                isClosed.set(true);
+
+                if (heartbeatFuture != null) {
+                    heartbeatFuture.cancel(true);
+                    heartbeatFuture = null;
+                }
+
+                this.reset();
+            }
+        } finally {
+            LOCKER.unlock();
+        }
+    }
+
+    /**
+     * 重新打开
+     * */
+    public void reopen() {
+        LOCKER.lock();
+        try {
+            if (isClosed.get()) {
+                //如果已关闭
+                isClosed.set(false);
+                getClient();
+                heartbeatHandle();
+            }
+        } finally {
+            LOCKER.unlock();
+        }
     }
 
     /**
