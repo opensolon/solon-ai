@@ -11,10 +11,10 @@ import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import java.util.Collection;
 
 /**
- * @author noear 2025/4/23 created
+ * 把 stdio mcp-server 转为 sse mcp-server
  */
-@McpServerEndpoint(name = "stdio-tool")
-public class McpStdioServerDemo implements ToolProvider {
+@McpServerEndpoint(name = "stdio-to-sse-tool")
+public class McpStdioToSseServerDemo implements ToolProvider {
     McpClientToolProvider stdioToolProvider = McpClientToolProvider.builder()
             .channel(McpChannel.STDIO) //表示使用 stdio
             .serverParameters(ServerParameters.builder("java")
@@ -28,6 +28,6 @@ public class McpStdioServerDemo implements ToolProvider {
     }
 
     public static void main(String[] args) {
-        Solon.start(McpStdioServerDemo.class, new String[]{"-server.port=8081"});
+        Solon.start(McpStdioToSseServerDemo.class, new String[]{"-server.port=8081"});
     }
 }
