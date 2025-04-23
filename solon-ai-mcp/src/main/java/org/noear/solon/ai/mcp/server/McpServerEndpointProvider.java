@@ -25,6 +25,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.noear.snack.ONode;
 import org.noear.solon.Solon;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
@@ -148,13 +149,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void postStart() throws Throwable {
         server = mcpServerSpec.build();
 
-        if(McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
+        if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
             log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}",
                     serverProperties.getName(),
                     serverProperties.getVersion(),
                     McpChannel.STDIO,
                     toolCount);
-        }else {
+        } else {
             log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}",
                     serverProperties.getName(),
                     serverProperties.getVersion(),
@@ -177,6 +178,29 @@ public class McpServerEndpointProvider implements LifecycleBean {
                         tmp.sendHeartbeat();
                     });
                 }, serverProperties.getHeartbeatInterval().toMillis());
+            }
+        }
+    }
+
+    /**
+     * 暂停（主要用于测试）
+     */
+    public void pause() {
+        if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
+            WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
+            Solon.app().router().remove(tmp.getSseEndpoint());
+        }
+    }
+
+    /**
+     * 恢复（主要用于测试）
+     */
+    public void resume() {
+        if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
+            WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
+
+            if (Utils.isEmpty(Solon.app().router().getBy(tmp.getSseEndpoint()))) {
+                tmp.toHttpHandler(Solon.app());
             }
         }
     }
