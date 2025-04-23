@@ -185,24 +185,35 @@ public class McpServerEndpointProvider implements LifecycleBean {
     /**
      * 暂停（主要用于测试）
      */
-    public void pause() {
+    public boolean pause() {
         if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
             WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
-            Solon.app().router().remove(tmp.getSseEndpoint());
+
+            //如果有注册
+            if (Utils.isNotEmpty(Solon.app().router().getBy(tmp.getSseEndpoint()))) {
+                Solon.app().router().remove(tmp.getSseEndpoint());
+                return true;
+            }
         }
+
+        return false;
     }
 
     /**
      * 恢复（主要用于测试）
      */
-    public void resume() {
+    public boolean resume() {
         if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
             WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
 
+            //如果没有注册
             if (Utils.isEmpty(Solon.app().router().getBy(tmp.getSseEndpoint()))) {
                 tmp.toHttpHandler(Solon.app());
+                return true;
             }
         }
+
+        return false;
     }
 
     @Override

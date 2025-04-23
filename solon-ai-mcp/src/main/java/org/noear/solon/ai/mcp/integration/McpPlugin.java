@@ -35,8 +35,8 @@ public class McpPlugin implements Plugin {
     @Override
     public void start(AppContext context) throws Throwable {
         context.beanBuilderAdd(McpServerEndpoint.class, (clz, bw, anno) -> {
-            //添加代理支持（即拦截）
-            bw.context().beanExtractOrProxy(bw, false, true);
+            //添加代理和提取支持
+            bw.context().beanExtractOrProxy(bw, true, true);
 
             //构建属性
             McpServerProperties props = new McpServerProperties();
