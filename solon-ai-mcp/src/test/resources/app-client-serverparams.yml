@@ -1,0 +1,18 @@
+solon.ai:
+  mcp:
+    client:
+      demo1:
+        channel: "stdio"
+        serverParameters:
+          command: "xxx"
+          args:
+            - "-jar"
+            - "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar"
+          env:
+            a: "1"
+      demo2:
+        channel: "stdio"
+        serverParameters:
+          command: "xxx"
+          args: ["-jar", "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar"]
+          env: {a: "1"}
