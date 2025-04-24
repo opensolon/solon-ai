@@ -121,17 +121,19 @@ public class McpSseClientTest {
                 .getProp("solon.ai.mcp.client.demo1")
                 .toBean(McpClientToolProvider.class);
 
+        McpClientToolProvider toolProvider2 = McpClientToolProvider.builder()
+                .apiUrl("http://localhost:8081/demo4/sse")
+                .build();
+
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .provider(provider)
                 .model(model)
+                .defaultToolsAdd(toolProvider)
+                .defaultToolsAdd(toolProvider2)
                 .build();
 
         ChatResponse resp = chatModel
-                .prompt("今天杭州的天气情况？")
-                .options(options -> {
-                    //转为工具集合用于绑定
-                    options.toolsAdd(toolProvider);
-                })
+                .prompt("杭州天气和北京降雨量如何？")
                 .call();
 
         //打印消息
