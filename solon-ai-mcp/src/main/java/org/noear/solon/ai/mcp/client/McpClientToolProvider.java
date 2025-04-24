@@ -74,6 +74,12 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
     }
 
     public McpClientToolProvider(McpClientProperties clientProps) {
+        if (clientProps.getHeartbeatInterval() != null) {
+            if (clientProps.getHeartbeatInterval().getSeconds() < 10L) {
+                throw new IllegalArgumentException("HeartbeatInterval cannot be less than 10s!");
+            }
+        }
+
         if (McpChannel.STDIO.equals(clientProps.getChannel())) {
             //stdio 通道
             if (clientProps.getServerParameters() == null) {
@@ -190,6 +196,10 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      */
     private void heartbeatHandleDo() {
         if (heartbeatExecutor == null) {
+            return;
+        }
+
+        if (clientProps.getHeartbeatInterval() == null) {
             return;
         }
 
