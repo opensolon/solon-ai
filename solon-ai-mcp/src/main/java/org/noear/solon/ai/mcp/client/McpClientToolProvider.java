@@ -424,7 +424,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
                 builder.serverParameters(McpServerParameters.builder(command).args(args).env(env).build());
             } else {
                 String url = kv.getValue().get("url").getString();
-                builder.apiUrl(url).header(env);
+                builder.apiUrl(url).headerSet(env);
             }
 
             map.put(name, builder.build());
@@ -465,12 +465,12 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
             return this;
         }
 
-        public Builder header(String name, String value) {
+        public Builder headerSet(String name, String value) {
             props.getHeaders().put(name, value);
             return this;
         }
 
-        public Builder header(Map<String, String> headers) {
+        public Builder headerSet(Map<String, String> headers) {
             if (Utils.isNotEmpty(headers)) {
                 props.getHeaders().putAll(headers);
             }
