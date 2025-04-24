@@ -11,7 +11,11 @@ import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.mcp.client.McpClientToolProvider;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
 import org.noear.solon.annotation.Inject;
+import org.noear.solon.rx.SimpleSubscriber;
 import org.noear.solon.test.SolonTest;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -138,6 +142,42 @@ public class McpSseClientTest {
 
         //打印消息
         log.info("{}", resp.getMessage());
+    }
+
+    @Test
+    public void case4_stream() throws Exception {
+        McpClientToolProvider toolProvider = Utils.loadProps("app-client.yml")
+                .getProp("solon.ai.mcp.client.demo1")
+                .toBean(McpClientToolProvider.class);
+
+        McpClientToolProvider toolProvider2 = McpClientToolProvider.builder()
+                .apiUrl("http://localhost:8081/demo4/sse")
+                .build();
+
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .provider(provider)
+                .model(model)
+                .defaultToolsAdd(toolProvider)
+                .defaultToolsAdd(toolProvider2)
+                .build();
+
+        AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+
+        chatModel.prompt("杭州天气和北京降雨量如何？")
+                .stream()
+                .subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnNext(resp -> {
+                            respHolder.set(resp);
+                        })
+                        .doOnComplete(() -> {
+                            latch.countDown();
+                        }));
+
+        latch.await();
+
+        //打印消息
+        log.info("{}", respHolder.get().getAggregationMessage());
     }
 
     private static final String apiUrl = "http://127.0.0.1:11434/api/chat";

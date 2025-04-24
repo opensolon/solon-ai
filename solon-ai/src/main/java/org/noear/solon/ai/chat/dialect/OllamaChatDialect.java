@@ -22,6 +22,7 @@ import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.audio.Audio;
 import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.*;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
@@ -132,5 +133,29 @@ public class OllamaChatDialect extends AbstractChatDialect {
         }
 
         return true;
+    }
+
+    @Override
+    protected ToolCall parseToolCall(ONode n1) {
+        int index = -1; //n1.get("index").getInt();它是没有值的
+        String callId = n1.get("id").getString();
+
+        ONode n1f = n1.get("function");
+        String name = n1f.get("name").getString();
+        ONode n1fArgs = n1f.get("arguments");
+        String argStr = n1fArgs.getString();
+
+        index = name.hashCode();
+
+        if (n1fArgs.isValue()) {
+            //有可能是 json string
+            n1fArgs = ONode.loadStr(argStr);
+        }
+
+        Map<String, Object> argMap = null;
+        if (n1fArgs.isObject()) {
+            argMap = n1fArgs.toObject(Map.class);
+        }
+        return new ToolCall(index, callId, name, argStr, argMap);
     }
 }

@@ -5,6 +5,7 @@
 * 添加 solon-ai-mcp stdio 通道交换流支持
 * 添加 solon-ai-mcp McpClientToolProvider 断线重连机制
 * 修复 solon-ai-mcp McpClientToolProvider 会丢失 queryString 的问题
+* 修复 solon-ai ollama 方言，在多工具调用时产生 index 混乱的问题
 
 ### 3.2.0
 

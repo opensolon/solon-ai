@@ -91,6 +91,53 @@ public class OllamaTest {
     }
 
     @Test
+    public void case3_wather_rainfall() throws IOException {
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .provider(provider)
+                .model(model)
+                .defaultToolsAdd(new Tools())
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("杭州天气和北京降雨量如何？")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+        assert resp.getMessage() != null;
+    }
+
+    @Test
+    public void case3_wather_rainfall_stream() throws Exception {
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .provider(provider)
+                .model(model)
+                .defaultToolsAdd(new Tools())
+                .build();
+
+        AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+
+        chatModel.prompt("杭州天气和北京降雨量如何？")
+                .stream()
+                .subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnNext(resp -> {
+                            respHolder.set(resp);
+                        })
+                        .doOnComplete(() -> {
+                            latch.countDown();
+                        }));
+
+        latch.await();
+
+        //打印消息
+        log.info("{}", respHolder.get().getAggregationMessage());
+
+        assert respHolder.get().getAggregationMessage() != null;
+        assert respHolder.get().getAggregationMessage().getContent().contains("北京");
+    }
+
+    @Test
     public void case4() throws Throwable {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .provider(provider)

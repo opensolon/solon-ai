@@ -24,12 +24,12 @@ public class OpenaiTest {
     //JQC6M0GTNPGSCEXZOBUGUX0HVHCOLDIMN6XOSSSA
     private static final Logger log = LoggerFactory.getLogger(OpenaiTest.class);
     private static final String apiUrl = "https://api.deepseek.com/v1/chat/completions";
-    private static final String apkKey = "sk-9f4415ddc570496581897c22e3d41a54";
+    private static final String apiKey = "sk-9f4415ddc570496581897c22e3d41a54";
     private static final String model = "deepseek-chat"; //deepseek-reasoner//deepseek-chat
 
     @Test
     public void case1() throws IOException {
-        ChatModel chatModel = ChatModel.of(apiUrl).apiKey(apkKey).model(model).build();
+        ChatModel chatModel = ChatModel.of(apiUrl).apiKey(apiKey).model(model).build();
 
         //一次性返回
         ChatResponse resp = chatModel.prompt("hello").call();
@@ -40,7 +40,7 @@ public class OpenaiTest {
 
     @Test
     public void case2() throws Exception {
-        ChatModel chatModel = ChatModel.of(apiUrl).apiKey(apkKey).model(model).build();
+        ChatModel chatModel = ChatModel.of(apiUrl).apiKey(apiKey).model(model).build();
 
         //流返回
         Publisher<ChatResponse> publisher = chatModel.prompt("hello").stream();
@@ -63,7 +63,7 @@ public class OpenaiTest {
     @Test
     public void case3_wather() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apkKey)
+                .apiKey(apiKey)
                 .model(model)
                 .defaultToolsAdd(new Tools())
                 .build();
@@ -78,9 +78,57 @@ public class OpenaiTest {
     }
 
     @Test
+    public void case3_wather_rainfall() throws IOException {
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .apiKey(apiKey)
+                .model(model)
+                .defaultToolsAdd(new Tools())
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("杭州天气和北京降雨量如何？")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+        assert resp.getMessage() != null;
+    }
+
+    @Test
+    public void case3_wather_rainfall_stream() throws Exception {
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .apiKey(apiKey)
+                .model(model)
+                .defaultToolsAdd(new Tools())
+                .build();
+
+        AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+
+        chatModel.prompt("杭州天气和北京降雨量如何？")
+                .stream()
+                .subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnNext(resp -> {
+                            respHolder.set(resp);
+                        })
+                        .doOnComplete(() -> {
+                            latch.countDown();
+                        }));
+
+        latch.await();
+
+        //打印消息
+        log.info("{}", respHolder.get().getAggregationMessage());
+
+        assert respHolder.get().getAggregationMessage() != null;
+        assert respHolder.get().getAggregationMessage().getContent().contains("北京");
+    }
+
+
+    @Test
     public void case3_www() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apkKey)
+                .apiKey(apiKey)
                 .model(model)
                 .defaultToolsAdd(new Tools())
                 .build();
@@ -96,7 +144,7 @@ public class OpenaiTest {
     @Test
     public void case3_www_2() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apkKey)
+                .apiKey(apiKey)
                 .model(model)
                 .build();
 
@@ -113,7 +161,7 @@ public class OpenaiTest {
     @Test
     public void case4() throws Throwable {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apkKey)
+                .apiKey(apiKey)
                 .model(model)
                 .build();
 
@@ -154,7 +202,7 @@ public class OpenaiTest {
     @Test
     public void case5() throws Throwable {
         ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apkKey)
+                .apiKey(apiKey)
                 .model(model)
                 .build();
 
