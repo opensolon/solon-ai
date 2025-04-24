@@ -77,6 +77,23 @@ public class GiteeaiTest {
     }
 
     @Test
+    public void case3_wather_rainfall() throws IOException {
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .apiKey(apiKey)
+                .model(model)
+                .defaultToolsAdd(new Tools())
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("杭州天气和北京降雨量如何？")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+        assert resp.getMessage() != null;
+    }
+
+    @Test
     public void case3_www() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apiKey)

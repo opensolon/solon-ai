@@ -21,6 +21,15 @@ public class Tools {
         return "晴，24度";// + weatherService.get(location);
     }
 
+    @ToolMapping(description = "查询城市降雨量")
+    public String get_rainfall(@ToolParam(name = "location", description = "城市位置") String location) {
+        if (location == null) {
+            throw new IllegalStateException("arguments location is null (Assistant recognition failure)");
+        }
+
+        return "555毫米";
+    }
+
     @ToolMapping(description = "用关键词搜索网络")
     public String search_www(@ToolParam(name = "key", description = "根据用户内容提取关键词") String key) throws IOException {
         if (key == null) {
