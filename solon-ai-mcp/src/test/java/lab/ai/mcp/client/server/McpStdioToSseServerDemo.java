@@ -1,11 +1,11 @@
 package lab.ai.mcp.client.server;
 
-import io.modelcontextprotocol.client.transport.ServerParameters;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientToolProvider;
+import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 
 import java.util.Collection;
@@ -17,7 +17,7 @@ import java.util.Collection;
 public class McpStdioToSseServerDemo implements ToolProvider {
     McpClientToolProvider stdioToolProvider = McpClientToolProvider.builder()
             .channel(McpChannel.STDIO) //表示使用 stdio
-            .serverParameters(ServerParameters.builder("java")
+            .serverParameters(McpServerParameters.builder("java")
                     .args("-jar", "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar")
                     .build())
             .build();

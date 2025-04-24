@@ -98,7 +98,10 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
         if (McpChannel.STDIO.equals(clientProps.getChannel())) {
             //stdio 通道
-            clientTransport = new StdioClientTransport(clientProps.getServerParameters());
+            clientTransport = new StdioClientTransport(ServerParameters.builder(clientProps.getServerParameters().getCommand())
+                    .args(clientProps.getServerParameters().getArgs())
+                    .env(clientProps.getServerParameters().getEnv())
+                    .build());
         } else {
             //sse 通道
             URI url = URI.create(clientProps.getApiUrl());
@@ -413,7 +416,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         /**
          * 服务端参数（用于 stdio）
          */
-        public Builder serverParameters(ServerParameters serverParameters) {
+        public Builder serverParameters(McpServerParameters serverParameters) {
             props.setServerParameters(serverParameters);
             return this;
         }

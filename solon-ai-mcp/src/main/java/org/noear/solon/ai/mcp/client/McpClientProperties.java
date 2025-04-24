@@ -15,9 +15,6 @@
  */
 package org.noear.solon.ai.mcp.client;
 
-import io.modelcontextprotocol.client.transport.ServerParameters;
-import lombok.Getter;
-import lombok.Setter;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.net.http.HttpTimeout;
 
@@ -31,8 +28,6 @@ import java.util.Map;
  * @author noear
  * @since 3.1
  */
-@Setter
-@Getter
 public class McpClientProperties {
     /**
      * 客户端名称
@@ -87,7 +82,7 @@ public class McpClientProperties {
     /**
      * 服务端参数（用于 stdio）
      */
-    private ServerParameters serverParameters;
+    private McpServerParameters serverParameters;
 
 
     public McpClientProperties() {
@@ -99,5 +94,96 @@ public class McpClientProperties {
      */
     public McpClientProperties(String apiUrl) {
         this.apiUrl = apiUrl;
+    }
+
+    /// ///////////////////
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+
+    public String getChannel() {
+        return channel;
+    }
+
+    public void setChannel(String channel) {
+        this.channel = channel;
+    }
+
+    public String getApiUrl() {
+        return apiUrl;
+    }
+
+    public void setApiUrl(String apiUrl) {
+        this.apiUrl = apiUrl;
+    }
+
+    public String getApiKey() {
+        return apiKey;
+    }
+
+    public void setApiKey(String apiKey) {
+        this.apiKey = apiKey;
+    }
+
+    public Map<String, String> getHeaders() {
+        return headers;
+    }
+
+    public void setHeaders(Map<String, String> headers) {
+        this.headers.putAll(headers);
+    }
+
+
+    public HttpTimeout getHttpTimeout() {
+        return httpTimeout;
+    }
+
+    public void setHttpTimeout(HttpTimeout httpTimeout) {
+        this.httpTimeout = httpTimeout;
+    }
+
+    public Duration getRequestTimeout() {
+        return requestTimeout;
+    }
+
+    public void setRequestTimeout(Duration requestTimeout) {
+        this.requestTimeout = requestTimeout;
+    }
+
+    public Duration getInitializationTimeout() {
+        return initializationTimeout;
+    }
+
+    public void setInitializationTimeout(Duration initializationTimeout) {
+        this.initializationTimeout = initializationTimeout;
+    }
+
+    public Duration getHeartbeatInterval() {
+        return heartbeatInterval;
+    }
+
+    public void setHeartbeatInterval(Duration heartbeatInterval) {
+        this.heartbeatInterval = heartbeatInterval;
+    }
+
+    public McpServerParameters getServerParameters() {
+        return serverParameters;
+    }
+
+    public void setServerParameters(McpServerParameters serverParameters) {
+        this.serverParameters = serverParameters;
     }
 }
