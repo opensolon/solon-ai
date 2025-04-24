@@ -39,7 +39,9 @@ import java.io.Closeable;
 import java.net.URI;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -54,8 +56,8 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
     private final McpClientProperties clientProps;
+    private ScheduledExecutorService heartbeatExecutor;
     private McpSyncClient client;
-    private ScheduledFuture<?> heartbeatFuture;
 
     /**
      * 用于支持注入
@@ -175,11 +177,23 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         }
     }
 
+    private void heartbeatHandle() {
+        if (heartbeatExecutor == null) {
+            heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
+        }
+
+        heartbeatHandleDo();
+    }
+
     /**
      * 心跳处理
      */
-    private void heartbeatHandle() {
-        heartbeatFuture = RunUtil.delay(() -> {
+    private void heartbeatHandleDo() {
+        if (heartbeatExecutor == null) {
+            return;
+        }
+
+        heartbeatExecutor.schedule(() -> {
             if (Thread.currentThread().isInterrupted()) {
                 //如果中断
                 return;
@@ -196,9 +210,9 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
                     }
                 });
 
-                heartbeatHandle();
+                heartbeatHandleDo();
             }
-        }, this.clientProps.getHeartbeatInterval().toMillis());
+        }, this.clientProps.getHeartbeatInterval().toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -212,9 +226,9 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
                 //如果未关闭
                 isClosed.set(true);
 
-                if (heartbeatFuture != null) {
-                    heartbeatFuture.cancel(true);
-                    heartbeatFuture = null;
+                if (heartbeatExecutor != null) {
+                    heartbeatExecutor.shutdownNow();
+                    heartbeatExecutor = null;
                 }
 
                 this.reset();
@@ -226,7 +240,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
     /**
      * 重新打开
-     * */
+     */
     public void reopen() {
         LOCKER.lock();
         try {
