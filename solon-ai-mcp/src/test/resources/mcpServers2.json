@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "server1": {
+      "url": "http://localhost8080/demo1/sse",
+      "env": {
+        "key": "value"
+      }
+    },
+    "fetch": {
+      "command": "/full/path/to/bin/mcp-proxy",
+      "args": [
+        "http://localhost:8932/sse"
+      ]
+    }
+  }
+}

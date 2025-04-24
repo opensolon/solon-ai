@@ -31,12 +31,16 @@ import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
+import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.net.URI;
+import java.net.URL;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -380,6 +384,55 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         return toolList;
     }
 
+    /**
+     * 根据 mcpServers 配置加载客户端
+     *
+     * @param uri 配置资源地址
+     */
+    public static Map<String, McpClientToolProvider> fromMcpServers(String uri) throws IOException {
+        Assert.notEmpty(uri, "Uri is empty");
+
+        URL res = ResourceUtil.findResource(uri);
+        String json = ResourceUtil.getResourceAsString(res);
+        ONode jsonDom = ONode.loadStr(json);
+
+        Map<String, McpClientToolProvider> map = new HashMap<>();
+        for (Map.Entry<String, ONode> kv : jsonDom.get("mcpServers").obj().entrySet()) {
+            String name = kv.getKey();
+            Map<String, String> env = kv.getValue().get("env").toObject(new HashMap<String, String>() {
+            }.getClass());
+
+            String type = kv.getValue().get("type").getString();
+
+            if (Utils.isEmpty(type)) {
+                //兼容没有 type 配置的情况
+                if (kv.getValue().contains("url")) {
+                    type = McpChannel.SSE;
+                } else {
+                    type = McpChannel.STDIO;
+                }
+            }
+
+
+            Builder builder = builder().channel(type);
+
+            if (McpChannel.STDIO.equalsIgnoreCase(type)) {
+                String command = kv.getValue().get("command").getString();
+                List<String> args = kv.getValue().get("args").toObject(new ArrayList<String>() {
+                }.getClass());
+
+                builder.serverParameters(McpServerParameters.builder(command).args(args).env(env).build());
+            } else {
+                String url = kv.getValue().get("url").getString();
+                builder.apiUrl(url).header(env);
+            }
+
+            map.put(name, builder.build());
+        }
+
+        return map;
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -414,6 +467,13 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
         public Builder header(String name, String value) {
             props.getHeaders().put(name, value);
+            return this;
+        }
+
+        public Builder header(Map<String, String> headers) {
+            if (Utils.isNotEmpty(headers)) {
+                props.getHeaders().putAll(headers);
+            }
             return this;
         }
 

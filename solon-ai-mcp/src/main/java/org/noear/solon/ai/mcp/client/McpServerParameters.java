@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.client;
 
+import org.noear.solon.Utils;
 import org.noear.solon.core.util.Assert;
 
 import java.util.*;
@@ -59,7 +60,7 @@ public class McpServerParameters {
     }
 
     public static class Builder {
-        private McpServerParameters params;
+        private McpServerParameters params = new McpServerParameters();
 
         public Builder(String command) {
             Assert.notNull(command, "The command can not be null");
@@ -85,7 +86,7 @@ public class McpServerParameters {
         }
 
         public McpServerParameters.Builder env(Map<String, String> env) {
-            if (env != null && !env.isEmpty()) {
+            if (Utils.isNotEmpty(env)) {
                 params.env.putAll(env);
             }
             return this;
