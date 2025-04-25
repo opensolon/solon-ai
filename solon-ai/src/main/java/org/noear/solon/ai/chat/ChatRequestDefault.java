@@ -211,7 +211,6 @@ public class ChatRequestDefault implements ChatRequest {
             if(buildStreamToolMessage(resp, subscriber) == false){
                 return;
             }
-
         }
 
         //添加到记忆（最后的聚合消息）
