@@ -258,4 +258,104 @@ public class GiteeaiTest {
 
         assert chatSession.getMessages().size() == 8;
     }
+
+
+    @Test
+    public void case6_wather_return() throws IOException {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new ReturnTools())
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("今天杭州的天气情况？")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+        assert "晴，24度".equals(resp.getMessage().getContent());
+    }
+
+    @Test
+    public void case6_wather_rainfall_return() throws IOException {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new ReturnTools())
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("杭州天气和北京降雨量如何？")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+        assert "晴，24度\n555毫米".equals(resp.getMessage().getContent());
+    }
+
+    @Test
+    public void case6_wather_return_stream() throws Exception {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new ReturnTools())
+                .build();
+
+        AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        ChatSession chatSession = new ChatSessionDefault();
+        chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
+
+        chatModel.prompt(chatSession)
+                .stream()
+                .subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnNext(resp -> {
+                            respHolder.set(resp);
+                        })
+                        .doOnComplete(() -> {
+                            latch.countDown();
+                        }));
+
+        latch.await();
+
+        //打印消息
+        log.info("{}", chatSession.toNdjson());
+        log.info("{}", respHolder.get().getAggregationMessage());
+
+        assert chatSession.getMessages().size() == 4;
+
+        assert respHolder.get().getAggregationMessage() != null;
+        assert respHolder.get().getAggregationMessage().getContent().equals("晴，24度");
+    }
+
+
+
+    @Test
+    public void case6_wather_rainfall_return_stream() throws Exception {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new ReturnTools())
+                .build();
+
+        AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        ChatSession chatSession = new ChatSessionDefault();
+        chatSession.addMessage(ChatMessage.ofUser("杭州天气和北京降雨量如何？"));
+
+        chatModel.prompt(chatSession)
+                .stream()
+                .subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnNext(resp -> {
+                            respHolder.set(resp);
+                        })
+                        .doOnComplete(() -> {
+                            latch.countDown();
+                        }));
+
+        latch.await();
+
+        //打印消息
+        log.info("{}", chatSession.toNdjson());
+        log.info("{}", respHolder.get().getAggregationMessage());
+
+        assert chatSession.getMessages().size() == 5;
+
+        assert respHolder.get().getAggregationMessage() != null;
+        assert respHolder.get().getAggregationMessage().getContent().equals("晴，24度\n" +
+                "555毫米");
+    }
 }

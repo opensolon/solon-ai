@@ -286,6 +286,7 @@ public class ChatRequestDefault implements ChatRequest {
             AssistantMessage message = dialect.buildAssistantMessageByToolMessages(toolMessages);
             resp.reset();
             resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
+            resp.aggregationMessageContent.setLength(0);
             publishResponse(subscriber, resp, resp.lastChoice());
             return true; //触发外层的完成事件
         }
