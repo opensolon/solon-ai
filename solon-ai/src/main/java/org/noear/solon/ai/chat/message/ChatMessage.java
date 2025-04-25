@@ -112,7 +112,14 @@ public interface ChatMessage extends Serializable {
      * 构建工具消息
      */
     static ChatMessage ofTool(String content, String name, String toolCallId) {
-        return new ToolMessage(content, name, toolCallId);
+        return ofTool(content, name, toolCallId, false);
+    }
+
+    /**
+     * 构建工具消息
+     */
+    static ChatMessage ofTool(String content, String name, String toolCallId, boolean returnDirect) {
+        return new ToolMessage(content, name, toolCallId, returnDirect);
     }
 
     /// //////////////////

@@ -33,15 +33,17 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
     private String content;
     private String name;
     private String toolCallId;
+    private transient boolean returnDirect;
 
     public ToolMessage() {
         //用于序列化
     }
 
-    public ToolMessage(String content, String name, String toolCallId) {
+    public ToolMessage(String content, String name, String toolCallId, boolean returnDirect) {
         this.content = content;
         this.name = name;
         this.toolCallId = toolCallId;
+        this.returnDirect = returnDirect;
     }
 
     /**
@@ -71,6 +73,12 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
         return toolCallId;
     }
 
+    /**
+     * 是否直接返回给调用者
+     */
+    public boolean isReturnDirect() {
+        return returnDirect;
+    }
 
     @Override
     public String toString() {

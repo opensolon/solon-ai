@@ -18,6 +18,7 @@ package org.noear.solon.ai.chat;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
+import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -37,6 +38,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -119,9 +121,21 @@ public class ChatRequestDefault implements ChatRequest {
             AssistantMessage choiceMessage = resp.getMessage();
             messages.add(choiceMessage); //添加到记忆
             if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
-                buildToolMessage(resp, choiceMessage);
+                List<ToolMessage> toolMessages = buildToolMessage(resp, choiceMessage);
 
-                return call();
+                if (Utils.isEmpty(toolMessages)) {
+                    //没有要求直接返回
+                    return call();
+                } else {
+                    //要求直接返回（转为新的响应消息）
+                    StringBuffer buf = new StringBuffer();
+                    for (ToolMessage toolMessage : toolMessages) {
+                        buf.append(toolMessage.getContent()).append("\n");
+                    }
+
+                    resp.addChoice(new ChatChoice(0, new Date(), "tool", ChatMessage.ofAssistant(buf.toString())));
+                    messages.add(choiceMessage); //添加到记忆
+                }
             }
         }
 
@@ -194,9 +208,10 @@ public class ChatRequestDefault implements ChatRequest {
 
     private void onEventEnd(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
         if (resp.isFinished() == false && resp.toolCallBuilders.size() > 0) {
-            buildStreamToolMessage(resp);
-            stream().subscribe(subscriber);
-            return;
+            if(buildStreamToolMessage(resp, subscriber) == false){
+                return;
+            }
+
         }
 
         //添加到记忆（最后的聚合消息）
@@ -249,9 +264,7 @@ public class ChatRequestDefault implements ChatRequest {
 
             if (resp.isFinished()) {
                 if (resp.toolCallBuilders.size() > 0) {
-                    buildStreamToolMessage(resp);
-                    stream().subscribe(subscriber);
-                    return false; //这样，不会触发外层的完成事件
+                    return buildStreamToolMessage(resp, subscriber);
                 }
             }
         }
@@ -259,14 +272,30 @@ public class ChatRequestDefault implements ChatRequest {
         return true;
     }
 
-    private void buildStreamToolMessage(ChatResponseDefault resp) {
+    private boolean buildStreamToolMessage(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
         ONode oNode = dialect.buildAssistantMessageNode(resp.toolCallBuilders);
 
         List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
 
         messages.addAll(assistantMessages);
 
-        buildToolMessage(resp, assistantMessages.get(0));
+        List<ToolMessage> toolMessages = buildToolMessage(resp, assistantMessages.get(0));
+
+        if (Utils.isEmpty(toolMessages)) {
+            //没有要求直接返回
+            stream().subscribe(subscriber);
+            return false; //不触发外层的完成事件
+        } else {
+            //要求直接返回（转为新的响应消息）
+            StringBuffer buf = new StringBuffer();
+            for (ToolMessage toolMessage : toolMessages) {
+                buf.append(toolMessage.getContent()).append("\n");
+            }
+
+            resp.reset();
+            resp.addChoice(new ChatChoice(0, new Date(), "tool", ChatMessage.ofAssistant(buf.toString())));
+            return true; //触发外层的完成事件
+        }
     }
 
     private void publishResponse(Subscriber<? super ChatResponse> subscriber, ChatResponseDefault resp, ChatChoice choice) {
@@ -298,11 +327,15 @@ public class ChatRequestDefault implements ChatRequest {
         }
     }
 
-    private void buildToolMessage(ChatResponseDefault resp, AssistantMessage acm) throws ChatException {
+    /**
+     * @return returnDirect
+     */
+    private List<ToolMessage> buildToolMessage(ChatResponseDefault resp, AssistantMessage acm) throws ChatException {
         if (Utils.isEmpty(acm.getToolCalls())) {
-            return;
+            return null;
         }
 
+        List<ToolMessage> toolMessages = new ArrayList<>();
         for (ToolCall call : acm.getToolCalls()) {
             FunctionTool func = config.getDefaultTool(call.name());
 
@@ -313,7 +346,9 @@ public class ChatRequestDefault implements ChatRequest {
             if (func != null) {
                 try {
                     String content = func.handle(call.arguments());
-                    messages.add(ChatMessage.ofTool(content, call.name(), call.id()));
+                    ToolMessage toolMessage = (ToolMessage) ChatMessage.ofTool(content, call.name(), call.id(), func.returnDirect());
+                    messages.add(toolMessage);
+                    toolMessages.add(toolMessage);
                 } catch (Throwable ex) {
                     throw new ChatException("The function call failed!", ex);
                 }
@@ -321,6 +356,13 @@ public class ChatRequestDefault implements ChatRequest {
                 //会存在调用的call实际上不存在的情况
                 log.warn("Tool call not found: {}", call.name());
             }
+        }
+
+        if (toolMessages.size() > 0 && toolMessages.stream().filter(m -> m.isReturnDirect() == false).count() == 0) {
+            //说明全部要求直接返回
+            return toolMessages;
+        } else {
+            return null;
         }
     }
 }
