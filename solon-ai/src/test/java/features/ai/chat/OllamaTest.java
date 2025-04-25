@@ -25,11 +25,15 @@ public class OllamaTest {
     private static final String provider = "ollama";
     private static final String model = "qwen2.5:1.5b"; //"llama3.2";//deepseek-r1:1.5b;
 
+    private ChatModel.Builder getChatModelBuilder() {
+        return ChatModel.of(apiUrl)
+                .provider(provider) //需要指定供应商，用于识别接口风格（也称为方言）
+                .model(model);
+    }
+
     @Test
     public void case1() throws IOException {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider) //需要指定供应商，用于识别接口风格（也称为方言）
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .build();
 
         //一次性返回
@@ -41,7 +45,8 @@ public class OllamaTest {
 
     @Test
     public void case2() throws Exception {
-        ChatModel chatModel = ChatModel.of(apiUrl).provider(provider).model(model).build();
+        ChatModel chatModel = getChatModelBuilder()
+                .build();
 
         ChatSession chatSession = new ChatSessionDefault();
         chatSession.addMessage(ChatMessage.ofUser("hello"));
@@ -76,9 +81,7 @@ public class OllamaTest {
 
     @Test
     public void case3_wather() throws IOException {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
 
@@ -92,9 +95,7 @@ public class OllamaTest {
 
     @Test
     public void case3_wather_rainfall() throws IOException {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
 
@@ -109,9 +110,7 @@ public class OllamaTest {
 
     @Test
     public void case3_wather_rainfall_stream() throws Exception {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
 
@@ -139,9 +138,7 @@ public class OllamaTest {
 
     @Test
     public void case4() throws Throwable {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .build();
 
         ChatSession chatSession = new ChatSessionDefault();
@@ -180,9 +177,7 @@ public class OllamaTest {
 
     @Test
     public void case5() throws Throwable {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .build();
 
         ChatSession chatSession = new ChatSessionDefault();
@@ -245,5 +240,103 @@ public class OllamaTest {
         System.out.println(chatSession.toNdjson());
 
         assert chatSession.getMessages().size() == 8;
+    }
+
+    @Test
+    public void case6_wather_return() throws IOException {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new ReturnTools())
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("今天杭州的天气情况？")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+        assert "晴，24度".equals(resp.getMessage().getContent());
+    }
+
+    @Test
+    public void case6_wather_rainfall_return() throws IOException {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new ReturnTools())
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("杭州天气和北京降雨量如何？")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+        assert "晴，24度\n555毫米".equals(resp.getMessage().getContent());
+    }
+
+    @Test
+    public void case6_wather_return_stream() throws Exception {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new ReturnTools())
+                .build();
+
+        AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        ChatSession chatSession = new ChatSessionDefault();
+        chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
+
+        chatModel.prompt(chatSession)
+                .stream()
+                .subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnNext(resp -> {
+                            respHolder.set(resp);
+                        })
+                        .doOnComplete(() -> {
+                            latch.countDown();
+                        }));
+
+        latch.await();
+
+        //打印消息
+        log.info("{}", chatSession.toNdjson());
+        log.info("{}", respHolder.get().getAggregationMessage());
+
+        assert chatSession.getMessages().size() == 4;
+
+        assert respHolder.get().getAggregationMessage() != null;
+        assert respHolder.get().getAggregationMessage().getContent().equals("晴，24度");
+    }
+
+
+    @Test
+    public void case6_wather_rainfall_return_stream() throws Exception {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new ReturnTools())
+                .build();
+
+        AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        ChatSession chatSession = new ChatSessionDefault();
+        chatSession.addMessage(ChatMessage.ofUser("杭州天气和北京降雨量如何？"));
+
+        chatModel.prompt(chatSession)
+                .stream()
+                .subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnNext(resp -> {
+                            respHolder.set(resp);
+                        })
+                        .doOnComplete(() -> {
+                            latch.countDown();
+                        }));
+
+        latch.await();
+
+        //打印消息
+        log.info("{}", chatSession.toNdjson());
+        log.info("{}", respHolder.get().getAggregationMessage());
+
+        assert chatSession.getMessages().size() == 5;
+
+        assert respHolder.get().getAggregationMessage() != null;
+        assert respHolder.get().getAggregationMessage().getContent().equals("晴，24度\n" +
+                "555毫米");
     }
 }

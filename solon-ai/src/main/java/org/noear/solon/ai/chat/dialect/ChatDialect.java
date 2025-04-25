@@ -19,6 +19,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.ai.AiModelDialect;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -59,6 +60,13 @@ public interface ChatDialect extends AiModelDialect {
      * @param toolCallBuilders 工具调用构建器集合
      */
     ONode buildAssistantMessageNode(Map<Integer, ToolCallBuilder> toolCallBuilders);
+
+    /**
+     * 构建助理消息根据直接返回的工具消息
+     *
+     * @param toolMessages 直接返回的工具消息
+     */
+    AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages);
 
     /**
      * 分析响应数据

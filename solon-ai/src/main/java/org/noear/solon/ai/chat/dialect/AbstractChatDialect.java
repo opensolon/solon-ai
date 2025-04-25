@@ -175,6 +175,20 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return oNode;
     }
 
+    @Override
+    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
+        //要求直接返回（转为新的响应消息）
+        StringBuffer buf = new StringBuffer();
+        for (ToolMessage toolMessage : toolMessages) {
+            if (buf.length() > 0) {
+                buf.append('\n');
+            }
+            buf.append(toolMessage.getContent());
+        }
+
+        return ChatMessage.ofAssistant(buf.toString());
+    }
+
     /**
      * 解析工具调用
      */

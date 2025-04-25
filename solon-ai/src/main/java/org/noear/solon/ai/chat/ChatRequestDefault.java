@@ -128,12 +128,9 @@ public class ChatRequestDefault implements ChatRequest {
                     return call();
                 } else {
                     //要求直接返回（转为新的响应消息）
-                    StringBuffer buf = new StringBuffer();
-                    for (ToolMessage toolMessage : toolMessages) {
-                        buf.append(toolMessage.getContent()).append("\n");
-                    }
-
-                    resp.addChoice(new ChatChoice(0, new Date(), "tool", ChatMessage.ofAssistant(buf.toString())));
+                    choiceMessage = dialect.buildAssistantMessageByToolMessages(toolMessages);
+                    resp.reset();
+                    resp.addChoice(new ChatChoice(0, new Date(), "tool", choiceMessage));
                     messages.add(choiceMessage); //添加到记忆
                 }
             }
@@ -286,13 +283,10 @@ public class ChatRequestDefault implements ChatRequest {
             return false; //不触发外层的完成事件
         } else {
             //要求直接返回（转为新的响应消息）
-            StringBuffer buf = new StringBuffer();
-            for (ToolMessage toolMessage : toolMessages) {
-                buf.append(toolMessage.getContent()).append("\n");
-            }
-
+            AssistantMessage message = dialect.buildAssistantMessageByToolMessages(toolMessages);
             resp.reset();
-            resp.addChoice(new ChatChoice(0, new Date(), "tool", ChatMessage.ofAssistant(buf.toString())));
+            resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
+            publishResponse(subscriber, resp, resp.lastChoice());
             return true; //触发外层的完成事件
         }
     }

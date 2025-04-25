@@ -26,9 +26,15 @@ public class GiteeaiTest {
     private static final String apiKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
     private static final String model = "Qwen2.5-72B-Instruct";//"QwQ-32B";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
 
+    private ChatModel.Builder getChatModelBuilder() {
+        return ChatModel.of(apiUrl)
+                .apiKey(apiKey)
+                .model(model);
+    }
+
     @Test
     public void case1() throws IOException {
-        ChatModel chatModel = ChatModel.of(apiUrl).apiKey(apiKey).model(model).build();
+        ChatModel chatModel = getChatModelBuilder().build();
 
         //一次性返回
         ChatResponse resp = chatModel.prompt("hello").call();
@@ -39,7 +45,7 @@ public class GiteeaiTest {
 
     @Test
     public void case2() throws Exception {
-        ChatModel chatModel = ChatModel.of(apiUrl).apiKey(apiKey).model(model).build();
+        ChatModel chatModel = getChatModelBuilder().build();
 
         //流返回
         Publisher<ChatResponse> publisher = chatModel.prompt("hello").stream();
@@ -61,9 +67,7 @@ public class GiteeaiTest {
 
     @Test
     public void case3_wather() throws IOException {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apiKey)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
 
@@ -78,9 +82,7 @@ public class GiteeaiTest {
 
     @Test
     public void case3_wather_rainfall() throws IOException {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apiKey)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
 
@@ -95,9 +97,7 @@ public class GiteeaiTest {
 
     @Test
     public void case3_wather_rainfall_stream() throws Exception {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apiKey)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
 
@@ -125,9 +125,7 @@ public class GiteeaiTest {
 
     @Test
     public void case3_www() throws IOException {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apiKey)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
 
@@ -141,9 +139,7 @@ public class GiteeaiTest {
 
     @Test
     public void case3_www_2() throws IOException {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apiKey)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .build();
 
         ChatResponse resp = chatModel
@@ -159,9 +155,7 @@ public class GiteeaiTest {
 
     @Test
     public void case4() throws Throwable {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apiKey)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .build();
 
         ChatSession chatSession = new ChatSessionDefault();
@@ -200,9 +194,7 @@ public class GiteeaiTest {
 
     @Test
     public void case5() throws Throwable {
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .apiKey(apiKey)
-                .model(model)
+        ChatModel chatModel = getChatModelBuilder()
                 .build();
 
         ChatSession chatSession = new ChatSessionDefault();
