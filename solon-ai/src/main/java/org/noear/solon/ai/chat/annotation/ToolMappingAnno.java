@@ -29,16 +29,18 @@ import java.lang.annotation.Annotation;
 public class ToolMappingAnno implements ToolMapping {
     private String name;
     private String description;
+    private boolean returnDirect;
     private Class<? extends ToolCallResultConverter> resultConverter;
 
-    public ToolMappingAnno(String name, String description, Class<? extends ToolCallResultConverter> resultConverter) {
+    public ToolMappingAnno(String name, String description, boolean returnDirect, Class<? extends ToolCallResultConverter> resultConverter) {
         this.name = (name == null ? "" : name);
         this.description = (description == null ? "" : description);
+        this.returnDirect = returnDirect;
         this.resultConverter = (resultConverter == null ? ToolCallResultConverter.class : resultConverter);
     }
 
     public static ToolMapping fromMapping(Mapping mapping) {
-        return new ToolMappingAnno(null, mapping.description(), null);
+        return new ToolMappingAnno(null, mapping.description(), false, null);
     }
 
     /**
@@ -55,6 +57,11 @@ public class ToolMappingAnno implements ToolMapping {
     @Override
     public String description() {
         return description;
+    }
+
+    @Override
+    public boolean returnDirect() {
+        return returnDirect;
     }
 
     /**

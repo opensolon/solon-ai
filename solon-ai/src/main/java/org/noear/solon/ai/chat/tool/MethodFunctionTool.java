@@ -40,6 +40,7 @@ public class MethodFunctionTool implements FunctionTool {
     private final Object target;
     private final Method method;
     private final String description;
+    private boolean returnDirect;
     private final String name;
     private final List<FunctionToolParam> params = new ArrayList<>();
     private final ToolCallResultConverter resultConverter;
@@ -55,6 +56,7 @@ public class MethodFunctionTool implements FunctionTool {
 
         this.name = Utils.annoAlias(m1Anno.name(), method.getName());
         this.description = m1Anno.description();
+        this.returnDirect = m1Anno.returnDirect();
 
         //断言
         Assert.notEmpty(m1Anno.description(), "ToolMapping description cannot be empty");
@@ -94,6 +96,11 @@ public class MethodFunctionTool implements FunctionTool {
     @Override
     public String description() {
         return description;
+    }
+
+    @Override
+    public boolean returnDirect() {
+        return returnDirect;
     }
 
     /**
@@ -154,6 +161,7 @@ public class MethodFunctionTool implements FunctionTool {
         return "MethodFunctionTool{" +
                 "name='" + name + '\'' +
                 ", description='" + description + '\'' +
+                ", returnDirect=" + returnDirect +
                 ", inputSchema=" + inputSchema() +
                 '}';
     }

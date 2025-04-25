@@ -30,6 +30,7 @@ public class FunctionToolDesc implements FunctionTool {
     private final String name;
     private final List<FunctionToolParam> params;
     private String description;
+    private boolean returnDirect = false;
     private Function<Map<String, Object>, String> doHandle;
 
     /**
@@ -47,6 +48,16 @@ public class FunctionToolDesc implements FunctionTool {
      */
     public FunctionToolDesc description(String description) {
         this.description = description;
+        return this;
+    }
+
+    /**
+     * 申明直接返回给调用者
+     *
+     * @param returnDirect 直接返回
+     */
+    public FunctionToolDesc returnDirect(boolean returnDirect) {
+        this.returnDirect = returnDirect;
         return this;
     }
 
@@ -154,6 +165,13 @@ public class FunctionToolDesc implements FunctionTool {
         return description;
     }
 
+    /**
+     * 是否直接返回给调用者
+     */
+    @Override
+    public boolean returnDirect() {
+        return returnDirect;
+    }
 
     /**
      * 函数参数

@@ -40,6 +40,11 @@ public @interface ToolMapping {
     String description();
 
     /**
+     * 是否直接返回给调用者
+     */
+    boolean returnDirect() default false;
+
+    /**
      * 结果转换器
      */
     Class<? extends ToolCallResultConverter> resultConverter() default ToolCallResultConverter.class;

@@ -50,6 +50,11 @@ public class RefererFunctionTool implements FunctionTool {
     }
 
     @Override
+    public boolean returnDirect() {
+        return false;
+    }
+
+    @Override
     public ONode inputSchema() {
         return inputSchema;
     }

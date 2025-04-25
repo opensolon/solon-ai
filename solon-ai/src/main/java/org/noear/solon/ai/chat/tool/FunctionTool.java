@@ -44,6 +44,11 @@ public interface FunctionTool extends Tool {
     String description();
 
     /**
+     * 是否直接返回给调用者
+     */
+    boolean returnDirect();
+
+    /**
      * 输入架构
      */
     ONode inputSchema();
