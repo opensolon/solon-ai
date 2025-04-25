@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.solon.ai.chat.annotation.ToolMapping;
+import org.noear.solon.annotation.Mapping;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -38,7 +39,7 @@ public class MethodToolProvider implements ToolProvider {
     public MethodToolProvider(Class<?> toolClz, Object toolObj) {
         //添加带注释的工具
         for (Method method : toolClz.getMethods()) {
-            if (method.isAnnotationPresent(ToolMapping.class)) {
+            if (method.isAnnotationPresent(ToolMapping.class) || method.isAnnotationPresent(Mapping.class)) {
                 MethodFunctionTool func = new MethodFunctionTool(toolObj, method);
                 tools.add(func);
             }
