@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.solon.core.convert.Converter;
+import org.noear.solon.core.exception.ConvertException;
 
 /**
  * 工具调用结果转换器
@@ -24,5 +24,11 @@ import org.noear.solon.core.convert.Converter;
  * @since 3.1
  */
 @FunctionalInterface
-public interface ToolCallResultConverter extends Converter<Object, String> {
+public interface ToolCallResultConverter {
+    /**
+     * 转换
+     *
+     * @param result 结果
+     */
+    String convert(Object result) throws ConvertException;
 }
