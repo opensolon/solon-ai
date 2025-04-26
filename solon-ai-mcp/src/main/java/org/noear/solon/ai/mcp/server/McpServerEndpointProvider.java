@@ -141,12 +141,12 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private McpSyncServer server;
 
     @Override
-    public void start() throws Throwable {
+    public void start() {
 
     }
 
     @Override
-    public void postStart() throws Throwable {
+    public void postStart() {
         server = mcpServerSpec.build();
 
         if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
@@ -217,7 +217,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     @Override
-    public void stop() throws Throwable {
+    public void stop() {
         if (server != null) {
             server.close();
         }
