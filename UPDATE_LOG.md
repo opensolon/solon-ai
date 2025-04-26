@@ -2,11 +2,14 @@
 
 * 添加 solon-ai ChatRequestDefault http 状态异常处理
 * 添加 solon-ai ToolCallResultConverter 接口（工具调用结果转换器）
+* 添加 solon-ai ToolCall 添加 Mapping 和 Param 注解（支持与 web api 打通）
+* 添加 solon-ai Tool.returnDirect 属性，用于直接返回给调用者（mcp 目前无法传导此属性，只能地本地用）
 * 添加 solon-ai-mcp McpChannel 通道（stdio, sse），实现不通道的支持
 * 添加 solon-ai-mcp stdio 通道交换流支持
 * 添加 solon-ai-mcp McpClientToolProvider 断线重连机制
 * 添加 solon-ai-mcp McpClientProperties:fromMcpServers 方法
 * 调整 solon-ai-mcp McpClientToolProvider.Builder:header 更名为 headerSet。保持与 ChatModel:Builder 相同风格
+* 调整 solon-ai ToolCallResultConverter 申明不再扩展自 Converter，避免冲突
 * 修复 solon-ai-mcp McpClientToolProvider 会丢失 queryString 的问题
 * 修复 solon-ai-load-word WordLoader 流使用错误问题
 * 修复 solon-ai ollama 方言，在多工具调用时产生 index 混乱的问题
