@@ -2,7 +2,7 @@
 <dependency>
     <groupId>org.noear</groupId>
     <artifactId>solon-ai-mcp</artifactId>
-    <version>3.2.1-SNAPSHOT</version>
+    <version>3.2.1</version>
 </dependency>
 ```
 
