@@ -15,15 +15,11 @@
  */
 package org.noear.solon.ai.mcp.integration;
 
-import org.noear.solon.Solon;
-import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
-import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.core.AppContext;
 import org.noear.solon.core.Plugin;
-import org.noear.solon.core.util.ConvertUtil;
 
 /**
  * Mcp 插件
@@ -38,37 +34,10 @@ public class McpPlugin implements Plugin {
             //添加代理和提取支持
             bw.context().beanExtractOrProxy(bw, true, true);
 
-            //构建属性
-            McpServerProperties props = new McpServerProperties();
-
-            //支持${配置}
-            String name = Solon.cfg().getByTmpl(anno.name());
-            String version = Solon.cfg().getByTmpl(anno.version());
-            String channel = Solon.cfg().getByTmpl(anno.channel());
-            String sseEndpoint = Solon.cfg().getByTmpl(anno.sseEndpoint());
-            String heartbeatInterval = Solon.cfg().getByTmpl(anno.heartbeatInterval());
-
-
-            if (Utils.isEmpty(name)) {
-                props.setName(clz.getSimpleName());
-            } else {
-                //支持${配置}
-                props.setName(name);
-            }
-
-            props.setVersion(version);
-            props.setChannel(channel);
-            props.setSseEndpoint(sseEndpoint);
-
-            if (Utils.isEmpty(heartbeatInterval)) {
-                props.setHeartbeatInterval(null); //表示不启用
-            } else {
-                //支持${配置}
-                props.setHeartbeatInterval(ConvertUtil.durationOf(heartbeatInterval));
-            }
-
             //构建端点提供者
-            McpServerEndpointProvider serverEndpointProvider = new McpServerEndpointProvider(props);
+            McpServerEndpointProvider serverEndpointProvider = McpServerEndpointProvider.builder()
+                    .from(clz, anno)
+                    .build();
 
             //添加工具
             serverEndpointProvider.addTool(new MethodToolProvider(bw.rawClz(), bw.raw()));
@@ -77,7 +46,7 @@ public class McpPlugin implements Plugin {
             bw.context().lifecycle(serverEndpointProvider);
 
             //按名字注册到容器
-            bw.context().wrapAndPut(props.getName(), serverEndpointProvider);
+            bw.context().wrapAndPut(serverEndpointProvider.getName(), serverEndpointProvider);
         });
     }
 }

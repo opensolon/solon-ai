@@ -29,8 +29,10 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
+import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
+import org.noear.solon.core.util.ConvertUtil;
 import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.lang.Nullable;
@@ -301,7 +303,34 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     public static class Builder {
         private McpServerProperties props = new McpServerProperties();
-        private McpServerTransportProvider transportProvider;
+
+        public Builder from(Class<?> endpointClz, McpServerEndpoint endpointAnno) {
+            //支持${配置}
+            String name = Solon.cfg().getByTmpl(endpointAnno.name());
+            String version = Solon.cfg().getByTmpl(endpointAnno.version());
+            String channel = Solon.cfg().getByTmpl(endpointAnno.channel());
+            String sseEndpoint = Solon.cfg().getByTmpl(endpointAnno.sseEndpoint());
+            String heartbeatInterval = Solon.cfg().getByTmpl(endpointAnno.heartbeatInterval());
+
+
+            if (Utils.isEmpty(name)) {
+                props.setName(endpointClz.getSimpleName());
+            } else {
+                props.setName(name);
+            }
+
+            props.setVersion(version);
+            props.setChannel(channel);
+            props.setSseEndpoint(sseEndpoint);
+
+            if (Utils.isEmpty(heartbeatInterval)) {
+                props.setHeartbeatInterval(null); //表示不启用
+            } else {
+                props.setHeartbeatInterval(ConvertUtil.durationOf(heartbeatInterval));
+            }
+
+            return this;
+        }
 
         /**
          * 名字
