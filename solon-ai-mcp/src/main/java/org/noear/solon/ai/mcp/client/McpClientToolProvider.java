@@ -34,6 +34,7 @@ import org.noear.solon.core.Props;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.core.util.RunUtil;
+import org.noear.solon.net.http.HttpProxy;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
 
@@ -489,6 +490,15 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         public Builder httpTimeout(HttpTimeout httpTimeout) {
             props.setHttpTimeout(httpTimeout);
             return this;
+        }
+
+        public Builder httpProxy(HttpProxy httpProxy) {
+            props.setHttpProxy(httpProxy);
+            return this;
+        }
+
+        public Builder httpProxy(String host, int port) {
+            return httpProxy(HttpProxy.of(host, port));
         }
 
         public Builder requestTimeout(Duration requestTimeout) {
