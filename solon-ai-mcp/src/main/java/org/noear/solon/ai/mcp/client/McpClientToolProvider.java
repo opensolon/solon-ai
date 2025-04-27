@@ -133,8 +133,6 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
             }
 
             //超时
-            HttpTimeout httpTimeout = clientProps.getHttpTimeout();
-
             HttpUtilsBuilder webBuilder = new HttpUtilsBuilder();
             webBuilder.baseUri(baseUri);
 
@@ -146,8 +144,12 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
                 webBuilder.headerSet(k, v);
             });
 
-            if (httpTimeout != null) {
-                webBuilder.timeout(httpTimeout);
+            if (clientProps.getHttpTimeout() != null) {
+                webBuilder.timeout(clientProps.getHttpTimeout());
+            }
+
+            if (clientProps.getHttpProxy() != null) {
+                webBuilder.proxy(clientProps.getHttpProxy().getHost(), clientProps.getHttpProxy().getPort());
             }
 
             clientTransport = WebRxSseClientTransport.builder(webBuilder)
