@@ -286,6 +286,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
         }
 
         /**
+         * 通道
+         */
+        public Builder channel(String channel) {
+            props.setChannel(channel);
+            return this;
+        }
+
+        /**
          * SSE 端点
          */
         public Builder sseEndpoint(String sseEndpoint) {
