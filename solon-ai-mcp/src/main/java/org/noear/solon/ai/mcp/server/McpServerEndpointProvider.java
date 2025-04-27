@@ -33,12 +33,13 @@ import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
 import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.util.RunUtil;
+import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.Properties;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Mcp 服务端点提供者
@@ -53,6 +54,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private final McpServerProperties serverProperties;
     private final String sseEndpoint;
     private final String messageEndpoint;
+    private final Map<String, FunctionTool> toolsMap = new ConcurrentHashMap<>();
 
     public McpServerEndpointProvider(Properties properties) {
         this(Props.from(properties).bindTo(new McpServerProperties()));
@@ -84,6 +86,20 @@ public class McpServerEndpointProvider implements LifecycleBean {
      */
     public String getName() {
         return serverProperties.getName();
+    }
+
+    /**
+     * 版本
+     */
+    public String getVersion() {
+        return serverProperties.getVersion();
+    }
+
+    /**
+     * 通道
+     */
+    public String getChannel() {
+        return serverProperties.getChannel();
     }
 
     /**
@@ -130,6 +146,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     /**
+     * 获取所有工具
+     */
+    public Collection<FunctionTool> getTools() {
+        return toolsMap.values();
+    }
+
+    /**
      * 通知工具变化
      */
     public void notifyToolsListChanged() {
@@ -139,6 +162,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     private McpSyncServer server;
+
+    /**
+     * 获取内部处理服务（postStart 后有效）
+     */
+    public @Nullable McpSyncServer getServer() {
+        return server;
+    }
 
     @Override
     public void start() {
@@ -226,6 +256,10 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private int toolCount = 0;
 
     protected void addToolSpec(FunctionTool functionTool) {
+        //内部登记
+        toolsMap.put(functionTool.name(), functionTool);
+
+        //mcp 登记
         ONode jsonSchema = buildJsonSchema(functionTool);
         String jsonSchemaStr = jsonSchema.toJson();
 
