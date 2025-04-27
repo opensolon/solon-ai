@@ -59,6 +59,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
     private final ReentrantLock LOCKER = new ReentrantLock();
 
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
+    private final AtomicBoolean isStarted = new AtomicBoolean(false);
     private final McpClientProperties clientProps;
     private ScheduledExecutorService heartbeatExecutor;
     private McpSyncClient client;
@@ -173,6 +174,9 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
                 throw new IllegalStateException("The current status has been closed.");
             }
 
+            //设为开始
+            isStarted.set(true);
+
             if (client == null) {
                 client = buildClient();
             }
@@ -213,16 +217,20 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
                 return;
             }
 
+
             if (isClosed.get() == false) {
-                //如果未关闭，再次心跳
-                RunUtil.runAndTry(() -> {
-                    try {
-                        getClient().ping();
-                    } catch (Throwable ex) {
-                        //如果失败，重置（下次会尝试重连）
-                        this.reset();
-                    }
-                });
+                //如果未关闭，尝试心跳
+                if (isStarted.get()) {
+                    //如果已开始，则心跳发送
+                    RunUtil.runAndTry(() -> {
+                        try {
+                            getClient().ping();
+                        } catch (Throwable ex) {
+                            //如果失败，重置（下次会尝试重连）
+                            this.reset();
+                        }
+                    });
+                }
 
                 heartbeatHandleDo();
             }
@@ -239,6 +247,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
             if (isClosed.get() == false) {
                 //如果未关闭
                 isClosed.set(true);
+                isStarted.set(false);
 
                 if (heartbeatExecutor != null) {
                     heartbeatExecutor.shutdownNow();

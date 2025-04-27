@@ -1,3 +1,8 @@
+### 3.2.2
+
+* 添加 solon-ai-mcp McpClientToolProvider isStarted 状态位（把心跳开始，转为第一次调用这后）
+* 添加 solon-ai-mcp McpServerEndpointProvider:Builder:channel 方法
+
 ### 3.2.1
 
 * 添加 solon-ai ChatRequestDefault http 状态异常处理
