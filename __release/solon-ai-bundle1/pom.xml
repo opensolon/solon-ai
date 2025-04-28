@@ -20,23 +20,23 @@
         <module>../../solon-ai-mcp</module>
         <module>../../solon-ai-parent</module>
 
-        <module>../../solon-ai-projects/solon-ai-load-excel</module>
-        <module>../../solon-ai-projects/solon-ai-load-html</module>
-        <module>../../solon-ai-projects/solon-ai-load-markdown</module>
-        <module>../../solon-ai-projects/solon-ai-load-pdf</module>
-        <module>../../solon-ai-projects/solon-ai-load-ppt</module>
-        <module>../../solon-ai-projects/solon-ai-load-word</module>
+        <module>../../solon-ai-rag-loaders/solon-ai-load-excel</module>
+        <module>../../solon-ai-rag-loaders/solon-ai-load-html</module>
+        <module>../../solon-ai-rag-loaders/solon-ai-load-markdown</module>
+        <module>../../solon-ai-rag-loaders/solon-ai-load-pdf</module>
+        <module>../../solon-ai-rag-loaders/solon-ai-load-ppt</module>
+        <module>../../solon-ai-rag-loaders/solon-ai-load-word</module>
 
-        <module>../../solon-ai-projects/solon-ai-repo-chroma</module>
-        <module>../../solon-ai-projects/solon-ai-repo-elasticsearch</module>
-        <module>../../solon-ai-projects/solon-ai-repo-mariadb</module>
-        <module>../../solon-ai-projects/solon-ai-repo-milvus</module>
-        <module>../../solon-ai-projects/solon-ai-repo-mysql</module>
-        <module>../../solon-ai-projects/solon-ai-repo-opensearch</module>
-        <module>../../solon-ai-projects/solon-ai-repo-pgvector</module>
-        <module>../../solon-ai-projects/solon-ai-repo-qdrant</module>
-        <module>../../solon-ai-projects/solon-ai-repo-redis</module>
-        <module>../../solon-ai-projects/solon-ai-repo-tcvectordb</module>
-        <module>../../solon-ai-projects/solon-ai-repo-vectorex</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-chroma</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-elasticsearch</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-mariadb</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-milvus</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-mysql</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-opensearch</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-pgvector</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-qdrant</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-redis</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-tcvectordb</module>
+        <module>../../solon-ai-rag-repositorys/solon-ai-repo-vectorex</module>
     </modules>
 </project>
