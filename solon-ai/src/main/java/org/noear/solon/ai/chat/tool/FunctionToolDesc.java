@@ -32,6 +32,7 @@ public class FunctionToolDesc implements FunctionTool {
     private String description;
     private boolean returnDirect = false;
     private Function<Map<String, Object>, String> doHandle;
+    private String inputSchema;
 
     /**
      * @param name 函数名字
@@ -66,12 +67,10 @@ public class FunctionToolDesc implements FunctionTool {
      *
      * @param name        参数名字
      * @param type        参数类型
-     * @param required    是否必须
      * @param description 参数描述
      */
-    public FunctionToolDesc param(String name, Class<?> type, boolean required, String description) {
-        params.add(new FunctionToolParamDesc(name, type, required, description));
-        return this;
+    public FunctionToolDesc param(String name, Class<?> type, String description) {
+        return param(name, type, true, description);
     }
 
     /**
@@ -79,10 +78,12 @@ public class FunctionToolDesc implements FunctionTool {
      *
      * @param name        参数名字
      * @param type        参数类型
+     * @param required    是否必须
      * @param description 参数描述
      */
-    public FunctionToolDesc param(String name, Class<?> type, String description) {
-        params.add(new FunctionToolParamDesc(name, type, true, description));
+    public FunctionToolDesc param(String name, Class<?> type, boolean required, String description) {
+        params.add(new FunctionToolParamDesc(name, type, required, description));
+        inputSchema = null;
         return this;
     }
 
@@ -185,8 +186,12 @@ public class FunctionToolDesc implements FunctionTool {
      */
     @Override
     public String inputSchema() {
-        return ToolSchemaUtil.buildToolParametersNode(this, params, new ONode())
-                .toJson();
+        if (inputSchema == null) {
+            inputSchema = ToolSchemaUtil.buildToolParametersNode(this, params, new ONode())
+                    .toJson();
+        }
+
+        return inputSchema;
     }
 
     /**

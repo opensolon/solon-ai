@@ -44,6 +44,7 @@ public class MethodFunctionTool implements FunctionTool {
     private final String name;
     private final List<FunctionToolParam> params = new ArrayList<>();
     private final ToolCallResultConverter resultConverter;
+    private final String inputSchema;
 
     public MethodFunctionTool(Object target, Method method) {
         this.target = target;
@@ -80,6 +81,9 @@ public class MethodFunctionTool implements FunctionTool {
             String name = Utils.annoAlias(p1Anno.name(), p1.getName());
             params.add(new FunctionToolParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description()));
         }
+
+        inputSchema = ToolSchemaUtil.buildToolParametersNode(this, params, new ONode())
+                .toJson();
     }
 
     /**
@@ -115,8 +119,7 @@ public class MethodFunctionTool implements FunctionTool {
      */
     @Override
     public String inputSchema() {
-        return ToolSchemaUtil.buildToolParametersNode(this, params, new ONode())
-                .toJson();
+        return inputSchema;
     }
 
     /**
