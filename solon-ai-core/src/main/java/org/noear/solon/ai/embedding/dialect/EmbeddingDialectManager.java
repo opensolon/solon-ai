@@ -29,11 +29,7 @@ import java.util.List;
  */
 public class EmbeddingDialectManager {
     private static List<RankEntity<EmbeddingDialect>> dialects = new ArrayList<>();
-
-    static {
-        register(OllamaEmbeddingDialect.getInstance());
-        register(DashscopeEmbeddingDialect.getInstance());
-    }
+    private static EmbeddingDialect defaultDialect;
 
     /**
      * 选择方言
@@ -45,7 +41,7 @@ public class EmbeddingDialectManager {
             }
         }
 
-        return OpenaiEmbeddingDialect.getInstance();
+        return defaultDialect;
     }
 
     /**
@@ -61,6 +57,10 @@ public class EmbeddingDialectManager {
     public static void register(EmbeddingDialect dialect, int index) {
         dialects.add(new RankEntity<>(dialect, index));
         Collections.sort(dialects);
+
+        if (defaultDialect == null || dialect.isDefault()) {
+            defaultDialect = dialect;
+        }
     }
 
     /**

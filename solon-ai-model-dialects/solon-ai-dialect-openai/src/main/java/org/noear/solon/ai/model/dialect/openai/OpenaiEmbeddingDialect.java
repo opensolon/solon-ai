@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.embedding.dialect;
+package org.noear.solon.ai.model.dialect.openai;
 
 import org.noear.snack.ONode;
 import org.noear.solon.ai.AiUsage;
@@ -21,26 +21,34 @@ import org.noear.solon.ai.embedding.Embedding;
 import org.noear.solon.ai.embedding.EmbeddingConfig;
 import org.noear.solon.ai.embedding.EmbeddingException;
 import org.noear.solon.ai.embedding.EmbeddingResponse;
+import org.noear.solon.ai.embedding.dialect.AbstractEmbeddingDialect;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Ollama 嵌入模型方言
+ * OpenAi 嵌入模型方言
  *
  * @author noear
  * @since 3.1
  */
-public class OllamaEmbeddingDialect extends AbstractEmbeddingDialect {
-    private static OllamaEmbeddingDialect instance = new OllamaEmbeddingDialect();
+public class OpenaiEmbeddingDialect extends AbstractEmbeddingDialect {
+    private static OpenaiEmbeddingDialect instance = new OpenaiEmbeddingDialect();
 
-    public static OllamaEmbeddingDialect getInstance() {
+    public static OpenaiEmbeddingDialect getInstance() {
         return instance;
+    }
+
+    /**
+     * 是否为默认
+     */
+    @Override
+    public boolean isDefault() {
+        return true;
     }
 
     @Override
     public boolean matched(EmbeddingConfig config) {
-        return "ollama".equals(config.getProvider());
+        return false;
     }
 
     @Override
@@ -52,21 +60,15 @@ public class OllamaEmbeddingDialect extends AbstractEmbeddingDialect {
         if (oResp.contains("error")) {
             return new EmbeddingResponse(model, new EmbeddingException(oResp.get("error").getString()), null, null);
         } else {
-            List<Embedding> data = new ArrayList<>();
-            int dataIndex = 0;
-            for (float[] embed : oResp.get("embeddings").toObjectList(float[].class)) {
-                data.add(new Embedding(dataIndex, embed));
-                dataIndex++;
-            }
-
+            List<Embedding> data = oResp.get("data").toObjectList(Embedding.class);
             AiUsage usage = null;
 
-            if (oResp.contains("prompt_eval_count")) {
-                int prompt_eval_count = oResp.get("prompt_eval_count").getInt();
+            if (oResp.contains("usage")) {
+                ONode oUsage = oResp.get("usage");
                 usage = new AiUsage(
-                        prompt_eval_count,
+                        oUsage.get("prompt_tokens").getInt(),
                         0,
-                        prompt_eval_count
+                        oUsage.get("total_tokens").getInt()
                 );
             }
 

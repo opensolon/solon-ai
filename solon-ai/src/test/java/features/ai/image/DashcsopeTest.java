@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.image.ImageModel;
 import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.core.util.IoUtil;
+import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,6 +17,7 @@ import java.util.Base64;
 /**
  * @author noear 2025/1/28 created
  */
+@SolonTest
 public class DashcsopeTest {
     private static final Logger log = LoggerFactory.getLogger(features.ai.chat.DashscopeTest.class);
     private static final String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis";

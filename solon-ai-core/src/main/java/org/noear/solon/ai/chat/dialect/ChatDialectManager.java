@@ -29,11 +29,7 @@ import java.util.List;
  */
 public class ChatDialectManager {
     private static List<RankEntity<ChatDialect>> dialects = new ArrayList<>();
-
-    static {
-        register(OllamaChatDialect.getInstance());
-        register(DashscopeChatDialect.getInstance());
-    }
+    private static ChatDialect defaultDialect;
 
     /**
      * 选择聊天方言
@@ -47,7 +43,7 @@ public class ChatDialectManager {
             }
         }
 
-        return OpenaiChatDialect.instance();
+        return defaultDialect;
     }
 
     /**
@@ -68,6 +64,10 @@ public class ChatDialectManager {
     public static void register(ChatDialect dialect, int index) {
         dialects.add(new RankEntity<>(dialect, index));
         Collections.sort(dialects);
+
+        if (defaultDialect == null || dialect.isDefault()) {
+            defaultDialect = dialect;
+        }
     }
 
     /**

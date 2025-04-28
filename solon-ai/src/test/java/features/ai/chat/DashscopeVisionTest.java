@@ -9,6 +9,7 @@ import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,6 +20,7 @@ import java.time.Duration;
  * @date: 2025年03月18日
  * @author: 献平
  */
+@SolonTest
 public class DashscopeVisionTest {
     private static final Logger log = LoggerFactory.getLogger(GiteeaiVisionTest.class);
     private static final String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";

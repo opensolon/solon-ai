@@ -38,17 +38,14 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <scope>provided</scope>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-flow</artifactId>
-            <scope>provided</scope>
+            <scope>test</scope>
         </dependency>
-
-
-
 
         <dependency>
             <groupId>org.noear</groupId>

@@ -3,6 +3,7 @@ package features.ai.embedding;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.embedding.EmbeddingResponse;
+import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,6 +12,7 @@ import java.io.IOException;
 /**
  * @author noear 2025/3/1 created
  */
+@SolonTest
 public class DashscopeTest {
     private static final Logger log = LoggerFactory.getLogger(features.ai.chat.DashscopeTest.class);
     private static final String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding";

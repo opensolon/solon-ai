@@ -13,19 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.dialect;
+package org.noear.solon.ai.model.dialect.ollama;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.audio.Audio;
+import org.noear.solon.ai.chat.ChatChoice;
+import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatException;
-import org.noear.solon.ai.chat.*;
-import org.noear.solon.ai.chat.tool.ToolCall;
-import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.video.Video;
 import org.noear.solon.core.util.DateUtil;

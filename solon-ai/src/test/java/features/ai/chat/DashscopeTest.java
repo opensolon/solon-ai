@@ -8,6 +8,7 @@ import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.rx.SimpleSubscriber;
+import org.noear.solon.test.SolonTest;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * @author noear 2025/1/28 created
  */
+@SolonTest
 public class DashscopeTest {
     private static final Logger log = LoggerFactory.getLogger(DashscopeTest.class);
     private static final String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation";

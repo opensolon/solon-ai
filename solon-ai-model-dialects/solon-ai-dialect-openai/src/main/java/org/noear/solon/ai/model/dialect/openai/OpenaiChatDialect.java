@@ -13,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.dialect;
+package org.noear.solon.ai.model.dialect.openai;
 
 import org.noear.snack.ONode;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.chat.ChatException;
 import org.noear.solon.ai.chat.*;
+import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 
@@ -34,8 +34,16 @@ import java.util.List;
 public class OpenaiChatDialect extends AbstractChatDialect {
     private static final OpenaiChatDialect instance = new OpenaiChatDialect();
 
-    public static OpenaiChatDialect instance() {
+    public static OpenaiChatDialect getInstance() {
         return instance;
+    }
+
+    /**
+     * 是否为默认
+     */
+    @Override
+    public boolean isDefault() {
+        return true;
     }
 
     /**

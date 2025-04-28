@@ -12,6 +12,7 @@ import org.noear.solon.ai.rag.splitter.SplitterPipeline;
 import org.noear.solon.ai.rag.splitter.RegexTextSplitter;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,6 +22,7 @@ import java.util.List;
 /**
  * @author noear 2025/2/18 created
  */
+@SolonTest
 public class RagRepositoryTest {
     //JQC6M0GTNPGSCEXZOBUGUX0HVHCOLDIMN6XOSSSA
     private static final Logger log = LoggerFactory.getLogger(OpenaiTest.class);

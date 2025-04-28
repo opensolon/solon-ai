@@ -3,6 +3,7 @@ package features.ai.embedding;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.embedding.EmbeddingResponse;
+import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,6 +12,7 @@ import java.io.IOException;
 /**
  * @author noear 2025/1/28 created
  */
+@SolonTest
 public class OllamaTest {
     private static final Logger log = LoggerFactory.getLogger(OllamaTest.class);
     private static final String apiUrl = "http://127.0.0.1:11434/api/embed";

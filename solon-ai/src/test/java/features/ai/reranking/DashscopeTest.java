@@ -14,6 +14,7 @@ import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.ai.reranking.RerankingModel;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.test.SolonTest;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ import java.util.List;
 /**
  * 未调通
  */
+@SolonTest
 public class DashscopeTest {
     public static RerankingModel getRerankingModel() {
         final String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank";

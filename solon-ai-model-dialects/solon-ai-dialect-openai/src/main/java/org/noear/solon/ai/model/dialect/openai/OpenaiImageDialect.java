@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.image.dialect;
+package org.noear.solon.ai.model.dialect.openai;
 
 import org.noear.snack.ONode;
 import org.noear.solon.ai.AiUsage;
@@ -21,6 +21,7 @@ import org.noear.solon.ai.image.Image;
 import org.noear.solon.ai.image.ImageConfig;
 import org.noear.solon.ai.image.ImageException;
 import org.noear.solon.ai.image.ImageResponse;
+import org.noear.solon.ai.image.dialect.AbstractImageDialect;
 
 import java.util.List;
 
@@ -28,16 +29,24 @@ import java.util.List;
  * @author noear
  * @since 3.1
  */
-public class OllamaImageDialect extends AbstractImageDialect {
-    private static OllamaImageDialect instance = new OllamaImageDialect();
+public class OpenaiImageDialect extends AbstractImageDialect {
+    private static OpenaiImageDialect instance = new OpenaiImageDialect();
 
-    public static OllamaImageDialect getInstance() {
+    public static OpenaiImageDialect getInstance() {
         return instance;
+    }
+
+    /**
+     * 是否为默认
+     */
+    @Override
+    public boolean isDefault() {
+        return true;
     }
 
     @Override
     public boolean matched(ImageConfig config) {
-        return "ollama".equals(config.getProvider());
+        return false;
     }
 
     @Override
@@ -52,12 +61,12 @@ public class OllamaImageDialect extends AbstractImageDialect {
             List<Image> data = oResp.get("data").toObjectList(Image.class);
 
             AiUsage usage = null;
-            if (oResp.contains("prompt_eval_count")) {
-                int prompt_eval_count = oResp.get("prompt_eval_count").getInt();
+            if (oResp.contains("usage")) {
+                ONode oUsage = oResp.get("usage");
                 usage = new AiUsage(
-                        prompt_eval_count,
+                        oUsage.get("prompt_tokens").getInt(),
                         0,
-                        prompt_eval_count
+                        oUsage.get("total_tokens").getInt()
                 );
             }
 

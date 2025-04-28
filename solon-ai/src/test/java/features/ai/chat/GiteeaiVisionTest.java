@@ -6,6 +6,7 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.image.Image;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +16,7 @@ import java.time.Duration;
 /**
  * @author noear 2025/1/28 created
  */
+@SolonTest
 public class GiteeaiVisionTest {
     private static final Logger log = LoggerFactory.getLogger(GiteeaiVisionTest.class);
     private static final String apiUrl = "https://ai.gitee.com/v1/chat/completions";

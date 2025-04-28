@@ -29,11 +29,7 @@ import java.util.List;
  */
 public class ImageDialectManager {
     private static List<RankEntity<ImageDialect>> dialects = new ArrayList<>();
-
-    static {
-        register(OllamaImageDialect.getInstance());
-        register(DashscopeImageDialect.getInstance());
-    }
+    private static ImageDialect defaultDialect;
 
     /**
      * 选择方言
@@ -45,7 +41,7 @@ public class ImageDialectManager {
             }
         }
 
-        return OpenaiImageDialect.getInstance();
+        return defaultDialect;
     }
 
     /**
@@ -61,6 +57,10 @@ public class ImageDialectManager {
     public static void register(ImageDialect dialect, int index) {
         dialects.add(new RankEntity<>(dialect, index));
         Collections.sort(dialects);
+
+        if (defaultDialect == null || dialect.isDefault()) {
+            defaultDialect = dialect;
+        }
     }
 
     /**

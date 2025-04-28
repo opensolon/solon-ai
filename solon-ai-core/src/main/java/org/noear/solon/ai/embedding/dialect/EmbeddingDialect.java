@@ -32,6 +32,13 @@ import java.util.List;
 @Preview("3.1")
 public interface EmbeddingDialect extends AiModelDialect {
     /**
+     * 是否为默认
+     */
+    default boolean isDefault() {
+        return false;
+    }
+
+    /**
      * 匹配检测
      *
      * @param config 聊天配置

@@ -13,12 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.embedding.dialect;
+package org.noear.solon.ai.model.dialect.dashscope;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.embedding.*;
+import org.noear.solon.ai.embedding.dialect.AbstractEmbeddingDialect;
 
 import java.util.ArrayList;
 import java.util.List;
