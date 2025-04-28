@@ -184,8 +184,9 @@ public class FunctionToolDesc implements FunctionTool {
      * 输入架构
      */
     @Override
-    public ONode inputSchema() {
-        return ToolSchemaUtil.buildToolParametersNode(this, params, new ONode());
+    public String inputSchema() {
+        return ToolSchemaUtil.buildToolParametersNode(this, params, new ONode())
+                .toJson();
     }
 
     /**

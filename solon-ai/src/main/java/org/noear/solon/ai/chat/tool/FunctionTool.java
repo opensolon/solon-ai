@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.snack.ONode;
-
 import java.util.Map;
 
 /**
@@ -50,8 +48,17 @@ public interface FunctionTool extends Tool {
 
     /**
      * 输入架构
+     *
+     * <pre>{@code
+     * JsonSchema {
+     *     String type;
+     *     Map<String, Object> properties;
+     *     List<String> required;
+     *     Boolean additionalProperties;
+     * }
+     * }</pre>
      */
-    ONode inputSchema();
+    String inputSchema();
 
     /**
      * 处理

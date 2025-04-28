@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.snack.ONode;
-
 import java.util.Map;
 import java.util.function.Function;
 
@@ -29,10 +27,10 @@ import java.util.function.Function;
 public class RefererFunctionTool implements FunctionTool {
     private final String name;
     private final String description;
-    private final ONode inputSchema;
+    private final String inputSchema;
     private final Function<Map<String, Object>, String> handler;
 
-    public RefererFunctionTool(String name, String description, ONode inputSchema, Function<Map<String, Object>, String> handler) {
+    public RefererFunctionTool(String name, String description, String inputSchema, Function<Map<String, Object>, String> handler) {
         this.name = name;
         this.description = description;
         this.inputSchema = inputSchema;
@@ -55,7 +53,7 @@ public class RefererFunctionTool implements FunctionTool {
     }
 
     @Override
-    public ONode inputSchema() {
+    public String inputSchema() {
         return inputSchema;
     }
 

@@ -382,12 +382,12 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         for (McpSchema.Tool tool : result.getTools()) {
             String name = tool.getName();
             String description = tool.getDescription();
-            ONode parametersNode = ONode.load(tool.getInputSchema());
+            String inputSchema = ONode.load(tool.getInputSchema()).toJson();
 
             RefererFunctionTool functionRefer = new RefererFunctionTool(
                     name,
                     description,
-                    parametersNode,
+                    inputSchema,
                     args -> callToolAsText(name, args));
 
             toolList.add(functionRefer);

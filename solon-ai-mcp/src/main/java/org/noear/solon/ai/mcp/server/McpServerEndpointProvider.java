@@ -290,7 +290,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     protected ONode buildJsonSchema(FunctionTool functionTool) {
         ONode jsonSchema = new ONode();
         jsonSchema.set("$schema", "http://json-schema.org/draft-07/schema#");
-        jsonSchema.setAll(functionTool.inputSchema());
+        jsonSchema.setAll(ONode.loadStr(functionTool.inputSchema()));
 
         return jsonSchema;
     }
