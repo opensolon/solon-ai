@@ -22,9 +22,9 @@
         <module>../../solon-ai-parent</module>
 
 
-        <module>../../solon-ai-model-dialects/solon-ai-dialect-dashscope</module>
-        <module>../../solon-ai-model-dialects/solon-ai-dialect-ollama</module>
-        <module>../../solon-ai-model-dialects/solon-ai-dialect-openai</module>
+        <module>../../solon-ai-llm-dialects/solon-ai-dialect-dashscope</module>
+        <module>../../solon-ai-llm-dialects/solon-ai-dialect-ollama</module>
+        <module>../../solon-ai-llm-dialects/solon-ai-dialect-openai</module>
 
         <module>../../solon-ai-rag-loaders/solon-ai-load-excel</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-html</module>
