@@ -34,12 +34,13 @@ import org.noear.solon.core.Props;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.core.util.RunUtil;
-import org.noear.solon.net.http.HttpProxy;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
@@ -149,7 +150,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
             }
 
             if (clientProps.getHttpProxy() != null) {
-                webBuilder.proxy(clientProps.getHttpProxy().getHost(), clientProps.getHttpProxy().getPort());
+                webBuilder.proxy(clientProps.getHttpProxy());
             }
 
             clientTransport = WebRxSseClientTransport.builder(webBuilder)
@@ -494,13 +495,13 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
             return this;
         }
 
-        public Builder httpProxy(HttpProxy httpProxy) {
+        public Builder httpProxy(Proxy httpProxy) {
             props.setHttpProxy(httpProxy);
             return this;
         }
 
         public Builder httpProxy(String host, int port) {
-            return httpProxy(HttpProxy.of(host, port));
+            return httpProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port)));
         }
 
         public Builder requestTimeout(Duration requestTimeout) {

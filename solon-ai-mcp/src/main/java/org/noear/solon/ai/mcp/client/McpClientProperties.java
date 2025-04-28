@@ -16,9 +16,9 @@
 package org.noear.solon.ai.mcp.client;
 
 import org.noear.solon.ai.mcp.McpChannel;
-import org.noear.solon.net.http.HttpProxy;
 import org.noear.solon.net.http.HttpTimeout;
 
+import java.net.Proxy;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -68,7 +68,7 @@ public class McpClientProperties {
     /**
      * http 代理
      */
-    private HttpProxy httpProxy;
+    private Proxy httpProxy;
 
 
     /**
@@ -162,11 +162,11 @@ public class McpClientProperties {
         this.httpTimeout = httpTimeout;
     }
 
-    public HttpProxy getHttpProxy() {
+    public Proxy getHttpProxy() {
         return httpProxy;
     }
 
-    public void setHttpProxy(HttpProxy httpProxy) {
+    public void setHttpProxy(Proxy httpProxy) {
         this.httpProxy = httpProxy;
     }
 
