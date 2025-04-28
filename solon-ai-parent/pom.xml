@@ -38,7 +38,31 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>solon-ai-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-mcp</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-dialect-dashscope</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-dialect-ollama</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-dialect-openai</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

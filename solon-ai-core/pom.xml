@@ -11,28 +11,60 @@
         <relativePath>../solon-ai-parent/pom.xml</relativePath>
     </parent>
     
-    <artifactId>solon-ai</artifactId>
+    <artifactId>solon-ai-core</artifactId>
     <packaging>jar</packaging>
 
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-core</artifactId>
+            <artifactId>solon</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-dialect-dashscope</artifactId>
+            <artifactId>solon-rx</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-dialect-ollama</artifactId>
+            <artifactId>solon-expression</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-dialect-openai</artifactId>
+            <artifactId>solon-web-sse</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-web-rx</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-net-httputils</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.knuddels</groupId>
+            <artifactId>jtokkit</artifactId>
+            <version>${jtokkit.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>snack3</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-configuration-processor</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
