@@ -341,4 +341,19 @@ public class OllamaTest {
         assert respHolder.get().getAggregationMessage().getContent().equals("晴，24度\n" +
                 "555毫米");
     }
+
+    @Test
+    public void case6_user_return() throws IOException {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new ReturnTools())
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("查询用户 112 的信息？")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+        assert "{\"userId\":112,\"name\":\"a1\",\"age\":12}".equals(resp.getMessage().getContent());
+    }
 }
