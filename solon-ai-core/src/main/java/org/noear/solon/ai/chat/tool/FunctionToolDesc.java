@@ -187,7 +187,7 @@ public class FunctionToolDesc implements FunctionTool {
     @Override
     public String inputSchema() {
         if (inputSchema == null) {
-            inputSchema = ToolSchemaUtil.buildToolParametersNode(this, params, new ONode())
+            inputSchema = ToolSchemaUtil.buildToolParametersNode(params, new ONode())
                     .toJson();
         }
 

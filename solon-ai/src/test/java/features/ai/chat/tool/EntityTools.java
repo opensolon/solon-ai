@@ -5,8 +5,8 @@ import org.noear.solon.ai.chat.annotation.ToolParam;
 
 public class EntityTools {
     @ToolMapping(description = "提交用户数据", returnDirect = true)
-    public String get_weather(@ToolParam(description = "用户数据") User user) {
-        System.out.println(user);
+    public String post_user(@ToolParam(description = "用户数据") User user) {
+        System.out.println("--------: " + user);
         return "成功";
     }
 

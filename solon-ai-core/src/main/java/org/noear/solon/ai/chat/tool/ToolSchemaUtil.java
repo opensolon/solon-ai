@@ -16,7 +16,17 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.annotation.ToolParam;
+import org.noear.solon.ai.chat.annotation.ToolParamAnno;
+import org.noear.solon.annotation.Param;
+import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.wrap.ClassWrap;
+import org.noear.solon.core.wrap.FieldWrap;
 
+import java.lang.reflect.AnnotatedElement;
+import java.lang.reflect.Field;
+import java.lang.reflect.Parameter;
 import java.net.URI;
 import java.util.Date;
 import java.util.List;
@@ -37,41 +47,41 @@ public class ToolSchemaUtil {
     public static final String TYPE_BOOLEAN = "boolean";
     public static final String TYPE_NULL = "null";
 
-    /**
-     * 解析工具参数节点
-     *
-     * @param functionDecl   函数申明
-     * @param parametersNode 函数参数节点
-     */
-    public static FunctionToolDesc parseToolParametersNode(FunctionToolDesc functionDecl, ONode parametersNode) {
-        List<String> requiredList = parametersNode.get("required").toObjectList(String.class);
-        ONode propertiesNode = parametersNode.get("properties");
-
-        for (Map.Entry<String, ONode> entry : propertiesNode.obj().entrySet()) {
-            ONode paramNode = entry.getValue();
-            String name = entry.getKey();
-            Class<?> type = jsonTypeAsClass(paramNode);
-            String desc = paramNode.get("description").getString();
-
-            functionDecl.param(name, type, requiredList.contains(name), desc);
+    public static FunctionToolParam toolParamOf(AnnotatedElement ae) {
+        ToolParam p1Anno = ae.getAnnotation(ToolParam.class);
+        if (p1Anno == null) {
+            p1Anno = ToolParamAnno.fromMapping(ae.getAnnotation(Param.class));
         }
 
-        return functionDecl;
+        //断言
+        Assert.notNull(p1Anno, "@ToolParam(or @Param) annotation is missing");
+        Assert.notEmpty(p1Anno.description(), "ToolParam description cannot be empty");
+
+        if (ae instanceof Parameter) {
+            Parameter p1 = (Parameter) ae;
+            String name = Utils.annoAlias(p1Anno.name(), p1.getName());
+            return new FunctionToolParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description());
+        } else {
+            Field p1 = (Field) ae;
+            String name = Utils.annoAlias(p1Anno.name(), p1.getName());
+            return new FunctionToolParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description());
+        }
     }
 
     /**
      * 构建工具参数节点
      *
-     * @param func           函数
-     * @param parametersNode 函数参数节点（待构建）
+     * @param toolParams       工具参数
+     * @param schemaParentNode 架构父节点（待构建）
      */
-    public static ONode buildToolParametersNode(FunctionTool func, List<FunctionToolParam> funcParams, ONode parametersNode) {
-        parametersNode.set("type", TYPE_OBJECT);
-        ONode requiredNode = new ONode(parametersNode.options()).asArray();
-        parametersNode.getOrNew("properties").build(propertiesNode -> {
-            for (FunctionToolParam fp : funcParams) {
+    public static ONode buildToolParametersNode(List<FunctionToolParam> toolParams, ONode schemaParentNode) {
+        ONode requiredNode = new ONode(schemaParentNode.options()).asArray();
+
+        schemaParentNode.set("type", TYPE_OBJECT);
+        schemaParentNode.getOrNew("properties").build(propertiesNode -> {
+            for (FunctionToolParam fp : toolParams) {
                 propertiesNode.getOrNew(fp.name()).build(paramNode -> {
-                    buildToolParamNode(fp, paramNode);
+                    buildToolParamNode(fp.type(), fp.description(), paramNode);
                 });
 
                 if (fp.required()) {
@@ -79,113 +89,72 @@ public class ToolSchemaUtil {
                 }
             }
         });
-        parametersNode.set("required", requiredNode);
 
-        return parametersNode;
+        schemaParentNode.set("required", requiredNode);
+
+        return schemaParentNode;
     }
 
     /**
      * 构建工具参数节点
      *
-     * @param funcParam 函数参数
-     * @param paramNode 参数节点
+     * @param type        类型
+     * @param description 描述
+     * @param schemaNode  架构节点
      */
-    public static void buildToolParamNode(FunctionToolParam funcParam, ONode paramNode) {
-        String typeStr = funcParam.type().getSimpleName().toLowerCase();
+    public static void buildToolParamNode(Class<?> type, String description, ONode schemaNode) {
+        String typeStr = type.getSimpleName().toLowerCase();
 
-        if (funcParam.type().isArray()) {
+        if (type.isArray()) {
             //数组
-            paramNode.set("type", TYPE_ARRAY);
+            schemaNode.set("type", TYPE_ARRAY);
 
             String typeItemStr = typeStr.substring(0, typeStr.length() - 2); //int[]
-            paramNode.getOrNew("items").set("type", jsonTypeCorrection(typeItemStr));
-        } else if (funcParam.type().isEnum()) {
+            schemaNode.getOrNew("items").set("type", jsonTypeCorrection(typeItemStr));
+        } else if (type.isEnum()) {
             //枚举
-            paramNode.set("type", TYPE_STRING);
+            schemaNode.set("type", TYPE_STRING);
 
-            paramNode.getOrNew("enum").build(n7 -> {
-                for (Object e : funcParam.type().getEnumConstants()) {
+            schemaNode.getOrNew("enum").build(n7 -> {
+                for (Object e : type.getEnumConstants()) {
                     n7.add(e.toString());
                 }
             });
-        } else if (Date.class.isAssignableFrom(funcParam.type())) {
+        } else if (Date.class.isAssignableFrom(type)) {
             //日期
-            paramNode.set("type", TYPE_STRING);
-            paramNode.set("format", "date");
-        } else if (URI.class.isAssignableFrom(funcParam.type())) {
+            schemaNode.set("type", TYPE_STRING);
+            schemaNode.set("format", "date");
+        } else if (URI.class.isAssignableFrom(type)) {
             //URI
-            paramNode.set("type", TYPE_STRING);
-            paramNode.set("format", "uri");
+            schemaNode.set("type", TYPE_STRING);
+            schemaNode.set("format", "uri");
         } else {
             //其它
-            paramNode.set("type", jsonTypeCorrection(typeStr));
+            typeStr = jsonTypeOfJavaType(type);
+            schemaNode.set("type", typeStr);
+
+            if (TYPE_OBJECT.equals(typeStr)) {
+                ONode requiredNode = new ONode(schemaNode.options()).asArray();
+                schemaNode.getOrNew("properties").build(propertiesNode -> {
+                    for (FieldWrap fw : ClassWrap.get(type).getAllFieldWraps()) {
+                        FunctionToolParam fp = toolParamOf(fw.getField());
+
+                        propertiesNode.getOrNew(fp.name()).build(paramNode -> {
+                            buildToolParamNode(fp.type(), fp.description(), paramNode);
+                        });
+
+                        if (fp.required()) {
+                            requiredNode.add(fp.name());
+                        }
+                    }
+                });
+
+                schemaNode.set("required", requiredNode);
+            }
         }
 
-        paramNode.set("description", funcParam.description());
-    }
-
-    /**
-     * json 类型转为 java 类型
-     */
-    public static Class<?> jsonTypeAsClass(ONode paramNode) {
-        String typeStr = paramNode.get("type").getString();
-
-        switch (typeStr) {
-            case "short":
-            case "integer":
-            case "int":
-            case "long":
-                return Long.class;
-
-            case "double":
-            case "float":
-            case "number":
-                return Double.class;
-
-            case "bool":
-            case "boolean":
-                return Boolean.class;
-
-            case "date":
-                return Date.class;
-
-            case "string": {
-                ONode formatNode = paramNode.getOrNull("format");
-                ONode enumNode = paramNode.getOrNull("enum");
-
-                if (formatNode != null) {
-                    if ("date".equals(formatNode.getString())) {
-                        return Date.class;
-                    } else if ("uri".equals(formatNode.getString())) {
-                        return URI.class;
-                    }
-                } else if (enumNode != null && enumNode.isArray()) {
-                    //不好反转
-                    return String.class;
-                }
-
-                return String.class;
-            }
-
-            case "array": {
-                String typeItemStr = jsonTypeCorrection(paramNode.get("items").getString());
-                switch (typeItemStr) {
-                    case TYPE_INTEGER:
-                        return Long[].class;
-                    case TYPE_NUMBER:
-                        return Double[].class;
-                    case TYPE_BOOLEAN:
-                        return Boolean[].class;
-                    case TYPE_STRING:
-                        return String[].class;
-
-                    default:
-                        return Object[].class;
-                }
-            }
-
-            default:
-                return Object.class;
+        if (description != null) {
+            schemaNode.set("description", description);
         }
     }
 
@@ -216,5 +185,21 @@ public class ToolSchemaUtil {
             default:
                 return typeStr;
         }
+    }
+
+    /**
+     * json 类型校正
+     */
+    public static String jsonTypeOfJavaType(Class<?> type) {
+        if (type.equals(Short.class) || type.equals(short.class) || type.equals(Integer.class) || type.equals(int.class) || type.equals(Long.class) || type.equals(long.class)) {
+            return TYPE_INTEGER;
+        } else if (type.equals(Double.class) || type.equals(double.class) || type.equals(Float.class) || type.equals(float.class) || type.equals(Number.class)) {
+            return TYPE_NUMBER;
+        } else if (type.equals(Boolean.class) || type.equals(boolean.class)) {
+            return TYPE_BOOLEAN;
+        } else if (type.equals(String.class) || type.equals(Date.class)) {
+            return TYPE_STRING;
+        }
+        return TYPE_OBJECT;
     }
 }

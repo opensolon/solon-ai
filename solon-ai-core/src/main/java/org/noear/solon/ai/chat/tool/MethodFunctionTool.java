@@ -20,10 +20,7 @@ import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.annotation.ToolMapping;
 import org.noear.solon.ai.chat.annotation.ToolMappingAnno;
-import org.noear.solon.ai.chat.annotation.ToolParam;
-import org.noear.solon.ai.chat.annotation.ToolParamAnno;
 import org.noear.solon.annotation.Mapping;
-import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 
 import java.lang.reflect.Method;
@@ -69,20 +66,11 @@ public class MethodFunctionTool implements FunctionTool {
         }
 
         for (Parameter p1 : method.getParameters()) {
-            ToolParam p1Anno = p1.getAnnotation(ToolParam.class);
-            if (p1Anno == null) {
-                p1Anno = ToolParamAnno.fromMapping(p1.getAnnotation(Param.class));
-            }
-
-            //断言
-            Assert.notNull(p1Anno, "@ToolParam(or @Param) annotation is missing");
-            Assert.notEmpty(p1Anno.description(), "ToolParam description cannot be empty");
-
-            String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-            params.add(new FunctionToolParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description()));
+            FunctionToolParam toolParam = ToolSchemaUtil.toolParamOf(p1);
+            params.add(toolParam);
         }
 
-        inputSchema = ToolSchemaUtil.buildToolParametersNode(this, params, new ONode())
+        inputSchema = ToolSchemaUtil.buildToolParametersNode(params, new ONode())
                 .toJson();
     }
 

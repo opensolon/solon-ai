@@ -367,7 +367,7 @@ public class OllamaTest {
                 .build();
 
         ChatResponse resp = chatModel
-                .prompt("提交用户(112, 阿飞)")
+                .prompt("提交用户数据，用户id=112, 用户名字=阿飞)")
                 .call();
 
         //打印消息
