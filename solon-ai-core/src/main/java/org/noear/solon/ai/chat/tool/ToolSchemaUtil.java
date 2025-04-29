@@ -27,10 +27,11 @@ import org.noear.solon.core.wrap.FieldWrap;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Field;
 import java.lang.reflect.Parameter;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.net.URI;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Tool 架构工具
@@ -103,14 +104,13 @@ public class ToolSchemaUtil {
      * @param schemaNode  架构节点
      */
     public static void buildToolParamNode(Class<?> type, String description, ONode schemaNode) {
-        String typeStr = type.getSimpleName().toLowerCase();
-
         if (type.isArray()) {
             //数组
             schemaNode.set("type", TYPE_ARRAY);
 
-            String typeItemStr = typeStr.substring(0, typeStr.length() - 2); //int[]
-            schemaNode.getOrNew("items").set("type", jsonTypeCorrection(typeItemStr));
+            Class<?> itemType = type.getComponentType();
+            ONode typeItemSchemaNode = schemaNode.getOrNew("items");
+            buildToolParamNode(itemType, null, typeItemSchemaNode);
         } else if (type.isEnum()) {
             //枚举
             schemaNode.set("type", TYPE_STRING);
@@ -130,7 +130,7 @@ public class ToolSchemaUtil {
             schemaNode.set("format", "uri");
         } else {
             //其它
-            typeStr = jsonTypeOfJavaType(type);
+            String typeStr = jsonTypeOfJavaType(type);
             schemaNode.set("type", typeStr);
 
             if (TYPE_OBJECT.equals(typeStr)) {
@@ -159,47 +159,19 @@ public class ToolSchemaUtil {
     }
 
     /**
-     * json 类型校正
-     */
-    public static String jsonTypeCorrection(String typeStr) {
-        switch (typeStr) {
-            case "short":
-            case "integer":
-            case "int":
-            case "long":
-                return TYPE_INTEGER;
-
-            case "double":
-            case "float":
-            case "number":
-                return TYPE_NUMBER;
-
-            case "bool":
-            case "boolean":
-                return TYPE_BOOLEAN;
-
-            case "string":
-            case "date":
-                return TYPE_STRING;
-
-            default:
-                return typeStr;
-        }
-    }
-
-    /**
-     * json 类型校正
+     * json 类型转换
      */
     public static String jsonTypeOfJavaType(Class<?> type) {
-        if (type.equals(Short.class) || type.equals(short.class) || type.equals(Integer.class) || type.equals(int.class) || type.equals(Long.class) || type.equals(long.class)) {
+        if (type.equals(String.class) || type.equals(Date.class) || type.equals(BigDecimal.class) || type.equals(BigInteger.class)) {
+            return TYPE_STRING;
+        } else if (type.equals(Short.class) || type.equals(short.class) || type.equals(Integer.class) || type.equals(int.class) || type.equals(Long.class) || type.equals(long.class)) {
             return TYPE_INTEGER;
         } else if (type.equals(Double.class) || type.equals(double.class) || type.equals(Float.class) || type.equals(float.class) || type.equals(Number.class)) {
             return TYPE_NUMBER;
         } else if (type.equals(Boolean.class) || type.equals(boolean.class)) {
             return TYPE_BOOLEAN;
-        } else if (type.equals(String.class) || type.equals(Date.class)) {
-            return TYPE_STRING;
+        } else {
+            return TYPE_OBJECT;
         }
-        return TYPE_OBJECT;
     }
 }
