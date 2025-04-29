@@ -1,4 +1,4 @@
-package features.ai.chat;
+package features.ai.chat.tool;
 
 import org.noear.solon.ai.chat.annotation.ToolMapping;
 import org.noear.solon.ai.chat.annotation.ToolParam;

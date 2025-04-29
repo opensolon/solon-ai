@@ -1,5 +1,8 @@
 package features.ai.chat;
 
+import features.ai.chat.tool.EntityTools;
+import features.ai.chat.tool.ReturnTools;
+import features.ai.chat.tool.Tools;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -355,5 +358,20 @@ public class OllamaTest {
         //打印消息
         log.info("{}", resp.getMessage());
         assert "{\"userId\":112,\"name\":\"a1\",\"age\":12}".equals(resp.getMessage().getContent());
+    }
+
+    @Test
+    public void case7_entity() throws IOException {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new EntityTools())
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("提交用户(112, 阿飞)")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+        assert "成功".equals(resp.getMessage().getContent());
     }
 }

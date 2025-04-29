@@ -1,5 +1,7 @@
 package features.ai.chat;
 
+import features.ai.chat.tool.ReturnTools;
+import features.ai.chat.tool.Tools;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
