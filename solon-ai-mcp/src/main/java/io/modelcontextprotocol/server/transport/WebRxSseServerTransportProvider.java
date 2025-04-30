@@ -92,7 +92,6 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * Map of active client sessions, keyed by session ID.
 	 */
 	private final ConcurrentHashMap<String, McpServerSession> sessions = new ConcurrentHashMap<>();
-	private final ConcurrentHashMap<String, WebRxMcpSessionTransport> sessionTransports = new ConcurrentHashMap<>();
 	/**
 	 * Flag indicating if the transport is shutting down.
 	 */
@@ -117,9 +116,9 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		this.sseEndpoint = sseEndpoint;
 	}
 
-	public void sendHeartbeat(){
-		for (WebRxMcpSessionTransport transport : sessionTransports.values()) {
-			transport.sendHeartbeat();
+	public void sendHeartbeat() {
+		for (McpServerSession session : sessions.values()) {
+			((WebRxMcpSessionTransport) session.getTransport()).sendHeartbeat();
 		}
 	}
 
@@ -230,14 +229,13 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		}
 
 		Flux<SseEvent> publisher = Flux.create(sink -> {
-			WebRxMcpSessionTransport sessionTransport = new WebRxMcpSessionTransport(sink);
+			WebRxMcpSessionTransport sessionTransport = new WebRxMcpSessionTransport(ctx, sink);
 
 			McpServerSession session = sessionFactory.create(sessionTransport);
 			String sessionId = session.getId();
 
 			logger.debug("Created new SSE connection for session: {}", sessionId);
 			sessions.put(sessionId, session);
-			sessionTransports.put(sessionId, sessionTransport);
 
 			// Send initial endpoint event
 			logger.debug("Sending initial endpoint event to session: {}", sessionId);
@@ -247,7 +245,6 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 			sink.onCancel(() -> {
 				logger.debug("Session {} cancelled", sessionId);
 				sessions.remove(sessionId);
-				sessionTransports.remove(sessionId);
 			});
 		});
 
@@ -277,13 +274,16 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 			return;
 		}
 
-		if (Utils.isEmpty(ctx.param("sessionId"))) {
+		String sessionId = ctx.param("sessionId");
+
+		if (Utils.isEmpty(sessionId)) {
 			ctx.status(404);
 			ctx.render(new McpError("Session ID missing in message endpoint"));
 			return;
 		}
 
-		McpServerSession session = sessions.get(ctx.param("sessionId"));
+
+		McpServerSession session = sessions.get(sessionId);
 
 		String body = ctx.body();
 		try {
@@ -301,7 +301,6 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 						return Mono.just(new Entity().status(500).body(new McpError(error.getMessage())));
 					});
 
-			ctx.attrSet("message", message);
 			ctx.returnValue(mono);
 		} catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
@@ -310,12 +309,17 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		}
 	}
 
-	private class WebRxMcpSessionTransport implements McpServerTransport {
-
+	public class WebRxMcpSessionTransport implements McpServerTransport {
+		private final Context context;
 		private final FluxSink<SseEvent> sink;
 
-		public WebRxMcpSessionTransport(FluxSink<SseEvent> sink) {
+		public WebRxMcpSessionTransport(Context context,FluxSink<SseEvent> sink) {
+			this.context = context;
 			this.sink = sink;
+		}
+
+		public Context getContext() {
+			return context;
 		}
 
 		public void sendHeartbeat() {

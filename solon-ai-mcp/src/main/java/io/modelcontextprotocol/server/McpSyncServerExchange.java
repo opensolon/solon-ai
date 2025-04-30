@@ -1,6 +1,7 @@
 package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpServerSession;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The
@@ -19,6 +20,10 @@ public class McpSyncServerExchange {
 	 */
 	public McpSyncServerExchange(McpAsyncServerExchange exchange) {
 		this.exchange = exchange;
+	}
+
+	public McpServerSession getSession() {
+		return exchange.getSession();
 	}
 
 	/**

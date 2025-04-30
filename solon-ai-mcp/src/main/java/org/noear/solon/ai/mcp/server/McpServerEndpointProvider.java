@@ -325,10 +325,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 new McpSchema.Tool(functionTool.name(), functionTool.description(), jsonSchemaStr),
                 (exchange, request) -> {
                     try {
+                        McpServerContext.currentSet(new McpServerContext(exchange));
+
                         String rst = functionTool.handle(request);
                         return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
                     } catch (Throwable ex) {
                         throw new McpException(ex.getMessage(), ex);
+                    } finally {
+                        McpServerContext.currentRemove();
                     }
                 });
 
@@ -349,6 +353,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 new McpSchema.Prompt(functionPrompt.name(), functionPrompt.description(), promptArguments),
                 (exchange, request) -> {
                     try {
+                        McpServerContext.currentSet(new McpServerContext(exchange));
 
                         Collection<ChatMessage> prompts = functionPrompt.handle(request.getArguments());
                         List<McpSchema.PromptMessage> promptMessages = new ArrayList<>();
@@ -363,6 +368,8 @@ public class McpServerEndpointProvider implements LifecycleBean {
                         return new McpSchema.GetPromptResult(functionPrompt.description(), promptMessages);
                     } catch (Throwable ex) {
                         throw new McpException(ex.getMessage(), ex);
+                    } finally {
+                        McpServerContext.currentRemove();
                     }
                 });
 
@@ -378,10 +385,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 new McpSchema.Resource(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
                 (exchange, request) -> {
                     try {
+                        McpServerContext.currentSet(new McpServerContext(exchange));
+
                         String text = functionResource.handle(request.getUri());
                         return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), text, functionResource.mimeType())));
                     } catch (Throwable ex) {
                         throw new McpException(ex.getMessage(), ex);
+                    } finally {
+                        McpServerContext.currentRemove();
                     }
                 });
 

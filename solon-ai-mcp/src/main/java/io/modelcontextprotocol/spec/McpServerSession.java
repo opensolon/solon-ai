@@ -81,6 +81,10 @@ public class McpServerSession implements McpSession {
 		this.notificationHandlers = notificationHandlers;
 	}
 
+	public McpServerTransport getTransport() {
+		return transport;
+	}
+
 	/**
 	 * Retrieve the session id.
 	 * @return session id
