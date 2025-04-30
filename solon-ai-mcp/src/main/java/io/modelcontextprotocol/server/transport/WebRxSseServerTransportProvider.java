@@ -301,6 +301,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 						return Mono.just(new Entity().status(500).body(new McpError(error.getMessage())));
 					});
 
+			ctx.attrSet("message", message);
 			ctx.returnValue(mono);
 		} catch (IllegalArgumentException | IOException e) {
 			logger.error("Failed to deserialize message: {}", e.getMessage());
