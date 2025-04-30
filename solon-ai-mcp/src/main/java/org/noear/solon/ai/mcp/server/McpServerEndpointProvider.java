@@ -31,8 +31,9 @@ import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
-import org.noear.solon.ai.mcp.tool.FunctionPrompt;
-import org.noear.solon.ai.mcp.tool.FunctionResource;
+import org.noear.solon.ai.mcp.util.FunctionPrompt;
+import org.noear.solon.ai.mcp.util.FunctionResource;
+import org.noear.solon.ai.mcp.util.ResourceProvider;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
 import org.noear.solon.core.util.ConvertUtil;
@@ -118,16 +119,16 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记资源
      */
     public void addResource(FunctionResource functionResource) {
-        McpServerFeatures.SyncResourceSpecification toolSpec = new McpServerFeatures.SyncResourceSpecification(
-                new McpSchema.Resource(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
-                (exchange, request) -> {
-                    try {
-                        String text = functionResource.handle();
-                        return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), text, functionResource.mimeType())));
-                    } catch (Throwable ex) {
-                        throw new McpException(ex.getMessage(), ex);
-                    }
-                });
+        addResourceSpec(functionResource);
+    }
+
+    /**
+     * 登记资源
+     */
+    public void addResource(ResourceProvider resourceProvider) {
+        for (FunctionResource functionResource : resourceProvider.getResources()) {
+            addResourceSpec(functionResource);
+        }
     }
 
     /**
@@ -230,7 +231,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                     serverProperties.getName(),
                     serverProperties.getVersion(),
                     McpChannel.STDIO,
-                    toolCount);
+                    toolsMap.size());
         } else {
             log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}",
                     serverProperties.getName(),
@@ -238,7 +239,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                     McpChannel.SSE,
                     this.sseEndpoint,
                     this.messageEndpoint,
-                    toolCount);
+                    toolsMap.size());
         }
 
         //如果是 web 类的
@@ -299,8 +300,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
         }
     }
 
-    private int toolCount = 0;
-
     protected void addToolSpec(FunctionTool functionTool) {
         //内部登记
         toolsMap.put(functionTool.name(), functionTool);
@@ -320,11 +319,29 @@ public class McpServerEndpointProvider implements LifecycleBean {
                     }
                 });
 
-        toolCount++;
         if (server != null) {
             server.addTool(toolSpec);
         } else {
             mcpServerSpec.tools(toolSpec);
+        }
+    }
+
+    protected void addResourceSpec(FunctionResource functionResource) {
+        McpServerFeatures.SyncResourceSpecification resSpec = new McpServerFeatures.SyncResourceSpecification(
+                new McpSchema.Resource(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
+                (exchange, request) -> {
+                    try {
+                        String text = functionResource.handle(request.getUri());
+                        return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), text, functionResource.mimeType())));
+                    } catch (Throwable ex) {
+                        throw new McpException(ex.getMessage(), ex);
+                    }
+                });
+
+        if (server != null) {
+            server.addResource(resSpec);
+        } else {
+            mcpServerSpec.resources(resSpec);
         }
     }
 

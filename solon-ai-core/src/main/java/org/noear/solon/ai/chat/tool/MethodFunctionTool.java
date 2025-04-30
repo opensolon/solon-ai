@@ -22,6 +22,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.annotation.ToolMappingAnno;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Mapping;
+import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.util.Assert;
 
 import java.lang.reflect.Method;
@@ -35,7 +36,7 @@ import java.util.*;
  * @since 3.1
  */
 public class MethodFunctionTool implements FunctionTool {
-    private final Object target;
+    private final BeanWrap beanWrap;
     private final Method method;
     private final String description;
     private boolean returnDirect;
@@ -44,14 +45,17 @@ public class MethodFunctionTool implements FunctionTool {
     private final ToolCallResultConverter resultConverter;
     private final String inputSchema;
 
-    public MethodFunctionTool(Object target, Method method) {
-        this.target = target;
+    public MethodFunctionTool(BeanWrap beanWrap, Method method) {
+        this.beanWrap = beanWrap;
         this.method = method;
 
         ToolMapping m1Anno = method.getAnnotation(ToolMapping.class);
         if (m1Anno == null) {
             m1Anno = ToolMappingAnno.fromMapping(method.getAnnotation(Mapping.class));
         }
+
+        //断言
+        Assert.notNull(m1Anno, "@ToolMapping annotation is missing");
 
         this.name = Utils.annoAlias(m1Anno.name(), method.getName());
         this.description = m1Anno.description();
@@ -133,7 +137,7 @@ public class MethodFunctionTool implements FunctionTool {
             vals[i] = args.get(params.get(i).name());
         }
 
-        Object rst = method.invoke(target, vals);
+        Object rst = method.invoke(beanWrap.raw(), vals);
 
         if (resultConverter == null) {
             return String.valueOf(rst);

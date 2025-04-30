@@ -18,6 +18,7 @@ package org.noear.solon.ai.mcp.integration;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
+import org.noear.solon.ai.mcp.util.MethodResourceProvider;
 import org.noear.solon.core.AppContext;
 import org.noear.solon.core.Plugin;
 
@@ -40,7 +41,9 @@ public class McpPlugin implements Plugin {
                     .build();
 
             //添加工具
-            serverEndpointProvider.addTool(new MethodToolProvider(bw.rawClz(), bw.raw()));
+            serverEndpointProvider.addTool(new MethodToolProvider(bw));
+            //添加资源
+            serverEndpointProvider.addResource(new MethodResourceProvider(bw));
 
             //加入容器生命周期
             bw.context().lifecycle(serverEndpointProvider);

@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.tool;
+package org.noear.solon.ai.mcp.util;
 
-import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.annotation.Mapping;
+import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.core.BeanWrap;
 
 import java.lang.reflect.Method;
@@ -25,41 +24,41 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * 方法构建的工具提供者
+ * 方法构建的资源提供者
  *
  * @author noear
- * @since 3.1
+ * @since 3.2
  */
-public class MethodToolProvider implements ToolProvider {
-    private final List<FunctionTool> tools = new ArrayList<>();
+public class MethodResourceProvider implements ResourceProvider {
+    private final List<FunctionResource> resources = new ArrayList<>();
 
-    public MethodToolProvider(Object toolObj) {
+    public MethodResourceProvider(Object toolObj) {
         this(toolObj.getClass(), toolObj);
     }
 
-    public MethodToolProvider(Class<?> toolClz, Object toolObj) {
+    public MethodResourceProvider(Class<?> toolClz, Object toolObj) {
         this(new BeanWrap(null, toolClz, toolObj));
     }
 
-    public MethodToolProvider(BeanWrap beanWrap) {
+    public MethodResourceProvider(BeanWrap beanWrap) {
         //添加带注释的工具
         for (Method method : beanWrap.rawClz().getMethods()) {
-            if (method.isAnnotationPresent(ToolMapping.class) || method.isAnnotationPresent(Mapping.class)) {
-                MethodFunctionTool func = new MethodFunctionTool(beanWrap, method);
-                tools.add(func);
+            if (method.isAnnotationPresent(ResourceMapping.class)) {
+                MethodFunctionResource resc = new MethodFunctionResource(beanWrap, method);
+                resources.add(resc);
             }
         }
 
         //如果自己就是工具集，再添加
-        if (beanWrap.raw() instanceof ToolProvider) {
-            for (FunctionTool t1 : ((ToolProvider) beanWrap.raw()).getTools()) {
-                tools.add(t1);
+        if (beanWrap.raw() instanceof ResourceProvider) {
+            for (FunctionResource t1 : ((ResourceProvider) beanWrap.raw()).getResources()) {
+                resources.add(t1);
             }
         }
     }
 
     @Override
-    public Collection<FunctionTool> getTools() {
-        return tools;
+    public Collection<FunctionResource> getResources() {
+        return resources;
     }
 }
