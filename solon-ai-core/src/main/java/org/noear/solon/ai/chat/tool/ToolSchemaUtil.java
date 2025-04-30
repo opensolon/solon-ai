@@ -19,6 +19,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolParam;
 import org.noear.solon.ai.annotation.ToolParamAnno;
+import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.wrap.ClassWrap;
@@ -48,7 +49,7 @@ public class ToolSchemaUtil {
     public static final String TYPE_BOOLEAN = "boolean";
     public static final String TYPE_NULL = "null";
 
-    public static FunctionToolParam toolParamOf(AnnotatedElement ae) {
+    public static ParamDesc toolParamOf(AnnotatedElement ae) {
         ToolParam p1Anno = ae.getAnnotation(ToolParam.class);
         if (p1Anno == null) {
             p1Anno = ToolParamAnno.fromMapping(ae.getAnnotation(Param.class));
@@ -61,11 +62,11 @@ public class ToolSchemaUtil {
         if (ae instanceof Parameter) {
             Parameter p1 = (Parameter) ae;
             String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-            return new FunctionToolParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description());
+            return new ParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description());
         } else {
             Field p1 = (Field) ae;
             String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-            return new FunctionToolParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description());
+            return new ParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description());
         }
     }
 
@@ -75,12 +76,12 @@ public class ToolSchemaUtil {
      * @param toolParams       工具参数
      * @param schemaParentNode 架构父节点（待构建）
      */
-    public static ONode buildToolParametersNode(List<FunctionToolParam> toolParams, ONode schemaParentNode) {
+    public static ONode buildToolParametersNode(List<ParamDesc> toolParams, ONode schemaParentNode) {
         ONode requiredNode = new ONode(schemaParentNode.options()).asArray();
 
         schemaParentNode.set("type", TYPE_OBJECT);
         schemaParentNode.getOrNew("properties").build(propertiesNode -> {
-            for (FunctionToolParam fp : toolParams) {
+            for (ParamDesc fp : toolParams) {
                 propertiesNode.getOrNew(fp.name()).build(paramNode -> {
                     buildToolParamNode(fp.type(), fp.description(), paramNode);
                 });
@@ -137,7 +138,7 @@ public class ToolSchemaUtil {
                 ONode requiredNode = new ONode(schemaNode.options()).asArray();
                 schemaNode.getOrNew("properties").build(propertiesNode -> {
                     for (FieldWrap fw : ClassWrap.get(type).getAllFieldWraps()) {
-                        FunctionToolParam fp = toolParamOf(fw.getField());
+                        ParamDesc fp = toolParamOf(fw.getField());
 
                         propertiesNode.getOrNew(fp.name()).build(paramNode -> {
                             buildToolParamNode(fp.type(), fp.description(), paramNode);

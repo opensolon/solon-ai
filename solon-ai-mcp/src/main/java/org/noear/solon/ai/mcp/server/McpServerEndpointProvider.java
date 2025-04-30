@@ -29,7 +29,10 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
+import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
+import org.noear.solon.ai.mcp.tool.FunctionPrompt;
+import org.noear.solon.ai.mcp.tool.FunctionResource;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
 import org.noear.solon.core.util.ConvertUtil;
@@ -112,6 +115,38 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     /**
+     * 登记资源
+     */
+    public void addResource(FunctionResource functionResource) {
+        McpServerFeatures.SyncResourceSpecification toolSpec = new McpServerFeatures.SyncResourceSpecification(
+                new McpSchema.Resource(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
+                (exchange, request) -> {
+                    try {
+                        String text = functionResource.handle();
+                        return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), text, functionResource.mimeType())));
+                    } catch (Throwable ex) {
+                        throw new McpException(ex.getMessage(), ex);
+                    }
+                });
+    }
+
+    /**
+     * 登记资源
+     */
+    public void addPrompt(FunctionPrompt functionPrompt) {
+//        McpServerFeatures.SyncPromptSpecification toolSpec = new McpServerFeatures.SyncPromptSpecification(
+//                new McpSchema.Prompt(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
+//                (exchange, request) -> {
+//                    try {
+//                        String text = functionResource.handle();
+//                        return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), text, functionResource.mimeType())));
+//                    } catch (Throwable ex) {
+//                        throw new McpException(ex.getMessage(), ex);
+//                    }
+//                });
+    }
+
+    /**
      * 登记工具
      */
     public void addTool(FunctionTool functionTool) {
@@ -160,6 +195,15 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void notifyToolsListChanged() {
         if (server != null) {
             server.notifyToolsListChanged();
+        }
+    }
+
+    /**
+     * 通知资源变化
+     */
+    public void notifyResourcesListChanged() {
+        if (server != null) {
+            server.notifyResourcesListChanged();
         }
     }
 
@@ -268,15 +312,12 @@ public class McpServerEndpointProvider implements LifecycleBean {
         McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(
                 new McpSchema.Tool(functionTool.name(), functionTool.description(), jsonSchemaStr),
                 (exchange, request) -> {
-                    McpSchema.CallToolResult toolResult = null;
                     try {
                         String rst = functionTool.handle(request);
-                        toolResult = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
+                        return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
                     } catch (Throwable ex) {
-                        toolResult = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(ex.getMessage())), true);
+                        throw new McpException(ex.getMessage(), ex);
                     }
-
-                    return toolResult;
                 });
 
         toolCount++;

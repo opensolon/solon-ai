@@ -45,6 +45,11 @@ public @interface ResourceMapping {
     String description() default "";
 
     /**
+     * 媒体类型
+     */
+    String mimeType() default "";
+
+    /**
      * 结果转换器
      */
     Class<? extends ToolCallResultConverter> resultConverter() default ToolCallResultConverter.class;

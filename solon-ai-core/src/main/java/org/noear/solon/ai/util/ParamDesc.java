@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.tool;
+package org.noear.solon.ai.util;
 
 /**
  * 函数工具参数描述
@@ -21,13 +21,13 @@ package org.noear.solon.ai.chat.tool;
  * @author noear
  * @since 3.1
  */
-public class FunctionToolParamDesc implements FunctionToolParam {
+public class ParamDesc {
     private final String name;
     private final Class<?> type;
     private final boolean required;
     private final String description;
 
-    public FunctionToolParamDesc(String name, Class<?> type, boolean required, String description) {
+    public ParamDesc(String name, Class<?> type, boolean required, String description) {
         this.name = name;
         this.type = type;
         this.required = required;
@@ -37,7 +37,6 @@ public class FunctionToolParamDesc implements FunctionToolParam {
     /**
      * 参数名字
      */
-    @Override
     public String name() {
         return name;
     }
@@ -45,7 +44,6 @@ public class FunctionToolParamDesc implements FunctionToolParam {
     /**
      * 参数类型
      */
-    @Override
     public Class<?> type() {
         return type;
     }
@@ -53,7 +51,6 @@ public class FunctionToolParamDesc implements FunctionToolParam {
     /**
      * 参数描述
      */
-    @Override
     public String description() {
         return description;
     }
@@ -61,7 +58,6 @@ public class FunctionToolParamDesc implements FunctionToolParam {
     /**
      * 是否必须
      */
-    @Override
     public boolean required() {
         return required;
     }

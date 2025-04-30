@@ -20,6 +20,7 @@ import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.annotation.ToolMappingAnno;
+import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.core.util.Assert;
 
@@ -39,7 +40,7 @@ public class MethodFunctionTool implements FunctionTool {
     private final String description;
     private boolean returnDirect;
     private final String name;
-    private final List<FunctionToolParam> params = new ArrayList<>();
+    private final List<ParamDesc> params = new ArrayList<>();
     private final ToolCallResultConverter resultConverter;
     private final String inputSchema;
 
@@ -66,7 +67,7 @@ public class MethodFunctionTool implements FunctionTool {
         }
 
         for (Parameter p1 : method.getParameters()) {
-            FunctionToolParam toolParam = ToolSchemaUtil.toolParamOf(p1);
+            ParamDesc toolParam = ToolSchemaUtil.toolParamOf(p1);
             params.add(toolParam);
         }
 
@@ -96,13 +97,6 @@ public class MethodFunctionTool implements FunctionTool {
     }
 
     /**
-     * 参数
-     */
-    public List<FunctionToolParam> params() {
-        return Collections.unmodifiableList(params);
-    }
-
-    /**
      * 输入架构
      */
     @Override
@@ -118,7 +112,7 @@ public class MethodFunctionTool implements FunctionTool {
         Map<String, Object> argsNew = new HashMap<>();
 
         ONode argsNode = ONode.load(args);
-        for (FunctionToolParam p1 : this.params()) {
+        for (ParamDesc p1 : this.params) {
             ONode v1 = argsNode.getOrNull(p1.name());
             if (v1 == null) {
                 //null

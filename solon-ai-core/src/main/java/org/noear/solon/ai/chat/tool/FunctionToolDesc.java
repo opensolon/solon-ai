@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
+import org.noear.solon.ai.util.ParamDesc;
 
 import java.util.*;
 import java.util.function.Function;
@@ -28,7 +29,7 @@ import java.util.function.Function;
  */
 public class FunctionToolDesc implements FunctionTool {
     private final String name;
-    private final List<FunctionToolParam> params;
+    private final List<ParamDesc> params;
     private String description;
     private boolean returnDirect = false;
     private Function<Map<String, Object>, String> doHandle;
@@ -82,7 +83,7 @@ public class FunctionToolDesc implements FunctionTool {
      * @param description 参数描述
      */
     public FunctionToolDesc param(String name, Class<?> type, boolean required, String description) {
-        params.add(new FunctionToolParamDesc(name, type, required, description));
+        params.add(new ParamDesc(name, type, required, description));
         inputSchema = null;
         return this;
     }
@@ -175,13 +176,6 @@ public class FunctionToolDesc implements FunctionTool {
     }
 
     /**
-     * 函数参数
-     */
-    public List<FunctionToolParam> params() {
-        return Collections.unmodifiableList(params);
-    }
-
-    /**
      * 输入架构
      */
     @Override
@@ -202,7 +196,7 @@ public class FunctionToolDesc implements FunctionTool {
         Map<String, Object> argsNew = new HashMap<>();
 
         ONode argsNode = ONode.load(args);
-        for (FunctionToolParam p1 : this.params()) {
+        for (ParamDesc p1 : this.params) {
             ONode v1 = argsNode.getOrNull(p1.name());
             if (v1 == null) {
                 //null
