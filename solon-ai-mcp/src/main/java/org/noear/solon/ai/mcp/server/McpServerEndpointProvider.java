@@ -331,6 +331,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                         String rst = functionTool.handle(request);
                         return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
                     } catch (Throwable ex) {
+                        ex = Utils.throwableUnwrap(ex);
                         throw new McpException(ex.getMessage(), ex);
                     } finally {
                         ContextHolder.currentRemove();
@@ -368,6 +369,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
                         return new McpSchema.GetPromptResult(functionPrompt.description(), promptMessages);
                     } catch (Throwable ex) {
+                        ex = Utils.throwableUnwrap(ex);
                         throw new McpException(ex.getMessage(), ex);
                     } finally {
                         ContextHolder.currentRemove();
@@ -391,6 +393,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                         String text = functionResource.handle(request.getUri());
                         return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), text, functionResource.mimeType())));
                     } catch (Throwable ex) {
+                        ex = Utils.throwableUnwrap(ex);
                         throw new McpException(ex.getMessage(), ex);
                     } finally {
                         ContextHolder.currentRemove();
