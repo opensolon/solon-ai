@@ -22,10 +22,12 @@ import java.lang.annotation.*;
  *
  * @author noear
  * @since 3.1
+ * @deprecated 3.1 {@link org.noear.solon.annotation.Param}
  */
 @Target({ElementType.PARAMETER, ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
+@Deprecated
 public @interface ToolParam {
     /**
      * 名字
