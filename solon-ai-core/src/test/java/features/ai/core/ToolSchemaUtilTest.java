@@ -2,8 +2,8 @@ package features.ai.core;
 
 import org.junit.jupiter.api.Test;
 import org.noear.snack.ONode;
-import org.noear.solon.ai.annotation.ToolParam;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
+import org.noear.solon.annotation.Param;
 
 import java.math.BigDecimal;
 
@@ -49,9 +49,9 @@ public class ToolSchemaUtilTest {
     }
 
     public static class User {
-        @ToolParam(description = "用户Id")
+        @Param(description = "用户Id")
         public int id;
-        @ToolParam(description = "用户名")
+        @Param(description = "用户名")
         public String name;
     }
 }

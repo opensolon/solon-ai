@@ -13,14 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.annotation;
+package org.noear.solon.ai.annotation;
 
 import org.noear.solon.ai.chat.tool.ToolCallResultConverter;
 
 import java.lang.annotation.*;
 
 /**
- * 资源映射
+ * 提示语映射
  *
  * @author noear
  * @since 3.1
@@ -28,12 +28,7 @@ import java.lang.annotation.*;
 @Target({ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface ResourceMapping {
-    /**
-     * 资源地址描述
-     */
-    String uri();
-
+public @interface PromptMapping {
     /**
      * 名字
      */
@@ -42,7 +37,7 @@ public @interface ResourceMapping {
     /**
      * 描述
      */
-    String description() default "";
+    String description();
 
     /**
      * 结果转换器

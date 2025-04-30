@@ -1,10 +1,10 @@
 package demo.ai.mcp.server_resume;
 
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.annotation.ToolParam;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.annotation.Inject;
+import org.noear.solon.annotation.Param;
 import org.noear.solon.scheduling.annotation.Scheduled;
 
 /**
@@ -13,7 +13,7 @@ import org.noear.solon.scheduling.annotation.Scheduled;
 @McpServerEndpoint(name = "mcp-server1")
 public class McpServerTool {
     @ToolMapping(description = "查询天气预报")
-    public String getWeather(@ToolParam(description = "城市位置") String location) {
+    public String getWeather(@Param(description = "城市位置") String location) {
         return "晴，14度";
     }
 

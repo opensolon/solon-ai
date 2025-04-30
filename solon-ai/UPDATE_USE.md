@@ -7,3 +7,4 @@
   * ChatOptions:functionAdd(...) - > ChatModel:toolsAdd(...)
 * `@FunctionMapping` -> `@ToolMapping`
   * `@FunctionParam` -> `@ToolParam`
+  * `@ToolParam` -> `@Param`

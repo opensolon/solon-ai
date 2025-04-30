@@ -160,7 +160,7 @@ layout:
 @McpServerEndpoint(name="mcp-case1", sseEndpoint = "/case1/sse") 
 public class McpServerTool {
     @ToolMapping(description = "查询天气预报")
-    public String getWeather(@ToolParam(description = "城市位置") String location) {
+    public String getWeather(@Param(description = "城市位置") String location) {
         return "晴，14度";
     }
 }

@@ -55,8 +55,8 @@ public class ToolSchemaUtil {
         }
 
         //断言
-        Assert.notNull(p1Anno, "@ToolParam(or @Param) annotation is missing");
-        Assert.notEmpty(p1Anno.description(), "ToolParam description cannot be empty");
+        Assert.notNull(p1Anno, "@Param annotation is missing");
+        Assert.notEmpty(p1Anno.description(), "Param description cannot be empty");
 
         if (ae instanceof Parameter) {
             Parameter p1 = (Parameter) ae;

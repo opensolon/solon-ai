@@ -1,13 +1,13 @@
 package demo.ai.mcp.server;
 
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.annotation.ToolParam;
-import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.mcp.annotation.PromptMapping;
-import org.noear.solon.ai.mcp.annotation.ResourceMapping;
+import org.noear.solon.ai.annotation.PromptMapping;
+import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Mapping;
+import org.noear.solon.annotation.Param;
 
 import java.util.Arrays;
 import java.util.List;
@@ -23,7 +23,7 @@ public class McpServerTool2 {
     // 建议开启编译参数：-parameters （否则，要再配置参数的 name）
     //
     @ToolMapping(description = "查询天气预报")
-    public String get_weather(@ToolParam(description = "城市位置") String location) {
+    public String get_weather(@Param(description = "城市位置") String location) {
         return "晴，14度";
     }
 
