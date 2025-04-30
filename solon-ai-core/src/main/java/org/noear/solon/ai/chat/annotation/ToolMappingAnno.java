@@ -40,7 +40,7 @@ public class ToolMappingAnno implements ToolMapping {
     }
 
     public static ToolMapping fromMapping(Mapping mapping) {
-        return new ToolMappingAnno(null, mapping.description(), false, null);
+        return new ToolMappingAnno(mapping.name(), mapping.description(), false, null);
     }
 
     /**
