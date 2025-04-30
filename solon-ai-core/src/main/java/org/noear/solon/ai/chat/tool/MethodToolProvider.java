@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.tool;
 
+import org.noear.solon.Solon;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.core.BeanWrap;
@@ -38,7 +39,7 @@ public class MethodToolProvider implements ToolProvider {
     }
 
     public MethodToolProvider(Class<?> toolClz, Object toolObj) {
-        this(new BeanWrap(null, toolClz, toolObj));
+        this(new BeanWrap(Solon.context(), toolClz, toolObj));
     }
 
     public MethodToolProvider(BeanWrap beanWrap) {

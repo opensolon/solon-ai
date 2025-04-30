@@ -24,6 +24,7 @@ import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.wrap.ClassWrap;
 import org.noear.solon.core.wrap.FieldWrap;
+import org.noear.solon.lang.Nullable;
 
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Field;
@@ -49,14 +50,17 @@ public class ToolSchemaUtil {
     public static final String TYPE_BOOLEAN = "boolean";
     public static final String TYPE_NULL = "null";
 
-    public static ParamDesc paramOf(AnnotatedElement ae) {
+    public static @Nullable ParamDesc paramOf(AnnotatedElement ae) {
         ToolParam p1Anno = ae.getAnnotation(ToolParam.class);
         if (p1Anno == null) {
             p1Anno = ToolParamAnno.fromMapping(ae.getAnnotation(Param.class));
         }
 
+        if (p1Anno == null) {
+            return null;
+        }
+
         //断言
-        Assert.notNull(p1Anno, "@Param annotation is missing");
         Assert.notEmpty(p1Anno.description(), "Param description cannot be empty");
 
         if (ae instanceof Parameter) {
@@ -140,12 +144,14 @@ public class ToolSchemaUtil {
                     for (FieldWrap fw : ClassWrap.get(type).getAllFieldWraps()) {
                         ParamDesc fp = paramOf(fw.getField());
 
-                        propertiesNode.getOrNew(fp.name()).build(paramNode -> {
-                            buildToolParamNode(fp.type(), fp.description(), paramNode);
-                        });
+                        if (fp != null) {
+                            propertiesNode.getOrNew(fp.name()).build(paramNode -> {
+                                buildToolParamNode(fp.type(), fp.description(), paramNode);
+                            });
 
-                        if (fp.required()) {
-                            requiredNode.add(fp.name());
+                            if (fp.required()) {
+                                requiredNode.add(fp.name());
+                            }
                         }
                     }
                 });

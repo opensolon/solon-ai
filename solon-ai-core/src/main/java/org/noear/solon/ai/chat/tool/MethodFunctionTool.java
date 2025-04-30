@@ -23,7 +23,12 @@ import org.noear.solon.ai.annotation.ToolMappingAnno;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.core.BeanWrap;
+import org.noear.solon.core.handle.Context;
+import org.noear.solon.core.handle.ContextEmpty;
+import org.noear.solon.core.handle.MethodHandler;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.MimeType;
+import org.noear.solon.core.wrap.MethodWrap;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -37,17 +42,18 @@ import java.util.*;
  */
 public class MethodFunctionTool implements FunctionTool {
     private final BeanWrap beanWrap;
-    private final Method method;
+    private final MethodWrap methodWrap;
+
+    private final String name;
     private final String description;
     private boolean returnDirect;
-    private final String name;
     private final List<ParamDesc> params = new ArrayList<>();
     private final ToolCallResultConverter resultConverter;
     private final String inputSchema;
 
     public MethodFunctionTool(BeanWrap beanWrap, Method method) {
         this.beanWrap = beanWrap;
-        this.method = method;
+        this.methodWrap = beanWrap.context().methodGet(method);
 
         ToolMapping m1Anno = method.getAnnotation(ToolMapping.class);
         if (m1Anno == null) {
@@ -56,13 +62,12 @@ public class MethodFunctionTool implements FunctionTool {
 
         //断言
         Assert.notNull(m1Anno, "@ToolMapping annotation is missing");
+        //断言
+        Assert.notEmpty(m1Anno.description(), "ToolMapping description cannot be empty");
 
         this.name = Utils.annoAlias(m1Anno.name(), method.getName());
         this.description = m1Anno.description();
         this.returnDirect = m1Anno.returnDirect();
-
-        //断言
-        Assert.notEmpty(m1Anno.description(), "ToolMapping description cannot be empty");
 
         if (m1Anno.resultConverter() == ToolCallResultConverter.class) {
             resultConverter = null;
@@ -72,7 +77,9 @@ public class MethodFunctionTool implements FunctionTool {
 
         for (Parameter p1 : method.getParameters()) {
             ParamDesc toolParam = ToolSchemaUtil.paramOf(p1);
-            params.add(toolParam);
+            if (toolParam != null) {
+                params.add(toolParam);
+            }
         }
 
         inputSchema = ToolSchemaUtil.buildToolParametersNode(params, new ONode())
@@ -113,36 +120,16 @@ public class MethodFunctionTool implements FunctionTool {
      */
     @Override
     public String handle(Map<String, Object> args) throws Throwable {
-        Map<String, Object> argsNew = new HashMap<>();
+        Context ctx = new ContextEmpty();
+        ctx.attrSet("body", args);
 
-        ONode argsNode = ONode.load(args);
-        for (ParamDesc p1 : this.params) {
-            ONode v1 = argsNode.getOrNull(p1.name());
-            if (v1 == null) {
-                //null
-                argsNew.put(p1.name(), null);
-            } else {
-                //用 ONode 可以自动转换类型
-                argsNew.put(p1.name(), v1.toObject(p1.type()));
-            }
-        }
-
-        return doHandle(argsNew);
-    }
-
-    private String doHandle(Map<String, Object> args) throws Throwable {
-        Object[] vals = new Object[params.size()];
-
-        for (int i = 0; i < params.size(); ++i) {
-            vals[i] = args.get(params.get(i).name());
-        }
-
-        Object rst = method.invoke(beanWrap.raw(), vals);
+        ctx.result = MethodActionExecutor.getInstance()
+                .executeHandle(ctx, beanWrap.get(), methodWrap);
 
         if (resultConverter == null) {
-            return String.valueOf(rst);
+            return String.valueOf(ctx.result);
         } else {
-            return resultConverter.convert(rst);
+            return resultConverter.convert(ctx.result);
         }
     }
 

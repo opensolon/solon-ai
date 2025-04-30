@@ -15,7 +15,9 @@
  */
 package org.noear.solon.ai.mcp.util;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ResourceMapping;
+import org.noear.solon.ai.chat.tool.MethodActionExecutor;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
@@ -23,6 +25,7 @@ import org.noear.solon.core.handle.MethodHandler;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.PathMatcher;
 import org.noear.solon.core.util.PathUtil;
+import org.noear.solon.core.wrap.MethodWrap;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -37,8 +40,9 @@ import java.util.regex.Matcher;
  */
 public class MethodFunctionResource implements FunctionResource {
     private BeanWrap beanWrap;
-    private Method method;
-    private MethodHandler methodHandler;
+    private final MethodWrap methodWrap;
+
+    private final String name;
     private ResourceMapping mapping;
 
     //path 分析器
@@ -48,16 +52,15 @@ public class MethodFunctionResource implements FunctionResource {
 
     public MethodFunctionResource(BeanWrap beanWrap, Method method) {
         this.beanWrap = beanWrap;
-        this.method = method;
+        this.methodWrap = beanWrap.context().methodGet(method);
         this.mapping = method.getAnnotation(ResourceMapping.class);
+        this.name = Utils.annoAlias(mapping.name(), method.getName());
 
         //断言
         Assert.notNull(mapping, "@ResourceMapping annotation is missing");
 
         //断言
         Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
-
-        this.methodHandler = new MethodHandler(beanWrap, method, true);
 
         //支持path变量
         if (mapping.uri() != null && mapping.uri().contains("{")) {
@@ -80,7 +83,7 @@ public class MethodFunctionResource implements FunctionResource {
 
     @Override
     public String name() {
-        return mapping.name();
+        return name;
     }
 
     @Override
@@ -96,19 +99,17 @@ public class MethodFunctionResource implements FunctionResource {
     @Override
     public String handle(String reqUri) throws Throwable {
         Context ctx = new ContextEmpty();
-        ctx.pathNew(reqUri);
+        bindPathVarDo(ctx, reqUri);
 
-        //获取path var
-        bindPathVarDo(ctx);
-
-        methodHandler.handle(ctx);
+        ctx.result = MethodActionExecutor.getInstance()
+                .executeHandle(ctx, beanWrap.get(), methodWrap);
 
         return String.valueOf(ctx.result);
     }
 
-    private void bindPathVarDo(Context c) throws Throwable {
+    private void bindPathVarDo(Context c, String reqUri) throws Throwable {
         if (pathKeysMatcher != null) {
-            Matcher pm = pathKeysMatcher.matcher(c.pathNew());
+            Matcher pm = pathKeysMatcher.matcher(reqUri);
             if (pm.find()) {
                 for (int i = 0, len = pathKeys.size(); i < len; i++) {
                     c.paramMap().add(pathKeys.get(i), pm.group(i + 1));//不采用group name,可解决_的问题
