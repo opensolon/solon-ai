@@ -26,6 +26,8 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.noear.snack.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
@@ -33,7 +35,9 @@ import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.ai.mcp.util.FunctionPrompt;
 import org.noear.solon.ai.mcp.util.FunctionResource;
+import org.noear.solon.ai.mcp.util.PromptProvider;
 import org.noear.solon.ai.mcp.util.ResourceProvider;
+import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
 import org.noear.solon.core.util.ConvertUtil;
@@ -132,19 +136,19 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     /**
-     * 登记资源
+     * 登记提示语
      */
     public void addPrompt(FunctionPrompt functionPrompt) {
-//        McpServerFeatures.SyncPromptSpecification toolSpec = new McpServerFeatures.SyncPromptSpecification(
-//                new McpSchema.Prompt(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
-//                (exchange, request) -> {
-//                    try {
-//                        String text = functionResource.handle();
-//                        return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), text, functionResource.mimeType())));
-//                    } catch (Throwable ex) {
-//                        throw new McpException(ex.getMessage(), ex);
-//                    }
-//                });
+        addPromptSpec(functionPrompt);
+    }
+
+    /**
+     * 登记提示语
+     */
+    public void addPrompt(PromptProvider promptProvider) {
+        for (FunctionPrompt functionPrompt : promptProvider.getPrompts()) {
+            addPromptSpec(functionPrompt);
+        }
     }
 
     /**
@@ -205,6 +209,15 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void notifyResourcesListChanged() {
         if (server != null) {
             server.notifyResourcesListChanged();
+        }
+    }
+
+    /**
+     * 通知资源变化
+     */
+    public void notifyPromptsListChanged() {
+        if (server != null) {
+            server.notifyPromptsListChanged();
         }
     }
 
@@ -326,8 +339,42 @@ public class McpServerEndpointProvider implements LifecycleBean {
         }
     }
 
+    protected void addPromptSpec(FunctionPrompt functionPrompt) {
+        List<McpSchema.PromptArgument> promptArguments = new ArrayList<>();
+        for (ParamDesc p1 : functionPrompt.params()) {
+            promptArguments.add(new McpSchema.PromptArgument(p1.name(), p1.description(), p1.required()));
+        }
+
+        McpServerFeatures.SyncPromptSpecification promptSpec = new McpServerFeatures.SyncPromptSpecification(
+                new McpSchema.Prompt(functionPrompt.name(), functionPrompt.description(), promptArguments),
+                (exchange, request) -> {
+                    try {
+
+                        Collection<ChatMessage> prompts = functionPrompt.handle(request.getArguments());
+                        List<McpSchema.PromptMessage> promptMessages = new ArrayList<>();
+                        for (ChatMessage msg : prompts) {
+                            if (msg.getRole() == ChatRole.ASSISTANT) {
+                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent(msg.getContent())));
+                            } else {
+                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER, new McpSchema.TextContent(msg.getContent())));
+                            }
+                        }
+
+                        return new McpSchema.GetPromptResult(functionPrompt.description(), promptMessages);
+                    } catch (Throwable ex) {
+                        throw new McpException(ex.getMessage(), ex);
+                    }
+                });
+
+        if (server != null) {
+            server.addPrompt(promptSpec);
+        } else {
+            mcpServerSpec.prompts(promptSpec);
+        }
+    }
+
     protected void addResourceSpec(FunctionResource functionResource) {
-        McpServerFeatures.SyncResourceSpecification resSpec = new McpServerFeatures.SyncResourceSpecification(
+        McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
                 new McpSchema.Resource(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
                 (exchange, request) -> {
                     try {
@@ -339,9 +386,9 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 });
 
         if (server != null) {
-            server.addResource(resSpec);
+            server.addResource(resourceSpec);
         } else {
-            mcpServerSpec.resources(resSpec);
+            mcpServerSpec.resources(resourceSpec);
         }
     }
 

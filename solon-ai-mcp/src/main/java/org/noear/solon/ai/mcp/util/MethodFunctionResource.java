@@ -38,8 +38,8 @@ import java.util.regex.Matcher;
 public class MethodFunctionResource implements FunctionResource {
     private BeanWrap beanWrap;
     private Method method;
+    private MethodHandler methodHandler;
     private ResourceMapping mapping;
-    private MethodHandler handler;
 
     //path 分析器
     private PathMatcher pathKeysMatcher;//路径分析器
@@ -57,7 +57,7 @@ public class MethodFunctionResource implements FunctionResource {
         //断言
         Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
 
-        this.handler = new MethodHandler(beanWrap, method, true);
+        this.methodHandler = new MethodHandler(beanWrap, method, true);
 
         //支持path变量
         if (mapping.uri() != null && mapping.uri().contains("{")) {
@@ -101,7 +101,7 @@ public class MethodFunctionResource implements FunctionResource {
         //获取path var
         bindPathVarDo(ctx);
 
-        handler.handle(ctx);
+        methodHandler.handle(ctx);
 
         return String.valueOf(ctx.result);
     }

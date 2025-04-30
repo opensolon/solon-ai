@@ -71,7 +71,7 @@ public class MethodFunctionTool implements FunctionTool {
         }
 
         for (Parameter p1 : method.getParameters()) {
-            ParamDesc toolParam = ToolSchemaUtil.toolParamOf(p1);
+            ParamDesc toolParam = ToolSchemaUtil.paramOf(p1);
             params.add(toolParam);
         }
 

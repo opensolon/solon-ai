@@ -49,7 +49,7 @@ public class ToolSchemaUtil {
     public static final String TYPE_BOOLEAN = "boolean";
     public static final String TYPE_NULL = "null";
 
-    public static ParamDesc toolParamOf(AnnotatedElement ae) {
+    public static ParamDesc paramOf(AnnotatedElement ae) {
         ToolParam p1Anno = ae.getAnnotation(ToolParam.class);
         if (p1Anno == null) {
             p1Anno = ToolParamAnno.fromMapping(ae.getAnnotation(Param.class));
@@ -138,7 +138,7 @@ public class ToolSchemaUtil {
                 ONode requiredNode = new ONode(schemaNode.options()).asArray();
                 schemaNode.getOrNew("properties").build(propertiesNode -> {
                     for (FieldWrap fw : ClassWrap.get(type).getAllFieldWraps()) {
-                        ParamDesc fp = toolParamOf(fw.getField());
+                        ParamDesc fp = paramOf(fw.getField());
 
                         propertiesNode.getOrNew(fp.name()).build(paramNode -> {
                             buildToolParamNode(fp.type(), fp.description(), paramNode);
