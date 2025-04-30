@@ -38,7 +38,11 @@ public class ToolParamAnno implements ToolParam {
     }
 
     public static ToolParam fromMapping(Param anno) {
-        return new ToolParamAnno(Utils.annoAlias(anno.value(), anno.name()), anno.description(), anno.required());
+        if (anno == null) {
+            return null;
+        } else {
+            return new ToolParamAnno(Utils.annoAlias(anno.value(), anno.name()), anno.description(), anno.required());
+        }
     }
 
     /**
