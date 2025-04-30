@@ -9,6 +9,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.handle.Context;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -26,7 +27,7 @@ public class McpServerTool2 {
     //
     @ToolMapping(description = "查询天气预报")
     public String get_weather(@Param(description = "城市位置") String location) {
-        System.out.println("------------: getSessionId: " + McpServerContext.current().getSessionId());
+        System.out.println("------------: sessionId: " + Context.current().sessionId());
 
         return "晴，14度";
     }

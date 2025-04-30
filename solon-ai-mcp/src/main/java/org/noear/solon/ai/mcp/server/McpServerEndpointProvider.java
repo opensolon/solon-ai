@@ -40,6 +40,7 @@ import org.noear.solon.ai.mcp.util.ResourceProvider;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
+import org.noear.solon.core.handle.ContextHolder;
 import org.noear.solon.core.util.ConvertUtil;
 import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.util.RunUtil;
@@ -325,14 +326,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 new McpSchema.Tool(functionTool.name(), functionTool.description(), jsonSchemaStr),
                 (exchange, request) -> {
                     try {
-                        McpServerContext.currentSet(new McpServerContext(exchange));
+                        ContextHolder.currentSet(new McpServerContext(exchange));
 
                         String rst = functionTool.handle(request);
                         return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
                     } catch (Throwable ex) {
                         throw new McpException(ex.getMessage(), ex);
                     } finally {
-                        McpServerContext.currentRemove();
+                        ContextHolder.currentRemove();
                     }
                 });
 
@@ -353,7 +354,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 new McpSchema.Prompt(functionPrompt.name(), functionPrompt.description(), promptArguments),
                 (exchange, request) -> {
                     try {
-                        McpServerContext.currentSet(new McpServerContext(exchange));
+                        ContextHolder.currentSet(new McpServerContext(exchange));
 
                         Collection<ChatMessage> prompts = functionPrompt.handle(request.getArguments());
                         List<McpSchema.PromptMessage> promptMessages = new ArrayList<>();
@@ -369,7 +370,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                     } catch (Throwable ex) {
                         throw new McpException(ex.getMessage(), ex);
                     } finally {
-                        McpServerContext.currentRemove();
+                        ContextHolder.currentRemove();
                     }
                 });
 
@@ -385,14 +386,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 new McpSchema.Resource(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
                 (exchange, request) -> {
                     try {
-                        McpServerContext.currentSet(new McpServerContext(exchange));
+                        ContextHolder.currentSet(new McpServerContext(exchange));
 
                         String text = functionResource.handle(request.getUri());
                         return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), text, functionResource.mimeType())));
                     } catch (Throwable ex) {
                         throw new McpException(ex.getMessage(), ex);
                     } finally {
-                        McpServerContext.currentRemove();
+                        ContextHolder.currentRemove();
                     }
                 });
 
