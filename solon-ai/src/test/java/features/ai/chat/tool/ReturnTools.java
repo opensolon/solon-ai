@@ -1,7 +1,7 @@
 package features.ai.chat.tool;
 
-import org.noear.solon.ai.chat.annotation.ToolMapping;
-import org.noear.solon.ai.chat.annotation.ToolParam;
+import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.annotation.ToolParam;
 import org.noear.solon.ai.chat.tool.ToolCallResultJsonConverter;
 
 import java.io.Serializable;

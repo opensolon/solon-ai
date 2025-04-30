@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.solon.ai.chat.annotation.ToolMapping;
+import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Mapping;
 
 import java.lang.reflect.Method;

@@ -1,7 +1,7 @@
 package demo.ai.mcp.server_resume;
 
-import org.noear.solon.ai.chat.annotation.ToolMapping;
-import org.noear.solon.ai.chat.annotation.ToolParam;
+import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.annotation.ToolParam;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.annotation.Inject;

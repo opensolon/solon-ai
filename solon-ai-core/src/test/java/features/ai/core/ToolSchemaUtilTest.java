@@ -2,7 +2,7 @@ package features.ai.core;
 
 import org.junit.jupiter.api.Test;
 import org.noear.snack.ONode;
-import org.noear.solon.ai.chat.annotation.ToolParam;
+import org.noear.solon.ai.annotation.ToolParam;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 
 import java.math.BigDecimal;

@@ -18,8 +18,8 @@ package org.noear.solon.ai.chat.tool;
 import org.noear.snack.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.annotation.ToolMapping;
-import org.noear.solon.ai.chat.annotation.ToolMappingAnno;
+import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.annotation.ToolMappingAnno;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.core.util.Assert;
 

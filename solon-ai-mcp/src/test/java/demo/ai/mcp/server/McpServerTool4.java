@@ -1,7 +1,5 @@
 package demo.ai.mcp.server;
 
-import org.noear.solon.ai.chat.annotation.ToolMapping;
-import org.noear.solon.ai.chat.annotation.ToolParam;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.annotation.Param;

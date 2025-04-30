@@ -13,34 +13,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.annotation;
+package org.noear.solon.ai.annotation;
 
-import org.noear.solon.ai.chat.tool.ToolCallResultConverter;
-import org.noear.solon.annotation.Mapping;
+import org.noear.solon.Utils;
+import org.noear.solon.annotation.Param;
 
 import java.lang.annotation.Annotation;
 
 /**
- * 工具映射注解包装
+ * 工具参数注解包装
  *
  * @author noear
  * @since 3.1
  */
-public class ToolMappingAnno implements ToolMapping {
+public class ToolParamAnno implements ToolParam {
     private String name;
     private String description;
-    private boolean returnDirect;
-    private Class<? extends ToolCallResultConverter> resultConverter;
+    private boolean required;
 
-    public ToolMappingAnno(String name, String description, boolean returnDirect, Class<? extends ToolCallResultConverter> resultConverter) {
+    public ToolParamAnno(String name, String description, boolean required) {
         this.name = (name == null ? "" : name);
         this.description = (description == null ? "" : description);
-        this.returnDirect = returnDirect;
-        this.resultConverter = (resultConverter == null ? ToolCallResultConverter.class : resultConverter);
+        this.required = required;
     }
 
-    public static ToolMapping fromMapping(Mapping mapping) {
-        return new ToolMappingAnno(mapping.name(), mapping.description(), false, null);
+    public static ToolParam fromMapping(Param anno) {
+        return new ToolParamAnno(Utils.annoAlias(anno.value(), anno.name()), anno.description(), anno.required());
     }
 
     /**
@@ -59,21 +57,16 @@ public class ToolMappingAnno implements ToolMapping {
         return description;
     }
 
-    @Override
-    public boolean returnDirect() {
-        return returnDirect;
-    }
-
     /**
-     * 结果转换器
+     * 是否必须
      */
     @Override
-    public Class<? extends ToolCallResultConverter> resultConverter() {
-        return resultConverter;
+    public boolean required() {
+        return required;
     }
 
     @Override
     public Class<? extends Annotation> annotationType() {
-        return ToolMapping.class;
+        return ToolParam.class;
     }
 }

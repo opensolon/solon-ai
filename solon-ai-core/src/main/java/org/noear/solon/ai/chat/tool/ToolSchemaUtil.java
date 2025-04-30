@@ -17,8 +17,8 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.annotation.ToolParam;
-import org.noear.solon.ai.chat.annotation.ToolParamAnno;
+import org.noear.solon.ai.annotation.ToolParam;
+import org.noear.solon.ai.annotation.ToolParamAnno;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.wrap.ClassWrap;
