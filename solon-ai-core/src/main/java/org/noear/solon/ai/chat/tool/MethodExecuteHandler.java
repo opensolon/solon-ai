@@ -17,7 +17,6 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
 import org.noear.snack.core.Feature;
-import org.noear.snack.core.Options;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.mvc.ActionExecuteHandlerDefault;
 import org.noear.solon.core.wrap.MethodWrap;
@@ -33,11 +32,13 @@ import java.util.List;
  * @since 1.0
  * @since 2.8
  * */
-public class MethodActionExecutor extends ActionExecuteHandlerDefault {
-    private static MethodActionExecutor instance = new MethodActionExecutor();
-    public static MethodActionExecutor getInstance(){
+public class MethodExecuteHandler extends ActionExecuteHandlerDefault {
+    private static MethodExecuteHandler instance = new MethodExecuteHandler();
+    public static MethodExecuteHandler getInstance(){
         return instance;
     }
+
+    public static final String MCP_BODY_ATTR = "MCP_BODY";
 
     /**
      * 转换 body
@@ -47,7 +48,7 @@ public class MethodActionExecutor extends ActionExecuteHandlerDefault {
      */
     @Override
     protected Object changeBody(Context ctx, MethodWrap mWrap) throws Exception {
-        return ONode.loadObj(ctx.attr("body"));
+        return ONode.loadObj(ctx.attr(MCP_BODY_ATTR), Feature.DisableClassNameRead);
     }
 
     /**

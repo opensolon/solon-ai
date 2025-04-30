@@ -19,13 +19,12 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.tool.MethodActionExecutor;
+import org.noear.solon.ai.chat.tool.MethodExecuteHandler;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
-import org.noear.solon.core.handle.MethodHandler;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.core.wrap.MethodWrap;
@@ -92,12 +91,14 @@ public class MethodFunctionPrompt implements FunctionPrompt {
 
     @Override
     public Collection<ChatMessage> handle(Map<String, Object> args) throws Throwable {
-        String json = ONode.stringify(args);
-        Context ctx = new ContextEmpty();
-        ctx.contentType(MimeType.APPLICATION_JSON_VALUE);
-        ctx.bodyNew(json);
+        Context ctx = Context.current();
+        if (ctx == null) {
+            ctx = new ContextEmpty();
+        }
 
-        ctx.result = MethodActionExecutor.getInstance()
+        ctx.attrSet(MethodExecuteHandler.MCP_BODY_ATTR, args);
+
+        ctx.result = MethodExecuteHandler.getInstance()
                 .executeHandle(ctx, beanWrap.get(), methodWrap);
 
         return (Collection<ChatMessage>) ctx.result;

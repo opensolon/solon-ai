@@ -25,9 +25,7 @@ import org.noear.solon.annotation.Mapping;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
-import org.noear.solon.core.handle.MethodHandler;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.MimeType;
 import org.noear.solon.core.wrap.MethodWrap;
 
 import java.lang.reflect.Method;
@@ -120,10 +118,14 @@ public class MethodFunctionTool implements FunctionTool {
      */
     @Override
     public String handle(Map<String, Object> args) throws Throwable {
-        Context ctx = new ContextEmpty();
-        ctx.attrSet("body", args);
+        Context ctx = Context.current();
+        if (ctx == null) {
+            ctx = new ContextEmpty();
+        }
 
-        ctx.result = MethodActionExecutor.getInstance()
+        ctx.attrSet(MethodExecuteHandler.MCP_BODY_ATTR, args);
+
+        ctx.result = MethodExecuteHandler.getInstance()
                 .executeHandle(ctx, beanWrap.get(), methodWrap);
 
         if (resultConverter == null) {

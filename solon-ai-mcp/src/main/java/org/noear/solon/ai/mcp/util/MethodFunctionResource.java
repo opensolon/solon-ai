@@ -17,11 +17,10 @@ package org.noear.solon.ai.mcp.util;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ResourceMapping;
-import org.noear.solon.ai.chat.tool.MethodActionExecutor;
+import org.noear.solon.ai.chat.tool.MethodExecuteHandler;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
-import org.noear.solon.core.handle.MethodHandler;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.PathMatcher;
 import org.noear.solon.core.util.PathUtil;
@@ -98,10 +97,14 @@ public class MethodFunctionResource implements FunctionResource {
 
     @Override
     public String handle(String reqUri) throws Throwable {
-        Context ctx = new ContextEmpty();
+        Context ctx = Context.current();
+        if (ctx == null) {
+            ctx = new ContextEmpty();
+        }
+
         bindPathVarDo(ctx, reqUri);
 
-        ctx.result = MethodActionExecutor.getInstance()
+        ctx.result = MethodExecuteHandler.getInstance()
                 .executeHandle(ctx, beanWrap.get(), methodWrap);
 
         return String.valueOf(ctx.result);
