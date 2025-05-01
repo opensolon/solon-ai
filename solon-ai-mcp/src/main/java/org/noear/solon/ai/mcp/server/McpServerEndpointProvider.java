@@ -137,6 +137,37 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     /**
+     * 移除资源
+     */
+    public void removeResource(String resourceUri) {
+        if (server != null) {
+            server.removeResource(resourceUri);
+        }
+    }
+
+    /**
+     * 移除资源
+     */
+    public void removeResource(ResourceProvider resourceProvider) {
+        if (server != null) {
+            for (FunctionResource functionResource : resourceProvider.getResources()) {
+                server.removeResource(functionResource.uri());
+            }
+        }
+    }
+
+    /**
+     * 通知资源变化
+     */
+    public void notifyResourcesListChanged() {
+        if (server != null) {
+            server.notifyResourcesListChanged();
+        }
+    }
+
+    /// ////////////////////////
+
+    /**
      * 登记提示语
      */
     public void addPrompt(FunctionPrompt functionPrompt) {
@@ -151,6 +182,37 @@ public class McpServerEndpointProvider implements LifecycleBean {
             addPromptSpec(functionPrompt);
         }
     }
+
+    /**
+     * 移除提示语
+     */
+    public void removePrompt(String promptName) {
+        if (server != null) {
+            server.removePrompt(promptName);
+        }
+    }
+
+    /**
+     * 移除提示语
+     */
+    public void removePrompt(PromptProvider promptProvider) {
+        if (server != null) {
+            for (FunctionPrompt functionPrompt : promptProvider.getPrompts()) {
+                server.removePrompt(functionPrompt.name());
+            }
+        }
+    }
+
+    /**
+     * 通知资源变化
+     */
+    public void notifyPromptsListChanged() {
+        if (server != null) {
+            server.notifyPromptsListChanged();
+        }
+    }
+
+    /// /////////////////////////
 
     /**
      * 登记工具
@@ -204,23 +266,10 @@ public class McpServerEndpointProvider implements LifecycleBean {
         }
     }
 
-    /**
-     * 通知资源变化
-     */
-    public void notifyResourcesListChanged() {
-        if (server != null) {
-            server.notifyResourcesListChanged();
-        }
-    }
+    /// /////////////////////
 
-    /**
-     * 通知资源变化
-     */
-    public void notifyPromptsListChanged() {
-        if (server != null) {
-            server.notifyPromptsListChanged();
-        }
-    }
+
+
 
     private McpSyncServer server;
 
