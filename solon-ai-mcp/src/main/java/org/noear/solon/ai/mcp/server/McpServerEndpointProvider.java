@@ -66,6 +66,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private final String sseEndpoint;
     private final String messageEndpoint;
     private final Map<String, FunctionTool> toolsMap = new ConcurrentHashMap<>();
+    private McpSyncServer server;
 
     public McpServerEndpointProvider(Properties properties) {
         this(Props.from(properties).bindTo(new McpServerProperties()));
@@ -90,6 +91,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
         this.mcpServerSpec = McpServer.sync(this.mcpTransportProvider)
                 .serverInfo(serverProperties.getName(), serverProperties.getVersion());
+    }
+
+    /**
+     * 获取服务端（postStart 后有效）
+     */
+    public @Nullable McpSyncServer getServer() {
+        return server;
     }
 
     /**
@@ -269,17 +277,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
     /// /////////////////////
 
 
-
-
-    private McpSyncServer server;
-
-    /**
-     * 获取内部处理服务（postStart 后有效）
-     */
-    public @Nullable McpSyncServer getServer() {
-        return server;
-    }
-
     @Override
     public void start() {
 
@@ -433,26 +430,37 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     protected void addResourceSpec(FunctionResource functionResource) {
-        McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
-                new McpSchema.Resource(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
-                (exchange, request) -> {
-                    try {
-                        ContextHolder.currentSet(new McpServerContext(exchange));
+        if (functionResource.uri().indexOf('{') < 0) {
+            //resourceSpec
+            McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
+                    new McpSchema.Resource(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
+                    (exchange, request) -> {
+                        try {
+                            ContextHolder.currentSet(new McpServerContext(exchange));
 
-                        String text = functionResource.handle(request.getUri());
-                        return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), functionResource.mimeType(), text)));
-                    } catch (Throwable ex) {
-                        ex = Utils.throwableUnwrap(ex);
-                        throw new McpException(ex.getMessage(), ex);
-                    } finally {
-                        ContextHolder.currentRemove();
-                    }
-                });
+                            String text = functionResource.handle(request.getUri());
+                            return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), functionResource.mimeType(), text)));
+                        } catch (Throwable ex) {
+                            ex = Utils.throwableUnwrap(ex);
+                            throw new McpException(ex.getMessage(), ex);
+                        } finally {
+                            ContextHolder.currentRemove();
+                        }
+                    });
 
-        if (server != null) {
-            server.addResource(resourceSpec);
+            if (server != null) {
+                server.addResource(resourceSpec);
+            } else {
+                mcpServerSpec.resources(resourceSpec);
+            }
         } else {
-            mcpServerSpec.resources(resourceSpec);
+            //resourceTemplates
+            McpSchema.Annotations annotations = null;//new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
+            mcpServerSpec.resourceTemplates(new McpSchema.ResourceTemplate(functionResource.uri(),
+                    functionResource.name(),
+                    functionResource.description(),
+                    functionResource.mimeType(),
+                    annotations));
         }
     }
 

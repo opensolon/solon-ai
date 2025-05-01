@@ -357,6 +357,8 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         }
     }
 
+    /// /////////////////////////////
+
     /**
      * 读取资源
      *
@@ -409,6 +411,8 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
             throw ex;
         }
     }
+
+    /// /////////////////////////////
 
     /**
      * 获取提示语
@@ -498,6 +502,8 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
 
         return toolList;
     }
+
+    /// /////////////////////////////
 
     /**
      * 根据 mcpServers 配置加载客户端
