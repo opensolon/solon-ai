@@ -7,6 +7,7 @@
 * 添加 solon-ai-mcp McpClientToolProvider isStarted 状态位（把心跳开始，转为第一次调用这后）
 * 添加 solon-ai-mcp McpServerEndpointProvider:getVersion,getChannel,getSseEndpoint,getTools,getServer 方法
 * 添加 solon-ai-mcp McpServerEndpointProvider:Builder:channel 方法
+* 添加 solon-ai-mcp ResourceMapping 和 PromptMapping 注解（支持资源与提示语服务）
 
 ### 3.2.1
 
