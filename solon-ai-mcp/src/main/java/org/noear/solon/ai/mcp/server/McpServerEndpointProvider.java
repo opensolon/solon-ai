@@ -66,6 +66,8 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private final String sseEndpoint;
     private final String messageEndpoint;
     private final Map<String, FunctionTool> toolsMap = new ConcurrentHashMap<>();
+    private final Map<String, FunctionResource> resourcesMap = new ConcurrentHashMap<>();
+    private final Map<String, FunctionPrompt> promptsMap = new ConcurrentHashMap<>();
     private McpSyncServer server;
 
     public McpServerEndpointProvider(Properties properties) {
@@ -150,6 +152,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void removeResource(String resourceUri) {
         if (server != null) {
             server.removeResource(resourceUri);
+            resourcesMap.remove(resourceUri);
         }
     }
 
@@ -160,8 +163,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
         if (server != null) {
             for (FunctionResource functionResource : resourceProvider.getResources()) {
                 server.removeResource(functionResource.uri());
+                resourcesMap.remove(functionResource.uri());
             }
         }
+    }
+
+    public Collection<FunctionResource> getResources(){
+        return resourcesMap.values();
     }
 
     /**
@@ -197,6 +205,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void removePrompt(String promptName) {
         if (server != null) {
             server.removePrompt(promptName);
+            promptsMap.remove(promptName);
         }
     }
 
@@ -207,8 +216,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
         if (server != null) {
             for (FunctionPrompt functionPrompt : promptProvider.getPrompts()) {
                 server.removePrompt(functionPrompt.name());
+                promptsMap.remove(functionPrompt.name());
             }
         }
+    }
+
+    public Collection<FunctionPrompt> getPrompts(){
+        return promptsMap.values();
     }
 
     /**
@@ -244,6 +258,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void removeTool(String toolName) {
         if (server != null) {
             server.removeTool(toolName);
+            toolsMap.remove(toolName);
         }
     }
 
@@ -254,6 +269,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
         if (server != null) {
             for (FunctionTool functionTool : toolProvider.getTools()) {
                 server.removeTool(functionTool.name());
+                toolsMap.remove(functionTool.name());
             }
         }
     }
@@ -392,6 +408,8 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     protected void addPromptSpec(FunctionPrompt functionPrompt) {
+        promptsMap.put(functionPrompt.name(), functionPrompt);
+
         List<McpSchema.PromptArgument> promptArguments = new ArrayList<>();
         for (ParamDesc p1 : functionPrompt.params()) {
             promptArguments.add(new McpSchema.PromptArgument(p1.name(), p1.description(), p1.required()));
@@ -430,6 +448,8 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     protected void addResourceSpec(FunctionResource functionResource) {
+        resourcesMap.put(functionResource.uri(), functionResource);
+
         if (functionResource.uri().indexOf('{') < 0) {
             //resourceSpec
             McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
