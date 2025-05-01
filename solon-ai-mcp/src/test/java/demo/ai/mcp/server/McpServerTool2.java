@@ -34,7 +34,7 @@ public class McpServerTool2 {
 
     @ResourceMapping(uri = "config://app-version", description = "获取应用版本号")
     public String get_app_version() {
-        return "v2.1.0";
+        return "v3.2.0";
     }
 
     @ResourceMapping(uri = "db://users/{user_id}/email", description = "根据用户ID查询邮箱")

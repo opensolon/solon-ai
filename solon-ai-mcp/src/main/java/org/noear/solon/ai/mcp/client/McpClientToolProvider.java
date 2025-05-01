@@ -24,6 +24,7 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.RefererFunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
@@ -336,19 +337,120 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      * @param name 工具名
      * @param args 调用参数
      */
-    protected McpSchema.CallToolResult callTool(String name, Map<String, Object> args) {
+    public McpSchema.CallToolResult callTool(String name, Map<String, Object> args) {
         try {
             McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
-            McpSchema.CallToolResult response = getClient().callTool(callToolRequest);
+            McpSchema.CallToolResult result = getClient().callTool(callToolRequest);
 
-            if (response.getIsError() == null || response.getIsError() == false) {
-                return response;
+            if (result.getIsError() == null || result.getIsError() == false) {
+                return result;
             } else {
-                if (Utils.isEmpty(response.getContent())) {
+                if (Utils.isEmpty(result.getContent())) {
                     throw new McpException("Call Toll Failed");
                 } else {
-                    throw new McpException(response.getContent().get(0).toString());
+                    throw new McpException(result.getContent().get(0).toString());
                 }
+            }
+        } catch (RuntimeException ex) {
+            this.reset();
+            throw ex;
+        }
+    }
+
+    /**
+     * 读取资源
+     *
+     * @param uri 资源地址
+     */
+    public String readResourceAsText(String uri) {
+        McpSchema.ReadResourceResult result = readResource(uri);
+        McpSchema.TextResourceContents textResource = (McpSchema.TextResourceContents) result.getContents().get(0);
+
+        if (Utils.isEmpty(textResource.getText())) {
+            return null;
+        } else {
+            return textResource.getText();
+        }
+    }
+
+    /**
+     * 读取资源
+     *
+     * @param uri 资源地址
+     */
+    public String readResourceAsBlob(String uri) {
+        McpSchema.ReadResourceResult result = readResource(uri);
+        McpSchema.BlobResourceContents textResource = (McpSchema.BlobResourceContents) result.getContents().get(0);
+
+        if (Utils.isEmpty(textResource.getBlob())) {
+            return null;
+        } else {
+            return textResource.getBlob();
+        }
+    }
+
+    /**
+     * 读取资源
+     *
+     * @param uri 资源地址
+     */
+    public McpSchema.ReadResourceResult readResource(String uri) {
+        try {
+            McpSchema.ReadResourceRequest callToolRequest = new McpSchema.ReadResourceRequest(uri);
+            McpSchema.ReadResourceResult result = getClient().readResource(callToolRequest);
+
+            if (Utils.isEmpty(result.getContents())) {
+                throw new McpException("Read resource Failed");
+            } else {
+                return result;
+            }
+        } catch (RuntimeException ex) {
+            this.reset();
+            throw ex;
+        }
+    }
+
+    /**
+     * 获取提示语
+     *
+     * @param name 名字
+     * @param args 参数
+     */
+    public List<ChatMessage> getPromptAsMessages(String name, Map<String, Object> args) {
+        List<ChatMessage> list = new ArrayList<>();
+
+        McpSchema.GetPromptResult result = getPrompt(name, args);
+        for (McpSchema.PromptMessage pm : result.getMessages()) {
+            McpSchema.Content content = pm.getContent();
+            if (pm.getRole() == McpSchema.Role.ASSISTANT) {
+                if (content instanceof McpSchema.TextContent) {
+                    list.add(ChatMessage.ofAssistant(((McpSchema.TextContent) content).getText()));
+                }
+            } else {
+                if (content instanceof McpSchema.TextContent) {
+                    list.add(ChatMessage.ofUser(((McpSchema.TextContent) content).getText()));
+                }
+            }
+        }
+
+        return list;
+    }
+
+    /**
+     * 获取提示语
+     *
+     * @param name 名字
+     * @param args 参数
+     */
+    public McpSchema.GetPromptResult getPrompt(String name, Map<String, Object> args) {
+        try {
+            McpSchema.GetPromptRequest callToolRequest = new McpSchema.GetPromptRequest(name, args);
+            McpSchema.GetPromptResult result = getClient().getPrompt(callToolRequest);
+
+            if (Utils.isEmpty(result.getMessages())) {
+                throw new McpException("Read resource Failed");
+            } else {
+                return result;
             }
         } catch (RuntimeException ex) {
             this.reset();

@@ -391,7 +391,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                         ContextHolder.currentSet(new McpServerContext(exchange));
 
                         String text = functionResource.handle(request.getUri());
-                        return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), text, functionResource.mimeType())));
+                        return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), functionResource.mimeType(), text)));
                     } catch (Throwable ex) {
                         ex = Utils.throwableUnwrap(ex);
                         throw new McpException(ex.getMessage(), ex);

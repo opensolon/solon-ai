@@ -43,6 +43,7 @@ public class MethodFunctionResource implements FunctionResource {
 
     private final String name;
     private ResourceMapping mapping;
+    private String newUri;
 
     //path 分析器
     private PathMatcher pathKeysMatcher;//路径分析器
@@ -61,6 +62,7 @@ public class MethodFunctionResource implements FunctionResource {
         //断言
         Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
 
+        this.newUri = mapping.uri();;
         //支持path变量
         if (mapping.uri() != null && mapping.uri().contains("{")) {
             pathKeys = new ArrayList<>();
@@ -72,12 +74,20 @@ public class MethodFunctionResource implements FunctionResource {
             if (pathKeys.size() > 0) {
                 pathKeysMatcher = PathMatcher.get(mapping.uri());
             }
+
+            //替换{x}值
+            if (newUri.indexOf("{") >= 0) {
+                if (newUri.indexOf("_}") > 0) {
+                    newUri = newUri.replaceAll("\\{[^\\}]+?\\_\\}", "(.+)");
+                }
+                newUri = newUri.replaceAll("\\{[^\\}]+?\\}", "([^/]+)");//不采用group name,可解决_的问题
+            }
         }
     }
 
     @Override
     public String uri() {
-        return mapping.uri();
+        return newUri;
     }
 
     @Override
