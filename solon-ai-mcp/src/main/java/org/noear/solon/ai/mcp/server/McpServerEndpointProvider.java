@@ -168,7 +168,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
         }
     }
 
-    public Collection<FunctionResource> getResources(){
+    public Collection<FunctionResource> getResources() {
         return resourcesMap.values();
     }
 
@@ -221,7 +221,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
         }
     }
 
-    public Collection<FunctionPrompt> getPrompts(){
+    public Collection<FunctionPrompt> getPrompts() {
         return promptsMap.values();
     }
 
@@ -303,19 +303,23 @@ public class McpServerEndpointProvider implements LifecycleBean {
         server = mcpServerSpec.build();
 
         if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
-            log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}",
+            log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
                     serverProperties.getName(),
                     serverProperties.getVersion(),
                     McpChannel.STDIO,
-                    toolsMap.size());
+                    toolsMap.size(),
+                    resourcesMap.size(),
+                    promptsMap.size());
         } else {
-            log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}",
+            log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
                     serverProperties.getName(),
                     serverProperties.getVersion(),
                     McpChannel.SSE,
                     this.sseEndpoint,
                     this.messageEndpoint,
-                    toolsMap.size());
+                    toolsMap.size(),
+                    resourcesMap.size(),
+                    promptsMap.size());
         }
 
         //如果是 web 类的
