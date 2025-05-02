@@ -1,5 +1,6 @@
 ### 3.2.2
 
+* 新增 solon-ai-repo-dashvector 插件
 * 调整 solon-ai ToolMapping,ToolParam 注解移到 org.noear.solon.ai.annotation
 * 调整 solon-ai 拆分为 solon-ai-core 和 solon-ai-model-dialects（方便适配与扩展）
 * 调整 solon-ai 模型方言改为插件扩展方式

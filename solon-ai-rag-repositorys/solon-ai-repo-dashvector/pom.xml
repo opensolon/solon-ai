@@ -11,7 +11,7 @@
         <relativePath>../../solon-ai-parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>solon-ai-repo-dash-vector</artifactId>
+    <artifactId>solon-ai-repo-dashvector</artifactId>
     <packaging>jar</packaging>
 
     <dependencies>
