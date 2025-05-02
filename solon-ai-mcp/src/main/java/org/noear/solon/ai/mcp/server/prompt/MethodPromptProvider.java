@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.prompt;
 
+import org.noear.solon.Solon;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.core.BeanWrap;
 
@@ -37,7 +38,7 @@ public class MethodPromptProvider implements PromptProvider {
     }
 
     public MethodPromptProvider(Class<?> toolClz, Object toolObj) {
-        this(new BeanWrap(null, toolClz, toolObj));
+        this(new BeanWrap(Solon.context(), toolClz, toolObj));
     }
 
     public MethodPromptProvider(BeanWrap beanWrap) {

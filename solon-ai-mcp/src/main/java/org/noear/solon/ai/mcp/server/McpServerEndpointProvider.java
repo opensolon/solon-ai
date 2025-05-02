@@ -17,30 +17,25 @@ package org.noear.solon.ai.mcp.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.McpServer;
-import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
-import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import org.noear.snack.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.ChatRole;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
-import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
+import org.noear.solon.ai.mcp.server.manager.PromptMcpServerManager;
+import org.noear.solon.ai.mcp.server.manager.ResourceMcpServerManager;
+import org.noear.solon.ai.mcp.server.manager.ToolMcpServerManager;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 import org.noear.solon.ai.mcp.server.prompt.PromptProvider;
 import org.noear.solon.ai.mcp.server.resource.ResourceProvider;
-import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
-import org.noear.solon.core.handle.ContextHolder;
 import org.noear.solon.core.util.ConvertUtil;
 import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.util.RunUtil;
@@ -50,7 +45,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Mcp 服务端点提供者
@@ -63,11 +57,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private final McpServerTransportProvider mcpTransportProvider;
     private final McpServer.SyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
+
+    private final PromptMcpServerManager promptManager = new PromptMcpServerManager();
+    private final ResourceMcpServerManager resourceManager = new ResourceMcpServerManager();
+    private final ToolMcpServerManager toolManager = new ToolMcpServerManager();
+
     private final String sseEndpoint;
     private final String messageEndpoint;
-    private final Map<String, FunctionTool> toolsMap = new ConcurrentHashMap<>();
-    private final Map<String, FunctionResource> resourcesMap = new ConcurrentHashMap<>();
-    private final Map<String, FunctionPrompt> promptsMap = new ConcurrentHashMap<>();
     private McpSyncServer server;
 
     public McpServerEndpointProvider(Properties properties) {
@@ -134,7 +130,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记资源
      */
     public void addResource(FunctionResource functionResource) {
-        addResourceSpec(functionResource);
+        resourceManager.add(server, mcpServerSpec, functionResource);
     }
 
     /**
@@ -142,7 +138,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      */
     public void addResource(ResourceProvider resourceProvider) {
         for (FunctionResource functionResource : resourceProvider.getResources()) {
-            addResourceSpec(functionResource);
+            addResource(functionResource);
         }
     }
 
@@ -150,10 +146,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 移除资源
      */
     public void removeResource(String resourceUri) {
-        if (server != null) {
-            server.removeResource(resourceUri);
-            resourcesMap.remove(resourceUri);
-        }
+        resourceManager.remove(server, resourceUri);
     }
 
     /**
@@ -162,14 +155,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void removeResource(ResourceProvider resourceProvider) {
         if (server != null) {
             for (FunctionResource functionResource : resourceProvider.getResources()) {
-                server.removeResource(functionResource.uri());
-                resourcesMap.remove(functionResource.uri());
+                removeResource(functionResource.uri());
             }
         }
     }
 
     public Collection<FunctionResource> getResources() {
-        return resourcesMap.values();
+        return resourceManager.all();
     }
 
     /**
@@ -187,7 +179,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记提示语
      */
     public void addPrompt(FunctionPrompt functionPrompt) {
-        addPromptSpec(functionPrompt);
+        promptManager.add(server, mcpServerSpec, functionPrompt);
     }
 
     /**
@@ -195,7 +187,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      */
     public void addPrompt(PromptProvider promptProvider) {
         for (FunctionPrompt functionPrompt : promptProvider.getPrompts()) {
-            addPromptSpec(functionPrompt);
+            addPrompt(functionPrompt);
         }
     }
 
@@ -203,10 +195,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 移除提示语
      */
     public void removePrompt(String promptName) {
-        if (server != null) {
-            server.removePrompt(promptName);
-            promptsMap.remove(promptName);
-        }
+        promptManager.remove(server, promptName);
     }
 
     /**
@@ -215,14 +204,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void removePrompt(PromptProvider promptProvider) {
         if (server != null) {
             for (FunctionPrompt functionPrompt : promptProvider.getPrompts()) {
-                server.removePrompt(functionPrompt.name());
-                promptsMap.remove(functionPrompt.name());
+                removePrompt(functionPrompt.name());
             }
         }
     }
 
     public Collection<FunctionPrompt> getPrompts() {
-        return promptsMap.values();
+        return promptManager.all();
     }
 
     /**
@@ -240,7 +228,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记工具
      */
     public void addTool(FunctionTool functionTool) {
-        addToolSpec(functionTool);
+        toolManager.add(server, mcpServerSpec, functionTool);
     }
 
     /**
@@ -248,7 +236,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      */
     public void addTool(ToolProvider toolProvider) {
         for (FunctionTool functionTool : toolProvider.getTools()) {
-            addToolSpec(functionTool);
+            addTool(functionTool);
         }
     }
 
@@ -256,10 +244,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 移除工具
      */
     public void removeTool(String toolName) {
-        if (server != null) {
-            server.removeTool(toolName);
-            toolsMap.remove(toolName);
-        }
+        toolManager.remove(server, toolName);
     }
 
     /**
@@ -268,8 +253,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public void removeTool(ToolProvider toolProvider) {
         if (server != null) {
             for (FunctionTool functionTool : toolProvider.getTools()) {
-                server.removeTool(functionTool.name());
-                toolsMap.remove(functionTool.name());
+                removeTool(functionTool.name());
             }
         }
     }
@@ -278,7 +262,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 获取所有工具
      */
     public Collection<FunctionTool> getTools() {
-        return toolsMap.values();
+        return toolManager.all();
     }
 
     /**
@@ -307,9 +291,9 @@ public class McpServerEndpointProvider implements LifecycleBean {
                     serverProperties.getName(),
                     serverProperties.getVersion(),
                     McpChannel.STDIO,
-                    toolsMap.size(),
-                    resourcesMap.size(),
-                    promptsMap.size());
+                    toolManager.count(),
+                    resourceManager.count(),
+                    promptManager.count());
         } else {
             log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
                     serverProperties.getName(),
@@ -317,9 +301,9 @@ public class McpServerEndpointProvider implements LifecycleBean {
                     McpChannel.SSE,
                     this.sseEndpoint,
                     this.messageEndpoint,
-                    toolsMap.size(),
-                    resourcesMap.size(),
-                    promptsMap.size());
+                    toolManager.count(),
+                    resourceManager.count(),
+                    promptManager.count());
         }
 
         //如果是 web 类的
@@ -378,122 +362,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
         if (server != null) {
             server.close();
         }
-    }
-
-    protected void addToolSpec(FunctionTool functionTool) {
-        //内部登记
-        toolsMap.put(functionTool.name(), functionTool);
-
-        //mcp 登记
-        ONode jsonSchema = buildJsonSchema(functionTool);
-        String jsonSchemaStr = jsonSchema.toJson();
-
-        McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(
-                new McpSchema.Tool(functionTool.name(), functionTool.description(), jsonSchemaStr),
-                (exchange, request) -> {
-                    try {
-                        ContextHolder.currentSet(new McpServerContext(exchange));
-
-                        String rst = functionTool.handle(request);
-                        return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
-                    } catch (Throwable ex) {
-                        ex = Utils.throwableUnwrap(ex);
-                        throw new McpException(ex.getMessage(), ex);
-                    } finally {
-                        ContextHolder.currentRemove();
-                    }
-                });
-
-        if (server != null) {
-            server.addTool(toolSpec);
-        } else {
-            mcpServerSpec.tools(toolSpec);
-        }
-    }
-
-    protected void addPromptSpec(FunctionPrompt functionPrompt) {
-        promptsMap.put(functionPrompt.name(), functionPrompt);
-
-        List<McpSchema.PromptArgument> promptArguments = new ArrayList<>();
-        for (ParamDesc p1 : functionPrompt.params()) {
-            promptArguments.add(new McpSchema.PromptArgument(p1.name(), p1.description(), p1.required()));
-        }
-
-        McpServerFeatures.SyncPromptSpecification promptSpec = new McpServerFeatures.SyncPromptSpecification(
-                new McpSchema.Prompt(functionPrompt.name(), functionPrompt.description(), promptArguments),
-                (exchange, request) -> {
-                    try {
-                        ContextHolder.currentSet(new McpServerContext(exchange));
-
-                        Collection<ChatMessage> prompts = functionPrompt.handle(request.getArguments());
-                        List<McpSchema.PromptMessage> promptMessages = new ArrayList<>();
-                        for (ChatMessage msg : prompts) {
-                            if (msg.getRole() == ChatRole.ASSISTANT) {
-                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent(msg.getContent())));
-                            } else {
-                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER, new McpSchema.TextContent(msg.getContent())));
-                            }
-                        }
-
-                        return new McpSchema.GetPromptResult(functionPrompt.description(), promptMessages);
-                    } catch (Throwable ex) {
-                        ex = Utils.throwableUnwrap(ex);
-                        throw new McpException(ex.getMessage(), ex);
-                    } finally {
-                        ContextHolder.currentRemove();
-                    }
-                });
-
-        if (server != null) {
-            server.addPrompt(promptSpec);
-        } else {
-            mcpServerSpec.prompts(promptSpec);
-        }
-    }
-
-    protected void addResourceSpec(FunctionResource functionResource) {
-        resourcesMap.put(functionResource.uri(), functionResource);
-
-        if (functionResource.uri().indexOf('{') < 0) {
-            //resourceSpec
-            McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
-                    new McpSchema.Resource(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
-                    (exchange, request) -> {
-                        try {
-                            ContextHolder.currentSet(new McpServerContext(exchange));
-
-                            String text = functionResource.handle(request.getUri());
-                            return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(request.getUri(), functionResource.mimeType(), text)));
-                        } catch (Throwable ex) {
-                            ex = Utils.throwableUnwrap(ex);
-                            throw new McpException(ex.getMessage(), ex);
-                        } finally {
-                            ContextHolder.currentRemove();
-                        }
-                    });
-
-            if (server != null) {
-                server.addResource(resourceSpec);
-            } else {
-                mcpServerSpec.resources(resourceSpec);
-            }
-        } else {
-            //resourceTemplates
-            McpSchema.Annotations annotations = null;//new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
-            mcpServerSpec.resourceTemplates(new McpSchema.ResourceTemplate(functionResource.uri(),
-                    functionResource.name(),
-                    functionResource.description(),
-                    functionResource.mimeType(),
-                    annotations));
-        }
-    }
-
-    protected ONode buildJsonSchema(FunctionTool functionTool) {
-        ONode jsonSchema = new ONode();
-        jsonSchema.set("$schema", "http://json-schema.org/draft-07/schema#");
-        jsonSchema.setAll(ONode.loadStr(functionTool.inputSchema()));
-
-        return jsonSchema;
     }
 
     /// //////////////////////////////////////////////

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
+import org.noear.solon.Solon;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.core.BeanWrap;
 
@@ -37,7 +38,7 @@ public class MethodResourceProvider implements ResourceProvider {
     }
 
     public MethodResourceProvider(Class<?> toolClz, Object toolObj) {
-        this(new BeanWrap(null, toolClz, toolObj));
+        this(new BeanWrap(Solon.context(), toolClz, toolObj));
     }
 
     public MethodResourceProvider(BeanWrap beanWrap) {
