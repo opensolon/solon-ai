@@ -32,7 +32,7 @@ public class FunctionToolDesc implements FunctionTool {
     private final List<ParamDesc> params;
     private String description;
     private boolean returnDirect = false;
-    private Function<Map<String, Object>, String> doHandle;
+    private Function<Map<String, Object>, String> doHandler;
     private String inputSchema;
 
     /**
@@ -138,13 +138,14 @@ public class FunctionToolDesc implements FunctionTool {
         return param(name, Date.class, description);
     }
 
+
     /**
      * 申明函数处理
      *
      * @param handler 处理器
      */
     public FunctionToolDesc doHandle(Function<Map<String, Object>, String> handler) {
-        this.doHandle = handler;
+        this.doHandler = handler;
         return this;
     }
 
@@ -207,6 +208,6 @@ public class FunctionToolDesc implements FunctionTool {
             }
         }
 
-        return doHandle.apply(argsNew);
+        return doHandler.apply(argsNew);
     }
 }

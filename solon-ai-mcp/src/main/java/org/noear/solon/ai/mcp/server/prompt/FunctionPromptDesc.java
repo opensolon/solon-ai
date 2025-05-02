@@ -15,12 +15,12 @@
  */
 package org.noear.solon.ai.mcp.server.prompt;
 
+import org.noear.snack.ONode;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.util.ParamDesc;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Function;
 
 /**
  * 函数提示语描述
@@ -28,24 +28,144 @@ import java.util.Map;
  * @author noear
  * @since 3.2
  */
-public class FunctionPromptDesc implements FunctionPrompt{
+public class FunctionPromptDesc implements FunctionPrompt {
+    private final String name;
+    private final List<ParamDesc> params;
+
+    private String description;
+    private Function<Map<String, Object>, Collection<ChatMessage>> doHandler;
+
+    public FunctionPromptDesc(String name) {
+        this.name = name;
+        this.params = new ArrayList<>();
+    }
+
+    /**
+     * 申明函数描述
+     *
+     * @param description 参数
+     */
+    public FunctionPromptDesc description(String description) {
+        this.description = description;
+        return this;
+    }
+
+
+    /**
+     * 申明函数参数
+     *
+     * @param name        参数名字
+     * @param type        参数类型
+     * @param description 参数描述
+     */
+    public FunctionPromptDesc param(String name, Class<?> type, String description) {
+        return param(name, type, true, description);
+    }
+
+    /**
+     * 申明函数参数
+     *
+     * @param name        参数名字
+     * @param type        参数类型
+     * @param required    是否必须
+     * @param description 参数描述
+     */
+    public FunctionPromptDesc param(String name, Class<?> type, boolean required, String description) {
+        params.add(new ParamDesc(name, type, required, description));
+        return this;
+    }
+
+    /**
+     * 申明函数字符串参数
+     *
+     * @param name        参数名字
+     * @param description 参数描述
+     */
+    public FunctionPromptDesc stringParam(String name, String description) {
+        return param(name, String.class, description);
+    }
+
+    /**
+     * 申明函数整型参数
+     *
+     * @param name        参数名字
+     * @param description 参数描述
+     */
+    public FunctionPromptDesc intParam(String name, String description) {
+        return param(name, int.class, description);
+    }
+
+    /**
+     * 申明函数浮点数参数
+     *
+     * @param name        参数名字
+     * @param description 参数描述
+     */
+    public FunctionPromptDesc floatParam(String name, String description) {
+        return param(name, float.class, description);
+    }
+
+    /**
+     * 申明函数布尔参数
+     *
+     * @param name        参数名字
+     * @param description 参数描述
+     */
+    public FunctionPromptDesc boolParam(String name, String description) {
+        return param(name, Boolean.class, description);
+    }
+
+    /**
+     * 申明函数时间参数
+     *
+     * @param name        参数名字
+     * @param description 参数描述
+     */
+    public FunctionPromptDesc dateParam(String name, String description) {
+        return param(name, Date.class, description);
+    }
+
+    /**
+     * 申明函数处理
+     *
+     * @param handler 处理器
+     */
+    public FunctionPromptDesc doHandle(Function<Map<String, Object>, Collection<ChatMessage>> handler) {
+        this.doHandler = handler;
+        return this;
+    }
+
     @Override
     public String name() {
-        return "";
+        return name;
     }
 
     @Override
     public String description() {
-        return "";
+        return description;
     }
 
     @Override
     public Collection<ParamDesc> params() {
-        return Collections.emptyList();
+        return params;
     }
 
     @Override
     public Collection<ChatMessage> handle(Map<String, Object> args) throws Throwable {
-        return Collections.emptyList();
+        Map<String, Object> argsNew = new HashMap<>();
+
+        ONode argsNode = ONode.load(args);
+        for (ParamDesc p1 : this.params) {
+            ONode v1 = argsNode.getOrNull(p1.name());
+            if (v1 == null) {
+                //null
+                argsNew.put(p1.name(), null);
+            } else {
+                //用 ONode 可以自动转换类型
+                argsNew.put(p1.name(), v1.toObject(p1.type()));
+            }
+        }
+
+        return doHandler.apply(argsNew);
     }
 }

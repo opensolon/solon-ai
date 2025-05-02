@@ -15,35 +15,87 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
+import java.util.function.Function;
+
 /**
  * 函数资源描述
  *
  * @author noear
  * @since 3.2
  */
-public class FunctionResourceDesc implements FunctionResource{
-    @Override
-    public String uri() {
-        return "";
+public class FunctionResourceDesc implements FunctionResource {
+    private final String name;
+    private String uri;
+    private String description;
+    private String mimeType;
+    private Function<String, String> doHandler;
+
+    public FunctionResourceDesc(String name) {
+        this.name = name;
+    }
+
+    /**
+     * 申明资源地址
+     *
+     * @param uri 参数
+     */
+    public FunctionResourceDesc uri(String uri) {
+        this.uri = uri;
+        return this;
+    }
+
+    /**
+     * 申明函数描述
+     *
+     * @param description 参数
+     */
+    public FunctionResourceDesc description(String description) {
+        this.description = description;
+        return this;
+    }
+
+    /**
+     * 申明媒体类型
+     *
+     * @param mimeType 媒体类型
+     */
+    public FunctionResourceDesc mimeType(String mimeType) {
+        this.mimeType = mimeType;
+        return this;
+    }
+
+    /**
+     * 申明函数处理
+     *
+     * @param handler 处理器
+     */
+    public FunctionResourceDesc doHandle(Function<String, String> handler) {
+        this.doHandler = handler;
+        return this;
     }
 
     @Override
     public String name() {
-        return "";
+        return name;
+    }
+
+    @Override
+    public String uri() {
+        return uri;
     }
 
     @Override
     public String description() {
-        return "";
+        return description;
     }
 
     @Override
     public String mimeType() {
-        return "";
+        return mimeType;
     }
 
     @Override
     public String handle(String reqUri) throws Throwable {
-        return "";
+        return doHandler.apply(reqUri);
     }
 }
