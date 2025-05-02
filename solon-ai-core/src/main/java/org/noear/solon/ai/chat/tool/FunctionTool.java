@@ -23,7 +23,7 @@ import java.util.Map;
  * @author noear
  * @since 3.1
  */
-public interface FunctionTool extends Tool {
+public interface FunctionTool extends ChatTool {
     /**
      * 工具类型
      */

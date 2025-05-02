@@ -16,12 +16,12 @@
 package org.noear.solon.ai.chat.tool;
 
 /**
- * 工具
+ * 聊天工具
  *
  * @author noear
  * @since 3.1
  */
-public interface Tool {
+public interface ChatTool {
     /**
      * 工具类型
      */

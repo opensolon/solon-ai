@@ -18,12 +18,12 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.ai.AiModel;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
+import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.Props;
 import org.noear.solon.lang.Preview;
 
-import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.*;
 import java.util.function.Consumer;
@@ -52,8 +52,8 @@ public class ChatModel implements AiModel {
     /**
      * 提示语
      */
-    public ChatRequest prompt(ChatSession session) {
-        return prompt(session.getMessages());
+    public ChatRequest prompt(ChatPrompt prompt) {
+        return prompt(prompt.getMessages());
     }
 
     /**

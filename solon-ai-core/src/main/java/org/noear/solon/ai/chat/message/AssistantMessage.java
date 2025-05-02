@@ -42,6 +42,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         //用于序列化
     }
 
+    public AssistantMessage(String content) {
+        this(content, false, null, null);
+    }
+
     public AssistantMessage(String content, boolean isThinking, List<Map> toolCallsRaw, List<ToolCall> toolCalls) {
         this.content = content;
         this.isThinking = isThinking;
@@ -69,6 +73,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
      * 结果内容（没有推理标签的内容）
      */
     private transient String resultContent;
+
     public String getResultContent() {
         if (resultContent == null) {
             if (content == null) {
