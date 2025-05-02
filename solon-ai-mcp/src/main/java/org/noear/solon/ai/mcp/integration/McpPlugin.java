@@ -18,8 +18,8 @@ package org.noear.solon.ai.mcp.integration;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
-import org.noear.solon.ai.mcp.util.MethodPromptProvider;
-import org.noear.solon.ai.mcp.util.MethodResourceProvider;
+import org.noear.solon.ai.mcp.server.prompt.MethodPromptProvider;
+import org.noear.solon.ai.mcp.server.resource.MethodResourceProvider;
 import org.noear.solon.core.AppContext;
 import org.noear.solon.core.Plugin;
 

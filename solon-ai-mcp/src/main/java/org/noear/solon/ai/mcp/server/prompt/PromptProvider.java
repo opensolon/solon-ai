@@ -13,39 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.util;
-
-import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.util.ParamDesc;
+package org.noear.solon.ai.mcp.server.prompt;
 
 import java.util.Collection;
-import java.util.List;
-import java.util.Map;
 
 /**
- * 函数提示语
+ * 提示语提供者
  *
  * @author noear
  * @since 3.2
  */
-public interface FunctionPrompt {
+public interface PromptProvider {
     /**
-     * 名字
+     * 获取提示语
      */
-    String name();
-
-    /**
-     * 描述
-     */
-    String description();
-
-    /**
-     * 参数
-     */
-    Collection<ParamDesc> params();
-
-    /**
-     * 处理
-     */
-    Collection<ChatMessage> handle(Map<String, Object> args) throws Throwable;
+    Collection<FunctionPrompt> getPrompts();
 }

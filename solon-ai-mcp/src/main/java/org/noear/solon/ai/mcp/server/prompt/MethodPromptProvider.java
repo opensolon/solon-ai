@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.util;
+package org.noear.solon.ai.mcp.server.prompt;
 
 import org.noear.solon.ai.annotation.PromptMapping;
-import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.core.BeanWrap;
 
 import java.lang.reflect.Method;

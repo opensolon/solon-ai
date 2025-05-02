@@ -13,19 +13,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.util;
-
-import java.util.Collection;
+package org.noear.solon.ai.mcp.server.resource;
 
 /**
- * 资源提供者
+ * 函数资源描述
  *
  * @author noear
  * @since 3.2
  */
-public interface ResourceProvider {
-    /**
-     * 获取资源
-     */
-    Collection<FunctionResource> getResources();
+public class FunctionResourceDesc implements FunctionResource{
+    @Override
+    public String uri() {
+        return "";
+    }
+
+    @Override
+    public String name() {
+        return "";
+    }
+
+    @Override
+    public String description() {
+        return "";
+    }
+
+    @Override
+    public String mimeType() {
+        return "";
+    }
+
+    @Override
+    public String handle(String reqUri) throws Throwable {
+        return "";
+    }
 }

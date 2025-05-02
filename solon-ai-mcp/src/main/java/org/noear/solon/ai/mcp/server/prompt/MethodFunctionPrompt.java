@@ -13,9 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.util;
+package org.noear.solon.ai.mcp.server.prompt;
 
-import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -26,7 +25,6 @@ import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.MimeType;
 import org.noear.solon.core.wrap.MethodWrap;
 
 import java.lang.reflect.Method;
