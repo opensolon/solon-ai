@@ -16,34 +16,27 @@
 package org.noear.solon.ai.mcp.server.resource;
 
 /**
- * 函数资源
+ * 简单资源实现
  *
  * @author noear
- * @since 3.2
+ * @since 3.1
  */
-public interface FunctionResource {
-    /**
-     * 资源地址描述
-     */
-    String uri();
+public class SimpleResource implements Resource {
+    private final boolean isBase64;
+    private final String content;
 
-    /**
-     * 名字
-     */
-    String name();
+    public SimpleResource(boolean isBase64, String content) {
+        this.isBase64 = isBase64;
+        this.content = content;
+    }
 
-    /**
-     * 描述
-     */
-    String description();
+    @Override
+    public boolean isBase64() {
+        return isBase64;
+    }
 
-    /**
-     * 媒体类型
-     */
-    String mimeType();
-
-    /**
-     * 处理
-     */
-    Resource handle(String reqUri) throws Throwable;
+    @Override
+    public String content() {
+        return content;
+    }
 }

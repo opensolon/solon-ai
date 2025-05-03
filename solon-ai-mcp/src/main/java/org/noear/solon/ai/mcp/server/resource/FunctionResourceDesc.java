@@ -28,7 +28,7 @@ public class FunctionResourceDesc implements FunctionResource {
     private String uri;
     private String description;
     private String mimeType;
-    private Function<String, String> doHandler;
+    private Function<String, Resource> doHandler;
 
     public FunctionResourceDesc(String name) {
         this.name = name;
@@ -69,7 +69,7 @@ public class FunctionResourceDesc implements FunctionResource {
      *
      * @param handler 处理器
      */
-    public FunctionResourceDesc doHandle(Function<String, String> handler) {
+    public FunctionResourceDesc doHandle(Function<String, Resource> handler) {
         this.doHandler = handler;
         return this;
     }
@@ -95,7 +95,7 @@ public class FunctionResourceDesc implements FunctionResource {
     }
 
     @Override
-    public String handle(String reqUri) throws Throwable {
+    public Resource handle(String reqUri) throws Throwable {
         return doHandler.apply(reqUri);
     }
 }

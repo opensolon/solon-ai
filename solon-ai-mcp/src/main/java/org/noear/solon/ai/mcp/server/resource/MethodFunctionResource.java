@@ -22,12 +22,17 @@ import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.IoUtil;
 import org.noear.solon.core.util.PathMatcher;
 import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.wrap.MethodWrap;
 
+import java.io.File;
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collection;
 import java.util.List;
 import java.util.regex.Matcher;
 
@@ -60,6 +65,12 @@ public class MethodFunctionResource implements FunctionResource {
 
         //断言
         Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
+
+        //检查返回类型
+        if (Resource.class.isAssignableFrom(method.getReturnType()) == false &&
+                String.class.isAssignableFrom(method.getReturnType()) == false) {
+            throw new IllegalArgumentException("@ResourceMapping return type is not resource or string");
+        }
 
         //支持path变量
         if (mapping.uri() != null && mapping.uri().indexOf('{') >= 0) {
@@ -96,7 +107,7 @@ public class MethodFunctionResource implements FunctionResource {
     }
 
     @Override
-    public String handle(String reqUri) throws Throwable {
+    public Resource handle(String reqUri) throws Throwable {
         Context ctx = Context.current();
         if (ctx == null) {
             ctx = new ContextEmpty();
@@ -107,7 +118,11 @@ public class MethodFunctionResource implements FunctionResource {
         ctx.result = MethodExecuteHandler.getInstance()
                 .executeHandle(ctx, beanWrap.get(), methodWrap);
 
-        return String.valueOf(ctx.result);
+        if (ctx.result instanceof Resource) {
+            return (Resource) ctx.result;
+        } else {
+            return Resource.of(false, String.valueOf(ctx.result));
+        }
     }
 
     private void bindPathVarDo(Context c, String reqUri) throws Throwable {
