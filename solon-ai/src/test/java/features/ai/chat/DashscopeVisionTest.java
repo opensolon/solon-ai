@@ -1,13 +1,13 @@
 package features.ai.chat;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.audio.Audio;
+import org.noear.solon.ai.media.Audio;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.image.Image;
+import org.noear.solon.ai.media.Image;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;

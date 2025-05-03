@@ -3,22 +3,15 @@ package features.ai.chat;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.ChatSession;
-import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.image.Image;
+import org.noear.solon.ai.media.Image;
 import org.noear.solon.net.http.HttpUtils;
-import org.noear.solon.rx.SimpleSubscriber;
 import org.noear.solon.test.SolonTest;
-import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.concurrent.CountDownLatch;
 
 /**
  * @author noear 2025/1/28 created
