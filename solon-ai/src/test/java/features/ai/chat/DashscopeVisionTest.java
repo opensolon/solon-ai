@@ -38,7 +38,6 @@ public class DashscopeVisionTest {
                 .build();
 
         String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
-
         byte[] bytes = HttpUtils.http(imageUrl).exec("GET").bodyAsBytes();
 
         //一次性返回
@@ -58,7 +57,7 @@ public class DashscopeVisionTest {
                 .timeout(Duration.ofSeconds(300))
                 .build();
 
-        String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
+        String imageUrl = "https://solon.noear.org/img/solon/favicon256.png";
         Image image = Image.ofUrl(imageUrl);
         //一次性返回
         ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？，这两张图片一样吗",image,image))
