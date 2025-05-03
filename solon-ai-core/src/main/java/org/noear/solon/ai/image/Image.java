@@ -17,6 +17,7 @@ package org.noear.solon.ai.image;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.media.AbstractMedia;
 
 import java.util.Base64;
 
@@ -26,10 +27,15 @@ import java.util.Base64;
  * @author noear
  * @since 3.1
  */
-public class Image implements AiMedia {
-    private String b64_json; //就是 base64-str
-    private String url;
-    private String mime;
+public class Image extends AbstractMedia implements AiMedia {
+    @Override
+    public String getMimeType() {
+        if (Utils.isEmpty(mimeType)) {
+            return "image/jpeg";
+        } else {
+            return mimeType;
+        }
+    }
 
     /**
      * 由 url 构建
@@ -52,20 +58,20 @@ public class Image implements AiMedia {
     /**
      * 由 base64 构建
      */
-    public static Image ofBase64(String base64String, String mime) {
+    public static Image ofBase64(String base64String, String mimeType) {
         Image tmp = new Image();
         tmp.b64_json = base64String;
-        tmp.mime = mime;
+        tmp.mimeType = mimeType;
         return tmp;
     }
 
     /**
      * 由 base64 构建
      */
-    public static Image ofBase64(byte[] base64, String mime) {
+    public static Image ofBase64(byte[] base64, String mimeType) {
         Image tmp = new Image();
         tmp.b64_json = Base64.getEncoder().encodeToString(base64);
-        tmp.mime = mime;
+        tmp.mimeType = mimeType;
         return tmp;
     }
 
@@ -76,54 +82,5 @@ public class Image implements AiMedia {
         Image tmp = new Image();
         tmp.b64_json = Base64.getEncoder().encodeToString(base64);
         return tmp;
-    }
-
-    /**
-     * 获取 base64
-     */
-    public String getB64Json() {
-        return b64_json;
-    }
-
-    /**
-     * 获取 url
-     */
-    public String getUrl() {
-        return url;
-    }
-
-    /**
-     * 获取 mime
-     */
-    public String getMime() {
-        return mime;
-    }
-
-    /**
-     * 转为带媒体信息的字符串
-     */
-    @Override
-    public String toDataString(boolean useMime) {
-        if (Utils.isEmpty(b64_json)) {
-            return url;
-        } else {
-            if (useMime) {
-                if (mime != null) {
-                    return "data:" + mime + ";base64," + b64_json;
-                } else {
-                    return "data:image/jpeg;base64," + b64_json;
-                }
-            } else {
-                return b64_json;
-            }
-        }
-    }
-
-    @Override
-    public String toString() {
-        return "Image{" +
-                "b64_json='" + b64_json + '\'' +
-                ", url='" + url + '\'' +
-                '}';
     }
 }

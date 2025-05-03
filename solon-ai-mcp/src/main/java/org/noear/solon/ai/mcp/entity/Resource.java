@@ -31,11 +31,4 @@ public interface Resource {
      * 内容
      */
     String content();
-
-    /**
-     * 构建
-     */
-    static Resource of(boolean isBase64, String content) {
-        return new SimpleResource(isBase64, content);
-    }
 }

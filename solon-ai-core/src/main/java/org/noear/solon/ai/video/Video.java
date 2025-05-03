@@ -15,7 +15,11 @@
  */
 package org.noear.solon.ai.video;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.media.AbstractMedia;
+
+import java.util.Base64;
 
 /**
  * 视频
@@ -23,8 +27,15 @@ import org.noear.solon.ai.AiMedia;
  * @author noear
  * @since 3.1
  */
-public class Video implements AiMedia {
-    private String url;
+public class Video extends AbstractMedia implements AiMedia {
+    @Override
+    public String getMimeType() {
+        if (Utils.isEmpty(mimeType)) {
+            return "video/mpeg";
+        } else {
+            return mimeType;
+        }
+    }
 
     /**
      * 由 url 构建
@@ -36,24 +47,40 @@ public class Video implements AiMedia {
     }
 
     /**
-     * 获取 url
+     * 由 base64String 构建
      */
-    public String getUrl() {
-        return url;
+    public static Video ofBase64(String base64String) {
+        Video tmp = new Video();
+        tmp.b64_json = base64String;
+        return tmp;
     }
 
     /**
-     * 转为数据字符串
+     * 由 base64 构建
      */
-    @Override
-    public String toDataString(boolean useMime) {
-        return url;
+    public static Video ofBase64(String base64String, String mimeType) {
+        Video tmp = new Video();
+        tmp.b64_json = base64String;
+        tmp.mimeType = mimeType;
+        return tmp;
     }
 
-    @Override
-    public String toString() {
-        return "Video{" +
-                "url='" + url + '\'' +
-                '}';
+    /**
+     * 由 base64 构建
+     */
+    public static Video ofBase64(byte[] base64, String mimeType) {
+        Video tmp = new Video();
+        tmp.b64_json = Base64.getEncoder().encodeToString(base64);
+        tmp.mimeType = mimeType;
+        return tmp;
+    }
+
+    /**
+     * 由 base64 构建
+     */
+    public static Video ofBase64(byte[] base64) {
+        Video tmp = new Video();
+        tmp.b64_json = Base64.getEncoder().encodeToString(base64);
+        return tmp;
     }
 }
