@@ -42,6 +42,14 @@ public class Video implements AiMedia {
         return url;
     }
 
+    /**
+     * 转为数据字符串
+     */
+    @Override
+    public String toDataString(boolean useMime) {
+        return url;
+    }
+
     @Override
     public String toString() {
         return "Video{" +

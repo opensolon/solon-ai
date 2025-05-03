@@ -23,14 +23,7 @@ package org.noear.solon.ai;
  */
 public interface AiMedia {
     /**
-     * 获取 url
-     */
-    String getUrl();
-
-    /**
      * 转为数据字符串
      */
-    default String toDataString(boolean useMime) {
-        return getUrl();
-    }
+    String toDataString(boolean useMime);
 }

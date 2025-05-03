@@ -113,9 +113,9 @@ public class Image implements AiMedia {
             return url;
         } else {
             if (useMime) {
-                if(mime!=null){
+                if (mime != null) {
                     return "data:" + mime + ";base64," + b64_json;
-                }else{
+                } else {
                     return "data:image/jpeg;base64," + b64_json;
                 }
             } else {

@@ -75,9 +75,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     if (media instanceof Image) {
                         n1.addNew().set("type", "image_url").getOrNew("image_url").set("url", media.toDataString(true));
                     } else if (media instanceof Audio) {
-                        n1.addNew().set("type", "audio_url").getOrNew("audio_url").set("url", media.getUrl());
+                        n1.addNew().set("type", "audio_url").getOrNew("audio_url").set("url", media.toDataString(true));
                     } else if (media instanceof Video) {
-                        n1.addNew().set("type", "video_url").getOrNew("video_url").set("url", media.getUrl());
+                        n1.addNew().set("type", "video_url").getOrNew("video_url").set("url", media.toDataString(true));
                     }
                 }
             });
