@@ -17,8 +17,6 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.annotation.ToolParam;
-import org.noear.solon.ai.annotation.ToolParamAnno;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
@@ -51,11 +49,7 @@ public class ToolSchemaUtil {
     public static final String TYPE_NULL = "null";
 
     public static @Nullable ParamDesc paramOf(AnnotatedElement ae) {
-        ToolParam p1Anno = ae.getAnnotation(ToolParam.class);
-        if (p1Anno == null) {
-            p1Anno = ToolParamAnno.fromMapping(ae.getAnnotation(Param.class));
-        }
-
+        Param p1Anno = ae.getAnnotation(Param.class);
         if (p1Anno == null) {
             return null;
         }
