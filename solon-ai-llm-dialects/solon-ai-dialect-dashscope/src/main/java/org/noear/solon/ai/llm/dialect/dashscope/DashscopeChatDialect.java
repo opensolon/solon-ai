@@ -19,13 +19,13 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.audio.Audio;
+import org.noear.solon.ai.media.Audio;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
-import org.noear.solon.ai.image.Image;
+import org.noear.solon.ai.media.Image;
 
 import java.util.Arrays;
 import java.util.Date;

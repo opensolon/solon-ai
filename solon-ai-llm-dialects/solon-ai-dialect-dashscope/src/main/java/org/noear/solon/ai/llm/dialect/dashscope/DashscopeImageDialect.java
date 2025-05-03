@@ -19,6 +19,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.image.*;
 import org.noear.solon.ai.image.dialect.AbstractImageDialect;
+import org.noear.solon.ai.media.Image;
 
 import java.util.Arrays;
 import java.util.List;
