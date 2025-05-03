@@ -23,7 +23,7 @@ public class McpSseClientMixTest {
 
     @Test
     public void tool() throws Exception {
-        String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州"));
+        String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
@@ -31,7 +31,7 @@ public class McpSseClientMixTest {
 
     @Test
     public void resource() throws Exception {
-        String resource = mcpClient.readResourceAsText("config://app-version");
+        String resource = mcpClient.readResourceAsText("config://app-version").getContent();
 
         assert Utils.isNotEmpty(resource);
         log.warn("{}", resource);
@@ -41,7 +41,7 @@ public class McpSseClientMixTest {
 
     @Test
     public void resource2() throws Exception {
-        String resource = mcpClient.readResourceAsText("db://users/12/email");
+        String resource = mcpClient.readResourceAsText("db://users/12/email").getContent();
 
         assert Utils.isNotEmpty(resource);
         log.warn("{}", resource);

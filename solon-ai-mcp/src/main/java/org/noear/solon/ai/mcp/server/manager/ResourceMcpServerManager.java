@@ -23,7 +23,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
-import org.noear.solon.ai.mcp.entity.Resource;
+import org.noear.solon.ai.media.Text;
 import org.noear.solon.core.handle.ContextHolder;
 
 import java.util.Arrays;
@@ -70,18 +70,18 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
                         try {
                             ContextHolder.currentSet(new McpServerContext(exchange));
 
-                            Resource res = functionResource.handle(request.getUri());
+                            Text res = functionResource.handle(request.getUri());
 
                             if (res.isBase64()) {
                                 return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
                                         request.getUri(),
                                         functionResource.mimeType(),
-                                        res.content())));
+                                        res.getContent())));
                             } else {
                                 return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
                                         request.getUri(),
                                         functionResource.mimeType(),
-                                        res.content())));
+                                        res.getContent())));
                             }
                         } catch (Throwable ex) {
                             ex = Utils.throwableUnwrap(ex);

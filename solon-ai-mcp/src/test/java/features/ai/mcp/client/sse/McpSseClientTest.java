@@ -31,7 +31,7 @@ public class McpSseClientTest {
                 .getProp("solon.ai.mcp.client.demo1")
                 .toBean(McpClientToolProvider.class);
 
-        String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州"));
+        String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
@@ -39,7 +39,7 @@ public class McpSseClientTest {
         mcpClient.close();
         mcpClient.reopen();
 
-        response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州"));
+        response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
@@ -53,7 +53,7 @@ public class McpSseClientTest {
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
 
-        String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州"));
+        String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);

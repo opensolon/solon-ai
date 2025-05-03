@@ -26,7 +26,7 @@ public class McpStdioClientTest {
 
         //args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "dir")
 
-        String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州"));
+        String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州")).getContent();
 
         assert response != null;
         log.warn(response);

@@ -26,7 +26,7 @@ public class McpSseClientRetryTest {
 
     private static void call(McpClientToolProvider toolProvider) {
         try {
-            String response = toolProvider.callToolAsText("getWeather", Maps.of("location", "杭州"));
+            String response = toolProvider.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
             assert response != null;
             System.err.println(response);
         } catch (Throwable e) {
