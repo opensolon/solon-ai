@@ -28,8 +28,8 @@ import java.util.Base64;
  * @since 3.1
  */
 public class Audio implements AiMedia {
-    private String url;
     private String b64_json; //就是 base64-str
+    private String url;
     private String mime;
 
     /**
@@ -39,22 +39,6 @@ public class Audio implements AiMedia {
         Audio tmp = new Audio();
         tmp.url = url;
         return tmp;
-    }
-
-    /**
-     * 获取 url
-     */
-    public String getUrl() {
-        return url;
-    }
-
-    @Override
-    public String toString() {
-        return "Audio{" +
-                "url='" + url + '\'' +
-                ", b64_json='" + b64_json + '\'' +
-                ", mime='" + mime + '\'' +
-                '}';
     }
 
     /**
@@ -96,6 +80,27 @@ public class Audio implements AiMedia {
     }
 
     /**
+     * 获取 base64
+     */
+    public String getB64Json() {
+        return b64_json;
+    }
+
+    /**
+     * 获取 url
+     */
+    public String getUrl() {
+        return url;
+    }
+
+    /**
+     * 获取 mime
+     */
+    public String getMime() {
+        return mime;
+    }
+
+    /**
      * 转为数据字符串
      */
     @Override
@@ -113,5 +118,14 @@ public class Audio implements AiMedia {
                 return b64_json;
             }
         }
+    }
+
+    @Override
+    public String toString() {
+        return "Audio{" +
+                "url='" + url + '\'' +
+                ", b64_json='" + b64_json + '\'' +
+                ", mime='" + mime + '\'' +
+                '}';
     }
 }

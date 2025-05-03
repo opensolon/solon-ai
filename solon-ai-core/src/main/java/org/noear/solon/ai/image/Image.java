@@ -31,11 +31,6 @@ public class Image implements AiMedia {
     private String url;
     private String mime;
 
-
-    public Image() {
-        //...用于反序列化
-    }
-
     /**
      * 由 url 构建
      */
