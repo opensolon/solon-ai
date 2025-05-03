@@ -29,6 +29,7 @@ import org.noear.solon.core.wrap.MethodWrap;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.regex.Matcher;
 
@@ -64,8 +65,9 @@ public class MethodFunctionResource implements FunctionResource {
 
         //检查返回类型
         if (Text.class.isAssignableFrom(method.getReturnType()) == false &&
-                String.class.isAssignableFrom(method.getReturnType()) == false) {
-            throw new IllegalArgumentException("@ResourceMapping return type is not 'Text' or 'String'");
+                String.class.equals(method.getReturnType()) == false &&
+                byte[].class.equals(method.getReturnType()) == false) {
+            throw new IllegalArgumentException("@ResourceMapping return type is not 'Text' or 'String' or `byte[]`");
         }
 
         //支持path变量
@@ -116,6 +118,9 @@ public class MethodFunctionResource implements FunctionResource {
 
         if (ctx.result instanceof Text) {
             return (Text) ctx.result;
+        } else if (ctx.result instanceof byte[]) {
+            String blob = Base64.getEncoder().encodeToString((byte[]) ctx.result);
+            return Text.of(true, blob);
         } else {
             return Text.of(false, String.valueOf(ctx.result));
         }
