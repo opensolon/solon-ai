@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
+import org.noear.solon.ai.mcp.entity.Resource;
+
 import java.util.function.Function;
 
 /**

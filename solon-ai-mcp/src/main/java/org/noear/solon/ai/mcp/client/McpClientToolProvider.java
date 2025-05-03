@@ -433,6 +433,9 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
             } else {
                 if (content instanceof McpSchema.TextContent) {
                     list.add(ChatMessage.ofUser(((McpSchema.TextContent) content).getText()));
+                } else if (content instanceof McpSchema.ImageContent) {
+                    McpSchema.ImageContent imageContent = ((McpSchema.ImageContent) content);
+                    list.add(ChatMessage.ofUser("", Image.ofBase64(imageContent.getData(), imageContent.getMimeType())));
                 }
             }
         }

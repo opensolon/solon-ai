@@ -23,7 +23,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
-import org.noear.solon.ai.mcp.server.resource.Resource;
+import org.noear.solon.ai.mcp.entity.Resource;
 import org.noear.solon.core.handle.ContextHolder;
 
 import java.util.Arrays;

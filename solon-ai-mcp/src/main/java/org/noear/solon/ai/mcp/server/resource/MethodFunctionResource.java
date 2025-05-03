@@ -18,21 +18,17 @@ package org.noear.solon.ai.mcp.server.resource;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.chat.tool.MethodExecuteHandler;
+import org.noear.solon.ai.mcp.entity.Resource;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.IoUtil;
 import org.noear.solon.core.util.PathMatcher;
 import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.wrap.MethodWrap;
 
-import java.io.File;
-import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Base64;
-import java.util.Collection;
 import java.util.List;
 import java.util.regex.Matcher;
 

@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
+import org.noear.solon.ai.mcp.entity.Resource;
+
 /**
  * 函数资源
  *
