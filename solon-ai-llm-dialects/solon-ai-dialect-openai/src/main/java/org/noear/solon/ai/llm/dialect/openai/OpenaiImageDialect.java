@@ -17,7 +17,7 @@ package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack.ONode;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.image.Image;
+import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.image.ImageConfig;
 import org.noear.solon.ai.image.ImageException;
 import org.noear.solon.ai.image.ImageResponse;
