@@ -19,7 +19,7 @@ import org.noear.snack.ONode;
 import org.noear.snack.core.Feature;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.chat.ChatRole;
-import org.noear.solon.ai.image.Image;
+import org.noear.solon.ai.media.Image;
 
 import java.io.*;
 import java.time.LocalDateTime;

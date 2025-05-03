@@ -18,12 +18,12 @@ package org.noear.solon.ai.chat.dialect;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
-import org.noear.solon.ai.audio.Audio;
+import org.noear.solon.ai.media.Audio;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.*;
-import org.noear.solon.ai.image.Image;
-import org.noear.solon.ai.video.Video;
+import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.media.Video;
 
 import java.util.*;
 

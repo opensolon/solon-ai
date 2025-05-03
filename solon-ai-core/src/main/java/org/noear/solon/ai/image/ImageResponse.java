@@ -17,6 +17,7 @@ package org.noear.solon.ai.image;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
+import org.noear.solon.ai.media.Image;
 
 import java.util.List;
 

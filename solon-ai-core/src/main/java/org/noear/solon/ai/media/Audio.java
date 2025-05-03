@@ -13,12 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.audio;
+package org.noear.solon.ai.media;
 
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
-import org.noear.solon.ai.media.AbstractMedia;
 
 import java.util.Base64;
 
