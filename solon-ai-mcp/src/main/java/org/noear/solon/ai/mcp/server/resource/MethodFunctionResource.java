@@ -18,7 +18,7 @@ package org.noear.solon.ai.mcp.server.resource;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.chat.tool.MethodExecuteHandler;
-import org.noear.solon.ai.mcp.entity.Resource;
+import org.noear.solon.ai.media.Text;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
@@ -63,9 +63,9 @@ public class MethodFunctionResource implements FunctionResource {
         Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
 
         //检查返回类型
-        if (Resource.class.isAssignableFrom(method.getReturnType()) == false &&
+        if (Text.class.isAssignableFrom(method.getReturnType()) == false &&
                 String.class.isAssignableFrom(method.getReturnType()) == false) {
-            throw new IllegalArgumentException("@ResourceMapping return type is not resource or string");
+            throw new IllegalArgumentException("@ResourceMapping return type is not 'Text' or 'String'");
         }
 
         //支持path变量
@@ -103,7 +103,7 @@ public class MethodFunctionResource implements FunctionResource {
     }
 
     @Override
-    public Resource handle(String reqUri) throws Throwable {
+    public Text handle(String reqUri) throws Throwable {
         Context ctx = Context.current();
         if (ctx == null) {
             ctx = new ContextEmpty();
@@ -114,10 +114,10 @@ public class MethodFunctionResource implements FunctionResource {
         ctx.result = MethodExecuteHandler.getInstance()
                 .executeHandle(ctx, beanWrap.get(), methodWrap);
 
-        if (ctx.result instanceof Resource) {
-            return (Resource) ctx.result;
+        if (ctx.result instanceof Text) {
+            return (Text) ctx.result;
         } else {
-            return Resource.of(false, String.valueOf(ctx.result));
+            return Text.of(false, String.valueOf(ctx.result));
         }
     }
 

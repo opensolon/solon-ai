@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
-import org.noear.solon.ai.mcp.entity.Resource;
+import org.noear.solon.ai.media.Text;
 
 /**
  * 函数资源
@@ -47,5 +47,5 @@ public interface FunctionResource {
     /**
      * 处理
      */
-    Resource handle(String reqUri) throws Throwable;
+    Text handle(String reqUri) throws Throwable;
 }

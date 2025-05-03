@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
-import org.noear.solon.ai.mcp.entity.Resource;
+import org.noear.solon.ai.media.Text;
 
 import java.util.function.Function;
 
@@ -30,7 +30,7 @@ public class FunctionResourceDesc implements FunctionResource {
     private String uri;
     private String description;
     private String mimeType;
-    private Function<String, Resource> doHandler;
+    private Function<String, Text> doHandler;
 
     public FunctionResourceDesc(String name) {
         this.name = name;
@@ -71,7 +71,7 @@ public class FunctionResourceDesc implements FunctionResource {
      *
      * @param handler 处理器
      */
-    public FunctionResourceDesc doHandle(Function<String, Resource> handler) {
+    public FunctionResourceDesc doHandle(Function<String, Text> handler) {
         this.doHandler = handler;
         return this;
     }
@@ -97,7 +97,7 @@ public class FunctionResourceDesc implements FunctionResource {
     }
 
     @Override
-    public Resource handle(String reqUri) throws Throwable {
+    public Text handle(String reqUri) throws Throwable {
         return doHandler.apply(reqUri);
     }
 }
