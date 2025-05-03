@@ -28,7 +28,8 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.RefererFunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
-import org.noear.solon.ai.image.Image;
+import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.media.Text;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
@@ -306,12 +307,19 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      * @param name 工具名
      * @param args 调用参数
      */
-    public String callToolAsText(String name, Map<String, Object> args) {
+    public Text callToolAsText(String name, Map<String, Object> args) {
         McpSchema.CallToolResult result = callTool(name, args);
+
         if (Utils.isEmpty(result.getContent())) {
             return null;
         } else {
-            return ((McpSchema.TextContent) result.getContent().get(0)).getText();
+            McpSchema.Content tmp = result.getContent().get(0);
+
+            if (tmp instanceof McpSchema.TextContent) {
+                return Text.of(false, ((McpSchema.TextContent) tmp).getText());
+            } else {
+                throw new IllegalArgumentException("The tool result content is not a text content.");
+            }
         }
     }
 
@@ -323,11 +331,18 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      */
     public Image callToolAsImage(String name, Map<String, Object> args) {
         McpSchema.CallToolResult result = callTool(name, args);
+
         if (Utils.isEmpty(result.getContent())) {
             return null;
         } else {
-            McpSchema.ImageContent imageContent = ((McpSchema.ImageContent) result.getContent().get(0));
-            return Image.ofBase64(imageContent.getData(), imageContent.getMimeType());
+            McpSchema.Content tmp = result.getContent().get(0);
+
+            if (tmp instanceof McpSchema.ImageContent) {
+                McpSchema.ImageContent imageContent = (McpSchema.ImageContent) tmp;
+                return Image.ofBase64(imageContent.getData(), imageContent.getMimeType());
+            } else {
+                throw new IllegalArgumentException("The tool result content is not a image content.");
+            }
         }
     }
 
@@ -364,30 +379,21 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
      *
      * @param uri 资源地址
      */
-    public String readResourceAsText(String uri) {
+    public Text readResourceAsText(String uri) {
         McpSchema.ReadResourceResult result = readResource(uri);
-        McpSchema.TextResourceContents textResource = (McpSchema.TextResourceContents) result.getContents().get(0);
 
-        if (Utils.isEmpty(textResource.getText())) {
+        if (Utils.isEmpty(result.getContents())) {
             return null;
         } else {
-            return textResource.getText();
-        }
-    }
+            McpSchema.ResourceContents tmp = result.getContents().get(0);
 
-    /**
-     * 读取资源
-     *
-     * @param uri 资源地址
-     */
-    public String readResourceAsBlob(String uri) {
-        McpSchema.ReadResourceResult result = readResource(uri);
-        McpSchema.BlobResourceContents textResource = (McpSchema.BlobResourceContents) result.getContents().get(0);
-
-        if (Utils.isEmpty(textResource.getBlob())) {
-            return null;
-        } else {
-            return textResource.getBlob();
+            if (tmp instanceof McpSchema.TextResourceContents) {
+                McpSchema.TextResourceContents textContents = (McpSchema.TextResourceContents) tmp;
+                return Text.of(false, textContents.getText(), textContents.getMimeType());
+            } else {
+                McpSchema.BlobResourceContents blobContents = (McpSchema.BlobResourceContents) tmp;
+                return Text.of(true, blobContents.getBlob(), blobContents.getMimeType());
+            }
         }
     }
 
@@ -424,6 +430,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         List<ChatMessage> list = new ArrayList<>();
 
         McpSchema.GetPromptResult result = getPrompt(name, args);
+
         for (McpSchema.PromptMessage pm : result.getMessages()) {
             McpSchema.Content content = pm.getContent();
             if (pm.getRole() == McpSchema.Role.ASSISTANT) {
@@ -498,7 +505,7 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
                     name,
                     description,
                     inputSchema,
-                    args -> callToolAsText(name, args));
+                    args -> callToolAsText(name, args).getContent());
 
             toolList.add(functionRefer);
         }
