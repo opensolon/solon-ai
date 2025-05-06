@@ -26,6 +26,8 @@ public class McpServerTool2 {
     public String get_weather(@Param(description = "城市位置") String location, Context ctx) {
         System.out.println("------------: sessionId: " + ctx.sessionId());
 
+        ctx.realIp();
+
         return "晴，14度";
     }
 
