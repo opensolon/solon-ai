@@ -61,4 +61,14 @@ public class ParamDesc {
     public boolean required() {
         return required;
     }
+
+    @Override
+    public String toString() {
+        return "ParamDesc{" +
+                "name='" + name + '\'' +
+                ", description='" + description + '\'' +
+                ", required=" + required +
+                ", type=" + type +
+                '}';
+    }
 }

@@ -29,7 +29,7 @@ public class McpServerTool2 {
         return "晴，14度";
     }
 
-    @ResourceMapping(uri = "config://app-version", description = "获取应用版本号")
+    @ResourceMapping(uri = "config://app-version", description = "获取应用版本号", mimeType = "text/config")
     public String getAppVersion() {
         return "v3.2.0";
     }

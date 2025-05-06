@@ -7,8 +7,12 @@ import org.noear.liquor.eval.Maps;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
+import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 import org.noear.solon.test.SolonTest;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -50,6 +54,18 @@ public class McpSseClientMixTest {
     }
 
     @Test
+    public void resource9() throws Exception {
+        Collection<FunctionResource> resources = mcpClient.getResources();
+        System.out.println(resources);
+        assert resources.size() == 1;
+
+        assert ("[FunctionResourceDesc{name='getAppVersion', " +
+                "uri='config://app-version', " +
+                "description='获取应用版本号', " +
+                "mimeType='text/config'}]").equals(resources.toString());
+    }
+
+    @Test
     public void prompt() throws Exception {
         List<ChatMessage> prompt = mcpClient.getPromptAsMessages("askQuestion", Maps.of("topic", "教育"));
 
@@ -66,5 +82,21 @@ public class McpSseClientMixTest {
         log.warn("{}", prompt);
         assert prompt.size() == 2;
         assert prompt.get(0).getContent().contains("太阳");
+    }
+
+    @Test
+    public void prompt9() throws Exception {
+        Collection<FunctionPrompt> prompts = mcpClient.getPrompts();
+        System.out.println(prompts);
+        assert prompts.size() == 2;
+        assert ("[FunctionPromptDesc{name='askQuestion', " +
+                "description='生成关于某个主题的提问', " +
+                "params=[ParamDesc{name='topic', description='主题', " +
+                "required=true, " +
+                "type=class java.lang.String}]}, " +
+                "FunctionPromptDesc{name='debugSession', " +
+                "description='初始化错误调试会话', " +
+                "params=[ParamDesc{name='error', description='错误信息', " +
+                "required=true, type=class java.lang.String}]}]").equals(prompts.toString());
     }
 }

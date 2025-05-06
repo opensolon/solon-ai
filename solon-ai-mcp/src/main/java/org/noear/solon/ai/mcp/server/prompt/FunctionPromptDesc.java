@@ -117,4 +117,13 @@ public class FunctionPromptDesc implements FunctionPrompt {
 
         return doHandler.apply(argsNew);
     }
+
+    @Override
+    public String toString() {
+        return "FunctionPromptDesc{" +
+                "name='" + name + '\'' +
+                ", description='" + description + '\'' +
+                ", params=" + params +
+                '}';
+    }
 }

@@ -543,6 +543,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             FunctionResourceDesc functionDesc = new FunctionResourceDesc(name);
             functionDesc.description(description);
             functionDesc.uri(uri);
+            functionDesc.mimeType(resource.getMimeType());
             functionDesc.doHandle((reqUri) -> readResourceAsText(reqUri));
 
 

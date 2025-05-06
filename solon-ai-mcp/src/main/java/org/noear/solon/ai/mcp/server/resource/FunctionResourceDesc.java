@@ -100,4 +100,14 @@ public class FunctionResourceDesc implements FunctionResource {
     public Text handle(String reqUri) throws Throwable {
         return doHandler.apply(reqUri);
     }
+
+    @Override
+    public String toString() {
+        return "FunctionResourceDesc{" +
+                "name='" + name + '\'' +
+                ", uri='" + uri + '\'' +
+                ", description='" + description + '\'' +
+                ", mimeType='" + mimeType + '\'' +
+                '}';
+    }
 }
