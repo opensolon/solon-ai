@@ -60,7 +60,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Mcp 连接工具提供者
+ * Mcp 客户端提供者
+ *
+ * <pre>{@code
+ * McpClientProvider toolProvider = McpClientProvider.builder()
+ *                 .apiUrl("http://localhost:8081/sse")
+ *                 .build();
+ *
+ * ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
+ *                 .model("deepseek-v3")
+ *                 .defaultToolsAdd(toolProvider)
+ *                 .build();
+ *
+ * ChatResponse resp = chatModel.prompt("杭州天气和北京降雨量如何？")
+ *                 .call();
+ * }</pre>
  *
  * @author noear
  * @since 3.1
