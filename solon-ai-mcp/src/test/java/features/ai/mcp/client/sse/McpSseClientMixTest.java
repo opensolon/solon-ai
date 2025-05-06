@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.liquor.eval.Maps;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
@@ -31,6 +32,21 @@ public class McpSseClientMixTest {
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
+    }
+
+    @Test
+    public void tool9() throws Exception {
+        Collection<FunctionTool> tools = mcpClient.getTools();
+
+        log.warn("{}", tools);
+
+        assert tools.size() == 1;
+
+        assert ("[RefererFunctionTool{name='getWeather', " +
+                "description='查询天气预报', " +
+                "returnDirect=true, " +
+                "inputSchema={\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"城市位置\"}},\"required\":[\"location\"]}}]")
+                .equals(tools.toString());
     }
 
     @Test

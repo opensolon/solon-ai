@@ -17,6 +17,7 @@
 * 添加 solon-ai-mcp ResourceMapping 和 PromptMapping 注解（支持资源与提示语服务）
 * 添加 solon-ai-mcp McpServerEndpoint AOP 支持（可支持 solono auth 注解鉴权）
 * 添加 solon-ai-mcp McpServerEndpoint 实体参数支持（可支持 solon web 的实体参数、注解相通）
+* 添加 solon-ai-mpc Tool.returnDirect 属性透传（前后端都有 solon-ai 时有效，目前还不是规范）
 
 ### 3.2.1
 

@@ -68,7 +68,7 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
         String jsonSchemaStr = jsonSchema.toJson();
 
         McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(
-                new McpSchema.Tool(functionTool.name(), functionTool.description(), jsonSchemaStr),
+                new McpSchema.Tool(functionTool.name(), functionTool.description(), functionTool.returnDirect(), jsonSchemaStr),
                 (exchange, request) -> {
                     try {
                         ContextHolder.currentSet(new McpServerContext(exchange));

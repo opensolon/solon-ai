@@ -28,13 +28,15 @@ public class RefererFunctionTool implements FunctionTool {
     private final String name;
     private final String description;
     private final String inputSchema;
+    private final boolean returnDirect;
     private final Function<Map<String, Object>, String> handler;
 
-    public RefererFunctionTool(String name, String description, String inputSchema, Function<Map<String, Object>, String> handler) {
+    public RefererFunctionTool(String name, String description, Boolean returnDirect, String inputSchema, Function<Map<String, Object>, String> handler) {
         this.name = name;
         this.description = description;
         this.inputSchema = inputSchema;
         this.handler = handler;
+        this.returnDirect = (returnDirect == null ? false : returnDirect);
     }
 
     @Override
@@ -49,7 +51,7 @@ public class RefererFunctionTool implements FunctionTool {
 
     @Override
     public boolean returnDirect() {
-        return false;
+        return returnDirect;
     }
 
     @Override
@@ -67,6 +69,7 @@ public class RefererFunctionTool implements FunctionTool {
         return "RefererFunctionTool{" +
                 "name='" + name + '\'' +
                 ", description='" + description + '\'' +
+                ", returnDirect=" + returnDirect +
                 ", inputSchema=" + inputSchema +
                 '}';
     }

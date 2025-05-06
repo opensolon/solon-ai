@@ -20,7 +20,7 @@ import java.util.Collection;
 @Controller
 @McpServerEndpoint(sseEndpoint = "/demo2/sse")
 public class McpServerTool2 {
-    @ToolMapping(description = "查询天气预报")
+    @ToolMapping(description = "查询天气预报", returnDirect = true)
     public String getWeather(@Param(description = "城市位置") String location, Context ctx) {
         System.out.println("------------: sessionId: " + ctx.sessionId());
 

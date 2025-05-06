@@ -808,12 +808,13 @@ public final class McpSchema {
 	public static class Tool {
 		@JsonProperty("name") String name;
 		@JsonProperty("description") String description;
+		@JsonProperty("returnDirect") Boolean returnDirect;
 		@JsonProperty("inputSchema") JsonSchema inputSchema;
-	
-		public Tool(String name, String description, String schema) {
-			this(name, description, parseSchema(schema));
+
+		public Tool(String name, String description, Boolean returnDirect, String schema) {
+			this(name, description, returnDirect, parseSchema(schema));
 		}
-			
+
 	} // @formatter:on
 
 	private static JsonSchema parseSchema(String schema) {

@@ -210,4 +210,14 @@ public class FunctionToolDesc implements FunctionTool {
 
         return doHandler.apply(argsNew);
     }
+
+    @Override
+    public String toString() {
+        return "FunctionToolDesc{" +
+                "name='" + name + '\'' +
+                ", description='" + description + '\'' +
+                ", returnDirect=" + returnDirect +
+                ", inputSchema=" + inputSchema +
+                '}';
+    }
 }
