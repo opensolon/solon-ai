@@ -53,7 +53,7 @@ public class McpSseClientTest {
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
 
-        String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州")).getContent();
+        String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
