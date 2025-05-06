@@ -28,6 +28,12 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.RefererFunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
+import org.noear.solon.ai.mcp.server.prompt.FunctionPromptDesc;
+import org.noear.solon.ai.mcp.server.prompt.PromptProvider;
+import org.noear.solon.ai.mcp.server.resource.FunctionResource;
+import org.noear.solon.ai.mcp.server.resource.FunctionResourceDesc;
+import org.noear.solon.ai.mcp.server.resource.ResourceProvider;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.media.Text;
 import org.noear.solon.ai.mcp.McpChannel;
@@ -59,7 +65,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @author noear
  * @since 3.1
  */
-public class McpClientToolProvider implements ToolProvider, Closeable {
+public class McpClientToolProvider implements ToolProvider, ResourceProvider, PromptProvider, Closeable {
     private final ReentrantLock LOCKER = new ReentrantLock();
 
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
@@ -511,6 +517,73 @@ public class McpClientToolProvider implements ToolProvider, Closeable {
         }
 
         return toolList;
+    }
+
+
+    @Override
+    public Collection<FunctionResource> getResources() {
+        return getResources(null);
+    }
+
+    public Collection<FunctionResource> getResources(String cursor) {
+        List<FunctionResource> resourceList = new ArrayList<>();
+
+        McpSchema.ListResourcesResult result = null;
+        if (cursor == null) {
+            result = getClient().listResources();
+        } else {
+            result = getClient().listResources(cursor);
+        }
+
+        for (McpSchema.Resource resource : result.getResources()) {
+            String name = resource.getName();
+            String uri = resource.getUri();
+            String description = resource.getDescription();
+
+            FunctionResourceDesc functionDesc = new FunctionResourceDesc(name);
+            functionDesc.description(description);
+            functionDesc.uri(uri);
+            functionDesc.doHandle((reqUri) -> readResourceAsText(reqUri));
+
+
+            resourceList.add(functionDesc);
+        }
+
+        return resourceList;
+    }
+
+    @Override
+    public Collection<FunctionPrompt> getPrompts() {
+        return getPrompts(null);
+    }
+
+    public Collection<FunctionPrompt> getPrompts(String cursor) {
+        List<FunctionPrompt> promptList = new ArrayList<>();
+
+        McpSchema.ListPromptsResult result = null;
+        if (cursor == null) {
+            result = getClient().listPrompts();
+        } else {
+            result = getClient().listPrompts(cursor);
+        }
+
+        for (McpSchema.Prompt prompt : result.getPrompts()) {
+            String name = prompt.getName();
+            String description = prompt.getDescription();
+
+            FunctionPromptDesc functionDesc = new FunctionPromptDesc(name);
+            functionDesc.description(description);
+            for(McpSchema.PromptArgument p1 : prompt.getArguments()){
+                functionDesc.param(p1.getName(), p1.getRequired(), p1.getDescription());
+            }
+
+            functionDesc.doHandle((args) -> getPromptAsMessages(name, args));
+
+
+            promptList.add(functionDesc);
+        }
+
+        return promptList;
     }
 
     /// /////////////////////////////

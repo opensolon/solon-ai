@@ -55,75 +55,24 @@ public class FunctionPromptDesc implements FunctionPrompt {
      * 申明函数参数
      *
      * @param name        参数名字
-     * @param type        参数类型
      * @param description 参数描述
      */
-    public FunctionPromptDesc param(String name, Class<?> type, String description) {
-        return param(name, type, true, description);
+    public FunctionPromptDesc param(String name,String description) {
+        return param(name,  true, description);
     }
 
     /**
      * 申明函数参数
      *
      * @param name        参数名字
-     * @param type        参数类型
      * @param required    是否必须
      * @param description 参数描述
      */
-    public FunctionPromptDesc param(String name, Class<?> type, boolean required, String description) {
-        params.add(new ParamDesc(name, type, required, description));
+    public FunctionPromptDesc param(String name, boolean required, String description) {
+        params.add(new ParamDesc(name, String.class, required, description));
         return this;
     }
 
-    /**
-     * 申明函数字符串参数
-     *
-     * @param name        参数名字
-     * @param description 参数描述
-     */
-    public FunctionPromptDesc stringParam(String name, String description) {
-        return param(name, String.class, description);
-    }
-
-    /**
-     * 申明函数整型参数
-     *
-     * @param name        参数名字
-     * @param description 参数描述
-     */
-    public FunctionPromptDesc intParam(String name, String description) {
-        return param(name, int.class, description);
-    }
-
-    /**
-     * 申明函数浮点数参数
-     *
-     * @param name        参数名字
-     * @param description 参数描述
-     */
-    public FunctionPromptDesc floatParam(String name, String description) {
-        return param(name, float.class, description);
-    }
-
-    /**
-     * 申明函数布尔参数
-     *
-     * @param name        参数名字
-     * @param description 参数描述
-     */
-    public FunctionPromptDesc boolParam(String name, String description) {
-        return param(name, Boolean.class, description);
-    }
-
-    /**
-     * 申明函数时间参数
-     *
-     * @param name        参数名字
-     * @param description 参数描述
-     */
-    public FunctionPromptDesc dateParam(String name, String description) {
-        return param(name, Date.class, description);
-    }
 
     /**
      * 申明函数处理

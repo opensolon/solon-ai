@@ -7,14 +7,17 @@ import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientToolProvider;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
+import org.noear.solon.ai.mcp.server.resource.FunctionResource;
+import org.noear.solon.ai.mcp.server.resource.ResourceProvider;
 
 import java.util.Collection;
+import java.util.Collections;
 
 /**
  * 把 stdio mcp-server 转为 sse mcp-server
  */
 @McpServerEndpoint(name = "stdio-to-sse-tool")
-public class McpStdioToSseServerDemo implements ToolProvider {
+public class McpStdioToSseServerDemo implements ToolProvider, ResourceProvider {
     McpClientToolProvider stdioToolProvider = McpClientToolProvider.builder()
             .channel(McpChannel.STDIO) //表示使用 stdio
             .serverParameters(McpServerParameters.builder("java")
@@ -29,5 +32,10 @@ public class McpStdioToSseServerDemo implements ToolProvider {
 
     public static void main(String[] args) {
         Solon.start(McpStdioToSseServerDemo.class, new String[]{"-server.port=8081"});
+    }
+
+    @Override
+    public Collection<FunctionResource> getResources() {
+        return stdioToolProvider.getResources();
     }
 }
