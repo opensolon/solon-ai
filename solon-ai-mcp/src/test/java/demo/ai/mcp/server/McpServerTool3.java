@@ -14,7 +14,7 @@ public class McpServerTool3 {
     // 建议开启编译参数：-parameters （否则，要再配置参数的 name）
     //
     @ToolMapping(description = "查询天气预报")
-    public String get_weather(@Param(description = "城市位置") String location) {
+    public String getWeather(@Param(description = "城市位置") String location) {
         return "晴，14度";
     }
 }

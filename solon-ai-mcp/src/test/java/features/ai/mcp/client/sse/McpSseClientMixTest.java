@@ -23,7 +23,7 @@ public class McpSseClientMixTest {
 
     @Test
     public void tool() throws Exception {
-        String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州")).getContent();
+        String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
@@ -51,7 +51,7 @@ public class McpSseClientMixTest {
 
     @Test
     public void prompt() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("ask_question", Maps.of("topic", "教育"));
+        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("askQuestion", Maps.of("topic", "教育"));
 
         assert Utils.isNotEmpty(prompt);
         log.warn("{}", prompt);
@@ -60,7 +60,7 @@ public class McpSseClientMixTest {
 
     @Test
     public void prompt2() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("debug_session", Maps.of("error", "太阳没出来"));
+        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("debugSession", Maps.of("error", "太阳没出来"));
 
         assert Utils.isNotEmpty(prompt);
         log.warn("{}", prompt);
