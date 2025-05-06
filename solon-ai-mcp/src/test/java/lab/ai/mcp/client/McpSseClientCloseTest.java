@@ -1,14 +1,14 @@
 package lab.ai.mcp.client;
 
 import org.noear.liquor.eval.Maps;
-import org.noear.solon.ai.mcp.client.McpClientToolProvider;
+import org.noear.solon.ai.mcp.client.McpClientProvider;
 
 /**
  * @author noear 2025/4/22 created
  */
 public class McpSseClientCloseTest {
     public static void main(String[] args) throws Exception {
-        McpClientToolProvider toolProvider = McpClientToolProvider.builder()
+        McpClientProvider toolProvider = McpClientProvider.builder()
                 .apiUrl("http://localhost:8081/sse")
                 .build();
 
@@ -19,7 +19,7 @@ public class McpSseClientCloseTest {
         toolProvider.close();
     }
 
-    private static void call(McpClientToolProvider toolProvider) {
+    private static void call(McpClientProvider toolProvider) {
         try {
             String response = toolProvider.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
             assert response != null;

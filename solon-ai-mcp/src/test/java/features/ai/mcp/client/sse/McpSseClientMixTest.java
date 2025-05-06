@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.liquor.eval.Maps;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.mcp.client.McpClientToolProvider;
+import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.test.SolonTest;
 
 import java.util.List;
@@ -17,7 +17,7 @@ import java.util.List;
 @Slf4j
 @SolonTest(McpServerApp.class)
 public class McpSseClientMixTest {
-    McpClientToolProvider mcpClient = McpClientToolProvider.builder()
+    McpClientProvider mcpClient = McpClientProvider.builder()
             .apiUrl("http://localhost:8081/demo2/sse")
             .build();
 

@@ -65,7 +65,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @author noear
  * @since 3.1
  */
-public class McpClientToolProvider implements ToolProvider, ResourceProvider, PromptProvider, Closeable {
+public class McpClientProvider implements ToolProvider, ResourceProvider, PromptProvider, Closeable {
     private final ReentrantLock LOCKER = new ReentrantLock();
 
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
@@ -77,18 +77,18 @@ public class McpClientToolProvider implements ToolProvider, ResourceProvider, Pr
     /**
      * 用于支持注入
      */
-    public McpClientToolProvider(Properties clientProps) {
+    public McpClientProvider(Properties clientProps) {
         this(Props.from(clientProps).bindTo(new McpClientProperties()));
     }
 
     /**
      * 用于简单构建
      */
-    public McpClientToolProvider(String apiUrl) {
+    public McpClientProvider(String apiUrl) {
         this(new McpClientProperties(apiUrl));
     }
 
-    public McpClientToolProvider(McpClientProperties clientProps) {
+    public McpClientProvider(McpClientProperties clientProps) {
         if (clientProps.getHeartbeatInterval() != null) {
             if (clientProps.getHeartbeatInterval().getSeconds() < 10L) {
                 throw new IllegalArgumentException("HeartbeatInterval cannot be less than 10s!");
@@ -593,14 +593,14 @@ public class McpClientToolProvider implements ToolProvider, ResourceProvider, Pr
      *
      * @param uri 配置资源地址
      */
-    public static Map<String, McpClientToolProvider> fromMcpServers(String uri) throws IOException {
+    public static Map<String, McpClientProvider> fromMcpServers(String uri) throws IOException {
         Assert.notEmpty(uri, "Uri is empty");
 
         URL res = ResourceUtil.findResource(uri);
         String json = ResourceUtil.getResourceAsString(res);
         ONode jsonDom = ONode.loadStr(json);
 
-        Map<String, McpClientToolProvider> map = new HashMap<>();
+        Map<String, McpClientProvider> map = new HashMap<>();
         for (Map.Entry<String, ONode> kv : jsonDom.get("mcpServers").obj().entrySet()) {
             String name = kv.getKey();
             Map<String, String> env = kv.getValue().get("env").toObject(new HashMap<String, String>() {
@@ -718,8 +718,8 @@ public class McpClientToolProvider implements ToolProvider, ResourceProvider, Pr
             return this;
         }
 
-        public McpClientToolProvider build() {
-            return new McpClientToolProvider(props);
+        public McpClientProvider build() {
+            return new McpClientProvider(props);
         }
     }
 }

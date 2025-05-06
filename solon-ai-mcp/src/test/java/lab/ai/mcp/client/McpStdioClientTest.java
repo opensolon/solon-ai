@@ -4,7 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.liquor.eval.Maps;
 import org.noear.solon.ai.mcp.McpChannel;
-import org.noear.solon.ai.mcp.client.McpClientToolProvider;
+import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.test.SolonTest;
 
@@ -17,7 +17,7 @@ public class McpStdioClientTest {
     @Test
     public void case1() throws Exception {
         //服务端不能开启控制台的日志，不然会污染协议流
-        McpClientToolProvider mcpClient = McpClientToolProvider.builder()
+        McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STDIO) //表示使用 stdio
                 .serverParameters(McpServerParameters.builder("java")
                         .args("-jar", "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar")

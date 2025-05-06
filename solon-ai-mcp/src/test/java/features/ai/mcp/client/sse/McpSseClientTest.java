@@ -8,7 +8,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
-import org.noear.solon.ai.mcp.client.McpClientToolProvider;
+import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
 import org.noear.solon.annotation.Inject;
 import org.noear.solon.rx.SimpleSubscriber;
@@ -27,9 +27,9 @@ public class McpSseClientTest {
     //简化客户端
     @Test
     public void case1() throws Exception {
-        McpClientToolProvider mcpClient = Utils.loadProps("app-client.yml")
+        McpClientProvider mcpClient = Utils.loadProps("app-client.yml")
                 .getProp("solon.ai.mcp.client.demo1")
-                .toBean(McpClientToolProvider.class);
+                .toBean(McpClientProvider.class);
 
         String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
 
@@ -49,7 +49,7 @@ public class McpSseClientTest {
 
     @Test
     public void case1_2() throws Exception {
-        McpClientToolProvider mcpClient = McpClientToolProvider.builder()
+        McpClientProvider mcpClient = McpClientProvider.builder()
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
 
@@ -66,7 +66,7 @@ public class McpSseClientTest {
 
     @Test
     public void case2() throws Exception {
-        McpClientToolProvider mcpClient = McpClientToolProvider.builder()
+        McpClientProvider mcpClient = McpClientProvider.builder()
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
 
@@ -109,7 +109,7 @@ public class McpSseClientTest {
 
     @Test
     public void case3() throws Exception {
-        McpClientToolProvider mcpClient = McpClientToolProvider.builder()
+        McpClientProvider mcpClient = McpClientProvider.builder()
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
 
@@ -121,11 +121,11 @@ public class McpSseClientTest {
     //与模型绑定
     @Test
     public void case4() throws Exception {
-        McpClientToolProvider toolProvider = Utils.loadProps("app-client.yml")
+        McpClientProvider toolProvider = Utils.loadProps("app-client.yml")
                 .getProp("solon.ai.mcp.client.demo1")
-                .toBean(McpClientToolProvider.class);
+                .toBean(McpClientProvider.class);
 
-        McpClientToolProvider toolProvider2 = McpClientToolProvider.builder()
+        McpClientProvider toolProvider2 = McpClientProvider.builder()
                 .apiUrl("http://localhost:8081/demo4/sse")
                 .build();
 
@@ -148,11 +148,11 @@ public class McpSseClientTest {
 
     @Test
     public void case4_stream() throws Exception {
-        McpClientToolProvider toolProvider = Utils.loadProps("app-client.yml")
+        McpClientProvider toolProvider = Utils.loadProps("app-client.yml")
                 .getProp("solon.ai.mcp.client.demo1")
-                .toBean(McpClientToolProvider.class);
+                .toBean(McpClientProvider.class);
 
-        McpClientToolProvider toolProvider2 = McpClientToolProvider.builder()
+        McpClientProvider toolProvider2 = McpClientProvider.builder()
                 .apiUrl("http://localhost:8081/demo4/sse")
                 .build();
 

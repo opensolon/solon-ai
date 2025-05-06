@@ -4,7 +4,7 @@ import org.noear.solon.Solon;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
-import org.noear.solon.ai.mcp.client.McpClientToolProvider;
+import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 
 import java.util.Collection;
@@ -14,7 +14,7 @@ import java.util.Collection;
  */
 @McpServerEndpoint(name = "sse-to-stdio-tool", channel = McpChannel.STDIO)
 public class McpSseToStdioServerDemo implements ToolProvider {
-    McpClientToolProvider sseToolProvider = McpClientToolProvider.builder()
+    McpClientProvider sseToolProvider = McpClientProvider.builder()
             .apiUrl("http://localhost:8081/sse")
             .build();
 
