@@ -63,7 +63,7 @@ public class RedisRepositoryTest {
         repository = RedisRepository.builder(embeddingModel, client)
                 .indexName("test_idx")
                 .keyPrefix("test_doc:")
-                .metadataIndexFields(metadataFields)
+                .metadataFields(metadataFields)
                 .build();
 
         repository.dropRepository();

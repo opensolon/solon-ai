@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
  */
 public class DashVectorRepository implements RepositoryStorable, RepositoryLifecycle {
     private final Builder config;
-    private  String collectionName;
+    private String collectionName;
 
     private static final String CONTENT_FIELD_KEY = "__content";
     private static final String URL_FIELD_KEY = "__url";
@@ -48,7 +48,7 @@ public class DashVectorRepository implements RepositoryStorable, RepositoryLifec
         // 尝试查找现有集合
         ListCollectionsResponse collection = config.client.listCollections();
 
-        if (collection.getOutput() != null && collection.getOutput().contains(config.collectionName)){
+        if (collection.getOutput() != null && collection.getOutput().contains(config.collectionName)) {
             return;
         }
 
@@ -67,8 +67,8 @@ public class DashVectorRepository implements RepositoryStorable, RepositoryLifec
         Map<String, String> fieldsSchema = new HashMap<>();
         fieldsSchema.put(CONTENT_FIELD_KEY, FieldType.STRING.getName());
         fieldsSchema.put(URL_FIELD_KEY, FieldType.STRING.getName());
-        if (config.metadataIndexFields != null) {
-            Map<String, String> addFields = config.metadataIndexFields.stream().collect(Collectors.toMap(MetadataField::getName, metadataField -> metadataField.getFieldType().getName(), (v1, v2) -> v1));
+        if (config.metadataFields != null) {
+            Map<String, String> addFields = config.metadataFields.stream().collect(Collectors.toMap(MetadataField::getName, metadataField -> metadataField.getFieldType().getName(), (v1, v2) -> v1));
             fieldsSchema.putAll(addFields);
         }
         config.client.createCollection(config.collectionName, config.embeddingModel.dimensions(), fieldsSchema);
@@ -114,7 +114,7 @@ public class DashVectorRepository implements RepositoryStorable, RepositoryLifec
             if (!Utils.isEmpty(document.getUrl())) {
                 map.put(URL_FIELD_KEY, document.getUrl());
             }
-            doc = new Doc(document.getId(),  floatArrayToList(document.getEmbedding()), document.getMetadata());
+            doc = new Doc(document.getId(), floatArrayToList(document.getEmbedding()), document.getMetadata());
             docs.add(doc);
         }
 
@@ -264,7 +264,7 @@ public class DashVectorRepository implements RepositoryStorable, RepositoryLifec
         /**
          * metadata索引类型
          */
-        private List<MetadataField> metadataIndexFields = new ArrayList<>();
+        private List<MetadataField> metadataFields = new ArrayList<>();
 
         /**
          * 集合名称，用于存储文档
@@ -281,8 +281,22 @@ public class DashVectorRepository implements RepositoryStorable, RepositoryLifec
             return this;
         }
 
-        public Builder metadataIndexFields(List<MetadataField> metadataIndexFields) {
-            this.metadataIndexFields = metadataIndexFields;
+        /**
+         * @deprecated 3.2 {@link #metadataFields(List)}
+         */
+        @Deprecated
+        public Builder metadataIndexFields(List<MetadataField> metadataFields) {
+            return metadataFields(metadataFields);
+        }
+
+        /**
+         * 设置元数据索引字段
+         *
+         * @param metadataFields 元数据索引字段
+         * @return Builder
+         */
+        public Builder metadataFields(List<MetadataField> metadataFields) {
+            this.metadataFields = metadataFields;
             return this;
         }
 

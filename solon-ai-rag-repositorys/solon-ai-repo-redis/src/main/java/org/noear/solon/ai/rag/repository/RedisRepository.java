@@ -97,7 +97,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                         .attributes(vectorArgs)
                         .build());
 
-                for (MetadataField metadataIndexField : config.metadataIndexFields) {
+                for (MetadataField metadataIndexField : config.metadataFields) {
                     fields.add(toSchemaField(metadataIndexField));
                 }
 
@@ -170,7 +170,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                     jsonDoc.put("content", doc.getContent());
                     jsonDoc.put("embedding", doc.getEmbedding());
                     jsonDoc.put("metadata", doc.getMetadata());
-                    if (Utils.isNotEmpty(config.metadataIndexFields)) {
+                    if (Utils.isNotEmpty(config.metadataFields)) {
                         jsonDoc.putAll(doc.getMetadata());
                     }
 
@@ -295,7 +295,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         // 可选参数，设置默认值
         private String indexName = "idx:solon-ai";
         private String keyPrefix = "doc:";
-        private List<MetadataField> metadataIndexFields = new ArrayList<>();
+        private List<MetadataField> metadataFields = new ArrayList<>();
         private VectorField.VectorAlgorithm algorithm = VectorField.VectorAlgorithm.HNSW;
         private String distanceMetric = "COSINE";
 
@@ -336,13 +336,21 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         }
 
         /**
+         * @deprecated 3.2 {@link #metadataFields(List)}
+         * */
+        @Deprecated
+        public Builder metadataIndexFields(List<MetadataField> metadataFields) {
+            return metadataFields(metadataFields);
+        }
+
+        /**
          * 设置元数据索引字段
          *
-         * @param metadataIndexFields 元数据索引字段
+         * @param metadataFields 元数据索引字段
          * @return Builder
          */
-        public Builder metadataIndexFields(List<MetadataField> metadataIndexFields) {
-            this.metadataIndexFields = metadataIndexFields;
+        public Builder metadataFields(List<MetadataField> metadataFields) {
+            this.metadataFields = metadataFields;
             return this;
         }
 

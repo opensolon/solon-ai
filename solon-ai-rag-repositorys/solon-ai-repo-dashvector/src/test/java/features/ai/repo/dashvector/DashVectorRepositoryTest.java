@@ -53,7 +53,7 @@ public class DashVectorRepositoryTest {
             metadataFields.add(new MetadataField("category", FieldType.STRING));
             metadataFields.add(new MetadataField("price", FieldType.FLOAT));
             metadataFields.add(new MetadataField("stock", FieldType.FLOAT));
-            repository = DashVectorRepository.builder(embeddingModel, new DashVectorClient(SERVER_URL,API_KEY)).collectionName(COLLECTION_NAME).metadataIndexFields(metadataFields).build();
+            repository = DashVectorRepository.builder(embeddingModel, new DashVectorClient(SERVER_URL,API_KEY)).collectionName(COLLECTION_NAME).metadataFields(metadataFields).build();
 
             repository.initRepository();
 
