@@ -121,14 +121,14 @@ public class ChatRequestDefault implements ChatRequest {
             AssistantMessage choiceMessage = resp.getMessage();
             messages.add(choiceMessage); //添加到记忆
             if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
-                List<ToolMessage> toolMessages = buildToolMessage(resp, choiceMessage);
+                List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
-                if (Utils.isEmpty(toolMessages)) {
-                    //没有要求直接返回
+                if (Utils.isEmpty(returnDirectMessages)) {
+                    //没有直接返回的消息
                     return call();
                 } else {
                     //要求直接返回（转为新的响应消息）
-                    choiceMessage = dialect.buildAssistantMessageByToolMessages(toolMessages);
+                    choiceMessage = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
                     resp.reset();
                     resp.addChoice(new ChatChoice(0, new Date(), "tool", choiceMessage));
                     messages.add(choiceMessage); //添加到记忆
@@ -275,15 +275,15 @@ public class ChatRequestDefault implements ChatRequest {
 
         messages.addAll(assistantMessages);
 
-        List<ToolMessage> toolMessages = buildToolMessage(resp, assistantMessages.get(0));
+        List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
 
-        if (Utils.isEmpty(toolMessages)) {
+        if (Utils.isEmpty(returnDirectMessages)) {
             //没有要求直接返回
             stream().subscribe(subscriber);
             return false; //不触发外层的完成事件
         } else {
             //要求直接返回（转为新的响应消息）
-            AssistantMessage message = dialect.buildAssistantMessageByToolMessages(toolMessages);
+            AssistantMessage message = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
             resp.reset();
             resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
             resp.aggregationMessageContent.setLength(0);
