@@ -13,6 +13,8 @@
 * 添加 solon-ai-mcp McpServerEndpointProvider:addResource,addPrompt 方法
 * 添加 solon-ai-mcp McpServerEndpointProvider:Builder:channel 方法
 * 添加 solon-ai-mcp ResourceMapping 和 PromptMapping 注解（支持资源与提示语服务）
+* 添加 solon-ai-mcp McpServerEndpoint AOP 支持（可支持 solono auth 注解鉴权）
+* 添加 solon-ai-mcp McpServerEndpoint 实体参数支持（可支持 solon web 的实体参数、注解相通）
 
 ### 3.2.1
 
