@@ -81,7 +81,7 @@ public class ChatDialectManager {
                 defaultDialect = dialect;
             }
 
-            log.info("Register chat dialect: {}", dialect.getClass());
+            log.debug("Register chat dialect: {}", dialect.getClass());
         }
     }
 

@@ -74,7 +74,7 @@ public class EmbeddingDialectManager {
                 defaultDialect = dialect;
             }
 
-            log.info("Register embedding dialect: {}", dialect.getClass());
+            log.debug("Register embedding dialect: {}", dialect.getClass());
         }
     }
 

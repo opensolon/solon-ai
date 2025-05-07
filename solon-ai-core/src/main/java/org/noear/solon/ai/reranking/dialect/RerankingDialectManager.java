@@ -73,7 +73,7 @@ public class RerankingDialectManager {
                 defaultDialect = dialect;
             }
 
-            log.info("Register reranking dialect: {}", dialect.getClass());
+            log.debug("Register reranking dialect: {}", dialect.getClass());
         }
     }
 

@@ -74,7 +74,7 @@ public class ImageDialectManager {
                 defaultDialect = dialect;
             }
 
-            log.info("Register image dialect: {}", dialect.getClass());
+            log.debug("Register image dialect: {}", dialect.getClass());
         }
     }
 
