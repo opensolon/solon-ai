@@ -8,6 +8,7 @@
 * 调整 solon-ai-mcp McpClientToolProvider 更名为 McpClientProvider（实现的接口变多了）
 * 优化 solon-ai-mcp McpClientProvider 同时实现 ResourceProvider, PromptProvider 接口
 * 优化 solon-ai-repo-redis metadataIndexFields 更名为 metadataFields （原名标为弃用）
+* 添加 solon-ai-core ChatSubscriberProxy 用于控制外部订阅者，只触发一次 onSubscribe
 * 添加 solon-ai-mcp McpClientProperties:httpProxy 配置
 * 添加 solon-ai-mcp McpClientToolProvider isStarted 状态位（把心跳开始，转为第一次调用这后）
 * 添加 solon-ai-mcp McpClientToolProvider:readResourceAsText,readResource,getPromptAsMessages,getPrompt 方法

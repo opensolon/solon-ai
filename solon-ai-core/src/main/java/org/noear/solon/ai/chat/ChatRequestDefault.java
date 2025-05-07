@@ -155,18 +155,20 @@ public class ChatRequestDefault implements ChatRequest {
         return subscriber -> {
             httpUtils.bodyOfJson(reqJson).execAsync("POST")
                     .whenComplete((resp, err) -> {
+                        Subscriber<? super ChatResponse>  subscriberProxy = ChatSubscriberProxy.of(subscriber);
+
                         if (err == null) {
                             try {
                                 if (resp.code() < 400) {
-                                    parseResp(resp, subscriber);
+                                    parseResp(resp, subscriberProxy);
                                 } else {
-                                    subscriber.onError(new HttpException("Error code:" + resp.code()));
+                                    subscriberProxy.onError(new HttpException("Error code:" + resp.code()));
                                 }
                             } catch (IOException e) {
-                                subscriber.onError(e);
+                                subscriberProxy.onError(e);
                             }
                         } else {
-                            subscriber.onError(err);
+                            subscriberProxy.onError(err);
                         }
                     });
         };
@@ -179,7 +181,7 @@ public class ChatRequestDefault implements ChatRequest {
         try {
             if (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE)) {
                 TextStreamUtil.parseSseStream(httpResp.body(), new SimpleSubscriber<ServerSentEvent>()
-                        //.doOnSubscribe(subscriber::onSubscribe)//不要做订阅（外部不支持多次触发）
+                        .doOnSubscribe(subscriber::onSubscribe)//不要做订阅（外部不支持多次触发）
                         .doOnNext(event -> {
                             return onEventStream(resp, event, subscriber);
                         })
@@ -189,7 +191,7 @@ public class ChatRequestDefault implements ChatRequest {
                         .doOnError(subscriber::onError));
             } else {
                 TextStreamUtil.parseLineStream(httpResp.body(), new SimpleSubscriber<String>()
-                        //.doOnSubscribe(subscriber::onSubscribe)
+                        .doOnSubscribe(subscriber::onSubscribe)
                         .doOnNext(data -> {
                             return onEventStream(resp, new ServerSentEvent(null, data), subscriber);
                         })
