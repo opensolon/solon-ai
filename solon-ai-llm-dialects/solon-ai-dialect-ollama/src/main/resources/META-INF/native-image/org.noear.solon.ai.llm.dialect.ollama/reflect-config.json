@@ -1,0 +1,14 @@
+[
+  {
+    "name": "org.noear.solon.ai.llm.dialect.ollama.OllamaChatDialect",
+    "allDeclaredConstructors": true
+  },
+  {
+    "name": "org.noear.solon.ai.llm.dialect.ollama.OllamaEmbeddingDialect",
+    "allDeclaredConstructors": true
+  },
+  {
+    "name": "org.noear.solon.ai.llm.dialect.ollama.OllamaImageDialect",
+    "allDeclaredConstructors": true
+  }
+]
