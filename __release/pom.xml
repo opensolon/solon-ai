@@ -19,5 +19,6 @@
 
     <modules>
         <module>solon-ai-bundle1</module>
+        <module>solon-ai-bundle2</module>
     </modules>
 </project>
