@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.dialect;
 
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.RankEntity;
 
 import java.util.ArrayList;
@@ -30,6 +31,12 @@ import java.util.List;
 public class ChatDialectManager {
     private static List<RankEntity<ChatDialect>> dialects = new ArrayList<>();
     private static ChatDialect defaultDialect;
+
+    static {
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.dashscope.DashscopeChatDialect"));
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.ollama.OllamaChatDialect"));
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.openai.OpenaiChatDialect"));
+    }
 
     /**
      * 选择聊天方言
@@ -62,11 +69,13 @@ public class ChatDialectManager {
      * @param index   顺序位（匹配执行顺序）
      */
     public static void register(ChatDialect dialect, int index) {
-        dialects.add(new RankEntity<>(dialect, index));
-        Collections.sort(dialects);
+        if (dialect != null) {
+            dialects.add(new RankEntity<>(dialect, index));
+            Collections.sort(dialects);
 
-        if (defaultDialect == null || dialect.isDefault()) {
-            defaultDialect = dialect;
+            if (defaultDialect == null || dialect.isDefault()) {
+                defaultDialect = dialect;
+            }
         }
     }
 

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.reranking.dialect;
+package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack.ONode;
 import org.noear.solon.ai.AiUsage;
@@ -21,6 +21,7 @@ import org.noear.solon.ai.reranking.Reranking;
 import org.noear.solon.ai.reranking.RerankingConfig;
 import org.noear.solon.ai.reranking.RerankingException;
 import org.noear.solon.ai.reranking.RerankingResponse;
+import org.noear.solon.ai.reranking.dialect.AbstractRerankingDialect;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +37,11 @@ public class OpenaiRerankingDialect extends AbstractRerankingDialect {
 
     public static OpenaiRerankingDialect getInstance() {
         return instance;
+    }
+
+    @Override
+    public boolean isDefault() {
+        return true;
     }
 
     @Override

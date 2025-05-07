@@ -13,13 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.reranking.dialect;
+package org.noear.solon.ai.llm.dialect.dashscope;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.reranking.*;
+import org.noear.solon.ai.reranking.dialect.AbstractRerankingDialect;
 
 import java.util.ArrayList;
 import java.util.List;

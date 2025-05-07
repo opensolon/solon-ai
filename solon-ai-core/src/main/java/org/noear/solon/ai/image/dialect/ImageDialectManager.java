@@ -16,6 +16,7 @@
 package org.noear.solon.ai.image.dialect;
 
 import org.noear.solon.ai.image.ImageConfig;
+import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.RankEntity;
 
 import java.util.ArrayList;
@@ -30,6 +31,12 @@ import java.util.List;
 public class ImageDialectManager {
     private static List<RankEntity<ImageDialect>> dialects = new ArrayList<>();
     private static ImageDialect defaultDialect;
+
+    static {
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.dashscope.DashscopeImageDialect"));
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.ollama.OllamaImageDialect"));
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.openai.OpenaiImageDialect"));
+    }
 
     /**
      * 选择方言
@@ -55,11 +62,13 @@ public class ImageDialectManager {
      * 注册方言
      */
     public static void register(ImageDialect dialect, int index) {
-        dialects.add(new RankEntity<>(dialect, index));
-        Collections.sort(dialects);
+        if (dialect != null) {
+            dialects.add(new RankEntity<>(dialect, index));
+            Collections.sort(dialects);
 
-        if (defaultDialect == null || dialect.isDefault()) {
-            defaultDialect = dialect;
+            if (defaultDialect == null || dialect.isDefault()) {
+                defaultDialect = dialect;
+            }
         }
     }
 

@@ -16,6 +16,7 @@
 package org.noear.solon.ai.reranking.dialect;
 
 import org.noear.solon.ai.reranking.RerankingConfig;
+import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.RankEntity;
 
 import java.util.ArrayList;
@@ -29,9 +30,11 @@ import java.util.List;
  */
 public class RerankingDialectManager {
     private static List<RankEntity<RerankingDialect>> dialects = new ArrayList<>();
+    private static RerankingDialect defaultDialect;
 
     static {
-        register(DashscopeRerankingDialect.getInstance());
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.dashscope.DashscopeRerankingDialect"));
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.openai.OpenaiRerankingDialect"));
     }
 
     /**
@@ -44,7 +47,7 @@ public class RerankingDialectManager {
             }
         }
 
-        return OpenaiRerankingDialect.getInstance();
+        return defaultDialect;
     }
 
     /**
@@ -58,8 +61,14 @@ public class RerankingDialectManager {
      * 注册方言
      */
     public static void register(RerankingDialect dialect, int index) {
-        dialects.add(new RankEntity<>(dialect, index));
-        Collections.sort(dialects);
+        if (dialect != null) {
+            dialects.add(new RankEntity<>(dialect, index));
+            Collections.sort(dialects);
+
+            if (defaultDialect == null || dialect.isDefault()) {
+                defaultDialect = dialect;
+            }
+        }
     }
 
     /**

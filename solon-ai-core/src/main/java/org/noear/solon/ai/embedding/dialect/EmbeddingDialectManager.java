@@ -16,6 +16,7 @@
 package org.noear.solon.ai.embedding.dialect;
 
 import org.noear.solon.ai.embedding.EmbeddingConfig;
+import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.RankEntity;
 
 import java.util.ArrayList;
@@ -30,6 +31,12 @@ import java.util.List;
 public class EmbeddingDialectManager {
     private static List<RankEntity<EmbeddingDialect>> dialects = new ArrayList<>();
     private static EmbeddingDialect defaultDialect;
+
+    static {
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.dashscope.DashscopeEmbeddingDialect"));
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.ollama.OllamaEmbeddingDialect"));
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.openai.OpenaiEmbeddingDialect"));
+    }
 
     /**
      * 选择方言
@@ -55,11 +62,13 @@ public class EmbeddingDialectManager {
      * 注册方言
      */
     public static void register(EmbeddingDialect dialect, int index) {
-        dialects.add(new RankEntity<>(dialect, index));
-        Collections.sort(dialects);
+        if (dialect != null) {
+            dialects.add(new RankEntity<>(dialect, index));
+            Collections.sort(dialects);
 
-        if (defaultDialect == null || dialect.isDefault()) {
-            defaultDialect = dialect;
+            if (defaultDialect == null || dialect.isDefault()) {
+                defaultDialect = dialect;
+            }
         }
     }
 
