@@ -32,7 +32,6 @@ import java.util.function.Consumer;
  */
 public class EmbeddingRequest {
     private static final Logger log = LoggerFactory.getLogger(EmbeddingRequest.class);
-    private static final EmbeddingOptions OPTIONS_DEFAULT = new EmbeddingOptions();
 
     private final EmbeddingConfig config;
     private final EmbeddingDialect dialect;
@@ -43,7 +42,7 @@ public class EmbeddingRequest {
         this.config = config;
         this.dialect = dialect;
         this.input = input;
-        this.options = OPTIONS_DEFAULT;
+        this.options = new EmbeddingOptions();
     }
 
     /**
@@ -51,6 +50,7 @@ public class EmbeddingRequest {
      */
     public EmbeddingRequest options(EmbeddingOptions options) {
         if (options != null) {
+            //重置
             this.options = options;
         }
 
@@ -61,7 +61,7 @@ public class EmbeddingRequest {
      * 选项
      */
     public EmbeddingRequest options(Consumer<EmbeddingOptions> optionsBuilder) {
-        this.options = EmbeddingOptions.of();
+        //可多次调用
         optionsBuilder.accept(options);
         return this;
     }

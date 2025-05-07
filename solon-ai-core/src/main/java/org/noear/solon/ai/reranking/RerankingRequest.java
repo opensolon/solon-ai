@@ -33,7 +33,6 @@ import java.util.function.Consumer;
  */
 public class RerankingRequest {
     private static final Logger log = LoggerFactory.getLogger(RerankingRequest.class);
-    private static final RerankingOptions OPTIONS_DEFAULT = new RerankingOptions();
 
     private final RerankingConfig config;
     private final RerankingDialect dialect;
@@ -46,7 +45,7 @@ public class RerankingRequest {
         this.dialect = dialect;
         this.query = query;
         this.documents = documents;
-        this.options = OPTIONS_DEFAULT;
+        this.options = new RerankingOptions();
     }
 
     /**
@@ -54,6 +53,7 @@ public class RerankingRequest {
      */
     public RerankingRequest options(RerankingOptions options) {
         if (options != null) {
+            //重置
             this.options = options;
         }
 
@@ -64,7 +64,7 @@ public class RerankingRequest {
      * 选项
      */
     public RerankingRequest options(Consumer<RerankingOptions> optionsBuilder) {
-        this.options = RerankingOptions.of();
+        //可多次调用
         optionsBuilder.accept(options);
         return this;
     }

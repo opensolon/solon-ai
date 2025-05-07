@@ -50,7 +50,6 @@ import java.util.function.Consumer;
  */
 public class ChatRequestDefault implements ChatRequest {
     private static final Logger log = LoggerFactory.getLogger(ChatRequestDefault.class);
-    private static final ChatOptions OPTIONS_DEFAULT = new ChatOptions();
 
     private final ChatConfig config;
     private final ChatDialect dialect;
@@ -62,7 +61,7 @@ public class ChatRequestDefault implements ChatRequest {
         this.config = config;
         this.dialect = dialect;
         this.messages = messages;
-        this.options = OPTIONS_DEFAULT;
+        this.options = new ChatOptions();
     }
 
     /**
@@ -73,6 +72,7 @@ public class ChatRequestDefault implements ChatRequest {
     @Override
     public ChatRequest options(ChatOptions options) {
         if (options != null) {
+            //重置
             this.options = options;
         }
 
@@ -86,7 +86,7 @@ public class ChatRequestDefault implements ChatRequest {
      */
     @Override
     public ChatRequest options(Consumer<ChatOptions> optionsBuilder) {
-        this.options = ChatOptions.of();
+        //可多次调用
         optionsBuilder.accept(options);
         return this;
     }

@@ -31,7 +31,6 @@ import java.util.function.Consumer;
  */
 public class ImageRequest {
     private static final Logger log = LoggerFactory.getLogger(ImageRequest.class);
-    private static final ImageOptions OPTIONS_DEFAULT = new ImageOptions();
 
     private final ImageConfig config;
     private final ImageDialect dialect;
@@ -42,7 +41,7 @@ public class ImageRequest {
         this.config = config;
         this.dialect = dialect;
         this.prompt = prompt;
-        this.options = OPTIONS_DEFAULT;
+        this.options = new ImageOptions();
     }
 
     /**
@@ -50,6 +49,7 @@ public class ImageRequest {
      */
     public ImageRequest options(ImageOptions options) {
         if (options != null) {
+            //重置
             this.options = options;
         }
 
@@ -60,7 +60,7 @@ public class ImageRequest {
      * 选项
      */
     public ImageRequest options(Consumer<ImageOptions> optionsBuilder) {
-        this.options = ImageOptions.of();
+        //可多次调用
         optionsBuilder.accept(options);
         return this;
     }
