@@ -2,6 +2,7 @@ package features.ai.chat;
 
 import features.ai.chat.tool.EntityTools;
 import features.ai.chat.tool.ReturnTools;
+import features.ai.chat.tool.Case8Tools;
 import features.ai.chat.tool.Tools;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
@@ -17,6 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -373,5 +376,44 @@ public class OllamaTest {
         //打印消息
         log.info("{}", resp.getMessage());
         assert "成功".equals(resp.getMessage().getContent());
+    }
+
+    @Test
+    public void case8() throws Exception {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new Case8Tools())
+                .timeout(Duration.ofSeconds(600))
+                .build();
+
+        ArrayList<ChatMessage> list = new ArrayList<>();
+
+        // list.add(chatMessage);
+        list.add(ChatMessage.ofUser("2025号3月20日，设备76-51的日用电量是多少"));
+
+        Publisher<ChatResponse> publisher = chatModel.prompt(list)
+                .stream();
+
+        CountDownLatch doneLatch = new CountDownLatch(1);
+        AtomicReference<Throwable> errHolder = new AtomicReference<>();
+        publisher.subscribe(new SimpleSubscriber<ChatResponse>()
+                .doOnNext(resp -> {
+                    if (resp.getMessage().getContent() != null) {
+                        System.out.print(resp.getMessage().getContent());
+                    }
+
+                }).doOnComplete(() -> {
+                    doneLatch.countDown();
+                }).doOnError(err -> {
+                    err.printStackTrace();
+
+                    errHolder.set(err);
+                    doneLatch.countDown();
+                }));
+
+        doneLatch.await();
+
+        System.out.println("完成");
+
+        assert errHolder.get() == null;
     }
 }
