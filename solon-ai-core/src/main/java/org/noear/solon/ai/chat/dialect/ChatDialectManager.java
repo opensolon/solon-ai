@@ -18,6 +18,8 @@ package org.noear.solon.ai.chat.dialect;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.RankEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,6 +31,8 @@ import java.util.List;
  * @author noear
  */
 public class ChatDialectManager {
+    static final Logger log = LoggerFactory.getLogger(ChatDialectManager.class);
+
     private static List<RankEntity<ChatDialect>> dialects = new ArrayList<>();
     private static ChatDialect defaultDialect;
 
@@ -76,6 +80,8 @@ public class ChatDialectManager {
             if (defaultDialect == null || dialect.isDefault()) {
                 defaultDialect = dialect;
             }
+
+            log.info("Register chat dialect: {}", dialect.getClass());
         }
     }
 

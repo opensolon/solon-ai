@@ -18,6 +18,8 @@ package org.noear.solon.ai.image.dialect;
 import org.noear.solon.ai.image.ImageConfig;
 import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.RankEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,6 +31,8 @@ import java.util.List;
  * @author noear
  */
 public class ImageDialectManager {
+    static final Logger log = LoggerFactory.getLogger(ImageDialectManager.class);
+
     private static List<RankEntity<ImageDialect>> dialects = new ArrayList<>();
     private static ImageDialect defaultDialect;
 
@@ -69,6 +73,8 @@ public class ImageDialectManager {
             if (defaultDialect == null || dialect.isDefault()) {
                 defaultDialect = dialect;
             }
+
+            log.info("Register image dialect: {}", dialect.getClass());
         }
     }
 

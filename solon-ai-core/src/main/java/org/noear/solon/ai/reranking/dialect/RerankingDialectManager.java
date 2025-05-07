@@ -18,6 +18,8 @@ package org.noear.solon.ai.reranking.dialect;
 import org.noear.solon.ai.reranking.RerankingConfig;
 import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.RankEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,6 +31,8 @@ import java.util.List;
  * @author noear
  */
 public class RerankingDialectManager {
+    static final Logger log = LoggerFactory.getLogger(RerankingDialectManager.class);
+
     private static List<RankEntity<RerankingDialect>> dialects = new ArrayList<>();
     private static RerankingDialect defaultDialect;
 
@@ -68,6 +72,8 @@ public class RerankingDialectManager {
             if (defaultDialect == null || dialect.isDefault()) {
                 defaultDialect = dialect;
             }
+
+            log.info("Register reranking dialect: {}", dialect.getClass());
         }
     }
 

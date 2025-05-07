@@ -18,6 +18,8 @@ package org.noear.solon.ai.embedding.dialect;
 import org.noear.solon.ai.embedding.EmbeddingConfig;
 import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.RankEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,6 +31,8 @@ import java.util.List;
  * @author noear
  */
 public class EmbeddingDialectManager {
+    static final Logger log = LoggerFactory.getLogger(EmbeddingDialectManager.class);
+
     private static List<RankEntity<EmbeddingDialect>> dialects = new ArrayList<>();
     private static EmbeddingDialect defaultDialect;
 
@@ -69,6 +73,8 @@ public class EmbeddingDialectManager {
             if (defaultDialect == null || dialect.isDefault()) {
                 defaultDialect = dialect;
             }
+
+            log.info("Register embedding dialect: {}", dialect.getClass());
         }
     }
 
