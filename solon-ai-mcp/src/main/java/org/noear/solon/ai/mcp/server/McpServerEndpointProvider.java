@@ -164,15 +164,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
         return resourceManager.all();
     }
 
-    /**
-     * 通知资源变化
-     */
-    public void notifyResourcesListChanged() {
-        if (server != null) {
-            server.notifyResourcesListChanged();
-        }
-    }
-
     /// ////////////////////////
 
     /**
@@ -211,15 +202,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     public Collection<FunctionPrompt> getPrompts() {
         return promptManager.all();
-    }
-
-    /**
-     * 通知资源变化
-     */
-    public void notifyPromptsListChanged() {
-        if (server != null) {
-            server.notifyPromptsListChanged();
-        }
     }
 
     /// /////////////////////////
@@ -263,15 +245,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
      */
     public Collection<FunctionTool> getTools() {
         return toolManager.all();
-    }
-
-    /**
-     * 通知工具变化
-     */
-    public void notifyToolsListChanged() {
-        if (server != null) {
-            server.notifyToolsListChanged();
-        }
     }
 
     /// /////////////////////
