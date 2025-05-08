@@ -1,9 +1,11 @@
 ### 3.2.2
 
 * 新增 solon-ai-repo-dashvector 插件
-* 调整 solon-ai 移除 ToolParam 注解，改用 Param 注解（通用参数注解）
-* 调整 solon-ai ToolMapping 注解移到 org.noear.solon.ai.annotation
-* 调整 solon-ai FunctionToolDesc:param 改为 paramAdd 风格
+* 插件 solon-ai 三次预览
+* 插件 solon-ai-mcp 二次预览
+* 调整 solon-ai 移除 ToolParam 注解，改用 `Param` 注解（通用参数注解）
+* 调整 solon-ai ToolMapping 注解移到 `org.noear.solon.ai.annotation`
+* 调整 solon-ai FunctionToolDesc:param 改为 `paramAdd` 风格
 * 调整 solon-ai MethodToolProvider 取消对 Mapping 注解的支持（利于跨生态体验的统一性）
 * 调整 solon-ai 拆分为 solon-ai-core 和 solon-ai-model-dialects（方便适配与扩展）
 * 调整 solon-ai 模型方言改为插件扩展方式
@@ -11,7 +13,7 @@
 * 优化 solon-ai 允许 MethodFunctionTool,MethodFunctionPrompt,MethodFunctionResource 没有 solon 上下文的用况
 * 优化 solon-ai-core `model.options(o->{})` 可多次调用
 * 优化 solon-ai-mcp McpClientProvider 同时实现 ResourceProvider, PromptProvider 接口
-* 优化 solon-ai-repo-redis metadataIndexFields 更名为 metadataFields （原名标为弃用）
+* 优化 solon-ai-repo-redis metadataIndexFields 更名为 `metadataFields` （原名标为弃用）
 * 添加 solon-ai-core ChatSubscriberProxy 用于控制外部订阅者，只触发一次 onSubscribe
 * 添加 solon-ai-mcp McpClientProperties:httpProxy 配置
 * 添加 solon-ai-mcp McpClientToolProvider isStarted 状态位（把心跳开始，转为第一次调用这后）
@@ -22,7 +24,7 @@
 * 添加 solon-ai-mcp ResourceMapping 和 PromptMapping 注解（支持资源与提示语服务）
 * 添加 solon-ai-mcp McpServerEndpoint AOP 支持（可支持 solono auth 注解鉴权）
 * 添加 solon-ai-mcp McpServerEndpoint 实体参数支持（可支持 solon web 的实体参数、注解相通）
-* 添加 solon-ai-mpc Tool.returnDirect 属性透传（前后端都有 solon-ai 时有效，目前还不是规范）
+* 添加 solon-ai-mpc `Tool.returnDirect` 属性透传（前后端都有 solon-ai 时有效，目前还不是规范）
 
 ### 3.2.1
 
