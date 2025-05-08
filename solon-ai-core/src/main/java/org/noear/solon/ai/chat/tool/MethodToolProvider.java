@@ -46,7 +46,7 @@ public class MethodToolProvider implements ToolProvider {
         //添加带注释的工具
         for (Method method : beanWrap.rawClz().getMethods()) {
             //兼容 mvc 注解
-            if (method.isAnnotationPresent(ToolMapping.class) || method.isAnnotationPresent(Mapping.class)) {
+            if (method.isAnnotationPresent(ToolMapping.class)) {
                 MethodFunctionTool func = new MethodFunctionTool(beanWrap, method);
                 tools.add(func);
             }
