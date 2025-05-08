@@ -51,7 +51,7 @@ public class MethodFunctionTool implements FunctionTool {
 
     public MethodFunctionTool(BeanWrap beanWrap, Method method) {
         this.beanWrap = beanWrap;
-        this.methodWrap = beanWrap.context().methodGet(method);
+        this.methodWrap = new MethodWrap(beanWrap.context(), method.getDeclaringClass(), method);
 
         ToolMapping m1Anno = method.getAnnotation(ToolMapping.class);
         if (m1Anno == null) {

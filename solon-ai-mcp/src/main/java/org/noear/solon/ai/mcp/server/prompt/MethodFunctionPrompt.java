@@ -47,7 +47,7 @@ public class MethodFunctionPrompt implements FunctionPrompt {
 
     public MethodFunctionPrompt(BeanWrap beanWrap, Method method) {
         this.beanWrap = beanWrap;
-        this.methodWrap = beanWrap.context().methodGet(method);
+        this.methodWrap = new MethodWrap(beanWrap.context(), method.getDeclaringClass(), method);
         this.mapping = method.getAnnotation(PromptMapping.class);
         this.name = Utils.annoAlias(mapping.name(), method.getName());
 
