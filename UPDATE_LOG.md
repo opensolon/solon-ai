@@ -4,6 +4,7 @@
 * 调整 solon-ai 移除 ToolParam 注解，改用 Param 注解（通用参数注解）
 * 调整 solon-ai ToolMapping 注解移到 org.noear.solon.ai.annotation
 * 调整 solon-ai FunctionToolDesc:param 改为 paramAdd 风格
+* 调整 solon-ai MethodToolProvider 取消对 Mapping 注解的支持（利于跨生态体验的统一性）
 * 调整 solon-ai 拆分为 solon-ai-core 和 solon-ai-model-dialects（方便适配与扩展）
 * 调整 solon-ai 模型方言改为插件扩展方式
 * 调整 solon-ai-mcp McpClientToolProvider 更名为 McpClientProvider（实现的接口变多了）
