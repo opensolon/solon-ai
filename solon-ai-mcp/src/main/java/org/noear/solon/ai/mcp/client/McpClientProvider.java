@@ -591,7 +591,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             FunctionPromptDesc functionDesc = new FunctionPromptDesc(name);
             functionDesc.description(description);
             for(McpSchema.PromptArgument p1 : prompt.getArguments()){
-                functionDesc.param(p1.getName(), p1.getRequired(), p1.getDescription());
+                functionDesc.paramAdd(p1.getName(), p1.getRequired(), p1.getDescription());
             }
 
             functionDesc.doHandle((args) -> getPromptAsMessages(name, args));
