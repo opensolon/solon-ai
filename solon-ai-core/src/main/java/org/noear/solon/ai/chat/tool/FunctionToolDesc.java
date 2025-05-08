@@ -70,8 +70,8 @@ public class FunctionToolDesc implements FunctionTool {
      * @param type        参数类型
      * @param description 参数描述
      */
-    public FunctionToolDesc param(String name, Class<?> type, String description) {
-        return param(name, type, true, description);
+    public FunctionToolDesc paramAdd(String name, Class<?> type, String description) {
+        return paramAdd(name, type, true, description);
     }
 
     /**
@@ -82,7 +82,7 @@ public class FunctionToolDesc implements FunctionTool {
      * @param required    是否必须
      * @param description 参数描述
      */
-    public FunctionToolDesc param(String name, Class<?> type, boolean required, String description) {
+    public FunctionToolDesc paramAdd(String name, Class<?> type, boolean required, String description) {
         params.add(new ParamDesc(name, type, required, description));
         inputSchema = null;
         return this;
@@ -94,8 +94,8 @@ public class FunctionToolDesc implements FunctionTool {
      * @param name        参数名字
      * @param description 参数描述
      */
-    public FunctionToolDesc stringParam(String name, String description) {
-        return param(name, String.class, description);
+    public FunctionToolDesc stringParamAdd(String name, String description) {
+        return paramAdd(name, String.class, description);
     }
 
     /**
@@ -104,8 +104,8 @@ public class FunctionToolDesc implements FunctionTool {
      * @param name        参数名字
      * @param description 参数描述
      */
-    public FunctionToolDesc intParam(String name, String description) {
-        return param(name, int.class, description);
+    public FunctionToolDesc intParamAdd(String name, String description) {
+        return paramAdd(name, int.class, description);
     }
 
     /**
@@ -114,8 +114,8 @@ public class FunctionToolDesc implements FunctionTool {
      * @param name        参数名字
      * @param description 参数描述
      */
-    public FunctionToolDesc floatParam(String name, String description) {
-        return param(name, float.class, description);
+    public FunctionToolDesc floatParamAdd(String name, String description) {
+        return paramAdd(name, float.class, description);
     }
 
     /**
@@ -124,8 +124,8 @@ public class FunctionToolDesc implements FunctionTool {
      * @param name        参数名字
      * @param description 参数描述
      */
-    public FunctionToolDesc boolParam(String name, String description) {
-        return param(name, Boolean.class, description);
+    public FunctionToolDesc boolParamAdd(String name, String description) {
+        return paramAdd(name, Boolean.class, description);
     }
 
     /**
@@ -134,8 +134,8 @@ public class FunctionToolDesc implements FunctionTool {
      * @param name        参数名字
      * @param description 参数描述
      */
-    public FunctionToolDesc dateParam(String name, String description) {
-        return param(name, Date.class, description);
+    public FunctionToolDesc dateParamAdd(String name, String description) {
+        return paramAdd(name, Date.class, description);
     }
 
 
