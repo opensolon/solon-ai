@@ -1,5 +1,6 @@
 package demo.ai.mcp.server;
 
+import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.annotation.Param;
@@ -9,7 +10,7 @@ import org.noear.solon.annotation.Param;
  */
 @McpServerEndpoint(sseEndpoint = "/demo4/sse")
 public class McpServerTool4 {
-    @Mapping(description = "查询城市降雨量")
+    @ToolMapping(description = "查询城市降雨量")
     public String getRainfall(@Param(name = "location", description = "城市位置") String location) {
         if (location == null) {
             throw new IllegalStateException("arguments location is null (Assistant recognition failure)");
