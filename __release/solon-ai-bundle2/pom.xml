@@ -16,14 +16,6 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-chroma</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-dashvector</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-elasticsearch</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-milvus</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-qdrant</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-redis</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-tcvectordb</module>
-
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-mariadb</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-mysql</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-opensearch</module>
