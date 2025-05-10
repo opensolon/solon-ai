@@ -24,7 +24,13 @@ import org.noear.solon.core.exception.ConvertException;
  * @author noear
  * @since 3.1
  */
-public class ToolCallResultJsonConverter implements ToolCallResultConverter{
+public class ToolCallResultJsonConverter implements ToolCallResultConverter {
+    private static final ToolCallResultConverter instance = new ToolCallResultJsonConverter();
+
+    public static ToolCallResultConverter getInstance() {
+        return instance;
+    }
+
     @Override
     public String convert(Object result) throws ConvertException {
         return ONode.stringify(result);

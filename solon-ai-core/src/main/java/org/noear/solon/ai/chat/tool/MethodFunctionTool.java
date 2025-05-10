@@ -22,6 +22,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.annotation.ToolMappingAnno;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Mapping;
+import org.noear.solon.annotation.Produces;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
@@ -44,33 +45,49 @@ public class MethodFunctionTool implements FunctionTool {
 
     private final String name;
     private final String description;
-    private boolean returnDirect;
+    private final boolean returnDirect;
     private final List<ParamDesc> params = new ArrayList<>();
     private final ToolCallResultConverter resultConverter;
     private final String inputSchema;
+    private final String mimeType;
 
     public MethodFunctionTool(BeanWrap beanWrap, Method method) {
         this.beanWrap = beanWrap;
         this.methodWrap = new MethodWrap(beanWrap.context(), method.getDeclaringClass(), method);
 
-        ToolMapping m1Anno = method.getAnnotation(ToolMapping.class);
-        if (m1Anno == null) {
-            m1Anno = ToolMappingAnno.fromMapping(method.getAnnotation(Mapping.class));
+        ToolMapping mapping = method.getAnnotation(ToolMapping.class);
+        if (mapping == null) {
+            mapping = ToolMappingAnno.fromMapping(method.getAnnotation(Mapping.class));
         }
 
         //断言
-        Assert.notNull(m1Anno, "@ToolMapping annotation is missing");
+        Assert.notNull(mapping, "@ToolMapping annotation is missing");
         //断言
-        Assert.notEmpty(m1Anno.description(), "ToolMapping description cannot be empty");
+        Assert.notEmpty(mapping.description(), "ToolMapping description cannot be empty");
 
-        this.name = Utils.annoAlias(m1Anno.name(), method.getName());
-        this.description = m1Anno.description();
-        this.returnDirect = m1Anno.returnDirect();
+        this.name = Utils.annoAlias(mapping.name(), method.getName());
+        this.description = mapping.description();
+        this.returnDirect = mapping.returnDirect();
 
-        if (m1Anno.resultConverter() == ToolCallResultConverter.class) {
-            resultConverter = null;
+        Produces producesAnno = method.getAnnotation(Produces.class);
+        if (producesAnno != null) {
+            this.mimeType = producesAnno.value();
         } else {
-            resultConverter = Solon.context().getBeanOrNew(m1Anno.resultConverter());
+            this.mimeType = "";
+        }
+
+        if (mapping.resultConverter() == ToolCallResultConverter.class) {
+            if (mimeType.contains("json")) {
+                resultConverter = ToolCallResultJsonConverter.getInstance();
+            } else {
+                resultConverter = null;
+            }
+        } else {
+            if (Solon.context() != null) {
+                resultConverter = Solon.context().getBeanOrNew(mapping.resultConverter());
+            } else {
+                resultConverter = null;
+            }
         }
 
         for (Parameter p1 : method.getParameters()) {

@@ -1,11 +1,11 @@
-package demo.ai.mcp.art1;
+package demo.ai.mcp.server.art1;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.annotation.Param;
 
-@McpServerEndpoint(channel = McpChannel.STDIO)
+@McpServerEndpoint(sseEndpoint = "/mcp/CalculatorTools/sse")
 public class CalculatorTools {
     @ToolMapping(description = "将两个数字相加")
     public int add(@Param int a, @Param int b) {
