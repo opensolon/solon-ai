@@ -1,4 +1,13 @@
-### 3.2.2
+### 3.3.1
+
+* 添加 solon-ai-mcp ToolMapping,ResourceMapping 注解方法对 Produces 注解的支持（用它可指定结果转换处理）
+* 添加 solon-ai-mcp ToolCallResultConverter:matched 方法
+* 添加 solon-ai-mcp 资源模板的响应适配
+* 添加 solon-ai-mcp McpClientProvider:getResourceTemplates 方法
+* 优化 solon-ai-mcp 取消 MethodFunctionResource 对反回类型的限制（增加了 resultConverter 转换处理）
+* 修复 solon-ai ChatRequestDefault:stream 请求 r1 时，可能会产生两次 tink 消息发射
+
+### 3.3.0
 
 * 新增 solon-ai-repo-dashvector 插件
 * 插件 solon-ai 三次预览
