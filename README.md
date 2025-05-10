@@ -202,12 +202,12 @@ String rst = clientToolProvider.callToolAsText("getWeather", Map.of("location", 
 ```
 
 
-* MCP Proxy （示例，把 gitee mcp 转为 sse 服务）
+* MCP Proxy （示例，把 gitee mcp stdio 转为 sse 服务）
 
 配置参考自：https://gitee.com/oschina/mcp-gitee
 
 ```java
-@McpServerEndpoint(name = "stdio-to-sse-tool")
+@McpServerEndpoint(name = "mcp-case3", sseEndpoint="/case3/sse")
 public class McpStdioToSseServerDemo implements ToolProvider {
     McpClientProvider stdioToolProvider = McpClientProvider.builder()
             .channel(McpChannel.STDIO) //表示使用 stdio
