@@ -57,16 +57,28 @@ public class McpSseClientMixTest {
         log.warn("{}", resource);
 
         assert "v3.2.0".equals(resource);
+
+        Collection<FunctionResource> list = mcpClient.getResources();
+        System.out.println(list);
+        assert list.size() == 1;
+
+        assert "config://app-version".equals(new ArrayList<>(list).get(0).uri());
     }
 
     @Test
-    public void resource2() throws Exception {
+    public void resource_tmpl() throws Exception {
         String resource = mcpClient.readResourceAsText("db://users/12/email").getContent();
 
         assert Utils.isNotEmpty(resource);
         log.warn("{}", resource);
 
         assert "12@example.com".equals(resource);
+
+        Collection<FunctionResource> list = mcpClient.getResourceTemplates();
+        System.out.println(list);
+        assert list.size() == 1;
+
+        assert "db://users/{user_id}/email".equals(new ArrayList<>(list).get(0).uri());
     }
 
     @Test
