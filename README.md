@@ -53,7 +53,7 @@ Solon-AI
 
 面向全场景的 Java AI 应用开发框架（支持已知 AI 开发的各种能力）。是 Solon 项目的一部分。也可嵌入到 SpringBoot2、jFinal、Vert.x 等框架中使用。
 
-其中 solon-mcp 的嵌入示例：
+其中 solon-ai(& mcp) 的嵌入示例：
 
 * https://gitee.com/opensolon/solon-ai-mcp-embedded-examples
 * https://gitcode.com/opensolon/solon-ai-mcp-embedded-examples
@@ -158,10 +158,23 @@ layout:
 ```java
 //组件方式构建
 @McpServerEndpoint(name="mcp-case1", sseEndpoint = "/case1/sse") 
-public class McpServerTool {
+public class McpServer {
     @ToolMapping(description = "查询天气预报")
     public String getWeather(@Param(description = "城市位置") String location) {
         return "晴，14度";
+    }
+
+    @ResourceMapping(uri = "config://app-version", description = "获取应用版本号", mimeType = "text/config")
+    public String getAppVersion() {
+        return "v3.2.0";
+    }
+
+
+    @PromptMapping(description = "生成关于某个主题的提问")
+    public Collection<ChatMessage> askQuestion(@Param(description = "主题") String topic) {
+        return Arrays.asList(
+                ChatMessage.ofUser("请解释一下'" + topic + "'的概念？")
+        );
     }
 }
 
@@ -171,7 +184,9 @@ McpServerEndpointProvider serverEndpoint = McpServerEndpointProvider.builder()
         .sseEndpoint("/case2/sse")
         .build();
 
-serverEndpoint.addTool(new MethodToolProvider(new McpServerTool()));
+serverEndpoint.addTool(new MethodToolProvider(new McpServerTools())); //添加工具
+serverEndpoint.addResource(new MethodResourceProvider(new McpServerResources())); //添加资源
+serverEndpoint.addPrompt(new MethodPromptProvider(new McpServerPrompts())); //添加提示语
 serverEndpoint.postStart();
 ```
 
@@ -182,7 +197,30 @@ McpClientToolProvider clientToolProvider = McpClientToolProvider.builder()
                 .apiUrl("http://localhost:8080/case1/sse")
                 .build();
 
-String rst = clientToolProvider.callToolAsText("getWeather", Map.of("location", "杭州"));
+String rst = clientToolProvider.callToolAsText("getWeather", Map.of("location", "杭州"))
+                .getContent();
+```
+
+
+* MCP Proxy （示例，把 gitee mcp 转为 sse 服务）
+
+```java
+@McpServerEndpoint(name = "stdio-to-sse-tool")
+public class McpStdioToSseServerDemo implements ToolProvider {
+    McpClientProvider stdioToolProvider = McpClientProvider.builder()
+            .channel(McpChannel.STDIO) //表示使用 stdio
+            .serverParameters(ServerParameters.builder("npx")
+                    .args("-y", "@gitee/mcp-gitee@latest")
+                    .addEnvVar("GITEE_API_BASE", "https://gitee.com/api/v5")
+                    .addEnvVar("GITEE_ACCESS_TOKEN", "<your personal access token>")
+                    .build())
+            .build();
+
+    @Override
+    public Collection<FunctionTool> getTools() {
+        return stdioToolProvider.getTools();
+    }
+}
 ```
 
 ## Solon 项目相关代码仓库
