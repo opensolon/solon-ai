@@ -251,7 +251,6 @@ public class ChatRequestDefault implements ChatRequest {
                         for (ChatChoice choice : choices) {
                             resp.reset();
                             resp.addChoice(choice);
-                            subscriber.onNext(resp);
                             publishResponse(subscriber, resp, choice);
                         }
                     } else {
