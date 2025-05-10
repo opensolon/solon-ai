@@ -569,6 +569,38 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         return resourceList;
     }
 
+    public Collection<FunctionResource> getResourceTemplates() {
+        return getResourceTemplates(null);
+    }
+
+    public Collection<FunctionResource> getResourceTemplates(String cursor) {
+        List<FunctionResource> resourceList = new ArrayList<>();
+
+        McpSchema.ListResourceTemplatesResult result = null;
+        if (cursor == null) {
+            result = getClient().listResourceTemplates();
+        } else {
+            result = getClient().listResourceTemplates(cursor);
+        }
+
+        for (McpSchema.ResourceTemplate resource : result.getResourceTemplates()) {
+            String name = resource.getName();
+            String uriTemplate = resource.getUriTemplate();
+            String description = resource.getDescription();
+
+            FunctionResourceDesc functionDesc = new FunctionResourceDesc(name);
+            functionDesc.description(description);
+            functionDesc.uri(uriTemplate);
+            functionDesc.mimeType(resource.getMimeType());
+            functionDesc.doHandle((reqUri) -> readResourceAsText(reqUri));
+
+
+            resourceList.add(functionDesc);
+        }
+
+        return resourceList;
+    }
+
     @Override
     public Collection<FunctionPrompt> getPrompts() {
         return getPrompts(null);
@@ -590,7 +622,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
             FunctionPromptDesc functionDesc = new FunctionPromptDesc(name);
             functionDesc.description(description);
-            for(McpSchema.PromptArgument p1 : prompt.getArguments()){
+            for (McpSchema.PromptArgument p1 : prompt.getArguments()) {
                 functionDesc.paramAdd(p1.getName(), p1.getRequired(), p1.getDescription());
             }
 
