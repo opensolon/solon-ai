@@ -1,9 +1,6 @@
 package features.ai.chat;
 
-import features.ai.chat.tool.EntityTools;
-import features.ai.chat.tool.ReturnTools;
-import features.ai.chat.tool.Case8Tools;
-import features.ai.chat.tool.Tools;
+import features.ai.chat.tool.*;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -415,5 +412,19 @@ public class OllamaTest {
         System.out.println("完成");
 
         assert errHolder.get() == null;
+    }
+
+    @Test
+    public void case9_tool() throws IOException {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new Case9Tools())
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("1+2等于几？")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
     }
 }
