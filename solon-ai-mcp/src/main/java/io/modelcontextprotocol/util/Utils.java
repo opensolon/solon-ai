@@ -35,6 +35,10 @@ public final class Utils {
 		return (str != null && !str.isEmpty() && !str.trim().isEmpty());
 	}
 
+	public static boolean isBlank(String str){
+		return str == null || str.trim().isEmpty();
+	}
+
 	/**
 	 * Return {@code true} if the supplied Collection is {@code null} or empty. Otherwise,
 	 * return {@code false}.

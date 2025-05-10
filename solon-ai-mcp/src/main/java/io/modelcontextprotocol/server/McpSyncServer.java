@@ -66,40 +66,6 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * Retrieves the list of all roots provided by the client.
-	 * @return The list of roots
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpSyncServerExchange#listRoots()}.
-	 */
-	@Deprecated
-	public McpSchema.ListRootsResult listRoots() {
-		return this.listRoots(null);
-	}
-
-	/**
-	 * Retrieves a paginated list of roots provided by the server.
-	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return The list of roots
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpSyncServerExchange#listRoots(String)}.
-	 */
-	@Deprecated
-	public McpSchema.ListRootsResult listRoots(String cursor) {
-		return this.asyncServer.listRoots(cursor).block();
-	}
-
-	/**
-	 * Add a new tool handler.
-	 * @param toolHandler The tool handler to add
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link #addTool(McpServerFeatures.SyncToolSpecification)}.
-	 */
-	@Deprecated
-	public void addTool(McpServerFeatures.SyncToolRegistration toolHandler) {
-		this.asyncServer.addTool(McpServerFeatures.AsyncToolRegistration.fromSync(toolHandler)).block();
-	}
-
-	/**
 	 * Add a new tool handler.
 	 * @param toolHandler The tool handler to add
 	 */
@@ -113,17 +79,6 @@ public class McpSyncServer {
 	 */
 	public void removeTool(String toolName) {
 		this.asyncServer.removeTool(toolName).block();
-	}
-
-	/**
-	 * Add a new resource handler.
-	 * @param resourceHandler The resource handler to add
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link #addResource(McpServerFeatures.SyncResourceSpecification)}.
-	 */
-	@Deprecated
-	public void addResource(McpServerFeatures.SyncResourceRegistration resourceHandler) {
-		this.asyncServer.addResource(McpServerFeatures.AsyncResourceRegistration.fromSync(resourceHandler)).block();
 	}
 
 	/**
@@ -143,14 +98,21 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * Add a new prompt handler.
-	 * @param promptRegistration The prompt registration to add
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link #addPrompt(McpServerFeatures.SyncPromptSpecification)}.
+	 * Add a new resource template handler.
+	 * @param resourceHandler The resource handler to add
 	 */
-	@Deprecated
-	public void addPrompt(McpServerFeatures.SyncPromptRegistration promptRegistration) {
-		this.asyncServer.addPrompt(McpServerFeatures.AsyncPromptRegistration.fromSync(promptRegistration)).block();
+	public void addResourceTemplate(McpServerFeatures.SyncResourceTemplateSpecification resourceHandler) {
+		this.asyncServer
+				.addResourceTemplate(McpServerFeatures.AsyncResourceTemplateSpecification.fromSync(resourceHandler))
+				.block();
+	}
+
+	/**
+	 * Remove a resource template handler.
+	 * @param resourceUri The URI of the resource template handler to remove
+	 */
+	public void removeResourceTemplate(String resourceUri) {
+		this.asyncServer.removeResourceTemplate(resourceUri).block();
 	}
 
 	/**

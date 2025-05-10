@@ -6,6 +6,7 @@ package io.modelcontextprotocol.server;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.UriTemplate;
 import io.modelcontextprotocol.util.Utils;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -35,7 +36,7 @@ public class McpServerFeatures {
 		McpSchema.ServerCapabilities serverCapabilities;
 		List<AsyncToolSpecification> tools;
 		Map<String, AsyncResourceSpecification> resources;
-		List<McpSchema.ResourceTemplate> resourceTemplates;
+		Map<UriTemplate, AsyncResourceTemplateSpecification> resourceTemplates;
 		Map<String, AsyncPromptSpecification> prompts;
 		List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers;
 
@@ -51,8 +52,9 @@ public class McpServerFeatures {
 		 * the roots list changes
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-              List<AsyncToolSpecification> tools, Map<String, AsyncResourceSpecification> resources,
-              List<McpSchema.ResourceTemplate> resourceTemplates,
+              List<AsyncToolSpecification> tools,
+			  Map<String, AsyncResourceSpecification> resources,
+			  Map<UriTemplate, AsyncResourceTemplateSpecification> resourceTemplates,
               Map<String, AsyncPromptSpecification> prompts,
               List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
 
@@ -72,7 +74,7 @@ public class McpServerFeatures {
 
 			this.tools = (tools != null) ? tools : Collections.emptyList();
 			this.resources = (resources != null) ? resources : Collections.emptyMap();
-			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Collections.emptyList();
+			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : Collections.emptyMap();
 			this.prompts = (prompts != null) ? prompts : Collections.emptyMap();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : Collections.emptyList();
 		}
@@ -96,6 +98,11 @@ public class McpServerFeatures {
 				resources.put(key, AsyncResourceSpecification.fromSync(resource));
 			});
 
+			Map<UriTemplate, AsyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
+			syncSpec.getResourceTemplates().forEach((key, resource) -> {
+				resourceTemplates.put(new UriTemplate(key), AsyncResourceTemplateSpecification.fromSync(resource));
+			});
+
 			Map<String, AsyncPromptSpecification> prompts = new HashMap<>();
 			syncSpec.getPrompts().forEach((key, prompt) -> {
 				prompts.put(key, AsyncPromptSpecification.fromSync(prompt));
@@ -110,7 +117,7 @@ public class McpServerFeatures {
 			}
 
 			return new Async(syncSpec.getServerInfo(), syncSpec.getServerCapabilities(), tools, resources,
-					syncSpec.getResourceTemplates(), prompts, rootChangeConsumers);
+					resourceTemplates, prompts, rootChangeConsumers);
 		}
 	}
 
@@ -132,7 +139,7 @@ public class McpServerFeatures {
 		McpSchema.ServerCapabilities serverCapabilities;
 		List<SyncToolSpecification> tools;
 		Map<String, SyncResourceSpecification> resources;
-		List<McpSchema.ResourceTemplate> resourceTemplates;
+		Map<String, SyncResourceTemplateSpecification> resourceTemplates;
 		Map<String, SyncPromptSpecification> prompts;
 		List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers;
 
@@ -150,7 +157,7 @@ public class McpServerFeatures {
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
 				List<SyncToolSpecification> tools,
 				Map<String, SyncResourceSpecification> resources,
-				List<McpSchema.ResourceTemplate> resourceTemplates,
+			    Map<String, SyncResourceTemplateSpecification> resourceTemplates,
 				Map<String, SyncPromptSpecification> prompts,
 				List<BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>> rootsChangeConsumers) {
 
@@ -170,7 +177,7 @@ public class McpServerFeatures {
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
-			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : new ArrayList<>();
+			this.resourceTemplates = (resourceTemplates != null) ? resourceTemplates : new HashMap<>();
 			this.prompts = (prompts != null) ? prompts : new HashMap<>();
 			this.rootsChangeConsumers = (rootsChangeConsumers != null) ? rootsChangeConsumers : new ArrayList<>();
 		}
@@ -277,6 +284,26 @@ public class McpServerFeatures {
 						.subscribeOn(Schedulers.boundedElastic()));
 		}
 	}
+
+	@Data
+	@AllArgsConstructor
+	@NoArgsConstructor
+	public static class AsyncResourceTemplateSpecification {
+		McpSchema.ResourceTemplate resource;
+		BiFunction<McpAsyncServerExchange, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler;
+
+		static AsyncResourceTemplateSpecification fromSync(SyncResourceTemplateSpecification resource) {
+			// FIXME: This is temporary, proper validation should be implemented
+			if (resource == null) {
+				return null;
+			}
+			return new AsyncResourceTemplateSpecification(resource.getResource(),
+					(exchange, req) -> Mono
+							.fromCallable(() -> resource.getReadHandler().apply(new McpSyncServerExchange(exchange), req))
+							.subscribeOn(Schedulers.boundedElastic()));
+		}
+	}
+
 
 	/**
 	 * Specification of a prompt template with its asynchronous handler function. Prompts
@@ -404,6 +431,44 @@ public class McpServerFeatures {
 	@NoArgsConstructor
 	public static class SyncResourceSpecification {
 		McpSchema.Resource resource;
+		BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler;
+	}
+
+
+	/**
+	 * Specification of a resource template with its synchronous handler function.
+	 * Resource templates provide context to AI models by exposing data such as:
+	 * <ul>
+	 * <li>File contents
+	 * <li>Database records
+	 * <li>API responses
+	 * <li>System information
+	 * <li>Application state
+	 * </ul>
+	 *
+	 * <p>
+	 * Example resource specification: <pre>{@code
+	 * new McpServerFeatures.SyncResourceTemplateSpecification(
+	 *     new ResourceTemplate("file:///{path}", "docs", "Documentation files", "text/markdown"),
+	 *     (exchange, request) -> {
+	 *         String content = readFile(request.getPath());
+	 *         return new ReadResourceResult(content);
+	 *     }
+	 * )
+	 * }</pre>
+	 *
+	 * @param resource The resource template definition including uriTemplate, name,
+	 * description, and MIME type
+	 * @param readHandler The function that handles resource read requests. The function's
+	 * first argument is an {@link McpSyncServerExchange} upon which the server can
+	 * interact with the connected client. The second arguments is a
+	 * {@link io.modelcontextprotocol.spec.McpSchema.ReadResourceRequest}.
+	 */
+	@Data
+	@AllArgsConstructor
+	@NoArgsConstructor
+	public static class SyncResourceTemplateSpecification {
+		McpSchema.ResourceTemplate resource;
 		BiFunction<McpSyncServerExchange, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler;
 	}
 
