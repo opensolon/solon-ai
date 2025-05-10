@@ -31,7 +31,7 @@ public class ParamDesc {
         this.name = name;
         this.type = type;
         this.required = required;
-        this.description = description;
+        this.description = (description == null ? "" : description);
     }
 
     /**

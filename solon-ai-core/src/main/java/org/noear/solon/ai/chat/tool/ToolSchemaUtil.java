@@ -55,7 +55,7 @@ public class ToolSchemaUtil {
         }
 
         //断言
-        Assert.notEmpty(p1Anno.description(), "Param description cannot be empty");
+        //Assert.notEmpty(p1Anno.description(), "Param description cannot be empty");
 
         if (ae instanceof Parameter) {
             Parameter p1 = (Parameter) ae;
