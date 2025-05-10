@@ -53,7 +53,12 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
     @Override
     public void remove(McpSyncServer server, String resourceUri) {
         if (server != null) {
-            server.removeResource(resourceUri);
+            if (resourceUri.indexOf('{') < 0) {
+                server.removeResource(resourceUri);
+            } else {
+                server.removeResourceTemplate(resourceUri);
+            }
+
             resourcesMap.remove(resourceUri);
         }
     }
@@ -99,11 +104,44 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
         } else {
             //resourceTemplates
             McpSchema.Annotations annotations = null;//new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
-            mcpServerSpec.resourceTemplates(new McpSchema.ResourceTemplate(functionResource.uri(),
-                    functionResource.name(),
-                    functionResource.description(),
-                    functionResource.mimeType(),
-                    annotations));
+
+            McpServerFeatures.SyncResourceTemplateSpecification resourceSpec = new McpServerFeatures.SyncResourceTemplateSpecification(
+                    new McpSchema.ResourceTemplate(functionResource.uri(),
+                            functionResource.name(),
+                            functionResource.description(),
+                            functionResource.mimeType(),
+                            annotations),
+                    (exchange, request) -> {
+                        try {
+                            ContextHolder.currentSet(new McpServerContext(exchange));
+
+                            Text res = functionResource.handle(request.getUri());
+
+                            if (res.isBase64()) {
+                                return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
+                                        request.getUri(),
+                                        functionResource.mimeType(),
+                                        res.getContent())));
+                            } else {
+                                return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
+                                        request.getUri(),
+                                        functionResource.mimeType(),
+                                        res.getContent())));
+                            }
+                        } catch (Throwable ex) {
+                            ex = Utils.throwableUnwrap(ex);
+                            throw new McpException(ex.getMessage(), ex);
+                        } finally {
+                            ContextHolder.currentRemove();
+                        }
+                    });
+
+
+            if (server != null) {
+                server.addResourceTemplate(resourceSpec);
+            } else {
+                mcpServerSpec.resourceTemplates(resourceSpec);
+            }
         }
     }
 }

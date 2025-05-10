@@ -79,7 +79,7 @@ public class MethodFunctionResource implements FunctionResource {
             }
 
             if (pathKeys.size() > 0) {
-                pathKeysMatcher = PathMatcher.get(mapping.uri());
+                pathKeysMatcher = PathMatcher.get(mapping.uri(), false);
             }
         }
     }
