@@ -70,13 +70,6 @@ public class MethodFunctionResource implements FunctionResource {
         //断言
         Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
 
-        //检查返回类型
-        if (Text.class.isAssignableFrom(method.getReturnType()) == false &&
-                String.class.equals(method.getReturnType()) == false &&
-                byte[].class.equals(method.getReturnType()) == false) {
-            throw new IllegalArgumentException("@ResourceMapping return type is not 'Text' or 'String' or `byte[]`");
-        }
-
         Produces producesAnno = method.getAnnotation(Produces.class);
         if (producesAnno != null) {
             this.mimeType = producesAnno.value();

@@ -1,0 +1,28 @@
+package features.ai.mcp.client.sse;
+
+import demo.ai.mcp.server.McpServerApp;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.media.Text;
+import org.noear.solon.test.SolonTest;
+
+/**
+ * @author noear 2025/5/11 created
+ */
+@Slf4j
+@SolonTest(McpServerApp.class)
+public class McpToolMixTest {
+    McpClientProvider mcpClient = McpClientProvider.builder()
+            .apiUrl("http://localhost:8081/mcp/WeatherTools/sse")
+            .build();
+
+    @Test
+    public void case1() throws Exception {
+        Text mediaText = mcpClient.readResourceAsText("weather://cities");
+
+        System.out.println(mediaText);
+
+        assert "[\"Tokyo\",\"Sydney\",\"Tokyo\"]".equals(mediaText.getContent());
+    }
+}
