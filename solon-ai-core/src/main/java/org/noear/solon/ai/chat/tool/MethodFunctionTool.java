@@ -77,7 +77,7 @@ public class MethodFunctionTool implements FunctionTool {
         }
 
         if (mapping.resultConverter() == ToolCallResultConverter.class) {
-            if (mimeType.contains("json")) {
+            if (ToolCallResultJsonConverter.getInstance().matched(mimeType)) {
                 resultConverter = ToolCallResultJsonConverter.getInstance();
             } else {
                 resultConverter = null;

@@ -26,6 +26,13 @@ import org.noear.solon.core.exception.ConvertException;
 @FunctionalInterface
 public interface ToolCallResultConverter {
     /**
+     * 匹配
+     */
+    default boolean matched(String mimeType) {
+        return true;
+    }
+
+    /**
      * 转换
      *
      * @param result 结果

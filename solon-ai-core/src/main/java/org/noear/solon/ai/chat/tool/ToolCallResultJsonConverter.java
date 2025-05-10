@@ -32,6 +32,15 @@ public class ToolCallResultJsonConverter implements ToolCallResultConverter {
     }
 
     @Override
+    public boolean matched(String mimeType) {
+        if (mimeType == null) {
+            return false;
+        }
+
+        return mimeType.contains("/json");
+    }
+
+    @Override
     public String convert(Object result) throws ConvertException {
         return ONode.stringify(result);
     }
