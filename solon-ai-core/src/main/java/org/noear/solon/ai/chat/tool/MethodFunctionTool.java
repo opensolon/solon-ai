@@ -19,9 +19,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.annotation.ToolMappingAnno;
 import org.noear.solon.ai.util.ParamDesc;
-import org.noear.solon.annotation.Mapping;
 import org.noear.solon.annotation.Produces;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
@@ -56,9 +54,6 @@ public class MethodFunctionTool implements FunctionTool {
         this.methodWrap = new MethodWrap(beanWrap.context(), method.getDeclaringClass(), method);
 
         ToolMapping mapping = method.getAnnotation(ToolMapping.class);
-        if (mapping == null) {
-            mapping = ToolMappingAnno.fromMapping(method.getAnnotation(Mapping.class));
-        }
 
         //断言
         Assert.notNull(mapping, "@ToolMapping annotation is missing");
