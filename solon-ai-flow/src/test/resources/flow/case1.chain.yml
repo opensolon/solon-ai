@@ -1,7 +1,15 @@
 
 id: case1
 layout:
-  - type: start
-  - task: "@ChatInput"
-  - task: "@ChatModel", meta: {stream: false, model: "gpt-4o-mini", apiKey: "ak-xxxx", temperature: "0.10"}
-  - task: "@ChatOutput"
+  - type: "start"
+  - {type: "@TextInput", meta: {text: "hello"}}
+  - {type: "@Llm", meta: {systemPrompt: "你是个聊天助手",
+                         stream: false,
+                         config: { "@type": "org.noear.solon.ai.chat.ChatConfig",
+                                   provider: "ollama",
+                                   model: "qwen2.5:1.5b",
+                                   apiUrl: "http://127.0.0.1:11434/api/chat",
+                                  }
+                         }}
+  - type: "@TextOutput"
+  - type: "end"

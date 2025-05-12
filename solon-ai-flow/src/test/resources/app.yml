@@ -1,0 +1,2 @@
+solon.flow:
+  - classpath:flow/*.yml
