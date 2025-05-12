@@ -3,7 +3,6 @@ package features.ai.mcp.client.sse;
 import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
-import org.noear.liquor.eval.Maps;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -14,6 +13,7 @@ import org.noear.solon.test.SolonTest;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -28,7 +28,7 @@ public class McpSseClientMixTest {
 
     @Test
     public void tool() throws Exception {
-        String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
+        String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
@@ -95,7 +95,7 @@ public class McpSseClientMixTest {
 
     @Test
     public void prompt() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("askQuestion", Maps.of("topic", "教育"));
+        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("askQuestion", Collections.singletonMap("topic", "教育"));
 
         assert Utils.isNotEmpty(prompt);
         log.warn("{}", prompt);
@@ -104,7 +104,7 @@ public class McpSseClientMixTest {
 
     @Test
     public void prompt2() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("debugSession", Maps.of("error", "太阳没出来"));
+        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("debugSession", Collections.singletonMap("error", "太阳没出来"));
 
         assert Utils.isNotEmpty(prompt);
         log.warn("{}", prompt);

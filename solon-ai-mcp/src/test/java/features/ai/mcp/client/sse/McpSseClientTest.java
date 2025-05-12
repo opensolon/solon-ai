@@ -3,7 +3,6 @@ package features.ai.mcp.client.sse;
 import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
-import org.noear.liquor.eval.Maps;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -14,6 +13,7 @@ import org.noear.solon.annotation.Inject;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.noear.solon.test.SolonTest;
 
+import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -31,7 +31,7 @@ public class McpSseClientTest {
                 .getProp("solon.ai.mcp.client.demo1")
                 .toBean(McpClientProvider.class);
 
-        String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
+        String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
@@ -39,7 +39,7 @@ public class McpSseClientTest {
         mcpClient.close();
         mcpClient.reopen();
 
-        response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
+        response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
@@ -53,7 +53,7 @@ public class McpSseClientTest {
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
 
-        String response = mcpClient.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
+        String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);

@@ -1,7 +1,8 @@
 package lab.ai.mcp.client;
 
-import org.noear.liquor.eval.Maps;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+
+import java.util.Collections;
 
 /**
  * @author noear 2025/4/22 created
@@ -20,7 +21,7 @@ public class McpSseClientRetryTest2 {
 
     private static void call(McpClientProvider toolProvider) {
         try {
-            String response = toolProvider.callToolAsText("getWeather", Maps.of("location", "杭州")).getContent();
+            String response = toolProvider.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
             assert response != null;
             System.err.println(response);
         } catch (Throwable e) {

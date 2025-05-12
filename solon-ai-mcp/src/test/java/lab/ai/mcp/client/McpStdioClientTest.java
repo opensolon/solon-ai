@@ -2,11 +2,12 @@ package lab.ai.mcp.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
-import org.noear.liquor.eval.Maps;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.test.SolonTest;
+
+import java.util.Collections;
 
 /**
  * @author noear 2025/4/21 created
@@ -26,7 +27,7 @@ public class McpStdioClientTest {
 
         //args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "dir")
 
-        String response = mcpClient.callToolAsText("get_weather", Maps.of("location", "杭州")).getContent();
+        String response = mcpClient.callToolAsText("get_weather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert response != null;
         log.warn(response);
