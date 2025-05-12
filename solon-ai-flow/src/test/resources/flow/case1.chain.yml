@@ -1,0 +1,7 @@
+
+id: case1
+layout:
+  - type: start
+  - task: "@ChatInput"
+  - task: "@ChatModel", meta: {stream: false, model: "gpt-4o-mini", apiKey: "ak-xxxx", temperature: "0.10"}
+  - task: "@ChatOutput"
