@@ -61,12 +61,14 @@ public class ChatSessionDefault implements ChatSession {
      * 添加消息
      */
     @Override
-    public void addMessage(ChatMessage... messages) {
-        if (messages.length == 1) {
-            this.messages.add(messages[0]);
-        } else {
-            for (ChatMessage m : messages) {
-                this.messages.add(m);
+    public void addMessage(List<ChatMessage> messages) {
+        if (Utils.isNotEmpty(messages)) {
+            if (messages.size() == 1) {
+                this.messages.add(messages.get(0));
+            } else {
+                for (ChatMessage m : messages) {
+                    this.messages.add(m);
+                }
             }
         }
     }

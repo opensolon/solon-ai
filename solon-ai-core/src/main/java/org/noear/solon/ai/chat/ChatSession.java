@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.lang.Preview;
 
 import java.io.*;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -40,7 +41,14 @@ public interface ChatSession extends ChatPrompt {
     /**
      * 添加消息
      */
-    void addMessage(ChatMessage... messages);
+    default void addMessage(ChatMessage... messages) {
+        addMessage(Arrays.asList(messages));
+    }
+
+    /**
+     * 添加消息
+     */
+    void addMessage(List<ChatMessage> messages);
 
     /**
      * 清空消息
