@@ -1,7 +1,7 @@
 package features.ai.flow;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.flow.Attrs;
+import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.annotation.Inject;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
@@ -22,7 +22,7 @@ public class ChatTest {
     @Test
     public void case2() {
         Context ctx = new ContextEmpty();
-        ctx.paramMap().put(Attrs.ATTR_IO_DEFAULT, "hello");
+        ctx.paramMap().put(Attrs.META_IO_MESSAGE, "hello");
 
         try {
             ContextHolder.currentSet(ctx);

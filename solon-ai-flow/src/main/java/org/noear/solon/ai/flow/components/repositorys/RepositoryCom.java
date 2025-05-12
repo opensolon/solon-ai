@@ -1,4 +1,4 @@
-package org.noear.solon.ai.flow.repositorys;
+package org.noear.solon.ai.flow.components.repositorys;
 
 /**
  * @author noear 2025/5/13 created

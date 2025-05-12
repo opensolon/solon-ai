@@ -2,12 +2,13 @@
 id: case2
 layout:
   - {type: "@ChatInput"}
-  - {type: "@Llm", meta: { systemPrompt: "你是个聊天助手",
-                            stream: false,
-                            config: { "@type": "org.noear.solon.ai.chat.ChatConfig",
-                                      provider: "ollama",
-                                      model: "qwen2.5:1.5b",
-                                      apiUrl: "http://127.0.0.1:11434/api/chat",
-                            }
-                          }}
+  - {type: "@ChatModel", meta: {  systemPrompt: "你是个聊天助手",
+                                  stream: false,
+                                  config: { "@type": "org.noear.solon.ai.chat.ChatConfig",
+                                            provider: "ollama",
+                                            model: "qwen2.5:1.5b",
+                                            apiUrl: "http://127.0.0.1:11434/api/chat",
+                                           }
+                                }
+     }
   - {type: "@ChatOutput"}
