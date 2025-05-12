@@ -1,8 +1,7 @@
 
 id: case2
 layout:
-  - type: "start"
-  - type: "@ChatInput"
+  - {type: "@ChatInput"}
   - {type: "@Llm", meta: { systemPrompt: "你是个聊天助手",
                             stream: false,
                             config: { "@type": "org.noear.solon.ai.chat.ChatConfig",
@@ -11,5 +10,4 @@ layout:
                                       apiUrl: "http://127.0.0.1:11434/api/chat",
                             }
                           }}
-  - type: "@ChatOutput"
-  - type: "end"
+  - {type: "@ChatOutput"}

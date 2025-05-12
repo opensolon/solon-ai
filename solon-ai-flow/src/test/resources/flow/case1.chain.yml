@@ -1,7 +1,6 @@
 
 id: case1
 layout:
-  - type: "start"
   - {type: "@TextInput", meta: {text: "hello"}}
   - {type: "@Llm", meta: {systemPrompt: "你是个聊天助手",
                          stream: false,
@@ -11,5 +10,4 @@ layout:
                                    apiUrl: "http://127.0.0.1:11434/api/chat",
                                   }
                          }}
-  - type: "@TextOutput"
-  - type: "end"
+  - {type: "@TextOutput"}
