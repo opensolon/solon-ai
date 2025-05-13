@@ -8,7 +8,7 @@ import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
-import org.noear.solon.ai.flow.components.AbstractCom;
+import org.noear.solon.ai.flow.components.AbstractDataCom;
 import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.flow.FlowContext;
@@ -21,7 +21,7 @@ import org.noear.solon.flow.Node;
  * @since 3.3
  */
 @Component("ChatModel")
-public class ChatModelCom extends AbstractCom {
+public class ChatModelCom extends AbstractDataCom {
     //私有元信息
     static final String META_SYSTEM_PROMPT = "systemPrompt";
     static final String META_STREAM = "stream";
@@ -32,7 +32,7 @@ public class ChatModelCom extends AbstractCom {
         //构建模板（已缓存）
         ChatModel chatModel = (ChatModel) node.attachment;
         if (chatModel == null) {
-            ChatConfig chatConfig = ONode.load(node.getMeta(Attrs.META_CONFIG)).toObject(ChatConfig.class);
+            ChatConfig chatConfig = ONode.load(node.getMeta(Attrs.META_CHAT_CONFIG)).toObject(ChatConfig.class);
             assert chatConfig != null;
             chatModel = ChatModel.of(chatConfig).build();
             node.attachment = chatModel;
@@ -49,7 +49,7 @@ public class ChatModelCom extends AbstractCom {
         }
 
         //获取数据
-        Object data = getInput(context, node, null);
+        Object data = getDataInput(context, node, null);
         if (data instanceof String) {
             chatSession.addMessage(ChatMessage.ofUser((String) data));
         } else if (data instanceof ChatMessage) {
@@ -65,6 +65,6 @@ public class ChatModelCom extends AbstractCom {
                 .getMessage()
                 .getContent();
 
-        setOutput(context, node, data, null);
+        setDataOutput(context, node, data, null);
     }
 }

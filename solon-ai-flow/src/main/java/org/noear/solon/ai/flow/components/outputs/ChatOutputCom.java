@@ -1,6 +1,6 @@
 package org.noear.solon.ai.flow.components.outputs;
 
-import org.noear.solon.ai.flow.components.AbstractCom;
+import org.noear.solon.ai.flow.components.AbstractDataCom;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.flow.FlowContext;
@@ -13,10 +13,10 @@ import org.noear.solon.flow.Node;
  * @since 3.3
  */
 @Component("ChatOutput")
-public class ChatOutputCom extends AbstractCom {
+public class ChatOutputCom extends AbstractDataCom {
 
     @Override
-    public void setOutput(FlowContext context, Node node, Object data, Object reference) throws Throwable {
+    public void setDataOutput(FlowContext context, Node node, Object data, Object reference) throws Throwable {
         if (data instanceof String) {
             ((Context) reference).output((String) data);
         } else {
@@ -26,8 +26,8 @@ public class ChatOutputCom extends AbstractCom {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        Object data = getInput(context, node, null);
+        Object data = getDataInput(context, node, null);
 
-        setOutput(context, node, data, Context.current());
+        setDataOutput(context, node, data, Context.current());
     }
 }

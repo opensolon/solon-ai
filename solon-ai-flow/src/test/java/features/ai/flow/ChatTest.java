@@ -22,7 +22,7 @@ public class ChatTest {
     @Test
     public void case2() {
         Context ctx = new ContextEmpty();
-        ctx.paramMap().put(Attrs.META_IO_MESSAGE, "hello");
+        ctx.paramMap().put(Attrs.META_DATA_IO_MESSAGE, "hello");
 
         try {
             ContextHolder.currentSet(ctx);
@@ -32,5 +32,10 @@ public class ChatTest {
         } finally {
             ContextHolder.currentRemove();
         }
+    }
+
+    @Test
+    public void case3() {
+        flowEngine.eval("case3");
     }
 }

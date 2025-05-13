@@ -1,7 +1,7 @@
 package org.noear.solon.ai.flow.components.inputs;
 
 import org.noear.solon.ai.flow.components.Attrs;
-import org.noear.solon.ai.flow.components.AbstractCom;
+import org.noear.solon.ai.flow.components.AbstractDataCom;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -13,16 +13,16 @@ import org.noear.solon.flow.Node;
  * @since 3.3
  */
 @Component("TextInput")
-public class TextInputCom extends AbstractCom {
+public class TextInputCom extends AbstractDataCom {
     @Override
-    public Object getInput(FlowContext context, Node node, Object reference) {
+    public Object getDataInput(FlowContext context, Node node, Object reference) {
         return node.getMetaOrDefault(Attrs.META_TEXT, "");
     }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        Object data = getInput(context, node, null);
+        Object data = getDataInput(context, node, null);
 
-        setOutput(context, node, data, null);
+        setDataOutput(context, node, data, null);
     }
 }
