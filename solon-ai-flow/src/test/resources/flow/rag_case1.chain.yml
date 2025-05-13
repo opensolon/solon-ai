@@ -1,5 +1,5 @@
 
-id: case3
+id: rag_case1
 layout:
   - type: "@TextInput"
     meta:
@@ -10,7 +10,7 @@ layout:
         provider: "ollama"
         model: "bge-m3"
         apiUrl: "http://127.0.0.1:11434/api/embed"
-      documentSource:
+      documentSources:
         - "https://solon.noear.org/article/about?format=md"
       splitPipeline:
         - "org.noear.solon.ai.rag.splitter.RegexTextSplitter"

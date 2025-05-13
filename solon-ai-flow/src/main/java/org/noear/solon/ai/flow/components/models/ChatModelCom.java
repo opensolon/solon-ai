@@ -8,12 +8,16 @@ import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.flow.components.AbstractDataCom;
 import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
+
+import java.util.List;
 
 /**
  * 聊天模型组件
@@ -27,16 +31,30 @@ public class ChatModelCom extends AbstractDataCom {
     static final String META_SYSTEM_PROMPT = "systemPrompt";
     static final String META_STREAM = "stream";
     static final String META_CHAT_CONFIG = "chatConfig";
+    static final String META_TOOL_PROVIDER = "toolProviders";
 
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        //构建模板（已缓存）
+        //构建聊天模型（预热后，会缓存住）
         ChatModel chatModel = (ChatModel) node.attachment;
         if (chatModel == null) {
             ChatConfig chatConfig = ONode.load(node.getMeta(META_CHAT_CONFIG)).toObject(ChatConfig.class);
             assert chatConfig != null;
-            chatModel = ChatModel.of(chatConfig).build();
+            ChatModel.Builder chatModelBuilder = ChatModel.of(chatConfig);
+
+
+            List<String> toolProviders = node.getMeta(META_TOOL_PROVIDER);
+            if (Utils.isNotEmpty(toolProviders)) {
+                for (String toolProvider : toolProviders) {
+                    Object tmp = ClassUtil.tryInstance(toolProvider);
+                    if (tmp != null) {
+                        chatModelBuilder.defaultToolsAdd(new MethodToolProvider(tmp));
+                    }
+                }
+            }
+
+            chatModel = chatModelBuilder.build();
             node.attachment = chatModel;
         }
 

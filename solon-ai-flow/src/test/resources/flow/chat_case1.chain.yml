@@ -1,9 +1,9 @@
 
-id: case1
+id: chat_case1
 layout:
   - type: "@TextInput"
     meta:
-      text: "hello"
+      text: "你好"
   - type: "@ChatModel"
     meta:
       systemPrompt: "你是个聊天助手"

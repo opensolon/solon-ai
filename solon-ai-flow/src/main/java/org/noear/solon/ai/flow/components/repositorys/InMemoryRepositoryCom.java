@@ -29,12 +29,12 @@ import java.util.List;
 @Component("InMemoryRepository")
 public class InMemoryRepositoryCom extends AbstractDataCom {
     static final String META_EMBEDDING_CONFIG = "embeddingConfig";
-    static final String META_DOCUMENT_SOURCE = "documentSource";
+    static final String META_DOCUMENT_SOURCES = "documentSources";
     static final String META_SPLIT_PIPELINE = "splitPipeline";
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        //初始化知识库（已缓存）
+        //构建知识库（预热后，会缓存住）
         RepositoryStorable repository = (RepositoryStorable) node.attachment;
         if (repository == null) {
             //构建
@@ -45,7 +45,7 @@ public class InMemoryRepositoryCom extends AbstractDataCom {
             node.attachment = repository;
 
             //首次加载文档源
-            List<String> documentSource = node.getMeta(META_DOCUMENT_SOURCE);
+            List<String> documentSource = node.getMeta(META_DOCUMENT_SOURCES);
             if (Utils.isNotEmpty(documentSource)) {
                 //获取分割器
                 List<String> splitters = node.getMeta(META_SPLIT_PIPELINE);

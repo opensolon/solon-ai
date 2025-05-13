@@ -1,15 +1,17 @@
 
-id: case2
+id: tool_case1
 layout:
-  - type: "@ChatInput"
+  - type: "@TextInput"
     meta:
-      text: "hello"
+      text: "杭州今天天气怎么样？"
   - type: "@ChatModel"
     meta:
-      systemPrompt: "你是个聊天助手"
+      systemPrompt: "你是个天气预报员"
       stream: false
       chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@ChatOutput"
+      toolProviders:
+        - "features.ai.flow.ToolDemo"
+  - type: "@TextOutput"

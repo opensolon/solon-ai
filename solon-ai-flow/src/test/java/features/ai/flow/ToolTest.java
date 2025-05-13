@@ -12,34 +12,34 @@ import org.noear.solon.test.HttpTester;
 import org.noear.solon.test.SolonTest;
 
 @SolonTest(DemoApp.class)
-public class RagTest extends HttpTester {
+public class ToolTest extends HttpTester {
     @Inject
     FlowEngine flowEngine;
 
     @Test
     public void case1() {
-        flowEngine.eval("rag_case1");
+        flowEngine.eval("tool_case1");
     }
 
     @Test
     public void case2() {
-        String rst = path("/rag_case2").data("message", "Solon 是谁开发的？").get();
+        String rst = path("/tool_case2").data("message", "杭州今天天气怎么样?").get();
         System.out.println(rst);
-        assert rst.contains("无耳");
+        assert rst.contains("晴");
     }
 
     @Test
     public void case2_mock() {
         Context ctx = new ContextEmpty();
-        ctx.paramMap().put(Attrs.META_DATA_IO_MESSAGE, "Solon 是谁开发的？");
+        ctx.paramMap().put(Attrs.META_DATA_IO_MESSAGE, "杭州今天天气怎么样？");
 
         try {
             ContextHolder.currentSet(ctx);
-            flowEngine.eval("rag_case2");
+            flowEngine.eval("tool_case2");
 
             String rst = ctx.attr("output");
             System.out.println(rst);
-            assert rst.contains("无耳");
+            assert rst.contains("晴");
         } finally {
             ContextHolder.currentRemove();
         }
