@@ -7,11 +7,15 @@ package org.noear.solon.ai.flow.components;
  * @since 3.3
  */
 public interface Attrs {
-    String META_DATA_INPUT = "input";
-    String META_DATA_OUTPUT = "output";
-    String META_DATA_IO_MESSAGE = "message";
+    String META_INPUT = "input";
+    String META_OUTPUT = "output";
+    String META_IO_MESSAGE = "message";
 
     String META_TEXT = "text";
 
     String CTX_SESSION = "session";
+
+    String CTX_PROPERTY = "property";
+
+    String PROP_TOOLS = "tools";
 }

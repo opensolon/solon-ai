@@ -9,7 +9,9 @@ import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
-import org.noear.solon.ai.flow.components.AbstractDataCom;
+import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.flow.components.AiIoComponent;
+import org.noear.solon.ai.flow.components.AiPropertyComponent;
 import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.util.Assert;
@@ -26,7 +28,7 @@ import java.util.List;
  * @since 3.3
  */
 @Component("ChatModel")
-public class ChatModelCom extends AbstractDataCom {
+public class ChatModelCom implements AiIoComponent, AiPropertyComponent {
     //私有元信息
     static final String META_SYSTEM_PROMPT = "systemPrompt";
     static final String META_STREAM = "stream";
@@ -54,6 +56,15 @@ public class ChatModelCom extends AbstractDataCom {
                 }
             }
 
+            List toolProps = getProperty(context, Attrs.PROP_TOOLS);
+            if (Utils.isNotEmpty(toolProps)) {
+                for (Object tmp : toolProps) {
+                    if (tmp instanceof ToolProvider) {
+                        chatModelBuilder.defaultToolsAdd((ToolProvider) tmp);
+                    }
+                }
+            }
+
             chatModel = chatModelBuilder.build();
             node.attachment = chatModel;
         }
@@ -71,7 +82,7 @@ public class ChatModelCom extends AbstractDataCom {
         boolean isStream = "true".equals(node.getMeta(META_STREAM));
 
         //获取数据
-        Object data = getDataInput(context, node);
+        Object data = getInput(context, node);
 
         Assert.notNull(data, "ChatModel input is null");
 
@@ -92,6 +103,6 @@ public class ChatModelCom extends AbstractDataCom {
             data = chatModel.prompt(chatSession).call();
         }
 
-        setDataOutput(context, node, data);
+        setOutput(context, node, data);
     }
 }

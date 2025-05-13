@@ -23,7 +23,12 @@
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-flow</artifactId>
-            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-mcp</artifactId>
+            <optional>true</optional>
         </dependency>
 
         <dependency>
@@ -50,6 +55,5 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
 
 </project>

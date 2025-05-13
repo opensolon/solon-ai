@@ -31,7 +31,7 @@ public class RagTest extends HttpTester {
     @Test
     public void case2_mock() {
         Context ctx = new ContextEmpty();
-        ctx.paramMap().put(Attrs.META_DATA_IO_MESSAGE, "Solon 是谁开发的？");
+        ctx.paramMap().put(Attrs.META_IO_MESSAGE, "Solon 是谁开发的？");
 
         try {
             ContextHolder.currentSet(ctx);

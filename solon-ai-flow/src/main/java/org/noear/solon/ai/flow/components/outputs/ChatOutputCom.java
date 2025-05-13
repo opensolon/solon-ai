@@ -1,7 +1,7 @@
 package org.noear.solon.ai.flow.components.outputs;
 
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.flow.components.AbstractDataCom;
+import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.util.MimeType;
@@ -17,10 +17,10 @@ import reactor.core.publisher.Flux;
  * @since 3.3
  */
 @Component("ChatOutput")
-public class ChatOutputCom extends AbstractDataCom {
+public class ChatOutputCom implements AiIoComponent {
 
     @Override
-    public void setDataOutput(FlowContext context, Node node, Object data) throws Throwable {
+    public void setOutput(FlowContext context, Node node, Object data) throws Throwable {
         final Context ctx = Context.current();
 
         if (data instanceof Publisher) {
@@ -47,8 +47,8 @@ public class ChatOutputCom extends AbstractDataCom {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        Object data = getDataInput(context, node);
+        Object data = getInput(context, node);
 
-        setDataOutput(context, node, data);
+        setOutput(context, node, data);
     }
 }

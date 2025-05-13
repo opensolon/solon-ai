@@ -5,7 +5,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.embedding.EmbeddingConfig;
 import org.noear.solon.ai.embedding.EmbeddingModel;
-import org.noear.solon.ai.flow.components.AbstractDataCom;
+import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.DocumentSplitter;
 import org.noear.solon.ai.rag.RepositoryStorable;
@@ -27,7 +27,7 @@ import java.util.List;
  * @since 3.1
  */
 @Component("InMemoryRepository")
-public class InMemoryRepositoryCom extends AbstractDataCom {
+public class InMemoryRepositoryCom implements AiIoComponent {
     static final String META_EMBEDDING_CONFIG = "embeddingConfig";
     static final String META_DOCUMENT_SOURCES = "documentSources";
     static final String META_SPLIT_PIPELINE = "splitPipeline";
@@ -68,14 +68,14 @@ public class InMemoryRepositoryCom extends AbstractDataCom {
             }
         }
 
-        Object data = getDataInput(context, node);
+        Object data = getInput(context, node);
 
         Assert.notNull(data, "InMemoryRepository input is null");
 
         if (data instanceof String) {
             List<Document> documents = repository.search((String) data);
             data = ChatMessage.augment((String) data, documents);
-            setDataOutput(context, node, data);
+            setOutput(context, node, data);
         } else {
             throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
         }

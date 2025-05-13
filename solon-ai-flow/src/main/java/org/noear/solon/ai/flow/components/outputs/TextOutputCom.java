@@ -1,10 +1,8 @@
 package org.noear.solon.ai.flow.components.outputs;
 
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.flow.components.AbstractDataCom;
+import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.annotation.Component;
-import org.noear.solon.core.handle.Context;
-import org.noear.solon.core.util.MimeType;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.reactivestreams.Publisher;
@@ -19,9 +17,9 @@ import java.io.PrintStream;
  * @since 3.3
  */
 @Component("TextOutput")
-public class TextOutputCom extends AbstractDataCom {
+public class TextOutputCom implements AiIoComponent {
     @Override
-    public void setDataOutput(FlowContext context, Node node, Object data) throws Throwable {
+    public void setOutput(FlowContext context, Node node, Object data) throws Throwable {
         final PrintStream out = System.out;
 
         if (data instanceof Publisher) {
@@ -45,8 +43,8 @@ public class TextOutputCom extends AbstractDataCom {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        Object data = getDataInput(context, node);
+        Object data = getInput(context, node);
 
-        setDataOutput(context, node, data);
+        setOutput(context, node, data);
     }
 }
