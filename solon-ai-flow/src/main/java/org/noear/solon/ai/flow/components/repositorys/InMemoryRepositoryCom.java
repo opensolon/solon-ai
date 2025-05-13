@@ -1,12 +1,12 @@
 package org.noear.solon.ai.flow.components.repositorys;
 
-import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.embedding.EmbeddingConfig;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
+import org.noear.solon.ai.flow.components.AiPropertyComponent;
+import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.DocumentSplitter;
 import org.noear.solon.ai.rag.RepositoryStorable;
@@ -28,8 +28,7 @@ import java.util.List;
  * @since 3.1
  */
 @Component("InMemoryRepository")
-public class InMemoryRepositoryCom extends AbsAiComponent implements AiIoComponent {
-    static final String META_EMBEDDING_CONFIG = "embeddingConfig";
+public class InMemoryRepositoryCom extends AbsAiComponent implements AiIoComponent, AiPropertyComponent {
     static final String META_DOCUMENT_SOURCES = "documentSources";
     static final String META_SPLIT_PIPELINE = "splitPipeline";
 
@@ -39,8 +38,9 @@ public class InMemoryRepositoryCom extends AbsAiComponent implements AiIoCompone
         RepositoryStorable repository = (RepositoryStorable) node.attachment;
         if (repository == null) {
             //构建
-            EmbeddingConfig embeddingConfig = ONode.load(node.getMeta(META_EMBEDDING_CONFIG)).toObject(EmbeddingConfig.class);
-            EmbeddingModel embeddingModel = EmbeddingModel.of(embeddingConfig).build();
+            EmbeddingModel embeddingModel = (EmbeddingModel) getProperty(context, Attrs.PROP_EMBEDDING_MODEL);
+
+            Assert.notNull(embeddingModel, "Missing embeddingModel property!");
 
             repository = new InMemoryRepository(embeddingModel);
             node.attachment = repository;
