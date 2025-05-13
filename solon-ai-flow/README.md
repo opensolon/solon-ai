@@ -163,7 +163,7 @@ layout:
     meta:
       systemPrompt: "你是一个智能体名字叫“阿飞”。将跟另一个叫“阿紫”的智能体，表演相声式吵架。"
       stream: false
-      session: "A"
+      chatSession: "A"
       chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
         provider: "ollama"
         model: "qwen2.5:1.5b"
@@ -176,7 +176,7 @@ layout:
     meta:
       systemPrompt: "你是一个智能体名字叫“阿紫”。将跟另一个叫“阿飞”的智能体，表演相声式吵架。"
       stream: false
-      session: "B"
+      chatSession: "B"
       chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
         provider: "ollama"
         model: "qwen2.5:1.5b"

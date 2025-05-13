@@ -26,7 +26,7 @@ public class DemoController {
 
         //保存会话记录
         ChatSession chatSession = chatSessionMap.computeIfAbsent("chat_case2", k -> new ChatSessionDefault());
-        flowContext.put(Attrs.CTX_SESSION, chatSession);
+        flowContext.put(Attrs.CTX_CHAT_SESSION, chatSession);
 
         //监听事件
         flowContext.eventBus().listen(Events.EVENT_FLOW_NODE_START, event -> {
