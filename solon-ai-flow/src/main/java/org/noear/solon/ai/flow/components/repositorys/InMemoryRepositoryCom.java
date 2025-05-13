@@ -5,6 +5,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.embedding.EmbeddingConfig;
 import org.noear.solon.ai.embedding.EmbeddingModel;
+import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.DocumentSplitter;
@@ -27,13 +28,13 @@ import java.util.List;
  * @since 3.1
  */
 @Component("InMemoryRepository")
-public class InMemoryRepositoryCom implements AiIoComponent {
+public class InMemoryRepositoryCom extends AbsAiComponent implements AiIoComponent {
     static final String META_EMBEDDING_CONFIG = "embeddingConfig";
     static final String META_DOCUMENT_SOURCES = "documentSources";
     static final String META_SPLIT_PIPELINE = "splitPipeline";
 
     @Override
-    public void run(FlowContext context, Node node) throws Throwable {
+    protected void doRun(FlowContext context, Node node) throws Throwable {
         //构建知识库（预热后，会缓存住）
         RepositoryStorable repository = (RepositoryStorable) node.attachment;
         if (repository == null) {

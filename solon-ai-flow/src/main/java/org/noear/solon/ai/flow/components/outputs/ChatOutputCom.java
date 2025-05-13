@@ -1,6 +1,7 @@
 package org.noear.solon.ai.flow.components.outputs;
 
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.handle.Context;
@@ -17,7 +18,7 @@ import reactor.core.publisher.Flux;
  * @since 3.3
  */
 @Component("ChatOutput")
-public class ChatOutputCom implements AiIoComponent {
+public class ChatOutputCom extends AbsAiComponent implements AiIoComponent {
 
     @Override
     public void setOutput(FlowContext context, Node node, Object data) throws Throwable {
@@ -46,7 +47,7 @@ public class ChatOutputCom implements AiIoComponent {
     }
 
     @Override
-    public void run(FlowContext context, Node node) throws Throwable {
+    protected void doRun(FlowContext context, Node node) throws Throwable {
         Object data = getInput(context, node);
 
         setOutput(context, node, data);

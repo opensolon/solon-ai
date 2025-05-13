@@ -3,11 +3,13 @@ package features.ai.flow.app;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.flow.components.Attrs;
+import org.noear.solon.ai.flow.events.Events;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Inject;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
+import org.noear.solon.flow.stateful.StatefulFlowEngine;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Controller
 public class DemoController {
     @Inject
-    FlowEngine flowEngine;
+    StatefulFlowEngine flowEngine;
 
     Map<String, ChatSession> chatSessionMap = new ConcurrentHashMap<>();
 
@@ -28,6 +30,9 @@ public class DemoController {
 
         FlowContext flowContext = new FlowContext();
         flowContext.put(Attrs.CTX_SESSION, chatSession);
+        flowContext.eventBus().listen(Events.EVENT_FLOW_NODE_START, event -> {
+            System.out.println(event);
+        });
 
         flowEngine.eval("chat_case2", flowContext);
     }

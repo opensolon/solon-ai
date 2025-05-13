@@ -1,5 +1,6 @@
 package org.noear.solon.ai.flow.components.inputs;
 
+import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.handle.Context;
@@ -13,7 +14,7 @@ import org.noear.solon.flow.Node;
  * @since 3.3
  */
 @Component("ChatInput")
-public class ChatInputCom implements AiIoComponent {
+public class ChatInputCom extends AbsAiComponent implements AiIoComponent {
     @Override
     public Object getInput(FlowContext context, Node node) {
         String input_name = getInputName(node);
@@ -21,7 +22,7 @@ public class ChatInputCom implements AiIoComponent {
     }
 
     @Override
-    public void run(FlowContext context, Node node) throws Throwable {
+    protected void doRun(FlowContext context, Node node) throws Throwable {
         Object data = getInput(context, node);
 
         setOutput(context, node, data);

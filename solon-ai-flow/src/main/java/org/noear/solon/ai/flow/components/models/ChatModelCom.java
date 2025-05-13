@@ -10,6 +10,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.flow.components.AiPropertyComponent;
 import org.noear.solon.ai.flow.components.Attrs;
@@ -28,7 +29,7 @@ import java.util.List;
  * @since 3.3
  */
 @Component("ChatModel")
-public class ChatModelCom implements AiIoComponent, AiPropertyComponent {
+public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPropertyComponent {
     //私有元信息
     static final String META_SYSTEM_PROMPT = "systemPrompt";
     static final String META_STREAM = "stream";
@@ -37,7 +38,7 @@ public class ChatModelCom implements AiIoComponent, AiPropertyComponent {
 
 
     @Override
-    public void run(FlowContext context, Node node) throws Throwable {
+    protected void doRun(FlowContext context, Node node) throws Throwable {
         //构建聊天模型（预热后，会缓存住）
         ChatModel chatModel = (ChatModel) node.attachment;
         if (chatModel == null) {

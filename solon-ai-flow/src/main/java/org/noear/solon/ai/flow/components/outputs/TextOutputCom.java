@@ -1,6 +1,7 @@
 package org.noear.solon.ai.flow.components.outputs;
 
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.flow.FlowContext;
@@ -17,7 +18,7 @@ import java.io.PrintStream;
  * @since 3.3
  */
 @Component("TextOutput")
-public class TextOutputCom implements AiIoComponent {
+public class TextOutputCom extends AbsAiComponent implements AiIoComponent {
     @Override
     public void setOutput(FlowContext context, Node node, Object data) throws Throwable {
         final PrintStream out = System.out;
@@ -42,7 +43,7 @@ public class TextOutputCom implements AiIoComponent {
     }
 
     @Override
-    public void run(FlowContext context, Node node) throws Throwable {
+    protected void doRun(FlowContext context, Node node) throws Throwable {
         Object data = getInput(context, node);
 
         setOutput(context, node, data);
