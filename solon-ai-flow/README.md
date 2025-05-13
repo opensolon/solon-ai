@@ -3,6 +3,18 @@ solon-ai-flow  = solon-ai + solon-flow，是一个 AI 流编排框架。
 
 有别常见的 AI 流编排工具（或低代码工具）。我们是开发框架，没有可视界面，编排风格类似 docker-compose （solon-flow 即是这风格）。算是一种新的思路（或参考）
 
+## 设计概要
+
+* 把 AI 能力，封装为 solon-flow 的 TaskComponent 组件。分为：输入输出组件，属性组件。然后用 solon-flow 编排串起来
+  * 有输入输出需求的组件，为输入输出组件
+  * 有属性添加或获取需求的组件，属性组件
+* 所有相关数据或属性通过 FlowContext 共享和中转
+
+比如：
+
+* ChatInputCom，会接收请求数据，并转为输出字段（FlowContext 里的约定字段）
+* McpToolCom，会根据元信息配置，并添加属性（FlowContext 里的约定字段）
+* ChatModelCom，会尝试从 FlowContext 获取“上个节点”的输出数据；尝试获取“上个节点”添加的属性。
 
 ##  简单示例
 
