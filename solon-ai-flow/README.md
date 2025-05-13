@@ -1,9 +1,12 @@
-solon-flow 的编排风格，类似 docker-compose。
 
-solon-ai-flow  = solon-flow + solon-ai。编排风格，也交类似 docker-compose。
+solon-ai-flow  = solon-ai + solon-flow，是一个 AI 流编排框架。
+
+有别常见的 AI 流编排工具（或低代码工具）。我们是开发框架，没有可视界面，编排风格类似 docker-compose。
 
 
-##  示例
+##  简单示例
+
+更多示例，参考模块的 test 目录
 
 ### chat_case1
 
@@ -60,8 +63,7 @@ layout:
     meta:
       systemPrompt: "你是个知识库"
       stream: false
-      chatConfig:
-        "@type": "org.noear.solon.ai.chat.ChatConfig"
+      chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"

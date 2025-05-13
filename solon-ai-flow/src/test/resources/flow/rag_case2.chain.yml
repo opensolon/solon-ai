@@ -17,8 +17,7 @@ layout:
     meta:
       systemPrompt: "你是个知识库"
       stream: false
-      chatConfig:
-        "@type": "org.noear.solon.ai.chat.ChatConfig"
+      chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
