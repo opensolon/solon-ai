@@ -1,9 +1,16 @@
 package features.ai.flow.app;
 
+import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.ChatSessionDefault;
+import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Inject;
 import org.noear.solon.annotation.Mapping;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author noear 2025/5/13 created
@@ -13,18 +20,35 @@ public class DemoController {
     @Inject
     FlowEngine flowEngine;
 
+    Map<String, ChatSession> chatSessionMap = new ConcurrentHashMap<>();
+
     @Mapping("chat_case2")
     public void chat_case2() throws Exception {
-        flowEngine.eval("chat_case2");
+        ChatSession chatSession = chatSessionMap.computeIfAbsent("chat_case2", k -> new ChatSessionDefault());
+
+        FlowContext flowContext = new FlowContext();
+        flowContext.put(Attrs.CTX_SESSION, chatSession);
+
+        flowEngine.eval("chat_case2", flowContext);
     }
 
     @Mapping("rag_case2")
     public void rag_case2() throws Exception {
-        flowEngine.eval("rag_case2");
+        ChatSession chatSession = chatSessionMap.computeIfAbsent("rag_case2", k -> new ChatSessionDefault());
+
+        FlowContext flowContext = new FlowContext();
+        flowContext.put(Attrs.CTX_SESSION, chatSession);
+
+        flowEngine.eval("rag_case2", flowContext);
     }
 
     @Mapping("tool_case2")
     public void tool_case2() throws Exception {
-        flowEngine.eval("tool_case2");
+        ChatSession chatSession = chatSessionMap.computeIfAbsent("tool_case2", k -> new ChatSessionDefault());
+
+        FlowContext flowContext = new FlowContext();
+        flowContext.put(Attrs.CTX_SESSION, chatSession);
+
+        flowEngine.eval("tool_case2", flowContext);
     }
 }
