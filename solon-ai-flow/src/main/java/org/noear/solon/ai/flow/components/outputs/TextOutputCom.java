@@ -1,5 +1,6 @@
 package org.noear.solon.ai.flow.components.outputs;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
@@ -19,6 +20,8 @@ import java.util.concurrent.CountDownLatch;
  */
 @Component("TextOutput")
 public class TextOutputCom extends AbsAiComponent implements AiIoComponent {
+    //私有元信息
+    static final String META_PREFIX = "prefix";
 
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
@@ -54,7 +57,12 @@ public class TextOutputCom extends AbsAiComponent implements AiIoComponent {
         }
 
         data = buf.toString();
-        System.out.println(data);
+        String prefix = node.getMeta(META_PREFIX);
+        if (Utils.isEmpty(prefix)) {
+            System.out.println(data);
+        } else {
+            System.out.println(prefix + data);
+        }
 
         setOutput(context, node, data);
     }

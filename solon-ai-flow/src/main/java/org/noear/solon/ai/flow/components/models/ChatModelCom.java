@@ -71,7 +71,8 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
         }
 
         //构建会话（可在发起流程时传递）
-        ChatSession chatSession = context.computeIfAbsent(Attrs.CTX_SESSION, k -> new ChatSessionDefault());
+        String sessionKey = node.getMetaOrDefault(Attrs.META_SESSION, Attrs.CTX_SESSION);
+        ChatSession chatSession = context.computeIfAbsent(sessionKey, k -> new ChatSessionDefault());
 
         if (Utils.isEmpty(chatSession.getMessages())) {
             String systemPrompt = node.getMeta(META_SYSTEM_PROMPT);

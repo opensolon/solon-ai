@@ -14,14 +14,14 @@ public interface AiIoComponent extends AiComponent {
      * 获取组件数据输入名字（有默认，可以配置）
      */
     default String getInputName(Node node) {
-        return node.getMetaOrDefault(Attrs.META_INPUT, Attrs.META_IO_MESSAGE);
+        return node.getMetaOrDefault(Attrs.META_INPUT, Attrs.CTX_MESSAGE);
     }
 
     /**
      * 获取组件数据输出名字（有默认，可以配置）
      */
     default String getOutputName(Node node) {
-        return node.getMetaOrDefault(Attrs.META_OUTPUT, Attrs.META_IO_MESSAGE);
+        return node.getMetaOrDefault(Attrs.META_OUTPUT, Attrs.CTX_MESSAGE);
     }
 
 

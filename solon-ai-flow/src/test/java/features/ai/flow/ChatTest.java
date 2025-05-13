@@ -31,7 +31,7 @@ public class ChatTest extends HttpTester {
     @Test
     public void case2_mock() {
         Context ctx = new ContextEmpty();
-        ctx.paramMap().put(Attrs.META_IO_MESSAGE, "你好");
+        ctx.paramMap().put(Attrs.CTX_MESSAGE, "你好");
 
         try {
             ContextHolder.currentSet(ctx);

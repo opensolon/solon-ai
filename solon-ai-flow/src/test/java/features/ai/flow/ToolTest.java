@@ -31,7 +31,7 @@ public class ToolTest extends HttpTester {
     @Test
     public void case2_mock() {
         Context ctx = new ContextEmpty();
-        ctx.paramMap().put(Attrs.META_IO_MESSAGE, "杭州今天天气怎么样？");
+        ctx.paramMap().put(Attrs.CTX_MESSAGE, "杭州今天天气怎么样？");
 
         try {
             ContextHolder.currentSet(ctx);

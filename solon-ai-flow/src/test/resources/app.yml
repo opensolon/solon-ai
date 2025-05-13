@@ -1,2 +1,11 @@
+solon.logging:
+  appender:
+    console:
+      level: INFO
+  logger:
+    "org.noear.dami":
+      level: ERROR
+
+
 solon.flow:
   - classpath:flow/*.yml
