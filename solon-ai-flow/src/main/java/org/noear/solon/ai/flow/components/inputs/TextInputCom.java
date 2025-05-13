@@ -15,14 +15,14 @@ import org.noear.solon.flow.Node;
 @Component("TextInput")
 public class TextInputCom extends AbstractDataCom {
     @Override
-    public Object getDataInput(FlowContext context, Node node, Object reference) {
+    public Object getDataInput(FlowContext context, Node node) {
         return node.getMetaOrDefault(Attrs.META_TEXT, "");
     }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        Object data = getDataInput(context, node, null);
+        Object data = getDataInput(context, node);
 
-        setDataOutput(context, node, data, null);
+        setDataOutput(context, node, data);
     }
 }

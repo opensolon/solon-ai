@@ -36,7 +36,7 @@ public abstract class AbstractDataCom implements TaskComponent {
     /**
      * 获取组件数据输入
      */
-    public Object getDataInput(FlowContext context, Node node, Object reference) throws Throwable {
+    public Object getDataInput(FlowContext context, Node node) throws Throwable {
         String input_name = getDataInputName(node);
         return context.get(input_name);
     }
@@ -44,7 +44,7 @@ public abstract class AbstractDataCom implements TaskComponent {
     /**
      * 获取组件数据输出
      */
-    public void setDataOutput(FlowContext context, Node node, Object data, Object reference) throws Throwable {
+    public void setDataOutput(FlowContext context, Node node, Object data) throws Throwable {
         String output_name = getDataOutputName(node);
         context.put(output_name, data);
     }

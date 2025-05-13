@@ -13,10 +13,5 @@ public interface Attrs {
 
     String META_TEXT = "text";
 
-    String META_CHAT_CONFIG = "chatConfig";
-    String META_EMBEDDING_CONFIG = "embeddingConfig";
-    String META_DOCUMENT_SOURCE = "documentSource";
-    String META_SPLIT_PIPELINE = "splitPipeline";
-
     String CTX_SESSION = "session";
 }

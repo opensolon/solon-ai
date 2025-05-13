@@ -14,17 +14,16 @@ import org.noear.solon.flow.Node;
  */
 @Component("ChatInput")
 public class ChatInputCom extends AbstractDataCom {
-
     @Override
-    public Object getDataInput(FlowContext context, Node node, Object reference) {
+    public Object getDataInput(FlowContext context, Node node) {
         String input_name = getDataInputName(node);
-        return ((Context) reference).param(input_name);
+        return Context.current().param(input_name);
     }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        Object data = getDataInput(context, node, Context.current());
+        Object data = getDataInput(context, node);
 
-        setDataOutput(context, node, data, null);
+        setDataOutput(context, node, data);
     }
 }

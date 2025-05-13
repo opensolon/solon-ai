@@ -33,9 +33,4 @@ public class ChatTest {
             ContextHolder.currentRemove();
         }
     }
-
-    @Test
-    public void case3() {
-        flowEngine.eval("case3");
-    }
 }

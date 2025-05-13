@@ -1,10 +1,14 @@
 package org.noear.solon.ai.flow.components.outputs;
 
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.flow.components.AbstractDataCom;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.handle.Context;
+import org.noear.solon.core.util.MimeType;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
+import org.reactivestreams.Publisher;
+import reactor.core.publisher.Flux;
 
 /**
  * 聊天输出组件
@@ -16,18 +20,35 @@ import org.noear.solon.flow.Node;
 public class ChatOutputCom extends AbstractDataCom {
 
     @Override
-    public void setDataOutput(FlowContext context, Node node, Object data, Object reference) throws Throwable {
-        if (data instanceof String) {
-            ((Context) reference).output((String) data);
+    public void setDataOutput(FlowContext context, Node node, Object data) throws Throwable {
+        final Context ctx = Context.current();
+
+        if (data instanceof Publisher) {
+            data = Flux.from((Publisher<ChatResponse>) data)
+                    .filter(resp -> resp.hasChoices())
+                    .map(resp -> resp.getMessage());
+
+            ctx.contentType(MimeType.TEXT_EVENT_STREAM_VALUE);
+            ctx.returnValue(data);
+        } else if (data instanceof ChatResponse) {
+            ChatResponse resp = (ChatResponse) data;
+            data = resp.getMessage();
+
+            ctx.contentType(MimeType.TEXT_EVENT_STREAM_VALUE);
+            ctx.returnValue(data);
         } else {
-            ((Context) reference).render(data);
+            if (data instanceof String) {
+                ctx.output((String) data);
+            } else {
+                ctx.render(data);
+            }
         }
     }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        Object data = getDataInput(context, node, null);
+        Object data = getDataInput(context, node);
 
-        setDataOutput(context, node, data, Context.current());
+        setDataOutput(context, node, data);
     }
 }

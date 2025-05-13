@@ -11,6 +11,7 @@ import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.flow.components.AbstractDataCom;
 import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.annotation.Component;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 
@@ -25,6 +26,7 @@ public class ChatModelCom extends AbstractDataCom {
     //私有元信息
     static final String META_SYSTEM_PROMPT = "systemPrompt";
     static final String META_STREAM = "stream";
+    static final String META_CHAT_CONFIG = "chatConfig";
 
 
     @Override
@@ -32,7 +34,7 @@ public class ChatModelCom extends AbstractDataCom {
         //构建模板（已缓存）
         ChatModel chatModel = (ChatModel) node.attachment;
         if (chatModel == null) {
-            ChatConfig chatConfig = ONode.load(node.getMeta(Attrs.META_CHAT_CONFIG)).toObject(ChatConfig.class);
+            ChatConfig chatConfig = ONode.load(node.getMeta(META_CHAT_CONFIG)).toObject(ChatConfig.class);
             assert chatConfig != null;
             chatModel = ChatModel.of(chatConfig).build();
             node.attachment = chatModel;
@@ -48,8 +50,13 @@ public class ChatModelCom extends AbstractDataCom {
             }
         }
 
+        boolean isStream = "true".equals(node.getMeta(META_STREAM));
+
         //获取数据
-        Object data = getDataInput(context, node, null);
+        Object data = getDataInput(context, node);
+
+        Assert.notNull(data, "ChatModel input is null");
+
         if (data instanceof String) {
             chatSession.addMessage(ChatMessage.ofUser((String) data));
         } else if (data instanceof ChatMessage) {
@@ -61,10 +68,12 @@ public class ChatModelCom extends AbstractDataCom {
         }
 
         //替换数据
-        data = chatModel.prompt(chatSession).call()
-                .getMessage()
-                .getContent();
+        if (isStream) {
+            data = chatModel.prompt(chatSession).stream();
+        } else {
+            data = chatModel.prompt(chatSession).call();
+        }
 
-        setDataOutput(context, node, data, null);
+        setDataOutput(context, node, data);
     }
 }
