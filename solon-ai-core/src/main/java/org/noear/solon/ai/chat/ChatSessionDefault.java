@@ -32,14 +32,28 @@ import java.util.List;
 @Preview("3.1")
 public class ChatSessionDefault implements ChatSession {
     private final String sessionId;
-    private List<ChatMessage> messages = new ArrayList<>();
+    private final List<ChatMessage> messages;
 
     public ChatSessionDefault() {
-        this.sessionId = Utils.uuid();
+        this(Utils.uuid());
     }
 
     public ChatSessionDefault(String sessionId) {
+        this(sessionId, null);
+    }
+
+    protected ChatSessionDefault(List<ChatMessage> messages) {
+        this(null, messages);
+    }
+
+    protected ChatSessionDefault(String sessionId, List<ChatMessage> messages) {
         this.sessionId = sessionId;
+
+        if (messages == null) {
+            this.messages = new ArrayList<>();
+        } else {
+            this.messages = messages;
+        }
     }
 
     /**
@@ -62,7 +76,7 @@ public class ChatSessionDefault implements ChatSession {
      * 添加消息
      */
     @Override
-    public void addMessage(Collection<ChatMessage> messages) {
+    public void addMessage(Collection<? extends ChatMessage> messages) {
         if (Utils.isNotEmpty(messages)) {
             for (ChatMessage m : messages) {
                 this.messages.add(m);

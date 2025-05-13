@@ -55,7 +55,7 @@ public interface ChatSession extends ChatPrompt {
     /**
      * 添加消息
      */
-    void addMessage(Collection<ChatMessage> messages);
+    void addMessage(Collection<? extends ChatMessage> messages);
 
     /**
      * 清空消息

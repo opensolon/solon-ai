@@ -53,14 +53,14 @@ public class ChatRequestDefault implements ChatRequest {
 
     private final ChatConfig config;
     private final ChatDialect dialect;
-    private final List<ChatMessage> messages;
+    private final ChatSession session;
 
     private ChatOptions options;
 
-    public ChatRequestDefault(ChatConfig config, ChatDialect dialect, List<ChatMessage> messages) {
+    public ChatRequestDefault(ChatConfig config, ChatDialect dialect, ChatSession session) {
         this.config = config;
         this.dialect = dialect;
-        this.messages = messages;
+        this.session = session;
         this.options = new ChatOptions();
     }
 
@@ -98,7 +98,7 @@ public class ChatRequestDefault implements ChatRequest {
     public ChatResponse call() throws IOException {
         HttpUtils httpUtils = config.createHttpUtils();
 
-        String reqJson = dialect.buildRequestJson(config, options, messages, false);
+        String reqJson = dialect.buildRequestJson(config, options, session.getMessages(), false);
 
         if (log.isTraceEnabled()) {
             log.trace("ai-request: {}", reqJson);
@@ -119,7 +119,7 @@ public class ChatRequestDefault implements ChatRequest {
 
         if (resp.hasChoices()) {
             AssistantMessage choiceMessage = resp.getMessage();
-            messages.add(choiceMessage); //添加到记忆
+            session.addMessage(choiceMessage); //添加到记忆
             if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
                 List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
@@ -131,7 +131,7 @@ public class ChatRequestDefault implements ChatRequest {
                     choiceMessage = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
                     resp.reset();
                     resp.addChoice(new ChatChoice(0, new Date(), "tool", choiceMessage));
-                    messages.add(choiceMessage); //添加到记忆
+                    session.addMessage(choiceMessage); //添加到记忆
                 }
             }
         }
@@ -146,7 +146,7 @@ public class ChatRequestDefault implements ChatRequest {
     public Publisher<ChatResponse> stream() {
         HttpUtils httpUtils = config.createHttpUtils();
 
-        String reqJson = dialect.buildRequestJson(config, options, messages, true);
+        String reqJson = dialect.buildRequestJson(config, options, session.getMessages(), true);
 
         if (log.isTraceEnabled()) {
             log.trace("ai-request: {}", reqJson);
@@ -155,7 +155,7 @@ public class ChatRequestDefault implements ChatRequest {
         return subscriber -> {
             httpUtils.bodyOfJson(reqJson).execAsync("POST")
                     .whenComplete((resp, err) -> {
-                        Subscriber<? super ChatResponse>  subscriberProxy = ChatSubscriberProxy.of(subscriber);
+                        Subscriber<? super ChatResponse> subscriberProxy = ChatSubscriberProxy.of(subscriber);
 
                         if (err == null) {
                             try {
@@ -207,7 +207,7 @@ public class ChatRequestDefault implements ChatRequest {
 
     private void onEventEnd(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
         if (resp.isFinished() == false && resp.toolCallBuilders.size() > 0) {
-            if(buildStreamToolMessage(resp, subscriber) == false){
+            if (buildStreamToolMessage(resp, subscriber) == false) {
                 return;
             }
         }
@@ -215,7 +215,7 @@ public class ChatRequestDefault implements ChatRequest {
         //添加到记忆（最后的聚合消息）
         AssistantMessage aggregationMessage = resp.getAggregationMessage();
         if (aggregationMessage != null) {
-            messages.add(aggregationMessage);
+            session.addMessage(aggregationMessage);
         }
 
         subscriber.onComplete();
@@ -274,7 +274,7 @@ public class ChatRequestDefault implements ChatRequest {
 
         List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
 
-        messages.addAll(assistantMessages);
+        session.addMessage(assistantMessages);
 
         List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
 
@@ -342,7 +342,7 @@ public class ChatRequestDefault implements ChatRequest {
                 try {
                     String content = func.handle(call.arguments());
                     ToolMessage toolMessage = (ToolMessage) ChatMessage.ofTool(content, call.name(), call.id(), func.returnDirect());
-                    messages.add(toolMessage);
+                    session.addMessage(toolMessage);
                     toolMessages.add(toolMessage);
                 } catch (Throwable ex) {
                     throw new ChatException("The function call failed!", ex);

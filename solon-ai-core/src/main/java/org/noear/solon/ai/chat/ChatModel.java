@@ -53,14 +53,18 @@ public class ChatModel implements AiModel {
      * 提示语
      */
     public ChatRequest prompt(ChatPrompt prompt) {
-        return prompt(prompt.getMessages());
+        if (prompt instanceof ChatSession) {
+            return new ChatRequestDefault(config, dialect, (ChatSession) prompt);
+        } else {
+            return new ChatRequestDefault(config, dialect, new ChatSessionDefault(prompt.getMessages()));
+        }
     }
 
     /**
      * 提示语
      */
     public ChatRequest prompt(List<ChatMessage> messages) {
-        return new ChatRequestDefault(config, dialect, messages);
+        return prompt(new ChatSessionDefault(messages));
     }
 
     /**
