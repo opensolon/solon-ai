@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -61,14 +62,10 @@ public class ChatSessionDefault implements ChatSession {
      * 添加消息
      */
     @Override
-    public void addMessage(List<ChatMessage> messages) {
+    public void addMessage(Collection<ChatMessage> messages) {
         if (Utils.isNotEmpty(messages)) {
-            if (messages.size() == 1) {
-                this.messages.add(messages.get(0));
-            } else {
-                for (ChatMessage m : messages) {
-                    this.messages.add(m);
-                }
+            for (ChatMessage m : messages) {
+                this.messages.add(m);
             }
         }
     }
