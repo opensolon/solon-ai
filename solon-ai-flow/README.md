@@ -161,7 +161,7 @@ layout:
   - type: "@ChatModel"
     id: model_a
     meta:
-      systemPrompt: "你是一个智能体名字叫“阿飞”。将跟另一个叫“阿紫”的智能体，表演很凶的相声式吵架。"
+      systemPrompt: "你是一个智能体名字叫“阿飞”。将跟另一个叫“阿紫”的智能体，表演相声式吵架。"
       stream: false
       session: "A"
       chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
@@ -174,7 +174,7 @@ layout:
   - type: "@ChatModel"
     id: model_b
     meta:
-      systemPrompt: "你是一个智能体名字叫“阿紫”。将跟另一个叫“阿飞”的智能体，表演很凶的相声式吵架。"
+      systemPrompt: "你是一个智能体名字叫“阿紫”。将跟另一个叫“阿飞”的智能体，表演相声式吵架。"
       stream: false
       session: "B"
       chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
