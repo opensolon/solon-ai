@@ -18,4 +18,6 @@ public interface Attrs {
     String CTX_PROPERTY = "property";
 
     String PROP_TOOLS = "tools";
+
+    String PROP_EMBEDDING_MODEL = "embeddingModel";
 }

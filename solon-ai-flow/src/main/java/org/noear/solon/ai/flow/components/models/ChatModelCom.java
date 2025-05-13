@@ -57,7 +57,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
                 }
             }
 
-            List toolProps = getProperty(context, Attrs.PROP_TOOLS);
+            List toolProps = getPropertyAll(context, Attrs.PROP_TOOLS);
             if (Utils.isNotEmpty(toolProps)) {
                 for (Object tmp : toolProps) {
                     if (tmp instanceof ToolProvider) {

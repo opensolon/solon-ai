@@ -1,5 +1,6 @@
 package org.noear.solon.ai.flow.components;
 
+import io.modelcontextprotocol.util.Utils;
 import org.noear.solon.flow.FlowContext;
 
 import java.util.ArrayList;
@@ -16,7 +17,16 @@ public interface AiPropertyComponent extends AiComponent {
     /**
      * 设置属性
      */
-    default List getProperty(FlowContext context, String name) throws Throwable {
+    default Object getProperty(FlowContext context, String name) throws Throwable {
+        List temp = context.get(Attrs.CTX_PROPERTY + "_" + name);
+        if (Utils.isEmpty(temp)) {
+            return null;
+        } else {
+            return temp.get(0);
+        }
+    }
+
+    default List getPropertyAll(FlowContext context, String name) throws Throwable {
         return context.get(Attrs.CTX_PROPERTY + "_" + name);
     }
 
