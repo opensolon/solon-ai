@@ -33,7 +33,23 @@ public class SplitterPipeline implements DocumentSplitter {
      * 添加到后面
      */
     public SplitterPipeline next(DocumentSplitter splitter) {
-        pipeline.addLast(splitter);
+        if (splitter != null) {
+            pipeline.addLast(splitter);
+        }
+
+        return this;
+    }
+
+    /**
+     * 添加到后面
+     */
+    public SplitterPipeline next(List<DocumentSplitter> splitters) {
+        if (splitters != null) {
+            for (DocumentSplitter splitter : splitters) {
+                pipeline.addLast(splitter);
+            }
+        }
+
         return this;
     }
 
