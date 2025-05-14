@@ -77,6 +77,14 @@ public class RerankingModel implements AiModel {
     }
 
 
+    @Override
+    public String toString() {
+        return "RerankingModel{" +
+                "config=" + config +
+                ", dialect=" + dialect.getClass().getName() +
+                '}';
+    }
+
     /**
      * 构建
      */

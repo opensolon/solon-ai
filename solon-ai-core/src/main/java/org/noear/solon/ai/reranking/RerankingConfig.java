@@ -27,5 +27,15 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.1")
 public class RerankingConfig extends AiConfig {
-
+    @Override
+    public String toString() {
+        return "RerankingConfig{" +
+                "apiUrl='" + apiUrl + '\'' +
+                ", apiKey='" + apiKey + '\'' +
+                ", provider='" + provider + '\'' +
+                ", model='" + model + '\'' +
+                ", headers=" + headers +
+                ", timeout=" + timeout +
+                '}';
+    }
 }
