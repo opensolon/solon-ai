@@ -17,7 +17,6 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.AiConfig;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.annotation.BindProps;
 
 import java.util.*;
 
@@ -69,5 +68,18 @@ public class ChatConfig extends AiConfig {
      */
     public Collection<FunctionTool> getDefaultTools() {
         return defaultTools.values();
+    }
+
+    @Override
+    public String toString() {
+        return "ChatConfig{" +
+                "apiUrl='" + apiUrl + '\'' +
+                ", apiKey='" + apiKey + '\'' +
+                ", provider='" + provider + '\'' +
+                ", model='" + model + '\'' +
+                ", headers=" + headers +
+                ", timeout=" + timeout +
+                ", defaultTools=" + defaultTools +
+                '}';
     }
 }

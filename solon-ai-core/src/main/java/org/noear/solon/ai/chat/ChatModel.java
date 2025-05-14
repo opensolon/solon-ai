@@ -82,6 +82,15 @@ public class ChatModel implements AiModel {
     }
 
 
+    @Override
+    public String toString() {
+        return "ChatModel{" +
+                "config=" + config +
+                ", dialect=" + dialect.getClass().getName() +
+                '}';
+    }
+
+
     /// /////////////////////////////////
 
     /**

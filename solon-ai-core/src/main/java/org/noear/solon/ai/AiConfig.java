@@ -112,4 +112,16 @@ public class AiConfig {
 
         return httpUtils;
     }
+
+    @Override
+    public String toString() {
+        return "AiConfig{" +
+                "apiUrl='" + apiUrl + '\'' +
+                ", apiKey='" + apiKey + '\'' +
+                ", provider='" + provider + '\'' +
+                ", model='" + model + '\'' +
+                ", headers=" + headers +
+                ", timeout=" + timeout +
+                '}';
+    }
 }
