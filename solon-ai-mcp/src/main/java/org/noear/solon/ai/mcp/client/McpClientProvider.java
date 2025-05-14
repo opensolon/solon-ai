@@ -87,6 +87,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     private final McpClientProperties clientProps;
     private ScheduledExecutorService heartbeatExecutor;
     private McpSyncClient client;
+    private McpSchema.LoggingLevel loggingLevel = McpSchema.LoggingLevel.INFO;
 
     /**
      * 用于支持注入
@@ -184,6 +185,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 .clientInfo(new McpSchema.Implementation(clientProps.getName(), clientProps.getVersion()))
                 .requestTimeout(clientProps.getRequestTimeout())
                 .initializationTimeout(clientProps.getInitializationTimeout())
+                .loggingConsumer(logging -> {
+                    logging.setLevel(loggingLevel);
+                })
                 .build();
     }
 
@@ -214,6 +218,15 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             return client;
         } finally {
             LOCKER.unlock();
+        }
+    }
+
+    /**
+     * 设置日志级别
+     */
+    public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
+        if (loggingLevel != null) {
+            this.loggingLevel = loggingLevel;
         }
     }
 

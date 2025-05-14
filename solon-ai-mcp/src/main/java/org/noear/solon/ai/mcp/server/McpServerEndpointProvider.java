@@ -20,6 +20,7 @@ import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
+import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
@@ -64,6 +65,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     private final String sseEndpoint;
     private final String messageEndpoint;
+    private McpSchema.LoggingLevel loggingLevel = McpSchema.LoggingLevel.INFO;
     private McpSyncServer server;
 
     public McpServerEndpointProvider(Properties properties) {
@@ -124,6 +126,15 @@ public class McpServerEndpointProvider implements LifecycleBean {
      */
     public String getSseEndpoint() {
         return sseEndpoint;
+    }
+
+    /**
+     * 设置日志级别
+     */
+    public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
+        if (loggingLevel != null) {
+            this.loggingLevel = loggingLevel;
+        }
     }
 
     /**
@@ -258,6 +269,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     @Override
     public void postStart() {
         server = mcpServerSpec.build();
+        server.loggingNotification(McpSchema.LoggingMessageNotification.builder().level(loggingLevel).build());
 
         if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
             log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
