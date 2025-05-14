@@ -85,6 +85,10 @@ public class ImageRequest {
 
         ImageResponse resp = dialect.parseResponseJson(config, respJson);
 
+        if (resp.getError() != null) {
+            throw resp.getError();
+        }
+
         return resp;
     }
 }

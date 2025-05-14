@@ -86,6 +86,10 @@ public class EmbeddingRequest {
 
         EmbeddingResponse resp = dialect.parseResponseJson(config, respJson);
 
+        if (resp.getError() != null) {
+            throw resp.getError();
+        }
+
         return resp;
     }
 }
