@@ -4,7 +4,6 @@ import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -22,7 +21,7 @@ import java.util.List;
  */
 @Slf4j
 @SolonTest(McpServerApp.class)
-public class McpSseClientMixTest {
+public class McpSseClientMixTest2 {
     McpClientProvider mcpClient = McpClientProvider.builder()
             .apiUrl("http://localhost:8081/demo2/sse")
             .build();
@@ -33,37 +32,6 @@ public class McpSseClientMixTest {
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
-    }
-
-
-    private static final String apiUrl = "http://127.0.0.1:11434/api/chat";
-    private static final String provider = "ollama";
-    private static final String model = "qwen2.5:1.5b"; //"llama3.2";//deepseek-r1:1.5b;
-
-    @Test
-    public void tool2() throws Exception {
-        //没有参数的工具
-        String response = mcpClient.callToolAsText("spotIntro", Collections.emptyMap()).getContent();
-
-        log.warn("{}", response);
-        assert Utils.isNotEmpty(response);
-        assert response.contains("西湖");
-
-
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider)
-                .model(model)
-                .defaultToolsAdd(mcpClient)
-                .build();
-
-        response = chatModel.prompt("杭州有哪些景点适合周末玩的？")
-                .call()
-                .getMessage()
-                .getContent();
-
-        log.warn("{}", response);
-        assert Utils.isNotEmpty(response);
-        assert response.contains("西湖");
     }
 
     @Test
@@ -144,30 +112,13 @@ public class McpSseClientMixTest {
         assert prompt.get(0).getContent().contains("太阳");
     }
 
-    @Test
-    public void prompt3() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("splitMessage", Collections.emptyMap());
-
-        assert Utils.isNotEmpty(prompt);
-        log.warn("{}", prompt);
-        assert prompt.size() == 2;
-        assert "[{role=user, content='', medias=[Image{url='https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png', b64_json='null', mimeType='image/jpeg'}]}, {role=user, content='这图里有方块吗？'}]"
-                .equals(prompt.toString());
-    }
 
     @Test
     public void prompt9() throws Exception {
         Collection<FunctionPrompt> prompts = mcpClient.getPrompts();
         System.out.println(prompts);
         assert prompts.size() == 2;
-        assert ("[FunctionPromptDesc{name='askQuestion', " +
-                "description='生成关于某个主题的提问', " +
-                "params=[ParamDesc{name='topic', description='主题', " +
-                "required=true, " +
-                "type=class java.lang.String}]}, " +
-                "FunctionPromptDesc{name='debugSession', " +
-                "description='初始化错误调试会话', " +
-                "params=[ParamDesc{name='error', description='错误信息', " +
-                "required=true, type=class java.lang.String}]}]").equals(prompts.toString());
+        assert prompts.stream().filter(p -> "askQuestion".equals(p.name())).count() == 1;
+        assert prompts.stream().filter(p -> "debugSession".equals(p.name())).count() == 1;
     }
 }

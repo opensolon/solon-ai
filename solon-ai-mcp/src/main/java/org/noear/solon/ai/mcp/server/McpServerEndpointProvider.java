@@ -46,6 +46,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Mcp 服务端点提供者
@@ -89,8 +90,17 @@ public class McpServerEndpointProvider implements LifecycleBean {
                     .build();
         }
 
-        this.mcpServerSpec = McpServer.sync(this.mcpTransportProvider)
+        McpSchema.ServerCapabilities serverCapabilities = new McpSchema.ServerCapabilities();
+        serverCapabilities.setTools(new McpSchema.ServerCapabilities.ToolCapabilities(true));
+        serverCapabilities.setPrompts(new McpSchema.ServerCapabilities.PromptCapabilities(true));
+        serverCapabilities.setResources(new McpSchema.ServerCapabilities.ResourceCapabilities(false, true));
+        serverCapabilities.setLogging(new McpSchema.ServerCapabilities.LoggingCapabilities());
+        serverCapabilities.setExperimental(new ConcurrentHashMap<>());
+
+        mcpServerSpec = McpServer.sync(this.mcpTransportProvider)
+                .capabilities(serverCapabilities)
                 .serverInfo(serverProperties.getName(), serverProperties.getVersion());
+
     }
 
     /**
