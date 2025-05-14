@@ -715,9 +715,9 @@ public class McpAsyncServer {
 			}
 
 			return Mono.defer(() -> {
-				if (this.resources.putIfAbsent(resourceSpecification.getResource().getDescription(), resourceSpecification) != null) {
+				if (this.resources.putIfAbsent(resourceSpecification.getResource().getUri(), resourceSpecification) != null) {
 					return Mono.error(new McpError(
-							"Resource with URI '" + resourceSpecification.getResource().getDescription() + "' already exists"));
+							"Resource with URI '" + resourceSpecification.getResource().getUri() + "' already exists"));
 				}
 				logger.debug("Added resource handler: {}", resourceSpecification.getResource().getUri());
 				if (this.serverCapabilities.getResources().getListChanged()) {
