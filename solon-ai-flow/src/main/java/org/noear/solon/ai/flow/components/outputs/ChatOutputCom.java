@@ -1,8 +1,11 @@
 package org.noear.solon.ai.flow.components.outputs;
 
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
+import org.noear.solon.ai.image.ImageResponse;
+import org.noear.solon.ai.media.Image;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.util.MimeType;
@@ -34,6 +37,12 @@ public class ChatOutputCom extends AbsAiComponent implements AiIoComponent {
         } else if (data instanceof ChatResponse) {
             ChatResponse resp = (ChatResponse) data;
             data = resp.getMessage();
+
+            ctx.contentType(MimeType.TEXT_EVENT_STREAM_VALUE);
+            ctx.returnValue(data);
+        } else if (data instanceof ImageResponse) {
+            ImageResponse resp = (ImageResponse) data;
+            data = ChatMessage.ofAssistant("![](" + resp.getImage().getUrl() + ")");
 
             ctx.contentType(MimeType.TEXT_EVENT_STREAM_VALUE);
             ctx.returnValue(data);

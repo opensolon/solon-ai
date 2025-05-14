@@ -4,6 +4,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
+import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -50,6 +51,11 @@ public class TextOutputCom extends AbsAiComponent implements AiIoComponent {
         } else if (data instanceof ChatResponse) {
             ChatResponse resp = (ChatResponse) data;
             data = resp.getMessage().getContent();
+
+            buf.append(data);
+        } else if (data instanceof ImageResponse) {
+            ImageResponse resp = (ImageResponse) data;
+            data = resp.getImage().getUrl();
 
             buf.append(data);
         } else {
