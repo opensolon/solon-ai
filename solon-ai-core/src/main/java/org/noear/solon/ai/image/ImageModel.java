@@ -54,6 +54,14 @@ public class ImageModel implements AiModel {
     }
 
 
+    @Override
+    public String toString() {
+        return "ImageModel{" +
+                "config=" + config +
+                ", dialect=" + dialect.getClass().getName() +
+                '}';
+    }
+
     /**
      * 构建
      */
