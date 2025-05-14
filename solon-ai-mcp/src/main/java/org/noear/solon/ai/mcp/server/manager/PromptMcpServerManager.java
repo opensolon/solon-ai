@@ -20,6 +20,7 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
@@ -84,16 +85,29 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
                                 UserMessage userMessage = (UserMessage) msg;
 
                                 if (Utils.isEmpty(userMessage.getMedias())) {
+                                    //如果没有媒体
                                     promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
                                             new McpSchema.TextContent(msg.getContent())));
                                 } else {
-                                    Image image = userMessage.getMedia(Image.class);
+                                    //如果有，分解消息
 
-                                    if (image != null && image.getB64Json() != null) {
+                                    //1.先转媒体（如果是图片）
+                                    for (AiMedia media : userMessage.getMedias()) {
+                                        if (media instanceof Image) {
+                                            Image mediaImage = (Image) media;
+                                            if (mediaImage.getB64Json() != null) {
+                                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
+                                                        new McpSchema.ImageContent(null, null,
+                                                                mediaImage.getB64Json(),
+                                                                mediaImage.getMimeType())));
+                                            }
+                                        }
+                                    }
+
+                                    //2.再转文本
+                                    if (Utils.isNotEmpty(msg.getContent())) {
                                         promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                new McpSchema.ImageContent(null, null,
-                                                        image.getB64Json(),
-                                                        image.getMimeType())));
+                                                new McpSchema.TextContent(msg.getContent())));
                                     }
                                 }
                             }
