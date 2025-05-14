@@ -90,17 +90,16 @@ public class McpServerEndpointProvider implements LifecycleBean {
                     .build();
         }
 
-        McpSchema.ServerCapabilities serverCapabilities = new McpSchema.ServerCapabilities();
-        serverCapabilities.setTools(new McpSchema.ServerCapabilities.ToolCapabilities(true));
-        serverCapabilities.setPrompts(new McpSchema.ServerCapabilities.PromptCapabilities(true));
-        serverCapabilities.setResources(new McpSchema.ServerCapabilities.ResourceCapabilities(false, true));
-        serverCapabilities.setLogging(new McpSchema.ServerCapabilities.LoggingCapabilities());
-        serverCapabilities.setExperimental(new ConcurrentHashMap<>());
+        McpSchema.ServerCapabilities serverCapabilities =  McpSchema.ServerCapabilities.builder()
+                .tools(true)
+                .resources(true,true)
+                .prompts(true)
+                .logging()
+                .build();
 
         mcpServerSpec = McpServer.sync(this.mcpTransportProvider)
                 .capabilities(serverCapabilities)
                 .serverInfo(serverProperties.getName(), serverProperties.getVersion());
-
     }
 
     /**
