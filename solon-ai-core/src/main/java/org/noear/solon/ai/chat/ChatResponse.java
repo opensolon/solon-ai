@@ -49,11 +49,13 @@ public interface ChatResponse {
     /**
      * 最后一个选择
      */
+    @Nullable
     ChatChoice lastChoice();
 
     /**
      * 获取所有选择
      */
+    @Nullable
     List<ChatChoice> getChoices();
 
     /**

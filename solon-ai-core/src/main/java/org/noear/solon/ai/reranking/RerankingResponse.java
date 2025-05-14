@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.reranking;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.lang.Nullable;
 
@@ -60,8 +61,16 @@ public class RerankingResponse {
     }
 
     /**
+     * 是否有结果
+     */
+    public boolean hasResults() {
+        return Utils.isNotEmpty(results);
+    }
+
+    /**
      * 获取数据
      */
+    @Nullable
     public List<Reranking> getResults() {
         return results;
     }

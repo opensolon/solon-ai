@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.embedding;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.lang.Nullable;
 
@@ -60,8 +61,16 @@ public class EmbeddingResponse {
     }
 
     /**
+     * 是否有数据
+     */
+    public boolean hasData() {
+        return Utils.isNotEmpty(data);
+    }
+
+    /**
      * 获取数据
      */
+    @Nullable
     public List<Embedding> getData() {
         return data;
     }

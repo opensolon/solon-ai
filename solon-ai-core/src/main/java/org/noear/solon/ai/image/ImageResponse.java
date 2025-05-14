@@ -18,6 +18,7 @@ package org.noear.solon.ai.image;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.media.Image;
+import org.noear.solon.lang.Nullable;
 
 import java.util.List;
 
@@ -50,10 +51,14 @@ public class ImageResponse {
     /**
      * 获取异常
      */
+    @Nullable
     public ImageException getError() {
         return error;
     }
 
+    /**
+     * 是否有数据
+     */
     public boolean hasData() {
         return Utils.isNotEmpty(data);
     }
@@ -61,6 +66,7 @@ public class ImageResponse {
     /**
      * 获取数据
      */
+    @Nullable
     public List<Image> getData() {
         return data;
     }
@@ -68,8 +74,13 @@ public class ImageResponse {
     /**
      * 获取图片
      */
+    @Nullable
     public Image getImage() {
-        return data.get(0);
+        if (hasData()) {
+            return data.get(0);
+        } else {
+            return null;
+        }
     }
 
     /**
