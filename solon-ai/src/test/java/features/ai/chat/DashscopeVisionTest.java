@@ -49,6 +49,29 @@ public class DashscopeVisionTest {
     }
 
     @Test
+    public void case1_b() throws IOException {
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .apiKey(apkKey) //需要指定供应商，用于识别接口风格（也称为方言）
+                .model(model)
+                .provider(provider)
+                .timeout(Duration.ofSeconds(300))
+                .build();
+
+        String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
+        byte[] bytes = HttpUtils.http(imageUrl).exec("GET").bodyAsBytes();
+
+        //一次性返回
+        ChatResponse resp = chatModel.prompt(
+                        ChatMessage.ofUser(Image.ofBase64(bytes)),
+                        ChatMessage.ofUser("这图里有方块吗？")
+                )
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+    }
+
+    @Test
     public void case2() throws IOException {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apkKey) //需要指定供应商，用于识别接口风格（也称为方言）

@@ -19,7 +19,6 @@ import org.noear.snack.ONode;
 import org.noear.snack.core.Feature;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.chat.ChatRole;
-import org.noear.solon.ai.media.Image;
 
 import java.io.*;
 import java.time.LocalDateTime;
@@ -104,8 +103,8 @@ public interface ChatMessage extends Serializable {
     /**
      * 构建用户消息
      */
-    static ChatMessage ofUser(String content, Image... images) {
-        return new UserMessage(content, Arrays.asList(images));
+    static ChatMessage ofUser(AiMedia media) {
+        return new UserMessage("", Arrays.asList(media));
     }
 
     /**

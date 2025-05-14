@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.test.SolonTest;
@@ -35,6 +36,28 @@ public class OllamaVisionTest {
 
         //一次性返回
         ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("图里有人像吗？", Image.ofBase64(bytes)))
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+    }
+
+    @Test
+    public void case1_b() throws IOException {
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .provider(provider) //需要指定供应商，用于识别接口风格（也称为方言）
+                .model(model)
+                .timeout(Duration.ofSeconds(300))
+                .build();
+
+        byte[] bytes = HttpUtils.http("https://solon.noear.org/img/solon/favicon256.png").exec("GET").bodyAsBytes();
+
+
+        //一次性返回
+        ChatResponse resp = chatModel.prompt(
+                        ChatMessage.ofUser(Image.ofBase64(bytes)),
+                        ChatMessage.ofUser("这图里有人像吗？")
+                )
                 .call();
 
         //打印消息
