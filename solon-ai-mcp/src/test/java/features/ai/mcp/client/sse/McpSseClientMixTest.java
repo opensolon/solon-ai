@@ -4,6 +4,7 @@ import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -27,11 +28,42 @@ public class McpSseClientMixTest {
             .build();
 
     @Test
-    public void tool() throws Exception {
+    public void tool1() throws Exception {
         String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
-        assert Utils.isNotEmpty(response);
         log.warn("{}", response);
+        assert Utils.isNotEmpty(response);
+    }
+
+
+    private static final String apiUrl = "http://127.0.0.1:11434/api/chat";
+    private static final String provider = "ollama";
+    private static final String model = "qwen2.5:1.5b"; //"llama3.2";//deepseek-r1:1.5b;
+
+    @Test
+    public void tool2() throws Exception {
+        //没有参数的工具
+        String response = mcpClient.callToolAsText("spotIntro", Collections.emptyMap()).getContent();
+
+        log.warn("{}", response);
+        assert Utils.isNotEmpty(response);
+        assert response.contains("西湖");
+
+
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .provider(provider)
+                .model(model)
+                .defaultToolsAdd(mcpClient)
+                .build();
+
+        response = chatModel.prompt("杭州有哪些景点适合周末玩的？")
+                .call()
+                .getMessage()
+                .getContent();
+
+        log.warn("{}", response);
+        assert Utils.isNotEmpty(response);
+        assert response.contains("西湖");
     }
 
     @Test

@@ -30,6 +30,11 @@ public class McpServerTool2 {
         return "晴，14度";
     }
 
+    @ToolMapping(description = "杭州的假日景点介绍")
+    public String spotIntro() {
+       return "西湖，良渚遗址";
+    }
+
     @ResourceMapping(uri = "config://app-version", description = "获取应用版本号", mimeType = "text/config")
     public String getAppVersion() {
         return "v3.2.0";
