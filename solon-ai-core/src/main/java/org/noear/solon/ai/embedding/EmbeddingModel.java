@@ -115,6 +115,14 @@ public class EmbeddingModel implements AiModel {
     }
 
 
+    @Override
+    public String toString() {
+        return "EmbeddingModel{" +
+                "config=" + config +
+                ", dialect=" + dialect.getClass().getName() +
+                '}';
+    }
+
     /**
      * 构建
      */

@@ -44,4 +44,17 @@ public class EmbeddingConfig extends AiConfig {
             this.batchSize = batchSize;
         }
     }
+
+    @Override
+    public String toString() {
+        return "EmbeddingConfig{" +
+                "apiUrl='" + apiUrl + '\'' +
+                ", apiKey='" + apiKey + '\'' +
+                ", provider='" + provider + '\'' +
+                ", model='" + model + '\'' +
+                ", headers=" + headers +
+                ", timeout=" + timeout +
+                ", batchSize=" + batchSize +
+                '}';
+    }
 }
