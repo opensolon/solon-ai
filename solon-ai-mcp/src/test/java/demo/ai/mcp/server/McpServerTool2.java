@@ -5,6 +5,7 @@ import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.media.Image;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.annotation.Param;
@@ -51,6 +52,15 @@ public class McpServerTool2 {
         return Arrays.asList(
                 ChatMessage.ofUser("遇到错误：" + error),
                 ChatMessage.ofAssistant("正在排查，请描述复现步骤。")
+        );
+    }
+
+    @PromptMapping(description = "拆解测试")
+    public Collection<ChatMessage> splitMessage() {
+        String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
+
+        return Arrays.asList(
+                ChatMessage.ofUser("这图里有方块吗？", Image.ofUrl(imageUrl))
         );
     }
 }

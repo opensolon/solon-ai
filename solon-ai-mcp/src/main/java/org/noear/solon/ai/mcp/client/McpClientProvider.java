@@ -462,7 +462,13 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                     list.add(ChatMessage.ofUser(((McpSchema.TextContent) content).getText()));
                 } else if (content instanceof McpSchema.ImageContent) {
                     McpSchema.ImageContent imageContent = ((McpSchema.ImageContent) content);
-                    list.add(ChatMessage.ofUser(Image.ofBase64(imageContent.getData(), imageContent.getMimeType())));
+                    String contentData = imageContent.getData();
+
+                    if (contentData.contains("://")) {
+                        list.add(ChatMessage.ofUser(Image.ofUrl(contentData)));
+                    } else {
+                        list.add(ChatMessage.ofUser(Image.ofBase64(contentData, imageContent.getMimeType())));
+                    }
                 }
             }
         }

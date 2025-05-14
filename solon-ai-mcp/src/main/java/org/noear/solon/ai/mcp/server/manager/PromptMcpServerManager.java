@@ -100,6 +100,11 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
                                                         new McpSchema.ImageContent(null, null,
                                                                 mediaImage.getB64Json(),
                                                                 mediaImage.getMimeType())));
+                                            } else {
+                                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
+                                                        new McpSchema.ImageContent(null, null,
+                                                                mediaImage.getUrl(),
+                                                                mediaImage.getMimeType())));
                                             }
                                         }
                                     }
