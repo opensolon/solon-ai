@@ -22,9 +22,11 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
+import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.core.handle.ContextHolder;
 
@@ -78,8 +80,22 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
                         for (ChatMessage msg : prompts) {
                             if (msg.getRole() == ChatRole.ASSISTANT) {
                                 promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent(msg.getContent())));
-                            } else {
-                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER, new McpSchema.TextContent(msg.getContent())));
+                            } else if (msg.getRole() == ChatRole.USER) {
+                                UserMessage userMessage = (UserMessage) msg;
+
+                                if (Utils.isEmpty(userMessage.getMedias())) {
+                                    promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
+                                            new McpSchema.TextContent(msg.getContent())));
+                                } else {
+                                    Image image = userMessage.getMedia(Image.class);
+
+                                    if (image != null && image.getB64Json() != null) {
+                                        promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
+                                                new McpSchema.ImageContent(null, null,
+                                                        image.getB64Json(),
+                                                        image.getMimeType())));
+                                    }
+                                }
                             }
                         }
 

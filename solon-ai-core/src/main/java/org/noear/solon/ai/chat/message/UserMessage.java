@@ -18,6 +18,7 @@ package org.noear.solon.ai.chat.message;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.List;
@@ -64,10 +65,26 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
     }
 
     /**
-     * 图片集合
+     * 媒体集合
      */
+    @Nullable
     public List<AiMedia> getMedias() {
         return medias;
+    }
+
+    /**
+     * 获取图像
+     */
+    @Nullable
+    public <T extends AiMedia> T getMedia(Class<T> type) {
+        if (Utils.isNotEmpty(medias)) {
+            AiMedia media = medias.get(0);
+            if (type.isInstance(media)) {
+                return (T) media;
+            }
+        }
+
+        return null;
     }
 
     @Override
