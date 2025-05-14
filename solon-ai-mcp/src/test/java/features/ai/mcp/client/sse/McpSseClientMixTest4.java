@@ -24,7 +24,7 @@ public class McpSseClientMixTest4 {
 
     private static final String apiUrl = "http://127.0.0.1:11434/api/chat";
     private static final String provider = "ollama";
-    private static final String model = "qwen2.5:1.5b"; //"llama3.2";//deepseek-r1:1.5b;
+    private static final String model = "llama3.2"; //"llama3.2";//deepseek-r1:1.5b;
 
     @Test
     public void tool2() throws Exception {
@@ -42,7 +42,7 @@ public class McpSseClientMixTest4 {
                 .defaultToolsAdd(mcpClient)
                 .build();
 
-        response = chatModel.prompt("杭州有哪些景点适合周末玩的？")
+        response = chatModel.prompt("杭州的假日景点介绍")
                 .call()
                 .getMessage()
                 .getContent();
