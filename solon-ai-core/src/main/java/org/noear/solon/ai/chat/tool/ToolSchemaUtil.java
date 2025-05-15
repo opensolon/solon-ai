@@ -75,13 +75,12 @@ public class ToolSchemaUtil {
      * @param schemaParentNode 架构父节点（待构建）
      */
     public static ONode buildToolParametersNode(List<ParamDesc> toolParams, ONode schemaParentNode) {
-        ONode requiredNode = new ONode(schemaParentNode.options()).asArray();
+        schemaParentNode.asObject();
 
-        schemaParentNode.set("type", TYPE_OBJECT);
+        if (Utils.isNotEmpty(toolParams)) {
+            ONode requiredNode = new ONode(schemaParentNode.options()).asArray();
 
-        if (Utils.isEmpty(toolParams)) {
-            schemaParentNode.getOrNew("properties").asObject();
-        } else {
+            schemaParentNode.set("type", TYPE_OBJECT);
             schemaParentNode.getOrNew("properties").build(propertiesNode -> {
                 for (ParamDesc fp : toolParams) {
                     propertiesNode.getOrNew(fp.name()).build(paramNode -> {
@@ -93,9 +92,9 @@ public class ToolSchemaUtil {
                     }
                 }
             });
-        }
 
-        schemaParentNode.set("required", requiredNode);
+            schemaParentNode.set("required", requiredNode);
+        }
 
         return schemaParentNode;
     }
