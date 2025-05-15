@@ -42,7 +42,7 @@ public class McpSseClientMixTest4 {
                 .defaultToolsAdd(mcpClient)
                 .build();
 
-        response = chatModel.prompt("杭州的假日景点介绍")
+        response = chatModel.prompt("杭州的假日景点介绍。要求用 tool 查")
                 .call()
                 .getMessage()
                 .getContent();

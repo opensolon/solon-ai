@@ -1,9 +1,11 @@
 package features.ai.chat;
 
+import features.ai.chat.tool.Case10Tools;
 import features.ai.chat.tool.ReturnTools;
 import features.ai.chat.tool.Case8Tools;
 import features.ai.chat.tool.Tools;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
@@ -19,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
@@ -392,5 +395,22 @@ public class DashscopeTest {
         System.out.println("完成");
 
         assert errHolder.get() == null;
+    }
+
+    @Test
+    public void case10() throws Exception {
+        //没有参数的工具
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new Case10Tools())
+                .build();
+
+        String response = chatModel.prompt("杭州的假日景点介绍。要求用 tool 查")
+                .call()
+                .getMessage()
+                .getContent();
+
+        log.warn("{}", response);
+        assert Utils.isNotEmpty(response);
+        assert response.contains("西湖");
     }
 }
