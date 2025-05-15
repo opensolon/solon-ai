@@ -1,14 +1,14 @@
 
 id: mcp_case1
 layout:
-  - type: "@TextInput"
+  - task: "@TextInput"
     meta:
       text: "杭州今天天气怎么样?"
-  - type: "@McpTool"
+  - task: "@McpTool"
     meta:
       mcpConfig:
         apiUrl: "http://127.0.0.1:8080/mcp/sse"
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     meta:
       systemPrompt: "你是个天气预报员"
       stream: false
@@ -16,4 +16,4 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@TextInput"
+  - task: "@TextInput"

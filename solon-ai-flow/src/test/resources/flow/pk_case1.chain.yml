@@ -2,10 +2,10 @@
 id: pk_case1
 layout:
   - type: "start"
-  - type: "@TextInput"
+  - task: "@TextInput"
     meta:
       text: "你好"
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     id: model_a
     meta:
       systemPrompt: "你是一个智能体名字叫“阿飞”。将跟另一个叫“阿紫”的智能体，表演相声式吵架。"
@@ -15,10 +15,10 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@TextOutput"
+  - task: "@TextOutput"
     meta:
       prefix: "阿飞: "
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     id: model_b
     meta:
       systemPrompt: "你是一个智能体名字叫“阿紫”。将跟另一个叫“阿飞”的智能体，表演相声式吵架。"
@@ -28,7 +28,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@TextOutput"
+  - task: "@TextOutput"
     meta:
       prefix: "阿紫: "
   - type: "exclusive"

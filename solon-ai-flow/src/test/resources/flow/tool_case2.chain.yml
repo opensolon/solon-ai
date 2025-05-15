@@ -1,8 +1,8 @@
 
 id: tool_case2
 layout:
-  - type: "@ChatInput"
-  - type: "@ChatModel"
+  - task: "@ChatInput"
+  - task: "@ChatModel"
     meta:
       systemPrompt: "你是个天气预报员"
       stream: false
@@ -12,4 +12,4 @@ layout:
         apiUrl: "http://127.0.0.1:11434/api/chat"
       toolProviders:
         - "features.ai.flow.ToolDemo"
-  - type: "@ChatOutput"
+  - task: "@ChatOutput"

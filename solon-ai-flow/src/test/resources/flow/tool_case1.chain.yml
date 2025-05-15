@@ -1,10 +1,10 @@
 
 id: tool_case1
 layout:
-  - type: "@TextInput"
+  - task: "@TextInput"
     meta:
       text: "杭州今天天气怎么样？"
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     meta:
       systemPrompt: "你是个天气预报员"
       stream: false
@@ -14,4 +14,4 @@ layout:
         apiUrl: "http://127.0.0.1:11434/api/chat"
       toolProviders:
         - "features.ai.flow.ToolDemo"
-  - type: "@TextOutput"
+  - task: "@TextOutput"

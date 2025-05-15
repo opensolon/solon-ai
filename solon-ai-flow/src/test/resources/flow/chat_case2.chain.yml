@@ -1,8 +1,8 @@
 
 id: chat_case2
 layout:
-  - type: "@ChatInput"
-  - type: "@ChatModel"
+  - task: "@ChatInput"
+  - task: "@ChatModel"
     meta:
       systemPrompt: "你是个聊天助手"
       stream: false
@@ -10,4 +10,4 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@ChatOutput"
+  - task: "@ChatOutput"

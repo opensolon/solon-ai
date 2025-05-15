@@ -1,23 +1,23 @@
 
 id: rag_case1
 layout:
-  - type: "@TextInput"
+  - task: "@TextInput"
     meta:
       text: "Solon 是谁开发的？"
-  - type: "@EmbeddingModel"
+  - task: "@EmbeddingModel"
     meta:
       embeddingConfig: # "@type": "org.noear.solon.ai.embedding.EmbeddingConfig"
         provider: "ollama"
         model: "bge-m3"
         apiUrl: "http://127.0.0.1:11434/api/embed"
-  - type: "@InMemoryRepository"
+  - task: "@InMemoryRepository"
     meta:
       documentSources:
         - "https://solon.noear.org/article/about?format=md"
       splitPipeline:
         - "org.noear.solon.ai.rag.splitter.RegexTextSplitter"
         - "org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter"
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     meta:
       systemPrompt: "你是个知识库"
       stream: false
@@ -25,4 +25,4 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@TextOutput"
+  - task: "@TextOutput"
