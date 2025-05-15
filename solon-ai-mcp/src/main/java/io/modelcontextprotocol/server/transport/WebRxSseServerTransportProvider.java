@@ -7,11 +7,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.util.Assert;
+import org.noear.solon.Solon;
 import org.noear.solon.SolonApp;
 import org.noear.solon.Utils;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Entity;
 import org.noear.solon.core.util.MimeType;
+import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.web.sse.SseEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -237,11 +239,17 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 			logger.debug("Created new SSE connection for session: {}", sessionId);
 			sessions.put(sessionId, session);
 
+			// Support contextPath
+			String messageEndpointNew = messageEndpoint;
+			if(Utils.isNotEmpty(Solon.cfg().serverContextPath())) {
+				messageEndpointNew = PathUtil.mergePath(Solon.cfg().serverContextPath(), messageEndpoint);
+			}
+
 			// Send initial endpoint event
 			logger.debug("Sending initial endpoint event to session: {}", sessionId);
 			sink.next(new SseEvent()
 					.name(ENDPOINT_EVENT_TYPE)
-					.data(messageEndpoint + "?sessionId=" + sessionId));
+					.data(messageEndpointNew + "?sessionId=" + sessionId));
 			sink.onCancel(() -> {
 				logger.debug("Session {} cancelled", sessionId);
 				sessions.remove(sessionId);
