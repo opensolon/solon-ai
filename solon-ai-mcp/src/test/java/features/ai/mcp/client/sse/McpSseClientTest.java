@@ -70,6 +70,7 @@ public class McpSseClientTest {
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
 
+        Thread.sleep(10);
         assert mcpClient.getTools().size() == 1;
         serverEndpointProvider.addTool(new FunctionToolDesc("hello")
                 .description("打招呼")
@@ -78,6 +79,7 @@ public class McpSseClientTest {
                 }));
 
 
+        Thread.sleep(10);
         assert mcpClient.getTools().size() == 2;
 
         serverEndpointProvider.addTool(new FunctionToolDesc("hello2")
@@ -87,6 +89,7 @@ public class McpSseClientTest {
                 }));
 
 
+        Thread.sleep(10);
         assert mcpClient.getTools().size() == 3;
 
         serverEndpointProvider.removeTool("hello2");
@@ -104,6 +107,7 @@ public class McpSseClientTest {
         serverEndpointProvider.removeTool("hello");
         serverEndpointProvider.removeTool("hello2");
 
+        Thread.sleep(10);
         assert mcpClient.getTools().size() == 1;
     }
 
@@ -137,7 +141,7 @@ public class McpSseClientTest {
                 .build();
 
         ChatResponse resp = chatModel
-                .prompt("杭州天气和北京降雨量如何？")
+                .prompt("杭州天气和北京降雨量如何？借助 tool 回答")
                 .call();
 
         //打印消息
