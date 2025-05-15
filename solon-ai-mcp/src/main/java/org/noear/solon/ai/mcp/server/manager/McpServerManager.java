@@ -38,6 +38,11 @@ public interface McpServerManager<T> {
     Collection<T> all();
 
     /**
+     * 是否包含
+     */
+    boolean contains(String key);
+
+    /**
      * 移除
      */
     void remove(McpSyncServer server, String key);

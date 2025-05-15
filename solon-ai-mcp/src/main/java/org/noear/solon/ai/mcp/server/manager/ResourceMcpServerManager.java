@@ -51,6 +51,11 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
     }
 
     @Override
+    public boolean contains(String resourceUri) {
+        return resourcesMap.containsKey(resourceUri);
+    }
+
+    @Override
     public void remove(McpSyncServer server, String resourceUri) {
         if (server != null) {
             if (resourceUri.indexOf('{') < 0) {

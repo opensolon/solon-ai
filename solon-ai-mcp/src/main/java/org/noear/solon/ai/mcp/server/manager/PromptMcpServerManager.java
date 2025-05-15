@@ -54,6 +54,11 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
     }
 
     @Override
+    public boolean contains(String promptName) {
+        return promptsMap.containsKey(promptName);
+    }
+
+    @Override
     public void remove(McpSyncServer server, String promptName) {
         if (server != null) {
             server.removePrompt(promptName);

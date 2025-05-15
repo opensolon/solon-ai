@@ -51,6 +51,11 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
     }
 
     @Override
+    public boolean contains(String toolName) {
+        return toolsMap.containsKey(toolName);
+    }
+
+    @Override
     public void remove(McpSyncServer server, String toolName) {
         if (server != null) {
             server.removeTool(toolName);

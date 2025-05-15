@@ -90,9 +90,9 @@ public class McpServerEndpointProvider implements LifecycleBean {
                     .build();
         }
 
-        McpSchema.ServerCapabilities serverCapabilities =  McpSchema.ServerCapabilities.builder()
+        McpSchema.ServerCapabilities serverCapabilities = McpSchema.ServerCapabilities.builder()
                 .tools(true)
-                .resources(true,true)
+                .resources(true, true)
                 .prompts(true)
                 .logging()
                 .build();
@@ -163,6 +163,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     /**
+     * 是否存在资源
+     */
+    public boolean hasResource(String resourceUri) {
+        return resourceManager.contains(resourceUri);
+    }
+
+    /**
      * 移除资源
      */
     public void removeResource(String resourceUri) {
@@ -203,6 +210,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     /**
+     * 是否存在提示语
+     */
+    public boolean hasPrompt(String promptName) {
+        return promptManager.contains(promptName);
+    }
+
+    /**
      * 移除提示语
      */
     public void removePrompt(String promptName) {
@@ -240,6 +254,13 @@ public class McpServerEndpointProvider implements LifecycleBean {
         for (FunctionTool functionTool : toolProvider.getTools()) {
             addTool(functionTool);
         }
+    }
+
+    /***
+     * 是否存在工具
+     * */
+    public boolean hasTool(String toolName) {
+        return toolManager.contains(toolName);
     }
 
     /**
