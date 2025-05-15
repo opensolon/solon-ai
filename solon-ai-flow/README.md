@@ -35,10 +35,10 @@ flowEngine.eval("chat_case1");
 ```yaml
 id: chat_case1
 layout:
-  - type: "@TextInput"
+  - task: "@TextInput"
     meta:
       text: "你好"
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     meta:
       systemPrompt: "你是个聊天助手"
       stream: false
@@ -46,7 +46,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@TextOutput"
+  - task: "@TextOutput"
 ```
 
 
@@ -60,23 +60,23 @@ flowEngine.eval("rag_case1");
 ```yaml
 id: rag_case1
 layout:
-  - type: "@TextInput"
+  - task: "@TextInput"
     meta:
       text: "Solon 是谁开发的？"
-  - type: "@EmbeddingModel"
+  - task: "@EmbeddingModel"
     meta:
       embeddingConfig: # "@type": "org.noear.solon.ai.embedding.EmbeddingConfig"
         provider: "ollama"
         model: "bge-m3"
         apiUrl: "http://127.0.0.1:11434/api/embed"
-  - type: "@InMemoryRepository"
+  - task: "@InMemoryRepository"
     meta:
       documentSources:
         - "https://solon.noear.org/article/about?format=md"
       splitPipeline:
         - "org.noear.solon.ai.rag.splitter.RegexTextSplitter"
         - "org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter"
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     meta:
       systemPrompt: "你是个知识库"
       stream: false
@@ -84,7 +84,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@TextOutput"
+  - task: "@TextOutput"
 ```
 
 
@@ -98,10 +98,10 @@ flowEngine.eval("tool_case1");
 ```yaml
 id: tool_case1
 layout:
-  - type: "@TextInput"
+  - task: "@TextInput"
     meta:
       text: "杭州今天天气怎么样？"
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     meta:
       systemPrompt: "你是个天气预报员"
       stream: false
@@ -111,7 +111,7 @@ layout:
         apiUrl: "http://127.0.0.1:11434/api/chat"
       toolProviders:
         - "features.ai.flow.ToolDemo"
-  - type: "@TextOutput"
+  - task: "@TextOutput"
 ```
 
 
@@ -125,14 +125,14 @@ flowEngine.eval("mcp_case1");
 ```yaml
 id: mcp_case1
 layout:
-  - type: "@TextInput"
+  - task: "@TextInput"
     meta:
       text: "杭州今天天气怎么样?"
-  - type: "@McpTool"
+  - task: "@McpTool"
     meta:
       mcpConfig:
         apiUrl: "http://127.0.0.1:8080/mcp/sse"
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     meta:
       systemPrompt: "你是个天气预报员"
       stream: false
@@ -140,7 +140,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@TextInput"
+  - task: "@TextInput"
 ```
 
 ### pk_case1 （智能体对话）
@@ -155,10 +155,10 @@ flowEngine.eval("pk_case1");
 id: pk_case1
 layout:
   - type: "start"
-  - type: "@TextInput"
+  - task: "@TextInput"
     meta:
       text: "你好"
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     id: model_a
     meta:
       systemPrompt: "你是一个智能体名字叫“阿飞”。将跟另一个叫“阿紫”的智能体，表演相声式吵架。"
@@ -168,10 +168,10 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@TextOutput"
+  - task: "@TextOutput"
     meta:
       prefix: "阿飞: "
-  - type: "@ChatModel"
+  - task: "@ChatModel"
     id: model_b
     meta:
       systemPrompt: "你是一个智能体名字叫“阿紫”。将跟另一个叫“阿飞”的智能体，表演相声式吵架。"
@@ -181,7 +181,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - type: "@TextOutput"
+  - task: "@TextOutput"
     meta:
       prefix: "阿紫: "
   - type: "exclusive"
