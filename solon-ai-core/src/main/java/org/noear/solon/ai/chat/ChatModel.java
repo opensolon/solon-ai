@@ -24,6 +24,8 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.Props;
 import org.noear.solon.lang.Preview;
 
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.time.Duration;
 import java.util.*;
 import java.util.function.Consumer;
@@ -220,12 +222,28 @@ public class ChatModel implements AiModel {
         }
 
         /**
-         * 超时
+         * 网络超时
          */
         public Builder timeout(Duration timeout) {
             config.setTimeout(timeout);
 
             return this;
+        }
+
+        /**
+         * 网络代理
+         */
+        public Builder proxy(Proxy proxy) {
+            config.setProxy(proxy);
+
+            return this;
+        }
+
+        /**
+         * 网络代理
+         */
+        public Builder proxy(String host, int port) {
+            return proxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port)));
         }
 
         public ChatModel build() {

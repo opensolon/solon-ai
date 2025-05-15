@@ -18,6 +18,7 @@ package org.noear.solon.ai;
 import org.noear.solon.Utils;
 import org.noear.solon.net.http.HttpUtils;
 
+import java.net.Proxy;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -35,6 +36,7 @@ public class AiConfig {
     protected String model;
     protected final Map<String, String> headers = new LinkedHashMap<>();
     protected Duration timeout = Duration.ofSeconds(60);
+    protected Proxy proxy;
 
     /// ///////////////////
 
@@ -62,6 +64,10 @@ public class AiConfig {
         return timeout;
     }
 
+    public Proxy getProxy() {
+        return proxy;
+    }
+
     /// ///////////////////
 
     public void setApiUrl(String apiUrl) {
@@ -86,14 +92,18 @@ public class AiConfig {
         }
     }
 
+    public void setHeader(String key, String value) {
+        headers.put(key, value);
+    }
+
     public void setTimeout(Duration timeout) {
         if (timeout != null) {
             this.timeout = timeout;
         }
     }
 
-    public void setHeader(String key, String value) {
-        headers.put(key, value);
+    public void setProxy(Proxy proxy) {
+        this.proxy = proxy;
     }
 
     /**
@@ -103,6 +113,10 @@ public class AiConfig {
         HttpUtils httpUtils = HttpUtils
                 .http(getApiUrl())
                 .timeout((int) getTimeout().getSeconds());
+
+        if (getProxy() != null) {
+            httpUtils.proxy(getProxy());
+        }
 
         if (Utils.isNotEmpty(getApiKey())) {
             httpUtils.header("Authorization", "Bearer " + getApiKey());
@@ -122,6 +136,7 @@ public class AiConfig {
                 ", model='" + model + '\'' +
                 ", headers=" + headers +
                 ", timeout=" + timeout +
+                ", proxy=" + proxy +
                 '}';
     }
 }

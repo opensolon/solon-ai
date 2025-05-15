@@ -23,6 +23,8 @@ import org.noear.solon.core.Props;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -148,38 +150,76 @@ public class EmbeddingModel implements AiModel {
     public static class Builder {
         private final EmbeddingConfig config;
 
+        /**
+         * @param apiUrl 接口地址
+         */
         public Builder(String apiUrl) {
             this.config = new EmbeddingConfig();
             this.config.setApiUrl(apiUrl);
         }
 
+        /**
+         * @param config 配置
+         */
         public Builder(EmbeddingConfig config) {
             this.config = config;
         }
 
+        /**
+         * 接口密钥
+         */
         public Builder apiKey(String apiKey) {
             config.setApiKey(apiKey);
             return this;
         }
 
+        /**
+         * 服务提供者
+         */
         public Builder provider(String provider) {
             config.setProvider(provider);
             return this;
         }
 
+
+        /**
+         * 使用模型
+         */
         public Builder model(String model) {
             config.setModel(model);
             return this;
         }
 
+        /**
+         * 头信息设置
+         */
         public Builder headerSet(String key, String value) {
             config.setHeader(key, value);
             return this;
         }
 
+        /**
+         * 网络超时
+         */
         public Builder timeout(Duration timeout) {
             config.setTimeout(timeout);
             return this;
+        }
+
+        /**
+         * 网络代理
+         */
+        public Builder proxy(Proxy proxy) {
+            config.setProxy(proxy);
+
+            return this;
+        }
+
+        /**
+         * 网络代理
+         */
+        public Builder proxy(String host, int port) {
+            return proxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port)));
         }
 
         /**
