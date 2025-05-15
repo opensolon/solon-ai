@@ -78,17 +78,22 @@ public class ToolSchemaUtil {
         ONode requiredNode = new ONode(schemaParentNode.options()).asArray();
 
         schemaParentNode.set("type", TYPE_OBJECT);
-        schemaParentNode.getOrNew("properties").build(propertiesNode -> {
-            for (ParamDesc fp : toolParams) {
-                propertiesNode.getOrNew(fp.name()).build(paramNode -> {
-                    buildToolParamNode(fp.type(), fp.description(), paramNode);
-                });
 
-                if (fp.required()) {
-                    requiredNode.add(fp.name());
+        if (Utils.isEmpty(toolParams)) {
+            schemaParentNode.getOrNew("properties").asObject();
+        } else {
+            schemaParentNode.getOrNew("properties").build(propertiesNode -> {
+                for (ParamDesc fp : toolParams) {
+                    propertiesNode.getOrNew(fp.name()).build(paramNode -> {
+                        buildToolParamNode(fp.type(), fp.description(), paramNode);
+                    });
+
+                    if (fp.required()) {
+                        requiredNode.add(fp.name());
+                    }
                 }
-            }
-        });
+            });
+        }
 
         schemaParentNode.set("required", requiredNode);
 
@@ -135,6 +140,8 @@ public class ToolSchemaUtil {
             if (TYPE_OBJECT.equals(typeStr)) {
                 ONode requiredNode = new ONode(schemaNode.options()).asArray();
                 schemaNode.getOrNew("properties").build(propertiesNode -> {
+                    propertiesNode.asObject();
+
                     for (FieldWrap fw : ClassWrap.get(type).getAllFieldWraps()) {
                         ParamDesc fp = paramOf(fw.getField());
 
