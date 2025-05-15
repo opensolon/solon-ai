@@ -1,10 +1,10 @@
 
-solon-ai-flow  = solon-ai + solon-flow，是一个 AI 流编排框架。
+solon-ai-flow  = solon-ai in solon-flow，是一个 AI 流编排框架。
 
 * 旨在实现一种 docker-compose 风格的 AI-Flow 
 * 算是一种新的思路（或参考）
 
-有别常见的 AI 流编排工具（或低代码工具）。我们是开发框架，暂时不考虑可视界面。
+有别常见的 AI 流编排工具（或低代码工具）。我们是仍是开发框架，是用来开发工具或产品的。
 
 
 ## 设计概要
