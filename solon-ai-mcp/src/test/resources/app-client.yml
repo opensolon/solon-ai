@@ -14,5 +14,11 @@ solon.ai:
           apiUrl: "http://localhost:8081/sse"
         demo2:
           apiUrl: "http://localhost:8081/demo2/sse"
+        proxy1:
+          apiUrl: "http://localhost:8081/sse"
+          httpProxy:
+            type: "HTTP"
+            host: "127.0.0.1"
+            port: 7851
 
 solon.logging.logger.root.level: TRACE

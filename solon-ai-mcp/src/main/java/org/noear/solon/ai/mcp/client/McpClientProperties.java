@@ -16,8 +16,10 @@
 package org.noear.solon.ai.mcp.client;
 
 import org.noear.solon.ai.mcp.McpChannel;
+import org.noear.solon.ai.util.ProxyDesc;
 import org.noear.solon.net.http.HttpTimeout;
 
+import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -66,10 +68,14 @@ public class McpClientProperties {
     private HttpTimeout httpTimeout = HttpTimeout.of(10, 60, 60);
 
     /**
-     * http 代理
+     * http 代理简单描述
      */
-    private Proxy httpProxy;
+    protected ProxyDesc httpProxy;
 
+    /**
+     * http 代理实例
+     */
+    private Proxy httpProxyInstance;
 
     /**
      * 请求超时
@@ -163,11 +169,18 @@ public class McpClientProperties {
     }
 
     public Proxy getHttpProxy() {
-        return httpProxy;
+        if (httpProxyInstance == null) {
+            if (httpProxy != null) {
+                httpProxyInstance = new Proxy(httpProxy.type, new InetSocketAddress(httpProxy.host, httpProxy.port));
+            }
+        }
+
+        return httpProxyInstance;
     }
 
     public void setHttpProxy(Proxy httpProxy) {
-        this.httpProxy = httpProxy;
+        this.httpProxyInstance = httpProxy;
+        this.httpProxy = null;
     }
 
     public Duration getRequestTimeout() {
@@ -200,5 +213,23 @@ public class McpClientProperties {
 
     public void setServerParameters(McpServerParameters serverParameters) {
         this.serverParameters = serverParameters;
+    }
+
+    @Override
+    public String toString() {
+        return "McpClientProperties{" +
+                "name='" + name + '\'' +
+                ", version='" + version + '\'' +
+                ", channel='" + channel + '\'' +
+                ", apiUrl='" + apiUrl + '\'' +
+                ", apiKey='" + apiKey + '\'' +
+                ", headers=" + headers +
+                ", httpTimeout=" + httpTimeout +
+                ", httpProxy=" + getHttpProxy() +
+                ", requestTimeout=" + requestTimeout +
+                ", initializationTimeout=" + initializationTimeout +
+                ", heartbeatInterval=" + heartbeatInterval +
+                ", serverParameters=" + serverParameters +
+                '}';
     }
 }

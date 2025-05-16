@@ -6,6 +6,7 @@
 * 添加 solon-ai-core ChatSession:addMessage(Collection) 方法
 * 添加 solon-ai-core RerankingConfig,RerankingModel toString 方法
 * 添加 solon-ai-core 模型的网络代理支持（支持简单配置，和复杂构建）
+* 添加 solon-ai-mcp 客户端的网络代理简单配置支持
 * 添加 solon-ai-mcp ToolMapping,ResourceMapping 注解方法对 Produces 注解的支持（用它可指定结果转换处理）
 * 添加 solon-ai-mcp ToolCallResultConverter:matched 方法
 * 添加 solon-ai-mcp 资源模板的响应适配
@@ -15,9 +16,9 @@
 * 优化 solon-ai-core tool 空参数时的不同大模型兼容性
 * 优化 solon-ai-core ChatSession 的作用，为限数提供支持
 * 优化 solon-ai-core MethodFunctionTool 移除对 Mapping 注解的支持（语意更清楚，之前 MethodToolProvider 已经移除，这个落了）
+* 优化 solon-ai-core EmbeddingRequest，ImageRequest，RerankingRequest 当 resp.getError() 非 null 时，直接出抛异常
 * 优化 solon-ai-mcp 取消 MethodFunctionResource 对反回类型的限制（增加了 resultConverter 转换处理）
 * 优化 solon-ai-mcp McpServerEndpointProvider 支持零添加原语，postStart 后，可添加原语
-* 优化 solon-ai-core EmbeddingRequest，ImageRequest，RerankingRequest 当 resp.getError() 非 null 时，直接出抛异常
 * 修复 solon-ai ChatRequestDefault:stream 请求 r1 时，可能会产生两次 tink 消息发射
 
 ### 3.3.0
