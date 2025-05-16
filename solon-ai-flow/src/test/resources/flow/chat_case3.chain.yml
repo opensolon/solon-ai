@@ -1,0 +1,24 @@
+
+id: chat_case3
+layout:
+  - type: start
+  - task: "@ConsoleInput"
+    id: input
+  - task: "@ChatModel"
+    meta:
+      systemPrompt: "你是个聊天助手"
+      stream: false
+      chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
+        provider: "ollama"
+        model: "qwen2.5:1.5b"
+        apiUrl: "http://127.0.0.1:11434/api/chat"
+  - task: "@TextOutput"
+    meta:
+      prefix: "机器人："
+  - type: "exclusive"
+    link:
+      - nextId: input
+        condition: 'context.counter().incr("demo") < 10'
+      - nextId: end
+  - type: "end"
+    id: "end"
