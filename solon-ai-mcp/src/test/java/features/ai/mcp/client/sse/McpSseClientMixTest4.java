@@ -10,7 +10,9 @@ import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author noear 2025/5/1 created
@@ -27,7 +29,7 @@ public class McpSseClientMixTest4 {
     private static final String model = "llama3.2"; //"llama3.2";//deepseek-r1:1.5b;
 
     @Test
-    public void tool2() throws Exception {
+    public void tool1() throws Exception {
         //没有参数的工具
         String response = mcpClient.callToolAsText("spotIntro", Collections.emptyMap()).getContent();
 
@@ -53,7 +55,20 @@ public class McpSseClientMixTest4 {
     }
 
     @Test
-    public void prompt3() throws Exception {
+    public void tool2() throws Exception {
+        Map<String, Object> args = new HashMap<>();
+        args.put("city", "杭州");
+        args.put("userName", "xxx");
+
+        String response = mcpClient.callToolAsText("getCity", args).getContent();
+
+        log.warn("{}", response);
+        assert Utils.isNotEmpty(response);
+        assert response.contains("杭州:xxx");
+    }
+
+    @Test
+    public void prompt1() throws Exception {
         List<ChatMessage> prompt = mcpClient.getPromptAsMessages("splitMessage", Collections.emptyMap());
 
         assert Utils.isNotEmpty(prompt);

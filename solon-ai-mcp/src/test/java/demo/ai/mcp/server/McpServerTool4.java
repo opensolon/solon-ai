@@ -25,6 +25,11 @@ public class McpServerTool4 {
         return "555毫米";
     }
 
+    @ToolMapping(description = "获取一个城市的特产介绍")
+    public String getCity(@Param String city, String userName) {
+        return city + ":" + userName;
+    }
+
     @ToolMapping(description = "杭州的假日景点介绍")
     public String spotIntro() {
         return "西湖，良渚遗址";
