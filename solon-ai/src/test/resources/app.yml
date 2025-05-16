@@ -6,6 +6,16 @@ solon.ai.chat:
     apiUrl: "http://127.0.0.1:11434/api/chat" # 使用完整地址（而不是 api_base）
     provider: "ollama" # 使用 ollama 服务时，需要配置 provider
     model: "llama3.2"
+  proxy1:
+    apiUrl: "http://127.0.0.1:11434/api/chat" # 使用完整地址（而不是 api_base）
+    provider: "ollama" # 使用 ollama 服务时，需要配置 provider
+    model: "llama3.2"
+    proxy:
+      type: "HTTP"
+      host: "127.0.0.1"
+      port: 9817
+
+
 
 solon.ai.embed:
   bge-m3:

@@ -16,8 +16,10 @@
 package org.noear.solon.ai;
 
 import org.noear.solon.Utils;
+import org.noear.solon.ai.util.ProxyDesc;
 import org.noear.solon.net.http.HttpUtils;
 
+import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -36,7 +38,8 @@ public class AiConfig {
     protected String model;
     protected final Map<String, String> headers = new LinkedHashMap<>();
     protected Duration timeout = Duration.ofSeconds(60);
-    protected Proxy proxy;
+    protected ProxyDesc proxy;
+    protected Proxy proxyInstance;
 
     /// ///////////////////
 
@@ -65,7 +68,13 @@ public class AiConfig {
     }
 
     public Proxy getProxy() {
-        return proxy;
+        if (proxyInstance == null) {
+            if (proxy != null) {
+                proxyInstance = new Proxy(proxy.type, new InetSocketAddress(proxy.host, proxy.port));
+            }
+        }
+
+        return proxyInstance;
     }
 
     /// ///////////////////
@@ -102,8 +111,9 @@ public class AiConfig {
         }
     }
 
-    public void setProxy(Proxy proxy) {
-        this.proxy = proxy;
+    public void setProxy(Proxy proxyInstance) {
+        this.proxyInstance = proxyInstance;
+        this.proxy = null;
     }
 
     /**
@@ -136,7 +146,7 @@ public class AiConfig {
                 ", model='" + model + '\'' +
                 ", headers=" + headers +
                 ", timeout=" + timeout +
-                ", proxy=" + proxy +
+                ", proxy=" + getProxy() +
                 '}';
     }
 }
