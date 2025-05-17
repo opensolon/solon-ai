@@ -293,6 +293,11 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 		McpServerSession session = sessions.get(sessionId);
 
+		if (session == null) {
+			ctx.returnValue(new Entity().status(404).body(new McpError("Session not found: " + sessionId)));
+			return;
+		}
+
 		String body = ctx.body();
 		try {
 			McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, body);
