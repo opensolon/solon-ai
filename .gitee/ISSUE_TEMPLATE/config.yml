@@ -3,6 +3,6 @@ blank_issues_enabled: true
 
 # 引导用户浏览相关文档
 contact_links:
-    -   name: Solon Ai 官网
-        url: https://solon.noear.org/article/learn-solon-ai
+    -   name: Solon 官网
+        url: https://solon.noear.org/
         about: 查阅官网以获得基本功能使用、介绍和常见问题解答
