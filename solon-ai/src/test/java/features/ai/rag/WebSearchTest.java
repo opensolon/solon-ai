@@ -37,9 +37,9 @@ public class WebSearchTest {
         List<Document> context = repository.search(query);
 
         ChatResponse resp = TestUtils.getChatModel()
-                .prompt(ChatMessage.template("${query} \n\n 请参考以下内容回答：${context}")
-                        .param("query", query)
-                        .param("context", context)
+                .prompt(ChatMessage.ofUserTmpl("${query} \n\n 请参考以下内容回答：${context}")
+                        .paramAdd("query", query)
+                        .paramAdd("context", context)
                         .generate())
                 .call();
 

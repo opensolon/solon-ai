@@ -124,19 +124,36 @@ public interface ChatMessage extends Serializable {
     /// //////////////////
 
     /**
+     * 创建系统消息模板
+     */
+    static SystemMessageTemplate ofSystemTmpl(String tmpl) {
+        return new SystemMessageTemplate(tmpl);
+    }
+
+    /**
+     * 创建用户消息模板
+     */
+    static UserMessageTemplate ofUserTmpl(String tmpl) {
+        return new UserMessageTemplate(tmpl);
+    }
+
+    /**
+     * 创建用户消息模板
+     *
+     * @deprecated 3.3 {@link #ofUserTmpl(String)}
+     */
+    @Deprecated
+    static UserMessageTemplate template(String tmpl) {
+        return ofUserTmpl(tmpl);
+    }
+
+    /**
      * 用户消息增强
      */
     static ChatMessage augment(String message, Object context) {
         String newContent = String.format("%s\n\n Now: %s\n\n References: %s", message,
                 LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME), context);
         return new UserMessage(newContent);
-    }
-
-    /**
-     * 创建用户消息模板
-     */
-    static UserMessageTemplate template(String tmpl) {
-        return new UserMessageTemplate(tmpl);
     }
 
     /// //////////////////

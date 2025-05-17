@@ -15,68 +15,46 @@
  */
 package org.noear.solon.ai.chat.message;
 
-import org.noear.solon.ai.AiMedia;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.TmplUtil;
 import org.noear.solon.lang.Preview;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * 聊天用户消息模板
+ * 聊天系统消息模板
  *
  * @author noear
- * @since 3.1
+ * @since 3.3
  */
-@Preview("3.1")
-public class UserMessageTemplate {
+@Preview("3.3")
+public class SystemMessageTemplate {
     private final String tmpl;
     private final Map<String, Object> params = new HashMap<>();
-    private List<AiMedia> medias;
 
 
     /**
      * @param tmpl '${question} \r\n context: ${context}'
      */
-    public UserMessageTemplate(String tmpl) {
+    public SystemMessageTemplate(String tmpl) {
         Assert.notNull(tmpl, "tmpl is null");
         this.tmpl = tmpl;
     }
 
     /**
      * 配置参数
-     *
-     * @deprecated 3.3 {@link #paramAdd(String, Object)}
      */
-    @Deprecated
-    public UserMessageTemplate param(String name, Object value) {
-        return paramAdd(name, value);
-    }
-
-    /**
-     * 配置参数
-     */
-    public UserMessageTemplate paramAdd(String name, Object value) {
+    public SystemMessageTemplate paramAdd(String name, Object value) {
         params.put(name, value);
-        return this;
-    }
-
-    /**
-     * 配置感知媒体
-     */
-    public UserMessageTemplate mediaAdd(AiMedia media) {
-        if (medias == null) {
-            medias = new ArrayList<>();
-        }
-        medias.add(media);
         return this;
     }
 
     /**
      * 生成
      */
-    public UserMessage generate() {
+    public SystemMessage generate() {
         String content = TmplUtil.parse(tmpl, params);
-        return new UserMessage(content, medias);
+        return new SystemMessage(content);
     }
 }
