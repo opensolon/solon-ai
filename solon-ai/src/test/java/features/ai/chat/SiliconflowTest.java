@@ -39,12 +39,8 @@ public class SiliconflowTest {
                 .timeout(Duration.ofSeconds(600))
                 .build();
 
-        ArrayList<ChatMessage> list = new ArrayList<>();
-
-        // list.add(chatMessage);
-        list.add(ChatMessage.ofUser("2025号3月20日，设备76-51的日用电量是多少"));
-
-        Publisher<ChatResponse> publisher = chatModel.prompt(list)
+        Publisher<ChatResponse> publisher = chatModel
+                .prompt(ChatMessage.ofUser("2025号3月20日，设备76-51的日用电量是多少"))
                 .stream();
 
         CountDownLatch doneLatch = new CountDownLatch(1);

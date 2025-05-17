@@ -60,16 +60,15 @@ public class DashscopeTest {
     public void case2() throws Exception {
         ChatModel chatModel = getChatModelBuilder().build();
 
-        List<ChatMessage> messageList = new ArrayList<>();
-        messageList.add(ChatMessage.ofUser("hello"));
+        ChatSession chatSession = new ChatSessionDefault();
+        chatSession.addMessage(ChatMessage.ofUser("hello"));
 
         //流返回
-        Publisher<ChatResponse> publisher = chatModel.prompt(messageList).stream();
+        Publisher<ChatResponse> publisher = chatModel.prompt(chatSession).stream();
 
         CountDownLatch doneLatch = new CountDownLatch(1);
         publisher.subscribe(new SimpleSubscriber<ChatResponse>()
                 .doOnNext(resp -> {
-                    messageList.add(resp.getMessage());
                     log.info("{}", resp.getMessage());
                 }).doOnComplete(() -> {
                     log.debug("::完成!");
@@ -365,12 +364,9 @@ public class DashscopeTest {
                 .timeout(Duration.ofSeconds(600))
                 .build();
 
-        ArrayList<ChatMessage> list = new ArrayList<>();
 
-        // list.add(chatMessage);
-        list.add(ChatMessage.ofUser("2025号3月20日，设备76-51的日用电量是多少"));
-
-        Publisher<ChatResponse> publisher = chatModel.prompt(list)
+        Publisher<ChatResponse> publisher = chatModel
+                .prompt(ChatMessage.ofUser("2025号3月20日，设备76-51的日用电量是多少"))
                 .stream();
 
         CountDownLatch doneLatch = new CountDownLatch(1);

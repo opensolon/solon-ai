@@ -460,7 +460,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param args 参数
      */
     public List<ChatMessage> getPromptAsMessages(String name, Map<String, Object> args) {
-        List<ChatMessage> list = new ArrayList<>();
+        List<ChatMessage> tmp = new ArrayList<>();
 
         McpSchema.GetPromptResult result = getPrompt(name, args);
 
@@ -468,25 +468,25 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             McpSchema.Content content = pm.getContent();
             if (pm.getRole() == McpSchema.Role.ASSISTANT) {
                 if (content instanceof McpSchema.TextContent) {
-                    list.add(ChatMessage.ofAssistant(((McpSchema.TextContent) content).getText()));
+                    tmp.add(ChatMessage.ofAssistant(((McpSchema.TextContent) content).getText()));
                 }
             } else {
                 if (content instanceof McpSchema.TextContent) {
-                    list.add(ChatMessage.ofUser(((McpSchema.TextContent) content).getText()));
+                    tmp.add(ChatMessage.ofUser(((McpSchema.TextContent) content).getText()));
                 } else if (content instanceof McpSchema.ImageContent) {
                     McpSchema.ImageContent imageContent = ((McpSchema.ImageContent) content);
                     String contentData = imageContent.getData();
 
                     if (contentData.contains("://")) {
-                        list.add(ChatMessage.ofUser(Image.ofUrl(contentData)));
+                        tmp.add(ChatMessage.ofUser(Image.ofUrl(contentData)));
                     } else {
-                        list.add(ChatMessage.ofUser(Image.ofBase64(contentData, imageContent.getMimeType())));
+                        tmp.add(ChatMessage.ofUser(Image.ofBase64(contentData, imageContent.getMimeType())));
                     }
                 }
             }
         }
 
-        return list;
+        return tmp;
     }
 
     /**
