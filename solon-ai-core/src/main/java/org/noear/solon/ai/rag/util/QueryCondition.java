@@ -171,5 +171,4 @@ public class QueryCondition {
         this.searchType = searchType;
         return this;
     }
-
 }

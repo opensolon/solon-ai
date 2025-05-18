@@ -46,6 +46,7 @@ import java.util.*;
  *
  * @author 小奶奶花生米
  * @since 3.1
+ * @since 3.3
  */
 @Preview("3.1")
 public class ElasticsearchRepository implements RepositoryStorable, RepositoryLifecycle {
@@ -96,8 +97,8 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
                 .startObject("embedding")
                 .field("type", "dense_vector")
                 .field("dims", dims)
-                .field("index",true)
-                .field("similarity","cosine")
+                .field("index", true)
+                .field("similarity", "cosine")
                 .endObject();
 
         // 如果有元数据字段需要索引，将其平铺到顶层
@@ -401,9 +402,9 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         contentParams.put("query", condition.getQuery());
 
         HybridSearchParams hybridSearchParams = condition.getHybridSearchParams();
-        if(SearchType.HYBRID.equals(condition.getSearchType()) && hybridSearchParams != null && hybridSearchParams.getFullTextWeight() > 0 ){
+        if (SearchType.HYBRID.equals(condition.getSearchType()) && hybridSearchParams != null && hybridSearchParams.getFullTextWeight() > 0) {
             contentParams.put("boost", hybridSearchParams.getFullTextWeight());
-        }else{
+        } else {
             contentParams.put("boost", 1.0);
         }
 
@@ -429,9 +430,9 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
             knnParams.put("k", condition.getLimit());
             knnParams.put("num_candidates", Math.min(condition.getLimit() * 10, 10000));
             HybridSearchParams hybridSearchParams = condition.getHybridSearchParams();
-            if(SearchType.HYBRID.equals(condition.getSearchType()) && hybridSearchParams != null && hybridSearchParams.getVectorWeight() > 0 ){
+            if (SearchType.HYBRID.equals(condition.getSearchType()) && hybridSearchParams != null && hybridSearchParams.getVectorWeight() > 0) {
                 knnParams.put("boost", hybridSearchParams.getVectorWeight());
-            }else{
+            } else {
                 knnParams.put("boost", 1.0);
             }
             knnQuery.put("knn", knnParams);
@@ -513,7 +514,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         // 向量检索部分
         Map<String, Object> vectorClause = buildVectorClause(condition, queryVector);
         if (vectorClause != null) {
-             shouldClauses.add(vectorClause);
+            shouldClauses.add(vectorClause);
         }
 
         boolQuery.put("should", shouldClauses);
