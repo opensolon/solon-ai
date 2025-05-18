@@ -28,8 +28,8 @@ import org.noear.solon.flow.Node;
  * @author noear
  * @since 3.3
  */
-@Component("ChatInput")
-public class ChatInputCom extends AbsAiComponent implements AiIoComponent {
+@Component("WebInput")
+public class WebInputCom extends AbsAiComponent implements AiIoComponent {
     @Override
     public Object getInput(FlowContext context, Node node) {
         String input_name = getInputName(node);

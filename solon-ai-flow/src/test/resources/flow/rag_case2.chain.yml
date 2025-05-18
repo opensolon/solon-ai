@@ -1,7 +1,7 @@
 
 id: rag_case2
 layout:
-  - task: "@ChatInput"
+  - task: "@WebInput"
   - task: "@EmbeddingModel"
     meta:
       embeddingConfig: # "@type": "org.noear.solon.ai.embedding.EmbeddingConfig"
@@ -23,4 +23,4 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - task: "@ChatOutput"
+  - task: "@WebOutput"
