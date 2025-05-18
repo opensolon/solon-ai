@@ -104,10 +104,13 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
         Assert.notNull(data, "ChatModel input is null");
 
         if (data instanceof String) {
+            //字符串
             chatSession.addMessage(ChatMessage.ofUser((String) data));
         } else if (data instanceof ChatMessage) {
+            //消息
             chatSession.addMessage((ChatMessage) data);
         } else if (data instanceof ChatPrompt) {
+            //提示语
             chatSession.addMessage(((ChatPrompt) data).getMessages());
         } else {
             throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
