@@ -1,6 +1,7 @@
 
 id: rag_case2
 layout:
+  - task: "@WebInput"
   - task: "@ChatInput"
   - task: "@EmbeddingModel"
     meta:
@@ -24,3 +25,4 @@ layout:
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
   - task: "@ChatOutput"
+  - task: "@WebOutput"

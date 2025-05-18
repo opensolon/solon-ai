@@ -1,6 +1,7 @@
 
 id: tool_case2
 layout:
+  - task: "@WebInput"
   - task: "@ChatInput"
   - task: "@ChatModel"
     meta:
@@ -13,3 +14,4 @@ layout:
       toolProviders:
         - "features.ai.flow.ToolDemo"
   - task: "@ChatOutput"
+  - task: "@WebOutput"
