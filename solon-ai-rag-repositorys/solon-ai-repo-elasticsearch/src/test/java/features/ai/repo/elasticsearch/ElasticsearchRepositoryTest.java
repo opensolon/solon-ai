@@ -32,6 +32,7 @@ import org.noear.solon.ai.rag.repository.ElasticsearchRepository;
 import org.noear.solon.ai.rag.repository.elasticsearch.MetadataField;
 import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.ai.rag.util.QueryCondition;
+import org.noear.solon.ai.rag.util.SearchType;
 import org.noear.solon.net.http.HttpUtils;
 
 /**
@@ -126,8 +127,84 @@ public class ElasticsearchRepositoryTest {
             assertFalse(results.isEmpty(), "应该找到noear.org域名下的文档");
             assertTrue(results.get(0).getUrl().contains("noear.org"), "文档URL应该包含noear.org");
 
-            // 打印结果
+            // 打印基本搜索结果
+            System.out.println("\n=== 基本搜索结果 ===");
             for (Document doc : results) {
+                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
+            }
+
+            // 测试全文搜索
+            System.out.println("\n=== 全文搜索测试 ===");
+
+            QueryCondition fullTextCondition = new QueryCondition("Solon 框架").searchType(SearchType.FULL_TEXT);
+            List<Document> fullTextResults = repository.search(fullTextCondition);
+
+            assertFalse(fullTextResults.isEmpty(), "全文搜索应该找到包含'Solon 框架'的文档");
+
+            for (Document doc : fullTextResults) {
+                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
+            }
+
+            // 测试向量搜索
+            System.out.println("\n=== 向量搜索测试 ===");
+
+            QueryCondition vectorCondition = new QueryCondition("solon framework").searchType(SearchType.VECTOR);
+            List<Document> vectorResults = repository.search(vectorCondition);
+
+            assertFalse(vectorResults.isEmpty(), "向量搜索应该找到相关文档");
+
+            for (Document doc : vectorResults) {
+                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
+            }
+
+            // 测试混合搜索
+            System.out.println("\n=== 混合搜索测试 ===");
+
+            QueryCondition hybridCondition = new QueryCondition("solon noear.org").searchType(SearchType.HYBRID);
+            List<Document> hybridResults = repository.search(hybridCondition);
+
+            assertFalse(hybridResults.isEmpty(), "混合搜索应该找到相关文档");
+
+            for (Document doc : hybridResults) {
+                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
+            }
+
+            // 测试带过滤器的全文搜索
+            System.out.println("\n=== 带过滤器的全文搜索测试 ===");
+            QueryCondition fullTextFilteredCondition = new QueryCondition("Solon 框架")
+                    .searchType(SearchType.FULL_TEXT)
+                    .filterExpression("url LIKE 'solon.noear.org'");
+            List<Document> fullTextFilteredResults = repository.search(fullTextFilteredCondition);
+            assertFalse(fullTextFilteredResults.isEmpty(), "带过滤器的全文搜索应该找到相关文档");
+            assertTrue(fullTextFilteredResults.get(0).getUrl().contains("solon.noear.org"), "文档URL应该包含 solon.noear.org");
+
+            for (Document doc : fullTextFilteredResults) {
+                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
+            }
+
+            // 测试带过滤器的向量搜索
+            System.out.println("\n=== 带过滤器的向量搜索测试 ===");
+            QueryCondition vectorFilteredCondition = new QueryCondition("solon framework")
+                    .searchType(SearchType.VECTOR)
+                    .filterExpression("url LIKE 'solon.noear.org'");
+            List<Document> vectorFilteredResults = repository.search(vectorFilteredCondition);
+            assertFalse(vectorFilteredResults.isEmpty(), "带过滤器的向量搜索应该找到相关文档");
+            assertTrue(vectorFilteredResults.get(0).getUrl().contains("solon.noear.org"), "文档URL应该包含 solon.noear.org");
+
+            for (Document doc : vectorFilteredResults) {
+                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
+            }
+
+            // 测试带过滤器的混合搜索
+            System.out.println("\n=== 带过滤器的混合搜索测试 ===");
+            QueryCondition hybridFilteredCondition = new QueryCondition("solon noear.org")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression("url LIKE 'solon.noear.org'");
+            List<Document> hybridFilteredResults = repository.search(hybridFilteredCondition);
+            assertFalse(hybridFilteredResults.isEmpty(), "带过滤器的混合搜索应该找到相关文档");
+            assertTrue(hybridFilteredResults.get(0).getUrl().contains("solon.noear.org"), "文档URL应该包含 solon.noear.org");
+
+            for (Document doc : hybridFilteredResults) {
                 System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
             }
 
