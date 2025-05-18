@@ -20,7 +20,6 @@ import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.annotation.Component;
-import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.UploadedFile;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -34,41 +33,9 @@ import org.noear.solon.flow.Node;
 @Component("ChatInput")
 public class ChatInputCom extends AbsAiComponent implements AiIoComponent {
     @Override
-    public Object getInput(FlowContext context, Node node) throws Exception {
-        String input_name = getInputName(node);
-        Context ctx = Context.current();
-
-        if (ctx == null) {
-            return null;
-        } else {
-            return ctx.param(input_name);
-        }
-    }
-
-    @Override
-    public Object getAttachment(FlowContext context, Node node) throws Throwable {
-        String attachment_name = getAttachmentName(node);
-        Context ctx = Context.current();
-
-        if (ctx == null) {
-            return null;
-        } else {
-            return ctx.file(attachment_name);
-        }
-    }
-
-    @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
-        //配置优先；上下文次之
-        Object input = AiIoComponent.super.getInput(context, node);
-        if (input == null) {
-            input = this.getInput(context, node);
-        }
-
-        Object attachment = AiIoComponent.super.getAttachment(context, node);
-        if (attachment == null) {
-            attachment = getAttachment(context, node);
-        }
+        Object input = getInput(context, node);
+        Object attachment = getAttachment(context, node);
 
         if (input == null && attachment != null) {
             throw new IllegalArgumentException("The input and attachment is null");

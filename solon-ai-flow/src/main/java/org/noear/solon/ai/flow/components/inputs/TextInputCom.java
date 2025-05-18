@@ -18,7 +18,6 @@ package org.noear.solon.ai.flow.components.inputs;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.annotation.Component;
-import org.noear.solon.core.handle.Context;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 
@@ -31,27 +30,9 @@ import org.noear.solon.flow.Node;
 @Component("TextInput")
 public class TextInputCom extends AbsAiComponent implements AiIoComponent {
     @Override
-    public Object getInput(FlowContext context, Node node) {
-        String input_name = getInputName(node);
-        Context ctx = Context.current();
-
-        if (ctx == null) {
-            return null;
-        } else {
-            return ctx.param(input_name);
-        }
-    }
-
-    @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
-        //配置优先；上下文次之
-        Object input = AiIoComponent.super.getInput(context, node);
-        if (input == null) {
-            input = this.getInput(context, node);
-        }
+        Object input = getInput(context, node);
 
-        Object output = input;
-
-        setOutput(context, node, output);
+        setOutput(context, node, input);
     }
 }

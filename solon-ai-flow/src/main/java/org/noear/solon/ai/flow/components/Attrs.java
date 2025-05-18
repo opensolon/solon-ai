@@ -23,14 +23,14 @@ package org.noear.solon.ai.flow.components;
  */
 public interface Attrs {
     String META_INPUT = "input";
-    String META_ATTACHMENT = "attachment";
     String META_OUTPUT = "output";
+    String META_ATTACHMENT = "attachment";
     String META_CHAT_SESSION = "chatSession";
 
     String CTX_CHAT_SESSION = "chatSession";
+    String CTX_PROPERTY = "property";
     String CTX_MESSAGE = "message";
     String CTX_ATTACHMENT = "attachment";
-    String CTX_PROPERTY = "property";
 
     String PROP_TOOLS = "tools";
 
