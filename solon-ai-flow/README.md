@@ -1,10 +1,10 @@
 
-solon-ai-flow  = solon-ai in solon-flow，是一个 AI 流编排框架。
+solon-ai-flow  = 基于 solon-flow 构建，是一个 AI 流编排框架。
 
 * 旨在实现一种 docker-compose 风格的 AI-Flow 
 * 算是一种新的思路（或参考）
 
-有别常见的 AI 流编排工具（或低代码工具）。我们是仍是开发框架，是用来开发工具或产品的。
+有别常见的 AI 流编排工具（或低代码工具）。我们是应用开发框架，是用来开发工具或产品的。
 
 
 ## 设计概要
@@ -16,7 +16,7 @@ solon-ai-flow  = solon-ai in solon-flow，是一个 AI 流编排框架。
 
 比如：
 
-* WebInputCom，会接收请求数据，并转为输出字段（FlowContext 里的约定字段）
+* WebInputCom，会接收网络请求数据，并转为输出字段（FlowContext 里的约定字段）
 * McpToolCom，会根据元信息配置，并添加属性（FlowContext 里的约定字段）
 * ChatModelCom，会尝试从 FlowContext 获取“上个节点”的输出数据；尝试获取“上个节点”添加的属性。
 
@@ -46,7 +46,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - task: "@TextOutput"
+  - task: "@ConsoleOutput"
 ```
 
 
@@ -84,7 +84,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - task: "@TextOutput"
+  - task: "@ConsoleOutput"
 ```
 
 
@@ -111,7 +111,7 @@ layout:
         apiUrl: "http://127.0.0.1:11434/api/chat"
       toolProviders:
         - "features.ai.flow.ToolDemo"
-  - task: "@TextOutput"
+  - task: "@ConsoleOutput"
 ```
 
 
@@ -140,7 +140,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - task: "@TextInput"
+  - task: "@ConsoleOutput"
 ```
 
 ### pk_case1 （智能体对话）
@@ -161,7 +161,7 @@ layout:
   - task: "@ChatModel"
     id: model_a
     meta:
-      systemPrompt: "你是一个智能体名字叫“阿飞”。将跟另一个叫“阿紫”的智能体，表演相声式吵架。每句话不要超过30个字"
+      systemPrompt: "你是一个智能体名字叫“阿飞”。将跟另一个叫“阿紫”的智能体，表演相声式吵架。每句话不要超过50个字"
       stream: false
       chatSession: "A"
       chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
@@ -169,12 +169,13 @@ layout:
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
   - task: "@TextOutput"
+  - task: "@ConsoleOutput"
     meta:
       prefix: "阿飞: "
   - task: "@ChatModel"
     id: model_b
     meta:
-      systemPrompt: "你是一个智能体名字叫“阿紫”。将跟另一个叫“阿飞”的智能体，表演相声式吵架。每句话不要超过30个字"
+      systemPrompt: "你是一个智能体名字叫“阿紫”。将跟另一个叫“阿飞”的智能体，表演相声式吵架。每句话不要超过50个字"
       stream: false
       chatSession: "B"
       chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
@@ -182,6 +183,7 @@ layout:
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
   - task: "@TextOutput"
+  - task: "@ConsoleOutput"
     meta:
       prefix: "阿紫: "
   - type: "exclusive"
