@@ -76,6 +76,14 @@ public interface AiIoComponent extends AiComponent {
     }
 
     /**
+     * 设置组件附件
+     */
+    default void setAttachment(FlowContext context, Node node, Object data) throws Throwable {
+        String attachment_name = getAttachmentName(node);
+        context.put(attachment_name, data);
+    }
+
+    /**
      * 获取组件数据输出
      */
     default void setOutput(FlowContext context, Node node, Object data) throws Throwable {
