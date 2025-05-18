@@ -14,4 +14,4 @@ layout:
         apiUrl: "http://127.0.0.1:11434/api/chat"
       toolProviders:
         - "features.ai.flow.ToolDemo"
-  - task: "@TextOutput"
+  - task: "@ConsoleOutput"

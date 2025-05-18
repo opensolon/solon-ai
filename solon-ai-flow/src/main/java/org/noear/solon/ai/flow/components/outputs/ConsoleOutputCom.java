@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.flow.components.outputs;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
@@ -28,17 +29,18 @@ import reactor.core.publisher.Flux;
 import java.util.concurrent.CountDownLatch;
 
 /**
- * 文本输出组件
+ * 控制台输出组件
  *
  * @author noear
  * @since 3.3
  */
-@Component("TextOutput")
-public class TextOutputCom extends AbsAiComponent implements AiIoComponent {
-    @Override
-    protected void doRun(FlowContext context, Node node) throws Throwable {
-        Object data = getInput(context, node);
+@Component("ConsoleOutput")
+public class ConsoleOutputCom extends AbsAiComponent implements AiIoComponent {
+    //私有元信息
+    static final String META_PREFIX = "prefix";
 
+    @Override
+    public void setOutput(FlowContext context, Node node, Object data) throws Throwable {
         final StringBuilder buf = new StringBuilder();
 
         if (data instanceof Publisher) {
@@ -74,6 +76,17 @@ public class TextOutputCom extends AbsAiComponent implements AiIoComponent {
         }
 
         data = buf.toString();
+        String prefix = node.getMeta(META_PREFIX);
+        if (Utils.isEmpty(prefix)) {
+            System.out.println(data);
+        } else {
+            System.out.println(prefix + data);
+        }
+    }
+
+    @Override
+    protected void doRun(FlowContext context, Node node) throws Throwable {
+        Object data = getInput(context, node);
 
         setOutput(context, node, data);
     }

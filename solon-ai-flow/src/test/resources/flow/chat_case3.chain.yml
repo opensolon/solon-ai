@@ -13,6 +13,7 @@ layout:
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
   - task: "@TextOutput"
+  - task: "@ConsoleOutput"
     meta:
       prefix: "机器人："
   - type: "exclusive"
