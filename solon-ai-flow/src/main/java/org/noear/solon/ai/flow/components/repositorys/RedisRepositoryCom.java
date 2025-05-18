@@ -37,6 +37,7 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.noear.solon.net.http.HttpUtils;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 
@@ -99,9 +100,16 @@ public class RedisRepositoryCom extends AbsAiComponent implements AiIoComponent,
         Assert.notNull(data, "RedisRepository input is null");
 
         if (data instanceof String) {
+            //查询
             List<Document> documents = repository.search((String) data);
             data = ChatMessage.augment((String) data, documents);
             setOutput(context, node, data);
+        } else if (data instanceof Document) {
+            //插入
+            repository.insert(Arrays.asList((Document) data));
+        } else if (data instanceof List) {
+            //插入
+            repository.insert((List<Document>) data);
         } else {
             throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
         }
