@@ -35,6 +35,8 @@ public class QueryCondition {
     private double similarityThreshold = DEFAULT_SIMILARITY_THRESHOLD;
     private Expression<Boolean> filterExpression;
     private boolean disableRefilter;
+    private SearchType searchType = SearchType.VECTOR;
+    private HybridSearchParams hybridSearchParams;
 
     public QueryCondition(String query) {
         this.query = query;
@@ -82,6 +84,22 @@ public class QueryCondition {
      */
     public boolean isDisableRefilter() {
         return disableRefilter;
+    }
+
+    /**
+     * 获取搜索类型
+     */
+    public SearchType getSearchType() {
+        return searchType;
+    }
+
+    public HybridSearchParams getHybridSearchParams() {
+        return hybridSearchParams;
+    }
+
+    public QueryCondition hybridSearchParams(HybridSearchParams hybridSearchParams) {
+        this.hybridSearchParams = hybridSearchParams;
+        return this;
     }
 
     /**
@@ -145,4 +163,13 @@ public class QueryCondition {
         this.disableRefilter = disableRefilter;
         return this;
     }
+
+    /**
+     * 配置搜索类型
+     */
+    public QueryCondition searchType(SearchType searchType) {
+        this.searchType = searchType;
+        return this;
+    }
+
 }
