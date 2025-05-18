@@ -77,25 +77,26 @@ public class ToolSchemaUtil {
     public static ONode buildToolParametersNode(List<ParamDesc> toolParams, ONode schemaParentNode) {
         schemaParentNode.asObject();
 
-        ONode requiredNode = new ONode(schemaParentNode.options()).asArray();
+        if (Utils.isNotEmpty(toolParams)) {
+            ONode requiredNode = new ONode(schemaParentNode.options()).asArray();
 
-        schemaParentNode.set("type", TYPE_OBJECT);
-        schemaParentNode.getOrNew("properties").build(propertiesNode -> {
-            propertiesNode.asObject();
+            schemaParentNode.set("type", TYPE_OBJECT);
+            schemaParentNode.getOrNew("properties").build(propertiesNode -> {
+                propertiesNode.asObject();
 
-            for (ParamDesc fp : toolParams) {
-                propertiesNode.getOrNew(fp.name()).build(paramNode -> {
-                    buildToolParamNode(fp.type(), fp.description(), paramNode);
-                });
+                for (ParamDesc fp : toolParams) {
+                    propertiesNode.getOrNew(fp.name()).build(paramNode -> {
+                        buildToolParamNode(fp.type(), fp.description(), paramNode);
+                    });
 
-                if (fp.required()) {
-                    requiredNode.add(fp.name());
+                    if (fp.required()) {
+                        requiredNode.add(fp.name());
+                    }
                 }
-            }
-        });
+            });
 
-        schemaParentNode.set("required", requiredNode);
-
+            schemaParentNode.set("required", requiredNode);
+        }
 
         return schemaParentNode;
     }
