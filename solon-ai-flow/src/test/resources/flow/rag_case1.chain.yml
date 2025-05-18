@@ -3,7 +3,7 @@ id: rag_case1
 layout:
   - task: "@TextInput"
     meta:
-      text: "Solon 是谁开发的？"
+      message: "Solon 是谁开发的？"
   - task: "@EmbeddingModel"
     meta:
       embeddingConfig: # "@type": "org.noear.solon.ai.embedding.EmbeddingConfig"

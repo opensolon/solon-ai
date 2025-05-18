@@ -33,6 +33,13 @@ public interface AiIoComponent extends AiComponent {
     }
 
     /**
+     * 获取组件附件名
+     */
+    default String getAttachmentName(Node node) {
+        return node.getMetaOrDefault(Attrs.META_ATTACHMENT, Attrs.CTX_ATTACHMENT);
+    }
+
+    /**
      * 获取组件数据输出名字（有默认，可以配置）
      */
     default String getOutputName(Node node) {
@@ -45,7 +52,27 @@ public interface AiIoComponent extends AiComponent {
      */
     default Object getInput(FlowContext context, Node node) throws Throwable {
         String input_name = getInputName(node);
-        return context.get(input_name);
+        Object input = context.get(input_name);
+
+        if (input == null) {
+            return node.getMeta(input_name);
+        } else {
+            return input;
+        }
+    }
+
+    /**
+     * 获取组件附件
+     */
+    default Object getAttachment(FlowContext context, Node node) throws Throwable {
+        String attachment_name = getAttachmentName(node);
+        Object attachment = context.get(attachment_name);
+
+        if (attachment == null) {
+            return node.getMeta(attachment_name);
+        } else {
+            return attachment;
+        }
     }
 
     /**

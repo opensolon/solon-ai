@@ -16,7 +16,7 @@ solon-ai-flow  = 基于 solon-flow 构建，是一个 AI 流编排框架。
 
 比如：
 
-* WebInputCom，会接收网络请求数据，并转为输出字段（FlowContext 里的约定字段）
+* ChatInputCom，会接收网络请求数据，并转为输出字段（FlowContext 里的约定字段）
 * McpToolCom，会根据元信息配置，并添加属性（FlowContext 里的约定字段）
 * ChatModelCom，会尝试从 FlowContext 获取“上个节点”的输出数据；尝试获取“上个节点”添加的属性。
 

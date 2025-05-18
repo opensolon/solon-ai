@@ -3,7 +3,7 @@ id: mcp_case1
 layout:
   - task: "@TextInput"
     meta:
-      text: "杭州今天天气怎么样?"
+      message: "杭州今天天气怎么样?"
   - task: "@McpTool"
     meta:
       mcpConfig:

@@ -34,8 +34,8 @@ import reactor.core.publisher.Flux;
  * @author noear
  * @since 3.3
  */
-@Component("WebOutput")
-public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
+@Component("ChatOutput")
+public class ChatOutputCom extends AbsAiComponent implements AiIoComponent {
 
     @Override
     public void setOutput(FlowContext context, Node node, Object data) throws Throwable {

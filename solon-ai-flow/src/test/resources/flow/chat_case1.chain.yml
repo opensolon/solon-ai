@@ -3,7 +3,7 @@ id: chat_case1
 layout:
   - task: "@TextInput"
     meta:
-      text: "你好"
+      message: "你好"
   - task: "@ChatModel"
     meta:
       systemPrompt: "你是个聊天助手"

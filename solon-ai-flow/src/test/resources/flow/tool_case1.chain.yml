@@ -3,7 +3,7 @@ id: tool_case1
 layout:
   - task: "@TextInput"
     meta:
-      text: "杭州今天天气怎么样？"
+      message: "杭州今天天气怎么样？"
   - task: "@ChatModel"
     meta:
       systemPrompt: "你是个天气预报员"

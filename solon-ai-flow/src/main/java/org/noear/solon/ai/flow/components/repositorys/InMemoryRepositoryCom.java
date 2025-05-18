@@ -94,6 +94,11 @@ public class InMemoryRepositoryCom extends AbsAiComponent implements AiIoCompone
             List<Document> documents = repository.search((String) data);
             data = ChatMessage.augment((String) data, documents);
             setOutput(context, node, data);
+        } else if (data instanceof ChatMessage) {
+            //查询
+            List<Document> documents = repository.search(((ChatMessage) data).getContent());
+            data = ChatMessage.augment(((ChatMessage) data).getContent(), documents);
+            setOutput(context, node, data);
         } else if (data instanceof Document) {
             //插入
             repository.insert(Arrays.asList((Document) data));
