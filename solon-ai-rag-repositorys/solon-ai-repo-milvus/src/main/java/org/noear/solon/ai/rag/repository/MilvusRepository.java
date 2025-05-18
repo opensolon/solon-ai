@@ -252,7 +252,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
     public static class Builder {
         private final EmbeddingModel embeddingModel;
         private final MilvusClientV2 client;
-        private String collectionName = "solon-ai";
+        private String collectionName = "solon_ai";//不能用 -
 
         public Builder(EmbeddingModel embeddingModel, MilvusClientV2 client) {
             this.embeddingModel = embeddingModel;
