@@ -22,13 +22,13 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 
 /**
- * 文本输入组件
+ * 变量输入组件
  *
  * @author noear
  * @since 3.3
  */
-@Component("TextInput")
-public class TextInputCom extends AbsAiComponent implements AiIoComponent {
+@Component("VarInput")
+public class VarInputCom extends AbsAiComponent implements AiIoComponent {
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
         Object input = getInput(context, node);

@@ -2,7 +2,7 @@
 id: pk_case1
 layout:
   - type: "start"
-  - task: "@TextInput"
+  - task: "@VarInput"
     meta:
       message: "你好"
   - task: "@ChatModel"

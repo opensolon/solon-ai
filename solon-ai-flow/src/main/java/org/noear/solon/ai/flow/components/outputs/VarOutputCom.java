@@ -28,13 +28,13 @@ import reactor.core.publisher.Flux;
 import java.util.concurrent.CountDownLatch;
 
 /**
- * 文本输出组件
+ * 变量输出组件
  *
  * @author noear
  * @since 3.3
  */
-@Component("TextOutput")
-public class TextOutputCom extends AbsAiComponent implements AiIoComponent {
+@Component("VarOutput")
+public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
         Object data = getInput(context, node);

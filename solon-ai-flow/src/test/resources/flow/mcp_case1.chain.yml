@@ -1,7 +1,7 @@
 
 id: mcp_case1
 layout:
-  - task: "@TextInput"
+  - task: "@VarInput"
     meta:
       message: "杭州今天天气怎么样?"
   - task: "@McpTool"

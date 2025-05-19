@@ -35,9 +35,9 @@ flowEngine.eval("chat_case1");
 ```yaml
 id: chat_case1
 layout:
-  - task: "@TextInput"
+  - task: "@VarInput"
     meta:
-      text: "你好"
+      message: "你好"
   - task: "@ChatModel"
     meta:
       systemPrompt: "你是个聊天助手"
@@ -60,9 +60,9 @@ flowEngine.eval("rag_case1");
 ```yaml
 id: rag_case1
 layout:
-  - task: "@TextInput"
+  - task: "@VarInput"
     meta:
-      text: "Solon 是谁开发的？"
+      message: "Solon 是谁开发的？"
   - task: "@EmbeddingModel"
     meta:
       embeddingConfig: # "@type": "org.noear.solon.ai.embedding.EmbeddingConfig"
@@ -98,9 +98,9 @@ flowEngine.eval("tool_case1");
 ```yaml
 id: tool_case1
 layout:
-  - task: "@TextInput"
+  - task: "@VarInput"
     meta:
-      text: "杭州今天天气怎么样？"
+      message: "杭州今天天气怎么样？"
   - task: "@ChatModel"
     meta:
       systemPrompt: "你是个天气预报员"
@@ -125,9 +125,9 @@ flowEngine.eval("mcp_case1");
 ```yaml
 id: mcp_case1
 layout:
-  - task: "@TextInput"
+  - task: "@VarInput"
     meta:
-      text: "杭州今天天气怎么样?"
+      message: "杭州今天天气怎么样?"
   - task: "@McpTool"
     meta:
       mcpConfig:
@@ -155,9 +155,9 @@ flowEngine.eval("pk_case1");
 id: pk_case1
 layout:
   - type: "start"
-  - task: "@TextInput"
+  - task: "@VarInput"
     meta:
-      text: "你好"
+      message: "你好"
   - task: "@ChatModel"
     id: model_a
     meta:

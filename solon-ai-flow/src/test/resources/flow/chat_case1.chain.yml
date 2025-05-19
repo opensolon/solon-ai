@@ -1,7 +1,7 @@
 
 id: chat_case1
 layout:
-  - task: "@TextInput"
+  - task: "@VarInput"
     meta:
       message: "你好"
   - task: "@ChatModel"
