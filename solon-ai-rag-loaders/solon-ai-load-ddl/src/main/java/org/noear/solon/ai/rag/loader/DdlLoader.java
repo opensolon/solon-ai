@@ -27,7 +27,7 @@ import org.noear.solon.lang.Preview;
 import javax.sql.DataSource;
 
 /**
- * JDBC表结构 加载器
+ * DDL 加载器
  * <p>
  * 读取表结构DDL，并转换为文本
  * </p>
@@ -36,14 +36,14 @@ import javax.sql.DataSource;
  * @since 3.3
  */
 @Preview("3.3")
-public class JdbcLoader extends AbstractOptionsDocumentLoader<JdbcLoader.Options, JdbcLoader> {
+public class DdlLoader extends AbstractOptionsDocumentLoader<DdlLoader.Options, DdlLoader> {
     private final DataSource dataSource;
-    private final JdbcLoadConfig jdbcLoadConfig;
+    private final DdlLoadConfig jdbcLoadConfig;
 
-    public JdbcLoader(DataSource dataSource) {
+    public DdlLoader(DataSource dataSource) {
         this.dataSource = dataSource;
         //默认支持mysql
-        this.jdbcLoadConfig = new JdbcLoadConfig.Builder()
+        this.jdbcLoadConfig = new DdlLoadConfig.Builder()
                 .shcemaTableQuerySql(" select TABLE_SCHEMA, TABLE_NAME from information_schema.TABLES where TABLE_SCHEMA not in ('mysql', 'sys', 'information_schema') ")
                 .shcemaTableQueryAndSchemaSqlTemplate(" and TABLE_SCHEMA = '%s' ")
                 .shcemaTableQueryAndTableSqlTemplate(" and TABLE_SCHEMA = '%s' and TABLE_NAME = '%s' ")
@@ -54,7 +54,7 @@ public class JdbcLoader extends AbstractOptionsDocumentLoader<JdbcLoader.Options
         this.options = new Options();
     }
 
-    public JdbcLoader(DataSource dataSource, JdbcLoadConfig jdbcLoadConfig) {
+    public DdlLoader(DataSource dataSource, DdlLoadConfig jdbcLoadConfig) {
         this.dataSource = dataSource;
         this.jdbcLoadConfig = jdbcLoadConfig;
         this.options = new Options();
@@ -82,17 +82,23 @@ public class JdbcLoader extends AbstractOptionsDocumentLoader<JdbcLoader.Options
 
             try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
                 ResultSet rowSet = preparedStatement.executeQuery();
+
                 while (rowSet.next()) {
                     //每张表单独转化
                     String tableSchema = rowSet.getString(this.jdbcLoadConfig.getShcemaTableQueryResultSchemeNameColumn());
                     String tableName = rowSet.getString(this.jdbcLoadConfig.getShcemaTableQueryResultTableNameColumn());
                     String showddl = String.format(this.jdbcLoadConfig.getDdlQuerySqlTemplate(), tableSchema, tableName);
+
                     try (PreparedStatement showddlPrepareStatement = connection.prepareStatement(showddl)) {
                         ResultSet showddlResultSet = showddlPrepareStatement.executeQuery();
+
                         if (showddlResultSet.next()) {
                             String tableddl = showddlResultSet.getString(this.jdbcLoadConfig.getDdlQueryResultDdlNameColumn());
                             String fullDDL = "CREATE TABLE `" + tableSchema + "`.`" + tableName + "` " + tableddl.substring(tableddl.indexOf("("));
-                            Document doc = new Document(fullDDL).metadata(this.additionalMetadata);
+
+                            Document doc = new Document(fullDDL)
+                                    .metadata("table", tableName)
+                                    .metadata(this.additionalMetadata);
                             documents.add(doc);
                         }
                     }

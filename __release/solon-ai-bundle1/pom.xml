@@ -27,10 +27,10 @@
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-ollama</module>
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-openai</module>
 
+        <module>../../solon-ai-rag-loaders/solon-ai-load-ddl</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-excel</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-html</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-markdown</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-jdbc</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-pdf</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-ppt</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-word</module>

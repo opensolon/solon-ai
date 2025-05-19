@@ -16,12 +16,12 @@
 package org.noear.solon.ai.rag.loader;
 
 /**
- * JDBC 加载配置
+ * DDL 加载配置
  *
  * @author 刘颜
  * @since 3.3
  */
-public class JdbcLoadConfig {
+public class DdlLoadConfig {
     private String shcemaTableQuerySql;
     private String shcemaTableQueryAndSchemaSqlTemplate;
     private String shcemaTableQueryAndTableSqlTemplate;
@@ -31,7 +31,7 @@ public class JdbcLoadConfig {
     private String ddlQuerySqlTemplate;
     private String ddlQueryResultDdlNameColumn;
 
-    public JdbcLoadConfig(String shcemaTableQuerySql, String shcemaTableQueryAndSchemaSqlTemplate, String shcemaTableQueryAndTableSqlTemplate, String shcemaTableQueryResultSchemeNameColumn, String shcemaTableQueryResultTableNameColumn, String ddlQuerySqlTemplate, String ddlQueryResultDdlNameColumn) {
+    public DdlLoadConfig(String shcemaTableQuerySql, String shcemaTableQueryAndSchemaSqlTemplate, String shcemaTableQueryAndTableSqlTemplate, String shcemaTableQueryResultSchemeNameColumn, String shcemaTableQueryResultTableNameColumn, String ddlQuerySqlTemplate, String ddlQueryResultDdlNameColumn) {
         this.shcemaTableQuerySql = shcemaTableQuerySql;
         this.shcemaTableQueryAndSchemaSqlTemplate = shcemaTableQueryAndSchemaSqlTemplate;
         this.shcemaTableQueryAndTableSqlTemplate = shcemaTableQueryAndTableSqlTemplate;
@@ -85,8 +85,8 @@ public class JdbcLoadConfig {
             return this;
         }
 
-        public JdbcLoadConfig build() {
-            return new JdbcLoadConfig(this.shcemaTableQuerySql, this.shcemaTableQueryAndSchemaSqlTemplate, this.shcemaTableQueryAndTableSqlTemplate, this.shcemaTableQueryResultSchemeNameColumn, this.shcemaTableQueryResultTableNameColumn, this.ddlQuerySqlTemplate, this.ddlQueryResultDdlNameColumn);
+        public DdlLoadConfig build() {
+            return new DdlLoadConfig(this.shcemaTableQuerySql, this.shcemaTableQueryAndSchemaSqlTemplate, this.shcemaTableQueryAndTableSqlTemplate, this.shcemaTableQueryResultSchemeNameColumn, this.shcemaTableQueryResultTableNameColumn, this.ddlQuerySqlTemplate, this.ddlQueryResultDdlNameColumn);
         }
     }
 

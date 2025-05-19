@@ -11,7 +11,7 @@
         <relativePath>../../solon-ai-parent/pom.xml</relativePath>
     </parent>
     
-    <artifactId>solon-ai-load-jdbc</artifactId>
+    <artifactId>solon-ai-load-ddl</artifactId>
     <packaging>jar</packaging>
 
     <dependencies>

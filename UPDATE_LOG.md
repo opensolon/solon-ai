@@ -1,7 +1,7 @@
 ### 3.3.1
 
 * 新增 solon-ai-flow 插件
-* 新增 solon-ai-load-jdbc 插件
+* 新增 solon-ai-load-ddl 插件
 * 添加 solon-ai-core ChatMessage:ofUser(media) 方法
 * 添加 solon-ai-core ChatSession:addMessage(ChatPrompt) 方法
 * 添加 solon-ai-core ChatSession:addMessage(Collection) 方法
