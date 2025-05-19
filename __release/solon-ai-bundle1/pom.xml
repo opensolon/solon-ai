@@ -30,6 +30,7 @@
         <module>../../solon-ai-rag-loaders/solon-ai-load-excel</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-html</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-markdown</module>
+        <module>../../solon-ai-rag-loaders/solon-ai-load-mysql</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-pdf</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-ppt</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-word</module>

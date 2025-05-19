@@ -35,6 +35,7 @@ flowEngine.eval("chat_case1");
 ```yaml
 id: chat_case1
 layout:
+  - type: "start"
   - task: "@VarInput"
     meta:
       message: "你好"
@@ -60,6 +61,7 @@ flowEngine.eval("rag_case1");
 ```yaml
 id: rag_case1
 layout:
+  - type: "start"
   - task: "@VarInput"
     meta:
       message: "Solon 是谁开发的？"
@@ -98,6 +100,7 @@ flowEngine.eval("tool_case1");
 ```yaml
 id: tool_case1
 layout:
+  - type: "start"
   - task: "@VarInput"
     meta:
       message: "杭州今天天气怎么样？"
@@ -125,6 +128,7 @@ flowEngine.eval("mcp_case1");
 ```yaml
 id: mcp_case1
 layout:
+  - type: "start"
   - task: "@VarInput"
     meta:
       message: "杭州今天天气怎么样?"

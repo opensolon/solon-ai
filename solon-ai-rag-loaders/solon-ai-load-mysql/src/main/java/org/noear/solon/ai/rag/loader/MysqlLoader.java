@@ -59,8 +59,10 @@ public class MysqlLoader extends AbstractOptionsDocumentLoader<MysqlLoader.Optio
         config.setJdbcUrl(this.url);
         config.setUsername(this.username);
         config.setPassword(this.password);
+
         String targetSchema = options.targetSchema;
         String targetTable = options.targetTable;
+
         try (HikariDataSource hikariDataSource = new HikariDataSource(config)) {
             try (Connection connection = hikariDataSource.getConnection()) {
                 String sql = "select TABLE_SCHEMA, TABLE_NAME from information_schema.TABLES where TABLE_SCHEMA not in ('mysql', 'sys', 'information_schema')";
