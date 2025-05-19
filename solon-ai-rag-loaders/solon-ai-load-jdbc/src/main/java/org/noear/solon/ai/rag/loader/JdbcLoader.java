@@ -37,8 +37,8 @@ import javax.sql.DataSource;
  */
 @Preview("3.3")
 public class JdbcLoader extends AbstractOptionsDocumentLoader<JdbcLoader.Options, JdbcLoader> {
-    private DataSource dataSource;
-    private JdbcLoadConfig jdbcLoadConfig;
+    private final DataSource dataSource;
+    private final JdbcLoadConfig jdbcLoadConfig;
 
     public JdbcLoader(DataSource dataSource) {
         this.dataSource = dataSource;
@@ -51,13 +51,13 @@ public class JdbcLoader extends AbstractOptionsDocumentLoader<JdbcLoader.Options
                 .shcemaTableQueryResultTableNameColumn("TABLE_NAME")
                 .ddlQuerySqlTemplate(" SHOW CREATE TABLE `%s`.`%s` ")
                 .ddlQueryResultDdlNameColumn("Create Table").build();
-        options = new Options();
+        this.options = new Options();
     }
 
     public JdbcLoader(DataSource dataSource, JdbcLoadConfig jdbcLoadConfig) {
         this.dataSource = dataSource;
         this.jdbcLoadConfig = jdbcLoadConfig;
-        options = new Options();
+        this.options = new Options();
     }
 
     @Override
@@ -69,6 +69,7 @@ public class JdbcLoader extends AbstractOptionsDocumentLoader<JdbcLoader.Options
 
         try (Connection connection = dataSource.getConnection()) {
             String sql = this.jdbcLoadConfig.getShcemaTableQuerySql();
+
             if (StringUtil.isEmpty(targetSchema)) {
                 //全库全表
             } else if (StringUtil.isEmpty(targetTable)) {
@@ -78,6 +79,7 @@ public class JdbcLoader extends AbstractOptionsDocumentLoader<JdbcLoader.Options
                 //单库单表
                 sql = sql.concat(String.format(this.jdbcLoadConfig.getShcemaTableQueryAndTableSqlTemplate(), targetSchema, targetTable));
             }
+
             try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
                 ResultSet rowSet = preparedStatement.executeQuery();
                 while (rowSet.next()) {
@@ -96,7 +98,9 @@ public class JdbcLoader extends AbstractOptionsDocumentLoader<JdbcLoader.Options
                     }
                 }
             }
-        } catch (RuntimeException | SQLException e) {
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (SQLException e) {
             throw new RuntimeException(e);
         }
 
