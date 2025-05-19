@@ -31,8 +31,9 @@ import org.noear.solon.flow.Node;
 public class VarInputCom extends AbsAiComponent implements AiIoComponent {
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
-        Object input = getInput(context, node);
-
-        setOutput(context, node, input);
+        //所有元信息，转为上下文变量
+        node.getMetas().forEach((k, v) -> {
+            context.put(k, v);
+        });
     }
 }
