@@ -171,7 +171,7 @@ layout:
   - task: "@VarOutput"
   - task: "@ConsoleOutput"
     meta:
-      prefix: "阿飞: "
+      format: "阿飞：#{message}"
   - task: "@ChatModel"
     id: model_b
     meta:
@@ -185,7 +185,7 @@ layout:
   - task: "@VarOutput"
   - task: "@ConsoleOutput"
     meta:
-      prefix: "阿紫: "
+      format: "阿紫：#{message}"
   - type: "exclusive"
     link:
       - nextId: model_a

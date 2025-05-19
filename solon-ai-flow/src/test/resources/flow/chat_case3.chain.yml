@@ -15,7 +15,7 @@ layout:
   - task: "@VarOutput"
   - task: "@ConsoleOutput"
     meta:
-      prefix: "机器人："
+      format: "机器人：#{message}"
   - type: "exclusive"
     link:
       - nextId: input

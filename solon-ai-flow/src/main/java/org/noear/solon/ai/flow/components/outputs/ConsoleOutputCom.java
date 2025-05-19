@@ -21,9 +21,12 @@ import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.annotation.Component;
+import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 import java.util.concurrent.CountDownLatch;
@@ -36,11 +39,14 @@ import java.util.concurrent.CountDownLatch;
  */
 @Component("ConsoleOutput")
 public class ConsoleOutputCom extends AbsAiComponent implements AiIoComponent {
+    static final Logger log = LoggerFactory.getLogger(ConsoleOutputCom.class);
     //私有元信息
-    static final String META_PREFIX = "prefix";
+    static final String META_FORMAT = "format";
 
     @Override
-    public void setOutput(FlowContext context, Node node, Object data) throws Throwable {
+    protected void doRun(FlowContext context, Node node) throws Throwable {
+        Object data = getInput(context, node);
+
         final StringBuilder buf = new StringBuilder();
 
         if (data instanceof Publisher) {
@@ -55,7 +61,7 @@ public class ConsoleOutputCom extends AbsAiComponent implements AiIoComponent {
                         latch.countDown();
                     })
                     .doOnError(err -> {
-                        err.printStackTrace();
+                        log.warn(err.getMessage(), err);
                         latch.countDown();
                     })
                     .subscribe();
@@ -76,18 +82,17 @@ public class ConsoleOutputCom extends AbsAiComponent implements AiIoComponent {
         }
 
         data = buf.toString();
-        String prefix = node.getMeta(META_PREFIX);
-        if (Utils.isEmpty(prefix)) {
+
+        //先做为上下文的一部分
+        setOutput(context, node, data);
+
+        //格式化输出
+        String format = node.getMeta(META_FORMAT);
+        if (Utils.isEmpty(format)) {
             System.out.println(data);
         } else {
-            System.out.println(prefix + data);
+            String formatted = SnEL.evalTmpl(format, context.model());
+            System.out.println(formatted);
         }
-    }
-
-    @Override
-    protected void doRun(FlowContext context, Node node) throws Throwable {
-        Object data = getInput(context, node);
-
-        setOutput(context, node, data);
     }
 }

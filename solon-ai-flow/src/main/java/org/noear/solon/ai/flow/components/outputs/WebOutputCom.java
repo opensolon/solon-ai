@@ -26,6 +26,8 @@ import org.noear.solon.core.util.MimeType;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 /**
@@ -36,7 +38,7 @@ import reactor.core.publisher.Flux;
  */
 @Component("WebOutput")
 public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
-    static final String META_MIME_TYPE = "mimeType";
+    static final Logger log = LoggerFactory.getLogger(WebOutputCom.class);
 
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
