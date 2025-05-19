@@ -16,20 +16,11 @@
 package org.noear.solon.ai.flow.components.outputs;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
-import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
-import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Flux;
-
-import java.util.concurrent.CountDownLatch;
 
 /**
  * 控制台输出组件
@@ -38,53 +29,13 @@ import java.util.concurrent.CountDownLatch;
  * @since 3.3
  */
 @Component("ConsoleOutput")
-public class ConsoleOutputCom extends AbsAiComponent implements AiIoComponent {
-    static final Logger log = LoggerFactory.getLogger(ConsoleOutputCom.class);
+public class ConsoleOutputCom extends VarOutputCom implements AiIoComponent {
     //私有元信息
     static final String META_FORMAT = "format";
 
     @Override
-    protected void doRun(FlowContext context, Node node) throws Throwable {
-        Object data = getInput(context, node);
-
-        final StringBuilder buf = new StringBuilder();
-
-        if (data instanceof Publisher) {
-            CountDownLatch latch = new CountDownLatch(1);
-            Flux.from((Publisher<ChatResponse>) data)
-                    .filter(resp -> resp.hasChoices())
-                    .map(resp -> resp.getMessage())
-                    .doOnNext(msg -> {
-                        buf.append(msg.getContent());
-                    })
-                    .doOnComplete(() -> {
-                        latch.countDown();
-                    })
-                    .doOnError(err -> {
-                        log.warn(err.getMessage(), err);
-                        latch.countDown();
-                    })
-                    .subscribe();
-
-            latch.await();
-        } else if (data instanceof ChatResponse) {
-            ChatResponse resp = (ChatResponse) data;
-            data = resp.getMessage().getContent();
-
-            buf.append(data);
-        } else if (data instanceof ImageResponse) {
-            ImageResponse resp = (ImageResponse) data;
-            data = resp.getImage().getUrl();
-
-            buf.append(data);
-        } else {
-            buf.append(data);
-        }
-
-        data = buf.toString();
-
-        //先做为上下文的一部分
-        setOutput(context, node, data);
+    public void setOutput(FlowContext context, Node node, Object data) throws Throwable {
+        super.setOutput(context, node, data);
 
         //格式化输出
         String format = node.getMeta(META_FORMAT);

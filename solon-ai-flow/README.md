@@ -168,7 +168,6 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - task: "@VarOutput"
   - task: "@ConsoleOutput"
     meta:
       format: "阿飞：#{message}"
@@ -182,7 +181,6 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - task: "@VarOutput"
   - task: "@ConsoleOutput"
     meta:
       format: "阿紫：#{message}"

@@ -23,6 +23,8 @@ import org.noear.solon.annotation.Component;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 import java.util.concurrent.CountDownLatch;
@@ -35,6 +37,8 @@ import java.util.concurrent.CountDownLatch;
  */
 @Component("VarOutput")
 public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
+    static final Logger log = LoggerFactory.getLogger(VarOutputCom.class);
+
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
         Object data = getInput(context, node);
@@ -53,7 +57,7 @@ public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
                         latch.countDown();
                     })
                     .doOnError(err -> {
-                        err.printStackTrace();
+                        log.error(err.getMessage(), err);
                         latch.countDown();
                     })
                     .subscribe();
