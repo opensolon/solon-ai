@@ -168,7 +168,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - task: "@TextOutput"
+  - task: "@VarOutput"
   - task: "@ConsoleOutput"
     meta:
       prefix: "阿飞: "
@@ -182,7 +182,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
-  - task: "@TextOutput"
+  - task: "@VarOutput"
   - task: "@ConsoleOutput"
     meta:
       prefix: "阿紫: "
