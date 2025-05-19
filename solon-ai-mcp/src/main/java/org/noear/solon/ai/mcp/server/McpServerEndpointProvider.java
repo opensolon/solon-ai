@@ -76,7 +76,12 @@ public class McpServerEndpointProvider implements LifecycleBean {
     public McpServerEndpointProvider(McpServerProperties serverProperties) {
         this.serverProperties = serverProperties;
         this.sseEndpoint = serverProperties.getSseEndpoint();
-        this.messageEndpoint = PathUtil.mergePath(this.sseEndpoint, "message");
+
+        if (Utils.isEmpty(serverProperties.getMessageEndpoint())) {
+            this.messageEndpoint = PathUtil.mergePath(this.sseEndpoint, "message");
+        } else {
+            this.messageEndpoint = serverProperties.getMessageEndpoint();
+        }
 
         if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
             //stdio 通道
@@ -394,6 +399,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
             String version = Solon.cfg().getByTmpl(endpointAnno.version());
             String channel = Solon.cfg().getByTmpl(endpointAnno.channel());
             String sseEndpoint = Solon.cfg().getByTmpl(endpointAnno.sseEndpoint());
+            String messageEndpoint = Solon.cfg().getByTmpl(endpointAnno.messageEndpoint());
             String heartbeatInterval = Solon.cfg().getByTmpl(endpointAnno.heartbeatInterval());
 
 
@@ -406,6 +412,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
             props.setVersion(version);
             props.setChannel(channel);
             props.setSseEndpoint(sseEndpoint);
+            props.setMessageEndpoint(messageEndpoint);
 
             if (Utils.isEmpty(heartbeatInterval)) {
                 props.setHeartbeatInterval(null); //表示不启用
@@ -445,6 +452,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
          */
         public Builder sseEndpoint(String sseEndpoint) {
             props.setSseEndpoint(sseEndpoint);
+            return this;
+        }
+
+        /**
+         * Message 端点
+         */
+        public Builder messageEndpoint(String messageEndpoint) {
+            props.setMessageEndpoint(messageEndpoint);
             return this;
         }
 

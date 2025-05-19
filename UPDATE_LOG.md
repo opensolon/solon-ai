@@ -7,6 +7,7 @@
 * 添加 solon-ai-core RerankingConfig,RerankingModel toString 方法
 * 添加 solon-ai-core 模型的网络代理支持（支持简单配置，和复杂构建）
 * 添加 solon-ai-mcp 客户端的网络代理简单配置支持
+* 添加 solon-ai-mcp messageEndpoint 端点配置支持（应对特殊需求，一般自动更好）
 * 添加 solon-ai-mcp ToolMapping,ResourceMapping 注解方法对 Produces 注解的支持（用它可指定结果转换处理）
 * 添加 solon-ai-mcp ToolCallResultConverter:matched 方法
 * 添加 solon-ai-mcp 资源模板的响应适配

@@ -50,6 +50,11 @@ public @interface McpServerEndpoint {
     String sseEndpoint() default "/sse";
 
     /**
+     * Message 端点（默认根据 sse 端点自动构建）
+     */
+    String messageEndpoint() default "";
+
+    /**
      * 服务器SSE心跳间隔（空表示不启用）
      */
     String heartbeatInterval() default "30s";

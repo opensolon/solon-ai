@@ -47,9 +47,14 @@ public class McpServerProperties {
     private String channel = McpChannel.SSE;
 
     /**
-     * 端点（路径）
+     * sse 端点（路径）
      */
     private String sseEndpoint = "/sse";
+
+    /**
+     * message 端点（路径）
+     */
+    private String messageEndpoint;
 
     /**
      * 服务器SSE心跳间隔（空表示不启用）
