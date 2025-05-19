@@ -120,33 +120,32 @@ chatModel.prompt(message)
 ```yaml
 id: demo1
 layout:
-  - title: "开始"
-    type: start
-  - title: "文件提取"
-    meta.input: "file" # 可视界面的配置（通过元信息表示）
-    meta.output: "fileTxt"
-    task: @FileLoaderCom
-  - title: "LLM"
-    meta.model: "Qwen/Qwen2.5-72B-Instruct" # 可视界面的配置（通过元信息表示）
-    meta.input: "fileTxt"
-    meta.messages:
-      - role: system
-        content: "#角色\n你是一个数据专家，删除数据的格式整理和转换\n\n#上下文\n${fileTxt}\n\n#任务\n提取csv格式的字符串"
-    task: @ChatModelCom
-  - title: "参数提取器"
-    meta.model: "Qwen/Qwen2.5-72B-Instruct" # 可视界面的配置（通过元信息表示）
-    meta.output: "csvData"
-    task: @ParamExtractionCom
-  - title: "执行代码"
-    meta.input: "csvData"
-    task: |
-      import com.demo.DataUtils;
-      
-      String json = DataUtils.csvToJson(node.meta().get("meta.input"));  //转为 json 数据
-      String echatCode = DataUtils.jsonAsEchatCode(json); //转为 echat 图表代码
-      context.result = echatCode; //做为结果返回
-  - title: "结束"
-    type: end
+  - type: "start"
+  - task: "@VarInput"
+    meta:
+      message: "Solon 是谁开发的？"
+  - task: "@EmbeddingModel"
+    meta:
+      embeddingConfig: # "@type": "org.noear.solon.ai.embedding.EmbeddingConfig"
+        provider: "ollama"
+        model: "bge-m3"
+        apiUrl: "http://127.0.0.1:11434/api/embed"
+  - task: "@InMemoryRepository"
+    meta:
+      documentSources:
+        - "https://solon.noear.org/article/about?format=md"
+      splitPipeline:
+        - "org.noear.solon.ai.rag.splitter.RegexTextSplitter"
+        - "org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter"
+  - task: "@ChatModel"
+    meta:
+      systemPrompt: "你是个知识库"
+      stream: false
+      chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
+        provider: "ollama"
+        model: "qwen2.5:1.5b"
+        apiUrl: "http://127.0.0.1:11434/api/chat"
+  - task: "@ConsoleOutput"
 
 # FlowEngine flowEngine = FlowEngine.newInstance();
 # ...
