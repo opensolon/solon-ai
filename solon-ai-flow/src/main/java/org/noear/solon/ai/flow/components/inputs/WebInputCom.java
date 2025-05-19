@@ -45,10 +45,21 @@ public class WebInputCom extends AbsAiComponent implements AiIoComponent {
 
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
-        Object data = getInput(context, node);
-        Object attachment = getAttachment(context, node);
+        Object message = AiIoComponent.super.getInput(context, node);
+        if (message == null) {
+            message = getInput(context, node);
+        }
 
-        setOutput(context, node, data);
+        Object attachment = AiIoComponent.super.getAttachment(context, node);
+        if (attachment == null) {
+            attachment = getAttachment(context, node);
+        }
+
+        if (message == null && attachment != null) {
+            throw new IllegalArgumentException("The input and attachment is null");
+        }
+
+        setOutput(context, node, message);
         setAttachment(context, node, attachment);
     }
 }
