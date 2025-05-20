@@ -22,8 +22,26 @@ package org.noear.solon.ai.rag.util;
  * @since 3.1
  */
 public enum Freshness {
-
-	ONE_DAY("oneDay"), ONE_WEEK("oneWeek"), ONE_MONTH("oneMonth"), ONE_YEAR("oneYear"), NO_LIMIT("noLimit");
+	/**
+	 * 一天内
+	 */
+	ONE_DAY("oneDay"),
+	/**
+	 * 一周内
+	 */
+	ONE_WEEK("oneWeek"),
+	/**
+	 * 一月内
+	 */
+	ONE_MONTH("oneMonth"),
+	/**
+	 * 一年内
+	 */
+	ONE_YEAR("oneYear"),
+	/**
+	 * 不限
+	 */
+	NO_LIMIT("noLimit");
 
 	public final String value;
 

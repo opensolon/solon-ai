@@ -88,18 +88,20 @@ public class QueryCondition {
 
     /**
      * 获取搜索类型
+     *
+     * @since 3.3
      */
     public SearchType getSearchType() {
         return searchType;
     }
 
+    /**
+     * 获取混合搜索参数
+     *
+     * @since 3.3
+     */
     public HybridSearchParams getHybridSearchParams() {
         return hybridSearchParams;
-    }
-
-    public QueryCondition hybridSearchParams(HybridSearchParams hybridSearchParams) {
-        this.hybridSearchParams = hybridSearchParams;
-        return this;
     }
 
     /**
@@ -166,9 +168,22 @@ public class QueryCondition {
 
     /**
      * 配置搜索类型
+     *
+     * @since 3.3
      */
     public QueryCondition searchType(SearchType searchType) {
         this.searchType = searchType;
+        return this;
+    }
+
+
+    /**
+     * 混合搜索参数
+     *
+     * @since 3.3
+     */
+    public QueryCondition hybridSearchParams(HybridSearchParams hybridSearchParams) {
+        this.hybridSearchParams = hybridSearchParams;
         return this;
     }
 }

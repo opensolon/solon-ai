@@ -34,11 +34,16 @@ public class HybridSearchParams {
         this.fullTextWeight = fullTextWeight;
     }
 
-
+    /**
+     * 矢量权重
+     */
     public double getVectorWeight() {
         return vectorWeight;
     }
 
+    /**
+     * 全文权重
+     */
     public double getFullTextWeight() {
         return fullTextWeight;
     }
