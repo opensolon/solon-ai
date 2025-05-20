@@ -31,7 +31,16 @@ public class DdlLoadConfig {
     private String ddlQuerySqlTemplate;
     private String ddlQueryResultDdlNameColumn;
 
-    public DdlLoadConfig(String shcemaTableQuerySql, String shcemaTableQueryAndSchemaSqlTemplate, String shcemaTableQueryAndTableSqlTemplate, String shcemaTableQueryResultSchemeNameColumn, String shcemaTableQueryResultTableNameColumn, String ddlQuerySqlTemplate, String ddlQueryResultDdlNameColumn) {
+    private String fullDdlCreateTableSqlPrefix;
+    private boolean fullDdlCreateTableSqlNeedSchema;
+    private String fullDdlCreateTableSqlDot;
+    private String fullDdlCreateTableSqlLeftDelimitedIdentifier;
+    private String fullDdlCreateTableSqlRightDelimitedIdentifier;
+    private String fullDdlCreateTableSqlTruncationSymbol;
+
+    public DdlLoadConfig(String shcemaTableQuerySql, String shcemaTableQueryAndSchemaSqlTemplate, String shcemaTableQueryAndTableSqlTemplate, String shcemaTableQueryResultSchemeNameColumn, String shcemaTableQueryResultTableNameColumn,
+                         String ddlQuerySqlTemplate, String ddlQueryResultDdlNameColumn,
+                         String fullDdlCreateTableSqlPrefix, boolean fullDdlCreateTableSqlNeedSchema, String fullDdlCreateTableSqlDot, String fullDdlCreateTableSqlLeftDelimitedIdentifier, String fullDdlCreateTableSqlRightDelimitedIdentifier, String fullDdlCreateTableSqlTruncationSymbol) {
         this.shcemaTableQuerySql = shcemaTableQuerySql;
         this.shcemaTableQueryAndSchemaSqlTemplate = shcemaTableQueryAndSchemaSqlTemplate;
         this.shcemaTableQueryAndTableSqlTemplate = shcemaTableQueryAndTableSqlTemplate;
@@ -39,6 +48,12 @@ public class DdlLoadConfig {
         this.shcemaTableQueryResultTableNameColumn = shcemaTableQueryResultTableNameColumn;
         this.ddlQuerySqlTemplate = ddlQuerySqlTemplate;
         this.ddlQueryResultDdlNameColumn = ddlQueryResultDdlNameColumn;
+        this.fullDdlCreateTableSqlPrefix = fullDdlCreateTableSqlPrefix;
+        this.fullDdlCreateTableSqlNeedSchema = fullDdlCreateTableSqlNeedSchema;
+        this.fullDdlCreateTableSqlDot = fullDdlCreateTableSqlDot;
+        this.fullDdlCreateTableSqlLeftDelimitedIdentifier = fullDdlCreateTableSqlLeftDelimitedIdentifier;
+        this.fullDdlCreateTableSqlRightDelimitedIdentifier = fullDdlCreateTableSqlRightDelimitedIdentifier;
+        this.fullDdlCreateTableSqlTruncationSymbol = fullDdlCreateTableSqlTruncationSymbol;
     }
 
     public static class Builder {
@@ -49,6 +64,12 @@ public class DdlLoadConfig {
         private String shcemaTableQueryResultTableNameColumn;
         private String ddlQuerySqlTemplate;
         private String ddlQueryResultDdlNameColumn;
+        private String fullDdlCreateTableSqlPrefix;
+        private boolean fullDdlCreateTableSqlNeedSchema;
+        private String fullDdlCreateTableSqlDot;
+        private String fullDdlCreateTableSqlLeftDelimitedIdentifier;
+        private String fullDdlCreateTableSqlRightDelimitedIdentifier;
+        private String fullDdlCreateTableSqlTruncationSymbol;
 
         public Builder shcemaTableQuerySql(String shcemaTableQuerySql) {
             this.shcemaTableQuerySql = shcemaTableQuerySql;
@@ -85,8 +106,41 @@ public class DdlLoadConfig {
             return this;
         }
 
+        public Builder fullDdlCreateTableSqlPrefix(String fullDdlCreateTableSqlPrefix) {
+            this.fullDdlCreateTableSqlPrefix = fullDdlCreateTableSqlPrefix;
+            return this;
+        }
+
+        public Builder fullDdlCreateTableSqlNeedSchema(boolean fullDdlCreateTableSqlNeedSchema) {
+            this.fullDdlCreateTableSqlNeedSchema = fullDdlCreateTableSqlNeedSchema;
+            return this;
+        }
+
+        public Builder fullDdlCreateTableSqlDot(String fullDdlCreateTableSqlDot) {
+            this.fullDdlCreateTableSqlDot = fullDdlCreateTableSqlDot;
+            return this;
+        }
+
+        public Builder fullDdlCreateTableSqlLeftDelimitedIdentifier(String fullDdlCreateTableSqlLeftDelimitedIdentifier) {
+            this.fullDdlCreateTableSqlLeftDelimitedIdentifier = fullDdlCreateTableSqlLeftDelimitedIdentifier;
+            return this;
+        }
+
+        public Builder fullDdlCreateTableSqlRightDelimitedIdentifier(String fullDdlCreateTableSqlRightDelimitedIdentifier) {
+            this.fullDdlCreateTableSqlRightDelimitedIdentifier = fullDdlCreateTableSqlRightDelimitedIdentifier;
+            return this;
+        }
+
+        public Builder fullDdlCreateTableSqlTruncationSymbol(String fullDdlCreateTableSqlTruncationSymbol) {
+            this.fullDdlCreateTableSqlTruncationSymbol = fullDdlCreateTableSqlTruncationSymbol;
+            return this;
+        }
+
         public DdlLoadConfig build() {
-            return new DdlLoadConfig(this.shcemaTableQuerySql, this.shcemaTableQueryAndSchemaSqlTemplate, this.shcemaTableQueryAndTableSqlTemplate, this.shcemaTableQueryResultSchemeNameColumn, this.shcemaTableQueryResultTableNameColumn, this.ddlQuerySqlTemplate, this.ddlQueryResultDdlNameColumn);
+            return new DdlLoadConfig(this.shcemaTableQuerySql, this.shcemaTableQueryAndSchemaSqlTemplate, this.shcemaTableQueryAndTableSqlTemplate, this.shcemaTableQueryResultSchemeNameColumn, this.shcemaTableQueryResultTableNameColumn,
+                    this.ddlQuerySqlTemplate, this.ddlQueryResultDdlNameColumn,
+                    this.fullDdlCreateTableSqlPrefix, this.fullDdlCreateTableSqlNeedSchema, this.fullDdlCreateTableSqlDot, this.fullDdlCreateTableSqlLeftDelimitedIdentifier, this.fullDdlCreateTableSqlRightDelimitedIdentifier, this.fullDdlCreateTableSqlTruncationSymbol
+            );
         }
     }
 
@@ -116,5 +170,29 @@ public class DdlLoadConfig {
 
     public String getDdlQueryResultDdlNameColumn() {
         return ddlQueryResultDdlNameColumn;
+    }
+
+    public String getFullDdlCreateTableSqlPrefix() {
+        return fullDdlCreateTableSqlPrefix;
+    }
+
+    public boolean isFullDdlCreateTableSqlNeedSchema() {
+        return fullDdlCreateTableSqlNeedSchema;
+    }
+
+    public String getFullDdlCreateTableSqlDot() {
+        return fullDdlCreateTableSqlDot;
+    }
+
+    public String getFullDdlCreateTableSqlLeftDelimitedIdentifier() {
+        return fullDdlCreateTableSqlLeftDelimitedIdentifier;
+    }
+
+    public String getFullDdlCreateTableSqlRightDelimitedIdentifier() {
+        return fullDdlCreateTableSqlRightDelimitedIdentifier;
+    }
+
+    public String getFullDdlCreateTableSqlTruncationSymbol() {
+        return fullDdlCreateTableSqlTruncationSymbol;
     }
 }
