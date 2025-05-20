@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.message;
 
+import org.noear.solon.Utils;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.TmplUtil;
 import org.noear.solon.lang.Preview;
@@ -47,6 +48,17 @@ public class SystemMessageTemplate {
      */
     public SystemMessageTemplate paramAdd(String name, Object value) {
         params.put(name, value);
+        return this;
+    }
+
+    /**
+     * 配置参数
+     */
+    public SystemMessageTemplate paramAdd(Map<String, Object> args) {
+        if (Utils.isNotEmpty(args)) {
+            params.putAll(args);
+        }
+
         return this;
     }
 
