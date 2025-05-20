@@ -215,7 +215,8 @@ public class FunctionToolDesc implements FunctionTool {
                 outputSchema = outputSchemaNode.toJson();
             }
         }
-        return FunctionTool.super.outputSchema();
+
+        return outputSchema;
     }
 
     /**
@@ -246,7 +247,8 @@ public class FunctionToolDesc implements FunctionTool {
                 "name='" + name + '\'' +
                 ", description='" + description + '\'' +
                 ", returnDirect=" + returnDirect +
-                ", inputSchema=" + inputSchema +
+                ", inputSchema=" + inputSchema() +
+                ", outputSchema=" + outputSchema() +
                 '}';
     }
 }

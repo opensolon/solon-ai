@@ -19,7 +19,6 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Param;
-import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.wrap.ClassWrap;
 import org.noear.solon.core.wrap.FieldWrap;
 import org.noear.solon.lang.Nullable;
@@ -34,7 +33,9 @@ import java.util.*;
  * Tool 架构工具
  *
  * @author noear
+ * @author ityangs ityangs@163.com
  * @since 3.1
+ * @since 3.3
  */
 public class ToolSchemaUtil {
     public static final String TYPE_OBJECT = "object";
@@ -45,6 +46,9 @@ public class ToolSchemaUtil {
     public static final String TYPE_BOOLEAN = "boolean";
     public static final String TYPE_NULL = "null";
 
+    /**
+     * 构建参数申明
+     * */
     public static @Nullable ParamDesc paramOf(AnnotatedElement ae) {
         Param p1Anno = ae.getAnnotation(Param.class);
         if (p1Anno == null) {
@@ -100,11 +104,11 @@ public class ToolSchemaUtil {
     /**
      * 主入口方法：构建 Schema 节点（递归处理）
      *
-     * @Author ityangs@163.com
-     * @Date 2025/5/20 10:19
+     * @since 3.1
+     * @since 3.3
      */
     public static void buildToolParamNode(Type type, String description, ONode schemaNode) {
-        if (description != null && !description.isEmpty()) {
+        if (Utils.isNotEmpty(description)) {
             schemaNode.set("description", description);
         }
 
@@ -120,19 +124,15 @@ public class ToolSchemaUtil {
             return;
         }
 
-        // 默认 fallback 为 string 类型
+        // 默认为 string 类型
         schemaNode.set("type", TYPE_STRING);
     }
 
 
     /**
-     * @Description 处理 ParameterizedType 类型（如 Result<T>、List<T>、Map<K,V> 等）
-     * 并自动识别并解析带泛型字段的包装类（保留结构并替换泛型类型）
-     * @Param type
-     * @Param description
-     * @Param schemaNode
-     * @Author ityangs@163.com
-     * @Date 2025/5/20 10:19
+     * 处理 ParameterizedType 类型（如 Result<T>、List<T>、Map<K,V> 等），并自动识别并解析带泛型字段的包装类（保留结构并替换泛型类型）
+     *
+     * @since 3.3
      */
     private static void handleParameterizedType(ParameterizedType pt, String description, ONode schemaNode) {
         Type rawType = pt.getRawType();
@@ -161,13 +161,7 @@ public class ToolSchemaUtil {
             return;
         }
 
-        // —— 4. ResponseEntity<T> ——
-        if (isResponseEntityType(rawType)) {
-            buildToolParamNode(pt.getActualTypeArguments()[0], description, schemaNode);
-            return;
-        }
-
-        // —— 5. 泛型包装类（如 Result<T>）结构保留并解析字段泛型 ——
+        // —— 4. 泛型包装类 ——
         TypeVariable<?>[] typeParams = clazz.getTypeParameters();
         Type[] actualTypes = pt.getActualTypeArguments();
         if (typeParams.length == actualTypes.length) {
@@ -181,14 +175,9 @@ public class ToolSchemaUtil {
 
 
     /**
-     * @param clazz       原始类，如 Result
-     * @param actualTypes 实际类型参数，如 T => String、List<XX> 等
-     * @param schemaNode  输出的 JSON schema 节点
-     * @Description 解析带泛型的类结构（如 Result<T>）：
-     * - 替换字段中的泛型变量为实际类型
-     * - 保留原始类的字段结构生成 schema
-     * @Author ityangs@163.com
-     * @Date 2025/5/20 10:19
+     * 解析带泛型的类结构（如 Result<T>）：
+     *
+     * @since 3.3
      */
     private static void resolveGenericClassWithTypeArgs(Class<?> clazz, Type[] actualTypes, ONode schemaNode) {
         TypeVariable<?>[] typeParams = clazz.getTypeParameters();
@@ -221,12 +210,7 @@ public class ToolSchemaUtil {
 
 
     /**
-     * @Description 处理普通 Class 类型：数组、枚举、POJO 等
-     * @Param clazz
-     * @Param description
-     * @Param schemaNode
-     * @Author ityangs@163.com
-     * @Date 2025/5/20 10:21
+     * 处理普通 Class 类型：数组、枚举、POJO 等
      */
     private static void handleClassType(Class<?> clazz, String description, ONode schemaNode) {
         // 数组
@@ -256,13 +240,14 @@ public class ToolSchemaUtil {
             return;
         }
 
-        // 特殊类型处理：日期和 URI
+        // 特殊类型处理：日期
         if (Date.class.isAssignableFrom(clazz)) {
             schemaNode.set("type", TYPE_STRING);
             schemaNode.set("format", "date");
             return;
         }
 
+        // 特殊类型处理：uri
         if (URI.class.isAssignableFrom(clazz)) {
             schemaNode.set("type", TYPE_STRING);
             schemaNode.set("format", "uri");
@@ -274,11 +259,7 @@ public class ToolSchemaUtil {
     }
 
     /**
-     * @Description 处理泛型集合类型：List<T>
-     * @Param pt
-     * @Param schemaNode
-     * @Author ityangs@163.com
-     * @Date 2025/5/20 10:22
+     * 处理泛型集合类型：List<T>
      */
     private static void handleGenericCollection(ParameterizedType pt, ONode schemaNode) {
         schemaNode.set("type", TYPE_ARRAY);
@@ -290,11 +271,7 @@ public class ToolSchemaUtil {
 
 
     /**
-     * @Description 处理泛型 Map 类型：Map<K, V>
-     * @Param pt
-     * @Param schemaNode
-     * @Author ityangs@163.com
-     * @Date 2025/5/20 10:22
+     * 处理泛型 Map 类型：Map<K, V>
      */
     private static void handleGenericMap(ParameterizedType pt, ONode schemaNode) {
         schemaNode.set("type", TYPE_OBJECT);
@@ -305,11 +282,7 @@ public class ToolSchemaUtil {
     }
 
     /**
-     * @Description 处理枚举类型：设置 type 为 string，并添加 enum 值
-     * @Param clazz
-     * @Param schemaNode
-     * @Author ityangs@163.com
-     * @Date 2025/5/20 10:22
+     * 处理枚举类型：设置 type 为 string，并添加 enum 值
      */
     private static void handleEnumType(Class<?> clazz, ONode schemaNode) {
         schemaNode.set("type", TYPE_STRING);
@@ -322,11 +295,9 @@ public class ToolSchemaUtil {
 
 
     /**
-     * @Description 处理 POJO 类型（含字段映射）
-     * @Param clazz
-     * @Param schemaNode
-     * @Author ityangs@163.com
-     * @Date 2025/5/20 10:23
+     * 处理 POJO 类型（含字段映射）
+     *
+     * @since 3.3
      */
     private static void handleObjectType(Class<?> clazz, ONode schemaNode) {
         String typeStr = jsonTypeOfJavaType(clazz);
@@ -340,9 +311,10 @@ public class ToolSchemaUtil {
 
         schemaNode.getOrNew("properties").build(propertiesNode -> {
             propertiesNode.asObject();
+
             for (FieldWrap fw : ClassWrap.get(clazz).getAllFieldWraps()) {
-                Field field = fw.getField();
-                ParamDesc fp = paramOf(field);
+                ParamDesc fp = paramOf(fw.getField());
+
                 if (fp != null) {
                     propertiesNode.getOrNew(fp.name()).build(paramNode -> {
                         buildToolParamNode(fp.type(), fp.description(), paramNode);
@@ -360,28 +332,13 @@ public class ToolSchemaUtil {
 
 
     /**
-     * @Description 判断是否为 Optional 类型
-     * @Param rawType
-     * @Return boolean
-     * @Author ityangs@163.com
-     * @Date 2025/5/20 10:23
+     * 判断是否为 Optional 类型
+     *
+     * @since 3.3
      */
     private static boolean isOptionalType(Type rawType) {
         return rawType.getTypeName().startsWith("java.util.Optional");
     }
-
-
-    /**
-     * @Description 判断是否为 ResponseEntity 类型（或你自定义的包）
-     * @Param rawType
-     * @Return boolean
-     * @Author ityangs@163.com
-     * @Date 2025/5/20 10:23
-     */
-    private static boolean isResponseEntityType(Type rawType) {
-        return rawType.getTypeName().startsWith("org.springframework.http.ResponseEntity");
-    }
-
 
     /**
      * json 类型转换
@@ -402,6 +359,8 @@ public class ToolSchemaUtil {
 
     /**
      * 获取原始类型
+     *
+     * @since 3.3
      */
     public static Class<?> getRawClass(Type type) {
         if (type instanceof ParameterizedType) {
