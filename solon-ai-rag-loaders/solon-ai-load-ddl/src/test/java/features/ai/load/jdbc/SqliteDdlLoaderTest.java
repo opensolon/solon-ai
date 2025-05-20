@@ -19,10 +19,11 @@ public class SqliteDdlLoaderTest {
 
     private static DataSource ds;
     private static DdlLoadConfig ddlLoadConfig;
-    ;
+
 
     public SqliteDdlLoaderTest() throws IOException {
-        String sqlurl = "jdbc:sqlite:D:/xxxx/solon-ai/solon-ai-rag-loaders/solon-ai-load-ddl/src/test/resources/sqlite.db";
+        String userDir = System.getProperty("user.dir");
+        String sqlurl = "jdbc:sqlite:" + userDir + "/src/test/resources/sqlite.db";
         String sqlusername = "";
         String sqlpassword = "";
 
