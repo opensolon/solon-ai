@@ -24,14 +24,11 @@ import org.noear.solon.core.wrap.ClassWrap;
 import org.noear.solon.core.wrap.FieldWrap;
 import org.noear.solon.lang.Nullable;
 
-import java.lang.reflect.AnnotatedElement;
-import java.lang.reflect.Field;
-import java.lang.reflect.Parameter;
+import java.lang.reflect.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URI;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 /**
  * Tool 架构工具
@@ -99,71 +96,294 @@ public class ToolSchemaUtil {
         return schemaParentNode;
     }
 
+
     /**
-     * 构建工具参数节点
-     *
-     * @param type        类型
-     * @param description 描述
-     * @param schemaNode  架构节点
+     * @Description 主入口方法：构建 Schema 节点（递归处理）
+     * @Param type
+     * @Param description
+     * @Param schemaNode
+     * @Author ityangs@163.com
+     * @Date 2025/5/20 10:19
      */
-    public static void buildToolParamNode(Class<?> type, String description, ONode schemaNode) {
-        if (type.isArray()) {
-            //数组
-            schemaNode.set("type", TYPE_ARRAY);
-
-            Class<?> itemType = type.getComponentType();
-            ONode typeItemSchemaNode = schemaNode.getOrNew("items");
-            buildToolParamNode(itemType, null, typeItemSchemaNode);
-        } else if (type.isEnum()) {
-            //枚举
-            schemaNode.set("type", TYPE_STRING);
-
-            schemaNode.getOrNew("enum").build(n7 -> {
-                for (Object e : type.getEnumConstants()) {
-                    n7.add(e.toString());
-                }
-            });
-        } else if (Date.class.isAssignableFrom(type)) {
-            //日期
-            schemaNode.set("type", TYPE_STRING);
-            schemaNode.set("format", "date");
-        } else if (URI.class.isAssignableFrom(type)) {
-            //URI
-            schemaNode.set("type", TYPE_STRING);
-            schemaNode.set("format", "uri");
-        } else {
-            //其它
-            String typeStr = jsonTypeOfJavaType(type);
-            schemaNode.set("type", typeStr);
-
-            if (TYPE_OBJECT.equals(typeStr)) {
-                ONode requiredNode = new ONode(schemaNode.options()).asArray();
-                schemaNode.getOrNew("properties").build(propertiesNode -> {
-                    propertiesNode.asObject();
-
-                    for (FieldWrap fw : ClassWrap.get(type).getAllFieldWraps()) {
-                        ParamDesc fp = paramOf(fw.getField());
-
-                        if (fp != null) {
-                            propertiesNode.getOrNew(fp.name()).build(paramNode -> {
-                                buildToolParamNode(fp.type(), fp.description(), paramNode);
-                            });
-
-                            if (fp.required()) {
-                                requiredNode.add(fp.name());
-                            }
-                        }
-                    }
-                });
-
-                schemaNode.set("required", requiredNode);
-            }
-        }
-
-        if (description != null) {
+    public static void buildToolParamNode(Type type, String description, ONode schemaNode) {
+        if (description != null && !description.isEmpty()) {
             schemaNode.set("description", description);
         }
+
+        //处理 ParameterizedType 类型（泛型），如 List<T>、Map<K,V>、Optional<T> 等
+        if (type instanceof ParameterizedType) {
+            handleParameterizedType((ParameterizedType) type, description, schemaNode);
+            return;
+        }
+
+        //处理普通 Class 类型：数组、枚举、POJO 等
+        if (type instanceof Class<?>) {
+            handleClassType((Class<?>) type, description, schemaNode);
+            return;
+        }
+
+        // 默认 fallback 为 string 类型
+        schemaNode.set("type", TYPE_STRING);
     }
+
+
+    /**
+     * @Description 处理 ParameterizedType 类型（如 Result<T>、List<T>、Map<K,V> 等）
+     * 并自动识别并解析带泛型字段的包装类（保留结构并替换泛型类型）
+     * @Param type
+     * @Param description
+     * @Param schemaNode
+     * @Author ityangs@163.com
+     * @Date 2025/5/20 10:19
+     */
+    private static void handleParameterizedType(ParameterizedType pt, String description, ONode schemaNode) {
+        Type rawType = pt.getRawType();
+        if (!(rawType instanceof Class<?>)) {
+            schemaNode.set("type", TYPE_OBJECT);
+            return;
+        }
+
+        Class<?> clazz = (Class<?>) rawType;
+
+        // —— 1. 泛型集合 List<T> / Set<T> ——
+        if (Collection.class.isAssignableFrom(clazz)) {
+            handleGenericCollection(pt, schemaNode);
+            return;
+        }
+
+        // —— 2. 泛型 Map<K,V> ——
+        if (Map.class.isAssignableFrom(clazz)) {
+            handleGenericMap(pt, schemaNode);
+            return;
+        }
+
+        // —— 3. Optional<T> ——
+        if (isOptionalType(rawType)) {
+            buildToolParamNode(pt.getActualTypeArguments()[0], description, schemaNode);
+            return;
+        }
+
+        // —— 4. ResponseEntity<T> ——
+        if (isResponseEntityType(rawType)) {
+            buildToolParamNode(pt.getActualTypeArguments()[0], description, schemaNode);
+            return;
+        }
+
+        // —— 5. 泛型包装类（如 Result<T>）结构保留并解析字段泛型 ——
+        TypeVariable<?>[] typeParams = clazz.getTypeParameters();
+        Type[] actualTypes = pt.getActualTypeArguments();
+        if (typeParams.length == actualTypes.length) {
+            resolveGenericClassWithTypeArgs(clazz, actualTypes, schemaNode);
+            return;
+        }
+
+        // —— fallback ——
+        schemaNode.set("type", TYPE_OBJECT);
+    }
+
+
+    /**
+     * @param clazz       原始类，如 Result
+     * @param actualTypes 实际类型参数，如 T => String、List<XX> 等
+     * @param schemaNode  输出的 JSON schema 节点
+     * @Description 解析带泛型的类结构（如 Result<T>）：
+     * - 替换字段中的泛型变量为实际类型
+     * - 保留原始类的字段结构生成 schema
+     * @Author ityangs@163.com
+     * @Date 2025/5/20 10:19
+     */
+    private static void resolveGenericClassWithTypeArgs(Class<?> clazz, Type[] actualTypes, ONode schemaNode) {
+        TypeVariable<?>[] typeParams = clazz.getTypeParameters();
+        Map<String, Type> typeVarMap = new HashMap<>();
+
+        // 构造泛型变量替换映射，如 T -> List<XX>
+        for (int i = 0; i < typeParams.length; i++) {
+            typeVarMap.put(typeParams[i].getName(), actualTypes[i]);
+        }
+
+        schemaNode.set("type", TYPE_OBJECT);
+        ONode props = schemaNode.getNew("properties");
+
+        for (Field field : clazz.getDeclaredFields()) {
+            field.setAccessible(true);
+            Type fieldType = field.getGenericType();
+
+            // 如果字段类型是泛型变量 T，替换为实际类型
+            if (fieldType instanceof TypeVariable<?> && typeVarMap.containsKey(((TypeVariable<?>) fieldType).getName())) {
+                TypeVariable<?> tv = (TypeVariable<?>) fieldType;
+                fieldType = typeVarMap.get(tv.getName());
+            }
+
+            // 构建字段 schema 结构
+            ONode fieldSchema = new ONode();
+            buildToolParamNode(fieldType, null, fieldSchema);
+            props.set(field.getName(), fieldSchema);
+        }
+    }
+
+
+    /**
+     * @Description 处理普通 Class 类型：数组、枚举、POJO 等
+     * @Param clazz
+     * @Param description
+     * @Param schemaNode
+     * @Author ityangs@163.com
+     * @Date 2025/5/20 10:21
+     */
+    private static void handleClassType(Class<?> clazz, String description, ONode schemaNode) {
+        // 数组
+        if (clazz.isArray()) {
+            schemaNode.set("type", TYPE_ARRAY);
+            buildToolParamNode(clazz.getComponentType(), null, schemaNode.getOrNew("items"));
+            return;
+        }
+
+        // Collection
+        if (Collection.class.isAssignableFrom(clazz)) {
+            schemaNode.set("type", TYPE_ARRAY);
+            schemaNode.getOrNew("items").set("type", TYPE_OBJECT); // fallback
+            return;
+        }
+
+        // Map
+        if (Map.class.isAssignableFrom(clazz)) {
+            schemaNode.set("type", TYPE_OBJECT);
+            schemaNode.getOrNew("properties").set("type", TYPE_OBJECT); // fallback
+            return;
+        }
+
+        // 枚举
+        if (clazz.isEnum()) {
+            handleEnumType(clazz, schemaNode);
+            return;
+        }
+
+        // 特殊类型处理：日期和 URI
+        if (Date.class.isAssignableFrom(clazz)) {
+            schemaNode.set("type", TYPE_STRING);
+            schemaNode.set("format", "date");
+            return;
+        }
+
+        if (URI.class.isAssignableFrom(clazz)) {
+            schemaNode.set("type", TYPE_STRING);
+            schemaNode.set("format", "uri");
+            return;
+        }
+
+        // 处理普通对象类型（POJO）
+        handleObjectType(clazz, schemaNode);
+    }
+
+    /**
+     * @Description 处理泛型集合类型：List<T>
+     * @Param pt
+     * @Param schemaNode
+     * @Author ityangs@163.com
+     * @Date 2025/5/20 10:22
+     */
+    private static void handleGenericCollection(ParameterizedType pt, ONode schemaNode) {
+        schemaNode.set("type", TYPE_ARRAY);
+        Type[] actualTypeArguments = pt.getActualTypeArguments();
+        if (actualTypeArguments.length > 0) {
+            buildToolParamNode(actualTypeArguments[0], null, schemaNode.getOrNew("items"));
+        }
+    }
+
+
+    /**
+     * @Description 处理泛型 Map 类型：Map<K, V>
+     * @Param pt
+     * @Param schemaNode
+     * @Author ityangs@163.com
+     * @Date 2025/5/20 10:22
+     */
+    private static void handleGenericMap(ParameterizedType pt, ONode schemaNode) {
+        schemaNode.set("type", TYPE_OBJECT);
+        Type[] actualTypeArguments = pt.getActualTypeArguments();
+        if (actualTypeArguments.length == 2) {
+            buildToolParamNode(actualTypeArguments[1], null, schemaNode.getOrNew("properties"));
+        }
+    }
+
+    /**
+     * @Description 处理枚举类型：设置 type 为 string，并添加 enum 值
+     * @Param clazz
+     * @Param schemaNode
+     * @Author ityangs@163.com
+     * @Date 2025/5/20 10:22
+     */
+    private static void handleEnumType(Class<?> clazz, ONode schemaNode) {
+        schemaNode.set("type", TYPE_STRING);
+        schemaNode.getOrNew("enum").build(n -> {
+            for (Object e : clazz.getEnumConstants()) {
+                n.add(e.toString());
+            }
+        });
+    }
+
+
+    /**
+     * @Description 处理 POJO 类型（含字段映射）
+     * @Param clazz
+     * @Param schemaNode
+     * @Author ityangs@163.com
+     * @Date 2025/5/20 10:23
+     */
+    private static void handleObjectType(Class<?> clazz, ONode schemaNode) {
+        String typeStr = jsonTypeOfJavaType(clazz);
+        schemaNode.set("type", typeStr);
+
+        if (!TYPE_OBJECT.equals(typeStr)) {
+            return;
+        }
+
+        ONode requiredNode = new ONode(schemaNode.options()).asArray();
+
+        schemaNode.getOrNew("properties").build(propertiesNode -> {
+            propertiesNode.asObject();
+            for (FieldWrap fw : ClassWrap.get(clazz).getAllFieldWraps()) {
+                Field field = fw.getField();
+                ParamDesc fp = paramOf(field);
+                if (fp != null) {
+                    propertiesNode.getOrNew(fp.name()).build(paramNode -> {
+                        buildToolParamNode(fp.type(), fp.description(), paramNode);
+                    });
+
+                    if (fp.required()) {
+                        requiredNode.add(fp.name());
+                    }
+                }
+            }
+        });
+
+        schemaNode.set("required", requiredNode);
+    }
+
+
+    /**
+     * @Description 判断是否为 Optional 类型
+     * @Param rawType
+     * @Return boolean
+     * @Author ityangs@163.com
+     * @Date 2025/5/20 10:23
+     */
+    private static boolean isOptionalType(Type rawType) {
+        return rawType.getTypeName().startsWith("java.util.Optional");
+    }
+
+
+    /**
+     * @Description 判断是否为 ResponseEntity 类型（或你自定义的包）
+     * @Param rawType
+     * @Return boolean
+     * @Author ityangs@163.com
+     * @Date 2025/5/20 10:23
+     */
+    private static boolean isResponseEntityType(Type rawType) {
+        return rawType.getTypeName().startsWith("org.springframework.http.ResponseEntity");
+    }
+
 
     /**
      * json 类型转换
@@ -181,4 +401,6 @@ public class ToolSchemaUtil {
             return TYPE_OBJECT;
         }
     }
+
+
 }

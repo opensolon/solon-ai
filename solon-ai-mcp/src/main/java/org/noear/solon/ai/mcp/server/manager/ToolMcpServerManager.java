@@ -68,25 +68,27 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
         //内部登记
         toolsMap.put(functionTool.name(), functionTool);
 
-        //mcp 登记
-        ONode jsonSchema = buildJsonSchema(functionTool);
-        String jsonSchemaStr = jsonSchema.toJson();
+        // 构建 inputSchema JSON 字符串
+        String inSchemaJson = buildJsonSchema(functionTool).toJson();
+        // 获取 outputSchema JSON 字符串（可能为 null 或空）
+        String outSchemaJson = functionTool.outputSchema();
 
-        McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(
-                new McpSchema.Tool(functionTool.name(), functionTool.description(), functionTool.returnDirect(), jsonSchemaStr),
-                (exchange, request) -> {
-                    try {
-                        ContextHolder.currentSet(new McpServerContext(exchange));
+        // 注册实际调用逻辑
+        McpServerFeatures.SyncToolSpecification toolSpec =new McpServerFeatures.SyncToolSpecification(
+                        new McpSchema.Tool(functionTool.name(), functionTool.description(), functionTool.returnDirect(), inSchemaJson, outSchemaJson),
+                        (exchange, request) -> {
+                            try {
+                                ContextHolder.currentSet(new McpServerContext(exchange));
 
-                        String rst = functionTool.handle(request);
-                        return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
-                    } catch (Throwable ex) {
-                        ex = Utils.throwableUnwrap(ex);
-                        throw new McpException(ex.getMessage(), ex);
-                    } finally {
-                        ContextHolder.currentRemove();
-                    }
-                });
+                                String rst = functionTool.handle(request);
+                                return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
+                            } catch (Throwable ex) {
+                                ex = Utils.throwableUnwrap(ex);
+                                throw new McpException(ex.getMessage(), ex);
+                            } finally {
+                                ContextHolder.currentRemove();
+                            }
+                        });
 
         if (server != null) {
             server.addTool(toolSpec);

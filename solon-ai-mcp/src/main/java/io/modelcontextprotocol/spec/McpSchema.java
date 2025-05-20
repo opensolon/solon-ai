@@ -810,9 +810,10 @@ public final class McpSchema {
 		@JsonProperty("description") String description;
 		@JsonProperty("returnDirect") Boolean returnDirect;
 		@JsonProperty("inputSchema") JsonSchema inputSchema;
+		@JsonProperty("outputSchema") JsonSchema outputSchema;
 
-		public Tool(String name, String description, Boolean returnDirect, String schema) {
-			this(name, description, returnDirect, parseSchema(schema));
+		public Tool(String name, String description, Boolean returnDirect, String inSchemaJson, String outSchemaJson) {
+			this(name, description, returnDirect, parseSchema(inSchemaJson), outSchemaJson != null && !outSchemaJson.isEmpty() ? parseSchema(outSchemaJson) : null);
 		}
 
 	} // @formatter:on
