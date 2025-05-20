@@ -105,7 +105,7 @@ public class MethodFunctionTool implements FunctionTool {
         if (enableOutputSchema) {
             Type returnType = method.getGenericReturnType();
             ONode outputSchemaNode = new ONode();
-            // 如果有泛型，则需要处理
+            // 如果返回类型，则需要处理
             if (returnType != void.class) {
                 ParamDesc returnDesc = new ParamDesc("", getRawClass(returnType), false, "");
                 ToolSchemaUtil.buildToolParamNode(returnType, returnDesc.description(), outputSchemaNode);
