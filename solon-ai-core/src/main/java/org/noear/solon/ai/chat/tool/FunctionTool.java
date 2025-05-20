@@ -61,7 +61,7 @@ public interface FunctionTool extends ChatTool {
     String inputSchema();
 
     /**
-     * 输入架构
+     * 输出架构
      *
      * <pre>{@code
      * JsonSchema {
