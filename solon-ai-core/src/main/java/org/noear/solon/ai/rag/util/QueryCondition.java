@@ -172,7 +172,12 @@ public class QueryCondition {
      * @since 3.3
      */
     public QueryCondition searchType(SearchType searchType) {
-        this.searchType = searchType;
+        if(searchType != null){
+            this.searchType = searchType;
+            if(SearchType.HYBRID.equals(searchType) && this.hybridSearchParams == null){
+                this.hybridSearchParams = HybridSearchParams.DEFAULT;
+            }
+        }
         return this;
     }
 

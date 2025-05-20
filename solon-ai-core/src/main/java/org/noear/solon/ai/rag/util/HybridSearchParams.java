@@ -22,6 +22,10 @@ package org.noear.solon.ai.rag.util;
  * @since 3.3
  */
 public class HybridSearchParams {
+    /**
+     * 默认的混合检索参数 (向量检索权重 0.5, 全文检索权重 0.5)
+     */
+    public static final HybridSearchParams DEFAULT = new HybridSearchParams(0.5, 0.5);
     private final double vectorWeight;
     private final double fullTextWeight;
 
@@ -49,12 +53,6 @@ public class HybridSearchParams {
     }
 
 
-    /**
-     * 获取默认的混合检索参数 (向量检索权重 0.5, 全文检索权重 0.5)
-     */
-    public static HybridSearchParams defaultParams() {
-        return new HybridSearchParams(0.5, 0.5);
-    }
 
     /**
      * 创建混合检索参数，优先设置向量检索权重，并自动调整全文检索权重，确保两者权重总和为 1.0

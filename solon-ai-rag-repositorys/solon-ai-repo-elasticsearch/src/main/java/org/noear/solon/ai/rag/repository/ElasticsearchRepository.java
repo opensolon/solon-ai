@@ -172,15 +172,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     private String executeSearch(QueryCondition condition, float[] queryVector) throws IOException {
         Request request = new Request("POST", "/" + config.indexName + "/_search");
 
-        Map<String, Object> requestBody = new HashMap<>();
-        Map<String, Object> query = translate(condition, queryVector);
-        requestBody.put("query", query);
-        requestBody.put("size", condition.getLimit() > 0 ? condition.getLimit() : 10);
-
-        // 将min_score作为顶层参数添加到请求体中
-        if (condition.getSimilarityThreshold() > 0) {
-            requestBody.put("min_score", condition.getSimilarityThreshold());
-        }
+        Map<String, Object> requestBody = translate(condition, queryVector);
 
         request.setJsonEntity(ONode.stringify(requestBody));
         org.elasticsearch.client.Response response = config.client.getLowLevelClient().performRequest(request);
@@ -352,9 +344,18 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      * 转换查询条件为 ES 查询语句
      */
     private Map<String, Object> translate(QueryCondition condition, float[] queryVector) {
-        Map<String, Object> query;
-        Map<String, Object> baseFilter = new HashMap<>();
+        Map<String, Object> requestBody = new HashMap<>();
 
+        // 添加顶层参数 size
+        requestBody.put("size", condition.getLimit() > 0 ? condition.getLimit() : 10);
+
+        // 添加顶层参数 min_score
+        if (condition.getSimilarityThreshold() > 0) {
+            requestBody.put("min_score", condition.getSimilarityThreshold());
+        }
+
+        // 提取 baseFilter 逻辑
+        Map<String, Object> baseFilter = new HashMap<>();
         if (condition.getFilterExpression() != null) {
             Map<String, Object> filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
             if (filter != null) {
@@ -366,39 +367,49 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
             baseFilter.put("match_all", new HashMap<>());
         }
 
-        SearchType searchType = condition.getSearchType();
-        if (searchType == null) {
-            searchType = SearchType.VECTOR;
-        }
+        // 构建核心搜索DSL
+        Map<String, Object> searchBodyContent = buildSearchBodyContent(condition, queryVector, baseFilter);
+        requestBody.putAll(searchBodyContent);
+
+        return requestBody;
+    }
+
+    /**
+     * 根据搜索类型和向量搜索类型构建核心搜索DSL
+     */
+    private Map<String, Object> buildSearchBodyContent(QueryCondition condition, float[] queryVector, Map<String, Object> baseFilter) {
+        Map<String, Object> searchDSL = new HashMap<>();
+
+        SearchType searchType = condition.getSearchType() == null ? SearchType.VECTOR : condition.getSearchType();
 
         switch (searchType) {
             case FULL_TEXT:
-                query = buildFullTextQuery(condition, baseFilter);
-                break;
-
-            case VECTOR:
-                query = buildVectorQuery(condition, queryVector, baseFilter);
+                searchDSL.put("query", buildFullTextQuery(condition, baseFilter));
                 break;
 
             case HYBRID:
-                query = buildHybridQuery(condition, queryVector, baseFilter);
+                searchDSL.put("query", buildHybridQuery(condition, queryVector, baseFilter));
                 break;
 
+            case VECTOR:
             default:
-                query = buildVectorQuery(condition, queryVector, baseFilter);
+                searchDSL.put("query", buildVectorQuery(condition, queryVector, baseFilter));
                 break;
         }
 
-        return query;
+        return searchDSL;
     }
 
     /**
      * 构建全文检索查询子句 (match query)
      */
     private Map<String, Object> buildFullTextClause(QueryCondition condition) {
+        Map<String, Object> fullTextClause = new HashMap<>();
         Map<String, Object> matchClause = new HashMap<>();
         Map<String, Object> contentParams = new HashMap<>();
 
+        fullTextClause.put("match", matchClause);
+        matchClause.put("content", contentParams);
         contentParams.put("query", condition.getQuery());
 
         HybridSearchParams hybridSearchParams = condition.getHybridSearchParams();
@@ -407,11 +418,6 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         } else {
             contentParams.put("boost", 1.0);
         }
-
-        matchClause.put("content", contentParams);
-
-        Map<String, Object> fullTextClause = new HashMap<>();
-        fullTextClause.put("match", matchClause);
 
         return fullTextClause;
     }
@@ -425,52 +431,52 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         if (vectorSearchType == VectorSearchType.APPROXIMATE_KNN) {
             Map<String, Object> knnQuery = new HashMap<>();
             Map<String, Object> knnParams = new HashMap<>();
+            knnQuery.put("knn", knnParams);
             knnParams.put("field", "embedding");
             knnParams.put("query_vector", queryVector);
             knnParams.put("k", condition.getLimit());
             knnParams.put("num_candidates", Math.min(condition.getLimit() * 10, 10000));
+
             HybridSearchParams hybridSearchParams = condition.getHybridSearchParams();
             if (SearchType.HYBRID.equals(condition.getSearchType()) && hybridSearchParams != null && hybridSearchParams.getVectorWeight() > 0) {
                 knnParams.put("boost", hybridSearchParams.getVectorWeight());
             } else {
                 knnParams.put("boost", 1.0);
             }
-            knnQuery.put("knn", knnParams);
+
             return knnQuery;
+        } else {
+            Map<String, Object> scriptScoreQuery = new HashMap<>();
+            Map<String, Object> scriptScoreDetails = new HashMap<>();
+            Map<String, Object> scriptClause = new HashMap<>();
+            Map<String, Object> scriptParams = new HashMap<>();
+            scriptScoreQuery.put("script_score", scriptScoreDetails);
+            // 为 script_score 提供一个默认的 query，后续会被 buildVectorQuery 中的 baseFilter 覆盖
+            scriptScoreDetails.put("query", new HashMap<String, Object>() {{
+                put("match_all", new HashMap<>());
+            }});
+            scriptScoreDetails.put("script", scriptClause);
+            scriptClause.put("source", "cosineSimilarity(params.query_vector, 'embedding') + 1.0");
+            scriptClause.put("params", scriptParams);
+            scriptParams.put("query_vector", queryVector);
 
-        } else if (vectorSearchType == VectorSearchType.EXACT_KNN) {
-            Map<String, Object> scriptScore = new HashMap<>();
-            Map<String, Object> script = new HashMap<>();
-            Map<String, Object> matchAll = new HashMap<>();
-
-            String scriptContent = "cosineSimilarity(params.query_vector, 'embedding') + 1.0";
-            Map<String, Object> params = new HashMap<>();
-            params.put("query_vector", queryVector);
-            script.put("source", scriptContent);
-            script.put("params", params);
-
-            matchAll.put("match_all", new HashMap<>());
-            scriptScore.put("query", matchAll);
-            scriptScore.put("script", script);
-            return scriptScore;
+            return scriptScoreQuery;
         }
-        return null;
     }
 
     /**
      * 构建全文检索查询
      */
     private Map<String, Object> buildFullTextQuery(QueryCondition condition, Map<String, Object> baseFilter) {
+        Map<String, Object> query = new HashMap<>();
         Map<String, Object> boolQuery = new HashMap<>();
-        List<Map<String, Object>> mustClauses = new ArrayList<>();
+        query.put("bool", boolQuery);
 
+        List<Map<String, Object>> mustClauses = new ArrayList<>();
         mustClauses.add(buildFullTextClause(condition));
 
         boolQuery.put("must", mustClauses);
         boolQuery.put("filter", baseFilter);
-
-        Map<String, Object> query = new HashMap<>();
-        query.put("bool", boolQuery);
         return query;
     }
 
@@ -483,15 +489,26 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
 
         if (vectorSearchType == VectorSearchType.APPROXIMATE_KNN) {
             Map<String, Object> boolQuery = new HashMap<>();
-            boolQuery.put("must", buildVectorClause(condition, queryVector));
-            boolQuery.put("filter", baseFilter);
+            // buildVectorClause 返回 {"knn": {...}}
+            Map<String, Object> knnClause = buildVectorClause(condition, queryVector);
+            ((Map<String, Object>) knnClause.get("knn")).put("filter", baseFilter);
 
+            boolQuery.put("must", knnClause);
+            boolQuery.put("filter", baseFilter);
             query.put("bool", boolQuery);
 
+
         } else if (vectorSearchType == VectorSearchType.EXACT_KNN) {
-            Map<String, Object> scriptScore = buildVectorClause(condition, queryVector);
-            scriptScore.put("query", baseFilter);
-            query.put("script_score", scriptScore);
+            // buildVectorClause 返回 {"script_score": {"query": {"match_all":{}}, "script": {...}}}
+            Map<String, Object> scriptScoreClause = buildVectorClause(condition, queryVector);
+
+            // 获取 script_score 的详细内容
+            Map<String, Object> scriptScoreDetails = (Map<String, Object>) scriptScoreClause.get("script_score");
+            if (scriptScoreDetails != null) {
+                // 将 baseFilter 设置为 script_score 的查询条件
+                scriptScoreDetails.put("query", baseFilter);
+            }
+            query.putAll(scriptScoreClause);
         }
         return query;
     }
@@ -502,10 +519,6 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     private Map<String, Object> buildHybridQuery(QueryCondition condition, float[] queryVector, Map<String, Object> baseFilter) {
         Map<String, Object> boolQuery = new HashMap<>();
         List<Map<String, Object>> shouldClauses = new ArrayList<>();
-
-        HybridSearchParams hybridParams = condition.getHybridSearchParams();
-        double vectorWeight = (hybridParams != null) ? hybridParams.getVectorWeight() : 0.5;
-        double fullTextWeight = (hybridParams != null) ? hybridParams.getFullTextWeight() : 0.5;
 
         // 全文检索部分
         Map<String, Object> fullTextClause = buildFullTextClause(condition);
@@ -546,8 +559,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         private final RestHighLevelClient client;
         private String indexName = "solon_ai";
         private List<MetadataField> metadataFields = new ArrayList<>();
-        // 向量检索默认使用近似 KNN 检索
-        private VectorSearchType vectorSearchType;
+        private VectorSearchType vectorSearchType = VectorSearchType.EXACT_KNN;
 
         /**
          * 构造函数
@@ -558,7 +570,6 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         public Builder(EmbeddingModel embeddingModel, RestHighLevelClient client) {
             this.embeddingModel = embeddingModel;
             this.client = client;
-            this.vectorSearchType = VectorSearchType.APPROXIMATE_KNN;
         }
 
         /**
