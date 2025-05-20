@@ -13,15 +13,12 @@ import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
+import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
 import org.elasticsearch.client.RestHighLevelClient;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
+import org.elasticsearch.client.core.MainResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +32,9 @@ import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SearchType;
 import org.noear.solon.net.http.HttpUtils;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+
 /**
  * ElasticsearchRepository 测试类
  *
@@ -43,6 +43,10 @@ import org.noear.solon.net.http.HttpUtils;
  */
 public class ElasticsearchRepositoryTest {
     private ElasticsearchRepository repository;
+
+    // 使用knn近似检索方式的repository实例
+    private ElasticsearchRepository knnApproximateRepository;
+
     private RestHighLevelClient client;
     private static final String TEST_INDEX = "test_docs";
     final String apiUrl = "http://127.0.0.1:11434/api/embed";
@@ -95,6 +99,12 @@ public class ElasticsearchRepositoryTest {
                 .metadataFields(metadataFields)
                 .build();
 
+        knnApproximateRepository = ElasticsearchRepository.builder(embeddingModel, client)
+                .metadataFields(metadataFields)
+                // 设置向量检索类型为KNN近似检索
+                .vectorSearchType(ElasticsearchRepository.VectorSearchType.APPROXIMATE_KNN)
+                .build();
+
         repository.dropRepository();
         repository.initRepository();
 
@@ -114,7 +124,7 @@ public class ElasticsearchRepositoryTest {
     public void testSearch() throws IOException {
         try {
 
-            // 测试基本搜索
+            // 测试基本搜索（默认使用向量检索，knn精确检索）
             QueryCondition condition = new QueryCondition("solon");
             List<Document> results = repository.search(condition);
             assertFalse(results.isEmpty(), "应该找到包含solon的文档");
@@ -127,50 +137,72 @@ public class ElasticsearchRepositoryTest {
             assertFalse(results.isEmpty(), "应该找到noear.org域名下的文档");
             assertTrue(results.get(0).getUrl().contains("noear.org"), "文档URL应该包含noear.org");
 
-            // 打印基本搜索结果
-            System.out.println("\n=== 基本搜索结果 ===");
             for (Document doc : results) {
                 System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
             }
 
-            // 测试全文搜索
-            System.out.println("\n=== 全文搜索测试 ===");
+        } catch (Exception e) {
+            fail("测试过程中发生异常: " + e.getMessage(), e);
+        }
+    }
 
+
+
+    @Test
+    public void testVectorSearchKnnApproximate() throws IOException {
+            assumeTrue(isVersionAtLeast(getElasticsearchVersionString(), 8, 12), "Skipping test: KNN Approximate requires Elasticsearch 8.12+");
+            try {
+            // 测试向量搜索 (KNN 近似)
+            QueryCondition vectorCondition = new QueryCondition("solon framework")
+                    .searchType(SearchType.VECTOR);
+            List<Document> vectorResults = knnApproximateRepository.search(vectorCondition);
+
+            assertFalse(vectorResults.isEmpty(), "向量搜索 (KNN 近似) 应该找到相关文档");
+
+        } catch (Exception e) {
+            fail("向量搜索 (KNN 近似) 测试过程中发生异常: " + e.getMessage(), e);
+        }
+    }
+
+
+    @Test
+    public void testVectorSearchKnnExact() throws IOException {
+        try {
+            // 测试向量搜索 (KNN 精确)
+
+            QueryCondition vectorCondition = new QueryCondition("solon framework")
+                    .searchType(SearchType.VECTOR);
+            List<Document> vectorResults = repository.search(vectorCondition);
+
+            assertFalse(vectorResults.isEmpty(), "向量搜索 (KNN 精确) 应该找到相关文档");
+
+            // 测试带过滤器的向量搜索 (KNN 精确)
+            QueryCondition vectorFilteredCondition = new QueryCondition("solon framework")
+                    .searchType(SearchType.VECTOR)
+                    .filterExpression("url LIKE 'noear.org'");
+            List<Document> vectorFilteredResults = repository.search(vectorFilteredCondition);
+            assertFalse(vectorFilteredResults.isEmpty(), "带过滤器的向量搜索 (KNN 精确) 应该找到相关文档");
+            assertTrue(vectorFilteredResults.get(0).getUrl().contains("solon.noear.org"), "文档URL应该包含 solon.noear.org");
+
+            for (Document doc : vectorFilteredResults) {
+                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
+            }
+        } catch (Exception e) {
+            fail("向量搜索 (KNN 精确) 测试过程中发生异常: " + e.getMessage());
+        }
+    }
+
+
+    @Test
+    public void testFullTextSearch() throws IOException {
+        try {
+            // 测试全文搜索
             QueryCondition fullTextCondition = new QueryCondition("Solon 框架").searchType(SearchType.FULL_TEXT);
             List<Document> fullTextResults = repository.search(fullTextCondition);
 
             assertFalse(fullTextResults.isEmpty(), "全文搜索应该找到包含'Solon 框架'的文档");
 
-            for (Document doc : fullTextResults) {
-                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
-            }
-
-            // 测试向量搜索
-            System.out.println("\n=== 向量搜索测试 ===");
-
-            QueryCondition vectorCondition = new QueryCondition("solon framework").searchType(SearchType.VECTOR);
-            List<Document> vectorResults = repository.search(vectorCondition);
-
-            assertFalse(vectorResults.isEmpty(), "向量搜索应该找到相关文档");
-
-            for (Document doc : vectorResults) {
-                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
-            }
-
-            // 测试混合搜索
-            System.out.println("\n=== 混合搜索测试 ===");
-
-            QueryCondition hybridCondition = new QueryCondition("solon noear.org").searchType(SearchType.HYBRID);
-            List<Document> hybridResults = repository.search(hybridCondition);
-
-            assertFalse(hybridResults.isEmpty(), "混合搜索应该找到相关文档");
-
-            for (Document doc : hybridResults) {
-                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
-            }
-
             // 测试带过滤器的全文搜索
-            System.out.println("\n=== 带过滤器的全文搜索测试 ===");
             QueryCondition fullTextFilteredCondition = new QueryCondition("Solon 框架")
                     .searchType(SearchType.FULL_TEXT)
                     .filterExpression("url LIKE 'solon.noear.org'");
@@ -182,21 +214,24 @@ public class ElasticsearchRepositoryTest {
                 System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
             }
 
-            // 测试带过滤器的向量搜索
-            System.out.println("\n=== 带过滤器的向量搜索测试 ===");
-            QueryCondition vectorFilteredCondition = new QueryCondition("solon framework")
-                    .searchType(SearchType.VECTOR)
-                    .filterExpression("url LIKE 'solon.noear.org'");
-            List<Document> vectorFilteredResults = repository.search(vectorFilteredCondition);
-            assertFalse(vectorFilteredResults.isEmpty(), "带过滤器的向量搜索应该找到相关文档");
-            assertTrue(vectorFilteredResults.get(0).getUrl().contains("solon.noear.org"), "文档URL应该包含 solon.noear.org");
+        } catch (Exception e) {
+            fail("全文搜索测试过程中发生异常: " + e.getMessage(),e);
+        }
+    }
 
-            for (Document doc : vectorFilteredResults) {
-                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
-            }
+
+
+    @Test
+    public void testHybridSearchKnnApproximate() throws IOException {
+        assumeTrue(isVersionAtLeast(getElasticsearchVersionString(), 8, 12), "Skipping test: KNN Approximate requires Elasticsearch 8.12+");
+        try {
+            // 测试混合搜索
+            QueryCondition hybridCondition = new QueryCondition("solon noear.org").searchType(SearchType.HYBRID);
+            List<Document> hybridResults = repository.search(hybridCondition);
+
+            assertFalse(hybridResults.isEmpty(), "混合搜索应该找到相关文档");
 
             // 测试带过滤器的混合搜索
-            System.out.println("\n=== 带过滤器的混合搜索测试 ===");
             QueryCondition hybridFilteredCondition = new QueryCondition("solon noear.org")
                     .searchType(SearchType.HYBRID)
                     .filterExpression("url LIKE 'solon.noear.org'");
@@ -207,7 +242,33 @@ public class ElasticsearchRepositoryTest {
             for (Document doc : hybridFilteredResults) {
                 System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
             }
+        } catch (Exception e) {
+            fail("混合搜索测试过程中发生异常: " + e.getMessage(), e);
+        }
+    }
 
+    @Test
+    public void testHybridSearchKnnExact() throws IOException {
+        try {
+            // 测试混合搜索 (向量检索使用 KNN 精确)
+
+            QueryCondition hybridCondition = new QueryCondition("solon noear.org")
+                    .searchType(SearchType.HYBRID);
+            List<Document> hybridResults = repository.search(hybridCondition);
+
+            assertFalse(hybridResults.isEmpty(), "混合搜索 (向量检索使用 KNN 精确) 应该找到相关文档");
+
+            // 测试带过滤器的混合搜索 (向量检索使用 KNN 精确)
+            QueryCondition hybridFilteredCondition = new QueryCondition("solon noear.org")
+                   .searchType(SearchType.HYBRID)
+                   .filterExpression("url LIKE 'noear.org'");
+            List<Document> hybridFilteredResults = repository.search(hybridFilteredCondition);
+            assertFalse(hybridFilteredResults.isEmpty(), "带过滤器的混合搜索 (向量检索使用 KNN 精确) 应该找到相关文档");
+            assertTrue(hybridFilteredResults.get(0).getUrl().contains("solon.noear.org"), "文档URL应该包含 solon.noear.org");
+
+            for (Document doc : hybridFilteredResults) {
+                System.out.println(doc.getId() + ":" + doc.getScore() + ":" + doc.getUrl() + "【" + doc.getContent() + "】");
+            }
         } catch (Exception e) {
             fail("测试过程中发生异常: " + e.getMessage());
         }
@@ -733,6 +794,580 @@ public class ElasticsearchRepositoryTest {
     }
 
     /**
+     * 测试 全文检索 + 高级表达式过滤
+     */
+    @Test
+    public void testAdvancedExpressionFilterForFullTextSearch() throws IOException {
+        try {
+            // 创建测试文档
+            List<Document> documents = new ArrayList<>();
+
+            Document doc1 = new Document("Document with numeric properties");
+            doc1.metadata("price", 100);
+            doc1.metadata("stock", 50);
+            doc1.metadata("category", "electronics");
+
+            Document doc2 = new Document("Document with different price");
+            doc2.metadata("price", 200);
+            doc2.metadata("stock", 10);
+            doc2.metadata("category", "electronics");
+
+            Document doc3 = new Document("Document with different category");
+            doc3.metadata("price", 150);
+            doc3.metadata("stock", 25);
+            doc3.metadata("category", "books");
+
+            documents.add(doc1);
+            documents.add(doc2);
+            documents.add(doc3);
+
+            // 插入测试文档
+            repository.insert(documents);
+
+            // 等待索引更新
+            Thread.sleep(1000);
+
+            // 1. 测试数值比较 (大于)
+            String gtExpression = "price > 120";
+            QueryCondition gtCondition = new QueryCondition("document")
+                    .searchType(SearchType.FULL_TEXT)
+                    .filterExpression(gtExpression)
+                    .disableRefilter(true);
+
+            List<Document> gtResults = repository.search(gtCondition);
+            System.out.println("找到 " + gtResults.size() + " 个文档，使用大于表达式: " + gtExpression);
+
+            // 验证结果 - 应该找到两个价格大于120的文档
+            assertTrue(gtResults.size() > 0, "大于表达式应该找到文档");
+            int countGt120 = 0;
+            for (Document doc : gtResults) {
+                int price = ((Number) doc.getMetadata("price")).intValue();
+                if (price > 120) {
+                    countGt120++;
+                }
+            }
+            assertTrue(countGt120 > 0, "应该找到价格大于120的文档");
+
+            // 2. 测试数值比较 (小于等于)
+            String lteExpression = "stock <= 25";
+            QueryCondition lteCondition = new QueryCondition("document")
+                    .searchType(SearchType.FULL_TEXT)
+                    .filterExpression(lteExpression)
+                    .disableRefilter(true);
+
+            List<Document> lteResults = repository.search(lteCondition);
+            System.out.println("找到 " + lteResults.size() + " 个文档，使用小于等于表达式: " + lteExpression);
+
+            // 验证结果 - 应该找到两个库存小于等于25的文档
+            assertTrue(lteResults.size() > 0, "小于等于表达式应该找到文档");
+            int countLte25 = 0;
+            for (Document doc : lteResults) {
+                int stock = ((Number) doc.getMetadata("stock")).intValue();
+                if (stock <= 25) {
+                    countLte25++;
+                }
+            }
+            assertTrue(countLte25 > 0, "应该找到库存小于等于25的文档");
+
+            // 3. 测试复合表达式 (价格区间和类别)
+            String complexExpression = "(price >= 100 AND price <= 180) AND category == 'electronics'";
+            QueryCondition complexCondition = new QueryCondition("document")
+                    .searchType(SearchType.FULL_TEXT)
+                    .filterExpression(complexExpression)
+                    .disableRefilter(true);
+
+            List<Document> complexResults = repository.search(complexCondition);
+            System.out.println("找到 " + complexResults.size() + " 个文档，使用复合表达式: " + complexExpression);
+
+            // 验证结果 - 应该找到一个满足所有条件的文档
+            assertTrue(complexResults.size() > 0, "复合表达式应该找到文档");
+            boolean foundMatch = false;
+            for (Document doc : complexResults) {
+                int price = ((Number) doc.getMetadata("price")).intValue();
+                String category = (String) doc.getMetadata("category");
+                if (price >= 100 && price <= 180 && "electronics".equals(category)) {
+                    foundMatch = true;
+                    break;
+                }
+            }
+            assertTrue(foundMatch, "应该找到符合复合条件的文档");
+
+            // 4. 测试 IN 操作符
+            String inExpression = "category IN ['electronics', 'books']";
+            QueryCondition inCondition = new QueryCondition("document")
+                    .searchType(SearchType.FULL_TEXT)
+                    .filterExpression(inExpression)
+                    .disableRefilter(true);
+
+            List<Document> inResults = repository.search(inCondition);
+            System.out.println("找到 " + inResults.size() + " 个文档，使用IN表达式: " + inExpression);
+            assertTrue(inResults.size() > 0, "IN表达式应该找到文档");
+
+            // 5. 测试 NOT 操作符
+            String notExpression = "NOT (category == 'books')";
+            QueryCondition notCondition = new QueryCondition("document")
+                    .searchType(SearchType.FULL_TEXT)
+                    .filterExpression(notExpression)
+                    .disableRefilter(true);
+            List<Document> notResults = repository.search(notCondition);
+            System.out.println("找到 " + notResults.size() + " 个文档，使用NOT表达式: " + notExpression);
+            assertTrue(notResults.size() > 0, "NOT表达式应该找到文档");
+            boolean foundNonBooks = false;
+            for (Document doc : notResults) {
+                String category = (String) doc.getMetadata("category");
+                if (!"books".equals(category)) {
+                    foundNonBooks = true;
+                    break;
+                }
+            }
+            assertTrue(foundNonBooks, "应该找到非books类别的文档");
+
+            // 打印结果
+            System.out.println("\n=== 高级表达式过滤测试结果 ===");
+            System.out.println("大于表达式结果数量: " + gtResults.size());
+            System.out.println("小于等于表达式结果数量: " + lteResults.size());
+            System.out.println("复合表达式结果数量: " + complexResults.size());
+            System.out.println("IN表达式结果数量: " + inResults.size());
+            System.out.println("NOT表达式结果数量: " + notResults.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            fail("测试过程中发生异常: " + e.getMessage());
+        }
+    }
+
+
+    /**
+     * 测试 向量检索 KNN近似 + 高级表达式过滤
+     */
+    @Test
+    public void testAdvancedExpressionFilterForKnnApproximateSearch() throws IOException {
+        try {
+            // 创建测试文档
+            List<Document> documents = new ArrayList<>();
+
+            Document doc1 = new Document("Document with numeric properties");
+            doc1.metadata("price", 100);
+            doc1.metadata("stock", 50);
+            doc1.metadata("category", "electronics");
+
+            Document doc2 = new Document("Document with different price");
+            doc2.metadata("price", 200);
+            doc2.metadata("stock", 10);
+            doc2.metadata("category", "electronics");
+
+            Document doc3 = new Document("Document with different category");
+            doc3.metadata("price", 150);
+            doc3.metadata("stock", 25);
+            doc3.metadata("category", "books");
+
+            documents.add(doc1);
+            documents.add(doc2);
+            documents.add(doc3);
+
+            // 插入测试文档
+            repository.insert(documents);
+
+            // 等待索引更新
+            Thread.sleep(1000);
+
+            // 1. 测试数值比较 (大于)
+            String gtExpression = "price > 120";
+            QueryCondition gtCondition = new QueryCondition("document")
+                    .searchType(SearchType.VECTOR)
+                    .filterExpression(gtExpression)
+                    .disableRefilter(true);
+
+            List<Document> gtResults = knnApproximateRepository.search(gtCondition);
+            System.out.println("找到 " + gtResults.size() + " 个文档，使用大于表达式: " + gtExpression);
+
+            // 验证结果 - 应该找到两个价格大于120的文档
+            assertTrue(gtResults.size() > 0, "大于表达式应该找到文档");
+            int countGt120 = 0;
+            for (Document doc : gtResults) {
+                int price = ((Number) doc.getMetadata("price")).intValue();
+                if (price > 120) {
+                    countGt120++;
+                }
+            }
+            assertTrue(countGt120 > 0, "应该找到价格大于120的文档");
+
+            // 2. 测试数值比较 (小于等于)
+            String lteExpression = "stock <= 25";
+            QueryCondition lteCondition = new QueryCondition("document")
+                    .searchType(SearchType.VECTOR)
+                    .filterExpression(lteExpression)
+                    .disableRefilter(true);
+
+            List<Document> lteResults = knnApproximateRepository.search(lteCondition);
+            System.out.println("找到 " + lteResults.size() + " 个文档，使用小于等于表达式: " + lteExpression);
+
+            // 验证结果 - 应该找到两个库存小于等于25的文档
+            assertTrue(lteResults.size() > 0, "小于等于表达式应该找到文档");
+            int countLte25 = 0;
+            for (Document doc : lteResults) {
+                int stock = ((Number) doc.getMetadata("stock")).intValue();
+                if (stock <= 25) {
+                    countLte25++;
+                }
+            }
+            assertTrue(countLte25 > 0, "应该找到库存小于等于25的文档");
+
+            // 3. 测试复合表达式 (价格区间和类别)
+            String complexExpression = "(price >= 100 AND price <= 180) AND category == 'electronics'";
+            QueryCondition complexCondition = new QueryCondition("document")
+                    .searchType(SearchType.VECTOR)
+                    .filterExpression(complexExpression)
+                    .disableRefilter(true);
+
+            List<Document> complexResults = knnApproximateRepository.search(complexCondition);
+            System.out.println("找到 " + complexResults.size() + " 个文档，使用复合表达式: " + complexExpression);
+
+            // 验证结果 - 应该找到一个满足所有条件的文档
+            assertTrue(complexResults.size() > 0, "复合表达式应该找到文档");
+            boolean foundMatch = false;
+            for (Document doc : complexResults) {
+                int price = ((Number) doc.getMetadata("price")).intValue();
+                String category = (String) doc.getMetadata("category");
+                if (price >= 100 && price <= 180 && "electronics".equals(category)) {
+                    foundMatch = true;
+                    break;
+                }
+            }
+            assertTrue(foundMatch, "应该找到符合复合条件的文档");
+
+            // 4. 测试 IN 操作符
+            String inExpression = "category IN ['electronics', 'books']";
+            QueryCondition inCondition = new QueryCondition("document")
+                    .searchType(SearchType.VECTOR)
+                    .filterExpression(inExpression)
+                    .disableRefilter(true);
+
+            List<Document> inResults = knnApproximateRepository.search(inCondition);
+            System.out.println("找到 " + inResults.size() + " 个文档，使用IN表达式: " + inExpression);
+            assertTrue(inResults.size() > 0, "IN表达式应该找到文档");
+
+            // 5. 测试 NOT 操作符
+            String notExpression = "NOT (category == 'books')";
+            QueryCondition notCondition = new QueryCondition("document")
+                    .searchType(SearchType.VECTOR)
+                    .filterExpression(notExpression)
+                    .disableRefilter(true);
+            List<Document> notResults = knnApproximateRepository.search(notCondition);
+            System.out.println("找到 " + notResults.size() + " 个文档，使用NOT表达式: " + notExpression);
+            assertTrue(notResults.size() > 0, "NOT表达式应该找到文档");
+            boolean foundNonBooks = false;
+            for (Document doc : notResults) {
+                String category = (String) doc.getMetadata("category");
+                if (!"books".equals(category)) {
+                    foundNonBooks = true;
+                    break;
+                }
+            }
+            assertTrue(foundNonBooks, "应该找到非books类别的文档");
+
+            // 打印结果
+            System.out.println("\n=== 高级表达式过滤测试结果 ===");
+            System.out.println("大于表达式结果数量: " + gtResults.size());
+            System.out.println("小于等于表达式结果数量: " + lteResults.size());
+            System.out.println("复合表达式结果数量: " + complexResults.size());
+            System.out.println("IN表达式结果数量: " + inResults.size());
+            System.out.println("NOT表达式结果数量: " + notResults.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            fail("测试过程中发生异常: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 测试 混合检索 KNN近似 + 高级表达式过滤
+     */
+    @Test
+    public void testAdvancedExpressionFilterForHybridApproximateSearch() throws IOException  {
+        try {
+            // 创建测试文档
+            List<Document> documents = new ArrayList<>();
+
+            Document doc1 = new Document("Document with numeric properties");
+            doc1.metadata("price", 100);
+            doc1.metadata("stock", 50);
+            doc1.metadata("category", "electronics");
+
+            Document doc2 = new Document("Document with different price");
+            doc2.metadata("price", 200);
+            doc2.metadata("stock", 10);
+            doc2.metadata("category", "electronics");
+
+            Document doc3 = new Document("Document with different category");
+            doc3.metadata("price", 150);
+            doc3.metadata("stock", 25);
+            doc3.metadata("category", "books");
+
+            documents.add(doc1);
+            documents.add(doc2);
+            documents.add(doc3);
+
+            // 插入测试文档
+            repository.insert(documents);
+
+            // 等待索引更新
+            Thread.sleep(1000);
+
+            // 1. 测试数值比较 (大于)
+            String gtExpression = "price > 120";
+            QueryCondition gtCondition = new QueryCondition("document")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression(gtExpression)
+                    .disableRefilter(true);
+
+            List<Document> gtResults = knnApproximateRepository.search(gtCondition);
+            System.out.println("找到 " + gtResults.size() + " 个文档，使用大于表达式: " + gtExpression);
+
+            // 验证结果 - 应该找到两个价格大于120的文档
+            assertTrue(gtResults.size() > 0, "大于表达式应该找到文档");
+            int countGt120 = 0;
+            for (Document doc : gtResults) {
+                int price = ((Number) doc.getMetadata("price")).intValue();
+                if (price > 120) {
+                    countGt120++;
+                }
+            }
+            assertTrue(countGt120 > 0, "应该找到价格大于120的文档");
+
+            // 2. 测试数值比较 (小于等于)
+            String lteExpression = "stock <= 25";
+            QueryCondition lteCondition = new QueryCondition("document")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression(lteExpression)
+                    .disableRefilter(true);
+
+            List<Document> lteResults = knnApproximateRepository.search(lteCondition);
+            System.out.println("找到 " + lteResults.size() + " 个文档，使用小于等于表达式: " + lteExpression);
+
+            // 验证结果 - 应该找到两个库存小于等于25的文档
+            assertTrue(lteResults.size() > 0, "小于等于表达式应该找到文档");
+            int countLte25 = 0;
+            for (Document doc : lteResults) {
+                int stock = ((Number) doc.getMetadata("stock")).intValue();
+                if (stock <= 25) {
+                    countLte25++;
+                }
+            }
+            assertTrue(countLte25 > 0, "应该找到库存小于等于25的文档");
+
+            // 3. 测试复合表达式 (价格区间和类别)
+            String complexExpression = "(price >= 100 AND price <= 180) AND category == 'electronics'";
+            QueryCondition complexCondition = new QueryCondition("document")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression(complexExpression)
+                    .disableRefilter(true);
+
+            List<Document> complexResults = knnApproximateRepository.search(complexCondition);
+            System.out.println("找到 " + complexResults.size() + " 个文档，使用复合表达式: " + complexExpression);
+
+            // 验证结果 - 应该找到一个满足所有条件的文档
+            assertTrue(complexResults.size() > 0, "复合表达式应该找到文档");
+            boolean foundMatch = false;
+            for (Document doc : complexResults) {
+                int price = ((Number) doc.getMetadata("price")).intValue();
+                String category = (String) doc.getMetadata("category");
+                if (price >= 100 && price <= 180 && "electronics".equals(category)) {
+                    foundMatch = true;
+                    break;
+                }
+            }
+            assertTrue(foundMatch, "应该找到符合复合条件的文档");
+
+            // 4. 测试 IN 操作符
+            String inExpression = "category IN ['electronics', 'books']";
+            QueryCondition inCondition = new QueryCondition("document")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression(inExpression)
+                    .disableRefilter(true);
+
+            List<Document> inResults = knnApproximateRepository.search(inCondition);
+            System.out.println("找到 " + inResults.size() + " 个文档，使用IN表达式: " + inExpression);
+            assertTrue(inResults.size() > 0, "IN表达式应该找到文档");
+
+            // 5. 测试 NOT 操作符
+            String notExpression = "NOT (category == 'books')";
+            QueryCondition notCondition = new QueryCondition("document")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression(notExpression)
+                    .disableRefilter(true);
+            List<Document> notResults = knnApproximateRepository.search(notCondition);
+            System.out.println("找到 " + notResults.size() + " 个文档，使用NOT表达式: " + notExpression);
+            assertTrue(notResults.size() > 0, "NOT表达式应该找到文档");
+            boolean foundNonBooks = false;
+            for (Document doc : notResults) {
+                String category = (String) doc.getMetadata("category");
+                if (!"books".equals(category)) {
+                    foundNonBooks = true;
+                    break;
+                }
+            }
+            assertTrue(foundNonBooks, "应该找到非books类别的文档");
+
+            // 打印结果
+            System.out.println("\n=== 高级表达式过滤测试结果 ===");
+            System.out.println("大于表达式结果数量: " + gtResults.size());
+            System.out.println("小于等于表达式结果数量: " + lteResults.size());
+            System.out.println("复合表达式结果数量: " + complexResults.size());
+            System.out.println("IN表达式结果数量: " + inResults.size());
+            System.out.println("NOT表达式结果数量: " + notResults.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            fail("测试过程中发生异常: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 测试 混合检索 KNN精确 + 高级表达式过滤
+     */
+    @Test
+    public void testAdvancedExpressionFilterForHybridExactSearch() throws IOException  {
+        try {
+            // 创建测试文档
+            List<Document> documents = new ArrayList<>();
+
+            Document doc1 = new Document("Document with numeric properties");
+            doc1.metadata("price", 100);
+            doc1.metadata("stock", 50);
+            doc1.metadata("category", "electronics");
+
+            Document doc2 = new Document("Document with different price");
+            doc2.metadata("price", 200);
+            doc2.metadata("stock", 10);
+            doc2.metadata("category", "electronics");
+
+            Document doc3 = new Document("Document with different category");
+            doc3.metadata("price", 150);
+            doc3.metadata("stock", 25);
+            doc3.metadata("category", "books");
+
+            documents.add(doc1);
+            documents.add(doc2);
+            documents.add(doc3);
+
+            // 插入测试文档
+            repository.insert(documents);
+
+            // 等待索引更新
+            Thread.sleep(1000);
+
+            // 1. 测试数值比较 (大于)
+            String gtExpression = "price > 120";
+            QueryCondition gtCondition = new QueryCondition("document")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression(gtExpression)
+                    .disableRefilter(true);
+
+            List<Document> gtResults = repository.search(gtCondition);
+            System.out.println("找到 " + gtResults.size() + " 个文档，使用大于表达式: " + gtExpression);
+
+            // 验证结果 - 应该找到两个价格大于120的文档
+            assertTrue(gtResults.size() > 0, "大于表达式应该找到文档");
+            int countGt120 = 0;
+            for (Document doc : gtResults) {
+                int price = ((Number) doc.getMetadata("price")).intValue();
+                if (price > 120) {
+                    countGt120++;
+                }
+            }
+            assertTrue(countGt120 > 0, "应该找到价格大于120的文档");
+
+            // 2. 测试数值比较 (小于等于)
+            String lteExpression = "stock <= 25";
+            QueryCondition lteCondition = new QueryCondition("document")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression(lteExpression)
+                    .disableRefilter(true);
+
+            List<Document> lteResults = repository.search(lteCondition);
+            System.out.println("找到 " + lteResults.size() + " 个文档，使用小于等于表达式: " + lteExpression);
+
+            // 验证结果 - 应该找到两个库存小于等于25的文档
+            assertTrue(lteResults.size() > 0, "小于等于表达式应该找到文档");
+            int countLte25 = 0;
+            for (Document doc : lteResults) {
+                int stock = ((Number) doc.getMetadata("stock")).intValue();
+                if (stock <= 25) {
+                    countLte25++;
+                }
+            }
+            assertTrue(countLte25 > 0, "应该找到库存小于等于25的文档");
+
+            // 3. 测试复合表达式 (价格区间和类别)
+            String complexExpression = "(price >= 100 AND price <= 180) AND category == 'electronics'";
+            QueryCondition complexCondition = new QueryCondition("document")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression(complexExpression)
+                    .disableRefilter(true);
+
+            List<Document> complexResults = repository.search(complexCondition);
+            System.out.println("找到 " + complexResults.size() + " 个文档，使用复合表达式: " + complexExpression);
+
+            // 验证结果 - 应该找到一个满足所有条件的文档
+            assertTrue(complexResults.size() > 0, "复合表达式应该找到文档");
+            boolean foundMatch = false;
+            for (Document doc : complexResults) {
+                int price = ((Number) doc.getMetadata("price")).intValue();
+                String category = (String) doc.getMetadata("category");
+                if (price >= 100 && price <= 180 && "electronics".equals(category)) {
+                    foundMatch = true;
+                    break;
+                }
+            }
+            assertTrue(foundMatch, "应该找到符合复合条件的文档");
+
+            // 4. 测试 IN 操作符
+            String inExpression = "category IN ['electronics', 'books']";
+            QueryCondition inCondition = new QueryCondition("document")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression(inExpression)
+                    .disableRefilter(true);
+
+            List<Document> inResults = repository.search(inCondition);
+            System.out.println("找到 " + inResults.size() + " 个文档，使用IN表达式: " + inExpression);
+            assertTrue(inResults.size() > 0, "IN表达式应该找到文档");
+
+            // 5. 测试 NOT 操作符
+            String notExpression = "NOT (category == 'books')";
+            QueryCondition notCondition = new QueryCondition("document")
+                    .searchType(SearchType.HYBRID)
+                    .filterExpression(notExpression)
+                    .disableRefilter(true);
+            List<Document> notResults = repository.search(notCondition);
+            System.out.println("找到 " + notResults.size() + " 个文档，使用NOT表达式: " + notExpression);
+            assertTrue(notResults.size() > 0, "NOT表达式应该找到文档");
+            boolean foundNonBooks = false;
+            for (Document doc : notResults) {
+                String category = (String) doc.getMetadata("category");
+                if (!"books".equals(category)) {
+                    foundNonBooks = true;
+                    break;
+                }
+            }
+            assertTrue(foundNonBooks, "应该找到非books类别的文档");
+
+            // 打印结果
+            System.out.println("\n=== 高级表达式过滤测试结果 ===");
+            System.out.println("大于表达式结果数量: " + gtResults.size());
+            System.out.println("小于等于表达式结果数量: " + lteResults.size());
+            System.out.println("复合表达式结果数量: " + complexResults.size());
+            System.out.println("IN表达式结果数量: " + inResults.size());
+            System.out.println("NOT表达式结果数量: " + notResults.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            fail("测试过程中发生异常: " + e.getMessage());
+        }
+    }
+
+
+    /**
      * 测试分数过滤与表达式过滤的组合使用
      */
     @Test
@@ -874,5 +1509,32 @@ public class ElasticsearchRepositoryTest {
 
         // 存储文档
         repository.insert(documents);
+    }
+
+    /**
+     * 获取 Elasticsearch 版本
+     */
+    private String getElasticsearchVersionString() {
+        try {
+            MainResponse response = client.info(RequestOptions.DEFAULT);
+            return response.getVersion().getNumber();
+        } catch (IOException e) {
+            fail("获取 Elasticsearch 版本失败: " + e.getMessage());
+        }
+        return "0.0.0";
+    }
+
+    private boolean isVersionAtLeast(String currentVersion, int requiredMajor, int requiredMinor) {
+        String[] parts = currentVersion.split("\\.");
+        if (parts.length >= 2) {
+            int major = Integer.parseInt(parts[0]);
+            int minor = Integer.parseInt(parts[1]);
+            if (major > requiredMajor) {
+                return true;
+            } else if (major == requiredMajor) {
+                return minor >= requiredMinor;
+            }
+        }
+        return false;
     }
 }
