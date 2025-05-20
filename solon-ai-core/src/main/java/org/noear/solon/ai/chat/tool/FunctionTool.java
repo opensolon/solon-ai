@@ -61,6 +61,22 @@ public interface FunctionTool extends ChatTool {
     String inputSchema();
 
     /**
+     * 输入架构
+     *
+     * <pre>{@code
+     * JsonSchema {
+     *     String type;
+     *     Map<String, Object> properties;
+     *     List<String> required;
+     *     Boolean additionalProperties;
+     * }
+     * }</pre>
+     */
+    default String outputSchema() {
+        return null;
+    }
+
+    /**
      * 处理
      */
     String handle(Map<String, Object> args) throws Throwable;

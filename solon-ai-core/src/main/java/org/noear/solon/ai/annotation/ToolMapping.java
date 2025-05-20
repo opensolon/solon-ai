@@ -48,4 +48,9 @@ public @interface ToolMapping {
      * 结果转换器
      */
     Class<? extends ToolCallResultConverter> resultConverter() default ToolCallResultConverter.class;
+
+    /**
+     * 是否启用 响应OutputSchema 自动提取
+     */
+    boolean enableOutputSchema() default false;
 }

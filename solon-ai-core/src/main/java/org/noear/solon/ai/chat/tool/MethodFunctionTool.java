@@ -29,6 +29,8 @@ import org.noear.solon.core.wrap.MethodWrap;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.*;
 
 /**
@@ -47,7 +49,10 @@ public class MethodFunctionTool implements FunctionTool {
     private final List<ParamDesc> params = new ArrayList<>();
     private final ToolCallResultConverter resultConverter;
     private final String inputSchema;
-    private final String mimeType;
+	private final String mimeType;
+    private String outputSchema;
+    private boolean enableOutputSchema;
+
 
     public MethodFunctionTool(BeanWrap beanWrap, Method method) {
         this.beanWrap = beanWrap;
@@ -63,6 +68,7 @@ public class MethodFunctionTool implements FunctionTool {
         this.name = Utils.annoAlias(mapping.name(), method.getName());
         this.description = mapping.description();
         this.returnDirect = mapping.returnDirect();
+		this.enableOutputSchema = mapping.enableOutputSchema();
 
         Produces producesAnno = method.getAnnotation(Produces.class);
         if (producesAnno != null) {
@@ -94,7 +100,39 @@ public class MethodFunctionTool implements FunctionTool {
 
         inputSchema = ToolSchemaUtil.buildToolParametersNode(params, new ONode())
                 .toJson();
+
+        // 输出参数 outputSchema
+        if (enableOutputSchema) {
+            Type returnType = method.getGenericReturnType();
+            ONode outputSchemaNode = new ONode();
+            // 如果有泛型，则需要处理
+            if (returnType != void.class) {
+                ParamDesc returnDesc = new ParamDesc("", getRawClass(returnType), false, "");
+                ToolSchemaUtil.buildToolParamNode(returnType, returnDesc.description(), outputSchemaNode);
+            }
+
+            outputSchema = outputSchemaNode.toJson();
+        }
+
+
     }
+
+    /**
+     * @Description 获取原始类型
+     * @Param type
+     * @Return Class<?>
+     * @Date 2025/5/20 11:29
+     */
+    public static Class<?> getRawClass(Type type) {
+        if (type instanceof ParameterizedType) {
+            return (Class<?>) ((ParameterizedType) type).getRawType();
+        } else if (type instanceof Class) {
+            return (Class<?>) type;
+        } else {
+            throw new IllegalArgumentException("Unsupported type: " + type);
+        }
+    }
+
 
     /**
      * 名字
@@ -123,6 +161,11 @@ public class MethodFunctionTool implements FunctionTool {
     @Override
     public String inputSchema() {
         return inputSchema;
+    }
+
+    @Override
+    public String outputSchema() {
+        return outputSchema;
     }
 
     /**
@@ -154,6 +197,7 @@ public class MethodFunctionTool implements FunctionTool {
                 ", description='" + description + '\'' +
                 ", returnDirect=" + returnDirect +
                 ", inputSchema=" + inputSchema() +
+                ", outputSchema=" + outputSchema() +
                 '}';
     }
 }
