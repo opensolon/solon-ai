@@ -45,7 +45,8 @@ public class McpSseClientMixTest2 {
         assert ("[RefererFunctionTool{name='getWeather', " +
                 "description='查询天气预报', " +
                 "returnDirect=true, " +
-                "inputSchema={\"type\":\"object\",\"properties\":{\"location\":{\"description\":\"城市位置\",\"type\":\"string\"}},\"required\":[\"location\"]}}]")
+                "inputSchema={\"type\":\"object\",\"properties\":{\"location\":{\"description\":\"城市位置\",\"type\":\"string\"}},\"required\":[\"location\"]}, " +
+                "outputSchema=null}]")
                 .equals(tools.toString());
     }
 
