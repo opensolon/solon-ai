@@ -18,10 +18,13 @@ package org.noear.solon.ai.rag.loader;
 import java.io.*;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.noear.snack.core.utils.StringUtil;
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.lang.Preview;
 
 import javax.sql.DataSource;
@@ -44,13 +47,20 @@ public class DdlLoader extends AbstractOptionsDocumentLoader<DdlLoader.Options, 
         this.dataSource = dataSource;
         //默认支持mysql
         this.jdbcLoadConfig = new DdlLoadConfig.Builder()
-                .shcemaTableQuerySql(" select TABLE_SCHEMA, TABLE_NAME from information_schema.TABLES where TABLE_SCHEMA not in ('mysql', 'sys', 'information_schema') ")
-                .shcemaTableQueryAndSchemaSqlTemplate(" and TABLE_SCHEMA = '%s' ")
-                .shcemaTableQueryAndTableSqlTemplate(" and TABLE_SCHEMA = '%s' and TABLE_NAME = '%s' ")
+                .shcemaTableQuerySql("select TABLE_SCHEMA, TABLE_NAME from information_schema.TABLES where TABLE_SCHEMA not in ('mysql', 'sys', 'information_schema')")
+                .shcemaTableQueryAndSchemaSqlTemplate("and TABLE_SCHEMA = '#{tableSchema}'")
+                .shcemaTableQueryAndTableSqlTemplate("and TABLE_SCHEMA = '#{tableSchema}' and TABLE_NAME = '#{tableName}'")
                 .shcemaTableQueryResultSchemeNameColumn("TABLE_SCHEMA")
                 .shcemaTableQueryResultTableNameColumn("TABLE_NAME")
-                .ddlQuerySqlTemplate(" SHOW CREATE TABLE `%s`.`%s` ")
-                .ddlQueryResultDdlNameColumn("Create Table").build();
+                .ddlQuerySqlTemplate("SHOW CREATE TABLE `#{tableSchema}`.`#{tableName}`")
+                .ddlQueryResultDdlNameColumn("Create Table")
+                .fullDdlCreateTableSqlPrefix("CREATE TABLE")
+                .fullDdlCreateTableSqlNeedSchema(true)
+                .fullDdlCreateTableSqlDot(".")
+                .fullDdlCreateTableSqlLeftDelimitedIdentifier("`")
+                .fullDdlCreateTableSqlRightDelimitedIdentifier("`")
+                .fullDdlCreateTableSqlTruncationSymbol("(")
+                .build();
         this.options = new Options();
     }
 
@@ -74,10 +84,15 @@ public class DdlLoader extends AbstractOptionsDocumentLoader<DdlLoader.Options, 
                 //全库全表
             } else if (StringUtil.isEmpty(targetTable)) {
                 //单库全表
-                sql = sql.concat(String.format(this.jdbcLoadConfig.getShcemaTableQueryAndSchemaSqlTemplate(), targetSchema));
+                Map<String, String> schemaTableQueryTempleateConfigMap = new HashMap<>(1);
+                schemaTableQueryTempleateConfigMap.put("tableSchema", targetSchema);
+                sql = SnEL.evalTmpl(sql + " " + this.jdbcLoadConfig.getShcemaTableQueryAndSchemaSqlTemplate(), schemaTableQueryTempleateConfigMap);
             } else {
                 //单库单表
-                sql = sql.concat(String.format(this.jdbcLoadConfig.getShcemaTableQueryAndTableSqlTemplate(), targetSchema, targetTable));
+                Map<String, String> schemaTableQueryTempleateConfigMap = new HashMap<>(2);
+                schemaTableQueryTempleateConfigMap.put("tableSchema", targetSchema);
+                schemaTableQueryTempleateConfigMap.put("tableName", targetTable);
+                sql = SnEL.evalTmpl(sql + " " + this.jdbcLoadConfig.getShcemaTableQueryAndTableSqlTemplate(), schemaTableQueryTempleateConfigMap);
             }
 
             try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
@@ -87,14 +102,18 @@ public class DdlLoader extends AbstractOptionsDocumentLoader<DdlLoader.Options, 
                     //每张表单独转化
                     String tableSchema = rowSet.getString(this.jdbcLoadConfig.getShcemaTableQueryResultSchemeNameColumn());
                     String tableName = rowSet.getString(this.jdbcLoadConfig.getShcemaTableQueryResultTableNameColumn());
-                    String showddl = String.format(this.jdbcLoadConfig.getDdlQuerySqlTemplate(), tableSchema, tableName);
+
+                    Map<String, String> ddlQueryTempleateConfigMap = new HashMap<>(2);
+                    ddlQueryTempleateConfigMap.put("tableSchema", tableSchema);
+                    ddlQueryTempleateConfigMap.put("tableName", tableName);
+                    String showddl = SnEL.evalTmpl(this.jdbcLoadConfig.getDdlQuerySqlTemplate(), ddlQueryTempleateConfigMap);
 
                     try (PreparedStatement showddlPrepareStatement = connection.prepareStatement(showddl)) {
                         ResultSet showddlResultSet = showddlPrepareStatement.executeQuery();
 
                         if (showddlResultSet.next()) {
                             String tableddl = showddlResultSet.getString(this.jdbcLoadConfig.getDdlQueryResultDdlNameColumn());
-                            String fullDDL = "CREATE TABLE `" + tableSchema + "`.`" + tableName + "` " + tableddl.substring(tableddl.indexOf("("));
+                            String fullDDL = getFullDdl(tableddl, tableSchema, tableName);
 
                             Document doc = new Document(fullDDL)
                                     .metadata("table", tableName)
@@ -111,6 +130,22 @@ public class DdlLoader extends AbstractOptionsDocumentLoader<DdlLoader.Options, 
         }
 
         return documents;
+    }
+
+    private String getFullDdl(String tableddl, String tableSchema, String tableName) {
+        Map<String, String> fullDdlTempleateConfigMap = new HashMap<>(7);
+        fullDdlTempleateConfigMap.put("tableSchema", tableSchema);
+        fullDdlTempleateConfigMap.put("tableName", tableName);
+        fullDdlTempleateConfigMap.put("fullDdlCreateTableSqlPrefix", this.jdbcLoadConfig.getFullDdlCreateTableSqlPrefix());
+        fullDdlTempleateConfigMap.put("fullDdlCreateTableSqlDot", this.jdbcLoadConfig.getFullDdlCreateTableSqlDot());
+        fullDdlTempleateConfigMap.put("fullDdlCreateTableSqlLeftDelimitedIdentifier", this.jdbcLoadConfig.getFullDdlCreateTableSqlLeftDelimitedIdentifier());
+        fullDdlTempleateConfigMap.put("fullDdlCreateTableSqlRightDelimitedIdentifier", this.jdbcLoadConfig.getFullDdlCreateTableSqlRightDelimitedIdentifier());
+        fullDdlTempleateConfigMap.put("fullDdlCreateTableSqlTruncation", tableddl.substring(tableddl.indexOf(this.jdbcLoadConfig.getFullDdlCreateTableSqlTruncationSymbol())));
+        if (this.jdbcLoadConfig.isFullDdlCreateTableSqlNeedSchema()) {
+            return SnEL.evalTmpl("#{fullDdlCreateTableSqlPrefix} #{fullDdlCreateTableSqlLeftDelimitedIdentifier}#{tableSchema}#{fullDdlCreateTableSqlRightDelimitedIdentifier}#{fullDdlCreateTableSqlDot}#{fullDdlCreateTableSqlLeftDelimitedIdentifier}#{tableName}#{fullDdlCreateTableSqlRightDelimitedIdentifier} #{fullDdlCreateTableSqlTruncation}", fullDdlTempleateConfigMap);
+        } else {
+            return SnEL.evalTmpl("#{fullDdlCreateTableSqlPrefix} #{fullDdlCreateTableSqlLeftDelimitedIdentifier}#{tableName}#{fullDdlCreateTableSqlRightDelimitedIdentifier} #{fullDdlCreateTableSqlTruncation}", fullDdlTempleateConfigMap);
+        }
     }
 
     /**
