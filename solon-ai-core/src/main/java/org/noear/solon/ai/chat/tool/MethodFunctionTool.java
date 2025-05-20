@@ -29,7 +29,6 @@ import org.noear.solon.core.wrap.MethodWrap;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.*;
 
@@ -107,29 +106,10 @@ public class MethodFunctionTool implements FunctionTool {
             ONode outputSchemaNode = new ONode();
             // 如果返回类型，则需要处理
             if (returnType != void.class) {
-                ParamDesc returnDesc = new ParamDesc("", getRawClass(returnType), false, "");
-                ToolSchemaUtil.buildToolParamNode(returnType, returnDesc.description(), outputSchemaNode);
+                ToolSchemaUtil.buildToolParamNode(returnType, "", outputSchemaNode);
             }
 
             outputSchema = outputSchemaNode.toJson();
-        }
-
-
-    }
-
-    /**
-     * @Description 获取原始类型
-     * @Param type
-     * @Return Class<?>
-     * @Date 2025/5/20 11:29
-     */
-    public static Class<?> getRawClass(Type type) {
-        if (type instanceof ParameterizedType) {
-            return (Class<?>) ((ParameterizedType) type).getRawType();
-        } else if (type instanceof Class) {
-            return (Class<?>) type;
-        } else {
-            throw new IllegalArgumentException("Unsupported type: " + type);
         }
     }
 

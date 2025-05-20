@@ -18,6 +18,7 @@ package org.noear.solon.ai.chat.tool;
 import org.noear.snack.ONode;
 import org.noear.solon.ai.util.ParamDesc;
 
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.function.Function;
 
@@ -30,10 +31,12 @@ import java.util.function.Function;
 public class FunctionToolDesc implements FunctionTool {
     private final String name;
     private final List<ParamDesc> params;
+    private Type returnType;
     private String description;
     private boolean returnDirect = false;
     private Function<Map<String, Object>, String> doHandler;
     private String inputSchema;
+    private String outputSchema;
 
     /**
      * @param name 函数名字
@@ -54,6 +57,16 @@ public class FunctionToolDesc implements FunctionTool {
     }
 
     /**
+     * 申明返回类型
+     *
+     * @param returnType 直接类型
+     */
+    public FunctionToolDesc returnType(Type returnType) {
+        this.returnType = returnType;
+        return this;
+    }
+
+    /**
      * 申明直接返回给调用者
      *
      * @param returnDirect 直接返回
@@ -70,7 +83,7 @@ public class FunctionToolDesc implements FunctionTool {
      * @param type        参数类型
      * @param description 参数描述
      */
-    public FunctionToolDesc paramAdd(String name, Class<?> type, String description) {
+    public FunctionToolDesc paramAdd(String name, Type type, String description) {
         return paramAdd(name, type, true, description);
     }
 
@@ -82,7 +95,7 @@ public class FunctionToolDesc implements FunctionTool {
      * @param required    是否必须
      * @param description 参数描述
      */
-    public FunctionToolDesc paramAdd(String name, Class<?> type, boolean required, String description) {
+    public FunctionToolDesc paramAdd(String name, Type type, boolean required, String description) {
         params.add(new ParamDesc(name, type, required, description));
         inputSchema = null;
         return this;
@@ -187,6 +200,22 @@ public class FunctionToolDesc implements FunctionTool {
         }
 
         return inputSchema;
+    }
+
+    @Override
+    public String outputSchema() {
+        if (outputSchema == null) {
+            if (returnType != null) {
+                ONode outputSchemaNode = new ONode();
+                // 如果返回类型，则需要处理
+                if (returnType != void.class) {
+                    ToolSchemaUtil.buildToolParamNode(returnType, "", outputSchemaNode);
+                }
+
+                outputSchema = outputSchemaNode.toJson();
+            }
+        }
+        return FunctionTool.super.outputSchema();
     }
 
     /**

@@ -57,11 +57,11 @@ public class ToolSchemaUtil {
         if (ae instanceof Parameter) {
             Parameter p1 = (Parameter) ae;
             String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-            return new ParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description());
+            return new ParamDesc(name, p1.getParameterizedType(), p1Anno.required(), p1Anno.description());
         } else {
             Field p1 = (Field) ae;
             String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-            return new ParamDesc(name, p1.getType(), p1Anno.required(), p1Anno.description());
+            return new ParamDesc(name, p1.getGenericType(), p1Anno.required(), p1Anno.description());
         }
     }
 
@@ -98,10 +98,8 @@ public class ToolSchemaUtil {
 
 
     /**
-     * @Description 主入口方法：构建 Schema 节点（递归处理）
-     * @Param type
-     * @Param description
-     * @Param schemaNode
+     * 主入口方法：构建 Schema 节点（递归处理）
+     *
      * @Author ityangs@163.com
      * @Date 2025/5/20 10:19
      */
@@ -402,5 +400,16 @@ public class ToolSchemaUtil {
         }
     }
 
-
+    /**
+     * 获取原始类型
+     */
+    public static Class<?> getRawClass(Type type) {
+        if (type instanceof ParameterizedType) {
+            return (Class<?>) ((ParameterizedType) type).getRawType();
+        } else if (type instanceof Class) {
+            return (Class<?>) type;
+        } else {
+            throw new IllegalArgumentException("Unsupported type: " + type);
+        }
+    }
 }

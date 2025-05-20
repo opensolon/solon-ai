@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.util;
 
+import java.lang.reflect.Type;
+
 /**
  * 函数工具参数描述
  *
@@ -23,11 +25,11 @@ package org.noear.solon.ai.util;
  */
 public class ParamDesc {
     private final String name;
-    private final Class<?> type;
+    private final Type type;
     private final boolean required;
     private final String description;
 
-    public ParamDesc(String name, Class<?> type, boolean required, String description) {
+    public ParamDesc(String name, Type type, boolean required, String description) {
         this.name = name;
         this.type = type;
         this.required = required;
@@ -44,7 +46,7 @@ public class ParamDesc {
     /**
      * 参数类型
      */
-    public Class<?> type() {
+    public Type type() {
         return type;
     }
 

@@ -540,12 +540,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             String description = tool.getDescription();
             Boolean returnDirect = tool.getReturnDirect();
             String inputSchema = ONode.load(tool.getInputSchema()).toJson();
+            String outputSchema = (tool.getOutputSchema() == null ? null : ONode.load(tool.getOutputSchema()).toJson());
 
             RefererFunctionTool functionRefer = new RefererFunctionTool(
                     name,
                     description,
                     returnDirect,
                     inputSchema,
+                    outputSchema,
                     args -> callToolAsText(name, args).getContent());
 
             toolList.add(functionRefer);
