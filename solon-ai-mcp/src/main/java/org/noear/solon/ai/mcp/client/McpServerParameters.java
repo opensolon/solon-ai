@@ -18,6 +18,7 @@ package org.noear.solon.ai.mcp.client;
 import org.noear.solon.Utils;
 import org.noear.solon.core.util.Assert;
 
+import java.time.Duration;
 import java.util.*;
 
 /**
@@ -25,9 +26,51 @@ import java.util.*;
  * @since 3.1
  */
 public class McpServerParameters {
+    private String transport;
+    private String url;
+    private Map<String, String> headers = new HashMap<>();
+    private Duration timeout;
+
     private String command;
     private List<String> args = new ArrayList<>();
     private Map<String, String> env = new HashMap<>();
+
+    /// ////////////
+    ///
+    ///
+
+
+    public String getTransport() {
+        return transport;
+    }
+
+    public void setTransport(String transport) {
+        this.transport = transport;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
+    public void setHeaders(Map<String, String> headers) {
+        this.headers = headers;
+    }
+
+    public Map<String, String> getHeaders() {
+        return headers;
+    }
+
+    public Duration getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(Duration timeout) {
+        this.timeout = timeout;
+    }
 
     /// ////////////
 
@@ -55,7 +98,7 @@ public class McpServerParameters {
         this.env = env;
     }
 
-    public static Builder builder(String command){
+    public static Builder builder(String command) {
         return new Builder(command);
     }
 
