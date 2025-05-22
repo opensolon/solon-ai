@@ -4,10 +4,6 @@ layout:
   - task: "@VarInput"
     meta:
       message: "杭州今天天气怎么样?"
-  - task: "@McpTool"
-    meta:
-      mcpConfig:
-        apiUrl: "http://127.0.0.1:8080/mcp/sse"
   - task: "@ChatModel"
     meta:
       systemPrompt: "你是个天气预报员"
@@ -16,4 +12,7 @@ layout:
         provider: "ollama"
         model: "qwen2.5:1.5b"
         apiUrl: "http://127.0.0.1:11434/api/chat"
+      mcpServers:
+        mcp1:
+          url: "http://127.0.0.1:8080/mcp/sse"
   - task: "@ConsoleOutput"

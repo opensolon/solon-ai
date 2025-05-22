@@ -3,11 +3,11 @@ package features.ai.flow.app;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.flow.components.Attrs;
-import org.noear.solon.ai.flow.events.Events;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Inject;
 import org.noear.solon.annotation.Mapping;
 import org.noear.solon.annotation.Produces;
+import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.stateful.StatefulFlowEngine;
@@ -24,17 +24,12 @@ public class DemoController {
 
     @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
     @Mapping("chat_case2")
-    public void chat_case2() throws Exception {
+    public void chat_case2(Context ctx) throws Exception {
         FlowContext flowContext = new FlowContext();
 
         //保存会话记录
-        ChatSession chatSession = chatSessionMap.computeIfAbsent("chat_case2", k -> new ChatSessionDefault());
+        ChatSession chatSession = chatSessionMap.computeIfAbsent(ctx.sessionId(), k -> new ChatSessionDefault(ctx.sessionId()));
         flowContext.put(Attrs.CTX_CHAT_SESSION, chatSession);
-
-        //监听事件
-        flowContext.eventBus().listen(Events.EVENT_FLOW_NODE_START, event -> {
-            System.out.println(event);
-        });
 
         flowEngine.eval("chat_case2", flowContext);
     }
