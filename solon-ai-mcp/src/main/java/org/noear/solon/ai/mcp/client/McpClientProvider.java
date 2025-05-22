@@ -659,52 +659,117 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     /// /////////////////////////////
 
     /**
-     * 根据 mcpServers 配置加载客户端
+     * 根据 mcpServers 配置解析出参数
      *
      * @param uri 配置资源地址
      */
-    public static Map<String, McpClientProvider> fromMcpServers(String uri) throws IOException {
-        Assert.notEmpty(uri, "Uri is empty");
+    public static Map<String, McpServerParameters> parseMcpServers(String uri) throws IOException {
+        Assert.notEmpty(uri, "uri is empty");
 
         URL res = ResourceUtil.findResource(uri);
         String json = ResourceUtil.getResourceAsString(res);
         ONode jsonDom = ONode.loadStr(json);
 
-        Map<String, McpClientProvider> map = new HashMap<>();
-        for (Map.Entry<String, ONode> kv : jsonDom.get("mcpServers").obj().entrySet()) {
-            String name = kv.getKey();
-            Map<String, String> env = kv.getValue().get("env").toObject(new HashMap<String, String>() {
-            }.getClass());
+        return parseMcpServers(jsonDom);
+    }
 
-            String type = kv.getValue().get("type").getString();
+    /**
+     * 根据 mcpServers 配置解析出参数
+     *
+     * @param configDom 配置文档
+     */
+    public static Map<String, McpServerParameters> parseMcpServers(ONode configDom) throws IOException {
+        Assert.notNull(configDom, "configDom is null");
 
-            if (Utils.isEmpty(type)) {
-                //兼容没有 type 配置的情况
-                if (kv.getValue().contains("url")) {
-                    type = McpChannel.SSE;
-                } else {
-                    type = McpChannel.STDIO;
-                }
-            }
-
-
-            Builder builder = builder().channel(type);
-
-            if (McpChannel.STDIO.equalsIgnoreCase(type)) {
-                String command = kv.getValue().get("command").getString();
-                List<String> args = kv.getValue().get("args").toObject(new ArrayList<String>() {
-                }.getClass());
-
-                builder.serverParameters(McpServerParameters.builder(command).args(args).env(env).build());
-            } else {
-                String url = kv.getValue().get("url").getString();
-                builder.apiUrl(url).headerSet(env);
-            }
-
-            map.put(name, builder.build());
+        ONode mcpServersNode = configDom.getOrNull("mcpServers");
+        if (mcpServersNode == null) {
+            mcpServersNode = configDom;
         }
 
-        return map;
+        Map<String, McpServerParameters> mcpServers = mcpServersNode
+                .toObject(new HashMap<String, McpServerParameters>() {
+                }.getClass());
+
+        return mcpServers;
+    }
+
+    /**
+     * 根据 mcpServers 配置加载客户端
+     *
+     * @param uri 配置资源地址
+     */
+    public static Map<String, McpClientProvider> fromMcpServers(String uri) throws IOException {
+        Map<String, McpServerParameters> mcpServers = parseMcpServers(uri);
+
+        return fromMcpServers(mcpServers);
+    }
+
+    /**
+     * 根据 mcpServers 配置加载客户端
+     *
+     * @param configDom 配置文档
+     */
+    public static Map<String, McpClientProvider> fromMcpServers(ONode configDom) throws IOException {
+        Map<String, McpServerParameters> mcpServers = parseMcpServers(configDom);
+
+        return fromMcpServers(mcpServers);
+    }
+
+    /**
+     * 根据 mcpServers 配置加载客户端
+     *
+     * @param mcpServers 配置集合
+     */
+    public static Map<String, McpClientProvider> fromMcpServers(Map<String, McpServerParameters> mcpServers) throws IOException {
+        Map<String, McpClientProvider> mcpClients = new HashMap<>();
+
+        if (Utils.isNotEmpty(mcpServers)) {
+            for (Map.Entry<String, McpServerParameters> kv : mcpServers.entrySet()) {
+                McpClientProvider mcpClient = fromMcpServer(kv.getValue());
+
+                mcpClients.put(kv.getKey(), mcpClient);
+            }
+        }
+
+        return mcpClients;
+    }
+
+    /**
+     * 根据 serverParameters 配置加载客户端
+     *
+     * @param serverParameters 配置参数
+     */
+    public static McpClientProvider fromMcpServer(McpServerParameters serverParameters) throws IOException {
+        Assert.notNull(serverParameters, "serverParameters is null");
+
+        String type = Utils.valueOr(serverParameters.getType(), serverParameters.getTransport());
+
+        if (Utils.isEmpty(type)) {
+            //兼容没有 type 配置的情况
+            if (Utils.isNotEmpty(serverParameters.getUrl())) {
+                type = McpChannel.SSE;
+            } else {
+                type = McpChannel.STDIO;
+            }
+        }
+
+
+        Builder builder = builder().channel(type);
+
+        if (McpChannel.STDIO.equalsIgnoreCase(type)) {
+            builder.serverParameters(serverParameters);
+        } else {
+            builder.apiUrl(serverParameters.getUrl());
+            builder.headerSet(serverParameters.getHeaders());
+
+            if (serverParameters.getTimeout() != null) {
+                builder.httpTimeout(HttpTimeout.of((int) serverParameters.getTimeout().getSeconds()));
+                builder.requestTimeout(serverParameters.getTimeout());
+                builder.initializationTimeout(serverParameters.getTimeout());
+            }
+        }
+
+        return builder.build();
     }
 
     public static Builder builder() {

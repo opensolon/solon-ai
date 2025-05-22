@@ -2,9 +2,9 @@
   "mcpServers": {
     "server1": {
       "type": "sse",
-      "url": "http://localhost8080/demo1/sse",
-      "env": {
-        "key": "value"
+      "url": "http://localhost:8081/demo2/sse",
+      "headers": {
+        "Token": "value"
       }
     },
     "fetch": {

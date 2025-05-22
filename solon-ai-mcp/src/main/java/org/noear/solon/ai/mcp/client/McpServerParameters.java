@@ -18,15 +18,20 @@ package org.noear.solon.ai.mcp.client;
 import org.noear.solon.Utils;
 import org.noear.solon.core.util.Assert;
 
+import java.io.Serializable;
 import java.time.Duration;
 import java.util.*;
 
 /**
+ * Mcp 服务端配置参数
+ *
  * @author noear
  * @since 3.1
  */
-public class McpServerParameters {
+public class McpServerParameters implements Serializable {
     private String transport;
+    private String type;
+
     private String url;
     private Map<String, String> headers = new HashMap<>();
     private Duration timeout;
@@ -46,6 +51,14 @@ public class McpServerParameters {
 
     public void setTransport(String transport) {
         this.transport = transport;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 
     public String getUrl() {
