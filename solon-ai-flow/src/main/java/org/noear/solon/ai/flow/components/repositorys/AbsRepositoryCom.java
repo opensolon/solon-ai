@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.flow.components.AiPropertyComponent;
+import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.DocumentSplitter;
 import org.noear.solon.ai.rag.RepositoryStorable;
@@ -77,6 +78,9 @@ public abstract class AbsRepositoryCom extends AbsAiComponent implements AiIoCom
         Object data = getInput(context, node);
 
         Assert.notNull(data, "Repository input is null");
+
+        //转到 context
+        setProperty(context, Attrs.PROP_REPOSITORY, repository);
 
         if (data instanceof String) {
             //查询
