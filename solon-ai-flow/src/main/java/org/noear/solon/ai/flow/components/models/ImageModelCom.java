@@ -38,7 +38,6 @@ import org.noear.solon.flow.Node;
 @Component("ImageModel")
 public class ImageModelCom extends AbsAiComponent implements AiIoComponent, AiPropertyComponent {
     //私有元信息
-    static final String META_SYSTEM_PROMPT = "systemPrompt";
     static final String META_IMAGE_CONFIG = "imageConfig";
 
 

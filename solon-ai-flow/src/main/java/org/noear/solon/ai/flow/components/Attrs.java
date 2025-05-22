@@ -25,7 +25,6 @@ public interface Attrs {
     String META_INPUT = "input";
     String META_OUTPUT = "output";
     String META_ATTACHMENT = "attachment";
-    String META_CHAT_SESSION = "chatSession";
 
     String CTX_CHAT_SESSION = "chatSession";
     String CTX_PROPERTY = "property";

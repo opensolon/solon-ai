@@ -51,6 +51,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
     static final String META_CHAT_CONFIG = "chatConfig";
     static final String META_TOOL_PROVIDERS = "toolProviders";
     static final String META_MCP_SERVERS = "mcpServers";
+    static final String META_CHAT_SESSION = "chatSession";
 
 
     @Override
@@ -96,7 +97,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
 
         if (data != null) {
             //构建会话（可在发起流程时传递）
-            String chatSessionKey = node.getMetaOrDefault(Attrs.META_CHAT_SESSION, Attrs.CTX_CHAT_SESSION);
+            String chatSessionKey = node.getMetaOrDefault(META_CHAT_SESSION, Attrs.CTX_CHAT_SESSION);
             ChatSession chatSession = context.computeIfAbsent(chatSessionKey, k -> new ChatSessionDefault());
 
             if (Utils.isEmpty(chatSession.getMessages())) {
