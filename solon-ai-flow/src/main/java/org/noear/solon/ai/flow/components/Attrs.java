@@ -32,8 +32,6 @@ public interface Attrs {
     String CTX_MESSAGE = "message";
     String CTX_ATTACHMENT = "attachment";
 
-    String PROP_TOOLS = "tools";
-    String PROP_MCP_PROVIDERS = "mcpProviders";
     String PROP_REPOSITORY = "repository";
 
     String PROP_EMBEDDING_MODEL = "embeddingModel";

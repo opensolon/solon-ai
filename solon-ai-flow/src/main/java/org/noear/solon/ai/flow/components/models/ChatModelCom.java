@@ -24,7 +24,6 @@ import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
-import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.flow.components.AiPropertyComponent;
@@ -49,7 +48,8 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
     static final String META_SYSTEM_PROMPT = "systemPrompt";
     static final String META_STREAM = "stream";
     static final String META_CHAT_CONFIG = "chatConfig";
-    static final String META_TOOL_PROVIDER = "toolProviders";
+    static final String META_TOOL_PROVIDERS = "toolProviders";
+    static final String META_MCP_SERVERS = "mcpServers";
 
 
     @Override
@@ -61,8 +61,8 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
             assert chatConfig != null;
             ChatModel.Builder chatModelBuilder = ChatModel.of(chatConfig);
 
-
-            List<String> toolProviders = node.getMeta(META_TOOL_PROVIDER);
+            //toolProviders
+            List<String> toolProviders = node.getMeta(META_TOOL_PROVIDERS);
             if (Utils.isNotEmpty(toolProviders)) {
                 for (String toolProvider : toolProviders) {
                     Object tmp = ClassUtil.tryInstance(toolProvider);
@@ -72,23 +72,13 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
                 }
             }
 
-            //tools
-            List toolsProps = getPropertyAll(context, Attrs.PROP_TOOLS);
-            if (Utils.isNotEmpty(toolsProps)) {
-                for (Object tmp : toolsProps) {
-                    if (tmp instanceof ToolProvider) {
-                        chatModelBuilder.defaultToolsAdd((ToolProvider) tmp);
-                    }
-                }
-            }
-
-            //mcpProviders
-            List mcpProvidersProps = getPropertyAll(context, Attrs.PROP_MCP_PROVIDERS);
-            if (Utils.isNotEmpty(mcpProvidersProps)) {
-                for (Object tmp : mcpProvidersProps) {
-                    if (tmp instanceof McpProviders) {
-                        chatModelBuilder.defaultToolsAdd((McpProviders) tmp);
-                    }
+            //mcpServers
+            Object mcpServers = node.getMeta(META_MCP_SERVERS);
+            if (mcpServers == null) {
+                ONode mcpServersNode = ONode.loadObj(mcpServers);
+                McpProviders mcpProviders = McpProviders.fromMcpServers(mcpServersNode);
+                if (mcpProviders != null) {
+                    chatModelBuilder.defaultToolsAdd(mcpProviders);
                 }
             }
 
