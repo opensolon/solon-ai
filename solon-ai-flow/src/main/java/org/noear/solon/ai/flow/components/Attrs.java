@@ -33,6 +33,9 @@ public interface Attrs {
     String CTX_ATTACHMENT = "attachment";
 
     String PROP_TOOLS = "tools";
-    String PROP_EMBEDDING_MODEL = "embeddingModel";
     String PROP_REPOSITORY = "repository";
+
+    String PROP_EMBEDDING_MODEL = "embeddingModel";
+    String PROP_CHAT_MODEL = "chatModel";
+    String PROP_IMAGE_MODEL = "imageModel";
 }

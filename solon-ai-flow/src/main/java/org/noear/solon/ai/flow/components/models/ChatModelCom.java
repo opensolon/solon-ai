@@ -85,44 +85,48 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
             node.attachment = chatModel;
         }
 
-        //构建会话（可在发起流程时传递）
-        String chatSessionKey = node.getMetaOrDefault(Attrs.META_CHAT_SESSION, Attrs.CTX_CHAT_SESSION);
-        ChatSession chatSession = context.computeIfAbsent(chatSessionKey, k -> new ChatSessionDefault());
+        //转入上下文
+        setProperty(context, Attrs.PROP_CHAT_MODEL, chatModel);
 
-        if (Utils.isEmpty(chatSession.getMessages())) {
-            String systemPrompt = node.getMeta(META_SYSTEM_PROMPT);
-            if (Utils.isNotEmpty(systemPrompt)) {
-                chatSession.addMessage(ChatMessage.ofSystem(systemPrompt));
-            }
-        }
-
-        boolean isStream = "true".equals(node.getMeta(META_STREAM));
 
         //获取数据
         Object data = getInput(context, node);
 
-        Assert.notNull(data, "ChatModel input is null");
+        if (data != null) {
+            //构建会话（可在发起流程时传递）
+            String chatSessionKey = node.getMetaOrDefault(Attrs.META_CHAT_SESSION, Attrs.CTX_CHAT_SESSION);
+            ChatSession chatSession = context.computeIfAbsent(chatSessionKey, k -> new ChatSessionDefault());
 
-        if (data instanceof String) {
-            //字符串
-            chatSession.addMessage(ChatMessage.ofUser((String) data));
-        } else if (data instanceof ChatMessage) {
-            //消息
-            chatSession.addMessage((ChatMessage) data);
-        } else if (data instanceof ChatPrompt) {
-            //提示语
-            chatSession.addMessage(((ChatPrompt) data).getMessages());
-        } else {
-            throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
+            if (Utils.isEmpty(chatSession.getMessages())) {
+                String systemPrompt = node.getMeta(META_SYSTEM_PROMPT);
+                if (Utils.isNotEmpty(systemPrompt)) {
+                    chatSession.addMessage(ChatMessage.ofSystem(systemPrompt));
+                }
+            }
+
+            boolean isStream = "true".equals(node.getMeta(META_STREAM));
+
+            if (data instanceof String) {
+                //字符串
+                chatSession.addMessage(ChatMessage.ofUser((String) data));
+            } else if (data instanceof ChatMessage) {
+                //消息
+                chatSession.addMessage((ChatMessage) data);
+            } else if (data instanceof ChatPrompt) {
+                //提示语
+                chatSession.addMessage(((ChatPrompt) data).getMessages());
+            } else {
+                throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
+            }
+
+            //替换数据
+            if (isStream) {
+                data = chatModel.prompt(chatSession).stream();
+            } else {
+                data = chatModel.prompt(chatSession).call();
+            }
+
+            setOutput(context, node, data);
         }
-
-        //替换数据
-        if (isStream) {
-            data = chatModel.prompt(chatSession).stream();
-        } else {
-            data = chatModel.prompt(chatSession).call();
-        }
-
-        setOutput(context, node, data);
     }
 }

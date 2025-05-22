@@ -16,9 +16,11 @@
 package org.noear.solon.ai.flow.components.models;
 
 import org.noear.snack.ONode;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.flow.components.AiPropertyComponent;
+import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.ai.image.ImageConfig;
 import org.noear.solon.ai.image.ImageModel;
 import org.noear.solon.ai.image.ImageResponse;
@@ -33,7 +35,7 @@ import org.noear.solon.flow.Node;
  * @author noear
  * @since 3.3
  */
-@Component("ChatModel")
+@Component("ImageModel")
 public class ImageModelCom extends AbsAiComponent implements AiIoComponent, AiPropertyComponent {
     //私有元信息
     static final String META_SYSTEM_PROMPT = "systemPrompt";
@@ -53,17 +55,25 @@ public class ImageModelCom extends AbsAiComponent implements AiIoComponent, AiPr
             node.attachment = imageModel;
         }
 
+        //转入上下文
+        setProperty(context, Attrs.PROP_IMAGE_MODEL, imageModel);
 
         //获取数据
         Object data = getInput(context, node);
 
-        //数据检测
-        Assert.notNull(data, "ImageModel input is null");
-        if (data instanceof String == false) {
-            throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
-        }
+        if (data != null) {
+            //数据检测
+            String promptStr = null;
+            if (data instanceof String) {
+                promptStr = (String) data;
+            } else if (data instanceof ChatMessage) {
+                promptStr = ((ChatMessage) data).getContent();
+            } else {
+                throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
+            }
 
-        ImageResponse resp = imageModel.prompt((String) data).call();
-        setOutput(context, node, resp);
+            ImageResponse resp = imageModel.prompt(promptStr).call();
+            setOutput(context, node, resp);
+        }
     }
 }
