@@ -49,7 +49,7 @@ public interface AiPropertyComponent extends AiComponent {
      * 获取属性
      */
     default void setProperty(FlowContext context, String name, Object value) throws Throwable {
-        context.put(Attrs.CTX_PROPERTY + "_" + name, Arrays.asList(value));
+        context.put(Attrs.CTX_PROPERTY + "_" + name, new ArrayList(Arrays.asList(value)));
     }
 
     /**
