@@ -38,7 +38,7 @@ import java.util.Properties;
 @Condition(onClass = RedisRepository.class)
 @Component("RedisRepository")
 public class RedisRepositoryCom extends AbsRepositoryCom {
-    static final String META_REPOSITORY_CONFIG = "repositoryConfig";
+    static final String META_REDIS_CONFIG = "redisConfig";
 
     @Override
     public RepositoryStorable getRepository(FlowContext context, Node node) throws Throwable {
@@ -50,7 +50,9 @@ public class RedisRepositoryCom extends AbsRepositoryCom {
             Assert.notNull(embeddingModel, "Missing embeddingModel property!");
 
 
-            Properties redisProperties = ONode.loadObj(node.getMeta(META_REPOSITORY_CONFIG)).toObject(Properties.class);
+            Properties redisProperties = ONode.loadObj(node.getMeta(META_REDIS_CONFIG))
+                    .toObject(Properties.class);
+
             RedisClient redisClient = new RedisClient(redisProperties);
 
             repository = RedisRepository.builder(embeddingModel, redisClient.jedis()).build();
