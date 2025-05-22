@@ -31,6 +31,7 @@ import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.ai.mcp.client.McpProviders;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.util.ClassUtil;
+import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 
@@ -101,7 +102,8 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
             if (Utils.isEmpty(chatSession.getMessages())) {
                 String systemPrompt = node.getMeta(META_SYSTEM_PROMPT);
                 if (Utils.isNotEmpty(systemPrompt)) {
-                    chatSession.addMessage(ChatMessage.ofSystem(systemPrompt));
+                    String systemPromptStr = SnEL.evalTmpl(systemPrompt, context.model());
+                    chatSession.addMessage(ChatMessage.ofSystem(systemPromptStr));
                 }
             }
 
