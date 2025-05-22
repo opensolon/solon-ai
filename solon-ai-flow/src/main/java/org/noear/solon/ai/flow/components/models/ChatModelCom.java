@@ -29,8 +29,8 @@ import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.flow.components.AiPropertyComponent;
 import org.noear.solon.ai.flow.components.Attrs;
+import org.noear.solon.ai.mcp.client.McpProviders;
 import org.noear.solon.annotation.Component;
-import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -72,11 +72,22 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
                 }
             }
 
-            List toolProps = getPropertyAll(context, Attrs.PROP_TOOLS);
-            if (Utils.isNotEmpty(toolProps)) {
-                for (Object tmp : toolProps) {
+            //tools
+            List toolsProps = getPropertyAll(context, Attrs.PROP_TOOLS);
+            if (Utils.isNotEmpty(toolsProps)) {
+                for (Object tmp : toolsProps) {
                     if (tmp instanceof ToolProvider) {
                         chatModelBuilder.defaultToolsAdd((ToolProvider) tmp);
+                    }
+                }
+            }
+
+            //mcpProviders
+            List mcpProvidersProps = getPropertyAll(context, Attrs.PROP_MCP_PROVIDERS);
+            if (Utils.isNotEmpty(mcpProvidersProps)) {
+                for (Object tmp : mcpProvidersProps) {
+                    if (tmp instanceof McpProviders) {
+                        chatModelBuilder.defaultToolsAdd((McpProviders) tmp);
                     }
                 }
             }
