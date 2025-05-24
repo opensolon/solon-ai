@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.util;
 
+import java.io.Serializable;
 import java.net.Proxy;
 
 /**
@@ -23,7 +24,7 @@ import java.net.Proxy;
  * @author noear
  * @since 3.3
  */
-public class ProxyDesc {
+public class ProxyDesc implements Serializable {
     public Proxy.Type type;
     public String host;
     public int port;
