@@ -85,12 +85,12 @@ public abstract class AbsRepositoryCom extends AbsAiComponent implements AiIoCom
         if (data instanceof String) {
             //查询
             List<Document> documents = repository.search((String) data);
-            data = ChatMessage.augment((String) data, documents);
+            data = ChatMessage.ofUserAugment((String) data, documents);
             setOutput(context, node, data);
         } else if (data instanceof ChatMessage) {
             //查询
             List<Document> documents = repository.search(((ChatMessage) data).getContent());
-            data = ChatMessage.augment(((ChatMessage) data).getContent(), documents);
+            data = ChatMessage.ofUserAugment(((ChatMessage) data).getContent(), documents);
             setOutput(context, node, data);
         } else if (data instanceof Document) {
             //插入

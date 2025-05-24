@@ -22,7 +22,7 @@ public class WebSearchTest {
         List<Document> context = repository.search(query);
 
         ChatResponse resp = TestUtils.getChatModel()
-                .prompt(ChatMessage.augment(query, context))
+                .prompt(ChatMessage.ofUserAugment(query, context))
                 .call();
 
         //打印

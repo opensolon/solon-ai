@@ -43,7 +43,7 @@ public class RagRepositoryTest {
 
         //3.应用
         ChatResponse resp = chatModel
-                .prompt(ChatMessage.augment(query, repository.search(query))) //3.1.搜索知识库（结果，作为提示语）
+                .prompt(ChatMessage.ofUserAugment(query, repository.search(query))) //3.1.搜索知识库（结果，作为提示语）
                 .call(); //3.2.调用大模型
 
         //打印

@@ -157,7 +157,7 @@ public class OpenaiTest {
                 .build();
 
         ChatResponse resp = chatModel
-                .prompt(ChatMessage.augment("solon 框架的作者是谁？", new Document()
+                .prompt(ChatMessage.ofUserAugment("solon 框架的作者是谁？", new Document()
                         .title("概述")
                         .url("https://solon.noear.org/article/about")))
                 .call();
