@@ -79,6 +79,7 @@ public class ChatConfig extends AiConfig {
                 ", model='" + model + '\'' +
                 ", headers=" + headers +
                 ", timeout=" + timeout +
+                ", proxy=" + getProxy() +
                 ", defaultTools=" + defaultTools +
                 '}';
     }
