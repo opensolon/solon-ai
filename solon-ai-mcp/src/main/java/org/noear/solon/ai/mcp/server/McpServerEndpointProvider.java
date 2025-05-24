@@ -136,10 +136,17 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     /**
-     * 端点
+     * SSE 端点
      */
     public String getSseEndpoint() {
         return sseEndpoint;
+    }
+
+    /**
+     * MESSAGE 端点
+     */
+    public String getMessageEndpoint() {
+        return messageEndpoint;
     }
 
     /**
