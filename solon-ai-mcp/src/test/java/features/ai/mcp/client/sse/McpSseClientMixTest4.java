@@ -68,6 +68,18 @@ public class McpSseClientMixTest4 {
     }
 
     @Test
+    public void tool3() throws Exception {
+        Map<String, Object> args = new HashMap<>();
+        args.put("activityInfo", Utils.asMap("activityId", "12"));
+
+        String response = mcpClient.callToolAsText("getDetails", args).getContent();
+
+        log.warn("{}", response);
+        assert Utils.isNotEmpty(response);
+        assert response.contains("activityId='12'");
+    }
+
+    @Test
     public void prompt1() throws Exception {
         List<ChatMessage> prompt = mcpClient.getPromptAsMessages("splitMessage", Collections.emptyMap());
 
@@ -77,4 +89,5 @@ public class McpSseClientMixTest4 {
         assert "[{role=user, content='', medias=[Image{url='https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png', b64_json='null', mimeType='image/jpeg'}]}, {role=user, content='这图里有方块吗？'}]"
                 .equals(prompt.toString());
     }
+
 }

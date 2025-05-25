@@ -5,8 +5,8 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.ai.media.Image;
-import org.noear.solon.annotation.Mapping;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.handle.Result;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -42,5 +42,22 @@ public class McpServerTool4 {
         return Arrays.asList(
                 ChatMessage.ofUser("这图里有方块吗？", Image.ofUrl(imageUrl))
         );
+    }
+
+    @ToolMapping(description = "获取活动详情")
+    public Result<ActivityInfoDTO> getDetails(@Param(description = "根据活动id查询", name = "activityInfo") ActivityInfoDTO activityInfo) {
+        return Result.succeed(activityInfo);
+    }
+
+    public static class ActivityInfoDTO {
+        @Param(description = "活动id")
+        private String activityId;
+
+        @Override
+        public String toString() {
+            return "ActivityInfoDTO{" +
+                    "activityId='" + activityId + '\'' +
+                    '}';
+        }
     }
 }
