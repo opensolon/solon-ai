@@ -18,8 +18,20 @@ public class ChatTest extends HttpTester {
     }
 
     @Test
+    public void case1_json() {
+        flowEngine.eval("chat_case1_json");
+    }
+
+    @Test
     public void case2() {
         String rst = path("/chat_case2").data("message", "你好").get();
+        System.out.println(rst);
+        assert rst.contains("你好");
+    }
+
+    @Test
+    public void case2_json() {
+        String rst = path("/chat_case2_json").data("message", "你好").get();
         System.out.println(rst);
         assert rst.contains("你好");
     }

@@ -1,0 +1,83 @@
+{
+  "id": "chat_case1_json",
+  "layout": [
+    {
+      "id": "node_sfeqrc0wb",
+      "type": "start",
+      "title": "开始",
+      "v_x": -220,
+      "v_y": -160,
+      "link": [
+        {
+          "v_source": "node_sfeqrc0wb",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_sxha48u9mh",
+          "v_targetPort": "port_t1",
+          "nextId": "node_sxha48u9mh",
+          "id": "edge_pa3jv5m4u4"
+        }
+      ]
+    },
+    {
+      "id": "node_sxha48u9mh",
+      "type": "activity",
+      "title": "变量输入",
+      "task": "@VarInput",
+      "when": "",
+      "meta": {
+        "message": "你好"
+      },
+      "v_x": -220,
+      "v_y": -68,
+      "link": [
+        {
+          "v_source": "node_sxha48u9mh",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_au0ju21yz",
+          "v_targetPort": "port_t1",
+          "nextId": "node_au0ju21yz",
+          "id": "edge_6kiasc2w16"
+        }
+      ]
+    },
+    {
+      "id": "node_au0ju21yz",
+      "type": "activity",
+      "title": "大模型",
+      "task": "@ChatModel",
+      "when": "",
+      "meta": {
+        "systemPrompt": "你是个聊天助手",
+        "stream": false,
+        "chatConfig": {
+          "provider": "ollama",
+          "model": "qwen2.5:1.5b",
+          "apiUrl": "http://127.0.0.1:11434/api/chat"
+        }
+      },
+      "v_x": -220,
+      "v_y": 28,
+      "link": [
+        {
+          "v_source": "node_au0ju21yz",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_xlhk0gfbxh",
+          "v_targetPort": "port_t1",
+          "nextId": "node_xlhk0gfbxh",
+          "id": "edge_3wqd1noj4n"
+        }
+      ]
+    },
+    {
+      "id": "node_xlhk0gfbxh",
+      "type": "activity",
+      "title": "控制台输出",
+      "task": "@ConsoleOutput",
+      "when": "",
+      "meta": {},
+      "v_x": -220,
+      "v_y": 123,
+      "link": []
+    }
+  ]
+}

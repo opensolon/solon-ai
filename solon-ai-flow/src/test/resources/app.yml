@@ -8,4 +8,4 @@ solon.logging:
 
 
 solon.flow:
-  - classpath:flow/*.yml
+  - classpath:flow/*
