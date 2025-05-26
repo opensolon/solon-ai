@@ -1,0 +1,123 @@
+{
+  "id": "chat_case3",
+  "layout": [
+    {
+      "id": "node_mnn2356qlm",
+      "title": "开始",
+      "task": "",
+      "when": "",
+      "meta": {},
+      "v_x": 110,
+      "v_y": 10,
+      "link": [
+        {
+          "v_source": "node_mnn2356qlm",
+          "v_sourcePort": "port_b1",
+          "v_target": "input",
+          "v_targetPort": "port_t1",
+          "nextId": "input",
+          "id": "edge_30va9zrpjv"
+        }
+      ]
+    },
+    {
+      "id": "input",
+      "title": "控制台输入",
+      "task": "@ConsoleInput",
+      "when": "",
+      "meta": {},
+      "v_x": 110,
+      "v_y": 110,
+      "link": [
+        {
+          "v_source": "input",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_w36z1j6fg",
+          "v_targetPort": "port_t1",
+          "nextId": "node_w36z1j6fg",
+          "id": "edge_gwju1jppvb"
+        }
+      ]
+    },
+    {
+      "id": "node_w36z1j6fg",
+      "title": "大模型",
+      "task": "@ChatModel",
+      "when": "",
+      "meta": {
+        "systemPrompt": "你是个聊天助手",
+        "stream": false,
+        "chatConfig": {
+          "provider": "ollama",
+          "model": "qwen2.5:1.5b",
+          "apiUrl": "http://127.0.0.1:11434/api/chat"
+        }
+      },
+      "v_x": 110,
+      "v_y": 210,
+      "link": [
+        {
+          "v_source": "node_w36z1j6fg",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_6c5uvxzmuv",
+          "v_targetPort": "port_t1",
+          "nextId": "node_6c5uvxzmuv",
+          "id": "edge_c1yp5q6324"
+        }
+      ]
+    },
+    {
+      "id": "node_6c5uvxzmuv",
+      "title": "控制台输出",
+      "task": "@ConsoleOutput",
+      "when": "",
+      "meta": {
+        "format": "机器人：#{message}"
+      },
+      "v_x": 110,
+      "v_y": 300,
+      "link": [
+        {
+          "v_source": "node_6c5uvxzmuv",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_1b0cy9scl4",
+          "v_targetPort": "port_t1",
+          "nextId": "node_1b0cy9scl4",
+          "id": "edge_y1e9gv0nlh"
+        }
+      ]
+    },
+    {
+      "id": "node_1b0cy9scl4",
+      "type": "exclusive",
+      "v_x": 110,
+      "v_y": 390,
+      "link": [
+        {
+          "v_source": "node_1b0cy9scl4",
+          "v_sourcePort": "port_b1",
+          "v_target": "input",
+          "v_targetPort": "port_t1",
+          "nextId": "input",
+          "id": "edge_6k3fop10d",
+          "title": "如果小于10次"
+        },
+        {
+          "v_source": "node_1b0cy9scl4",
+          "v_sourcePort": "port_b1",
+          "v_target": "end",
+          "v_targetPort": "port_t1",
+          "nextId": "end",
+          "id": "edge_m6n2q018fk"
+        }
+      ]
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "v_x": 110,
+      "v_y": 480,
+      "link": []
+    }
+  ]
+}
