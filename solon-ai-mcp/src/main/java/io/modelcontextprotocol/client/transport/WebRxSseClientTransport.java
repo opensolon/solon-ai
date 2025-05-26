@@ -87,6 +87,7 @@ public class WebRxSseClientTransport implements McpClientTransport {
 
 	/** Holds the SSE connection future */
 	private final AtomicReference<CompletableFuture<Void>> connectionFuture = new AtomicReference<>();
+	private SimpleSubscriber<ServerSentEvent> sseSubscriber;
 
 	/**
 	 * Creates a new transport instance with default HTTP client and object mapper.
@@ -202,36 +203,42 @@ public class WebRxSseClientTransport implements McpClientTransport {
 		CompletableFuture<Void> future = new CompletableFuture<>();
 		connectionFuture.set(future);
 
+		if(sseSubscriber != null){
+			sseSubscriber.cancel();
+		}
+
+		sseSubscriber = new SimpleSubscriber<ServerSentEvent>()
+				.doOnNext(event -> {
+					if (isClosing) {
+						return;
+					}
+
+					try {
+						if (ENDPOINT_EVENT_TYPE.equals(event.getEvent())) {
+							String endpoint = event.data();
+							messageEndpoint.set(endpoint);
+							closeLatch.countDown();
+							future.complete(null);
+						} else if (MESSAGE_EVENT_TYPE.equals(event.getEvent())) {
+							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, event.data());
+							handler.apply(Mono.just(message)).subscribe();
+						} else {
+							logger.error("Received unrecognized SSE event type: {}", event.getEvent());
+						}
+					} catch (IOException e) {
+						logger.error("Error processing SSE event", e);
+						future.completeExceptionally(e);
+					}
+				}).doOnError(error -> {
+					if (!isClosing) {
+						logger.warn("SSE connection error", error);
+						future.completeExceptionally(error);
+					}
+				});
+
 		webBuilder.build(this.sseEndpoint)
 				.execAsSseStream("GET")
-				.subscribe(new SimpleSubscriber<ServerSentEvent>()
-						.doOnNext(event -> {
-							if (isClosing) {
-								return;
-							}
-
-							try {
-								if (ENDPOINT_EVENT_TYPE.equals(event.getEvent())) {
-									String endpoint = event.data();
-									messageEndpoint.set(endpoint);
-									closeLatch.countDown();
-									future.complete(null);
-								} else if (MESSAGE_EVENT_TYPE.equals(event.getEvent())) {
-									JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, event.data());
-									handler.apply(Mono.just(message)).subscribe();
-								} else {
-									logger.error("Received unrecognized SSE event type: {}", event.getEvent());
-								}
-							} catch (IOException e) {
-								logger.error("Error processing SSE event", e);
-								future.completeExceptionally(e);
-							}
-						}).doOnError(error -> {
-							if (!isClosing) {
-								logger.warn("SSE connection error", error);
-								future.completeExceptionally(error);
-							}
-						}));
+				.subscribe(sseSubscriber);
 
 		return Mono.fromFuture(future);
 	}
@@ -301,6 +308,10 @@ public class WebRxSseClientTransport implements McpClientTransport {
 			CompletableFuture<Void> future = connectionFuture.get();
 			if (future != null && !future.isDone()) {
 				future.cancel(true);
+			}
+
+			if(sseSubscriber != null){
+				sseSubscriber.cancel();
 			}
 		});
 	}
