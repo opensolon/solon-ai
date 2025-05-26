@@ -26,7 +26,7 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.RefererFunctionTool;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPromptDesc;
@@ -542,7 +542,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             String inputSchema = ONode.load(tool.getInputSchema()).toJson();
             String outputSchema = (tool.getOutputSchema() == null ? null : ONode.load(tool.getOutputSchema()).toJson());
 
-            RefererFunctionTool functionRefer = new RefererFunctionTool(
+            FunctionToolDesc functionRefer = new FunctionToolDesc(
                     name,
                     description,
                     returnDirect,

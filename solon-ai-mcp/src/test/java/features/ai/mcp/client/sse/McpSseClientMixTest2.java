@@ -42,7 +42,7 @@ public class McpSseClientMixTest2 {
 
         assert tools.size() == 1;
 
-        assert ("[RefererFunctionTool{name='getWeather', " +
+        assert ("[FunctionToolDesc{name='getWeather', " +
                 "description='查询天气预报', " +
                 "returnDirect=true, " +
                 "inputSchema={\"type\":\"object\",\"properties\":{\"location\":{\"description\":\"城市位置\",\"type\":\"string\"}},\"required\":[\"location\"]}, " +

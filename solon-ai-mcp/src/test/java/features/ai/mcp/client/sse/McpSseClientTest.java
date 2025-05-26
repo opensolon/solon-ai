@@ -182,9 +182,13 @@ public class McpSseClientTest {
                         })
                         .doOnComplete(() -> {
                             latch.countDown();
+                        }).doOnError(throwable -> {
+                            latch.countDown();
                         }));
 
         latch.await();
+
+        assert respHolder.get() != null;
 
         //打印消息
         log.info("{}", respHolder.get().getAggregationMessage());

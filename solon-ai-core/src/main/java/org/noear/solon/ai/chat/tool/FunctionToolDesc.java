@@ -30,7 +30,7 @@ import java.util.function.Function;
  */
 public class FunctionToolDesc implements FunctionTool {
     private final String name;
-    private final List<ParamDesc> params;
+    private final List<ParamDesc> params = new ArrayList<>();
     private Type returnType;
     private String description;
     private boolean returnDirect = false;
@@ -38,12 +38,20 @@ public class FunctionToolDesc implements FunctionTool {
     private String inputSchema;
     private String outputSchema;
 
+    public FunctionToolDesc(String name, String description, Boolean returnDirect, String inputSchema, String outputSchema, Function<Map<String, Object>, String> handler) {
+        this.name = name;
+        this.description = description;
+        this.inputSchema = inputSchema;
+        this.outputSchema = outputSchema;
+        this.doHandler = handler;
+        this.returnDirect = (returnDirect == null ? false : returnDirect);
+    }
+
     /**
      * @param name 函数名字
      */
     public FunctionToolDesc(String name) {
         this.name = name;
-        this.params = new ArrayList<>();
     }
 
     /**
@@ -63,6 +71,7 @@ public class FunctionToolDesc implements FunctionTool {
      */
     public FunctionToolDesc returnType(Type returnType) {
         this.returnType = returnType;
+        outputSchema = null;
         return this;
     }
 
@@ -224,21 +233,25 @@ public class FunctionToolDesc implements FunctionTool {
      */
     @Override
     public String handle(Map<String, Object> args) throws Throwable {
-        Map<String, Object> argsNew = new HashMap<>();
+        if (params.size() > 0) {
+            Map<String, Object> argsNew = new HashMap<>();
 
-        ONode argsNode = ONode.load(args);
-        for (ParamDesc p1 : this.params) {
-            ONode v1 = argsNode.getOrNull(p1.name());
-            if (v1 == null) {
-                //null
-                argsNew.put(p1.name(), null);
-            } else {
-                //用 ONode 可以自动转换类型
-                argsNew.put(p1.name(), v1.toObject(p1.type()));
+            ONode argsNode = ONode.load(args);
+            for (ParamDesc p1 : this.params) {
+                ONode v1 = argsNode.getOrNull(p1.name());
+                if (v1 == null) {
+                    //null
+                    argsNew.put(p1.name(), null);
+                } else {
+                    //用 ONode 可以自动转换类型
+                    argsNew.put(p1.name(), v1.toObject(p1.type()));
+                }
             }
-        }
 
-        return doHandler.apply(argsNew);
+            return doHandler.apply(argsNew);
+        } else {
+            return doHandler.apply(args);
+        }
     }
 
     @Override
