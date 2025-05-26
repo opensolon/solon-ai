@@ -13,16 +13,19 @@ import org.noear.solon.test.SolonTest;
 @Slf4j
 @SolonTest(McpServerApp.class)
 public class McpToolMixTest {
-    McpClientProvider mcpClient = McpClientProvider.builder()
-            .apiUrl("http://localhost:8081/mcp/WeatherTools/sse")
-            .build();
+
 
     @Test
     public void case1() throws Exception {
+        McpClientProvider mcpClient = McpClientProvider.builder()
+                .apiUrl("http://localhost:8081/mcp/WeatherTools/sse")
+                .build();
+
         Text mediaText = mcpClient.readResourceAsText("weather://cities");
 
         System.out.println(mediaText);
 
         assert "[\"Tokyo\",\"Sydney\",\"Tokyo\"]".equals(mediaText.getContent());
+        mcpClient.close();
     }
 }

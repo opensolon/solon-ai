@@ -109,6 +109,7 @@ public class McpSseClientTest {
 
         Thread.sleep(10);
         assert mcpClient.getTools().size() == 1;
+        mcpClient.close();
     }
 
     @Test
@@ -120,6 +121,7 @@ public class McpSseClientTest {
         assert mcpClient.getTools().size() == 1;
         assert mcpClient.getTools().size() == 1;
         assert mcpClient.getTools().size() == 1;
+        mcpClient.close();
     }
 
     //与模型绑定
@@ -148,6 +150,8 @@ public class McpSseClientTest {
         log.info("{}", resp.getMessage());
 
         assert resp.getMessage().getContent().contains("北京");
+        toolProvider.close();
+        toolProvider2.close();
     }
 
     @Test
@@ -184,6 +188,8 @@ public class McpSseClientTest {
 
         //打印消息
         log.info("{}", respHolder.get().getAggregationMessage());
+        toolProvider.close();
+        toolProvider2.close();
     }
 
     private static final String apiUrl = "http://127.0.0.1:11434/api/chat";

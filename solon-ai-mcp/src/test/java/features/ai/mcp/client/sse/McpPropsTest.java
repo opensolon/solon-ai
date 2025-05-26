@@ -5,6 +5,7 @@ import org.noear.solon.Solon;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProperties;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.mcp.client.McpProviders;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Map;
@@ -36,7 +37,7 @@ public class McpPropsTest {
 
     @Test
     public void case101() throws Exception {
-        Map<String, McpClientProvider> tmp = McpClientProvider.
+        McpProviders tmp = McpProviders.
                 fromMcpServers("classpath:mcpServers.json");
 
         assert tmp.size() == 2;
@@ -44,7 +45,7 @@ public class McpPropsTest {
 
     @Test
     public void case102() throws Exception {
-        Map<String, McpClientProvider> tmp = McpClientProvider.
+        McpProviders tmp = McpProviders.
                 fromMcpServers("classpath:mcpServers2.json");
 
         assert tmp.size() == 2;

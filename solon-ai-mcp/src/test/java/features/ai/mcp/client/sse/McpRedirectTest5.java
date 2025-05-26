@@ -15,15 +15,16 @@ import java.util.Collections;
 @Slf4j
 @SolonTest(McpServerApp.class)
 public class McpRedirectTest5 {
-    McpClientProvider mcpClient = McpClientProvider.builder()
-            .apiUrl("http://localhost:8081/demo5/jump/sse")
-            .build();
-
     @Test
     public void tool1() throws Exception {
+        McpClientProvider mcpClient = McpClientProvider.builder()
+                .apiUrl("http://localhost:8081/demo5/jump/sse")
+                .build();
+
         String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
+        mcpClient.close();
     }
 }

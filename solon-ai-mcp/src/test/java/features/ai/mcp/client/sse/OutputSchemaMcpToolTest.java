@@ -2,6 +2,7 @@ package features.ai.mcp.client.sse;
 
 import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -17,9 +18,14 @@ import java.util.Map;
 @Slf4j
 @SolonTest(McpServerApp.class)
 public class OutputSchemaMcpToolTest {
-    McpClientProvider mcpClient = McpClientProvider.builder()
+    static McpClientProvider mcpClient = McpClientProvider.builder()
             .apiUrl("http://localhost:8081/mcp/outputSchema/sse")
             .build();
+
+    @AfterAll
+    public static void close() {
+        mcpClient.close();
+    }
 
     public Map<String, FunctionTool> getToolMap() throws Exception {
         Map<String, FunctionTool> toolMap = new HashMap<>();

@@ -63,6 +63,13 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
     }
 
     /**
+     * 数量
+     */
+    public int size() {
+        return providers.size();
+    }
+
+    /**
      * 关闭
      */
     @Override
