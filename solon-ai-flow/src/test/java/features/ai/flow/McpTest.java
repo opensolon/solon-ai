@@ -16,4 +16,9 @@ public class McpTest extends HttpTester {
     public void case1() {
         flowEngine.eval("mcp_case1");
     }
+
+    @Test
+    public void case1_json() {
+        flowEngine.eval("mcp_case1_json");
+    }
 }

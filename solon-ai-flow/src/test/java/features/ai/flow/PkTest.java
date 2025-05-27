@@ -21,4 +21,9 @@ public class PkTest extends HttpTester {
         flowEngine.eval("pk_case1");
     }
 
+    @Test
+    public void case1_json() {
+        flowEngine.eval("pk_case1_json");
+    }
+
 }

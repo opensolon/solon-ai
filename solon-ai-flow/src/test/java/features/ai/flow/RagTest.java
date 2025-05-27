@@ -18,6 +18,11 @@ public class RagTest extends HttpTester {
     }
 
     @Test
+    public void case1_json() {
+        flowEngine.eval("rag_case1_json");
+    }
+
+    @Test
     public void case2() {
         String rst = path("/rag_case2").data("message", "Solon 是谁开发的？").get();
         System.out.println(rst);

@@ -1,0 +1,181 @@
+{
+  "id": "pk_case1_json",
+  "layout": [
+    {
+      "id": "node_7enk44v17g",
+      "type": "start",
+      "title": "开始",
+      "v_x": 10,
+      "v_y": 10,
+      "link": [
+        {
+          "v_source": "node_7enk44v17g",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_rzduxj6bmh",
+          "v_targetPort": "port_t1",
+          "nextId": "node_rzduxj6bmh",
+          "id": "edge_wlipa7k10r",
+          "title": null
+        }
+      ]
+    },
+    {
+      "id": "node_rzduxj6bmh",
+      "type": "activity",
+      "title": "@VarInput",
+      "task": "@VarInput",
+      "meta": {
+        "message": "你好"
+      },
+      "v_x": 110,
+      "v_y": 110,
+      "link": [
+        {
+          "v_source": "node_rzduxj6bmh",
+          "v_sourcePort": "port_b1",
+          "v_target": "model_a",
+          "v_targetPort": "port_t1",
+          "nextId": "model_a",
+          "id": "edge_uf77m6dex",
+          "title": null
+        }
+      ]
+    },
+    {
+      "id": "model_a",
+      "type": "activity",
+      "title": "@ChatModel",
+      "task": "@ChatModel",
+      "meta": {
+        "systemPrompt": "你是一个智能体名字叫“阿飞”。将跟另一个叫“阿紫”的智能体，表演相声式吵架。每句话不要超过50个字",
+        "stream": false,
+        "chatSession": "A",
+        "chatConfig": {
+          "provider": "ollama",
+          "model": "qwen2.5:1.5b",
+          "apiUrl": "http://127.0.0.1:11434/api/chat"
+        }
+      },
+      "v_x": 210,
+      "v_y": 210,
+      "link": [
+        {
+          "v_source": "model_a",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_kklsre3x9",
+          "v_targetPort": "port_t1",
+          "nextId": "node_kklsre3x9",
+          "id": "edge_gcltdlf5ut",
+          "title": null
+        }
+      ]
+    },
+    {
+      "id": "node_kklsre3x9",
+      "type": "activity",
+      "title": "@ConsoleOutput",
+      "task": "@ConsoleOutput",
+      "meta": {
+        "format": "阿飞：#{message}"
+      },
+      "v_x": 310,
+      "v_y": 310,
+      "link": [
+        {
+          "v_source": "node_kklsre3x9",
+          "v_sourcePort": "port_b1",
+          "v_target": "model_b",
+          "v_targetPort": "port_t1",
+          "nextId": "model_b",
+          "id": "edge_nnt57zzr6p",
+          "title": null
+        }
+      ]
+    },
+    {
+      "id": "model_b",
+      "type": "activity",
+      "title": "@ChatModel",
+      "task": "@ChatModel",
+      "meta": {
+        "systemPrompt": "你是一个智能体名字叫“阿紫”。将跟另一个叫“阿飞”的智能体，表演相声式吵架。每句话不要超过50个字",
+        "stream": false,
+        "chatSession": "B",
+        "chatConfig": {
+          "provider": "ollama",
+          "model": "qwen2.5:1.5b",
+          "apiUrl": "http://127.0.0.1:11434/api/chat"
+        }
+      },
+      "v_x": 410,
+      "v_y": 410,
+      "link": [
+        {
+          "v_source": "model_b",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_08c05rtd7c",
+          "v_targetPort": "port_t1",
+          "nextId": "node_08c05rtd7c",
+          "id": "edge_m0x1fu8l5e",
+          "title": null
+        }
+      ]
+    },
+    {
+      "id": "node_08c05rtd7c",
+      "type": "activity",
+      "title": "@ConsoleOutput",
+      "task": "@ConsoleOutput",
+      "meta": {
+        "format": "阿紫：#{message}"
+      },
+      "v_x": 510,
+      "v_y": 510,
+      "link": [
+        {
+          "v_source": "node_08c05rtd7c",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_olz5ys235s",
+          "v_targetPort": "port_t1",
+          "nextId": "node_olz5ys235s",
+          "id": "edge_i2jvcirj2s",
+          "title": null
+        }
+      ]
+    },
+    {
+      "id": "node_olz5ys235s",
+      "type": "exclusive",
+      "title": "排他网关",
+      "v_x": 610,
+      "v_y": 610,
+      "link": [
+        {
+          "v_source": "node_olz5ys235s",
+          "v_sourcePort": "port_b1",
+          "v_target": "model_a",
+          "v_targetPort": "port_t1",
+          "nextId": "model_a",
+          "id": "edge_5v6ijolwt",
+          "condition": "context.counter().incr(\"demo\") < 5"
+        },
+        {
+          "v_source": "node_olz5ys235s",
+          "v_sourcePort": "port_b1",
+          "v_target": "end",
+          "v_targetPort": "port_t1",
+          "nextId": "end",
+          "id": "edge_m1mkx78478"
+        }
+      ]
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "title": "结束",
+      "v_x": 710,
+      "v_y": 710,
+      "link": []
+    }
+  ]
+}

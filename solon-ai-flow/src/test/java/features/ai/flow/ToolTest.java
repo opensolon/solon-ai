@@ -18,6 +18,11 @@ public class ToolTest extends HttpTester {
     }
 
     @Test
+    public void case1_json() {
+        flowEngine.eval("tool_case1_json");
+    }
+
+    @Test
     public void case2() {
         String rst = path("/tool_case2").data("message", "杭州今天天气怎么样?").get();
         System.out.println(rst);

@@ -1,0 +1,69 @@
+{
+  "id": "mcp_case1_json",
+  "layout": [
+    {
+      "id": "node_in91m2enur",
+      "type": "activity",
+      "title": "@VarInput",
+      "task": "@VarInput",
+      "meta": {
+        "message": "杭州今天天气怎么样?"
+      },
+      "v_x": 10,
+      "v_y": 10,
+      "link": [
+        {
+          "v_source": "node_in91m2enur",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_vgpkx681lm",
+          "v_targetPort": "port_t1",
+          "nextId": "node_vgpkx681lm",
+          "id": "edge_kioxlziarl",
+          "title": null
+        }
+      ]
+    },
+    {
+      "id": "node_vgpkx681lm",
+      "type": "activity",
+      "title": "@ChatModel",
+      "task": "@ChatModel",
+      "meta": {
+        "systemPrompt": "你是个天气预报员",
+        "stream": false,
+        "chatConfig": {
+          "provider": "ollama",
+          "model": "qwen2.5:1.5b",
+          "apiUrl": "http://127.0.0.1:11434/api/chat"
+        },
+        "mcpServers": {
+          "mcp1": {
+            "url": "http://127.0.0.1:8080/mcp/sse"
+          }
+        }
+      },
+      "v_x": 110,
+      "v_y": 110,
+      "link": [
+        {
+          "v_source": "node_vgpkx681lm",
+          "v_sourcePort": "port_b1",
+          "v_target": "node_lin6c6aap",
+          "v_targetPort": "port_t1",
+          "nextId": "node_lin6c6aap",
+          "id": "edge_ld3kpbivks",
+          "title": null
+        }
+      ]
+    },
+    {
+      "id": "node_lin6c6aap",
+      "type": "activity",
+      "title": "@ConsoleOutput",
+      "task": "@ConsoleOutput",
+      "v_x": 210,
+      "v_y": 210,
+      "link": []
+    }
+  ]
+}

@@ -1,49 +1,48 @@
 {
-  "id": "chat_case3",
+  "id": "chat_case3_json",
   "layout": [
     {
-      "id": "node_mnn2356qlm",
+      "id": "node_nu2ayrsh3a",
+      "type": "start",
       "title": "开始",
-      "task": "",
-      "when": "",
-      "meta": {},
-      "v_x": 110,
+      "v_x": 10,
       "v_y": 10,
       "link": [
         {
-          "v_source": "node_mnn2356qlm",
+          "v_source": "node_nu2ayrsh3a",
           "v_sourcePort": "port_b1",
           "v_target": "input",
           "v_targetPort": "port_t1",
           "nextId": "input",
-          "id": "edge_30va9zrpjv"
+          "id": "edge_6nw6n89mk",
+          "title": null
         }
       ]
     },
     {
       "id": "input",
-      "title": "控制台输入",
+      "type": "activity",
+      "title": "@ConsoleInput",
       "task": "@ConsoleInput",
-      "when": "",
-      "meta": {},
       "v_x": 110,
       "v_y": 110,
       "link": [
         {
           "v_source": "input",
           "v_sourcePort": "port_b1",
-          "v_target": "node_w36z1j6fg",
+          "v_target": "node_80l10om8f",
           "v_targetPort": "port_t1",
-          "nextId": "node_w36z1j6fg",
-          "id": "edge_gwju1jppvb"
+          "nextId": "node_80l10om8f",
+          "id": "edge_yhmzu70eba",
+          "title": null
         }
       ]
     },
     {
-      "id": "node_w36z1j6fg",
-      "title": "大模型",
+      "id": "node_80l10om8f",
+      "type": "activity",
+      "title": "@ChatModel",
       "task": "@ChatModel",
-      "when": "",
       "meta": {
         "systemPrompt": "你是个聊天助手",
         "stream": false,
@@ -53,70 +52,74 @@
           "apiUrl": "http://127.0.0.1:11434/api/chat"
         }
       },
-      "v_x": 110,
+      "v_x": 210,
       "v_y": 210,
       "link": [
         {
-          "v_source": "node_w36z1j6fg",
+          "v_source": "node_80l10om8f",
           "v_sourcePort": "port_b1",
-          "v_target": "node_6c5uvxzmuv",
+          "v_target": "node_s0yn2385uc",
           "v_targetPort": "port_t1",
-          "nextId": "node_6c5uvxzmuv",
-          "id": "edge_c1yp5q6324"
+          "nextId": "node_s0yn2385uc",
+          "id": "edge_sgkoitzd6d",
+          "title": null
         }
       ]
     },
     {
-      "id": "node_6c5uvxzmuv",
-      "title": "控制台输出",
+      "id": "node_s0yn2385uc",
+      "type": "activity",
+      "title": "@ConsoleOutput",
       "task": "@ConsoleOutput",
-      "when": "",
       "meta": {
         "format": "机器人：#{message}"
       },
-      "v_x": 110,
-      "v_y": 300,
+      "v_x": 310,
+      "v_y": 310,
       "link": [
         {
-          "v_source": "node_6c5uvxzmuv",
+          "v_source": "node_s0yn2385uc",
           "v_sourcePort": "port_b1",
-          "v_target": "node_1b0cy9scl4",
+          "v_target": "node_e6gk4zedb6",
           "v_targetPort": "port_t1",
-          "nextId": "node_1b0cy9scl4",
-          "id": "edge_y1e9gv0nlh"
+          "nextId": "node_e6gk4zedb6",
+          "id": "edge_l6a2u77rgr",
+          "title": null
         }
       ]
     },
     {
-      "id": "node_1b0cy9scl4",
+      "id": "node_e6gk4zedb6",
       "type": "exclusive",
-      "v_x": 110,
-      "v_y": 390,
+      "title": "排他网关",
+      "v_x": 410,
+      "v_y": 410,
       "link": [
         {
-          "v_source": "node_1b0cy9scl4",
+          "v_source": "node_e6gk4zedb6",
           "v_sourcePort": "port_b1",
           "v_target": "input",
           "v_targetPort": "port_t1",
           "nextId": "input",
-          "id": "edge_6k3fop10d",
-          "title": "如果小于10次"
+          "id": "edge_d5tm3o6qal",
+          "condition": "context.counter().incr(\"demo\") < 10"
         },
         {
-          "v_source": "node_1b0cy9scl4",
+          "v_source": "node_e6gk4zedb6",
           "v_sourcePort": "port_b1",
           "v_target": "end",
           "v_targetPort": "port_t1",
           "nextId": "end",
-          "id": "edge_m6n2q018fk"
+          "id": "edge_b6cgw9mvdq"
         }
       ]
     },
     {
       "id": "end",
       "type": "end",
-      "v_x": 110,
-      "v_y": 480,
+      "title": "结束",
+      "v_x": 510,
+      "v_y": 510,
       "link": []
     }
   ]
