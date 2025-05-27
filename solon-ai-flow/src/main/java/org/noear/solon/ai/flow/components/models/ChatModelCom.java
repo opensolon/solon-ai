@@ -76,7 +76,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
 
             //mcpServers
             Object mcpServers = node.getMeta(META_MCP_SERVERS);
-            if (mcpServers == null) {
+            if (mcpServers != null) {
                 ONode mcpServersNode = ONode.loadObj(mcpServers);
                 McpProviders mcpProviders = McpProviders.fromMcpServers(mcpServersNode);
                 if (mcpProviders != null) {
