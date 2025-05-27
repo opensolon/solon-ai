@@ -138,7 +138,7 @@ public class McpAsyncClient {
 	 * @param features the MCP Client supported features.
 	 */
 	McpAsyncClient(ClientMcpTransport transport, Duration requestTimeout, Duration initializationTimeout,
-			McpClientFeatures.Async features) {
+			McpClientFeatures.Async features, boolean connectOnInit) {
 
 		Assert.notNull(transport, "Transport must not be null");
 		Assert.notNull(requestTimeout, "Request timeout must not be null");
@@ -214,6 +214,9 @@ public class McpAsyncClient {
 
 		this.mcpSession = new McpClientSession(requestTimeout, transport, requestHandlers, notificationHandlers);
 
+		if (connectOnInit) {
+			this.mcpSession.openSSE();
+		}
 	}
 
 	/**
@@ -269,6 +272,18 @@ public class McpAsyncClient {
 	 */
 	public Mono<Void> closeGracefully() {
 		return this.mcpSession.closeGracefully();
+	}
+
+	// ---------------------------
+	// open an SSE stream
+	// ---------------------------
+	/**
+	 * The client may issue an HTTP GET to the MCP endpoint. This can be used to open an
+	 * SSE stream, allowing the server to communicate to the client, without the client
+	 * first sending data via HTTP POST.
+	 */
+	public void openSSE() {
+		this.mcpSession.openSSE();
 	}
 
 	// --------------------------
