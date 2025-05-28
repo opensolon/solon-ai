@@ -32,19 +32,14 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
     private static final String MCP_SESSION_ID = "Mcp-Session-Id";
     private static final String APPLICATION_JSON = "application/json";
     private static final String TEXT_EVENT_STREAM = "text/event-stream";
-
-    private McpServerSession.Factory sessionFactory;
-
     private final ObjectMapper objectMapper;
-
     private final McpServerTransportProvider legacyTransportProvider;
-
     private final Set<String> allowedOrigins;
-
     /**
      * Map of active client sessions, keyed by session ID
      */
     private final Map<String, McpSession> sessions = new ConcurrentHashMap<>();
+    private McpServerSession.Factory sessionFactory;
 
     public StreamableHttpServerTransportProvider(final ObjectMapper objectMapper, final McpServerTransportProvider legacyTransportProvider, final Set<String> allowedOrigins) {
         this.objectMapper = objectMapper;
@@ -101,6 +96,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
         // todo!!!!
         if (!acceptTypes.contains(APPLICATION_JSON) && !acceptTypes.contains(TEXT_EVENT_STREAM)) {
+            // todo 需要实现新旧实现新旧SSE传输提供者的兼容处理
 //            if (legacyTransportProvider instanceof HttpServletSseServerTransportProvider legacy) {
 //                legacy.doPost(req, resp);
 //            } else {
@@ -160,6 +156,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        // todo 需要实现新旧实现新旧SSE传输提供者的兼容处理
 //        if (legacyTransportProvider instanceof HttpServletSseServerTransportProvider legacy) {
 //            legacy.doGet(req, resp);
 //        } else {
