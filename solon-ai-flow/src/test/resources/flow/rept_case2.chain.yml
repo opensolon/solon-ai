@@ -1,0 +1,123 @@
+id: chain_1y3cgoygfn
+layout:
+  - id: node_68dfrdhco5
+    title: 开始
+    task: ''
+    when: ''
+    meta: {}
+    v_x: -200
+    v_y: -140
+    link:
+      - v_source: node_68dfrdhco5
+        v_sourcePort: port_b1
+        v_target: node_jugk04esvb
+        v_targetPort: port_t1
+        nextId: node_jugk04esvb
+        id: edge_ua5wqu03j
+  - id: node_jugk04esvb
+    title: '@WebInput'
+    task: '@WebInput'
+    when: ''
+    meta: {}
+    v_x: -200
+    v_y: -70
+    link:
+      - v_source: node_jugk04esvb
+        v_sourcePort: port_b1
+        v_target: node_lqfnf912k
+        v_targetPort: port_t1
+        nextId: node_lqfnf912k
+        id: edge_62h7gx78ss
+  - id: node_lqfnf912k
+    title: '@ChatModel'
+    task: '@ChatModel'
+    when: ''
+    meta:
+      systemPrompt: 你只回答一个字：“对”或“错”
+      stream: false
+      chatConfig:
+        provider: ollama
+        model: qwen2.5:1.5b
+        apiUrl: http://127.0.0.1:11434/api/chat
+    v_x: -200
+    v_y: 0
+    link:
+      - v_source: node_lqfnf912k
+        v_sourcePort: port_b1
+        v_target: node_2z40tidyc9
+        v_targetPort: port_t1
+        nextId: node_2z40tidyc9
+        id: edge_p8dt51ckok
+  - id: node_2z40tidyc9
+    title: '@WebOutput'
+    task: '@WebOutput'
+    when: ''
+    meta: {}
+    v_x: -200
+    v_y: 70
+    link:
+      - v_source: node_2z40tidyc9
+        v_sourcePort: port_b1
+        v_target: node_mxyub65son
+        v_targetPort: port_t1
+        nextId: node_mxyub65son
+        id: edge_21bialvf1
+  - id: node_0n6y902o6h
+    title: 排他网关
+    task: ''
+    when: ''
+    meta: {}
+    v_x: -200
+    v_y: 200
+    link:
+      - v_source: node_0n6y902o6h
+        v_sourcePort: port_b1
+        v_target: node_2hnaqd07mb
+        v_targetPort: port_t1
+        nextId: node_2hnaqd07mb
+        id: edge_tneqnof2q
+      - v_source: node_0n6y902o6h
+        v_sourcePort: port_b1
+        v_target: node_58gzirrr6
+        v_targetPort: port_t1
+        nextId: node_58gzirrr6
+        id: edge_sfr1n684r8
+        condition: '"错".equals(message)'
+  - id: node_mxyub65son
+    title: '@VarOutput'
+    task: '@VarOutput'
+    when: ''
+    meta: {}
+    v_x: -200
+    v_y: 130
+    link:
+      - v_source: node_mxyub65son
+        v_sourcePort: port_b1
+        v_target: node_0n6y902o6h
+        v_targetPort: port_t1
+        nextId: node_0n6y902o6h
+        id: edge_mirjpb1o7b
+  - id: node_58gzirrr6
+    title: '@WebOutput'
+    task: '@WebOutput'
+    when: ''
+    meta:
+      message: 请再次输入
+    v_x: -40
+    v_y: 330
+    link:
+      - v_source: node_58gzirrr6
+        v_sourcePort: port_r1
+        v_target: node_jugk04esvb
+        v_targetPort: port_r1
+        nextId: node_jugk04esvb
+        id: edge_enyibeboau
+  - id: node_2hnaqd07mb
+    type: end
+    title: 结束
+    v_x: -200
+    v_y: 471
+    link: []
+title: 问答机，答到对为此
+driver: null
+meta: {}

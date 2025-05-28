@@ -52,10 +52,10 @@ public interface AiIoComponent extends AiComponent {
      */
     default Object getInput(FlowContext context, Node node) throws Throwable {
         String input_name = getInputName(node);
-        Object input = context.get(input_name);
+        Object input = node.getMeta(input_name);
 
         if (input == null) {
-            return node.getMeta(input_name);
+            return context.get(input_name);
         } else {
             return input;
         }
