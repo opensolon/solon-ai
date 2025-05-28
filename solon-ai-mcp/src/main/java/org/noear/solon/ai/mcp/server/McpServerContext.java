@@ -5,6 +5,7 @@ import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.handle.SessionState;
+import org.noear.solon.core.util.KeyValues;
 import org.noear.solon.core.util.MultiMap;
 
 import java.util.Collection;
@@ -23,6 +24,12 @@ public class McpServerContext extends ContextEmpty {
     public McpServerContext(McpSyncServerExchange serverExchange) {
         this.serverExchange = serverExchange;
         this.context = ((WebRxSseServerTransportProvider.WebRxMcpSessionTransport) serverExchange.getSession().getTransport()).getContext();
+
+        for (KeyValues<String> kv : context.paramMap()) {
+            for (String v : kv.getValues()) {
+                this.paramMap().add(kv.getKey(), v);
+            }
+        }
     }
 
     /**
