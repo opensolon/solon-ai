@@ -221,6 +221,7 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
             builder.serverParameters(serverParameters);
         } else {
             builder.apiUrl(serverParameters.getUrl());
+            builder.headerSet(serverParameters.getEnv());
             builder.headerSet(serverParameters.getHeaders());
 
             if (serverParameters.getTimeout() != null) {
