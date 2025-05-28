@@ -21,7 +21,8 @@ import java.util.Map;
 @SolonTest(McpServerApp.class)
 public class McpSseClientMixTest4 {
     McpClientProvider mcpClient = McpClientProvider.builder()
-            .apiUrl("http://localhost:8081/demo4/sse")
+            .apiUrl("http://localhost:8081/demo4/sse?token=3")
+            .headerSet("user", "2")
             .build();
 
     private static final String apiUrl = "http://127.0.0.1:11434/api/chat";
@@ -77,6 +78,24 @@ public class McpSseClientMixTest4 {
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
         assert response.contains("activityId='12'");
+    }
+
+    @Test
+    public void tool4_getHeader() throws Exception {
+        String response = mcpClient.callToolAsText("getHeader", Utils.asMap()).getContent();
+
+        log.warn("{}", response);
+        assert Utils.isNotEmpty(response);
+        assert response.contains("2");
+    }
+
+    @Test
+    public void tool5_getParam() throws Exception {
+        String response = mcpClient.callToolAsText("getParam", Utils.asMap()).getContent();
+
+        log.warn("{}", response);
+        assert Utils.isNotEmpty(response);
+        assert response.contains("3");
     }
 
     @Test

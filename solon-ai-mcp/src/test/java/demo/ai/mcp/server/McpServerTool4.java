@@ -5,7 +5,9 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.ai.media.Image;
+import org.noear.solon.annotation.Header;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Result;
 
 import java.util.Arrays;
@@ -28,6 +30,16 @@ public class McpServerTool4 {
     @ToolMapping(description = "获取一个城市的特产介绍")
     public String getCity(@Param String city, String userName) {
         return city + ":" + userName;
+    }
+
+    @ToolMapping(description = "获取连接请求头")
+    public String getHeader(@Header("user") String user) {
+        return user;
+    }
+
+    @ToolMapping(description = "获取连接请参数")
+    public String getParam(Context ctx) {
+        return ctx.param("token");
     }
 
     @ToolMapping(description = "杭州的假日景点介绍")

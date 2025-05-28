@@ -8,4 +8,4 @@ solon.ai.mcp.server:
     sseEndpoint: "/demo2/sse"
 
 solon.logging.logger:
-  root.level: TRACE
+  root.level: INFO

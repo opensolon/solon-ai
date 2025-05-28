@@ -23,7 +23,7 @@ import java.util.List;
 @SolonTest(McpServerApp.class)
 public class McpSseClientMixTest2 {
     McpClientProvider mcpClient = McpClientProvider.builder()
-            .apiUrl("http://localhost:8081/demo2/sse")
+            .apiUrl("http://localhost:8081/demo2/sse?user=1")
             .build();
 
     @Test
