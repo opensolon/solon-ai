@@ -6,6 +6,7 @@ layout:
     meta:
       message: "你好"
   - task: "@ChatModel"
+    title: "智能体-阿飞"
     id: model_a
     meta:
       systemPrompt: "你是一个智能体名字叫“阿飞”。将跟另一个叫“阿紫”的智能体，表演相声式吵架。每句话不要超过50个字"
@@ -19,6 +20,7 @@ layout:
     meta:
       format: "阿飞：#{message}"
   - task: "@ChatModel"
+    title: "智能体-阿紫"
     id: model_b
     meta:
       systemPrompt: "你是一个智能体名字叫“阿紫”。将跟另一个叫“阿飞”的智能体，表演相声式吵架。每句话不要超过50个字"
