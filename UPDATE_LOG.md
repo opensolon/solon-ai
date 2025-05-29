@@ -1,3 +1,21 @@
+
+### 3.3.2
+
+* 优化 solon-ai-flow 插件
+* 添加 solon-ai-core ChatMessage:ofUserAugment 替代 augment（后者标为弃用）
+* 添加 solon-ai-core ProxyDesc 的 Serializable 接口实现
+* 添加 solon-ai-mcp McpServerEndpointProvider:getMessageEndpoint 方法
+* 添加 solon-ai-mcp McpServerParameters http 参数支持
+* 优化 solon-ai-core ChatConfig.toString （增加 proxy）
+* 优化 solon-ai OpenaiChatDialect 方言，tool 消息也附带所有的 tools 元信息（之前被过滤了）
+* 优化 solon-ai-mcp McpServerContext 同步连接时的请求参数，方便在 Tool 方法里获取
+* 优化 solon-ai-mcp McpProviders 在 sse 时，支持 env 也作为 header 处理（有些服务方的配置，是用 env 的）
+* 优化 solon-ai-mcp 取消 RefererFunctionTool（由 FunctionToolDesc 替代）
+* 优化 solon-ai-mcp 基于 McpServerParameters 的构建能力
+* 修复 solon-ai-flow ChatModel 没有加载 mcpServers 配置的问题
+* mcp 适配优化 WebRxSseClientTransport 关闭时同时取消 sse 订阅（避免线程占用）
+
+
 ### 3.3.1
 
 * 新增 solon-ai-flow 插件
