@@ -81,6 +81,20 @@ public class ChatRequest {
     }
 
     /**
+     * 获取选项
+     */
+    public Object getOption(String key) {
+        return options.option(key);
+    }
+
+    /**
+     * 获取用户
+     */
+    public String getUser() {
+        return (String) getOption("user");
+    }
+
+    /**
      * 是否为流请求
      */
     public boolean isStream() {
