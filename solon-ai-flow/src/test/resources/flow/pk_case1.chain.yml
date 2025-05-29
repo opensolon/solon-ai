@@ -36,6 +36,7 @@ layout:
   - type: "exclusive"
     link:
       - nextId: model_a
+        title: "重复5次"
         condition: 'context.counter().incr("demo") < 5'
       - nextId: end
   - type: "end"
