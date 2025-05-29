@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat;
 
 
+import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 
@@ -31,12 +32,14 @@ import java.util.Map;
  */
 public class ChatRequest {
     private final ChatConfig config;
+    private final ChatDialect dialect;
     private final ChatOptions options;
     private final boolean stream;
     private List<ChatMessage> messages;
 
-    public ChatRequest(ChatConfig config, ChatOptions options, boolean stream, List<ChatMessage> messages) {
+    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, boolean stream, List<ChatMessage> messages) {
         this.config = config;
+        this.dialect = dialect;
         this.options = options;
         this.stream = stream;
         this.messages = messages;
@@ -98,5 +101,13 @@ public class ChatRequest {
      */
     public List<ChatMessage> getMessages() {
         return Collections.unmodifiableList(messages);
+    }
+
+    /**
+     * 转为请求数据
+     */
+    public String toRequestData() {
+        String reqJson = dialect.buildRequestJson(config, options, messages, stream);
+        return reqJson;
     }
 }

@@ -35,6 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChatResponseDefault implements ChatResponse {
     private final boolean stream;
 
+    protected String responseData;
+
     protected final List<ChatChoice> choices = new ArrayList<>();
     protected ChatException error;
     protected AiUsage usage;
@@ -47,6 +49,14 @@ public class ChatResponseDefault implements ChatResponse {
 
     public ChatResponseDefault(boolean stream) {
         this.stream = stream;
+    }
+
+    /**
+     * 获取响应数据
+     */
+    @Override
+    public String getResponseData() {
+        return responseData;
     }
 
     /**
@@ -158,6 +168,13 @@ public class ChatResponseDefault implements ChatResponse {
     public void reset() {
         this.error = null;
         this.choices.clear();
+    }
+
+    /**
+     * 设置响应数据
+     */
+    public void setResponseData(String responseData) {
+        this.responseData = responseData;
     }
 
     /**

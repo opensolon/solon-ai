@@ -110,20 +110,20 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
 
         //构建请求数据
-        ChatRequest crh = new ChatRequest(config, options, false, session.getMessages());
+        ChatRequest req = new ChatRequest(config, dialect, options, false, session.getMessages());
 
         CallChain chain = new CallChain(interceptorList, this::doCall);
 
-        return chain.doIntercept(crh);
+        return chain.doIntercept(req);
     }
 
     /**
      * 调用
      */
-    private ChatResponse doCall(ChatRequest crh) throws IOException {
+    private ChatResponse doCall(ChatRequest req) throws IOException {
         HttpUtils httpUtils = config.createHttpUtils();
 
-        String reqJson = dialect.buildRequestJson(config, options, crh.getMessages(), crh.isStream());
+        String reqJson = req.toRequestData();
 
         if (log.isTraceEnabled()) {
             log.trace("ai-request: {}", reqJson);
@@ -136,6 +136,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
 
         ChatResponseDefault resp = new ChatResponseDefault(false);
+        resp.setResponseData(respJson);
         dialect.parseResponseJson(config, resp, respJson);
 
         if (resp.getError() != null) {
@@ -178,20 +179,20 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
 
         //构建请求数据
-        ChatRequest crh = new ChatRequest(config, options, true, session.getMessages());
+        ChatRequest req = new ChatRequest(config, dialect, options, true, session.getMessages());
 
         StreamChain chain = new StreamChain(interceptorList, this::doStream);
 
-        return chain.doIntercept(crh);
+        return chain.doIntercept(req);
     }
 
     /**
      * 流响应
      */
-    private Publisher<ChatResponse> doStream(ChatRequest crh) {
+    private Publisher<ChatResponse> doStream(ChatRequest req) {
         HttpUtils httpUtils = config.createHttpUtils();
 
-        String reqJson = dialect.buildRequestJson(config, options, crh.getMessages(), crh.isStream());
+        String reqJson = req.toRequestData();
 
         if (log.isTraceEnabled()) {
             log.trace("ai-request: {}", reqJson);
@@ -270,6 +271,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         if (log.isTraceEnabled()) {
             log.trace("ai-response: {}", event.data());
         }
+
+        resp.setResponseData(event.data());
 
         if (Utils.isEmpty(event.data())) {
             return true;

@@ -31,6 +31,12 @@ import java.util.List;
 @Preview("3.1")
 public interface ChatResponse {
     /**
+     * 获取响应数据
+     */
+    @Nullable
+    String getResponseData();
+
+    /**
      * 获取模型
      */
     String getModel();
