@@ -1,0 +1,29 @@
+package features.ai.chat.interceptor;
+
+import lombok.extern.slf4j.Slf4j;
+import org.noear.solon.ai.chat.ChatRequest;
+import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.interceptor.CallChain;
+import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
+import org.noear.solon.ai.chat.interceptor.StreamChain;
+import org.reactivestreams.Publisher;
+
+import java.io.IOException;
+
+/**
+ * @author noear 2025/5/30 created
+ */
+@Slf4j
+public class ChatInterceptorTest implements ChatInterceptor {
+    @Override
+    public ChatResponse interceptCall(ChatRequest req, CallChain chain) throws IOException {
+        log.warn("ChatInterceptor-interceptCall: " + req.getModel());
+        return chain.doIntercept(req);
+    }
+
+    @Override
+    public Publisher<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
+        log.warn("ChatInterceptor-interceptStream: " + req.getModel());
+        return chain.doIntercept(req);
+    }
+}

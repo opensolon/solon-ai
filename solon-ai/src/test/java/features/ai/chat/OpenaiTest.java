@@ -1,5 +1,6 @@
 package features.ai.chat;
 
+import features.ai.chat.interceptor.ChatInterceptorTest;
 import features.ai.chat.tool.Case10Tools;
 import features.ai.chat.tool.ReturnTools;
 import features.ai.chat.tool.Case8Tools;
@@ -40,7 +41,8 @@ public class OpenaiTest {
     private ChatModel.Builder getChatModelBuilder() {
         return ChatModel.of(apiUrl)
                 .apiKey(apiKey)
-                .model(model);
+                .model(model)
+                .defaultInterceptorAdd(new ChatInterceptorTest());
     }
 
     @Test

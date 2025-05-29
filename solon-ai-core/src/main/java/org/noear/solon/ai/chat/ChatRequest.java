@@ -19,6 +19,7 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 
 import java.util.Collections;
 import java.util.List;
@@ -48,6 +49,7 @@ public class ChatRequest {
     /**
      * 获取提供者
      */
+    @Nullable
     public String getProvider() {
         return config.getProvider();
     }
@@ -83,6 +85,7 @@ public class ChatRequest {
     /**
      * 获取选项
      */
+    @Nullable
     public Object getOption(String key) {
         return options.option(key);
     }
@@ -90,6 +93,7 @@ public class ChatRequest {
     /**
      * 获取用户
      */
+    @Nullable
     public String getUser() {
         return (String) getOption("user");
     }
@@ -121,6 +125,7 @@ public class ChatRequest {
      * 转为请求数据
      */
     public String toRequestData() {
+        //留个变量方便调试
         String reqJson = dialect.buildRequestJson(config, options, messages, stream);
         return reqJson;
     }

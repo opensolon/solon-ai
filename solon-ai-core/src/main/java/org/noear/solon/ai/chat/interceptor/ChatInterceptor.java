@@ -34,9 +34,7 @@ public interface ChatInterceptor {
      * @param req   请求
      * @param chain 拦截链
      */
-    default ChatResponse interceptCall(ChatRequest req, CallChain chain) throws IOException {
-        return chain.doIntercept(req);
-    }
+    ChatResponse interceptCall(ChatRequest req, CallChain chain) throws IOException;
 
     /**
      * 拦截 Stream 请求
@@ -44,7 +42,5 @@ public interface ChatInterceptor {
      * @param req   请求
      * @param chain 拦截链
      */
-    default Publisher<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
-        return chain.doIntercept(req);
-    }
+    Publisher<ChatResponse> interceptStream(ChatRequest req, StreamChain chain);
 }

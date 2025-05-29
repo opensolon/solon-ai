@@ -1,5 +1,6 @@
 package features.ai.chat;
 
+import features.ai.chat.interceptor.ChatInterceptorTest;
 import features.ai.chat.tool.Case10Tools;
 import features.ai.chat.tool.ReturnTools;
 import features.ai.chat.tool.Case8Tools;
@@ -33,12 +34,13 @@ public class GiteeaiTest {
     private static final Logger log = LoggerFactory.getLogger(GiteeaiTest.class);
     private static final String apiUrl = "https://ai.gitee.com/v1/chat/completions";
     private static final String apiKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
-    private static final String model = "Qwen3-32B";//"Qwen2.5-72B-Instruct";//"QwQ-32B";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
+    private static final String model = "Qwen2.5-72B-Instruct";//"Qwen3-32B";//"QwQ-32B";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
 
     private ChatModel.Builder getChatModelBuilder() {
         return ChatModel.of(apiUrl)
                 .apiKey(apiKey)
-                .model(model);
+                .model(model)
+                .defaultInterceptorAdd(new ChatInterceptorTest());
     }
 
     @Test
