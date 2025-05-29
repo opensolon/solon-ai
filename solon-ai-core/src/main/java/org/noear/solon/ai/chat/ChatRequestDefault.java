@@ -18,6 +18,10 @@ package org.noear.solon.ai.chat;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
+import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
+import org.noear.solon.ai.chat.interceptor.ChatInterceptorChain;
+import org.noear.solon.ai.chat.interceptor.ChatInterceptorChainImpl;
+import org.noear.solon.ai.chat.interceptor.ChatRequestHolder;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -25,6 +29,7 @@ import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.MimeType;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.net.http.HttpException;
 import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
@@ -38,6 +43,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.function.Consumer;
@@ -96,9 +102,29 @@ public class ChatRequestDefault implements ChatRequest {
      */
     @Override
     public ChatResponse call() throws IOException {
+        //收集拦截器
+        List<RankEntity<ChatInterceptor>> interceptorList = new ArrayList<>();
+        interceptorList.addAll(config.getDefaultInterceptors());
+        interceptorList.addAll(options.interceptors());
+        if (interceptorList.size() > 1) {
+            Collections.sort(interceptorList);
+        }
+
+        //构建请求数据
+        ChatRequestHolder crh = new ChatRequestHolder(config, options, false, session.getMessages());
+
+        ChatInterceptorChain chain = new ChatInterceptorChainImpl(interceptorList, this::doCall);
+
+        return chain.doIntercept(crh);
+    }
+
+    /**
+     * 调用
+     */
+    protected ChatResponse doCall(ChatRequestHolder crh) throws IOException {
         HttpUtils httpUtils = config.createHttpUtils();
 
-        String reqJson = dialect.buildRequestJson(config, options, session.getMessages(), false);
+        String reqJson = dialect.buildRequestJson(config, options, crh.getMessages(), crh.isStream());
 
         if (log.isTraceEnabled()) {
             log.trace("ai-request: {}", reqJson);

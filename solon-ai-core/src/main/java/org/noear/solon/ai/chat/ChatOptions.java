@@ -135,8 +135,14 @@ public class ChatOptions {
      */
     public ChatOptions interceptorAdd(int index, ChatInterceptor interceptor) {
         interceptors.add(new RankEntity<>(interceptor, index));
-        Collections.sort(interceptors);
         return this;
+    }
+
+    /**
+     * 获取所有拦截器
+     */
+    public List<RankEntity<ChatInterceptor>> interceptors() {
+        return interceptors;
     }
 
     /// ///////////////////////////////////

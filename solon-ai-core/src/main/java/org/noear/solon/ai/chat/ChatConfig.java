@@ -79,7 +79,6 @@ public class ChatConfig extends AiConfig {
      */
     public void addDefaultInterceptor(int index, ChatInterceptor interceptor) {
         defaultInterceptors.add(new RankEntity<>(interceptor, index));
-        Collections.sort(defaultInterceptors);
     }
 
     /**

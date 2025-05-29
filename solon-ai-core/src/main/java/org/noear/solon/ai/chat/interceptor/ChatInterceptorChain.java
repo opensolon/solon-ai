@@ -17,6 +17,8 @@ package org.noear.solon.ai.chat.interceptor;
 
 import org.noear.solon.ai.chat.ChatResponse;
 
+import java.io.IOException;
+
 /**
  * 聊天拦截链
  *
@@ -29,5 +31,5 @@ public interface ChatInterceptorChain {
      *
      * @param requestHolder 请求持有者
      */
-    ChatResponse doIntercept(ChatRequestHolder requestHolder) throws Throwable;
+    ChatResponse doIntercept(ChatRequestHolder requestHolder) throws IOException;
 }

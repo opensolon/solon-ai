@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai;
 
+import java.io.IOException;
+
 /**
  * Ai 处理器
  *
@@ -27,5 +29,5 @@ public interface AiHandler<Req, Resp> {
      *
      * @param req 请求
      */
-    Resp handle(Req req) throws Throwable;
+    Resp handle(Req req) throws IOException;
 }

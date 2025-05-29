@@ -19,6 +19,7 @@ import org.noear.solon.ai.AiHandler;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.core.util.RankEntity;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -39,7 +40,7 @@ public class ChatInterceptorChainImpl implements ChatInterceptorChain {
     }
 
     @Override
-    public ChatResponse doIntercept(ChatRequestHolder requestHolder) throws Throwable {
+    public ChatResponse doIntercept(ChatRequestHolder requestHolder) throws IOException {
         if (lastHandler == null) {
             return interceptorList.get(index++).target.doIntercept(requestHolder, this);
         } else {
