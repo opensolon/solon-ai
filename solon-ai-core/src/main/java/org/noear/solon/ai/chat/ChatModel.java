@@ -18,6 +18,7 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.ai.AiModel;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
+import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -218,6 +219,26 @@ public class ChatModel implements AiModel {
             FunctionToolDesc decl = new FunctionToolDesc(name);
             toolBuilder.accept(decl);
             config.addDefaultTools(decl);
+            return this;
+        }
+
+        /**
+         * 添加默认拦截器
+         *
+         * @param interceptor 拦截器
+         */
+        public Builder defaultInterceptorAdd(ChatInterceptor interceptor) {
+            return defaultInterceptorAdd(0, interceptor);
+        }
+
+        /**
+         * 添加默认拦截器
+         *
+         * @param index       顺序位
+         * @param interceptor 拦截器
+         */
+        public Builder defaultInterceptorAdd(int index, ChatInterceptor interceptor) {
+            config.addDefaultInterceptor(index, interceptor);
             return this;
         }
 

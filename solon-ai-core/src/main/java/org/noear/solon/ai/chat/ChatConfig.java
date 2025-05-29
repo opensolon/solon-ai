@@ -16,7 +16,9 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.AiConfig;
+import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.core.util.RankEntity;
 
 import java.util.*;
 
@@ -28,6 +30,7 @@ import java.util.*;
  */
 public class ChatConfig extends AiConfig {
     private final Map<String, FunctionTool> defaultTools = new LinkedHashMap<>();
+    private final List<RankEntity<ChatInterceptor>> defaultInterceptors = new ArrayList<>();
 
     /**
      * 设置默认工具（用于属性提示）
@@ -68,6 +71,22 @@ public class ChatConfig extends AiConfig {
      */
     public Collection<FunctionTool> getDefaultTools() {
         return defaultTools.values();
+    }
+
+
+    /**
+     * 添加默认拦截器
+     */
+    public void addDefaultInterceptor(int index, ChatInterceptor interceptor) {
+        defaultInterceptors.add(new RankEntity<>(interceptor, index));
+        Collections.sort(defaultInterceptors);
+    }
+
+    /**
+     * 获取所有默认拦截器
+     */
+    public List<RankEntity<ChatInterceptor>> getDefaultInterceptors() {
+        return defaultInterceptors;
     }
 
     @Override

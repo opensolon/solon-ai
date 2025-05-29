@@ -15,7 +15,9 @@
  */
 package org.noear.solon.ai.chat;
 
+import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.tool.*;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -45,6 +47,7 @@ public class ChatOptions {
 
 
     private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
+    private final List<RankEntity<ChatInterceptor>> interceptors = new ArrayList<>();
     private Map<String, Object> options = new LinkedHashMap<>();
 
     /// ////////////
@@ -110,6 +113,29 @@ public class ChatOptions {
         FunctionToolDesc decl = new FunctionToolDesc(name);
         toolBuilder.accept(decl);
         tools.put(decl.name(), decl);
+        return this;
+    }
+
+    /// ///////////////////////////////////
+
+    /**
+     * 添加拦截器
+     *
+     * @param interceptor 拦截器
+     */
+    public ChatOptions interceptorAdd(ChatInterceptor interceptor) {
+        return interceptorAdd(0, interceptor);
+    }
+
+    /**
+     * 添加拦截器
+     *
+     * @param index       顺序位
+     * @param interceptor 拦截器
+     */
+    public ChatOptions interceptorAdd(int index, ChatInterceptor interceptor) {
+        interceptors.add(new RankEntity<>(interceptor, index));
+        Collections.sort(interceptors);
         return this;
     }
 
