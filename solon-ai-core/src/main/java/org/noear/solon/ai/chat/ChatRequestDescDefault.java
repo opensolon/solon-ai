@@ -19,9 +19,8 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
-import org.noear.solon.ai.chat.interceptor.ChatCallChain;
-import org.noear.solon.ai.chat.interceptor.ChatRequestHolder;
-import org.noear.solon.ai.chat.interceptor.ChatStreamChain;
+import org.noear.solon.ai.chat.interceptor.CallChain;
+import org.noear.solon.ai.chat.interceptor.StreamChain;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -49,13 +48,13 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 聊天请求实现
+ * 聊天请求描述实现
  *
  * @author noear
  * @since 3.1
  */
-public class ChatRequestDefault implements ChatRequest {
-    private static final Logger log = LoggerFactory.getLogger(ChatRequestDefault.class);
+public class ChatRequestDescDefault implements ChatRequestDesc {
+    private static final Logger log = LoggerFactory.getLogger(ChatRequestDescDefault.class);
 
     private final ChatConfig config;
     private final ChatDialect dialect;
@@ -63,7 +62,7 @@ public class ChatRequestDefault implements ChatRequest {
 
     private ChatOptions options;
 
-    public ChatRequestDefault(ChatConfig config, ChatDialect dialect, ChatSession session) {
+    public ChatRequestDescDefault(ChatConfig config, ChatDialect dialect, ChatSession session) {
         this.config = config;
         this.dialect = dialect;
         this.session = session;
@@ -76,7 +75,7 @@ public class ChatRequestDefault implements ChatRequest {
      * @param options 选项
      */
     @Override
-    public ChatRequest options(ChatOptions options) {
+    public ChatRequestDesc options(ChatOptions options) {
         if (options != null) {
             //重置
             this.options = options;
@@ -91,7 +90,7 @@ public class ChatRequestDefault implements ChatRequest {
      * @param optionsBuilder 选项构建器
      */
     @Override
-    public ChatRequest options(Consumer<ChatOptions> optionsBuilder) {
+    public ChatRequestDesc options(Consumer<ChatOptions> optionsBuilder) {
         //可多次调用
         optionsBuilder.accept(options);
         return this;
@@ -111,9 +110,9 @@ public class ChatRequestDefault implements ChatRequest {
         }
 
         //构建请求数据
-        ChatRequestHolder crh = new ChatRequestHolder(config, options, false, session.getMessages());
+        ChatRequest crh = new ChatRequest(config, options, false, session.getMessages());
 
-        ChatCallChain chain = new ChatCallChain(interceptorList, this::doCall);
+        CallChain chain = new CallChain(interceptorList, this::doCall);
 
         return chain.doIntercept(crh);
     }
@@ -121,7 +120,7 @@ public class ChatRequestDefault implements ChatRequest {
     /**
      * 调用
      */
-    private ChatResponse doCall(ChatRequestHolder crh) throws IOException {
+    private ChatResponse doCall(ChatRequest crh) throws IOException {
         HttpUtils httpUtils = config.createHttpUtils();
 
         String reqJson = dialect.buildRequestJson(config, options, crh.getMessages(), crh.isStream());
@@ -179,9 +178,9 @@ public class ChatRequestDefault implements ChatRequest {
         }
 
         //构建请求数据
-        ChatRequestHolder crh = new ChatRequestHolder(config, options, true, session.getMessages());
+        ChatRequest crh = new ChatRequest(config, options, true, session.getMessages());
 
-        ChatStreamChain chain = new ChatStreamChain(interceptorList, this::doStream);
+        StreamChain chain = new StreamChain(interceptorList, this::doStream);
 
         return chain.doIntercept(crh);
     }
@@ -189,7 +188,7 @@ public class ChatRequestDefault implements ChatRequest {
     /**
      * 流响应
      */
-    private Publisher<ChatResponse> doStream(ChatRequestHolder crh) {
+    private Publisher<ChatResponse> doStream(ChatRequest crh) {
         HttpUtils httpUtils = config.createHttpUtils();
 
         String reqJson = dialect.buildRequestJson(config, options, crh.getMessages(), crh.isStream());

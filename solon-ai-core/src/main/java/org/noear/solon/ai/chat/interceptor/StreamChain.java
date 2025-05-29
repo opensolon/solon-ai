@@ -16,37 +16,38 @@
 package org.noear.solon.ai.chat.interceptor;
 
 import org.noear.solon.ai.AiHandler;
+import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.core.util.RankEntity;
+import org.reactivestreams.Publisher;
 
-import java.io.IOException;
 import java.util.List;
 
 /**
- * 聊天 Call 拦截链
+ * 聊天 Stream 拦截链
  *
  * @author noear
  * @since 3.3
  */
-public class ChatCallChain {
+public class StreamChain {
     private final List<RankEntity<ChatInterceptor>> interceptorList;
-    private final AiHandler<ChatRequestHolder, ChatResponse, IOException> lastHandler;
+    private final AiHandler<ChatRequest, Publisher<ChatResponse>, RuntimeException> lastHandler;
     private int index;
 
-    public ChatCallChain(List<RankEntity<ChatInterceptor>> interceptorList, AiHandler<ChatRequestHolder, ChatResponse, IOException> lastHandler) {
+    public StreamChain(List<RankEntity<ChatInterceptor>> interceptorList, AiHandler<ChatRequest, Publisher<ChatResponse>, RuntimeException> lastHandler) {
         this.interceptorList = interceptorList;
         this.lastHandler = lastHandler;
         this.index = 0;
     }
 
-    public ChatResponse doIntercept(ChatRequestHolder requestHolder) throws IOException {
+    public Publisher<ChatResponse> doIntercept(ChatRequest req) {
         if (lastHandler == null) {
-            return interceptorList.get(index++).target.interceptCall(requestHolder, this);
+            return interceptorList.get(index++).target.interceptStream(req, this);
         } else {
             if (index < interceptorList.size()) {
-                return interceptorList.get(index++).target.interceptCall(requestHolder, this);
+                return interceptorList.get(index++).target.interceptStream(req, this);
             } else {
-                return lastHandler.handle(requestHolder);
+                return lastHandler.handle(req);
             }
         }
     }

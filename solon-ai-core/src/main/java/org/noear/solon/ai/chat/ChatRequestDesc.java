@@ -13,38 +13,44 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.interceptor;
+package org.noear.solon.ai.chat;
 
-import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.lang.Preview;
 import org.reactivestreams.Publisher;
 
 import java.io.IOException;
+import java.util.function.Consumer;
 
 /**
- * 聊天拦截器
+ * 聊天请求描述
  *
  * @author noear
+ * @since 3.1
  * @since 3.3
  */
-public interface ChatInterceptor {
+@Preview("3.1")
+public interface ChatRequestDesc {
     /**
-     * 拦截 Call 请求
+     * 选项设置
      *
-     * @param req   请求
-     * @param chain 拦截链
+     * @param options 选项
      */
-    default ChatResponse interceptCall(ChatRequest req, CallChain chain) throws IOException {
-        return chain.doIntercept(req);
-    }
+    ChatRequestDesc options(ChatOptions options);
 
     /**
-     * 拦截 Stream 请求
+     * 选项配置
      *
-     * @param req   请求
-     * @param chain 拦截链
+     * @param optionsBuilder 选项构建器
      */
-    default Publisher<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
-        return chain.doIntercept(req);
-    }
+    ChatRequestDesc options(Consumer<ChatOptions> optionsBuilder);
+
+    /**
+     * 调用
+     */
+    ChatResponse call() throws IOException;
+
+    /**
+     * 流响应
+     */
+    Publisher<ChatResponse> stream();
 }

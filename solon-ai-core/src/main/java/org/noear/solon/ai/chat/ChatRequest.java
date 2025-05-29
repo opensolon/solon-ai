@@ -15,41 +15,88 @@
  */
 package org.noear.solon.ai.chat;
 
-import org.noear.solon.lang.Preview;
-import org.reactivestreams.Publisher;
 
-import java.io.IOException;
-import java.util.function.Consumer;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.core.util.Assert;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 /**
- * 聊天请求
+ * 聊天请求持有者
  *
  * @author noear
- * @since 3.1
+ * @since 3.3
  */
-@Preview("3.1")
-public interface ChatRequest {
-    /**
-     * 选项设置
-     *
-     * @param options 选项
-     */
-    ChatRequest options(ChatOptions options);
+public class ChatRequest {
+    private final ChatConfig config;
+    private final ChatOptions options;
+    private final boolean stream;
+    private List<ChatMessage> messages;
+
+    public ChatRequest(ChatConfig config, ChatOptions options, boolean stream, List<ChatMessage> messages) {
+        this.config = config;
+        this.options = options;
+        this.stream = stream;
+        this.messages = messages;
+    }
 
     /**
-     * 选项配置
-     *
-     * @param optionsBuilder 选项构建器
+     * 获取提供者
      */
-    ChatRequest options(Consumer<ChatOptions> optionsBuilder);
+    public String getProvider() {
+        return config.getProvider();
+    }
 
     /**
-     * 调用
+     * 获取模型
      */
-    ChatResponse call() throws IOException;
+    public String getModel() {
+        return config.getModel();
+    }
 
     /**
-     * 流响应
+     * 获取请求头
      */
-    Publisher<ChatResponse> stream();
+    public Map<String, String> getHeaders() {
+        return Collections.unmodifiableMap(config.getHeaders());
+    }
+
+    /**
+     * 获取选项
+     */
+    public Map<String, Object> getOptions() {
+        return options.options();
+    }
+
+    /**
+     * 添加选项
+     */
+    public void addOption(String key, Object value) {
+        options.optionAdd(key, value);
+    }
+
+    /**
+     * 是否为流请求
+     */
+    public boolean isStream() {
+        return stream;
+    }
+
+    /**
+     * 设置消息
+     */
+    public void setMessages(List<ChatMessage> messages) {
+        Assert.notEmpty(messages, "messages is empty");
+
+        this.messages = messages;
+    }
+
+    /**
+     * 获取消息
+     */
+    public List<ChatMessage> getMessages() {
+        return Collections.unmodifiableList(messages);
+    }
 }
