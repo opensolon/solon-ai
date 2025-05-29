@@ -30,15 +30,15 @@ import java.util.function.Consumer;
  * @author noear
  * @since 3.1
  */
-public class EmbeddingRequest {
-    private static final Logger log = LoggerFactory.getLogger(EmbeddingRequest.class);
+public class EmbeddingRequestDesc {
+    private static final Logger log = LoggerFactory.getLogger(EmbeddingRequestDesc.class);
 
     private final EmbeddingConfig config;
     private final EmbeddingDialect dialect;
     private final List<String> input;
     private EmbeddingOptions options;
 
-    protected EmbeddingRequest(EmbeddingConfig config, EmbeddingDialect dialect, List<String> input) {
+    protected EmbeddingRequestDesc(EmbeddingConfig config, EmbeddingDialect dialect, List<String> input) {
         this.config = config;
         this.dialect = dialect;
         this.input = input;
@@ -48,7 +48,7 @@ public class EmbeddingRequest {
     /**
      * 选项
      */
-    public EmbeddingRequest options(EmbeddingOptions options) {
+    public EmbeddingRequestDesc options(EmbeddingOptions options) {
         if (options != null) {
             //重置
             this.options = options;
@@ -60,7 +60,7 @@ public class EmbeddingRequest {
     /**
      * 选项
      */
-    public EmbeddingRequest options(Consumer<EmbeddingOptions> optionsBuilder) {
+    public EmbeddingRequestDesc options(Consumer<EmbeddingOptions> optionsBuilder) {
         //可多次调用
         optionsBuilder.accept(options);
         return this;

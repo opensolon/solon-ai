@@ -105,15 +105,15 @@ public class EmbeddingModel implements AiModel {
     /**
      * 输入
      */
-    public EmbeddingRequest input(String... input) {
+    public EmbeddingRequestDesc input(String... input) {
         return input(Arrays.asList(input));
     }
 
     /**
      * 输入
      */
-    public EmbeddingRequest input(List<String> input) {
-        return new EmbeddingRequest(config, dialect, input);
+    public EmbeddingRequestDesc input(List<String> input) {
+        return new EmbeddingRequestDesc(config, dialect, input);
     }
 
 
