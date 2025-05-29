@@ -20,7 +20,6 @@ import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.ai.chat.message.ChatMessage;
 
 import java.util.Date;
 import java.util.List;
@@ -54,15 +53,6 @@ public class OpenaiChatDialect extends AbstractChatDialect {
     @Override
     public boolean matched(ChatConfig config) {
         return false;
-    }
-
-    @Override
-    protected void buildReqToolsNode(ONode n, ChatConfig config, ChatOptions options, ChatMessage lastMessage) {
-        if (lastMessage.getRole() != ChatRole.TOOL) {
-            //如果是 tool ，后面不跟 funcs
-            buildReqToolsNodeDo(n, config.getDefaultTools());
-            buildReqToolsNodeDo(n, options.tools());
-        }
     }
 
     @Override
