@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.interceptor;
 
 import org.noear.solon.ai.chat.ChatResponse;
+import org.reactivestreams.Publisher;
 
 import java.io.IOException;
 
@@ -27,10 +28,22 @@ import java.io.IOException;
  */
 public interface ChatInterceptor {
     /**
-     * 拦截
+     * 拦截 Call 请求
      *
      * @param requestHolder 请求持有人
      * @param chain         拦截链
      */
-    ChatResponse doIntercept(ChatRequestHolder requestHolder, ChatInterceptorChain chain) throws IOException;
+    default ChatResponse interceptCall(ChatRequestHolder requestHolder, ChatCallChain chain) throws IOException {
+        return chain.doIntercept(requestHolder);
+    }
+
+    /**
+     * 拦截 Stream 请求
+     *
+     * @param requestHolder 请求持有人
+     * @param chain         拦截链
+     */
+    default Publisher<ChatResponse> interceptStream(ChatRequestHolder requestHolder, ChatStreamChain chain) {
+        return chain.doIntercept(requestHolder);
+    }
 }

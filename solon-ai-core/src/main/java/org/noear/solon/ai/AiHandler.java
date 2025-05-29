@@ -23,11 +23,11 @@ import java.io.IOException;
  * @author noear
  * @since 3.3
  */
-public interface AiHandler<Req, Resp> {
+public interface AiHandler<Req, Resp, Err extends Throwable> {
     /**
      * 处理
      *
      * @param req 请求
      */
-    Resp handle(Req req) throws IOException;
+    Resp handle(Req req) throws Err;
 }

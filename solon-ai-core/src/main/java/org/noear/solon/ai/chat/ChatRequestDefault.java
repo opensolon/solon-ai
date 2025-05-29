@@ -19,9 +19,9 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
-import org.noear.solon.ai.chat.interceptor.ChatInterceptorChain;
-import org.noear.solon.ai.chat.interceptor.ChatInterceptorChainImpl;
+import org.noear.solon.ai.chat.interceptor.ChatCallChain;
 import org.noear.solon.ai.chat.interceptor.ChatRequestHolder;
+import org.noear.solon.ai.chat.interceptor.ChatStreamChain;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -113,7 +113,7 @@ public class ChatRequestDefault implements ChatRequest {
         //构建请求数据
         ChatRequestHolder crh = new ChatRequestHolder(config, options, false, session.getMessages());
 
-        ChatInterceptorChain chain = new ChatInterceptorChainImpl(interceptorList, this::doCall);
+        ChatCallChain chain = new ChatCallChain(interceptorList, this::doCall);
 
         return chain.doIntercept(crh);
     }
@@ -121,7 +121,7 @@ public class ChatRequestDefault implements ChatRequest {
     /**
      * 调用
      */
-    protected ChatResponse doCall(ChatRequestHolder crh) throws IOException {
+    private ChatResponse doCall(ChatRequestHolder crh) throws IOException {
         HttpUtils httpUtils = config.createHttpUtils();
 
         String reqJson = dialect.buildRequestJson(config, options, crh.getMessages(), crh.isStream());
@@ -170,9 +170,29 @@ public class ChatRequestDefault implements ChatRequest {
      */
     @Override
     public Publisher<ChatResponse> stream() {
+        //收集拦截器
+        List<RankEntity<ChatInterceptor>> interceptorList = new ArrayList<>();
+        interceptorList.addAll(config.getDefaultInterceptors());
+        interceptorList.addAll(options.interceptors());
+        if (interceptorList.size() > 1) {
+            Collections.sort(interceptorList);
+        }
+
+        //构建请求数据
+        ChatRequestHolder crh = new ChatRequestHolder(config, options, true, session.getMessages());
+
+        ChatStreamChain chain = new ChatStreamChain(interceptorList, this::doStream);
+
+        return chain.doIntercept(crh);
+    }
+
+    /**
+     * 流响应
+     */
+    private Publisher<ChatResponse> doStream(ChatRequestHolder crh) {
         HttpUtils httpUtils = config.createHttpUtils();
 
-        String reqJson = dialect.buildRequestJson(config, options, session.getMessages(), true);
+        String reqJson = dialect.buildRequestJson(config, options, crh.getMessages(), crh.isStream());
 
         if (log.isTraceEnabled()) {
             log.trace("ai-request: {}", reqJson);

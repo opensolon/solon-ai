@@ -23,29 +23,28 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * 聊天拦截链实现
+ * 聊天 Call 拦截链
  *
  * @author noear
  * @since 3.3
  */
-public class ChatInterceptorChainImpl implements ChatInterceptorChain {
+public class ChatCallChain {
     private final List<RankEntity<ChatInterceptor>> interceptorList;
-    private final AiHandler<ChatRequestHolder, ChatResponse> lastHandler;
+    private final AiHandler<ChatRequestHolder, ChatResponse, IOException> lastHandler;
     private int index;
 
-    public ChatInterceptorChainImpl(List<RankEntity<ChatInterceptor>> interceptorList, AiHandler<ChatRequestHolder, ChatResponse> lastHandler) {
+    public ChatCallChain(List<RankEntity<ChatInterceptor>> interceptorList, AiHandler<ChatRequestHolder, ChatResponse, IOException> lastHandler) {
         this.interceptorList = interceptorList;
         this.lastHandler = lastHandler;
         this.index = 0;
     }
 
-    @Override
     public ChatResponse doIntercept(ChatRequestHolder requestHolder) throws IOException {
         if (lastHandler == null) {
-            return interceptorList.get(index++).target.doIntercept(requestHolder, this);
+            return interceptorList.get(index++).target.interceptCall(requestHolder, this);
         } else {
             if (index < interceptorList.size()) {
-                return interceptorList.get(index++).target.doIntercept(requestHolder, this);
+                return interceptorList.get(index++).target.interceptCall(requestHolder, this);
             } else {
                 return lastHandler.handle(requestHolder);
             }
