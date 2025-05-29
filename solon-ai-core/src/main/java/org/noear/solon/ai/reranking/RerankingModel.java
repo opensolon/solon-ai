@@ -74,8 +74,8 @@ public class RerankingModel implements AiModel {
     /**
      * 输入
      */
-    public RerankingRequest input(String query, List<Document> documents) {
-        return new RerankingRequest(config, dialect, query, documents);
+    public RerankingRequestDesc input(String query, List<Document> documents) {
+        return new RerankingRequestDesc(config, dialect, query, documents);
     }
 
 

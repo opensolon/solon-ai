@@ -26,13 +26,13 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 重排请求
+ * 重排请求描述
  *
  * @author noear
  * @since 3.1
  */
-public class RerankingRequest {
-    private static final Logger log = LoggerFactory.getLogger(RerankingRequest.class);
+public class RerankingRequestDesc {
+    private static final Logger log = LoggerFactory.getLogger(RerankingRequestDesc.class);
 
     private final RerankingConfig config;
     private final RerankingDialect dialect;
@@ -40,7 +40,7 @@ public class RerankingRequest {
     private final List<Document> documents;
     private RerankingOptions options;
 
-    protected RerankingRequest(RerankingConfig config, RerankingDialect dialect, String query ,List<Document> documents) {
+    protected RerankingRequestDesc(RerankingConfig config, RerankingDialect dialect, String query , List<Document> documents) {
         this.config = config;
         this.dialect = dialect;
         this.query = query;
@@ -51,7 +51,7 @@ public class RerankingRequest {
     /**
      * 选项
      */
-    public RerankingRequest options(RerankingOptions options) {
+    public RerankingRequestDesc options(RerankingOptions options) {
         if (options != null) {
             //重置
             this.options = options;
@@ -63,7 +63,7 @@ public class RerankingRequest {
     /**
      * 选项
      */
-    public RerankingRequest options(Consumer<RerankingOptions> optionsBuilder) {
+    public RerankingRequestDesc options(Consumer<RerankingOptions> optionsBuilder) {
         //可多次调用
         optionsBuilder.accept(options);
         return this;
