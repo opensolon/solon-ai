@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 嵌入请求
+ * 嵌入请求描述
  *
  * @author noear
  * @since 3.1

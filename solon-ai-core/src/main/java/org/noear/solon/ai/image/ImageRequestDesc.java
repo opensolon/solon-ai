@@ -24,20 +24,20 @@ import java.io.IOException;
 import java.util.function.Consumer;
 
 /**
- * 图像请求
+ * 图像请求描述
  *
  * @author noear
  * @since 3.1
  */
-public class ImageRequest {
-    private static final Logger log = LoggerFactory.getLogger(ImageRequest.class);
+public class ImageRequestDesc {
+    private static final Logger log = LoggerFactory.getLogger(ImageRequestDesc.class);
 
     private final ImageConfig config;
     private final ImageDialect dialect;
     private final String prompt;
     private ImageOptions options;
 
-    protected ImageRequest(ImageConfig config, ImageDialect dialect, String prompt) {
+    protected ImageRequestDesc(ImageConfig config, ImageDialect dialect, String prompt) {
         this.config = config;
         this.dialect = dialect;
         this.prompt = prompt;
@@ -47,7 +47,7 @@ public class ImageRequest {
     /**
      * 选项
      */
-    public ImageRequest options(ImageOptions options) {
+    public ImageRequestDesc options(ImageOptions options) {
         if (options != null) {
             //重置
             this.options = options;
@@ -59,7 +59,7 @@ public class ImageRequest {
     /**
      * 选项
      */
-    public ImageRequest options(Consumer<ImageOptions> optionsBuilder) {
+    public ImageRequestDesc options(Consumer<ImageOptions> optionsBuilder) {
         //可多次调用
         optionsBuilder.accept(options);
         return this;

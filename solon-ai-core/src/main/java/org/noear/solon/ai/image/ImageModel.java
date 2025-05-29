@@ -51,8 +51,8 @@ public class ImageModel implements AiModel {
     /**
      * 输入
      */
-    public ImageRequest prompt(String prompt) {
-        return new ImageRequest(config, dialect, prompt);
+    public ImageRequestDesc prompt(String prompt) {
+        return new ImageRequestDesc(config, dialect, prompt);
     }
 
 
