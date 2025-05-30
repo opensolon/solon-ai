@@ -1,6 +1,7 @@
 package io.modelcontextprotocol.client.transport;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -8,6 +9,9 @@ import io.modelcontextprotocol.util.Assert;
 import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.HttpUtilsBuilder;
+import org.noear.solon.net.http.textstream.ServerSentEvent;
+import org.noear.solon.net.http.textstream.TextStreamUtil;
+import org.noear.solon.rx.SimpleSubscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -17,16 +21,17 @@ import reactor.util.retry.Retry;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-public class StreamableHttpClientTransport implements McpClientTransport {
+public class WebRxStreamableClientTransport implements McpClientTransport {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(StreamableHttpClientTransport.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(WebRxStreamableClientTransport.class);
 
     private static final String DEFAULT_MCP_ENDPOINT = "/mcp";
 
@@ -52,11 +57,11 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
     private final HttpUtilsBuilder webBuilder;
 
+    private final String endpoint;
+
 //    private final HttpRequest.Builder requestBuilder;
 
     private final ObjectMapper objectMapper;
-
-    private final URI uri;
 
     private final AtomicReference<String> lastEventId = new AtomicReference<>();
 
@@ -64,12 +69,13 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
     private final AtomicBoolean fallbackToSse = new AtomicBoolean(false);
 
-    StreamableHttpClientTransport(final HttpUtilsBuilder webBuilder,
-                                  final ObjectMapper objectMapper, final String baseUri, final String endpoint,
-                                  final WebRxSseClientTransport webRxSseClientTransport) {
+    public WebRxStreamableClientTransport(final HttpUtilsBuilder webBuilder,
+                                   final ObjectMapper objectMapper,
+                                          final String endpoint,
+                                   final WebRxSseClientTransport webRxSseClientTransport) {
         this.webBuilder = webBuilder;
         this.objectMapper = objectMapper;
-        this.uri = URI.create(baseUri + endpoint);
+        this.endpoint = endpoint;
         this.webRxSseClientTransport = webRxSseClientTransport;
     }
 
@@ -90,47 +96,30 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
         private final HttpUtilsBuilder webBuilder;
 
-//        private final HttpClient.Builder clientBuilder = HttpClient.newBuilder()
-//                .version(HttpClient.Version.HTTP_1_1)
-//                .connectTimeout(Duration.ofSeconds(10));
-//
-//        private final HttpRequest.Builder requestBuilder = HttpRequest.newBuilder();
-
         private ObjectMapper objectMapper = new ObjectMapper();
 
-        private String baseUri;
-
         private String endpoint = DEFAULT_MCP_ENDPOINT;
-
-        public Builder withBaseUri(final String baseUri) {
-            Assert.hasText(baseUri, "baseUri must not be empty");
-            this.baseUri = baseUri;
-            return this;
-        }
 
         public Builder(HttpUtilsBuilder webBuilder) {
             Assert.notNull(webBuilder, "webBuilder must not be empty");
             this.webBuilder = webBuilder;
         }
 
-//        public StreamableHttpClientTransport build() {
-//            final HttpClientSseClientTransport.Builder builder = HttpClientSseClientTransport.builder(baseUri)
-//                    .objectMapper(objectMapper);
-//            if (clientCustomizer != null) {
-//                builder.customizeClient(clientCustomizer);
-//            }
-//
-//            if (requestCustomizer != null) {
-//                builder.customizeRequest(requestCustomizer);
-//            }
-//
-//            if (!endpoint.equals(DEFAULT_MCP_ENDPOINT)) {
-//                builder.sseEndpoint(endpoint);
-//            }
-//
-//            return new StreamableHttpClientTransport(clientBuilder.build(), requestBuilder, objectMapper, baseUri,
-//                    endpoint, builder.build());
-//        }
+        public Builder endpoint(String endpoint) {
+            Assert.hasText(endpoint, "endpoint must not be null");
+            this.endpoint = endpoint;
+            return this;
+        }
+
+        public Builder objectMapper(ObjectMapper objectMapper) {
+            Assert.notNull(objectMapper, "objectMapper must not be null");
+            this.objectMapper = objectMapper;
+            return this;
+        }
+
+        public WebRxStreamableClientTransport build(){
+            return new WebRxStreamableClientTransport(webBuilder, objectMapper, endpoint, new WebRxSseClientTransport(webBuilder, endpoint, objectMapper));
+        }
 
     }
 
@@ -206,11 +195,10 @@ public class StreamableHttpClientTransport implements McpClientTransport {
                         // have to use it for any subsequent requests
                         if (message instanceof McpSchema.JSONRPCRequest
                                 && ((McpSchema.JSONRPCRequest) message).getMethod().equals(McpSchema.METHOD_INITIALIZE)) {
-                            // todo 需要换成可用的
-//                            response.headers()
-//                                    .firstValue(MCP_SESSION_ID)
-//                                    .map(String::trim)
-//                                    .ifPresent(this.mcpSessionId::set);
+                            String sessionId = response.header(MCP_SESSION_ID);
+                            if (sessionId != null) {
+                                mcpSessionId.set(sessionId);
+                            }
                         }
 
                         // If the response is 202 Accepted, there's no body to process
@@ -266,8 +254,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
     private Mono<String> serializeJson(final McpSchema.JSONRPCMessage msg) {
         try {
             return Mono.just(objectMapper.writeValueAsString(msg));
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             LOGGER.error("Error serializing JSON-RPC message", e);
             return Mono.error(e);
         }
@@ -279,11 +266,9 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 //        final String contentType = response.headers().firstValue(CONTENT_TYPE).orElse("");
         if (contentType.contains(APPLICATION_JSON_SEQ)) {
             return handleJsonStream(response, handler);
-        }
-        else if (contentType.contains(TEXT_EVENT_STREAM)) {
+        } else if (contentType.contains(TEXT_EVENT_STREAM)) {
             return handleSseStream(response, handler);
-        }
-        else if (contentType.contains(APPLICATION_JSON)) {
+        } else if (contentType.contains(APPLICATION_JSON)) {
             return handleSingleJson(response, handler);
         }
         return Mono.error(new UnsupportedOperationException("Unsupported Content-Type: " + contentType));
@@ -296,8 +281,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
                 final McpSchema.JSONRPCMessage msg = McpSchema.deserializeJsonRpcMessage(objectMapper,
                         new String(response.bodyAsBytes(), StandardCharsets.UTF_8));
                 return handler.apply(Mono.just(msg));
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 LOGGER.error("Error processing JSON response", e);
                 return Mono.error(e);
             }
@@ -310,8 +294,7 @@ public class StreamableHttpClientTransport implements McpClientTransport {
             try {
                 final McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, jsonLine);
                 return handler.apply(Mono.just(message));
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 LOGGER.error("Error processing JSON line", e);
                 return Mono.error(e);
             }
@@ -320,67 +303,51 @@ public class StreamableHttpClientTransport implements McpClientTransport {
 
     private Mono<Void> handleSseStream(final HttpResponse response,
                                        final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
-        return Flux.fromStream(new BufferedReader(new InputStreamReader(response.body())).lines())
-                .map(String::trim)
-                .bufferUntil(String::isEmpty)
-                .map(eventLines -> {
-                    String event = "";
-                    String data = "";
-                    String id = "";
 
-                    for (String line : eventLines) {
-                        if (line.startsWith("event: "))
-                            event = line.substring(7).trim();
-                        else if (line.startsWith("data: "))
-                            data += line.substring(6) + "\n";
-                        else if (line.startsWith("id: "))
-                            id = line.substring(4).trim();
-                    }
+        return Mono.create(sink -> {
+            try {
+                TextStreamUtil.parseSseStream(response.body(), new SimpleSubscriber<ServerSentEvent>()
+                        .doOnNext(sseEvent -> {
+                            String rawData = sseEvent.getData();
+                            try {
+                                JsonNode node = objectMapper.readTree(rawData);
+                                List<McpSchema.JSONRPCMessage> messages = new ArrayList<>();
+                                if (node.isArray()) {
+                                    for (JsonNode item : node) {
+                                        messages.add(McpSchema.deserializeJsonRpcMessage(objectMapper, item.toString()));
+                                    }
+                                } else if (node.isObject()) {
+                                    messages.add(McpSchema.deserializeJsonRpcMessage(objectMapper, node.toString()));
+                                } else {
+                                    String warning = "Unexpected JSON in SSE data: " + rawData;
+                                    LOGGER.warn(warning);
+                                    sink.error(new IllegalArgumentException(warning));
+                                    return;
+                                }
 
-                    if (data.endsWith("\n")) {
-                        data = data.substring(0, data.length() - 1);
-                    }
-                    return null;
-                    // todo 需要换成可用的
-//                    return new FlowSseClient.SseEvent(id, event, data);
-                })
-                // todo 需要换成可用的
-//                .filter(sseEvent -> "message".equals(sseEvent.type()))
-                .concatMap(sseEvent -> {
-                    // todo 需要换成可用的
-//                    String rawData = sseEvent.data().trim();
-//                    try {
-//                        JsonNode node = objectMapper.readTree(rawData);
-//                        List<McpSchema.JSONRPCMessage> messages = new ArrayList<>();
-//                        if (node.isArray()) {
-//                            for (JsonNode item : node) {
-//                                messages.add(McpSchema.deserializeJsonRpcMessage(objectMapper, item.toString()));
-//                            }
-//                        }
-//                        else if (node.isObject()) {
-//                            messages.add(McpSchema.deserializeJsonRpcMessage(objectMapper, node.toString()));
-//                        }
-//                        else {
-//                            String warning = "Unexpected JSON in SSE data: " + rawData;
-//                            LOGGER.warn(warning);
-//                            return Mono.error(new IllegalArgumentException(warning));
-//                        }
-//
-//                        return Flux.fromIterable(messages)
-//                                .concatMap(msg -> handler.apply(Mono.just(msg)))
-//                                .then(Mono.fromRunnable(() -> {
-//                                    if (!sseEvent.id().isEmpty()) {
-//                                        lastEventId.set(sseEvent.id());
-//                                    }
-//                                }));
-//                    }
-//                    catch (IOException e) {
-//                        LOGGER.error("Error parsing SSE JSON: {}", rawData, e);
-//                        return Mono.error(e);
-//                    }
-                    return null;
-                })
-                .then();
+                                for (McpSchema.JSONRPCMessage message : messages) {
+                                    handler.apply(Mono.just(message));
+                                }
+
+                                if (!sseEvent.id().isEmpty()) {
+                                    lastEventId.set(sseEvent.id());
+                                }
+                            } catch (IOException e) {
+                                LOGGER.error("Error parsing SSE JSON: {}", rawData, e);
+                                sink.error(e);
+                                return;
+                            }
+                        })
+                        .doOnComplete(() -> {
+                            sink.success();
+                        })
+                        .doOnError(err -> {
+                            sink.error(err);
+                        }));
+            } catch (IOException e) {
+                sink.error(e);
+            }
+        });
     }
 
     @Override
@@ -397,5 +364,4 @@ public class StreamableHttpClientTransport implements McpClientTransport {
     public <T> T unmarshalFrom(final Object data, final TypeReference<T> typeRef) {
         return objectMapper.convertValue(data, typeRef);
     }
-
 }

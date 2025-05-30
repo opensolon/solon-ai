@@ -20,6 +20,7 @@ import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
+import io.modelcontextprotocol.server.transport.WebRxStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.noear.solon.Solon;
@@ -86,6 +87,10 @@ public class McpServerEndpointProvider implements LifecycleBean {
         if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
             //stdio 通道
             this.mcpTransportProvider = new StdioServerTransportProvider();
+        } else if(McpChannel.STREAMABLE.equalsIgnoreCase(serverProperties.getChannel())) {
+            this.mcpTransportProvider = WebRxStreamableServerTransportProvider.builder()
+                    .build();
+
         } else {
             //sse 通道
             this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()

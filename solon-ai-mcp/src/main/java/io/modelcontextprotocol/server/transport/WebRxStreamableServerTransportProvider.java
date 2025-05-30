@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.*;
+import io.modelcontextprotocol.util.Assert;
 import org.noear.solon.core.exception.StatusException;
 import org.noear.solon.core.handle.Context;
 import org.slf4j.Logger;
@@ -28,19 +29,19 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
     private static final String MCP_SESSION_ID = "Mcp-Session-Id";
     private static final String APPLICATION_JSON = "application/json";
     private static final String TEXT_EVENT_STREAM = "text/event-stream";
+    private static final String DEFAULT_MCP_ENDPOINT = "/mcp";
+
     private final ObjectMapper objectMapper;
-    private final McpServerTransportProvider legacyTransportProvider;
-    private final Set<String> allowedOrigins;
+    private final String endpoint;
     /**
      * Map of active client sessions, keyed by session ID
      */
     private final Map<String, McpSession> sessions = new ConcurrentHashMap<>();
     private McpServerSession.Factory sessionFactory;
 
-    public WebRxStreamableServerTransportProvider(final ObjectMapper objectMapper, final McpServerTransportProvider legacyTransportProvider, final Set<String> allowedOrigins) {
+    public WebRxStreamableServerTransportProvider(final ObjectMapper objectMapper, String endpoint) {
         this.objectMapper = objectMapper;
-        this.legacyTransportProvider = legacyTransportProvider;
-        this.allowedOrigins = allowedOrigins;
+        this.endpoint = endpoint;
     }
 
 
@@ -71,13 +72,6 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
     }
 
     public void doPost(Context ctx) throws Throwable {
-        // 1. Origin header check
-        String origin = ctx.header("Origin");
-        if (origin != null && !allowedOrigins.contains(origin)) {
-            ctx.status(403, "Origin not allowed");
-            return;
-        }
-
         // 2. Accept header routing
         final String accept = ctx.headerOrDefault("Accept", "");
         final List<String> acceptTypes = Arrays.stream(accept.split(","))
@@ -241,6 +235,61 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
                     // ignore or log
                 }
             });
+        }
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * Builder for creating instances of {@link WebRxSseServerTransportProvider}.
+     * <p>
+     * This builder provides a fluent API for configuring and creating instances of
+     * WebFluxSseServerTransportProvider with custom settings.
+     */
+    public static class Builder {
+
+        private ObjectMapper objectMapper;
+
+        private String endpoint = DEFAULT_MCP_ENDPOINT;
+
+        /**
+         * Sets the ObjectMapper to use for JSON serialization/deserialization of MCP
+         * messages.
+         * @param objectMapper The ObjectMapper instance. Must not be null.
+         * @return this builder instance
+         * @throws IllegalArgumentException if objectMapper is null
+         */
+        public Builder objectMapper(ObjectMapper objectMapper) {
+            Assert.notNull(objectMapper, "ObjectMapper must not be null");
+            this.objectMapper = objectMapper;
+            return this;
+        }
+
+        /**
+         * Sets the endpoint URI where clients should send their JSON-RPC messages.
+         * @param endpoint The endpoint URI. Must not be null.
+         * @return this builder instance
+         * @throws IllegalArgumentException if endpoint is null
+         */
+        public Builder endpoint(String endpoint) {
+            Assert.notNull(endpoint, "Endpoint must not be null");
+            this.endpoint = endpoint;
+            return this;
+        }
+
+        /**
+         * Builds a new instance of {@link WebRxSseServerTransportProvider} with the
+         * configured settings.
+         * @return A new WebFluxSseServerTransportProvider instance
+         * @throws IllegalStateException if required parameters are not set
+         */
+        public WebRxStreamableServerTransportProvider build() {
+            Assert.notNull(objectMapper, "ObjectMapper must be set");
+            Assert.notNull(endpoint, "Endpoint must be set");
+
+            return new WebRxStreamableServerTransportProvider(objectMapper, endpoint);
         }
     }
 }

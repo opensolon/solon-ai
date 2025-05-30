@@ -20,6 +20,7 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.client.transport.WebRxSseClientTransport;
+import io.modelcontextprotocol.client.transport.WebRxStreamableClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
@@ -144,15 +145,15 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             //sse 通道
             URI url = URI.create(clientProps.getApiUrl());
             String baseUri = url.getScheme() + "://" + url.getAuthority();
-            String sseEndpoint = null;
+            String endpoint = null;
             if (Utils.isEmpty(url.getRawQuery())) {
-                sseEndpoint = url.getRawPath();
+                endpoint = url.getRawPath();
             } else {
-                sseEndpoint = url.getRawPath() + "?" + url.getRawQuery();
+                endpoint = url.getRawPath() + "?" + url.getRawQuery();
             }
 
 
-            if (Utils.isEmpty(sseEndpoint)) {
+            if (Utils.isEmpty(endpoint)) {
                 throw new IllegalArgumentException("SseEndpoint is empty!");
             }
 
@@ -176,9 +177,15 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 webBuilder.proxy(clientProps.getHttpProxy());
             }
 
-            clientTransport = WebRxSseClientTransport.builder(webBuilder)
-                    .sseEndpoint(sseEndpoint)
-                    .build();
+            if (McpChannel.STREAMABLE.equals(clientProps.getChannel())) {
+                clientTransport = WebRxStreamableClientTransport.builder(webBuilder)
+                        .endpoint(endpoint)
+                        .build();
+            } else {
+                clientTransport = WebRxSseClientTransport.builder(webBuilder)
+                        .sseEndpoint(endpoint)
+                        .build();
+            }
         }
 
         return McpClient.sync(clientTransport)
