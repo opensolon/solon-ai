@@ -17,13 +17,13 @@ import java.io.IOException;
 public class ChatInterceptorTest implements ChatInterceptor {
     @Override
     public ChatResponse interceptCall(ChatRequest req, CallChain chain) throws IOException {
-        log.warn("ChatInterceptor-interceptCall: " + req.getModel());
+        log.warn("ChatInterceptor-interceptCall: " + req.getConfig().getModel());
         return chain.doIntercept(req);
     }
 
     @Override
     public Publisher<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
-        log.warn("ChatInterceptor-interceptStream: " + req.getModel());
+        log.warn("ChatInterceptor-interceptStream: " + req.getConfig().getModel());
         return chain.doIntercept(req);
     }
 }

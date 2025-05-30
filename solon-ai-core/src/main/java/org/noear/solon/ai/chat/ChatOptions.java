@@ -18,6 +18,7 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.core.util.RankEntity;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -253,5 +254,13 @@ public class ChatOptions {
      */
     public ChatOptions user(String user) {
         return optionAdd("user", user);
+    }
+
+    /**
+     * 获取用户
+     */
+    @Nullable
+    public String user() {
+        return (String) option("user");
     }
 }

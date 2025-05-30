@@ -19,11 +19,9 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.lang.Nullable;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 聊天请求持有者
@@ -33,6 +31,7 @@ import java.util.Map;
  */
 public class ChatRequest {
     private final ChatConfig config;
+    private final ChatConfigReadonly configReadonly;
     private final ChatDialect dialect;
     private final ChatOptions options;
     private final boolean stream;
@@ -40,6 +39,7 @@ public class ChatRequest {
 
     public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, boolean stream, List<ChatMessage> messages) {
         this.config = config;
+        this.configReadonly = new ChatConfigReadonly(config);
         this.dialect = dialect;
         this.options = options;
         this.stream = stream;
@@ -47,55 +47,17 @@ public class ChatRequest {
     }
 
     /**
-     * 获取提供者
+     * 获取配置
      */
-    @Nullable
-    public String getProvider() {
-        return config.getProvider();
-    }
-
-    /**
-     * 获取模型
-     */
-    public String getModel() {
-        return config.getModel();
-    }
-
-    /**
-     * 获取请求头
-     */
-    public Map<String, String> getHeaders() {
-        return Collections.unmodifiableMap(config.getHeaders());
+    public ChatConfigReadonly getConfig() {
+        return configReadonly;
     }
 
     /**
      * 获取选项
      */
-    public Map<String, Object> getOptions() {
-        return options.options();
-    }
-
-    /**
-     * 添加选项
-     */
-    public void addOption(String key, Object value) {
-        options.optionAdd(key, value);
-    }
-
-    /**
-     * 获取选项
-     */
-    @Nullable
-    public Object getOption(String key) {
-        return options.option(key);
-    }
-
-    /**
-     * 获取用户
-     */
-    @Nullable
-    public String getUser() {
-        return (String) getOption("user");
+    public ChatOptions getOptions() {
+        return options;
     }
 
     /**
