@@ -34,6 +34,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     private String content;
     private List<ToolCall> toolCalls;
     private List<Map> toolCallsRaw;
+    private List<Map> searchResultsRaw;
 
     //纯思考；纯内容；混合内容
     private boolean isThinking;
@@ -43,14 +44,23 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     public AssistantMessage(String content) {
-        this(content, false, null, null);
+        this(content, false, null, null, null);
     }
 
-    public AssistantMessage(String content, boolean isThinking, List<Map> toolCallsRaw, List<ToolCall> toolCalls) {
+    public AssistantMessage(String content, boolean isThinking) {
+        this(content, isThinking, null, null, null);
+    }
+
+    public AssistantMessage(String content, boolean isThinking, List<Map> searchResultsRaw) {
+        this(content, isThinking, null, null, searchResultsRaw);
+    }
+
+    public AssistantMessage(String content, boolean isThinking, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
         this.content = content;
         this.isThinking = isThinking;
         this.toolCallsRaw = toolCallsRaw;
         this.toolCalls = toolCalls;
+        this.searchResultsRaw = searchResultsRaw;
     }
 
     /**
@@ -114,6 +124,13 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     /**
+     * 搜索结果原始数据
+     */
+    public List<Map> getSearchResultsRaw() {
+        return searchResultsRaw;
+    }
+
+    /**
      * 转为字符串
      */
     @Override
@@ -133,6 +150,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
 
         if (toolCallsRaw != null) {
             buf.append(", tool_calls=").append(toolCallsRaw);
+        }
+
+        if (searchResultsRaw != null) {
+            buf.append(", search_results=").append(searchResultsRaw);
         }
 
         buf.append("}");

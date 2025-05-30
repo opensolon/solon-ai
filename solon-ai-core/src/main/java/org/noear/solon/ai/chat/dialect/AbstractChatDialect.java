@@ -232,12 +232,18 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         String content = oMessage.get("content").getRawString();
         ONode toolCallsNode = oMessage.getOrNull("tool_calls");
+        ONode searchResultsNode = oMessage.getOrNull("search_results");
 
         List<Map> toolCallsRaw = null;
         List<ToolCall> toolCalls = parseToolCalls(toolCallsNode);
+        List<Map> searchResultsRaw = null;
 
         if (Utils.isNotEmpty(toolCalls)) {
             toolCallsRaw = toolCallsNode.toObject(List.class);
+        }
+
+        if (searchResultsNode != null) {
+            searchResultsRaw = searchResultsNode.toObject(List.class);
         }
 
         if (oMessage.contains("reasoning_content")) {
@@ -249,8 +255,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 if (content == null) {
                     if (resp.reasoning == false) {
                         //说明是第一次
-                        messageList.add(new AssistantMessage("<think>", true, null, null));
-                        messageList.add(new AssistantMessage("\n\n", true, null, null));
+                        messageList.add(new AssistantMessage("<think>", true));
+                        messageList.add(new AssistantMessage("\n\n", true));
                         if (Utils.isNotEmpty(reasoning_content)) {
                             content = reasoning_content;
                         }
@@ -262,8 +268,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 } else {
                     if (resp.reasoning) {
                         //说明是最后一次
-                        messageList.add(new AssistantMessage("</think>", true, null, null));
-                        messageList.add(new AssistantMessage("\n\n", false, null, null));
+                        messageList.add(new AssistantMessage("</think>", true));
+                        messageList.add(new AssistantMessage("\n\n", false));
                     }
 
                     resp.reasoning = false;
@@ -285,7 +291,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                         int thinkEnd = content.indexOf("</think>");
                         if (thinkEnd >= 0) { //可能是个开始符
                             resp.reasoning = false;
-                            messageList.add(new AssistantMessage(content, true, null, null));
+                            messageList.add(new AssistantMessage(content, true));
                             return messageList;
                         }
                     }
@@ -294,7 +300,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         if (content != null || toolCallsRaw != null) {
-            messageList.add(new AssistantMessage(content, resp.reasoning, toolCallsRaw, toolCalls));
+            messageList.add(new AssistantMessage(content, resp.reasoning, toolCallsRaw, toolCalls, searchResultsRaw));
         }
 
         return messageList;

@@ -118,13 +118,13 @@ public class ChatResponseDefault implements ChatResponse {
     public AssistantMessage getAggregationMessage() {
         if (hasChoices()) {
             if (stream) {
-                return new AssistantMessage(aggregationMessageContent.toString(), lastChoice().getMessage().isThinking(), null, null);
+                return new AssistantMessage(aggregationMessageContent.toString(), lastChoice().getMessage().isThinking());
             } else {
                 return lastChoice().getMessage();
             }
         } else {
             if (aggregationMessageContent.length() > 0) {
-                return new AssistantMessage(aggregationMessageContent.toString(), false, null, null);
+                return new AssistantMessage(aggregationMessageContent.toString(), false);
             } else {
                 return null;
             }
