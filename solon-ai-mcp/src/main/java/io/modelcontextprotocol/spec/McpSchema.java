@@ -198,9 +198,13 @@ public final class McpSchema {
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
+	@Data
+	@AllArgsConstructor
+	@NoArgsConstructor
 	public static class JSONRPCBatchRequest implements JSONRPCMessage {
 
-		@JsonProperty("items") List<JSONRPCMessage> items;
+		@JsonProperty("items")
+		List<JSONRPCMessage> items;
 
 		@Override
 		@JsonIgnore
@@ -216,7 +220,8 @@ public final class McpSchema {
 	@NoArgsConstructor
 	public static class JSONRPCBatchResponse implements JSONRPCMessage {
 
-		@JsonProperty("items") List<JSONRPCMessage> items;
+		@JsonProperty("items")
+		List<JSONRPCMessage> items;
 
 		@JsonIgnore
 		public String getJsonrpc() {
