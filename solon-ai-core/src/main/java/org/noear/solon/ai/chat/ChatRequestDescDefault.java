@@ -18,9 +18,7 @@ package org.noear.solon.ai.chat;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
-import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
-import org.noear.solon.ai.chat.interceptor.CallChain;
-import org.noear.solon.ai.chat.interceptor.StreamChain;
+import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -41,10 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 import java.util.function.Consumer;
 
 /**
@@ -388,7 +383,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             if (func != null) {
                 try {
-                    String content = func.handle(call.arguments());
+                    String content = doToolCall(func, call.arguments());
                     ToolMessage toolMessage = (ToolMessage) ChatMessage.ofTool(content, call.name(), call.id(), func.returnDirect());
                     session.addMessage(toolMessage);
                     toolMessages.add(toolMessage);
@@ -407,5 +402,25 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         } else {
             return null;
         }
+    }
+
+    /**
+     * 执行工具调用（支持拦截器）
+     */
+    private String doToolCall(FunctionTool func, Map<String, Object> args) throws Throwable {
+        //收集拦截器
+        List<RankEntity<ChatInterceptor>> interceptorList = new ArrayList<>();
+        interceptorList.addAll(config.getDefaultInterceptors());
+        interceptorList.addAll(options.interceptors());
+        if (interceptorList.size() > 1) {
+            Collections.sort(interceptorList);
+        }
+
+        ToolRequest req = new ToolRequest(config, options, args);
+
+        //构建请求数据
+        ToolChain chain = new ToolChain(interceptorList, func);
+
+        return chain.doIntercept(req);
     }
 }

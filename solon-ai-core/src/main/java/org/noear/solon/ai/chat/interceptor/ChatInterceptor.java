@@ -43,4 +43,13 @@ public interface ChatInterceptor {
      * @param chain 拦截链
      */
     Publisher<ChatResponse> interceptStream(ChatRequest req, StreamChain chain);
+
+
+    /**
+     * 拦截工具
+     *
+     * @param req   请求
+     * @param chain 拦截链
+     */
+    String interceptTool(ToolRequest req, ToolChain chain) throws Throwable;
 }
