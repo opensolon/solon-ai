@@ -4,6 +4,8 @@ import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -25,6 +27,10 @@ public class McpSseClientMixTest2 {
     McpClientProvider mcpClient = McpClientProvider.builder()
             .apiUrl("http://localhost:8081/demo2/sse?user=1")
             .build();
+
+    private static final String apiUrl = "http://127.0.0.1:11434/api/chat";
+    private static final String provider = "ollama";
+    private static final String model = "llama3.2"; //"llama3.2";//deepseek-r1:1.5b;
 
     @Test
     public void tool1() throws Exception {
@@ -48,6 +54,23 @@ public class McpSseClientMixTest2 {
                 "inputSchema={\"type\":\"object\",\"properties\":{\"location\":{\"description\":\"城市位置\",\"type\":\"string\"}},\"required\":[\"location\"]}, " +
                 "outputSchema=null}]")
                 .equals(tools.toString());
+    }
+
+    @Test
+    public void tool9_model() throws Exception {
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .provider(provider)
+                .model(model)
+                .defaultToolsAdd(mcpClient)
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt("今天杭州的天气情况？")
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+        assert resp.getMessage() != null;
     }
 
     @Test
