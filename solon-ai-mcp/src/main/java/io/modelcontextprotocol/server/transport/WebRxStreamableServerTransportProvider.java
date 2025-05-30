@@ -4,30 +4,26 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.*;
+import org.noear.solon.core.exception.StatusException;
+import org.noear.solon.core.handle.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import javax.servlet.AsyncContext;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-public class StreamableHttpServerTransportProvider extends HttpServlet implements McpServerTransportProvider {
+public class WebRxStreamableServerTransportProvider implements McpServerTransportProvider {
 
     /**
      * Logger for this class
      */
-    private static final Logger logger = LoggerFactory.getLogger(StreamableHttpServerTransportProvider.class);
+    private static final Logger logger = LoggerFactory.getLogger(WebRxStreamableServerTransportProvider.class);
 
     private static final String MCP_SESSION_ID = "Mcp-Session-Id";
     private static final String APPLICATION_JSON = "application/json";
@@ -41,7 +37,7 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
     private final Map<String, McpSession> sessions = new ConcurrentHashMap<>();
     private McpServerSession.Factory sessionFactory;
 
-    public StreamableHttpServerTransportProvider(final ObjectMapper objectMapper, final McpServerTransportProvider legacyTransportProvider, final Set<String> allowedOrigins) {
+    public WebRxStreamableServerTransportProvider(final ObjectMapper objectMapper, final McpServerTransportProvider legacyTransportProvider, final Set<String> allowedOrigins) {
         this.objectMapper = objectMapper;
         this.legacyTransportProvider = legacyTransportProvider;
         this.allowedOrigins = allowedOrigins;
@@ -74,23 +70,16 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
         return Flux.fromIterable(sessions.values()).flatMap(McpSession::closeGracefully).then();
     }
 
-    @Override
-    public void destroy() {
-        closeGracefully().block();
-        super.destroy();
-    }
-
-    @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    public void doPost(Context ctx) throws Throwable {
         // 1. Origin header check
-        String origin = req.getHeader("Origin");
+        String origin = ctx.header("Origin");
         if (origin != null && !allowedOrigins.contains(origin)) {
-            resp.sendError(HttpServletResponse.SC_FORBIDDEN, "Origin not allowed");
+            ctx.status(403, "Origin not allowed");
             return;
         }
 
         // 2. Accept header routing
-        final String accept = Optional.ofNullable(req.getHeader("Accept")).orElse("");
+        final String accept = ctx.headerOrDefault("Accept", "");
         final List<String> acceptTypes = Arrays.stream(accept.split(","))
                 .map(String::trim)
                 .collect(Collectors.toList());
@@ -106,32 +95,31 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
         }
 
         // 3. Enable async
-        final AsyncContext asyncContext = req.startAsync();
-        asyncContext.setTimeout(0);
+        ctx.asyncStart();
 
         // resp
-        resp.setStatus(HttpServletResponse.SC_OK);
-        resp.setCharacterEncoding("UTF-8");
+        ctx.status(200);
+        ctx.charset("UTF-8");
+        ctx.keepAlive(60);
 
-        final McpServerTransport transport = new StreamableHttpServerTransport(resp.getOutputStream(), objectMapper);
-        final McpSession session = getOrCreateSession(req.getHeader(MCP_SESSION_ID), transport);
+        final McpServerTransport transport = new StreamableHttpServerTransport(ctx, objectMapper);
+        final McpSession session = getOrCreateSession(ctx.header(MCP_SESSION_ID), transport);
         if (!"stateless".equals(session.getId())) {
-            resp.setHeader(MCP_SESSION_ID, session.getId());
+            ctx.headerSet(MCP_SESSION_ID, session.getId());
         }
-        final Flux<McpSchema.JSONRPCMessage> messages = parseRequestBodyAsStream(req);
+        final Flux<McpSchema.JSONRPCMessage> messages = parseRequestBodyAsStream(ctx);
 
         if (accept.contains(TEXT_EVENT_STREAM)) {
             // TODO: Handle streaming JSON-RPC over HTTP
-            resp.setContentType(TEXT_EVENT_STREAM);
-            resp.setHeader("Connection", "keep-alive");
+            ctx.contentType(TEXT_EVENT_STREAM);
 
             messages.flatMap(session::handle)
-                    .doOnError(e -> sendError(resp, 500, "Streaming failed: " + e.getMessage()))
+                    .doOnError(e -> sendError(ctx, 500, "Streaming failed: " + e.getMessage()))
                     .then(transport.closeGracefully())
                     .subscribe();
         } else if (accept.contains(APPLICATION_JSON)) {
             // TODO: Handle traditional JSON-RPC response
-            resp.setContentType(APPLICATION_JSON);
+            ctx.contentType(APPLICATION_JSON);
 
             messages.flatMap(session::handle)
                     .collectList()
@@ -140,22 +128,21 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
                             String json = new ObjectMapper().writeValueAsString(
                                     responses.size() == 1 ? responses.get(0) : responses
                             );
-                            resp.getWriter().write(json);
+                            ctx.output(json);
                             return transport.closeGracefully();
                         } catch (IOException e) {
                             return Mono.error(e);
                         }
                     })
-                    .doOnError(e -> sendError(resp, 500, "JSON response failed: " + e.getMessage()))
+                    .doOnError(e -> sendError(ctx, 500, "JSON response failed: " + e.getMessage()))
                     .subscribe();
 
         } else {
-            resp.sendError(HttpServletResponse.SC_NOT_ACCEPTABLE, "Unsupported Accept header");
+            ctx.status(StatusException.CODE_NOT_ACCEPTABLE, "Unsupported Accept header");
         }
     }
 
-    @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    public void doGet(Context ctx) throws IOException {
         // todo 需要实现新旧实现新旧SSE传输提供者的兼容处理
 //        if (legacyTransportProvider instanceof HttpServletSseServerTransportProvider legacy) {
 //            legacy.doGet(req, resp);
@@ -164,22 +151,22 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
 //        }
     }
 
-    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        final String sessionId = req.getHeader("mcp-session-id");
+    public void doDelete(Context ctx) throws IOException {
+        final String sessionId = ctx.header("mcp-session-id");
         if (sessionId == null || !sessions.containsKey(sessionId)) {
-            resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Session not found");
+            ctx.status(StatusException.CODE_NOT_FOUND, "Session not found");
             return;
         }
 
         final McpSession session = sessions.remove(sessionId);
         session.closeGracefully().subscribe();
-        resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
+        ctx.status(StatusException.CODE_NO_CONTENT);
     }
 
     // todo:!!!
-    private Flux<McpSchema.JSONRPCMessage> parseRequestBodyAsStream(final HttpServletRequest req) {
+    private Flux<McpSchema.JSONRPCMessage> parseRequestBodyAsStream(final Context req) {
         return Mono.fromCallable(() -> {
-            try (final InputStream inputStream = req.getInputStream()) {
+            try (final InputStream inputStream = req.bodyAsStream()) {
                 final JsonNode node = objectMapper.readTree(inputStream);
                 if (node.isArray()) {
                     final List<McpSchema.JSONRPCMessage> messages = new ArrayList<>();
@@ -208,21 +195,21 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
         }
     }
 
-    private void sendError(final HttpServletResponse resp, final int code, final String msg) {
+    private void sendError(final Context resp, final int code, final String msg) {
         try {
-            resp.sendError(code, msg);
-        } catch (IOException ignored) {
+            resp.status(code, msg);
+        } catch (Exception ignored) {
             logger.debug("Exception during send error");
         }
     }
 
     public static class StreamableHttpServerTransport implements McpServerTransport {
         private final ObjectMapper objectMapper;
-        private final OutputStream outputStream;
+        private final Context ctx;
 
-        public StreamableHttpServerTransport(final OutputStream outputStream, final ObjectMapper objectMapper) {
+        public StreamableHttpServerTransport(final Context ctx, final ObjectMapper objectMapper) {
             this.objectMapper = objectMapper;
-            this.outputStream = outputStream;
+            this.ctx = ctx;
         }
 
         @Override
@@ -230,9 +217,9 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
             return Mono.fromRunnable(() -> {
                 try {
                     String json = objectMapper.writeValueAsString(message);
-                    outputStream.write(json.getBytes(StandardCharsets.UTF_8));
-                    outputStream.write('\n');
-                    outputStream.flush();
+                    ctx.output(json.getBytes(StandardCharsets.UTF_8));
+                    ctx.output(new byte[]{'\n'});
+                    ctx.flush();
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to send message", e);
                 }
@@ -248,8 +235,8 @@ public class StreamableHttpServerTransportProvider extends HttpServlet implement
         public Mono<Void> closeGracefully() {
             return Mono.fromRunnable(() -> {
                 try {
-                    outputStream.flush();
-                    outputStream.close();
+                    ctx.flush();
+                    ctx.close();
                 } catch (IOException e) {
                     // ignore or log
                 }
