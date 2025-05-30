@@ -132,6 +132,18 @@ public class McpSyncClient implements AutoCloseable {
 		return true;
 	}
 
+	// ---------------------------
+	// open an SSE stream
+	// ---------------------------
+	/**
+	 * The client may issue an HTTP GET to the MCP endpoint. This can be used to open an
+	 * SSE stream, allowing the server to communicate to the client, without the client
+	 * first sending data via HTTP POST.
+	 */
+	public void openSSE() {
+		this.delegate.openSSE();
+	}
+
 	/**
 	 * The initialization phase MUST be the first interaction between client and server.
 	 * During this phase, the client and server:

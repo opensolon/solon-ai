@@ -170,7 +170,64 @@ public final class McpSchema {
 	// ---------------------------
 	public interface JSONRPCMessage {
 		String getJsonrpc();
+
+		// 包级私有"密封"控制：只有同包下的类能实现该接口
+		final class SealedControl {
+			private SealedControl() {}
+			static final Class<?>[] PERMITTED = {
+					JSONRPCBatchRequest.class,
+					JSONRPCBatchResponse.class,
+					JSONRPCRequest.class,
+					JSONRPCNotification.class,
+					JSONRPCResponse.class
+			};
+		}
+		static void checkSealed(JSONRPCMessage message) {
+			boolean permitted = false;
+			for (Class<?> clazz : SealedControl.PERMITTED) {
+				if (clazz.isInstance(message)) {
+					permitted = true;
+					break;
+				}
+			}
+			if (!permitted) {
+				throw new IllegalArgumentException("Prohibited subtype: " + message.getClass());
+			}
+		}
 	}
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@Data
+	@AllArgsConstructor
+	@NoArgsConstructor
+	public static class JSONRPCBatchRequest implements JSONRPCMessage {
+
+		@JsonProperty("items")
+		List<JSONRPCMessage> items;
+
+		@Override
+		@JsonIgnore
+		public String getJsonrpc() {
+			return JSONRPC_VERSION;
+		}
+	} // @formatter:on
+
+	@JsonInclude(JsonInclude.Include.NON_ABSENT)
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	@Data
+	@AllArgsConstructor
+	@NoArgsConstructor
+	public static class JSONRPCBatchResponse implements JSONRPCMessage {
+
+		@JsonProperty("items")
+		List<JSONRPCMessage> items;
+
+		@JsonIgnore
+		public String getJsonrpc() {
+			return JSONRPC_VERSION;
+		}
+	} // @formatter:on
 
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)

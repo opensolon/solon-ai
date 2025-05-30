@@ -66,7 +66,7 @@ public class McpClientSession implements McpSession {
 	/** Atomic counter for generating unique request IDs */
 	private final AtomicLong requestCounter = new AtomicLong(0);
 
-	private final Disposable connection;
+	private Disposable connection;
 
 	/**
 	 * Functional interface for handling incoming JSON-RPC requests. Implementations
@@ -160,6 +160,24 @@ public class McpClientSession implements McpSession {
 	}
 
 	/**
+	 * The client may issue an HTTP GET to the MCP endpoint. This can be used to open an
+	 * SSE stream, allowing the server to communicate to the client, without the client
+	 * first sending data via HTTP POST.
+	 */
+	public void openSSE() {
+		if (this.connection != null && !this.connection.isDisposed()) {
+			return; // already connected and still active
+		}
+
+		// TODO: consider mono.transformDeferredContextual where the Context contains
+		// the
+		// Observation associated with the individual message - it can be used to
+		// create child Observation and emit it together with the message to the
+		// consumer
+		this.connection = this.transport.connect(mono -> mono.doOnNext(this::handle)).subscribe();
+	}
+
+	/**
 	 * Handles an incoming JSON-RPC request by routing it to the appropriate handler.
 	 * @param request The incoming JSON-RPC request
 	 * @return A Mono containing the JSON-RPC response
@@ -225,6 +243,16 @@ public class McpClientSession implements McpSession {
 		return this.sessionPrefix + "-" + this.requestCounter.getAndIncrement();
 	}
 
+	@Override
+	public String getId() {
+		return "";
+	}
+
+	@Override
+	public Mono<Void> handle(McpSchema.JSONRPCMessage message) {
+		return null;
+	}
+
 	/**
 	 * Sends a JSON-RPC request and returns the response.
 	 * @param <T> The expected response type
@@ -261,6 +289,11 @@ public class McpClientSession implements McpSession {
 				}
 			}
 		});
+	}
+
+	@Override
+	public Mono<Void> sendNotification(String method) {
+		return McpSession.super.sendNotification(method);
 	}
 
 	/**
