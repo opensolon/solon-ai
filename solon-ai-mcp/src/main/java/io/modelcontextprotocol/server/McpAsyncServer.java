@@ -16,12 +16,10 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -104,28 +102,6 @@ public class McpAsyncServer {
 	}
 
 	/**
-	 * Get the client capabilities that define the supported features and functionality.
-	 * @return The client capabilities
-	 * @deprecated This will be removed in 0.9.0. Use
-	 * {@link McpAsyncServerExchange#getClientCapabilities()}.
-	 */
-	@Deprecated
-	public ClientCapabilities getClientCapabilities() {
-		return this.delegate.getClientCapabilities();
-	}
-
-	/**
-	 * Get the client implementation information.
-	 * @return The client implementation details
-	 * @deprecated This will be removed in 0.9.0. Use
-	 * {@link McpAsyncServerExchange#getClientInfo()}.
-	 */
-	@Deprecated
-	public McpSchema.Implementation getClientInfo() {
-		return this.delegate.getClientInfo();
-	}
-
-	/**
 	 * Gracefully closes the server, allowing any in-progress operations to complete.
 	 * @return A Mono that completes when the server has been closed
 	 */
@@ -140,44 +116,10 @@ public class McpAsyncServer {
 		this.delegate.close();
 	}
 
-	/**
-	 * Retrieves the list of all roots provided by the client.
-	 * @return A Mono that emits the list of roots result.
-	 * @deprecated This will be removed in 0.9.0. Use
-	 * {@link McpAsyncServerExchange#listRoots()}.
-	 */
-	@Deprecated
-	public Mono<McpSchema.ListRootsResult> listRoots() {
-		return this.delegate.listRoots(null);
-	}
-
-	/**
-	 * Retrieves a paginated list of roots provided by the server.
-	 * @param cursor Optional pagination cursor from a previous list request
-	 * @return A Mono that emits the list of roots result containing
-	 * @deprecated This will be removed in 0.9.0. Use
-	 * {@link McpAsyncServerExchange#listRoots(String)}.
-	 */
-	@Deprecated
-	public Mono<McpSchema.ListRootsResult> listRoots(String cursor) {
-		return this.delegate.listRoots(cursor);
-	}
-
 	// ---------------------------------------
 	// Tool Management
 	// ---------------------------------------
 
-	/**
-	 * Add a new tool registration at runtime.
-	 * @param toolRegistration The tool registration to add
-	 * @return Mono that completes when clients have been notified of the change
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link #addTool(McpServerFeatures.AsyncToolSpecification)}.
-	 */
-	@Deprecated
-	public Mono<Void> addTool(McpServerFeatures.AsyncToolRegistration toolRegistration) {
-		return this.delegate.addTool(toolRegistration);
-	}
 
 	/**
 	 * Add a new tool specification at runtime.
@@ -208,18 +150,6 @@ public class McpAsyncServer {
 	// ---------------------------------------
 	// Resource Management
 	// ---------------------------------------
-
-	/**
-	 * Add a new resource handler at runtime.
-	 * @param resourceHandler The resource handler to add
-	 * @return Mono that completes when clients have been notified of the change
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link #addResource(McpServerFeatures.AsyncResourceSpecification)}.
-	 */
-	@Deprecated
-	public Mono<Void> addResource(McpServerFeatures.AsyncResourceRegistration resourceHandler) {
-		return this.delegate.addResource(resourceHandler);
-	}
 
 	/**
 	 * Add a new resource handler at runtime.
@@ -274,17 +204,6 @@ public class McpAsyncServer {
 	// Prompt Management
 	// ---------------------------------------
 
-	/**
-	 * Add a new prompt handler at runtime.
-	 * @param promptRegistration The prompt handler to add
-	 * @return Mono that completes when clients have been notified of the change
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link #addPrompt(McpServerFeatures.AsyncPromptSpecification)}.
-	 */
-	@Deprecated
-	public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptRegistration promptRegistration) {
-		return this.delegate.addPrompt(promptRegistration);
-	}
 
 	/**
 	 * Add a new prompt handler at runtime.
@@ -329,32 +248,6 @@ public class McpAsyncServer {
 	// ---------------------------------------
 	// Sampling
 	// ---------------------------------------
-
-	/**
-	 * Create a new message using the sampling capabilities of the client. The Model
-	 * Context Protocol (MCP) provides a standardized way for servers to request LLM
-	 * sampling (“completions” or “generations”) from language models via clients. This
-	 * flow allows clients to maintain control over model access, selection, and
-	 * permissions while enabling servers to leverage AI capabilities—with no server API
-	 * keys necessary. Servers can request text or image-based interactions and optionally
-	 * include context from MCP servers in their prompts.
-	 * @param createMessageRequest The request to create a new message
-	 * @return A Mono that completes when the message has been created
-	 * @throws McpError if the client has not been initialized or does not support
-	 * sampling capabilities
-	 * @throws McpError if the client does not support the createMessage method
-	 * @see McpSchema.CreateMessageRequest
-	 * @see McpSchema.CreateMessageResult
-	 * @see <a href=
-	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
-	 * Specification</a>
-	 * @deprecated This will be removed in 0.9.0. Use
-	 * {@link McpAsyncServerExchange#createMessage(McpSchema.CreateMessageRequest)}.
-	 */
-	@Deprecated
-	public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
-		return this.delegate.createMessage(createMessageRequest);
-	}
 
 	/**
 	 * This method is package-private and used for test only. Should not be called by user
@@ -491,17 +384,6 @@ public class McpAsyncServer {
 			return this.serverInfo;
 		}
 
-		@Override
-		@Deprecated
-		public ClientCapabilities getClientCapabilities() {
-			throw new IllegalStateException("This method is deprecated and should not be called");
-		}
-
-		@Override
-		@Deprecated
-		public McpSchema.Implementation getClientInfo() {
-			throw new IllegalStateException("This method is deprecated and should not be called");
-		}
 
 		@Override
 		public Mono<Void> closeGracefully() {
@@ -513,17 +395,6 @@ public class McpAsyncServer {
 			this.mcpTransportProvider.close();
 		}
 
-		@Override
-		@Deprecated
-		public Mono<McpSchema.ListRootsResult> listRoots() {
-			return this.listRoots(null);
-		}
-
-		@Override
-		@Deprecated
-		public Mono<McpSchema.ListRootsResult> listRoots(String cursor) {
-			return Mono.error(new RuntimeException("Not implemented"));
-		}
 
 		private McpServerSession.NotificationHandler asyncRootsListChangedNotificationHandler(
 				List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
@@ -571,11 +442,6 @@ public class McpAsyncServer {
 				}
 				return Mono.empty();
 			});
-		}
-
-		@Override
-		public Mono<Void> addTool(McpServerFeatures.AsyncToolRegistration toolRegistration) {
-			return this.addTool(toolRegistration.toSpecification());
 		}
 
 		@Override
@@ -728,11 +594,6 @@ public class McpAsyncServer {
 		}
 
 		@Override
-		public Mono<Void> addResource(McpServerFeatures.AsyncResourceRegistration resourceHandler) {
-			return this.addResource(resourceHandler.toSpecification());
-		}
-
-		@Override
 		public Mono<Void> removeResource(String resourceUri) {
 			if (resourceUri == null) {
 				return Mono.error(new McpError("Resource URI must not be null"));
@@ -823,11 +684,6 @@ public class McpAsyncServer {
 				}
 				return Mono.empty();
 			});
-		}
-
-		@Override
-		public Mono<Void> addPrompt(McpServerFeatures.AsyncPromptRegistration promptRegistration) {
-			return this.addPrompt(promptRegistration.toSpecification());
 		}
 
 		@Override
@@ -926,12 +782,6 @@ public class McpAsyncServer {
 		// ---------------------------------------
 		// Sampling
 		// ---------------------------------------
-
-		@Override
-		@Deprecated
-		public Mono<McpSchema.CreateMessageResult> createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
-			return Mono.error(new RuntimeException("Not implemented"));
-		}
 
 		@Override
 		void setProtocolVersions(List<String> protocolVersions) {

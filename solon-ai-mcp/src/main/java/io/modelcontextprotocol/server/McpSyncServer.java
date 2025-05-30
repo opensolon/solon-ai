@@ -4,9 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.util.Assert;
 
@@ -155,28 +153,6 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * Get the client capabilities that define the supported features and functionality.
-	 * @return The client capabilities
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpSyncServerExchange#getClientCapabilities()}.
-	 */
-	@Deprecated
-	public ClientCapabilities getClientCapabilities() {
-		return this.asyncServer.getClientCapabilities();
-	}
-
-	/**
-	 * Get the client implementation information.
-	 * @return The client implementation details
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpSyncServerExchange#getClientInfo()}.
-	 */
-	@Deprecated
-	public McpSchema.Implementation getClientInfo() {
-		return this.asyncServer.getClientInfo();
-	}
-
-	/**
 	 * Notify clients that the list of available resources has changed.
 	 */
 	public void notifyResourcesListChanged() {
@@ -219,37 +195,4 @@ public class McpSyncServer {
 	public McpAsyncServer getAsyncServer() {
 		return this.asyncServer;
 	}
-
-	/**
-	 * Create a new message using the sampling capabilities of the client. The Model
-	 * Context Protocol (MCP) provides a standardized way for servers to request LLM
-	 * sampling ("completions" or "generations") from language models via clients.
-	 *
-	 * <p>
-	 * This flow allows clients to maintain control over model access, selection, and
-	 * permissions while enabling servers to leverage AI capabilities—with no server API
-	 * keys necessary. Servers can request text or image-based interactions and optionally
-	 * include context from MCP servers in their prompts.
-	 *
-	 * <p>
-	 * Unlike its async counterpart, this method blocks until the message creation is
-	 * complete, making it easier to use in synchronous code paths.
-	 * @param createMessageRequest The request to create a new message
-	 * @return The result of the message creation
-	 * @throws McpError if the client has not been initialized or does not support
-	 * sampling capabilities
-	 * @throws McpError if the client does not support the createMessage method
-	 * @see McpSchema.CreateMessageRequest
-	 * @see McpSchema.CreateMessageResult
-	 * @see <a href=
-	 * "https://spec.modelcontextprotocol.io/specification/client/sampling/">Sampling
-	 * Specification</a>
-	 * @deprecated This method will be removed in 0.9.0. Use
-	 * {@link McpSyncServerExchange#createMessage(McpSchema.CreateMessageRequest)}.
-	 */
-	@Deprecated
-	public McpSchema.CreateMessageResult createMessage(McpSchema.CreateMessageRequest createMessageRequest) {
-		return this.asyncServer.createMessage(createMessageRequest).block();
-	}
-
 }
