@@ -137,7 +137,7 @@ public class McpAsyncClient {
 	 * @param initializationTimeout the max timeout to await for the client-server
 	 * @param features the MCP Client supported features.
 	 */
-	McpAsyncClient(ClientMcpTransport transport, Duration requestTimeout, Duration initializationTimeout,
+	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
 			McpClientFeatures.Async features, boolean connectOnInit) {
 
 		Assert.notNull(transport, "Transport must not be null");

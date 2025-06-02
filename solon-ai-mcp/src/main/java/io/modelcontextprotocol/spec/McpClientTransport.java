@@ -13,9 +13,8 @@ import java.util.function.Function;
  * @author Christian Tzolov
  * @author Dariusz Jędrzejczyk
  */
-public interface McpClientTransport extends ClientMcpTransport {
+public interface McpClientTransport extends McpTransport {
 
-	@Override
 	Mono<Void> connect(Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler);
 
 }
