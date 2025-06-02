@@ -74,14 +74,14 @@ public class EmbeddingRequestDesc {
 
         String reqJson = dialect.buildRequestJson(config, options, input);
 
-        if (log.isTraceEnabled()) {
-            log.trace("ai-request: {}", reqJson);
+        if (log.isDebugEnabled()) {
+            log.debug("ai-request: {}", reqJson);
         }
 
         String respJson = httpUtils.bodyOfJson(reqJson).post();
 
-        if (log.isTraceEnabled()) {
-            log.trace("ai-response: {}", respJson);
+        if (log.isDebugEnabled()) {
+            log.debug("ai-response: {}", respJson);
         }
 
         EmbeddingResponse resp = dialect.parseResponseJson(config, respJson);

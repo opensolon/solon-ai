@@ -120,14 +120,14 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         String reqJson = req.toRequestData();
 
-        if (log.isTraceEnabled()) {
-            log.trace("ai-request: {}", reqJson);
+        if (log.isDebugEnabled()) {
+            log.debug("ai-request: {}", reqJson);
         }
 
         String respJson = httpUtils.bodyOfJson(reqJson).post();
 
-        if (log.isTraceEnabled()) {
-            log.trace("ai-response: {}", respJson);
+        if (log.isDebugEnabled()) {
+            log.debug("ai-response: {}", respJson);
         }
 
         ChatResponseDefault resp = new ChatResponseDefault(false);
@@ -189,8 +189,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         String reqJson = req.toRequestData();
 
-        if (log.isTraceEnabled()) {
-            log.trace("ai-request: {}", reqJson);
+        if (log.isDebugEnabled()) {
+            log.debug("ai-request: {}", reqJson);
         }
 
         return subscriber -> {
@@ -263,8 +263,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private boolean onEventStream(ChatResponseDefault resp, ServerSentEvent event, Subscriber<? super ChatResponse> subscriber) {
-        if (log.isTraceEnabled()) {
-            log.trace("ai-response: {}", event.data());
+        if (log.isDebugEnabled()) {
+            log.debug("ai-response: {}", event.data());
         }
 
         resp.setResponseData(event.data());
