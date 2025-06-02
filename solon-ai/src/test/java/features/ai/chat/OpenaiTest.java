@@ -93,6 +93,7 @@ public class OpenaiTest {
         //打印消息
         log.info("{}", resp.getMessage());
         assert resp.getMessage() != null;
+        assert resp.getMessage().getContent().contains("晴");
     }
 
     @Test
@@ -108,6 +109,8 @@ public class OpenaiTest {
         //打印消息
         log.info("{}", resp.getMessage());
         assert resp.getMessage() != null;
+        assert resp.getMessage().getContent().contains("晴");
+        assert resp.getMessage().getContent().contains("555");
     }
 
     @Test
@@ -136,6 +139,7 @@ public class OpenaiTest {
 
         assert respHolder.get().getAggregationMessage() != null;
         assert respHolder.get().getAggregationMessage().getContent().contains("北京");
+        assert respHolder.get().getAggregationMessage().getContent().contains("555");
     }
 
 
