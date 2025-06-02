@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.util.Assert;
+import org.noear.solon.SolonApp;
 import org.noear.solon.core.exception.StatusException;
 import org.noear.solon.core.handle.Context;
+import org.noear.solon.web.sse.SseEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -36,12 +38,25 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
     /**
      * Map of active client sessions, keyed by session ID
      */
-    private final Map<String, McpSession> sessions = new ConcurrentHashMap<>();
+    private final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
     private McpServerSession.Factory sessionFactory;
 
     public WebRxStreamableServerTransportProvider(final ObjectMapper objectMapper, String endpoint) {
         this.objectMapper = objectMapper;
         this.endpoint = endpoint;
+    }
+
+    public void sendHeartbeat() {
+        for (McpServerSession session : sessions.values()) {
+            ((WebRxSseServerTransportProvider.WebRxMcpSessionTransport) session.getTransport()).sendHeartbeat();
+        }
+    }
+
+    public void toHttpHandler(SolonApp app) {
+        if (app != null) {
+            app.post(this.endpoint, this::doPost);
+            app.delete(this.endpoint, this::doDelete);
+        }
     }
 
 
@@ -78,13 +93,8 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
                 .map(String::trim)
                 .collect(Collectors.toList());
 
-        // todo!!!!
         if (!acceptTypes.contains(APPLICATION_JSON) && !acceptTypes.contains(TEXT_EVENT_STREAM)) {
-//            if (legacyTransportProvider instanceof HttpServletSseServerTransportProvider legacy) {
-//                legacy.doPost(req, resp);
-//            } else {
-//                resp.sendError(HttpServletResponse.SC_NOT_ACCEPTABLE, "Legacy transport not available");
-//            }
+            ctx.status(StatusException.CODE_NOT_ACCEPTABLE, "Legacy transport not available");
             return;
         }
 
@@ -136,15 +146,6 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
         }
     }
 
-    public void doGet(Context ctx) throws IOException {
-        // todo 需要实现新旧实现新旧SSE传输提供者的兼容处理
-//        if (legacyTransportProvider instanceof HttpServletSseServerTransportProvider legacy) {
-//            legacy.doGet(req, resp);
-//        } else {
-//            resp.sendError(HttpServletResponse.SC_NOT_ACCEPTABLE, "Legacy transport not available");
-//        }
-    }
-
     public void doDelete(Context ctx) throws IOException {
         final String sessionId = ctx.header("mcp-session-id");
         if (sessionId == null || !sessions.containsKey(sessionId)) {
@@ -157,7 +158,6 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
         ctx.status(StatusException.CODE_NO_CONTENT);
     }
 
-    // todo:!!!
     private Flux<McpSchema.JSONRPCMessage> parseRequestBodyAsStream(final Context req) {
         return Mono.fromCallable(() -> {
             try (final InputStream inputStream = req.bodyAsStream()) {
@@ -165,13 +165,16 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
                 if (node.isArray()) {
                     final List<McpSchema.JSONRPCMessage> messages = new ArrayList<>();
                     for (final JsonNode item : node) {
-                        messages.add(objectMapper.treeToValue(item, McpSchema.JSONRPCMessage.class));
+                        McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, item);
+                        messages.add(message);
                     }
                     return messages;
                 } else if (node.isObject()) {
-                    return Collections.singletonList(objectMapper.treeToValue(node, McpSchema.JSONRPCMessage.class));
+                    McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, node);
+                    return Collections.singletonList(message);
                 } else {
-                    throw new IllegalArgumentException("Invalid JSON-RPC request: not object or array");
+                    return Collections.<McpSchema.JSONRPCMessage>emptyList();
+                    //throw new IllegalArgumentException("Invalid JSON-RPC request: not object or array");
                 }
             }
         }).flatMapMany(Flux::fromIterable);
@@ -182,8 +185,9 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
             // Reuse or track sessions if you support that; for now, we just create new ones
             return sessions.get(sessionId);
         } else if (sessionFactory != null) {
-            final String newSessionId = UUID.randomUUID().toString();
-            return sessions.put(newSessionId, sessionFactory.create(transport));
+            final McpServerSession session = sessionFactory.create(transport);
+            sessions.put(session.getId(), session);
+            return session;
         } else {
             return new StatelessMcpSession(transport);
         }
@@ -211,10 +215,12 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
             return Mono.fromRunnable(() -> {
                 try {
                     String json = objectMapper.writeValueAsString(message);
-                    ctx.output(json.getBytes(StandardCharsets.UTF_8));
-                    ctx.output(new byte[]{'\n'});
-                    ctx.flush();
-                } catch (IOException e) {
+
+                    SseEvent event = new SseEvent()
+                            .data(json);
+
+                    ctx.render(event);
+                } catch (Throwable e) {
                     throw new RuntimeException("Failed to send message", e);
                 }
             });

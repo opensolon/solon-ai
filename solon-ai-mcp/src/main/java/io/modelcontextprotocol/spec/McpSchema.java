@@ -7,6 +7,7 @@ package io.modelcontextprotocol.spec;
 import com.fasterxml.jackson.annotation.*;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.As;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -163,6 +164,25 @@ public final class McpSchema {
 		}
 
 		throw new IllegalArgumentException("Cannot deserialize JSONRPCMessage: " + jsonText);
+	}
+
+	public static JSONRPCMessage deserializeJsonRpcMessage(ObjectMapper objectMapper, JsonNode jsonNode)
+			throws IOException {
+
+		logger.debug("Received JSON message: {}", jsonNode);
+
+		// Determine message type based on specific JSON structure
+		if (jsonNode.has("method") && jsonNode.has("id")) {
+			return objectMapper.treeToValue(jsonNode, JSONRPCRequest.class);
+		}
+		else if (jsonNode.has("method") && !jsonNode.has("id")) {
+			return objectMapper.treeToValue(jsonNode, JSONRPCNotification.class);
+		}
+		else if (jsonNode.has("result") || jsonNode.has("error")) {
+			return objectMapper.treeToValue(jsonNode, JSONRPCResponse.class);
+		}
+
+		throw new IllegalArgumentException("Cannot deserialize JSONRPCMessage: " + jsonNode);
 	}
 
 	// ---------------------------

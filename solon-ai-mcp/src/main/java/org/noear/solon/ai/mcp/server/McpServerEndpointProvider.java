@@ -88,7 +88,10 @@ public class McpServerEndpointProvider implements LifecycleBean {
             //stdio 通道
             this.mcpTransportProvider = new StdioServerTransportProvider();
         } else if(McpChannel.STREAMABLE.equalsIgnoreCase(serverProperties.getChannel())) {
+            //streamable 通道
             this.mcpTransportProvider = WebRxStreamableServerTransportProvider.builder()
+                    .endpoint(this.sseEndpoint)
+                    .objectMapper(new ObjectMapper())
                     .build();
 
         } else {
@@ -341,6 +344,19 @@ public class McpServerEndpointProvider implements LifecycleBean {
         //如果是 web 类的
         if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
             WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
+            tmp.toHttpHandler(Solon.app());
+
+            if (serverProperties.getHeartbeatInterval() != null
+                    && serverProperties.getHeartbeatInterval().getSeconds() > 0) {
+                //启用 sse 心跳（保持客户端不断开）
+                RunUtil.delayAndRepeat(() -> {
+                    RunUtil.runAndTry(() -> {
+                        tmp.sendHeartbeat();
+                    });
+                }, serverProperties.getHeartbeatInterval().toMillis());
+            }
+        } else if (mcpTransportProvider instanceof WebRxStreamableServerTransportProvider) {
+            WebRxStreamableServerTransportProvider tmp = (WebRxStreamableServerTransportProvider) mcpTransportProvider;
             tmp.toHttpHandler(Solon.app());
 
             if (serverProperties.getHeartbeatInterval() != null

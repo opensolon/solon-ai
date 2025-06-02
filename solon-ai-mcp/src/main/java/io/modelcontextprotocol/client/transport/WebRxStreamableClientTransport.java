@@ -53,7 +53,7 @@ public class WebRxStreamableClientTransport implements McpClientTransport {
 
 //    private final HttpClientSseClientTransport sseClientTransport;
 
-    private final WebRxSseClientTransport webRxSseClientTransport;
+    private final WebRxSseClientTransport sseClientTransport;
 
     private final HttpUtilsBuilder webBuilder;
 
@@ -72,11 +72,11 @@ public class WebRxStreamableClientTransport implements McpClientTransport {
     public WebRxStreamableClientTransport(final HttpUtilsBuilder webBuilder,
                                    final ObjectMapper objectMapper,
                                           final String endpoint,
-                                   final WebRxSseClientTransport webRxSseClientTransport) {
+                                   final WebRxSseClientTransport sseClientTransport) {
         this.webBuilder = webBuilder;
         this.objectMapper = objectMapper;
         this.endpoint = endpoint;
-        this.webRxSseClientTransport = webRxSseClientTransport;
+        this.sseClientTransport = sseClientTransport;
     }
 
     /**
@@ -126,11 +126,11 @@ public class WebRxStreamableClientTransport implements McpClientTransport {
     @Override
     public Mono<Void> connect(final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
         if (fallbackToSse.get()) {
-            return webRxSseClientTransport.connect(handler);
+            return sseClientTransport.connect(handler);
         }
 
         return Mono.defer(() -> Mono.fromFuture(() -> {
-                    HttpUtils build = webBuilder.build(DEFAULT_MCP_ENDPOINT);
+                    HttpUtils build = webBuilder.build(endpoint);
                     build.header(ACCEPT, TEXT_EVENT_STREAM);
                     final String lastId = lastEventId.get();
                     if (lastId != null) {
@@ -139,7 +139,7 @@ public class WebRxStreamableClientTransport implements McpClientTransport {
                     if (mcpSessionId.get() != null) {
                         build.header(MCP_SESSION_ID, mcpSessionId.get());
                     }
-                    return build.execAsync("GET");
+                    return build.execAsync("POST");
                 }).flatMap(response -> {
                     // must like server terminate session and the client need to start a
                     // new session by sending a new `InitializeRequest` without a session
@@ -151,7 +151,7 @@ public class WebRxStreamableClientTransport implements McpClientTransport {
                     if (response.code() == 405 || response.code() == 404) {
                         LOGGER.warn("Operation not allowed, falling back to SSE");
                         fallbackToSse.set(true);
-                        return webRxSseClientTransport.connect(handler);
+                        return sseClientTransport.connect(handler);
                     }
                     return handleStreamingResponse(response, handler);
                 })
@@ -174,7 +174,7 @@ public class WebRxStreamableClientTransport implements McpClientTransport {
         }
 
         return serializeJson(message).flatMap(json -> {
-            HttpUtils build = webBuilder.build(DEFAULT_MCP_ENDPOINT)
+            HttpUtils build = webBuilder.build(endpoint)
                     .bodyOfJson(json)
                     .header(ACCEPT, DEFAULT_ACCEPT_VALUES)
                     .header(CONTENT_TYPE, APPLICATION_JSON);
@@ -237,18 +237,18 @@ public class WebRxStreamableClientTransport implements McpClientTransport {
         if (msg instanceof McpSchema.JSONRPCBatchRequest) {
             McpSchema.JSONRPCBatchRequest batchReq = (McpSchema.JSONRPCBatchRequest) msg;
             return Flux.fromIterable(batchReq.getItems())
-                    .flatMap(webRxSseClientTransport::sendMessage)
+                    .flatMap(sseClientTransport::sendMessage)
                     .then();
         }
 
         if (msg instanceof McpSchema.JSONRPCBatchResponse) {
             McpSchema.JSONRPCBatchResponse batch = (McpSchema.JSONRPCBatchResponse) msg;
             return Flux.fromIterable(batch.getItems())
-                    .flatMap(webRxSseClientTransport::sendMessage)
+                    .flatMap(sseClientTransport::sendMessage)
                     .then();
         }
 
-        return webRxSseClientTransport.sendMessage(msg);
+        return sseClientTransport.sendMessage(msg);
     }
 
     private Mono<String> serializeJson(final McpSchema.JSONRPCMessage msg) {
@@ -355,7 +355,7 @@ public class WebRxStreamableClientTransport implements McpClientTransport {
         mcpSessionId.set(null);
         lastEventId.set(null);
         if (fallbackToSse.get()) {
-            return webRxSseClientTransport.closeGracefully();
+            return sseClientTransport.closeGracefully();
         }
         return Mono.empty();
     }
