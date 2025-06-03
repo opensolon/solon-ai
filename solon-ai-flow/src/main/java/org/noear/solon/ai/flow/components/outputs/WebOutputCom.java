@@ -22,13 +22,14 @@ import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.handle.Context;
-import org.noear.solon.core.util.MimeType;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
+
+import java.util.stream.Collectors;
 
 /**
  * 文本输出组件
@@ -47,30 +48,33 @@ public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
         Context ctx = Context.current();
 
         if (data instanceof Publisher) {
-            data = Flux.from((Publisher<ChatResponse>) data)
-                    .filter(resp -> resp.hasChoices())
-                    .map(resp -> resp.getMessage());
-
-            ctx.contentType(MimeType.TEXT_EVENT_STREAM_VALUE);
-            ctx.returnValue(data);
+            for (ChatResponse resp : Flux.from((Publisher<ChatResponse>) data)
+                    .toStream()
+                    .collect(Collectors.toList())) {
+                ctx.render(resp.getMessage());
+                ctx.output("\n");
+                ctx.flush();
+            }
         } else if (data instanceof ChatResponse) {
             ChatResponse resp = (ChatResponse) data;
-            data = resp.getMessage();
 
-            ctx.contentType(MimeType.TEXT_EVENT_STREAM_VALUE);
-            ctx.returnValue(data);
+            ctx.render(resp.getMessage());
+            ctx.output("\n");
+            ctx.flush();
         } else if (data instanceof ImageResponse) {
             ImageResponse resp = (ImageResponse) data;
-            data = ChatMessage.ofAssistant("![](" + resp.getImage().getUrl() + ")");
 
-            ctx.contentType(MimeType.TEXT_EVENT_STREAM_VALUE);
-            ctx.returnValue(data);
+            ctx.render(ChatMessage.ofAssistant("![](" + resp.getImage().getUrl() + ")"));
+            ctx.output("\n");
+            ctx.flush();
         } else {
             if (data instanceof String) {
                 ctx.output((String) data);
             } else {
                 ctx.render(data);
             }
+            ctx.output("\n");
+            ctx.flush();
         }
     }
 }

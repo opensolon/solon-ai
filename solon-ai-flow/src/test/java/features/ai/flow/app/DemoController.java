@@ -46,6 +46,18 @@ public class DemoController {
         flowEngine.eval("chat_case2_json", flowContext);
     }
 
+    @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
+    @Mapping("pk_case2")
+    public void pk_case2(Context ctx) throws Exception {
+        FlowContext flowContext = new FlowContext();
+
+        //保存会话记录
+        ChatSession chatSession = chatSessionMap.computeIfAbsent(ctx.sessionId(), k -> new ChatSessionDefault(ctx.sessionId()));
+        flowContext.put(Attrs.CTX_CHAT_SESSION, chatSession);
+
+        flowEngine.eval("pk_case2", flowContext);
+    }
+
     @Mapping("rag_case2")
     public void rag_case2() throws Exception {
         flowEngine.eval("rag_case2");

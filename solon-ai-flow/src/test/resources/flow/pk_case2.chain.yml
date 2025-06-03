@@ -1,0 +1,41 @@
+
+id: pk_case2
+layout:
+  - type: "start"
+  - task: "@VarInput"
+    meta:
+      message: "你好"
+  - task: "@ChatModel"
+    title: "智能体-阿飞"
+    id: model_a
+    meta:
+      systemPrompt: "你是一个智能体名字叫“阿飞”。将跟另一个叫“阿紫”的智能体，表演相声式吵架。每句话不要超过50个字"
+      stream: false
+      chatSession: "A"
+      chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
+        provider: "ollama"
+        model: "qwen2.5:1.5b"
+        apiUrl: "http://127.0.0.1:11434/api/chat"
+  - task: "@WebOutput"
+  - task: "@VarOutput"
+  - task: "@ChatModel"
+    title: "智能体-阿紫"
+    id: model_b
+    meta:
+      systemPrompt: "你是一个智能体名字叫“阿紫”。将跟另一个叫“阿飞”的智能体，表演相声式吵架。每句话不要超过50个字"
+      stream: false
+      chatSession: "B"
+      chatConfig: # "@type": "org.noear.solon.ai.chat.ChatConfig"
+        provider: "ollama"
+        model: "qwen2.5:1.5b"
+        apiUrl: "http://127.0.0.1:11434/api/chat"
+  - task: "@WebOutput"
+  - task: "@VarOutput"
+  - type: "exclusive"
+    link:
+      - nextId: model_a
+        title: "重复5次"
+        condition: 'context.counter().incr("demo") < 5'
+      - nextId: end
+  - type: "end"
+    id: "end"
