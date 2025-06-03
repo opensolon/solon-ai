@@ -147,7 +147,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             n.set("stream", isStream);
 
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {
-                n.set(kv.getKey(), kv.getValue());
+                n.set(kv.getKey(), ONode.loadObj(kv.getValue()));
             }
 
             ChatMessage lastMessage = messages.get(messages.size() - 1);

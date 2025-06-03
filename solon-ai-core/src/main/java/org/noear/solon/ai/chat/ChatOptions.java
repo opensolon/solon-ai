@@ -40,6 +40,7 @@ public class ChatOptions {
     public static final String FREQUENCY_PENALTY = "frequency_penalty";
     public static final String PRESENCE_PENALTY = "presence_penalty";
     public static final String TOOL_CHOICE = "tool_choice";
+    public static final String RESPONSE_FORMAT = "response_format";
 
 
     public static ChatOptions of() {
@@ -247,6 +248,20 @@ public class ChatOptions {
      */
     public ChatOptions presence_penalty(float frequency_penalty) {
         return optionAdd(PRESENCE_PENALTY, frequency_penalty);
+    }
+
+    /**
+     * 常用选项：响应格式
+     * <pre>{@code
+     * o.response_format(Utils.asMap("type", "json_object"));
+     *
+     * o.response_format(Utils.asMap("type", "json_schema",
+     *                               "json_schema", Utils.asMap("type","object","properties",Utils.asMap()),
+     *                               "strict", true));
+     * }</pre>
+     */
+    public ChatOptions response_format(Map map) {
+        return optionAdd(RESPONSE_FORMAT, map);
     }
 
     /**
