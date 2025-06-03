@@ -30,38 +30,38 @@ public class OutputSchemaMcpTool {
         return "晴，14度";
     }
 
-    @ToolMapping(description = "查询天气预报", enableOutputSchema = true)
+    @ToolMapping(description = "查询天气预报")
     public String getWeather(@Param(description = "城市") String city) {
         return "晴，14度";
     }
 
-    @ToolMapping(description = "获取用户信息", enableOutputSchema = true)
+    @ToolMapping(description = "获取用户信息")
     public UserInfo getUserInfo(@Param(description = "用户ID") Long userId) {
         return new UserInfo(); // 假设 UserInfo 有 name、age 字段
     }
 
-    @ToolMapping(description = "获取所有城市信息", enableOutputSchema = true)
+    @ToolMapping(description = "获取所有城市信息")
     public Result<List<CityInfo>> listCities() {
         return Result.ok(Arrays.asList(new CityInfo()));
     }
 
-    @ToolMapping(description = "获取配置项", enableOutputSchema = true)
+    @ToolMapping(description = "获取配置项")
     public Map<String, Object> getConfigs() {
         return Collections.singletonMap("env", "prod"); // 返回单一键值对的 Map
     }
 
-    @ToolMapping(description = "获取当前用户信息", enableOutputSchema = true)
+    @ToolMapping(description = "获取当前用户信息")
     public Result<UserInfo> getCurrentUser() {
         return Result.ok(new UserInfo());
     }
 
-    @ToolMapping(description = "获取某个设置项", enableOutputSchema = true)
+    @ToolMapping(description = "获取某个设置项")
     public Optional<String> getSetting(@Param(description = "键") String key) {
         return Optional.of("值");
     }
 
 
-    @ToolMapping(description = "获取标签列表", enableOutputSchema = true)
+    @ToolMapping(description = "获取标签列表")
     public Result<String[]> getTags() {
         return Result.ok(new String[]{"天气", "推荐"});
     }

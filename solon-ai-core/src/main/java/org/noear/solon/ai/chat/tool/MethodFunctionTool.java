@@ -50,7 +50,6 @@ public class MethodFunctionTool implements FunctionTool {
     private final String inputSchema;
 	private final String mimeType;
     private String outputSchema;
-    private boolean enableOutputSchema;
 
 
     public MethodFunctionTool(BeanWrap beanWrap, Method method) {
@@ -67,7 +66,6 @@ public class MethodFunctionTool implements FunctionTool {
         this.name = Utils.annoAlias(mapping.name(), method.getName());
         this.description = mapping.description();
         this.returnDirect = mapping.returnDirect();
-		this.enableOutputSchema = mapping.enableOutputSchema();
 
         Produces producesAnno = method.getAnnotation(Produces.class);
         if (producesAnno != null) {
@@ -101,7 +99,7 @@ public class MethodFunctionTool implements FunctionTool {
                 .toJson();
 
         // 输出参数 outputSchema
-        if (enableOutputSchema) {
+        {
             Type returnType = method.getGenericReturnType();
             ONode outputSchemaNode = new ONode();
             // 如果返回类型，则需要处理
