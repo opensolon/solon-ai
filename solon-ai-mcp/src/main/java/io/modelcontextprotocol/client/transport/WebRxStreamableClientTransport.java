@@ -9,9 +9,7 @@ import io.modelcontextprotocol.util.Assert;
 import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.HttpUtilsBuilder;
-import org.noear.solon.net.http.textstream.ServerSentEvent;
 import org.noear.solon.net.http.textstream.TextStreamUtil;
-import org.noear.solon.rx.SimpleSubscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -290,64 +288,52 @@ public class WebRxStreamableClientTransport implements McpClientTransport {
 
     private Mono<Void> handleJsonStream(final HttpResponse response,
                                         final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
-        return Flux.fromStream(new BufferedReader(new InputStreamReader(response.body())).lines()).flatMap(jsonLine -> {
-            try {
-                final McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, jsonLine);
-                return handler.apply(Mono.just(message));
-            } catch (IOException e) {
-                LOGGER.error("Error processing JSON line", e);
-                return Mono.error(e);
-            }
-        }).then();
+        return Flux.from(TextStreamUtil.parseLineStream(response.body()))
+                .flatMap(jsonLine -> {
+                    try {
+                        final McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, jsonLine);
+                        return handler.apply(Mono.just(message));
+                    } catch (IOException e) {
+                        LOGGER.error("Error processing JSON line", e);
+                        return Mono.error(e);
+                    }
+                }).then();
     }
 
     private Mono<Void> handleSseStream(final HttpResponse response,
                                        final Function<Mono<McpSchema.JSONRPCMessage>, Mono<McpSchema.JSONRPCMessage>> handler) {
 
-        return Mono.create(sink -> {
-            try {
-                TextStreamUtil.parseSseStream(response.body(), new SimpleSubscriber<ServerSentEvent>()
-                        .doOnNext(sseEvent -> {
-                            String rawData = sseEvent.getData();
-                            try {
-                                JsonNode node = objectMapper.readTree(rawData);
-                                List<McpSchema.JSONRPCMessage> messages = new ArrayList<>();
-                                if (node.isArray()) {
-                                    for (JsonNode item : node) {
-                                        messages.add(McpSchema.deserializeJsonRpcMessage(objectMapper, item.toString()));
-                                    }
-                                } else if (node.isObject()) {
-                                    messages.add(McpSchema.deserializeJsonRpcMessage(objectMapper, node.toString()));
-                                } else {
-                                    String warning = "Unexpected JSON in SSE data: " + rawData;
-                                    LOGGER.warn(warning);
-                                    sink.error(new IllegalArgumentException(warning));
-                                    return;
-                                }
-
-                                for (McpSchema.JSONRPCMessage message : messages) {
-                                    handler.apply(Mono.just(message));
-                                }
-
-                                if (!sseEvent.id().isEmpty()) {
-                                    lastEventId.set(sseEvent.id());
-                                }
-                            } catch (IOException e) {
-                                LOGGER.error("Error parsing SSE JSON: {}", rawData, e);
-                                sink.error(e);
-                                return;
+        return Flux.from(TextStreamUtil.parseSseStream(response.body()))
+                .filter(sseEvent -> "message".equals(sseEvent.getEvent()))
+                .concatMap(sseEvent -> {
+                    String rawData = sseEvent.getData().trim();
+                    try {
+                        JsonNode node = objectMapper.readTree(rawData);
+                        List<McpSchema.JSONRPCMessage> messages = new ArrayList<>();
+                        if (node.isArray()) {
+                            for (JsonNode item : node) {
+                                messages.add(McpSchema.deserializeJsonRpcMessage(objectMapper, item.toString()));
                             }
-                        })
-                        .doOnComplete(() -> {
-                            sink.success();
-                        })
-                        .doOnError(err -> {
-                            sink.error(err);
-                        }));
-            } catch (IOException e) {
-                sink.error(e);
-            }
-        });
+                        } else if (node.isObject()) {
+                            messages.add(McpSchema.deserializeJsonRpcMessage(objectMapper, node.toString()));
+                        } else {
+                            String warning = "Unexpected JSON in SSE data: " + rawData;
+                            LOGGER.warn(warning);
+                            return Mono.error(new IllegalArgumentException(warning));
+                        }
+
+                        return Flux.fromIterable(messages)
+                                .concatMap(msg -> handler.apply(Mono.just(msg)))
+                                .then(Mono.fromRunnable(() -> {
+                                    if (!sseEvent.getId().isEmpty()) {
+                                        lastEventId.set(sseEvent.getId());
+                                    }
+                                }));
+                    } catch (IOException e) {
+                        LOGGER.error("Error parsing SSE JSON: {}", rawData, e);
+                        return Mono.error(e);
+                    }
+                }).then();
     }
 
     @Override

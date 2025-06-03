@@ -8,6 +8,7 @@ import io.modelcontextprotocol.util.Assert;
 import org.noear.solon.SolonApp;
 import org.noear.solon.core.exception.StatusException;
 import org.noear.solon.core.handle.Context;
+import org.noear.solon.core.handle.Entity;
 import org.noear.solon.web.sse.SseEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,14 +99,6 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
             return;
         }
 
-        // 3. Enable async
-        ctx.asyncStart();
-
-        // resp
-        ctx.status(200);
-        ctx.charset("UTF-8");
-        ctx.keepAlive(60);
-
         final McpServerTransport transport = new StreamableHttpServerTransport(ctx, objectMapper);
         final McpSession session = getOrCreateSession(ctx.header(MCP_SESSION_ID), transport);
         if (!"stateless".equals(session.getId())) {
@@ -117,30 +110,42 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
             // TODO: Handle streaming JSON-RPC over HTTP
             ctx.contentType(TEXT_EVENT_STREAM);
 
-            messages.flatMap(session::handle)
-                    .doOnError(e -> sendError(ctx, 500, "Streaming failed: " + e.getMessage()))
-                    .then(transport.closeGracefully())
-                    .subscribe();
+            Mono<Entity> mono = messages.flatMap(session::handle)
+                    .collectList()
+                    .flatMap(response -> {
+                        return Mono.just(new Entity());
+                    })
+                    .onErrorResume(error -> {
+                        logger.error("Error processing  message: {}", error.getMessage());
+                        // TODO: instead of signalling the error, just respond with 200 OK
+                        // - the error is signalled on the SSE connection
+                        // return ServerResponse.ok().build();
+                        return Mono.just(new Entity().status(500).body(new McpError(error.getMessage())));
+                    }).doOnTerminate(()->{
+                        closeGracefully();
+                    });
+
+            ctx.returnValue(mono);
         } else if (accept.contains(APPLICATION_JSON)) {
             // TODO: Handle traditional JSON-RPC response
             ctx.contentType(APPLICATION_JSON);
 
-            messages.flatMap(session::handle)
+            Mono<Entity> mono = messages.flatMap(session::handle)
                     .collectList()
                     .flatMap(responses -> {
-                        try {
-                            String json = new ObjectMapper().writeValueAsString(
-                                    responses.size() == 1 ? responses.get(0) : responses
-                            );
-                            ctx.output(json);
-                            return transport.closeGracefully();
-                        } catch (IOException e) {
-                            return Mono.error(e);
-                        }
+                        return Mono.just(new Entity());
                     })
-                    .doOnError(e -> sendError(ctx, 500, "JSON response failed: " + e.getMessage()))
-                    .subscribe();
+                    .onErrorResume(error -> {
+                        logger.error("Error processing  message: {}", error.getMessage());
+                        // TODO: instead of signalling the error, just respond with 200 OK
+                        // - the error is signalled on the SSE connection
+                        // return ServerResponse.ok().build();
+                        return Mono.just(new Entity().status(500).body(new McpError(error.getMessage())));
+                    }).doOnTerminate(()->{
+                        closeGracefully();
+                    });
 
+            ctx.returnValue(mono);
         } else {
             ctx.status(StatusException.CODE_NOT_ACCEPTABLE, "Unsupported Accept header");
         }
@@ -193,14 +198,6 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
         }
     }
 
-    private void sendError(final Context resp, final int code, final String msg) {
-        try {
-            resp.status(code, msg);
-        } catch (Exception ignored) {
-            logger.debug("Exception during send error");
-        }
-    }
-
     public static class StreamableHttpServerTransport implements McpServerTransport {
         private final ObjectMapper objectMapper;
         private final Context ctx;
@@ -216,10 +213,14 @@ public class WebRxStreamableServerTransportProvider implements McpServerTranspor
                 try {
                     String json = objectMapper.writeValueAsString(message);
 
-                    SseEvent event = new SseEvent()
-                            .data(json);
-
-                    ctx.render(event);
+                    if (APPLICATION_JSON.equals(ctx.contentTypeNew())) {
+                        ctx.output(json);
+                    } else {
+                        SseEvent event = new SseEvent()
+                                .id(UUID.randomUUID().toString())
+                                .data(json);
+                        ctx.render(event);
+                    }
                 } catch (Throwable e) {
                     throw new RuntimeException("Failed to send message", e);
                 }
