@@ -13,6 +13,7 @@
 
     <groupId>org.noear.bundle</groupId>
     <artifactId>solon-ai-bundle1</artifactId>
+    <name>${project.artifactId}</name>
     <packaging>pom</packaging>
 
     <modules>
