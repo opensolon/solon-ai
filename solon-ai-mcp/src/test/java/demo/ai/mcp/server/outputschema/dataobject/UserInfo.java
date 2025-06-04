@@ -13,5 +13,8 @@ public class UserInfo {
 
     @Param(description = "年龄")
     private Integer age;
+
+    @Param(description = "性别。0表示女，1表示男")
+    private Integer gender;
 }
 
