@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.ToolCallException;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.net.http.HttpException;
@@ -388,7 +389,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     session.addMessage(toolMessage);
                     toolMessages.add(toolMessage);
                 } catch (Throwable ex) {
-                    throw new ChatException("The function call failed!", ex);
+                    throw new ToolCallException("The tool call failed, name: '" + func + "'", ex);
                 }
             } else {
                 //会存在调用的call实际上不存在的情况
