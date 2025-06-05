@@ -30,6 +30,8 @@ import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.PathMatcher;
 import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.wrap.MethodWrap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -44,6 +46,8 @@ import java.util.regex.Matcher;
  * @since 3.2
  */
 public class MethodFunctionResource implements FunctionResource {
+    static final Logger log = LoggerFactory.getLogger(MethodFunctionResource.class);
+
     private BeanWrap beanWrap;
     private final MethodWrap methodWrap;
 
@@ -127,6 +131,17 @@ public class MethodFunctionResource implements FunctionResource {
 
     @Override
     public Text handle(String reqUri) throws Throwable {
+        try {
+            return doHandle(reqUri);
+        } catch (Throwable ex) {
+            if (log.isWarnEnabled()) {
+                log.warn("Resource handle error, name: '{}'", name, ex);
+            }
+            throw ex;
+        }
+    }
+
+    private Text doHandle(String reqUri) throws Throwable {
         Context ctx = Context.current();
         if (ctx == null) {
             ctx = new ContextEmpty();

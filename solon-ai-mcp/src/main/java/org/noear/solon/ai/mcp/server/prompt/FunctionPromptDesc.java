@@ -18,6 +18,8 @@ package org.noear.solon.ai.mcp.server.prompt;
 import org.noear.snack.ONode;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.util.ParamDesc;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Function;
@@ -29,6 +31,8 @@ import java.util.function.Function;
  * @since 3.2
  */
 public class FunctionPromptDesc implements FunctionPrompt {
+    static final Logger log = LoggerFactory.getLogger(FunctionPromptDesc.class);
+
     private final String name;
     private final List<ParamDesc> params;
 
@@ -58,7 +62,7 @@ public class FunctionPromptDesc implements FunctionPrompt {
      * @param description 参数描述
      */
     public FunctionPromptDesc paramAdd(String name, String description) {
-        return paramAdd(name,  true, description);
+        return paramAdd(name, true, description);
     }
 
     /**
@@ -101,6 +105,18 @@ public class FunctionPromptDesc implements FunctionPrompt {
 
     @Override
     public Collection<ChatMessage> handle(Map<String, Object> args) throws Throwable {
+        try {
+            return doHandle(args);
+        } catch (Throwable ex) {
+            if (log.isWarnEnabled()) {
+                log.warn("Prompt handle error, name: '{}'", name, ex);
+            }
+
+            throw ex;
+        }
+    }
+
+    private Collection<ChatMessage> doHandle(Map<String, Object> args) throws Throwable {
         Map<String, Object> argsNew = new HashMap<>();
 
         ONode argsNode = ONode.load(args);

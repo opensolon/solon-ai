@@ -16,6 +16,8 @@
 package org.noear.solon.ai.mcp.server.resource;
 
 import org.noear.solon.ai.media.Text;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.function.Function;
 
@@ -26,6 +28,8 @@ import java.util.function.Function;
  * @since 3.2
  */
 public class FunctionResourceDesc implements FunctionResource {
+    static final Logger log = LoggerFactory.getLogger(FunctionResourceDesc.class);
+
     private final String name;
     private String uri;
     private String description;
@@ -98,7 +102,15 @@ public class FunctionResourceDesc implements FunctionResource {
 
     @Override
     public Text handle(String reqUri) throws Throwable {
-        return doHandler.apply(reqUri);
+        try {
+            return doHandler.apply(reqUri);
+        } catch (Throwable ex) {
+            if (log.isWarnEnabled()) {
+                log.warn("Resource handle error, name: '{}'", name, ex);
+            }
+
+            throw ex;
+        }
     }
 
     @Override

@@ -17,6 +17,8 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
 import org.noear.solon.ai.util.ParamDesc;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
 import java.util.*;
@@ -29,6 +31,8 @@ import java.util.function.Function;
  * @since 3.1
  */
 public class FunctionToolDesc implements FunctionTool {
+    static final Logger log = LoggerFactory.getLogger(FunctionToolDesc.class);
+
     private final String name;
     private final List<ParamDesc> params = new ArrayList<>();
     private Type returnType;
@@ -233,6 +237,17 @@ public class FunctionToolDesc implements FunctionTool {
      */
     @Override
     public String handle(Map<String, Object> args) throws Throwable {
+        try {
+            return doHandle(args);
+        } catch (Throwable ex) {
+            if (log.isWarnEnabled()) {
+                log.warn("Tool handle error, name: '{}'", name, ex);
+            }
+            throw ex;
+        }
+    }
+
+    private String doHandle(Map<String, Object> args) throws Throwable {
         if (params.size() > 0) {
             Map<String, Object> argsNew = new HashMap<>();
 

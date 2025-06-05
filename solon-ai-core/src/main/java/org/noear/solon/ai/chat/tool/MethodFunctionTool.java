@@ -26,6 +26,8 @@ import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.wrap.MethodWrap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -39,6 +41,8 @@ import java.util.*;
  * @since 3.1
  */
 public class MethodFunctionTool implements FunctionTool {
+    static final Logger log = LoggerFactory.getLogger(MethodFunctionTool.class);
+
     private final BeanWrap beanWrap;
     private final MethodWrap methodWrap;
 
@@ -48,7 +52,7 @@ public class MethodFunctionTool implements FunctionTool {
     private final List<ParamDesc> params = new ArrayList<>();
     private final ToolCallResultConverter resultConverter;
     private final String inputSchema;
-	private final String mimeType;
+    private final String mimeType;
     private String outputSchema;
 
 
@@ -151,6 +155,17 @@ public class MethodFunctionTool implements FunctionTool {
      */
     @Override
     public String handle(Map<String, Object> args) throws Throwable {
+        try {
+            return doHandle(args);
+        } catch (Throwable ex) {
+            if (log.isWarnEnabled()) {
+                log.warn("Tool handle error, name: '{}'", name, ex);
+            }
+            throw ex;
+        }
+    }
+
+    private String doHandle(Map<String, Object> args) throws Throwable {
         Context ctx = Context.current();
         if (ctx == null) {
             ctx = new ContextEmpty();
