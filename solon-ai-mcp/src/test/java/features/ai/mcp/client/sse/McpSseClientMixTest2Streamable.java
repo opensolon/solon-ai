@@ -28,6 +28,7 @@ public class McpSseClientMixTest2Streamable {
     McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.STREAMABLE)
             .apiUrl("http://localhost:8081/demo2/streamable?user=1")
+            .cacheSeconds(30)
             .build();
 
     private static final String apiUrl = "http://127.0.0.1:11434/api/chat";

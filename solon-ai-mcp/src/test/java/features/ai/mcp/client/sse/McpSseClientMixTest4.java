@@ -23,6 +23,7 @@ public class McpSseClientMixTest4 {
     McpClientProvider mcpClient = McpClientProvider.builder()
             .apiUrl("http://localhost:8081/demo4/sse?token=3")
             .headerSet("user", "2")
+            .cacheSeconds(30)
             .build();
 
     private static final String apiUrl = "http://127.0.0.1:11434/api/chat";

@@ -26,6 +26,7 @@ import java.util.List;
 public class McpSseClientMixTest2 {
     McpClientProvider mcpClient = McpClientProvider.builder()
             .apiUrl("http://localhost:8081/demo2/sse?user=1")
+            .cacheSeconds(30)
             .build();
 
     private static final String apiUrl = "http://127.0.0.1:11434/api/chat";
