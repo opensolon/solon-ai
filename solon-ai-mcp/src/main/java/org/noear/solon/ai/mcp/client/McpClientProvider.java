@@ -129,6 +129,13 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     /**
+     * 清理缓存
+     */
+    public void clearCache() {
+        localCache.clear();
+    }
+
+    /**
      * 构建同步客户端
      */
     private McpSyncClient buildClient() {

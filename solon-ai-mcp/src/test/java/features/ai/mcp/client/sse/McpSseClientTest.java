@@ -71,6 +71,7 @@ public class McpSseClientTest {
                 .build();
 
         Thread.sleep(10);
+        mcpClient.clearCache();
         assert mcpClient.getTools().size() == 1;
         serverEndpointProvider.addTool(new FunctionToolDesc("hello")
                 .description("打招呼")
@@ -80,6 +81,7 @@ public class McpSseClientTest {
 
 
         Thread.sleep(10);
+        mcpClient.clearCache();
         assert mcpClient.getTools().size() == 2;
 
         serverEndpointProvider.addTool(new FunctionToolDesc("hello2")
@@ -90,6 +92,7 @@ public class McpSseClientTest {
 
 
         Thread.sleep(10);
+        mcpClient.clearCache();
         assert mcpClient.getTools().size() == 3;
 
         serverEndpointProvider.removeTool("hello2");
@@ -99,6 +102,7 @@ public class McpSseClientTest {
                     return "hello world";
                 }));
 
+        mcpClient.clearCache();
         String rst2 = mcpClient.getTools().toString();
         System.out.println(rst2);
         assert rst2.contains("打招呼2222");
@@ -108,6 +112,7 @@ public class McpSseClientTest {
         serverEndpointProvider.removeTool("hello2");
 
         Thread.sleep(10);
+        mcpClient.clearCache();
         assert mcpClient.getTools().size() == 1;
         mcpClient.close();
     }
@@ -119,7 +124,9 @@ public class McpSseClientTest {
                 .build();
 
         assert mcpClient.getTools().size() == 1;
+        mcpClient.clearCache();
         assert mcpClient.getTools().size() == 1;
+        mcpClient.clearCache();
         assert mcpClient.getTools().size() == 1;
         mcpClient.close();
     }
