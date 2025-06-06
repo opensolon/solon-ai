@@ -51,10 +51,15 @@ public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
         //格式化输出
         String format = node.getMeta(META_FORMAT);
         if (Utils.isEmpty(format)) {
+            final StringBuilder buf = new StringBuilder();
+
             if (data instanceof Publisher) {
                 AtomicReference<Throwable> errReference = new AtomicReference<>();
                 Flux.from((Publisher<ChatResponse>) data)
+                        .filter(resp -> resp.hasChoices())
                         .doOnNext(resp -> {
+                            buf.append(resp.getMessage().getContent());
+
                             try {
                                 ctx.render(resp.getMessage());
                                 ctx.output("\n");
@@ -74,28 +79,35 @@ public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
             } else if (data instanceof ChatResponse) {
                 ChatResponse resp = (ChatResponse) data;
 
+                buf.append(resp.getMessage().getContent());
+
                 ctx.render(resp.getMessage());
                 ctx.output("\n");
                 ctx.flush();
             } else if (data instanceof ImageResponse) {
                 ImageResponse resp = (ImageResponse) data;
 
+                buf.append(resp.getImage().getUrl());
+
                 ctx.render(ChatMessage.ofAssistant("![](" + resp.getImage().getUrl() + ")"));
                 ctx.output("\n");
                 ctx.flush();
             } else {
-                if (data instanceof String) {
-                    ctx.render((String) data);
-                } else {
-                    ctx.render(data);
-                }
+                buf.append(data);
+
+                ctx.render(data);
                 ctx.output("\n");
                 ctx.flush();
             }
+
+            data = buf.toString();
+
+            setOutput(context, node, data);
         } else {
             data = VarOutputCom.getInputAsString(data);
 
             setOutput(context, node, data);
+
             String formatted = SnEL.evalTmpl(format, context.model());
             ctx.render(formatted);
             ctx.output("\n");

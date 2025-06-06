@@ -28,6 +28,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 变量输出组件
@@ -37,8 +38,6 @@ import java.util.concurrent.CountDownLatch;
  */
 @Component("VarOutput")
 public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
-    static final Logger log = LoggerFactory.getLogger(VarOutputCom.class);
-
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
         Object data = getInput(context, node);
@@ -52,33 +51,29 @@ public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
         final StringBuilder buf = new StringBuilder();
 
         if (data instanceof Publisher) {
-            CountDownLatch latch = new CountDownLatch(1);
+            AtomicReference<Throwable> errReference = new AtomicReference<>();
             Flux.from((Publisher<ChatResponse>) data)
                     .filter(resp -> resp.hasChoices())
-                    .map(resp -> resp.getMessage())
-                    .doOnNext(msg -> {
-                        buf.append(msg.getContent());
-                    })
-                    .doOnComplete(() -> {
-                        latch.countDown();
+                    .doOnNext(resp -> {
+                        buf.append(resp.getMessage().getContent());
                     })
                     .doOnError(err -> {
-                        log.error(err.getMessage(), err);
-                        latch.countDown();
+                        errReference.set(err);
                     })
-                    .subscribe();
+                    .then()
+                    .block();
 
-            latch.await();
+            if (errReference.get() != null) {
+                throw errReference.get();
+            }
         } else if (data instanceof ChatResponse) {
             ChatResponse resp = (ChatResponse) data;
-            data = resp.getMessage().getContent();
 
-            buf.append(data);
+            buf.append(resp.getMessage().getContent());
         } else if (data instanceof ImageResponse) {
             ImageResponse resp = (ImageResponse) data;
-            data = resp.getImage().getUrl();
 
-            buf.append(data);
+            buf.append(resp.getImage().getUrl());
         } else {
             buf.append(data);
         }
