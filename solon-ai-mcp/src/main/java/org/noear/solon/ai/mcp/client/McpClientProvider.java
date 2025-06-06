@@ -40,9 +40,8 @@ import org.noear.solon.ai.media.Text;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
-import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.core.util.RunUtil;
+import org.noear.solon.data.cache.LocalCacheService;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
 
@@ -51,7 +50,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URI;
-import java.net.URL;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -89,6 +87,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     private ScheduledExecutorService heartbeatExecutor;
     private McpSyncClient client;
     private McpSchema.LoggingLevel loggingLevel = McpSchema.LoggingLevel.INFO;
+    private LocalCacheService localCache = new LocalCacheService();
 
     /**
      * 用于支持注入
@@ -527,12 +526,20 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         return getTools(null);
     }
 
+
     /**
      * 获取函数工具（可用于模型绑定）
      *
      * @param cursor 游标
      */
     public Collection<FunctionTool> getTools(String cursor) {
+        return localCache.getOrStore("getTools:" + cursor,
+                Collection.class,
+                clientProps.getCacheSeconds(),
+                () -> getToolsDo(cursor));
+    }
+
+    private Collection<FunctionTool> getToolsDo(String cursor) {
         List<FunctionTool> toolList = new ArrayList<>();
 
         McpSchema.ListToolsResult result = null;
@@ -570,6 +577,13 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     public Collection<FunctionResource> getResources(String cursor) {
+        return localCache.getOrStore("getResources:" + cursor,
+                Collection.class,
+                clientProps.getCacheSeconds(),
+                () -> getResourcesDo(cursor));
+    }
+
+    private Collection<FunctionResource> getResourcesDo(String cursor) {
         List<FunctionResource> resourceList = new ArrayList<>();
 
         McpSchema.ListResourcesResult result = null;
@@ -602,6 +616,13 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     public Collection<FunctionResource> getResourceTemplates(String cursor) {
+        return localCache.getOrStore("getResourceTemplates:" + cursor,
+                Collection.class,
+                clientProps.getCacheSeconds(),
+                () -> getResourceTemplatesDo(cursor));
+    }
+
+    private Collection<FunctionResource> getResourceTemplatesDo(String cursor) {
         List<FunctionResource> resourceList = new ArrayList<>();
 
         McpSchema.ListResourceTemplatesResult result = null;
@@ -635,6 +656,13 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     public Collection<FunctionPrompt> getPrompts(String cursor) {
+        return localCache.getOrStore("getPrompts:" + cursor,
+                Collection.class,
+                clientProps.getCacheSeconds(),
+                () -> getPromptsDo(cursor));
+    }
+
+    private Collection<FunctionPrompt> getPromptsDo(String cursor) {
         List<FunctionPrompt> promptList = new ArrayList<>();
 
         McpSchema.ListPromptsResult result = null;
@@ -747,6 +775,11 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         public Builder heartbeatInterval(Duration heartbeatInterval) {
             props.setHeartbeatInterval(heartbeatInterval);
+            return this;
+        }
+
+        public Builder cacheSeconds(int cacheSeconds) {
+            props.setCacheSeconds(cacheSeconds);
             return this;
         }
 

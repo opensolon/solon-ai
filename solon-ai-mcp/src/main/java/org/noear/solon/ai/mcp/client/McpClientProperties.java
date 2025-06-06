@@ -93,6 +93,11 @@ public class McpClientProperties {
     private Duration heartbeatInterval = Duration.ofSeconds(15);
 
     /**
+     * 缓存秒数
+     */
+    private int cacheSeconds = 30; // Default timeout
+
+    /**
      * 服务端参数（用于 stdio）
      */
     private McpServerParameters serverParameters;
@@ -205,6 +210,15 @@ public class McpClientProperties {
 
     public void setHeartbeatInterval(Duration heartbeatInterval) {
         this.heartbeatInterval = heartbeatInterval;
+    }
+
+
+    public int getCacheSeconds() {
+        return cacheSeconds;
+    }
+
+    public void setCacheSeconds(int cacheSeconds) {
+        this.cacheSeconds = cacheSeconds;
     }
 
     public McpServerParameters getServerParameters() {
