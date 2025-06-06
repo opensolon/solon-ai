@@ -43,6 +43,12 @@ public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
     protected void doRun(FlowContext context, Node node) throws Throwable {
         Object data = getInput(context, node);
 
+        data = getInputAsString(data);
+
+        setOutput(context, node, data);
+    }
+
+    public static String getInputAsString(Object data) throws Throwable {
         final StringBuilder buf = new StringBuilder();
 
         if (data instanceof Publisher) {
@@ -77,8 +83,6 @@ public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
             buf.append(data);
         }
 
-        data = buf.toString();
-
-        setOutput(context, node, data);
+        return buf.toString();
     }
 }

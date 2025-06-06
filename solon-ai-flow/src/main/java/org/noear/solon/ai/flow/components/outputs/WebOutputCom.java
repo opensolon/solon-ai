@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.flow.components.outputs;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
@@ -22,14 +23,13 @@ import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.handle.Context;
+import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 文本输出组件
@@ -39,7 +39,8 @@ import java.util.stream.Collectors;
  */
 @Component("WebOutput")
 public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
-    static final Logger log = LoggerFactory.getLogger(WebOutputCom.class);
+    //私有元信息
+    static final String META_FORMAT = "format";
 
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
@@ -47,32 +48,56 @@ public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
 
         Context ctx = Context.current();
 
-        if (data instanceof Publisher) {
-            for (ChatResponse resp : Flux.from((Publisher<ChatResponse>) data)
-                    .toStream()
-                    .collect(Collectors.toList())) {
+        //格式化输出
+        String format = node.getMeta(META_FORMAT);
+        if (Utils.isEmpty(format)) {
+            if (data instanceof Publisher) {
+                AtomicReference<Throwable> errReference = new AtomicReference<>();
+                Flux.from((Publisher<ChatResponse>) data)
+                        .doOnNext(resp -> {
+                            try {
+                                ctx.render(resp.getMessage());
+                                ctx.output("\n");
+                                ctx.flush();
+                            } catch (Throwable ex) {
+                                throw new RuntimeException(ex);
+                            }
+                        }).doOnError(err -> {
+                            errReference.set(err);
+                        })
+                        .then()
+                        .block();
+
+                if (errReference.get() != null) {
+                    throw errReference.get();
+                }
+            } else if (data instanceof ChatResponse) {
+                ChatResponse resp = (ChatResponse) data;
+
                 ctx.render(resp.getMessage());
                 ctx.output("\n");
                 ctx.flush();
-            }
-        } else if (data instanceof ChatResponse) {
-            ChatResponse resp = (ChatResponse) data;
+            } else if (data instanceof ImageResponse) {
+                ImageResponse resp = (ImageResponse) data;
 
-            ctx.render(resp.getMessage());
-            ctx.output("\n");
-            ctx.flush();
-        } else if (data instanceof ImageResponse) {
-            ImageResponse resp = (ImageResponse) data;
-
-            ctx.render(ChatMessage.ofAssistant("![](" + resp.getImage().getUrl() + ")"));
-            ctx.output("\n");
-            ctx.flush();
-        } else {
-            if (data instanceof String) {
-                ctx.output((String) data);
+                ctx.render(ChatMessage.ofAssistant("![](" + resp.getImage().getUrl() + ")"));
+                ctx.output("\n");
+                ctx.flush();
             } else {
-                ctx.render(data);
+                if (data instanceof String) {
+                    ctx.render((String) data);
+                } else {
+                    ctx.render(data);
+                }
+                ctx.output("\n");
+                ctx.flush();
             }
+        } else {
+            data = VarOutputCom.getInputAsString(data);
+
+            setOutput(context, node, data);
+            String formatted = SnEL.evalTmpl(format, context.model());
+            ctx.render(formatted);
             ctx.output("\n");
             ctx.flush();
         }
