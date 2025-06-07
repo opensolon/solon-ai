@@ -47,6 +47,7 @@ import org.noear.solon.net.http.HttpUtilsBuilder;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URI;
@@ -57,6 +58,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 
 /**
  * Mcp 客户端提供者
@@ -525,6 +527,18 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     /// ///////////
+
+    /**
+     * 支持缓存获取
+     */
+    private <T> T getByCache(String key, Type type, Supplier<T> supplier) {
+        if (clientProps.getCacheSeconds() > 0) {
+            return localCache.getOrStore(key, type, clientProps.getCacheSeconds(), supplier);
+        } else {
+            return supplier.get();
+        }
+    }
+
     /**
      * 获取函数工具（可用于模型绑定）
      */
@@ -540,9 +554,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param cursor 游标
      */
     public Collection<FunctionTool> getTools(String cursor) {
-        return localCache.getOrStore("getTools:" + cursor,
+        return getByCache("getTools:" + cursor,
                 Collection.class,
-                clientProps.getCacheSeconds(),
                 () -> getToolsDo(cursor));
     }
 
@@ -584,9 +597,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     public Collection<FunctionResource> getResources(String cursor) {
-        return localCache.getOrStore("getResources:" + cursor,
+        return getByCache("getResources:" + cursor,
                 Collection.class,
-                clientProps.getCacheSeconds(),
                 () -> getResourcesDo(cursor));
     }
 
@@ -623,9 +635,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     public Collection<FunctionResource> getResourceTemplates(String cursor) {
-        return localCache.getOrStore("getResourceTemplates:" + cursor,
+        return getByCache("getResourceTemplates:" + cursor,
                 Collection.class,
-                clientProps.getCacheSeconds(),
                 () -> getResourceTemplatesDo(cursor));
     }
 
@@ -663,9 +674,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     public Collection<FunctionPrompt> getPrompts(String cursor) {
-        return localCache.getOrStore("getPrompts:" + cursor,
+        return getByCache("getPrompts:" + cursor,
                 Collection.class,
-                clientProps.getCacheSeconds(),
                 () -> getPromptsDo(cursor));
     }
 
