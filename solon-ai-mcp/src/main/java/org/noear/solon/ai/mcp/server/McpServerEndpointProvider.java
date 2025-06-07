@@ -20,7 +20,6 @@ import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
-import io.modelcontextprotocol.server.transport.WebRxStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.noear.solon.Solon;
@@ -87,13 +86,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
         if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
             //stdio 通道
             this.mcpTransportProvider = new StdioServerTransportProvider();
-        } else if(McpChannel.STREAMABLE.equalsIgnoreCase(serverProperties.getChannel())) {
-            //streamable 通道
-            this.mcpTransportProvider = WebRxStreamableServerTransportProvider.builder()
-                    .endpoint(this.sseEndpoint)
-                    .objectMapper(new ObjectMapper())
-                    .build();
-
         } else {
             //sse 通道
             this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
@@ -344,19 +336,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
         //如果是 web 类的
         if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
             WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
-            tmp.toHttpHandler(Solon.app());
-
-            if (serverProperties.getHeartbeatInterval() != null
-                    && serverProperties.getHeartbeatInterval().getSeconds() > 0) {
-                //启用 sse 心跳（保持客户端不断开）
-                RunUtil.delayAndRepeat(() -> {
-                    RunUtil.runAndTry(() -> {
-                        tmp.sendHeartbeat();
-                    });
-                }, serverProperties.getHeartbeatInterval().toMillis());
-            }
-        } else if (mcpTransportProvider instanceof WebRxStreamableServerTransportProvider) {
-            WebRxStreamableServerTransportProvider tmp = (WebRxStreamableServerTransportProvider) mcpTransportProvider;
             tmp.toHttpHandler(Solon.app());
 
             if (serverProperties.getHeartbeatInterval() != null

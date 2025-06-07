@@ -20,7 +20,6 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.client.transport.WebRxSseClientTransport;
-import io.modelcontextprotocol.client.transport.WebRxStreamableClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
@@ -185,15 +184,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 webBuilder.proxy(clientProps.getHttpProxy());
             }
 
-            if (McpChannel.STREAMABLE.equals(clientProps.getChannel())) {
-                clientTransport = WebRxStreamableClientTransport.builder(webBuilder)
-                        .endpoint(endpoint)
-                        .build();
-            } else {
-                clientTransport = WebRxSseClientTransport.builder(webBuilder)
-                        .sseEndpoint(endpoint)
-                        .build();
-            }
+            clientTransport = WebRxSseClientTransport.builder(webBuilder)
+                    .sseEndpoint(endpoint)
+                    .build();
         }
 
         return McpClient.sync(clientTransport)
