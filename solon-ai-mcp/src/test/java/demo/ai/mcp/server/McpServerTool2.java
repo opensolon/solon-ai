@@ -19,7 +19,7 @@ import java.util.Collection;
  */
 @Mapping("/demo2/sse")
 @Controller
-@McpServerEndpoint(sseEndpoint = "/demo2/sse")
+@McpServerEndpoint(sseEndpoint = "/demo2/sse", enableOutputSchema = true)
 public class McpServerTool2 {
     @ToolMapping(description = "查询天气预报", returnDirect = true)
     public String getWeather(@Param(description = "城市位置") String location, Context ctx) {

@@ -420,6 +420,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
             props.setChannel(channel);
             props.setSseEndpoint(sseEndpoint);
             props.setMessageEndpoint(messageEndpoint);
+            props.setEnableOutputSchema(endpointAnno.enableOutputSchema());
 
             if (Utils.isEmpty(heartbeatInterval)) {
                 props.setHeartbeatInterval(null); //表示不启用
