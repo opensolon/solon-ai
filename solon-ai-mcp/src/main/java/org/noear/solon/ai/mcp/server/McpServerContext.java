@@ -28,6 +28,13 @@ public class McpServerContext extends ContextEmpty {
         for (KeyValues<String> kv : context.paramMap()) {
             for (String v : kv.getValues()) {
                 this.paramMap().add(kv.getKey(), v);
+                this.headerMap().add(kv.getKey(), v);
+            }
+        }
+
+        for (KeyValues<String> kv : context.headerMap()) {
+            for (String v : kv.getValues()) {
+                this.headerMap().add(kv.getKey(), v);
             }
         }
     }
@@ -145,31 +152,6 @@ public class McpServerContext extends ContextEmpty {
     }
 
     /// /////////////////
-
-    @Override
-    public String header(String name) {
-        return context.header(name);
-    }
-
-    @Override
-    public String headerOrDefault(String name, String def) {
-        return context.headerOrDefault(name, def);
-    }
-
-    @Override
-    public String[] headerValues(String name) {
-        return context.headerValues(name);
-    }
-
-    @Override
-    public Collection<String> headerNames() {
-        return context.headerNames();
-    }
-
-    @Override
-    public MultiMap<String> headerMap() {
-        throw new UnsupportedOperationException();
-    }
 
 
     @Override
