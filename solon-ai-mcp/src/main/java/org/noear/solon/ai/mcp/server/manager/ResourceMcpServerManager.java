@@ -22,6 +22,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
+import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 import org.noear.solon.ai.media.Text;
 import org.noear.solon.core.handle.ContextHolder;
@@ -69,7 +70,7 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
     }
 
     @Override
-    public void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, FunctionResource functionResource) {
+    public void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionResource functionResource) {
         resourcesMap.put(functionResource.uri(), functionResource);
 
         if (functionResource.uri().indexOf('{') < 0) {

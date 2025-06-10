@@ -58,4 +58,9 @@ public @interface McpServerEndpoint {
      * 服务器SSE心跳间隔（空表示不启用）
      */
     String heartbeatInterval() default "30s";
+
+    /**
+     * 启用输出架构
+     */
+    boolean enableOutputSchema() default false;
 }

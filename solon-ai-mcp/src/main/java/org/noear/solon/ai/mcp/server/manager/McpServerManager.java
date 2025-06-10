@@ -17,6 +17,7 @@ package org.noear.solon.ai.mcp.server.manager;
 
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
+import org.noear.solon.ai.mcp.server.McpServerProperties;
 
 import java.util.Collection;
 
@@ -50,5 +51,5 @@ public interface McpServerManager<T> {
     /**
      * 添加
      */
-    void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, T item);
+    void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, T item);
 }

@@ -60,4 +60,9 @@ public class McpServerProperties {
      * 服务器SSE心跳间隔（空表示不启用）
      */
     private Duration heartbeatInterval = Duration.ofSeconds(30);
+
+    /**
+     * 启用输出架构
+     */
+    private boolean enableOutputSchema;
 }

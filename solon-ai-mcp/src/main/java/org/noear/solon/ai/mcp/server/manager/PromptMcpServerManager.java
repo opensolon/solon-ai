@@ -26,6 +26,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
+import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.util.ParamDesc;
@@ -67,7 +68,7 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
     }
 
     @Override
-    public void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, FunctionPrompt functionPrompt) {
+    public void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionPrompt functionPrompt) {
         promptsMap.put(functionPrompt.name(), functionPrompt);
 
         List<McpSchema.PromptArgument> promptArguments = new ArrayList<>();

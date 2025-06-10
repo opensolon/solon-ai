@@ -162,7 +162,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记资源
      */
     public void addResource(FunctionResource functionResource) {
-        resourceManager.add(server, mcpServerSpec, functionResource);
+        resourceManager.add(server, mcpServerSpec, serverProperties, functionResource);
     }
 
     /**
@@ -209,7 +209,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记提示语
      */
     public void addPrompt(FunctionPrompt functionPrompt) {
-        promptManager.add(server, mcpServerSpec, functionPrompt);
+        promptManager.add(server, mcpServerSpec, serverProperties, functionPrompt);
     }
 
     /**
@@ -256,7 +256,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记工具
      */
     public void addTool(FunctionTool functionTool) {
-        toolManager.add(server, mcpServerSpec, functionTool);
+        toolManager.add(server, mcpServerSpec, serverProperties, functionTool);
     }
 
     /**
@@ -475,6 +475,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
          */
         public Builder heartbeatInterval(Duration sseHeartbeatInterval) {
             props.setHeartbeatInterval(sseHeartbeatInterval);
+            return this;
+        }
+
+        /**
+         * 启用输出架构
+         */
+        public Builder enableOutputSchema(boolean enableOutputSchema) {
+            props.setEnableOutputSchema(enableOutputSchema);
             return this;
         }
 
