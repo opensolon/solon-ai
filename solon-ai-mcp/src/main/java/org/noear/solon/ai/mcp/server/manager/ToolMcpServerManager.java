@@ -71,7 +71,7 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
         // 构建 inputSchema JSON 字符串
         String inSchemaJson = buildJsonSchema(functionTool).toJson();
         // 获取 outputSchema JSON 字符串（可能为 null 或空）
-        String outSchemaJson = functionTool.outputSchema();
+        String outSchemaJson = null;//functionTool.outputSchema();
 
         // 注册实际调用逻辑
         McpServerFeatures.SyncToolSpecification toolSpec =new McpServerFeatures.SyncToolSpecification(
