@@ -230,7 +230,7 @@ public class ToolSchemaUtil {
         // Map
         if (Map.class.isAssignableFrom(clazz)) {
             schemaNode.set("type", TYPE_OBJECT);
-            schemaNode.getOrNew("properties").set("type", TYPE_OBJECT); // fallback
+            //schemaNode.getOrNew("properties").set("type", TYPE_OBJECT); // fallback
             return;
         }
 
@@ -243,7 +243,7 @@ public class ToolSchemaUtil {
         // 特殊类型处理：日期
         if (Date.class.isAssignableFrom(clazz)) {
             schemaNode.set("type", TYPE_STRING);
-            schemaNode.set("format", "date");
+            schemaNode.set("format", "date-time");
             return;
         }
 
@@ -275,10 +275,10 @@ public class ToolSchemaUtil {
      */
     private static void handleGenericMap(ParameterizedType pt, ONode schemaNode) {
         schemaNode.set("type", TYPE_OBJECT);
-        Type[] actualTypeArguments = pt.getActualTypeArguments();
-        if (actualTypeArguments.length == 2) {
-            buildToolParamNode(actualTypeArguments[1], null, schemaNode.getOrNew("properties"));
-        }
+//        Type[] actualTypeArguments = pt.getActualTypeArguments();
+//        if (actualTypeArguments.length == 2) {
+//            buildToolParamNode(actualTypeArguments[1], null, schemaNode.getOrNew("properties"));
+//        }
     }
 
     /**

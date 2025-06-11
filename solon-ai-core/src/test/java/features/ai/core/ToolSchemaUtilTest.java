@@ -1,11 +1,20 @@
 package features.ai.core;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
+import com.fasterxml.jackson.module.jsonSchema.JsonSchemaGenerator;
 import org.junit.jupiter.api.Test;
 import org.noear.snack.ONode;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodFunctionTool;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.annotation.Param;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 
 /**
  * @author noear 2025/4/29 created
@@ -46,6 +55,25 @@ public class ToolSchemaUtilTest {
 
         System.out.println(schemaNode);
         assert "{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"用户Id\"},\"name\":{\"type\":\"string\",\"description\":\"用户名\"}},\"required\":[\"id\",\"name\"]},\"description\":\"test\"}".equals(schemaNode.toJson());
+    }
+
+    @Test
+    public void entity_case3() {
+        CaseTool caseTool = new CaseTool();
+        MethodToolProvider provider = new MethodToolProvider(caseTool);
+        FunctionTool functionTool = new ArrayList<>(provider.getTools()).get(0);
+
+        System.out.println(functionTool.inputSchema());
+    }
+
+    @Test
+    public void entity_case4() throws JsonProcessingException {
+        ObjectMapper mapper = new ObjectMapper();
+
+        JsonSchemaGenerator generator = new JsonSchemaGenerator(mapper);
+        JsonSchema schema = generator.generateSchema(CaseBo.class);
+        JsonNode jsonNode = mapper.valueToTree(schema);
+        System.out.println(jsonNode.toPrettyString());
     }
 
     public static class User {
