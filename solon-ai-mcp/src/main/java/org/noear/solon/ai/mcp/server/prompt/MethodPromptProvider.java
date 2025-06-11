@@ -43,7 +43,7 @@ public class MethodPromptProvider implements PromptProvider {
 
     public MethodPromptProvider(BeanWrap beanWrap) {
         //添加带注释的工具
-        for (Method method : beanWrap.rawClz().getMethods()) {
+        for (Method method : beanWrap.clz().getMethods()) {
             if (method.isAnnotationPresent(PromptMapping.class)) {
                 MethodFunctionPrompt resc = new MethodFunctionPrompt(beanWrap, method);
                 prompts.add(resc);

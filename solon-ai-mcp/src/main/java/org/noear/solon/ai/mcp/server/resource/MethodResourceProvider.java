@@ -43,7 +43,7 @@ public class MethodResourceProvider implements ResourceProvider {
 
     public MethodResourceProvider(BeanWrap beanWrap) {
         //添加带注释的工具
-        for (Method method : beanWrap.rawClz().getMethods()) {
+        for (Method method : beanWrap.clz().getMethods()) {
             if (method.isAnnotationPresent(ResourceMapping.class)) {
                 MethodFunctionResource resc = new MethodFunctionResource(beanWrap, method);
                 resources.add(resc);
