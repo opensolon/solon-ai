@@ -165,9 +165,7 @@ public interface ChatMessage extends Serializable {
      */
     @Deprecated
     static ChatMessage augment(String message, Object context) {
-        String newContent = String.format("%s\n\n Now: %s\n\n References: %s", message,
-                LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME), context);
-        return new UserMessage(newContent);
+        return ofUserAugment(message, context);
     }
 
     /// //////////////////
