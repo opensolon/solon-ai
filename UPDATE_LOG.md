@@ -1,4 +1,10 @@
 
+### 3.3.3
+
+* 优化 solon-ai-core ToolSchemaUtil 对 Map 的处理（有些框架，太细不支持）
+* 优化 solon-ai-core ToolSchemaUtil 对 Collection 的处理（有些框架，太细不支持）
+* 添加 solon-ai-mcp McpServerEndpoint:enableOutputSchema 支持（默认为 false）
+
 ### 3.3.2
 
 * 优化 solon-ai-flow 插件
