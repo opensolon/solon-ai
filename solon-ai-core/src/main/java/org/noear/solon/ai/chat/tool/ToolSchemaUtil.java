@@ -223,7 +223,7 @@ public class ToolSchemaUtil {
         // Collection
         if (Collection.class.isAssignableFrom(clazz)) {
             schemaNode.set("type", TYPE_ARRAY);
-            schemaNode.getOrNew("items").set("type", TYPE_OBJECT); // fallback
+            //schemaNode.getOrNew("items").set("type", TYPE_OBJECT); // fallback
             return;
         }
 
