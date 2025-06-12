@@ -4,6 +4,9 @@
 * 优化 solon-ai-core ToolSchemaUtil 对 Map 的处理（有些框架，太细不支持）
 * 优化 solon-ai-core ToolSchemaUtil 对 Collection 的处理（有些框架，太细不支持）
 * 添加 solon-ai-mcp McpServerEndpoint:enableOutputSchema 支持（默认为 false）
+* 调整 solon-ai-mcp MethodPromptProvider,MethodResourceProvider 改用 clz 构建(兼容外部代理情况)
+* 调整 solon-ai-core MethodToolProvider 改用 clz 构建(兼容外部代理情况)
+* mcp 优化 WebRxSseClientTransport 连接等待处理（异常时立即结束）
 
 ### 3.3.2
 
