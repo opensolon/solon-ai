@@ -20,7 +20,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -78,9 +78,6 @@ public class WebRxSseClientTransport implements McpClientTransport {
 
 	/** Flag indicating if the transport is in closing state */
 	private volatile boolean isClosing = false;
-
-	/** Latch for coordinating endpoint discovery */
-	private final CountDownLatch closeLatch = new CountDownLatch(1);
 
 	/** Holds the discovered message endpoint URL */
 	private final AtomicReference<String> messageEndpoint = new AtomicReference<>();
@@ -217,7 +214,6 @@ public class WebRxSseClientTransport implements McpClientTransport {
 						if (ENDPOINT_EVENT_TYPE.equals(event.getEvent())) {
 							String endpoint = event.data();
 							messageEndpoint.set(endpoint);
-							closeLatch.countDown();
 							future.complete(null);
 						} else if (MESSAGE_EVENT_TYPE.equals(event.getEvent())) {
 							JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper, event.data());
@@ -259,11 +255,15 @@ public class WebRxSseClientTransport implements McpClientTransport {
 			return Mono.empty();
 		}
 
+		if (connectionFuture.get() == null) {
+			return Mono.empty();
+		}
+
 		try {
-			if (!closeLatch.await(10, TimeUnit.SECONDS)) {
-				return Mono.error(new McpError("Failed to wait for the message endpoint"));
-			}
-		} catch (InterruptedException e) {
+			connectionFuture.get().get(10, TimeUnit.SECONDS);
+		} catch (ExecutionException e) {
+			return Mono.error(e.getCause());
+		} catch (Exception e) {
 			return Mono.error(new McpError("Failed to wait for the message endpoint"));
 		}
 
