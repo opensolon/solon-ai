@@ -108,24 +108,20 @@ public class ToolSchemaUtil {
      * @since 3.3
      */
     public static void buildToolParamNode(Type type, String description, ONode schemaNode) {
+        if (type instanceof ParameterizedType) {
+            //处理 ParameterizedType 类型（泛型），如 List<T>、Map<K,V>、Optional<T> 等
+            handleParameterizedType((ParameterizedType) type, description, schemaNode);
+        } else if (type instanceof Class<?>) {
+            //处理普通 Class 类型：数组、枚举、POJO 等
+            handleClassType((Class<?>) type, description, schemaNode);
+        } else {
+            // 默认为 string 类型
+            schemaNode.set("type", TYPE_STRING);
+        }
+
         if (Utils.isNotEmpty(description)) {
             schemaNode.set("description", description);
         }
-
-        //处理 ParameterizedType 类型（泛型），如 List<T>、Map<K,V>、Optional<T> 等
-        if (type instanceof ParameterizedType) {
-            handleParameterizedType((ParameterizedType) type, description, schemaNode);
-            return;
-        }
-
-        //处理普通 Class 类型：数组、枚举、POJO 等
-        if (type instanceof Class<?>) {
-            handleClassType((Class<?>) type, description, schemaNode);
-            return;
-        }
-
-        // 默认为 string 类型
-        schemaNode.set("type", TYPE_STRING);
     }
 
 
@@ -251,6 +247,17 @@ public class ToolSchemaUtil {
         if (URI.class.isAssignableFrom(clazz)) {
             schemaNode.set("type", TYPE_STRING);
             schemaNode.set("format", "uri");
+            return;
+        }
+
+        // 特殊类型处理: 大整型、大数字
+        if(BigInteger.class.isAssignableFrom(clazz)) {
+            schemaNode.set("type", TYPE_INTEGER);
+            return;
+        }
+
+        if(BigDecimal.class.isAssignableFrom(clazz)) {
+            schemaNode.set("type", TYPE_NUMBER);
             return;
         }
 
