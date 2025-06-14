@@ -36,7 +36,7 @@
         <dependency>
             <groupId>com.tencent.tcvectordb</groupId>
             <artifactId>vectordatabase-sdk-java</artifactId>
-            <version>2.3.2</version>
+            <version>${tcvectordb.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>

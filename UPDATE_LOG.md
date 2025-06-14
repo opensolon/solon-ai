@@ -7,6 +7,9 @@
 * 调整 solon-ai-mcp MethodPromptProvider,MethodResourceProvider 改用 clz 构建(兼容外部代理情况)
 * 调整 solon-ai-core MethodToolProvider 改用 clz 构建(兼容外部代理情况)
 * mcp 优化 WebRxSseClientTransport 连接等待处理（异常时立即结束）
+* elasticsearch-rest-high-level-client 升为 7.17.28
+* milvus-sdk-java 升为 2.5.10
+* vectordatabase-sdk-java 升为 2.4.5
 
 ### 3.3.2
 
