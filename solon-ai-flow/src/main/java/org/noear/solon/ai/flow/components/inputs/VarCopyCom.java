@@ -18,6 +18,7 @@ package org.noear.solon.ai.flow.components.inputs;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.annotation.Component;
+import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 
@@ -31,12 +32,10 @@ import org.noear.solon.flow.Node;
 public class VarCopyCom extends AbsAiComponent implements AiIoComponent {
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
-        //用元信息，复制上下文变量
+        //用元信息，复制上下文变量(支后表达式)
         node.getMetas().forEach((newKey, oldKey) -> {
-            Object oldVal = context.get(String.valueOf(oldKey));
-            if (oldVal != null) {
-                context.put(newKey, oldVal);
-            }
+            String oldKeyExpr = String.valueOf(oldKey);
+            context.put(newKey, SnEL.eval(oldKeyExpr, context.model()));
         });
     }
 }
