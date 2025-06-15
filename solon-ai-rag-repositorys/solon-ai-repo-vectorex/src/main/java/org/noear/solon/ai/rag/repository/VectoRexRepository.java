@@ -31,6 +31,7 @@ import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.vectorex.FilterTransformer;
+import org.noear.solon.ai.rag.repository.vectorex.MetadataField;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 
@@ -52,20 +53,27 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
 
     @Override
     public void initRepository() throws Exception {
-        List<ScalarField> scalarFields = new ArrayList();
+        List<ScalarField> scalarFields = new ArrayList<>();
 
         ScalarField id = ScalarField.builder().name(config.idFieldName).isPrimaryKey(true).build();
         scalarFields.add(id);
+        if (Utils.isNotEmpty(config.metadataFields)) {
+            for (MetadataField metadataField : config.metadataFields) {
+                scalarFields.add(ScalarField.builder().name(metadataField.getName()).isPrimaryKey(false).build());
+            }
+        }
 
-        List<VectorFiled> vectorFileds = new ArrayList();
+        List<VectorFiled> vectorFields = new ArrayList<>();
         VectorFiled vector = VectorFiled.builder().name(config.embeddingFieldName)
-                .metricType(MetricType.FLOAT_CANBERRA_DISTANCE)
-                .dimensions(3)
+                .metricType(MetricType.FLOAT_COSINE_DISTANCE)
+                .dimensions(config.embeddingModel.dimensions())
                 .build();
 
-        vectorFileds.add(vector);
-        ServerResponse<Void> face = config.client.createCollection(VectoRexCollectionReq.builder().collectionName("face").scalarFields(scalarFields).vectorFileds(vectorFileds).build());
-
+        vectorFields.add(vector);
+        ServerResponse<Void> response = config.client.createCollection(VectoRexCollectionReq.builder().collectionName(config.collectionName).scalarFields(scalarFields).vectorFileds(vectorFields).build());
+        if (!response.isSuccess()){
+            throw new IOException(response.getMsg());
+        }
     }
 
     @Override
@@ -83,14 +91,20 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
             doc.id(Utils.uuid());
             doc.embedding(config.embeddingModel.embed(doc.getContent()));
 
+            Map<String, Object> map = new HashMap<>();
+            map.put(config.idFieldName, doc.getId());
+            map.put(config.embeddingFieldName, doc.getEmbedding());
+            map.put(config.contentFieldName, doc.getContent());
+            map.put(config.metadataFieldName, doc.getMetadata());
+            if (Utils.isNotEmpty(config.metadataFields)) {
+                for (MetadataField metadataField : config.metadataFields) {
+                    map.put(metadataField.getName(), doc.getMetadata(metadataField.getName()));
+                }
+            }
+
             CollectionDataAddReq req = CollectionDataAddReq.builder()
                     .collectionName(config.collectionName)
-                    .metadata(new HashMap<String, Object>() {{
-                        put(config.idFieldName, doc.getId());
-                        put(config.embeddingFieldName, doc.getEmbedding());
-                        put(config.contentFieldName, doc.getContent());
-                        put(config.metadataFieldName, doc.getMetadata());
-                    }})
+                    .metadata(map)
                     .build();
 
             ServerResponse<Void> response = config.client.addCollectionData(req);
@@ -118,18 +132,19 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
         QueryBuilder queryBuilder = QueryBuilder.lambda(config.collectionName);
         queryBuilder.eq(config.idFieldName, id);
         ServerResponse<List<VectorSearchResult>> response = config.client.queryCollectionData(queryBuilder);
-
         return response.isSuccess() && Utils.isNotEmpty(response.getData());
     }
 
     @Override
     public List<Document> search(QueryCondition condition) throws IOException {
         float[] embed = config.embeddingModel.embed(condition.getQuery());
-
+        List<Float> embedList = new ArrayList<>();
+        for (float f : embed) {
+            embedList.add(f);
+        }
         QueryBuilder queryBuilder = new FilterTransformer(config.collectionName)
                 .transform(condition.getFilterExpression());
-
-        queryBuilder.vector(config.embeddingFieldName, Arrays.asList(embed))
+        queryBuilder.vector(config.embeddingFieldName, embedList)
                 .topK(condition.getLimit());
 
         ServerResponse<List<VectorSearchResult>> response = config.client.queryCollectionData(queryBuilder);
@@ -142,11 +157,12 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     private Document toDocument(VectorSearchResult rst) {
+        double score = 1.0 - Math.min(1.0, Math.max(0.0, rst.getScore()));
         return new Document(
                 (String) rst.getData().getMetadata().get(config.idFieldName),
                 (String) rst.getData().getMetadata().get(config.contentFieldName),
                 (Map<String, Object>) rst.getData().getMetadata().get(config.metadataFieldName),
-                rst.getScore());
+                score);
     }
 
     public static Builder builder(EmbeddingModel embeddingModel, VectorRexClient client) {
@@ -162,6 +178,10 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
         private final String embeddingFieldName = "embedding";
         private final String contentFieldName = "content";
         private final String metadataFieldName = "metadata";
+        /**
+         * metadata索引类型
+         */
+        private List<MetadataField> metadataFields = new ArrayList<>();
 
         public Builder(EmbeddingModel embeddingModel, VectorRexClient client) {
             this.embeddingModel = embeddingModel;
@@ -170,6 +190,11 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
 
         public Builder collectionName(String collectionName) {
             this.collectionName = collectionName;
+            return this;
+        }
+
+        public Builder metadataFields(List<MetadataField> metadataFields) {
+            this.metadataFields = metadataFields;
             return this;
         }
 
