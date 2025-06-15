@@ -3,6 +3,7 @@ package features.ai.flow;
 import features.ai.flow.app.DemoApp;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.annotation.Inject;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.test.HttpTester;
 import org.noear.solon.test.SolonTest;
@@ -14,7 +15,11 @@ public class ChatTest extends HttpTester {
 
     @Test
     public void case1() {
-        flowEngine.eval("chat_case1");
+        FlowContext flowContext = new FlowContext();
+        flowEngine.eval("chat_case1", flowContext);
+
+        String var2 = flowContext.get("var2");
+        assert "你好".equals(var2);
     }
 
     @Test

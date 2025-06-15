@@ -4,6 +4,9 @@ layout:
   - task: "@VarInput"
     meta:
       message: "你好"
+  - task : "@VarCopy"
+    meta:
+      var2: message
   - task: "@ChatModel"
     meta:
       systemPrompt: "你是个聊天助手"

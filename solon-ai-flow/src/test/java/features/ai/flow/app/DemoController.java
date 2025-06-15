@@ -3,6 +3,8 @@ package features.ai.flow.app;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.flow.components.Attrs;
+import org.noear.solon.ai.flow.events.Events;
+import org.noear.solon.ai.flow.events.NodeEvent;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Inject;
 import org.noear.solon.annotation.Mapping;
@@ -26,6 +28,11 @@ public class DemoController {
     @Mapping("chat_case2")
     public void chat_case2(Context ctx) throws Exception {
         FlowContext flowContext = new FlowContext();
+
+        //事件
+        flowContext.<NodeEvent, String>eventBus().listen(Events.EVENT_FLOW_NODE_END, (event) -> {
+            event.getContent().getContext();
+        });
 
         //保存会话记录
         ChatSession chatSession = chatSessionMap.computeIfAbsent(ctx.sessionId(), k -> new ChatSessionDefault(ctx.sessionId()));

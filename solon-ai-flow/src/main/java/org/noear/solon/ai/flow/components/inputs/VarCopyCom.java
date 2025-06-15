@@ -21,27 +21,22 @@ import org.noear.solon.annotation.Component;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-
 /**
- * 控制台输入组件
+ * 变量复制组件
  *
  * @author noear
  * @since 3.3
  */
-@Component("ConsoleInput")
-public class ConsoleInputCom extends AbsAiComponent implements AiIoComponent {
-    @Override
-    public Object getInput(FlowContext context, Node node) throws Throwable {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        return reader.readLine();
-    }
-
+@Component("VarCopy")
+public class VarCopyCom extends AbsAiComponent implements AiIoComponent {
     @Override
     protected void doRun(FlowContext context, Node node) throws Throwable {
-        Object data = getInput(context, node);
-
-        setOutput(context, node, data);
+        //用元信息，复制上下文变量
+        node.getMetas().forEach((newKey, oldKey) -> {
+            Object oldVal = context.get(String.valueOf(oldKey));
+            if (oldVal != null) {
+                context.put(newKey, oldVal);
+            }
+        });
     }
 }
