@@ -16,7 +16,11 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
+import org.noear.solon.ai.AiMedia;
 import org.noear.solon.core.exception.ConvertException;
+
+import java.lang.reflect.Type;
+import java.util.Date;
 
 /**
  * 工具调用结果 Json 转换器
@@ -41,7 +45,21 @@ public class ToolCallResultJsonConverter implements ToolCallResultConverter {
     }
 
     @Override
-    public String convert(Object result) throws ConvertException {
-        return ONode.stringify(result);
+    public String convert(Object result, Type returnType) throws ConvertException {
+        if (returnType == Void.class) {
+            return ONode.loadObj("Done").toString();
+        } else if (result instanceof String) {
+            return result.toString();
+        } else if (result instanceof Number) {
+            return result.toString();
+        } else if (result instanceof Boolean) {
+            return result.toString();
+        } else if (result instanceof Date) {
+            return result.toString();
+        } else if (result instanceof AiMedia) {
+            return ONode.load(((AiMedia) result).toData(true)).toJson();
+        } else {
+            return ONode.load(result).toJson();
+        }
     }
 }

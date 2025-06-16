@@ -57,7 +57,12 @@ public class McpServerTool4 {
     }
 
     @ToolMapping(description = "获取活动详情")
-    public Result<ActivityInfoDTO> getDetails(@Param(description = "根据活动id查询", name = "activityInfo") ActivityInfoDTO activityInfo) {
+    public ActivityInfoDTO getDetails(@Param(description = "根据活动id查询", name = "activityInfo") ActivityInfoDTO activityInfo) {
+        return activityInfo;
+    }
+
+    @ToolMapping(description = "获取活动详情结果")
+    public Result<ActivityInfoDTO> getDetailsResult(@Param(description = "根据活动id查询", name = "activityInfo") ActivityInfoDTO activityInfo) {
         return Result.succeed(activityInfo);
     }
 

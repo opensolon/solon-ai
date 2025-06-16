@@ -27,6 +27,7 @@ import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.PathMatcher;
 import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.wrap.MethodWrap;
@@ -34,6 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -48,8 +50,9 @@ import java.util.regex.Matcher;
 public class MethodFunctionResource implements FunctionResource {
     static final Logger log = LoggerFactory.getLogger(MethodFunctionResource.class);
 
-    private BeanWrap beanWrap;
+    private final BeanWrap beanWrap;
     private final MethodWrap methodWrap;
+    private final Type returnType;
 
     private final String name;
     private final ResourceMapping mapping;
@@ -64,6 +67,8 @@ public class MethodFunctionResource implements FunctionResource {
     public MethodFunctionResource(BeanWrap beanWrap, Method method) {
         this.beanWrap = beanWrap;
         this.methodWrap = new MethodWrap(beanWrap.context(), method.getDeclaringClass(), method);
+        this.returnType = method.getGenericReturnType();
+
         this.mapping = method.getAnnotation(ResourceMapping.class);
         this.name = Utils.annoAlias(mapping.name(), method.getName());
 
@@ -91,7 +96,7 @@ public class MethodFunctionResource implements FunctionResource {
             if (Solon.context() != null) {
                 resultConverter = Solon.context().getBeanOrNew(mapping.resultConverter());
             } else {
-                resultConverter = null;
+                resultConverter = ClassUtil.newInstance(mapping.resultConverter());
             }
         }
 
@@ -162,7 +167,7 @@ public class MethodFunctionResource implements FunctionResource {
             if (resultConverter == null) {
                 text = String.valueOf(ctx.result);
             } else {
-                text = resultConverter.convert(ctx.result);
+                text = resultConverter.convert(ctx.result, returnType);
             }
 
             return Text.of(false, text);

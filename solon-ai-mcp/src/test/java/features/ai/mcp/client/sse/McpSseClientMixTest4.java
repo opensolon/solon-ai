@@ -78,7 +78,19 @@ public class McpSseClientMixTest4 {
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
-        assert response.contains("activityId='12'");
+        assert response.equals("{\"activityId\":\"12\"}");
+    }
+
+    @Test
+    public void tool3_result() throws Exception {
+        Map<String, Object> args = Utils.asMap("activityInfo",
+                Utils.asMap("activityId", "12"));
+
+        String response = mcpClient.callToolAsText("getDetailsResult", args).getContent();
+
+        log.warn("{}", response);
+        assert Utils.isNotEmpty(response);
+        assert response.equals("{\"code\":200,\"description\":\"\",\"data\":{\"activityId\":\"12\"}}");
     }
 
     @Test

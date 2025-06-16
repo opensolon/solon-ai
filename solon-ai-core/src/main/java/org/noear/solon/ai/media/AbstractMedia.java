@@ -18,6 +18,8 @@ package org.noear.solon.ai.media;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 
+import java.util.Map;
+
 /**
  * 虚拟媒体类型
  *
@@ -60,11 +62,26 @@ public abstract class AbstractMedia implements AiMedia {
         } else {
             if (useMime) {
                 if (Utils.isNotEmpty(getMimeType())) {
-                    return "data:" + mimeType + ";base64," + b64_json;
+                    return "data:" + getMimeType() + ";base64," + getB64Json();
                 }
             }
 
-            return b64_json;
+            return getB64Json();
+        }
+    }
+
+    @Override
+    public Map<String, Object> toData(boolean useMime) {
+        if (Utils.isEmpty(getB64Json())) {
+            return Utils.asMap("url", getUrl());
+        } else {
+            if (useMime) {
+                if (Utils.isNotEmpty(getMimeType())) {
+                    return Utils.asMap("mimeType", getMimeType(), "data", getB64Json());
+                }
+            }
+
+            return Utils.asMap("data", getB64Json());
         }
     }
 

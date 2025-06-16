@@ -18,6 +18,8 @@ package org.noear.solon.ai.media;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 
+import java.util.Map;
+
 /**
  * 文本媒体
  *
@@ -68,6 +70,17 @@ public class Text implements AiMedia {
         }
 
         return getContent();
+    }
+
+    @Override
+    public Map<String, Object> toData(boolean useMime) {
+        if (useMime) {
+            if (Utils.isNotEmpty(getMimeType())) {
+                return Utils.asMap("mimeType", getMimeType(), "data", getContent());
+            }
+        }
+
+        return Utils.asMap("data", getContent());
     }
 
     @Override

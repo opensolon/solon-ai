@@ -25,6 +25,7 @@ import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.wrap.MethodWrap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +46,7 @@ public class MethodFunctionTool implements FunctionTool {
 
     private final BeanWrap beanWrap;
     private final MethodWrap methodWrap;
+    private final Type returnType;
 
     private final String name;
     private final String description;
@@ -59,6 +61,7 @@ public class MethodFunctionTool implements FunctionTool {
     public MethodFunctionTool(BeanWrap beanWrap, Method method) {
         this.beanWrap = beanWrap;
         this.methodWrap = new MethodWrap(beanWrap.context(), method.getDeclaringClass(), method);
+        this.returnType = method.getGenericReturnType();
 
         ToolMapping mapping = method.getAnnotation(ToolMapping.class);
 
@@ -88,7 +91,7 @@ public class MethodFunctionTool implements FunctionTool {
             if (Solon.context() != null) {
                 resultConverter = Solon.context().getBeanOrNew(mapping.resultConverter());
             } else {
-                resultConverter = null;
+                resultConverter = ClassUtil.newInstance(mapping.resultConverter());
             }
         }
 
@@ -179,7 +182,7 @@ public class MethodFunctionTool implements FunctionTool {
         if (resultConverter == null) {
             return String.valueOf(ctx.result);
         } else {
-            return resultConverter.convert(ctx.result);
+            return resultConverter.convert(ctx.result, returnType);
         }
     }
 

@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai;
 
+import java.util.Map;
+
 /**
  * Ai 媒体
  *
@@ -26,4 +28,9 @@ public interface AiMedia {
      * 转为数据字符串
      */
     String toDataString(boolean useMime);
+
+    /**
+     * 转为数据
+     */
+    Map<String, Object> toData(boolean useMime);
 }

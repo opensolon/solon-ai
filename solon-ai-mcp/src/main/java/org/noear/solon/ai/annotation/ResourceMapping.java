@@ -16,6 +16,7 @@
 package org.noear.solon.ai.annotation;
 
 import org.noear.solon.ai.chat.tool.ToolCallResultConverter;
+import org.noear.solon.ai.chat.tool.ToolCallResultJsonConverter;
 
 import java.lang.annotation.*;
 
@@ -52,5 +53,5 @@ public @interface ResourceMapping {
     /**
      * 结果转换器
      */
-    Class<? extends ToolCallResultConverter> resultConverter() default ToolCallResultConverter.class;
+    Class<? extends ToolCallResultConverter> resultConverter() default ToolCallResultJsonConverter.class;
 }
