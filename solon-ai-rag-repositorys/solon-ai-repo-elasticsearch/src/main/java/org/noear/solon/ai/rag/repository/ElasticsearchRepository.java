@@ -158,9 +158,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         }
 
         // 生成查询向量
-        Document queryDoc = new Document(condition.getQuery());
-        config.embeddingModel.embed(Collections.singletonList(queryDoc));
-        float[] queryVector = queryDoc.getEmbedding();
+        float[] queryVector = config.embeddingModel.embed(condition.getQuery());
 
         String responseBody = executeSearch(condition, queryVector);
         return parseSearchResponse(responseBody);
@@ -559,7 +557,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         private final RestHighLevelClient client;
         private String indexName = "solon_ai";
         private List<MetadataField> metadataFields = new ArrayList<>();
-        private VectorSearchType vectorSearchType = VectorSearchType.EXACT_KNN;
+        private VectorSearchType vectorSearchType = VectorSearchType.APPROXIMATE_KNN;
 
         /**
          * 构造函数
