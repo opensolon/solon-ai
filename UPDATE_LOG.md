@@ -3,10 +3,10 @@
 
 * 优化 solon-ai-core ToolSchemaUtil 对 Map 的处理（有些框架，太细不支持）
 * 优化 solon-ai-core ToolSchemaUtil 对 Collection 的处理（有些框架，太细不支持）
+* 优化 solon-ai-mcp MethodPromptProvider,MethodResourceProvider 改用 clz 构建(兼容外部代理情况)
+* 优化 solon-ai-core MethodToolProvider 改用 clz 构建(兼容外部代理情况)
 * 添加 solon-ai-mcp McpServerEndpoint:enableOutputSchema 支持（默认为 false）
-* 调整 solon-ai-core MethodToolProvider 改用 clz 构建(兼容外部代理情况)
 * 调整 solon-ai-core ToolCallResultConverter 接口定义（增加返回类型参数）
-* 调整 solon-ai-mcp MethodPromptProvider,MethodResourceProvider 改用 clz 构建(兼容外部代理情况)
 * 调整 solon-ai-mcp tool,resource 结果默认处理改为 ToolCallResultJsonConverter
 * 调整 solon-ai-repo-elasticsearch 搜索类型，默认改为相似搜索（之前为精准，需要脚本权限）
 * mcp 优化 WebRxSseClientTransport 连接等待处理（异常时立即结束）
