@@ -18,6 +18,7 @@ package org.noear.solon.ai.rag;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -32,6 +33,13 @@ public interface RepositoryStorable extends Repository {
      * 插入
      */
     void insert(List<Document> documents) throws IOException;
+
+    /**
+     * 插入
+     */
+    default void insert(Document... documents) throws IOException {
+        insert(Arrays.asList(documents));
+    }
 
     /**
      * 删除
