@@ -5,6 +5,7 @@
 * 优化 solon-ai-core ToolSchemaUtil 对 Collection 的处理（有些框架，太细不支持）
 * 优化 solon-ai-mcp MethodPromptProvider,MethodResourceProvider 改用 clz 构建(兼容外部代理情况)
 * 优化 solon-ai-core MethodToolProvider 改用 clz 构建(兼容外部代理情况)
+* 添加 solon-ai-core RepositoryStorable:insert(Doc...) 方法
 * 添加 solon-ai-mcp McpServerEndpoint:enableOutputSchema 支持（默认为 false）
 * 调整 solon-ai-core ToolCallResultConverter 接口定义（增加返回类型参数）
 * 调整 solon-ai-core 移除 QueryCondition:doFilter 方法（避免误解）
