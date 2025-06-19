@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.rag.util;
 
-import org.noear.solon.ai.rag.Document;
 import org.noear.solon.expression.Expression;
 import org.noear.solon.expression.snel.SnEL;
 
@@ -102,17 +101,6 @@ public class QueryCondition {
      */
     public HybridSearchParams getHybridSearchParams() {
         return hybridSearchParams;
-    }
-
-    /**
-     * 过滤
-     */
-    public boolean doFilter(Document doc) {
-        if (filterExpression == null) {
-            return true;
-        } else {
-            return filterExpression.eval(doc.getMetadata());
-        }
     }
 
 

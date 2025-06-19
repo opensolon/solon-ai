@@ -16,6 +16,7 @@
 package org.noear.solon.ai.rag.util;
 
 import org.noear.solon.ai.rag.Document;
+import org.noear.solon.expression.Expression;
 
 import java.io.IOException;
 import java.util.Comparator;
@@ -61,7 +62,15 @@ public final class SimilarityUtil {
         if (condition.isDisableRefilter()) {
             return refilter(docs, condition.getLimit(), condition.getSimilarityThreshold());
         } else {
-            return refilter(docs.filter(condition::doFilter), condition.getLimit(), condition.getSimilarityThreshold());
+            return refilter(docs.filter(doc -> doFilter(condition.getFilterExpression(), doc)), condition.getLimit(), condition.getSimilarityThreshold());
+        }
+    }
+
+    private static boolean doFilter(Expression<Boolean> filterExpression, Document doc) {
+        if (filterExpression == null) {
+            return true;
+        } else {
+            return filterExpression.eval(doc.getMetadata());
         }
     }
 
