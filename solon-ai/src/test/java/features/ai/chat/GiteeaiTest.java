@@ -22,8 +22,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -58,22 +58,39 @@ public class GiteeaiTest {
     public void case2() throws Exception {
         ChatModel chatModel = getChatModelBuilder().build();
 
+        ChatSession chatSession = new ChatSessionDefault();
+        chatSession.addMessage(ChatMessage.ofUser("hello"));
+
         //流返回
-        Publisher<ChatResponse> publisher = chatModel.prompt("hello").stream();
+        Publisher<ChatResponse> publisher = chatModel.prompt(chatSession).stream();
 
         CountDownLatch doneLatch = new CountDownLatch(1);
+        AtomicBoolean done = new AtomicBoolean(false);
         publisher.subscribe(new SimpleSubscriber<ChatResponse>()
                 .doOnNext(resp -> {
-                    log.info("{}", resp.getMessage());
+                    log.info("{} - {}", resp.isFinished(), resp.getMessage());
+                    done.set(resp.isFinished());
                 }).doOnComplete(() -> {
                     log.debug("::完成!");
                     doneLatch.countDown();
                 }).doOnError(err -> {
-                    err.printStackTrace();
                     doneLatch.countDown();
+                    err.printStackTrace();
                 }));
 
         doneLatch.await();
+        assert done.get();
+
+
+        //序列化测试
+        String ndjson1 = chatSession.toNdjson();
+        System.out.println(ndjson1);
+
+        chatSession.clear();
+        chatSession.loadNdjson(ndjson1);
+        String ndjson2 = chatSession.toNdjson();
+        System.out.println(ndjson2);
+        assert ndjson1.equals(ndjson2);
     }
 
     @Test

@@ -1,4 +1,8 @@
 
+### 3.4.0
+
+* 修复 solon-ai-core ChatModel:stream:doOnNext 可能无法获取 isFinished=true 情况
+
 ### 3.3.3
 
 * 优化 solon-ai-core ToolSchemaUtil 对 Map 的处理（有些框架，太细不支持）

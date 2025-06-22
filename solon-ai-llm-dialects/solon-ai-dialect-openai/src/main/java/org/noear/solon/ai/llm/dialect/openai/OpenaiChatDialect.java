@@ -58,6 +58,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
     @Override
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) { //不是数据结构
+            resp.addChoice(new ChatChoice(0, new Date(), "done", new AssistantMessage("")));
             resp.setFinished(true);
             return true;
         }

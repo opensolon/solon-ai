@@ -93,6 +93,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     @Override
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) { //不是数据结构
+            resp.addChoice(new ChatChoice(0, new Date(), "done", new AssistantMessage("")));
             resp.setFinished(true);
             return true;
         }
@@ -114,10 +115,6 @@ public class DashscopeChatDialect extends AbstractChatDialect {
             for (ONode oChoice1 : oResp.get("output").get("choices").ary()) {
                 String finish_reason = oChoice1.get("finish_reason").getString();
 
-                if ("stop".equals(finish_reason)) {
-                    resp.setFinished(true);
-                }
-
                 List<AssistantMessage> messageList;
                 if (oChoice1.contains("delta")) {  //object=chat.completion.chunk
                     messageList = parseAssistantMessage(resp, oChoice1.get("delta"));
@@ -127,6 +124,13 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
                 for (AssistantMessage msg1 : messageList) {
                     resp.addChoice(new ChatChoice(index, created, finish_reason, msg1));
+                }
+
+                if ("stop".equals(finish_reason)) {
+                    if(resp.hasChoices() == false) {
+                        resp.addChoice(new ChatChoice(0, created, "done", new AssistantMessage("")));
+                    }
+                    resp.setFinished(true);
                 }
 
                 index++;

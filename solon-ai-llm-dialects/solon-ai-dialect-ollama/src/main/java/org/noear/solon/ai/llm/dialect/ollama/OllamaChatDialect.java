@@ -132,6 +132,10 @@ public class OllamaChatDialect extends AbstractChatDialect {
                 long totalTokens = promptTokens + completionTokens;
 
                 resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens));
+
+                if(resp.hasChoices() == false) {
+                    resp.addChoice(new ChatChoice(0, created, "done", new AssistantMessage("")));
+                }
             }
         }
 
