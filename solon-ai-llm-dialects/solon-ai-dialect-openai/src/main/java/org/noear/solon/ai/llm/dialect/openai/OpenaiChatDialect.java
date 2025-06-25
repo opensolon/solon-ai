@@ -58,8 +58,10 @@ public class OpenaiChatDialect extends AbstractChatDialect {
     @Override
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) { //不是数据结构
-            resp.addChoice(new ChatChoice(0, new Date(), "done", new AssistantMessage("")));
-            resp.setFinished(true);
+            if(resp.isFinished() == false) {
+                resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                resp.setFinished(true);
+            }
             return true;
         }
 
@@ -77,11 +79,11 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         } else {
             resp.setModel(oResp.get("model").getString());
 
-            String finish_reason = oResp.get("finish_reason").getString();
             Date created = new Date(oResp.get("created").getLong() * 1000);
 
             for (ONode oChoice1 : oResp.get("choices").ary()) {
                 int index = oChoice1.get("index").getInt();
+                String finish_reason = oChoice1.get("finish_reason").getString();
 
                 List<AssistantMessage> messageList;
                 if (oChoice1.contains("delta")) {  //object=chat.completion.chunk
@@ -92,6 +94,16 @@ public class OpenaiChatDialect extends AbstractChatDialect {
 
                 for (AssistantMessage msg1 : messageList) {
                     resp.addChoice(new ChatChoice(index, created, finish_reason, msg1));
+                }
+
+                if ("stop".equals(finish_reason)) {
+                    resp.setFinished(true);
+                }
+            }
+
+            if (resp.isFinished()) {
+                if (resp.hasChoices() == false) {
+                    resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage("")));
                 }
             }
 

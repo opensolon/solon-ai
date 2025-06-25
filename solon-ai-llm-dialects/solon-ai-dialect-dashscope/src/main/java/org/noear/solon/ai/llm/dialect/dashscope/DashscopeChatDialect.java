@@ -93,8 +93,10 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     @Override
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) { //不是数据结构
-            resp.addChoice(new ChatChoice(0, new Date(), "done", new AssistantMessage("")));
-            resp.setFinished(true);
+            if(resp.isFinished() == false) {
+                resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                resp.setFinished(true);
+            }
             return true;
         }
 
@@ -127,13 +129,16 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                 }
 
                 if ("stop".equals(finish_reason)) {
-                    if(resp.hasChoices() == false) {
-                        resp.addChoice(new ChatChoice(0, created, "done", new AssistantMessage("")));
-                    }
                     resp.setFinished(true);
                 }
 
                 index++;
+            }
+
+            if (resp.isFinished()) {
+                if (resp.hasChoices() == false) {
+                    resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage("")));
+                }
             }
 
             ONode oUsage = oResp.getOrNull("usage");
