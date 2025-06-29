@@ -15,10 +15,12 @@
  */
 package org.noear.solon.ai.chat.interceptor;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatConfigReadonly;
 import org.noear.solon.ai.chat.ChatOptions;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -35,7 +37,12 @@ public class ToolRequest {
     public ToolRequest(ChatConfig config, ChatOptions options, Map<String, Object> args) {
         this.configReadonly = new ChatConfigReadonly(config);
         this.options = options;
-        this.args = args;
+        if (Utils.isEmpty(options.toolsContext())) {
+            this.args = args;
+        } else {
+            this.args = new LinkedHashMap<>(args);
+            this.args.putAll(options.toolsContext());
+        }
     }
 
     /**

@@ -1,6 +1,7 @@
 
 ### 3.4.0
 
+* 添加 solon-ai Options:toolsContext 方法
 * 修复 solon-ai-core ChatModel:stream:doOnNext 可能无法获取 isFinished=true 情况
 
 ### 3.3.3

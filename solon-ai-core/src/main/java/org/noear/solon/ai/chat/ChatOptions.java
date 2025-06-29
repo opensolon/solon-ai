@@ -49,8 +49,9 @@ public class ChatOptions {
 
 
     private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
+    private final Map<String, Object> toolsContext = new LinkedHashMap<>();
     private final List<RankEntity<ChatInterceptor>> interceptors = new ArrayList<>();
-    private Map<String, Object> options = new LinkedHashMap<>();
+    private final Map<String, Object> options = new LinkedHashMap<>();
 
     /// ////////////
 
@@ -59,6 +60,13 @@ public class ChatOptions {
      */
     public Collection<FunctionTool> tools() {
         return tools.values();
+    }
+
+    /**
+     * 工具上下文（附加参数）
+     */
+    public Map<String, Object> toolsContext() {
+        return toolsContext;
     }
 
     /**
@@ -115,6 +123,11 @@ public class ChatOptions {
         FunctionToolDesc decl = new FunctionToolDesc(name);
         toolBuilder.accept(decl);
         tools.put(decl.name(), decl);
+        return this;
+    }
+
+    public ChatOptions toolsContext(Map<String, Object> toolsContext) {
+        this.toolsContext.putAll(toolsContext);
         return this;
     }
 
