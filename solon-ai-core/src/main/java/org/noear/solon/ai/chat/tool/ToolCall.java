@@ -29,8 +29,12 @@ public class ToolCall implements Serializable {
     private int index;
     private String id;
     private String name;
-    private transient String argumentsStr;
+    private String argumentsStr;
     private Map<String, Object> arguments;
+
+    public ToolCall() {
+        //用于序列化
+    }
 
     public ToolCall(int index, String id, String name, String argumentsStr, Map<String, Object> arguments) {
         this.index = index;

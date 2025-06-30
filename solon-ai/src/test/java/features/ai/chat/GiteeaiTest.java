@@ -95,18 +95,24 @@ public class GiteeaiTest {
 
     @Test
     public void case3_wather() throws IOException {
+        ChatSession session = new ChatSessionDefault();
+
         ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
 
+        session.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
+
         ChatResponse resp = chatModel
-                .prompt("今天杭州的天气情况？")
+                .prompt(session)
                 .call();
 
         //打印消息
         log.info("{}", resp.getMessage());
         assert resp.getMessage() != null;
         assert resp.getMessage().getContent().contains("晴");
+
+        System.out.println(session.toNdjson());
     }
 
     @Test
