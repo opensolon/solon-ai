@@ -167,6 +167,14 @@ public class MarkdownLoader extends AbstractOptionsDocumentLoader<MarkdownLoader
                 Heading heading = (Heading) tmp;
                 this.currentDocument.metadata("category", String.format("header_%d", (heading.getLevel())));
                 this.currentDocument.metadata("title", text.getLiteral());
+            } else if (tmp instanceof Image) {
+                Image image = (Image) tmp;
+                String destination = image.getDestination();
+                if (destination != null && destination.startsWith("http")) {
+                    this.currentParagraphs.add("![" + text.getLiteral() + "](" + destination + ")");
+                } else {
+                    this.currentParagraphs.add(text.getLiteral());
+                }
             } else {
                 this.currentParagraphs.add(text.getLiteral());
             }
