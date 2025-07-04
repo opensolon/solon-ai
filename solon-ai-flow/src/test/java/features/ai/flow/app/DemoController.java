@@ -12,7 +12,7 @@ import org.noear.solon.annotation.Produces;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.stateful.StatefulFlowEngine;
+import org.noear.solon.flow.FlowEngine;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Controller
 public class DemoController {
     @Inject
-    StatefulFlowEngine flowEngine;
+    FlowEngine flowEngine;
 
     Map<String, ChatSession> chatSessionMap = new ConcurrentHashMap<>();
 
