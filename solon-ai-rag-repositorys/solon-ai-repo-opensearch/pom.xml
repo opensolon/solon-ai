@@ -21,6 +21,25 @@
             <artifactId>solon-ai</artifactId>
         </dependency>
 
+        <!-- opensearch 由于需要支持 java 8，这里使用 1.x的版本 -->
+        <dependency>
+            <groupId>org.opensearch.client</groupId>
+            <artifactId>opensearch-rest-high-level-client</artifactId>
+            <version>1.3.20</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.opensearch</groupId>
+            <artifactId>opensearch</artifactId>
+            <version>1.3.20</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.opensearch</groupId>
+            <artifactId>opensearch-core</artifactId>
+            <version>1.3.20</version>
+        </dependency>
+
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-test</artifactId>
