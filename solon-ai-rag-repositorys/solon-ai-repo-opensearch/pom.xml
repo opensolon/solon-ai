@@ -25,19 +25,19 @@
         <dependency>
             <groupId>org.opensearch.client</groupId>
             <artifactId>opensearch-rest-high-level-client</artifactId>
-            <version>1.3.20</version>
+            <version>${opensearch.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.opensearch</groupId>
             <artifactId>opensearch</artifactId>
-            <version>1.3.20</version>
+            <version>${opensearch.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.opensearch</groupId>
             <artifactId>opensearch-core</artifactId>
-            <version>1.3.20</version>
+            <version>${opensearch.version}</version>
         </dependency>
 
         <dependency>

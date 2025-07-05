@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.rag.repository;
+package org.noear.solon.ai.rag.repository.opensearch;
 
 import org.noear.solon.expression.Expression;
 import org.noear.solon.expression.Transformer;

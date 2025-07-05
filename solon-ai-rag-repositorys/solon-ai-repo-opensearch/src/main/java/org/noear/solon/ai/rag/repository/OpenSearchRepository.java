@@ -12,6 +12,8 @@ import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
+import org.noear.solon.ai.rag.repository.opensearch.FilterTransformer;
+import org.noear.solon.ai.rag.repository.opensearch.MetadataField;
 import org.noear.solon.ai.rag.util.*;
 import org.noear.solon.core.util.IoUtil;
 import org.noear.solon.lang.Preview;
@@ -30,7 +32,7 @@ import org.opensearch.common.xcontent.XContentFactory;
  * @author 小奶奶花生米
  * @since 3.4
  */
-@Preview("3.1")
+@Preview("3.4")
 public class OpenSearchRepository implements RepositoryStorable, RepositoryLifecycle {
     private final Builder config;
 
@@ -92,21 +94,21 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
         if (IndexMethod.HNSW.toString().equals(config.indexMethod)) {
             builder.field("name", config.indexMethod);
             builder.startObject("parameters")
-                   .field("ef_construction", config.efConstruction)
-                   .field("m", config.m)
-                   .endObject();
+                    .field("ef_construction", config.efConstruction)
+                    .field("m", config.m)
+                    .endObject();
         } else if (IndexMethod.IVF.toString().equals(config.indexMethod)) {
             builder.field("name", config.indexMethod);
             builder.startObject("parameters")
-                   .field("nlist", 4)  // IVF默认参数
-                   .endObject();
+                    .field("nlist", 4)  // IVF默认参数
+                    .endObject();
         } else {
             // 默认使用HNSW
             builder.field("name", IndexMethod.HNSW.toString());
             builder.startObject("parameters")
-                   .field("ef_construction", config.efConstruction)
-                   .field("m", config.m)
-                   .endObject();
+                    .field("ef_construction", config.efConstruction)
+                    .field("m", config.m)
+                    .endObject();
         }
 
         builder.endObject(); // 结束 method 对象
@@ -171,7 +173,7 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
 
         String responseBody = executeSearch(condition, queryVector);
         List<Document> documents = parseSearchResponse(responseBody);
-        return SimilarityUtil.refilter(documents.stream(),condition);
+        return SimilarityUtil.refilter(documents.stream(), condition);
     }
 
     /**
