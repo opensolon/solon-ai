@@ -3,6 +3,7 @@
 
 * 新增 solon-ai-repo-opensearch 插件
 * 添加 solon-ai Options:toolsContext 方法
+* 调整 solon-ai-core ToolCallResultJsonConverter 更名为 ToolCallResultConverterDefault 并添加序列化插件支持
 * 调整 solon-ai-mcp PromptMapping，ResourceMapping 取消 resultConverter 属性（没必要）
 * 修复 solon-ai-core ChatModel:stream:doOnNext 可能无法获取 isFinished=true 情况
 
