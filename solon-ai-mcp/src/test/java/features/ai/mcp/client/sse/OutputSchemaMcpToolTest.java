@@ -4,6 +4,7 @@ import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.test.SolonTest;
@@ -55,6 +56,14 @@ public class OutputSchemaMcpToolTest {
         //public UserInfo getUserInfo(@Param(description = "用户ID") Long userId) {
         FunctionTool tool = getToolMap().get("getUserInfo");
         log.warn(tool.toString());
+    }
+
+    @Test
+    public void getUserInfo_call() throws Exception {
+        String text = mcpClient.callToolAsText("getUserInfo", Utils.asMap("userId", 1L)).getContent();
+        log.warn(text);
+
+        assert text.contains("2025-07-06");
     }
 
     @Test

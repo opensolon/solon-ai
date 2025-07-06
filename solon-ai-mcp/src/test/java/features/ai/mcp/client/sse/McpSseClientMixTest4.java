@@ -90,7 +90,8 @@ public class McpSseClientMixTest4 {
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
-        assert response.equals("{\"code\":200,\"description\":\"\",\"data\":{\"activityId\":\"12\"}}");
+        assert response.equals("{\"code\":200,\"description\":\"\",\"data\":{\"activityId\":\"12\"}}")
+                || response.equals("{\"code\":200,\"data\":{\"activityId\":\"12\"},\"description\":\"\"}");
     }
 
     @Test

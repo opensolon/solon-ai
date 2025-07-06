@@ -1,5 +1,6 @@
 package demo.ai.mcp.server;
 
+import lombok.Getter;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -66,6 +67,7 @@ public class McpServerTool4 {
         return Result.succeed(activityInfo);
     }
 
+    @Getter
     public static class ActivityInfoDTO {
         @Param(description = "活动id")
         private String activityId;

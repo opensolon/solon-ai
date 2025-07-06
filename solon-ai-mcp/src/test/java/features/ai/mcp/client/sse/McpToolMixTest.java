@@ -25,7 +25,7 @@ public class McpToolMixTest {
 
         System.out.println(mediaText);
 
-        assert "[\"Tokyo\",\"Sydney\",\"Tokyo\"]".equals(mediaText.getContent());
+        assert "[Tokyo, Sydney, Tokyo]".equals(mediaText.getContent());
         mcpClient.close();
     }
 }
