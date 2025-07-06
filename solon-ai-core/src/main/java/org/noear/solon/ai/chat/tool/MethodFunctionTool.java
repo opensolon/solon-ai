@@ -20,7 +20,6 @@ import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.util.ParamDesc;
-import org.noear.solon.annotation.Produces;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
@@ -54,7 +53,6 @@ public class MethodFunctionTool implements FunctionTool {
     private final List<ParamDesc> params = new ArrayList<>();
     private final ToolCallResultConverter resultConverter;
     private final String inputSchema;
-    private final String mimeType;
     private String outputSchema;
 
 
@@ -74,19 +72,9 @@ public class MethodFunctionTool implements FunctionTool {
         this.description = mapping.description();
         this.returnDirect = mapping.returnDirect();
 
-        Produces producesAnno = method.getAnnotation(Produces.class);
-        if (producesAnno != null) {
-            this.mimeType = producesAnno.value();
-        } else {
-            this.mimeType = "";
-        }
-
-        if (mapping.resultConverter() == ToolCallResultConverter.class) {
-            if (ToolCallResultJsonConverter.getInstance().matched(mimeType)) {
-                resultConverter = ToolCallResultJsonConverter.getInstance();
-            } else {
-                resultConverter = null;
-            }
+        if (mapping.resultConverter() == ToolCallResultConverter.class
+                || mapping.resultConverter() == ToolCallResultConverterDefault.class) {
+            resultConverter = ToolCallResultConverterDefault.getInstance();
         } else {
             if (Solon.context() != null) {
                 resultConverter = Solon.context().getBeanOrNew(mapping.resultConverter());

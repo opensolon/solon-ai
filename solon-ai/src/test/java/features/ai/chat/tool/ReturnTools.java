@@ -1,7 +1,6 @@
 package features.ai.chat.tool;
 
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.tool.ToolCallResultJsonConverter;
 import org.noear.solon.annotation.Param;
 
 import java.io.Serializable;
@@ -28,7 +27,7 @@ public class ReturnTools {
         return "555毫米";
     }
 
-    @ToolMapping(description = "根据用户id查询用户信息", returnDirect = true, resultConverter = ToolCallResultJsonConverter.class)
+    @ToolMapping(description = "根据用户id查询用户信息", returnDirect = true)
     public User get_user(@Param(description = "用户Id") long userId) {
         return new User(userId, "a1", 12);
     }

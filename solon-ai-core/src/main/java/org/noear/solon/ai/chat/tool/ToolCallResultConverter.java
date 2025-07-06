@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.solon.core.exception.ConvertException;
+import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Type;
 
@@ -25,15 +26,9 @@ import java.lang.reflect.Type;
  * @author noear
  * @since 3.1
  */
+@Preview("3.1")
 @FunctionalInterface
 public interface ToolCallResultConverter {
-    /**
-     * 匹配
-     */
-    default boolean matched(String mimeType) {
-        return true;
-    }
-
     /**
      * 转换
      *

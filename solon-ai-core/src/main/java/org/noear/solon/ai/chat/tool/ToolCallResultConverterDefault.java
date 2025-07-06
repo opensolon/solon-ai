@@ -16,9 +16,12 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Solon;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.core.exception.ConvertException;
+import org.noear.solon.core.serialize.Serializer;
 
+import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.Date;
 
@@ -28,26 +31,17 @@ import java.util.Date;
  * @author noear
  * @since 3.1
  */
-public class ToolCallResultJsonConverter implements ToolCallResultConverter {
-    private static final ToolCallResultConverter instance = new ToolCallResultJsonConverter();
+public class ToolCallResultConverterDefault implements ToolCallResultConverter {
+    private static final ToolCallResultConverter instance = new ToolCallResultConverterDefault();
 
     public static ToolCallResultConverter getInstance() {
         return instance;
     }
 
     @Override
-    public boolean matched(String mimeType) {
-        if (mimeType == null) {
-            return false;
-        }
-
-        return mimeType.contains("/json");
-    }
-
-    @Override
     public String convert(Object result, Type returnType) throws ConvertException {
         if (returnType == Void.class) {
-            return ONode.loadObj("Done").toString();
+            return "Done";
         } else if (result instanceof String) {
             return result.toString();
         } else if (result instanceof Number) {
@@ -57,9 +51,24 @@ public class ToolCallResultJsonConverter implements ToolCallResultConverter {
         } else if (result instanceof Date) {
             return result.toString();
         } else if (result instanceof AiMedia) {
-            return ONode.load(((AiMedia) result).toData(true)).toJson();
+            return serializeToJson(((AiMedia) result).toData(true));
         } else {
-            return ONode.load(result).toJson();
+            return serializeToJson(result);
         }
+    }
+
+    protected String serializeToJson(Object obj) throws ConvertException {
+        if (Solon.app() == null) {
+            Serializer<String> serializer = Solon.app().serializerManager().get("@json");
+            if (serializer != null) {
+                try {
+                    return serializer.serialize(obj);
+                } catch (IOException ex) {
+                    throw new ConvertException(ex);
+                }
+            }
+        }
+
+        return ONode.load(obj).toJson();
     }
 }
