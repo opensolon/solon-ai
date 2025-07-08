@@ -4,7 +4,7 @@
 Solon-AI
 </h1>
 <p align="center">
-	<strong>Java AI（智能体） 全场景应用开发框架（支持已知 AI 开发的各种能力）</strong>
+	<strong>Java AI & MCP 应用开发框架（支持已知 AI 开发的各种能力）</strong>
     <br/>
     <strong>【基于 Solon 应用开发框架构建】</strong>
 </p>
