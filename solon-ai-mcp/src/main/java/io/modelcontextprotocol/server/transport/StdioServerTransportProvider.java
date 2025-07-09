@@ -110,7 +110,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 	/**
 	 * Implementation of McpServerTransport for the stdio session.
 	 */
-	private class StdioMcpSessionTransport implements McpServerTransport {
+	public class StdioMcpSessionTransport implements McpServerTransport {
 
 		private final Sinks.Many<JSONRPCMessage> inboundSink;
 
