@@ -90,7 +90,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
                 resultContent = "";
             } else {
                 int tinkIndex = content.indexOf("</think>");
-                if (tinkIndex > 0) {
+                if (tinkIndex > -1) {
                     resultContent = content.substring(tinkIndex + 8).trim();
                 } else {
                     resultContent = content;
