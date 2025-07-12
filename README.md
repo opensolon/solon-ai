@@ -35,14 +35,14 @@ Solon-AI
 		<img src="https://img.shields.io/badge/JDK-23-green.svg" alt="jdk-23" />
 	</a>
     <br />
-    <a target="_blank" href='https://gitee.com/noear/solon/stargazers'>
-		<img src='https://gitee.com/noear/solon/badge/star.svg' alt='gitee star'/>
+    <a target="_blank" href='https://gitee.com/opensolon/solon-ai/stargazers'>
+		<img src='https://gitee.com/opensolon/solon-ai/badge/star.svg' alt='gitee star'/>
 	</a>
-    <a target="_blank" href='https://github.com/noear/solon/stargazers'>
-		<img src="https://img.shields.io/github/stars/noear/solon.svg?style=flat&logo=github" alt="github star"/>
+    <a target="_blank" href='https://github.com/opensolon/solon-ai/stargazers'>
+		<img src="https://img.shields.io/github/stars/opensolon/solon-ai.svg?style=flat&logo=github" alt="github star"/>
 	</a>
-    <a target="_blank" href='https://gitcode.com/opensolon/solon/stargazers'>
-		<img src='https://gitcode.com/opensolon/solon/star/badge.svg' alt='gitcode star'/>
+    <a target="_blank" href='https://gitcode.com/opensolon/solon-ai/stargazers'>
+		<img src='https://gitcode.com/opensolon/solon-ai/star/badge.svg' alt='gitcode star'/>
 	</a>
 </p>
 
