@@ -13,7 +13,7 @@ import java.util.Collections;
  * @author noear 2025/4/21 created
  */
 @Slf4j
-@SolonTest
+@SolonTest(scanning = false)
 public class McpStdioClientTest {
     @Test
     public void case1() throws Exception {
@@ -30,6 +30,7 @@ public class McpStdioClientTest {
         String response = mcpClient.callToolAsText("get_weather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert response != null;
+        System.out.println(response);
         log.warn(response);
 
         mcpClient.close();
