@@ -1,6 +1,7 @@
 package features.ai.chat;
 
 import features.ai.chat.tool.*;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
@@ -20,6 +21,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -39,12 +41,60 @@ public class OllamaR1Test {
     }
 
     @Test
+    public void case2() throws Exception {
+        ChatModel chatModel = getChatModelBuilder().build();
+
+        ChatSession chatSession = new ChatSessionDefault();
+        chatSession.addMessage(ChatMessage.ofUser("hello"));
+
+        //流返回
+        Publisher<ChatResponse> publisher = chatModel.prompt(chatSession).stream();
+        List<AssistantMessage> assistantMessageList = new ArrayList<>();
+
+        CountDownLatch doneLatch = new CountDownLatch(1);
+        AtomicBoolean done = new AtomicBoolean(false);
+        publisher.subscribe(new SimpleSubscriber<ChatResponse>()
+                .doOnNext(resp -> {
+                    log.info("{} - {}", resp.isFinished(), resp.getMessage());
+                    assistantMessageList.add(resp.getMessage());
+                    done.set(resp.isFinished());
+                }).doOnComplete(() -> {
+                    log.debug("::完成!");
+                    doneLatch.countDown();
+                }).doOnError(err -> {
+                    doneLatch.countDown();
+                    err.printStackTrace();
+                }));
+
+        doneLatch.await();
+        assert done.get();
+
+
+        //序列化测试
+        String ndjson1 = chatSession.toNdjson();
+        System.out.println(ndjson1);
+
+        chatSession.clear();
+        chatSession.loadNdjson(ndjson1);
+        String ndjson2 = chatSession.toNdjson();
+        System.out.println(ndjson2);
+        assert ndjson1.equals(ndjson2);
+
+        //有思考的，也有非思考的
+        assert assistantMessageList.stream().filter(m -> m.isThinking()).count() > 0;
+        assert assistantMessageList.stream().filter(m -> m.isThinking() == false).count() > 0;
+    }
+
+    @Test
     public void case_trink() throws Exception {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
+        ChatSession chatSession = new ChatSessionDefault();
+        chatSession.addMessage("如何保证睡眠质量？");
+
         //流返回
-        Publisher<ChatResponse> publisher = chatModel.prompt("如何保证睡眠质量？").stream();
+        Publisher<ChatResponse> publisher = chatModel.prompt(chatSession).stream();
 
         List<String> list = new ArrayList<>();
         CountDownLatch doneLatch = new CountDownLatch(1);
@@ -61,7 +111,9 @@ public class OllamaR1Test {
 
         doneLatch.await();
 
-        assert list.stream().filter(s -> s.equals("<think>")).count() == 1;
-        assert list.stream().filter(s -> s.equals("</think>")).count() == 1;
+        log.warn(chatSession.toNdjson());
+
+        Assertions.assertEquals(1, list.stream().filter(s -> s.equals("<think>")).count(), "<think> 数量");
+        Assertions.assertEquals(1, list.stream().filter(s -> s.equals("</think>")).count(), "</think> 数量");
     }
 }

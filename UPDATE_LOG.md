@@ -1,4 +1,9 @@
 
+### 3.4.1
+
+* 优化 solon-ai 方言思考字段的兼容性处理
+
+
 ### 3.4.0
 
 * 新增 solon-ai-repo-opensearch 插件

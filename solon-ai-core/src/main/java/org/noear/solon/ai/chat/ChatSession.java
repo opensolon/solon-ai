@@ -41,6 +41,13 @@ public interface ChatSession extends ChatPrompt {
     /**
      * 添加消息
      */
+    default void addMessage(String userMessage) {
+        addMessage(ChatMessage.ofUser(userMessage));
+    }
+
+    /**
+     * 添加消息
+     */
     default void addMessage(ChatMessage... messages) {
         addMessage(Arrays.asList(messages));
     }

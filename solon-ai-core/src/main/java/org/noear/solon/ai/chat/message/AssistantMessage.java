@@ -140,6 +140,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
 
         buf.append("role=").append(getRole().name().toLowerCase());
 
+        if (isThinking) {
+            buf.append(", is_thinking=true");
+        }
+
         if (content != null) {
             buf.append(", content='").append(content).append('\'');
         }

@@ -158,9 +158,14 @@ public class ChatResponseDefault implements ChatResponse {
     /// //////////////////////////
 
     /**
-     * 思考中
+     * 在思考中
      */
-    public boolean reasoning;
+    public boolean in_thinking;
+
+    /**
+     * 有推理字段
+     * */
+    public boolean has_reasoning_field;
 
     /**
      * 重置响应数据
