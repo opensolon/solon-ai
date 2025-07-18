@@ -110,6 +110,35 @@ public class DashscopeTest {
     }
 
     @Test
+    public void case3_wather_stream() throws Exception {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new Tools())
+                .build();
+
+        AtomicReference<ChatResponse> respRef = new AtomicReference<>();
+        CountDownLatch doneLatch = new CountDownLatch(1);
+        chatModel.prompt("今天杭州的天气情况？")
+                .stream().subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnNext(resp -> {
+                            if (resp.isFinished()) {
+                                respRef.set(resp);
+                            }
+                        }).doOnComplete(() -> {
+                            doneLatch.countDown();
+                        }).doOnError(err -> {
+                            doneLatch.countDown();
+                        }));
+
+        doneLatch.await();
+        assert respRef.get() != null;
+
+        //打印消息
+        log.info("{}", respRef.get().getAggregationMessage());
+        assert respRef.get().getAggregationMessage() != null;
+        assert respRef.get().getAggregationMessage().getContent().contains("晴");
+    }
+
+    @Test
     public void case3_wather_rainfall() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
