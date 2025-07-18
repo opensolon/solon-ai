@@ -77,6 +77,16 @@ public interface ChatResponse {
     AssistantMessage getAggregationMessage();
 
     /**
+     * 是否有消息内容
+     */
+    boolean hasContent();
+
+    /**
+     * 获取消息内容
+     */
+    String getContent();
+
+    /**
      * 获取使用情况（完成时，才会有使用情况）
      */
     @Nullable
