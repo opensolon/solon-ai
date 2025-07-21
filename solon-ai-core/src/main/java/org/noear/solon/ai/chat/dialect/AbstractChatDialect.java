@@ -69,7 +69,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
             oNode.set("content", msg.getContent());
         } else {
             oNode.getOrNew("content").build(n1 -> {
-                n1.addNew().set("type", "text").set("text", msg.getContent());
+                if (Utils.isNotEmpty(msg.getContent())) {
+                    n1.addNew().set("type", "text").set("text", msg.getContent());
+                }
 
                 for (AiMedia media : msg.getMedias()) {
                     if (media instanceof Image) {

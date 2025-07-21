@@ -4,6 +4,7 @@
 * 新增 solon-ai-repo-pgvector 插件
 * 添加 solon-ai-core `TextLoader(byte[])(SupplierEx<InputStream>)` 构造方法
 * 优化 solon-ai 方言思考字段的兼容性处理
+* 优化 solon-ai 用户消息的请求构建（当内容为空时，不添加 text）
 * 优化 solon-ai-mcp McpServerContext 增加 stdio 代理支持（环境变量自动转为 ctx:header）
 * mcp WebRxSseClientTransport 添加 debug 日志打印
 
