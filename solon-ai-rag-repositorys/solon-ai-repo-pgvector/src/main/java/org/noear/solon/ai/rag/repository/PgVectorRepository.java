@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.rag.repository;
 
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
@@ -51,29 +49,13 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
      */
     private PgVectorRepository(Builder config) {
         this.config = config;
-        this.dataSource = createDataSource();
+        this.dataSource = config.dataSource;
+
         try {
             initRepository();
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize pgvector repository", e);
         }
-    }
-
-    /**
-     * 创建数据源
-     */
-    private DataSource createDataSource() {
-        HikariConfig hikariConfig = new HikariConfig();
-        hikariConfig.setJdbcUrl(config.jdbcUrl);
-        hikariConfig.setUsername(config.username);
-        hikariConfig.setPassword(config.password);
-        hikariConfig.setMaximumPoolSize(config.maxPoolSize);
-        hikariConfig.setMinimumIdle(config.minIdle);
-        hikariConfig.setConnectionTimeout(config.connectionTimeout);
-        hikariConfig.setIdleTimeout(config.idleTimeout);
-        hikariConfig.setMaxLifetime(config.maxLifetime);
-        
-        return new HikariDataSource(hikariConfig);
     }
 
     /**
@@ -84,7 +66,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
         try (Connection conn = dataSource.getConnection()) {
             // 确保 pgvector 扩展已安装
             ensurePgVectorExtension(conn);
-            
+
             // 检查表是否存在
             if (!tableExists(conn, config.tableName)) {
                 createTable(conn);
@@ -122,7 +104,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
      * 创建表
      */
     private void createTable(Connection conn) throws SQLException, IOException {
-                StringBuilder sql = new StringBuilder();
+        StringBuilder sql = new StringBuilder();
         sql.append("CREATE TABLE ").append(config.tableName).append(" (");
         sql.append("id VARCHAR(255) PRIMARY KEY,");
         sql.append("content TEXT NOT NULL,");
@@ -155,10 +137,10 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
 
         // 创建向量索引
         String indexSql = String.format(
-            "CREATE INDEX IF NOT EXISTS idx_%s_embedding ON %s USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)",
-            config.tableName, config.tableName
+                "CREATE INDEX IF NOT EXISTS idx_%s_embedding ON %s USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)",
+                config.tableName, config.tableName
         );
-        
+
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(indexSql);
         }
@@ -188,7 +170,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
 
         for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
             config.embeddingModel.embed(batch);
-            
+
             try (Connection conn = dataSource.getConnection()) {
                 insertBatch(conn, batch);
             } catch (SQLException e) {
@@ -203,28 +185,28 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
     private void insertBatch(Connection conn, List<Document> documents) throws SQLException {
         StringBuilder sql = new StringBuilder();
         sql.append("INSERT INTO ").append(config.tableName).append(" (id, content, embedding, metadata");
-        
+
         // 添加元数据字段
         if (Utils.isNotEmpty(config.metadataFields)) {
             for (MetadataField field : config.metadataFields) {
                 sql.append(", \"").append(field.getName()).append("\"");
             }
         }
-        
+
         sql.append(") VALUES (?, ?, ?, ?");
-        
+
         // 添加元数据字段占位符
         if (Utils.isNotEmpty(config.metadataFields)) {
             for (int i = 0; i < config.metadataFields.size(); i++) {
                 sql.append(", ?");
             }
         }
-        
+
         sql.append(") ON CONFLICT (id) DO UPDATE SET ");
         sql.append("content = EXCLUDED.content,");
         sql.append("embedding = EXCLUDED.embedding,");
         sql.append("metadata = EXCLUDED.metadata");
-        
+
         // 添加元数据字段更新
         if (Utils.isNotEmpty(config.metadataFields)) {
             for (MetadataField field : config.metadataFields) {
@@ -284,7 +266,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
                 stmt.addBatch();
             }
             stmt.executeBatch();
-        }catch (Exception e){
+        } catch (Exception e) {
             throw new SQLException("Failed to insert documents", e);
         }
     }
@@ -299,7 +281,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
         }
 
         String sql = "DELETE FROM " + config.tableName + " WHERE id = ANY(?)";
-        
+
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setArray(1, conn.createArrayOf("varchar", ids));
@@ -315,7 +297,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
     @Override
     public boolean exists(String id) throws IOException {
         String sql = "SELECT COUNT(*) FROM " + config.tableName + " WHERE id = ?";
-        
+
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, id);
@@ -333,23 +315,23 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
     @Override
     public List<Document> search(QueryCondition condition) throws IOException {
         float[] queryEmbedding = config.embeddingModel.embed(condition.getQuery());
-        
+
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT id, content, metadata, 1 - (embedding <=> ?::vector) as similarity ");
         sql.append("FROM ").append(config.tableName);
-        
+
         // 添加过滤条件
         String filterClause = FilterTransformer.getInstance().transform(condition.getFilterExpression());
         if (Utils.isNotEmpty(filterClause)) {
             sql.append(" WHERE ").append(filterClause);
         }
-        
+
         sql.append(" ORDER BY embedding <=> ?::vector");
         sql.append(" LIMIT ?");
 
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
-            
+
             int paramIndex = 1;
             stmt.setArray(paramIndex++, conn.createArrayOf("float4", toFloatArray(queryEmbedding)));
             stmt.setArray(paramIndex++, conn.createArrayOf("float4", toFloatArray(queryEmbedding)));
@@ -396,8 +378,8 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
     /**
      * 创建 PgVectorRepository 构建器
      */
-    public static Builder builder(EmbeddingModel embeddingModel, String jdbcUrl, String username, String password) {
-        return new Builder(embeddingModel, jdbcUrl, username, password);
+    public static Builder builder(EmbeddingModel embeddingModel, DataSource dataSource) {
+        return new Builder(embeddingModel, dataSource);
     }
 
     /**
@@ -406,27 +388,19 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
     public static class Builder {
         // 必需参数
         private final EmbeddingModel embeddingModel;
-        private final String jdbcUrl;
-        private final String username;
-        private final String password;
+        private final DataSource dataSource;
 
         // 可选参数，设置默认值
         private String tableName = "solon_ai";
         private List<MetadataField> metadataFields = new ArrayList<>();
-        private int maxPoolSize = 10;
-        private int minIdle = 2;
-        private long connectionTimeout = 30000;
-        private long idleTimeout = 600000;
-        private long maxLifetime = 1800000;
+
 
         /**
          * 构造器
          */
-        public Builder(EmbeddingModel embeddingModel, String jdbcUrl, String username, String password) {
+        public Builder(EmbeddingModel embeddingModel, DataSource dataSource) {
             this.embeddingModel = embeddingModel;
-            this.jdbcUrl = jdbcUrl;
-            this.username = username;
-            this.password = password;
+            this.dataSource = dataSource;
         }
 
         /**
@@ -446,50 +420,10 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
         }
 
         /**
-         * 设置最大连接池大小
-         */
-        public Builder maxPoolSize(int maxPoolSize) {
-            this.maxPoolSize = maxPoolSize;
-            return this;
-        }
-
-        /**
-         * 设置最小空闲连接数
-         */
-        public Builder minIdle(int minIdle) {
-            this.minIdle = minIdle;
-            return this;
-        }
-
-        /**
-         * 设置连接超时时间
-         */
-        public Builder connectionTimeout(long connectionTimeout) {
-            this.connectionTimeout = connectionTimeout;
-            return this;
-        }
-
-        /**
-         * 设置空闲超时时间
-         */
-        public Builder idleTimeout(long idleTimeout) {
-            this.idleTimeout = idleTimeout;
-            return this;
-        }
-
-        /**
-         * 设置最大生命周期
-         */
-        public Builder maxLifetime(long maxLifetime) {
-            this.maxLifetime = maxLifetime;
-            return this;
-        }
-
-        /**
          * 构建 PgVectorRepository 实例
          */
         public PgVectorRepository build() {
             return new PgVectorRepository(this);
         }
     }
-} 
+}

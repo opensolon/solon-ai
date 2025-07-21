@@ -1,5 +1,6 @@
 package features.ai.repo.pgvector;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,6 +51,11 @@ public class PgVectorRepositoryTest {
         String username = "postgres";
         String password = "test_123!";
 
+        HikariDataSource dataSource = new HikariDataSource();
+        dataSource.setJdbcUrl(jdbcUrl);
+        dataSource.setUsername(username);
+        dataSource.setPassword(password);
+
         // 创建元数据索引字段列表
         List<MetadataField> metadataFields = new ArrayList<>();
         metadataFields.add(MetadataField.text("title"));
@@ -58,7 +64,7 @@ public class PgVectorRepositoryTest {
         metadataFields.add(MetadataField.numeric("stock"));
 
         // 创建测试用的 Repository
-        repository = PgVectorRepository.builder(embeddingModel, jdbcUrl, username, password)
+        repository = PgVectorRepository.builder(embeddingModel, dataSource)
                 .tableName("test_documents")
                 .metadataFields(metadataFields)
                 .build();
