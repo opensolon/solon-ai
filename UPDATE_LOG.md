@@ -1,6 +1,7 @@
 
 ### 3.4.1
 
+* 新增 solon-ai-repo-pgvector 插件
 * 添加 solon-ai-core `TextLoader(byte[])(SupplierEx<InputStream>)` 构造方法
 * 优化 solon-ai 方言思考字段的兼容性处理
 * 优化 solon-ai-mcp McpServerContext 增加 stdio 代理支持（环境变量自动转为 ctx:header）

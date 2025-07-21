@@ -25,14 +25,15 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.6.0</version>
+            <version>42.6.2</version>
         </dependency>
 
         <!-- HikariCP 连接池 -->
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
-            <version>4.0.3</version>
+            <version>${hikaricp.version}</version>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
