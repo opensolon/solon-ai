@@ -2,7 +2,7 @@ package features.ai.example;
 
 import features.ai.TestUtils;
 import org.noear.solon.ai.rag.Document;
-import org.noear.solon.ai.rag.search.BaiduAiSearchRepository;
+import org.noear.solon.ai.rag.search.BaiduWebSearchRepository;
 
 import java.util.List;
 
@@ -37,7 +37,7 @@ public class BaiduAiSearchExample {
         System.out.println("=== 基础搜索示例 ===");
         
         // 创建基础搜索Repository
-        BaiduAiSearchRepository repository = BaiduAiSearchRepository.ofBasic()
+        BaiduWebSearchRepository repository = BaiduWebSearchRepository.ofBasic()
                 .apiKey(apiKey)
                 .apiUrl(apiUrl)
                 .build();
@@ -67,7 +67,7 @@ public class BaiduAiSearchExample {
         System.out.println("\n=== AI搜索示例 ===");
         
         // 创建AI搜索Repository
-        BaiduAiSearchRepository repository = BaiduAiSearchRepository.ofAI()
+        BaiduWebSearchRepository repository = BaiduWebSearchRepository.ofAI()
                 .apiKey(apiKey)
                 .apiUrl(apiUrl)
                 .model("ernie-3.5-8k")  // 可选择其他模型
@@ -106,7 +106,7 @@ public class BaiduAiSearchExample {
         System.out.println("\n=== 自定义配置示例 ===");
         
         // 创建自定义配置的Repository
-        BaiduAiSearchRepository repository = BaiduAiSearchRepository.of(BaiduAiSearchRepository.SearchType.AI)
+        BaiduWebSearchRepository repository = BaiduWebSearchRepository.of(BaiduWebSearchRepository.SearchType.AI)
                 .apiKey(apiKey)
                 .apiUrl(apiUrl)
                 .model("ernie-4.0-turbo-8k")  // 使用showSupportedModels里面的模型

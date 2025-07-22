@@ -44,7 +44,7 @@ import java.util.List;
  * @author yangbuyiya
  * @since 3.0
  */
-public class BaiduAiSearchRepository implements Repository {
+public class BaiduWebSearchRepository implements Repository {
     
     private final AiConfig config;
     private final SearchType searchType;
@@ -54,7 +54,7 @@ public class BaiduAiSearchRepository implements Repository {
     /**
      * 私有构造函数，使用Builder模式创建实例
      */
-    private BaiduAiSearchRepository(AiConfig config, SearchType searchType, String model, EmbeddingModel embeddingModel) {
+    private BaiduWebSearchRepository(AiConfig config, SearchType searchType, String model, EmbeddingModel embeddingModel) {
         this.config = config;
         this.searchType = searchType != null ? searchType : SearchType.BASIC;
         this.model = model != null ? model : "ernie-3.5-8k";
@@ -301,8 +301,8 @@ public class BaiduAiSearchRepository implements Repository {
         /**
          * 构建BaiduAiSearchRepository实例
          */
-        public BaiduAiSearchRepository build() {
-            return new BaiduAiSearchRepository(config, searchType, model, embeddingModel);
+        public BaiduWebSearchRepository build() {
+            return new BaiduWebSearchRepository(config, searchType, model, embeddingModel);
         }
     }
 }

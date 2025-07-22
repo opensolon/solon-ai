@@ -2,7 +2,7 @@ package features.ai;
 
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.embedding.EmbeddingModel;
-import org.noear.solon.ai.rag.search.BaiduAiSearchRepository;
+import org.noear.solon.ai.rag.search.BaiduWebSearchRepository;
 
 /**
  * 测试工具
@@ -31,9 +31,9 @@ public class TestUtils {
     /**
      * 获取百度AI基础搜索Repository
      */
-    public static BaiduAiSearchRepository getBaiduBasicSearchRepository() {
+    public static BaiduWebSearchRepository getBaiduBasicSearchRepository() {
         
-        return BaiduAiSearchRepository.ofBasic()
+        return BaiduWebSearchRepository.ofBasic()
                 .apiKey(apiKey)
                 .apiUrl(apiUrl)
                 .build();
@@ -42,9 +42,9 @@ public class TestUtils {
     /**
      * 获取百度AI搜索Repository（智能总结模式）
      */
-    public static BaiduAiSearchRepository getBaiduAiSearchRepository() {
+    public static BaiduWebSearchRepository getBaiduAiSearchRepository() {
         
-        return BaiduAiSearchRepository.ofAI()
+        return BaiduWebSearchRepository.ofAI()
                 .apiKey(apiKey)
                 .apiUrl(apiUrl)
                 .model("ernie-3.5-8k")  // 可选择其他模型如 deepseek-r1, ernie-4.0-turbo-8k 等

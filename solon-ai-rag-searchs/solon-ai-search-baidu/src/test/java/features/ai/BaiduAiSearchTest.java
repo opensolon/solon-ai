@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.rag.Document;
-import org.noear.solon.ai.rag.search.BaiduAiSearchRepository;
+import org.noear.solon.ai.rag.search.BaiduWebSearchRepository;
 import org.noear.solon.test.SolonTest;
 
 import java.util.List;
@@ -23,7 +23,7 @@ public class BaiduAiSearchTest {
      */
     @Test
     public void basicSearchWithChatModel() throws Exception {
-        BaiduAiSearchRepository repository = TestUtils.getBaiduBasicSearchRepository();
+        BaiduWebSearchRepository repository = TestUtils.getBaiduBasicSearchRepository();
         String query = "今日上海天气如何？";
 
         List<Document> context = repository.search(query);
@@ -50,7 +50,7 @@ public class BaiduAiSearchTest {
      */
     @Test
     public void basicSearchWithTemplate() throws Exception {
-        BaiduAiSearchRepository repository = TestUtils.getBaiduBasicSearchRepository();
+        BaiduWebSearchRepository repository = TestUtils.getBaiduBasicSearchRepository();
         String query = "solon框架是谁开发的？";
 
         List<Document> context = repository.search(query);
@@ -81,7 +81,7 @@ public class BaiduAiSearchTest {
      */
     @Test
     public void aiSearchDirect() throws Exception {
-        BaiduAiSearchRepository repository = TestUtils.getBaiduAiSearchRepository();
+        BaiduWebSearchRepository repository = TestUtils.getBaiduAiSearchRepository();
         String query = "如何解决交通拥堵问题？";
 
         List<Document> results = repository.search(query);
@@ -105,7 +105,7 @@ public class BaiduAiSearchTest {
      */
     @Test
     public void aiSearchWithChatModel() throws Exception {
-        BaiduAiSearchRepository repository = TestUtils.getBaiduAiSearchRepository();
+        BaiduWebSearchRepository repository = TestUtils.getBaiduAiSearchRepository();
         String query = "deepseek-r1模型的特点是什么？";
 
         List<Document> aiResults = repository.search(query);
@@ -149,11 +149,11 @@ public class BaiduAiSearchTest {
         String query = "最新的AI技术发展趋势";
 
         // 基础搜索
-        BaiduAiSearchRepository basicRepo = TestUtils.getBaiduBasicSearchRepository();
+        BaiduWebSearchRepository basicRepo = TestUtils.getBaiduBasicSearchRepository();
         List<Document> basicResults = basicRepo.search(query);
 
         // AI搜索
-        BaiduAiSearchRepository aiRepo = TestUtils.getBaiduAiSearchRepository();
+        BaiduWebSearchRepository aiRepo = TestUtils.getBaiduAiSearchRepository();
         List<Document> aiResults = aiRepo.search(query);
 
         System.out.println("=== 基础搜索结果 (" + basicResults.size() + "条) ===");
