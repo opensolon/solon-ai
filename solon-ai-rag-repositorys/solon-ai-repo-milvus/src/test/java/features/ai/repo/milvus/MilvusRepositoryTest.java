@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -31,7 +32,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 public class MilvusRepositoryTest {
     private static final Logger log = LoggerFactory.getLogger(MilvusRepositoryTest.class);
     private static String milvusUri = "http://localhost:19530";
-
+    Consumer<Integer> progressCallback = integer -> log.info("Processing document:{}% ", integer);
     private ConnectConfig connectConfig = ConnectConfig.builder()
             .uri(milvusUri)
             .build();
@@ -54,6 +55,7 @@ public class MilvusRepositoryTest {
 
     @Test
     public void case1_search() throws Exception {
+
         List<Document> list = repository.search("solon");
         assert list.size() == 4;
 
@@ -65,7 +67,9 @@ public class MilvusRepositoryTest {
 
         // 准备并存储文档，显式指定 ID
         Document doc = new Document("Test content");
-        repository.insert(Collections.singletonList(doc));
+        repository.asyncInsert(Collections.singletonList(doc), progressCallback).get();
+        // 等待索引更新
+        Thread.sleep(1000);
         String key = doc.getId();
 
         // 验证存储成功
@@ -73,7 +77,8 @@ public class MilvusRepositoryTest {
 
         // 删除文档
         repository.delete(doc.getId());
-
+        // 等待索引更新
+        Thread.sleep(1000);
         // 验证删除成功
         assertFalse(repository.exists(key), "Document should not exist after removal");
     }
@@ -97,14 +102,17 @@ public class MilvusRepositoryTest {
         documents.add(doc1);
         documents.add(doc2);
         documents.add(doc3);
-        repository.insert(documents);
+        //插入文档并阻塞线程
+        repository.asyncInsert(documents, progressCallback);
 
         try {
             // 1. 使用OR表达式过滤进行搜索
             String orExpression = "title == 'solon' OR title == '设置'";
+            Thread.sleep(1000);
             List<Document> orResults = repository.search(new QueryCondition("framework").filterExpression(orExpression).disableRefilter(true));
 
             System.out.println("Found " + orResults.size() + " documents with OR filter expression: " + orExpression);
+            // 等待索引更新
 
             // 验证结果包含2个文档
             assert orResults.size() == 2;
@@ -159,7 +167,8 @@ public class MilvusRepositoryTest {
 
         try {
             // 插入测试文档
-            repository.insert(documents);
+            //并阻塞住异步线程
+            repository.asyncInsert(documents, progressCallback).get();
 
             // 等待索引更新
             Thread.sleep(1000);
@@ -284,8 +293,8 @@ public class MilvusRepositoryTest {
         documents.add(doc3);
 
         try {
-            // 插入测试文档
-            repository.insert(documents);
+            // 插入测试文档,并阻塞异步线程
+            repository.asyncInsert(documents, progressCallback).get();
 
             // 等待索引更新
             Thread.sleep(1000);
