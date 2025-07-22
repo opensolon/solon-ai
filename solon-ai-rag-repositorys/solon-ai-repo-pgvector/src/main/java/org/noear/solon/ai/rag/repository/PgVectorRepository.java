@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 /**
  * PostgreSQL pgvector 矢量存储知识库
@@ -163,26 +164,34 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
      * 存储文档列表
      */
     @Override
-    public void insert(List<Document> documents) throws IOException {
-        if (documents == null || documents.isEmpty()) {
+    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+        if (Utils.isEmpty(documents)) {
+            //回调进度
+            progressCallback.accept(0, 0);
             return;
         }
 
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
 
             try (Connection conn = dataSource.getConnection()) {
-                insertBatch(conn, batch);
+                batchInsertDo(conn, batch);
             } catch (SQLException e) {
                 throw new IOException("Failed to insert documents", e);
             }
+
+            //回调进度
+            progressCallback.accept(batchIndex++, batchList.size());
         }
     }
 
     /**
      * 批量插入文档
      */
-    private void insertBatch(Connection conn, List<Document> documents) throws SQLException {
+    private void batchInsertDo(Connection conn, List<Document> documents) throws SQLException {
         StringBuilder sql = new StringBuilder();
         sql.append("INSERT INTO ").append(config.tableName).append(" (id, content, embedding, metadata");
 

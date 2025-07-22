@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
@@ -148,40 +149,52 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
      * @throws IOException 如果存储过程中发生 IO 错误
      */
     @Override
-    public void insert(List<Document> documents) throws IOException {
-        if (documents == null || documents.isEmpty()) {
+    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+        if (Utils.isEmpty(documents)) {
+            //回调进度
+            progressCallback.accept(0, 0);
             return;
         }
 
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
-            PipelineBase pipeline = null;
-            try {
-                pipeline = config.client.pipelined();
-                for (Document doc : batch) {
-                    if (doc.getId() == null) {
-                        doc.id(UUID.randomUUID().toString());
-                    }
+            batchInsertDo(batch);
 
-                    String key = config.keyPrefix + doc.getId();
+            //回调进度
+            progressCallback.accept(batchIndex++, batchList.size());
+        }
+    }
 
-                    // 存储为 JSON 格式，注意字段名称需要与索引定义匹配
-                    Map<String, Object> jsonDoc = new HashMap<>();
-                    jsonDoc.put("content", doc.getContent());
-                    jsonDoc.put("embedding", doc.getEmbedding());
-                    jsonDoc.put("metadata", doc.getMetadata());
-                    if (Utils.isNotEmpty(config.metadataFields)) {
-                        jsonDoc.putAll(doc.getMetadata());
-                    }
-
-                    // 使用Jedis直接存储Map
-                    pipeline.jsonSet(key, Path.ROOT_PATH, jsonDoc);
+    private void batchInsertDo(List<Document> batch) {
+        PipelineBase pipeline = null;
+        try {
+            pipeline = config.client.pipelined();
+            for (Document doc : batch) {
+                if (doc.getId() == null) {
+                    doc.id(UUID.randomUUID().toString());
                 }
-                pipeline.sync();
-            } finally {
-                if (pipeline != null) {
-                    pipeline.close();
+
+                String key = config.keyPrefix + doc.getId();
+
+                // 存储为 JSON 格式，注意字段名称需要与索引定义匹配
+                Map<String, Object> jsonDoc = new HashMap<>();
+                jsonDoc.put("content", doc.getContent());
+                jsonDoc.put("embedding", doc.getEmbedding());
+                jsonDoc.put("metadata", doc.getMetadata());
+                if (Utils.isNotEmpty(config.metadataFields)) {
+                    jsonDoc.putAll(doc.getMetadata());
                 }
+
+                // 使用Jedis直接存储Map
+                pipeline.jsonSet(key, Path.ROOT_PATH, jsonDoc);
+            }
+            pipeline.sync();
+        } finally {
+            if (pipeline != null) {
+                pipeline.close();
             }
         }
     }

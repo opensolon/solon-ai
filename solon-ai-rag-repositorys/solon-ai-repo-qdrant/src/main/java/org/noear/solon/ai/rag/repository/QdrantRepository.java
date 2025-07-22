@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -96,26 +97,36 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
     }
 
     @Override
-    public void insert(List<Document> documents) throws IOException {
+    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
+            //回调进度
+            progressCallback.accept(0, 0);
             return;
         }
 
-        // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
+            batchInsertDo(batch);
 
-            List<PointStruct> points = batch.stream()
-                    .map(this::toPointStruct)
-                    .collect(Collectors.toList());
+            //回调进度
+            progressCallback.accept(batchIndex++, batchList.size());
+        }
+    }
 
-            try {
-                config.client.upsertAsync(UpsertPoints.newBuilder()
-                        .setCollectionName(config.collectionName)
-                        .addAllPoints(points).build()).get();
-            } catch (InterruptedException | ExecutionException e) {
-                throw new IOException("Failed to insert documents from Qdrant", e);
-            }
+    private void batchInsertDo(List<Document> batch) throws IOException{
+        List<PointStruct> points = batch.stream()
+                .map(this::toPointStruct)
+                .collect(Collectors.toList());
+
+        try {
+            config.client.upsertAsync(UpsertPoints.newBuilder()
+                    .setCollectionName(config.collectionName)
+                    .addAllPoints(points).build()).get();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new IOException("Failed to insert documents from Qdrant", e);
         }
     }
 

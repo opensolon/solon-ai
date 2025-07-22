@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
@@ -99,8 +100,10 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      * 批量存储文档
      */
     @Override
-    public void insert(List<Document> documents) throws IOException {
+    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
+            //回调进度
+            progressCallback.accept(0, 0);
             return;
         }
 
@@ -111,26 +114,31 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
             }
         }
 
-        // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
-            addDocuments(batch);
+            batchInsertDo(batch);
+
+            //回调进度
+            progressCallback.accept(batchIndex++, batchList.size());
         }
     }
 
     /**
      * 添加文档到集合
      *
-     * @param documents 文档列表
+     * @param batch 文档列表
      * @throws IOException 如果添加失败
      */
-    private void addDocuments(List<Document> documents) throws IOException {
+    private void batchInsertDo(List<Document> batch) throws IOException {
         List<String> ids = new ArrayList<>();
         List<List<Float>> embeddings = new ArrayList<>();
         List<Map<String, Object>> metadatas = new ArrayList<>();
         List<String> contents = new ArrayList<>();
 
-        for (Document doc : documents) {
+        for (Document doc : batch) {
             ids.add(doc.getId());
 
             // 转换嵌入向量

@@ -13,6 +13,7 @@ import org.noear.solon.ai.rag.util.SimilarityUtil;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 /**
@@ -79,8 +80,10 @@ public class DashVectorRepository implements RepositoryStorable, RepositoryLifec
      * 批量存储文档
      */
     @Override
-    public void insert(List<Document> documents) throws IOException {
+    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
+            //回调进度
+            progressCallback.accept(0, 0);
             return;
         }
 
@@ -91,24 +94,29 @@ public class DashVectorRepository implements RepositoryStorable, RepositoryLifec
             }
         }
 
-        // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
-            addDocuments(batch);
+            batchInsertDo(batch);
+
+            //回调进度
+            progressCallback.accept(batchIndex++, batchList.size());
         }
     }
 
     /**
      * 添加文档到集合
      *
-     * @param documents 文档列表
+     * @param batch 文档列表
      * @throws IOException 如果添加失败
      */
-    private void addDocuments(List<Document> documents) throws IOException {
+    private void batchInsertDo(List<Document> batch) throws IOException {
         List<Doc> docs = new ArrayList<>();
         Doc doc;
         Map<String, Object> map;
-        for (Document document : documents) {
+        for (Document document : batch) {
             map = document.getMetadata();
             map.put(CONTENT_FIELD_KEY, document.getContent());
             if (!Utils.isEmpty(document.getUrl())) {

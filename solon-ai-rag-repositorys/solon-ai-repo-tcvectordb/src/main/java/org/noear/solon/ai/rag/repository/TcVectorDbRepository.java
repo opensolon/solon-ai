@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
@@ -212,8 +213,10 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
      * @throws IOException 如果存储过程发生IO错误
      */
     @Override
-    public void insert(List<Document> documents) throws IOException {
-        if (documents == null || documents.isEmpty()) {
+    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+        if (Utils.isEmpty(documents)) {
+            //回调进度
+            progressCallback.accept(0, 0);
             return;
         }
 
@@ -225,36 +228,45 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
             }
         }
 
-        // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingBatchSize)) {
-            // 准备上传到VectorDB的文档
-            List<com.tencent.tcvectordb.model.Document> batchDocs = new ArrayList<>();
-            for (Document document : batch) {
-                com.tencent.tcvectordb.model.Document.Builder builder = com.tencent.tcvectordb.model.Document.newBuilder()
-                        .withId(document.getId())
-                        .withDoc(document.getContent())
-                        // 确保文档内容被设置到TEXT_FIELD_NAME字段
-                        .addDocField(new DocField(TEXT_FIELD_NAME, document.getContent()));
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingBatchSize);
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
+            batchInsertDo(batch);
 
-                if (document.getMetadata() != null && !document.getMetadata().isEmpty()) {
-                    for (Map.Entry<String, Object> entry : document.getMetadata().entrySet()) {
-                        builder.addDocField(new DocField(entry.getKey(), entry.getValue()));
-                    }
+            //回调进度
+            progressCallback.accept(batchIndex++, batchList.size());
+        }
+    }
+
+    private void batchInsertDo(List<Document> batch) throws IOException{
+        // 准备上传到VectorDB的文档
+        List<com.tencent.tcvectordb.model.Document> batchDocs = new ArrayList<>();
+        for (Document document : batch) {
+            com.tencent.tcvectordb.model.Document.Builder builder = com.tencent.tcvectordb.model.Document.newBuilder()
+                    .withId(document.getId())
+                    .withDoc(document.getContent())
+                    // 确保文档内容被设置到TEXT_FIELD_NAME字段
+                    .addDocField(new DocField(TEXT_FIELD_NAME, document.getContent()));
+
+            if (document.getMetadata() != null && !document.getMetadata().isEmpty()) {
+                for (Map.Entry<String, Object> entry : document.getMetadata().entrySet()) {
+                    builder.addDocField(new DocField(entry.getKey(), entry.getValue()));
                 }
-
-                batchDocs.add(builder.build());
             }
 
-            // 插入文档
-            InsertParam insertParam = InsertParam.newBuilder()
-                    .addAllDocument(batchDocs)
-                    .withBuildIndex(true)
-                    .build();
-            AffectRes upsert = collection.upsert(insertParam);
+            batchDocs.add(builder.build());
+        }
 
-            if (upsert.getCode() != 0) {
-                throw new IOException("Failed to insert documents: " + upsert.getMsg());
-            }
+        // 插入文档
+        InsertParam insertParam = InsertParam.newBuilder()
+                .addAllDocument(batchDocs)
+                .withBuildIndex(true)
+                .build();
+        AffectRes upsert = collection.upsert(insertParam);
+
+        if (upsert.getCode() != 0) {
+            throw new IOException("Failed to insert documents: " + upsert.getMsg());
         }
     }
 

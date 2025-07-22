@@ -32,11 +32,13 @@ import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.vectorex.FilterTransformer;
 import org.noear.solon.ai.rag.repository.vectorex.MetadataField;
+import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.BiConsumer;
 
 /**
  * VectoRex 矢量存储知识库
@@ -86,16 +88,37 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     @Override
-    public void insert(List<Document> documents) throws IOException {
-        for (Document doc : documents) {
+    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+        if (Utils.isEmpty(documents)) {
+            //回调进度
+            progressCallback.accept(0, 0);
+            return;
+        }
+
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
+            config.embeddingModel.embed(batch);
+            batchInsertDo(batch);
+
+            //回调进度
+            progressCallback.accept(batchIndex++, batchList.size());
+        }
+
+
+    }
+
+    private void batchInsertDo(List<Document> batch) throws IOException{
+        for (Document doc : batch) {
             doc.id(Utils.uuid());
-            doc.embedding(config.embeddingModel.embed(doc.getContent()));
 
             Map<String, Object> map = new HashMap<>();
             map.put(config.idFieldName, doc.getId());
             map.put(config.embeddingFieldName, doc.getEmbedding());
             map.put(config.contentFieldName, doc.getContent());
             map.put(config.metadataFieldName, doc.getMetadata());
+
             if (Utils.isNotEmpty(config.metadataFields)) {
                 for (MetadataField metadataField : config.metadataFields) {
                     map.put(metadataField.getName(), doc.getMetadata(metadataField.getName()));

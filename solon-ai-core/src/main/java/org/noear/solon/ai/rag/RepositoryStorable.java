@@ -15,11 +15,15 @@
  */
 package org.noear.solon.ai.rag;
 
+import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 
 /**
  * 可存储的知识库（可存储）
@@ -30,12 +34,48 @@ import java.util.List;
 @Preview("3.1")
 public interface RepositoryStorable extends Repository {
     /**
-     * 插入
+     * 异步插件
+     *
+     * @param documents 文档集
+     * @param progressCallback 进度回调
      */
-    void insert(List<Document> documents) throws IOException;
+    default CompletableFuture<Void> asyncInsert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+
+        RunUtil.async(() -> {
+            try {
+                insert(documents, progressCallback);
+                future.complete(null);
+            } catch (Exception ex) {
+                future.completeExceptionally(ex);
+            }
+        });
+
+        return future;
+    }
 
     /**
      * 插入
+     *
+     * @param documents 文档集
+     * @param progressCallback 进度回调
+     */
+    void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException;
+
+
+    /**
+     * 插入
+     *
+     * @param documents 文档集
+     */
+    default void insert(List<Document> documents) throws IOException {
+        insert(documents, null);
+    }
+
+    /**
+     * 插入
+     *
+     * @param documents 文档集
      */
     default void insert(Document... documents) throws IOException {
         insert(Arrays.asList(documents));

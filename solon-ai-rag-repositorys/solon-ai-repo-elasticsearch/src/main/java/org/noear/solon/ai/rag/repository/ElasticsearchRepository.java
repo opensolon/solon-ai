@@ -40,6 +40,7 @@ import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.BiConsumer;
 
 /**
  * Elasticsearch 矢量存储知识库
@@ -246,23 +247,33 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      * @author 小奶奶花生米
      */
     @Override
-    public void insert(List<Document> documents) throws IOException {
+    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
+            //回调进度
+            progressCallback.accept(0, 0);
             return;
         }
 
-        // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
+            batchInsertDo(batch);
 
-            StringBuilder buf = new StringBuilder();
-            for (Document doc : batch) {
-                insertBuild(buf, doc);
-            }
-
-            executeBulkRequest(buf.toString());
-            refreshIndex();
+            //回调进度
+            progressCallback.accept(batchIndex++, batchList.size());
         }
+    }
+
+    private void batchInsertDo(List<Document> batch) throws IOException{
+        StringBuilder buf = new StringBuilder();
+        for (Document doc : batch) {
+            insertBuild(buf, doc);
+        }
+
+        executeBulkRequest(buf.toString());
+        refreshIndex();
     }
 
 

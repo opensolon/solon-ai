@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
@@ -376,46 +377,56 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
      * @throws IOException 如果存储过程中发生IO错误
      */
     @Override
-    public void insert(List<Document> documents) throws IOException {
+    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
+            //回调进度
+            progressCallback.accept(0, 0);
             return;
         }
 
-        // 分批处理
-        for (List<Document> batch : ListUtil.partition(documents, config.embeddingModel.batchSize())) {
+        // 分块处理
+        List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int batchIndex = 0;
+        for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
+            batchInsertDo(batch);
 
-            StringBuilder buf = new StringBuilder();
-            for (Document doc : batch) {
-                if (doc.getId() == null) {
-                    doc.id(Utils.uuid());
-                }
+            //回调进度
+            progressCallback.accept(batchIndex++, batchList.size());
+        }
+    }
 
-                buf.append("{\"index\":{\"_index\":\"").append(config.indexName)
-                        .append("\",\"_id\":\"").append(doc.getId()).append("\"}}\n");
-
-                Map<String, Object> source = new HashMap<>();
-                source.put("content", doc.getContent());
-                source.put("metadata", doc.getMetadata());
-                source.put("embedding", doc.getEmbedding());
-
-                if (doc.getUrl() != null) {
-                    source.put("url", doc.getUrl());
-                }
-
-                // 将metadata内部字段平铺到顶层
-                if (doc.getMetadata() != null) {
-                    for (Map.Entry<String, Object> entry : doc.getMetadata().entrySet()) {
-                        source.put(entry.getKey(), entry.getValue());
-                    }
-                }
-
-                buf.append(ONode.stringify(source)).append("\n");
+    private void batchInsertDo(List<Document> batch) throws IOException{
+        StringBuilder buf = new StringBuilder();
+        for (Document doc : batch) {
+            if (doc.getId() == null) {
+                doc.id(Utils.uuid());
             }
 
-            executeBulkRequest(buf.toString());
-            refreshIndex();
+            buf.append("{\"index\":{\"_index\":\"").append(config.indexName)
+                    .append("\",\"_id\":\"").append(doc.getId()).append("\"}}\n");
+
+            Map<String, Object> source = new HashMap<>();
+            source.put("content", doc.getContent());
+            source.put("metadata", doc.getMetadata());
+            source.put("embedding", doc.getEmbedding());
+
+            if (doc.getUrl() != null) {
+                source.put("url", doc.getUrl());
+            }
+
+            // 将metadata内部字段平铺到顶层
+            if (doc.getMetadata() != null) {
+                for (Map.Entry<String, Object> entry : doc.getMetadata().entrySet()) {
+                    source.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            buf.append(ONode.stringify(source)).append("\n");
         }
+
+        executeBulkRequest(buf.toString());
+        refreshIndex();
     }
 
     /**
