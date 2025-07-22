@@ -45,5 +45,7 @@
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-tcvectordb</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-opensearch</module>
         <module>../../solon-ai-rag-repositorys/solon-ai-repo-pgvector</module>
+
+        <module>../../solon-ai-rag-searchs/solon-ai-search-baidu</module>
     </modules>
 </project>
