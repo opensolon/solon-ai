@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.rag.repository;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.common.DataType;
 import io.milvus.v2.common.IndexParam;
@@ -26,26 +28,22 @@ import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.SearchReq.SearchReqBuilder;
 import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.SearchResp;
-
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryLifecycle;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.repository.milvus.FilterTransformer;
-import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
-
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import org.noear.solon.ai.rag.util.SimilarityUtil;
 import org.noear.solon.lang.Preview;
+
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -64,6 +62,45 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
         this.config = config;
 
         initRepository();
+    }
+
+    public static Builder builder(EmbeddingModel embeddingModel, MilvusClientV2 client) {
+        return new Builder(embeddingModel, client);
+    }
+
+    public CompletableFuture<Void> asyncInsert(List<Document> documents, Consumer<Integer> progressCallback) {
+        if (Utils.isEmpty(documents)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        List<List<Document>> partition = ListUtil.partition(documents, config.embeddingModel.batchSize());
+        int totalBatches = partition.size();
+        AtomicInteger completedBatches = new AtomicInteger(0);
+
+        return CompletableFuture.runAsync(() -> {
+            for (List<Document> batch : partition) {
+                // 批量embedding
+                try {
+                    config.embeddingModel.embed(batch);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+                // 转换成json存储
+                List<JsonObject> docObjs = batch.stream().map(this::toJsonObject)
+                        .collect(Collectors.toList());
+                InsertReq insertReq = InsertReq.builder()
+                        .collectionName(config.collectionName)
+                        .data(docObjs)
+                        .build();
+
+                // 如果需要更新，请先移除再插入（即不支持更新）
+                config.client.insert(insertReq);
+
+                int currentBatch = completedBatches.incrementAndGet();
+                int progress = (int) ((double) currentBatch / totalBatches * 100);
+                progressCallback.accept(progress);
+
+            }
+        });
     }
 
     /**
@@ -243,10 +280,6 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
 
         Document doc = new Document((String) result.getId(), content, metadata, result.getScore());
         return doc.embedding(embedding);
-    }
-
-    public static Builder builder(EmbeddingModel embeddingModel, MilvusClientV2 client) {
-        return new Builder(embeddingModel, client);
     }
 
     public static class Builder {
