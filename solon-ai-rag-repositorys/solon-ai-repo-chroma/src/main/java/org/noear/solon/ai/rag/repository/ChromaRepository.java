@@ -103,7 +103,9 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
     public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
-            progressCallback.accept(0, 0);
+            if (progressCallback != null) {
+                progressCallback.accept(0, 0);
+            }
             return;
         }
 
@@ -122,7 +124,9 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
             batchInsertDo(batch);
 
             //回调进度
-            progressCallback.accept(batchIndex++, batchList.size());
+            if (progressCallback != null) {
+                progressCallback.accept(batchIndex++, batchList.size());
+            }
         }
     }
 
