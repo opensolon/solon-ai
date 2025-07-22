@@ -52,7 +52,7 @@ public class OpenSearchRepositoryTest {
         // 创建客户端
         final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
         // 如果需要认证，请取消注释并设置用户名和密码
-         credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials("admin", "xnnhsM_1234543"));
+        credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials("admin", "xnnhsM_1234543"));
 
         RestClientBuilder builder = RestClient.builder(new HttpHost(host, port, scheme));
         if (credentialsProvider.getCredentials(AuthScope.ANY) != null) {
@@ -300,7 +300,7 @@ public class OpenSearchRepositoryTest {
      * 加载文档到存储库
      *
      * @param repository 存储库
-     * @param url 文档URL
+     * @param url        文档URL
      * @throws IOException IO异常
      */
     private void load(OpenSearchRepository repository, String url) throws IOException {
