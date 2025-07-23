@@ -17,6 +17,7 @@ package org.noear.solon.ai.mcp.client;
 
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.util.ProxyDesc;
+import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
 
 import java.net.InetSocketAddress;
@@ -76,6 +77,11 @@ public class McpClientProperties {
      * http 代理实例
      */
     private Proxy httpProxyInstance;
+
+    /**
+     * http ssl 提供者
+     * */
+    private HttpSslSupplier httpSslSupplier;
 
     /**
      * 请求超时
@@ -186,6 +192,14 @@ public class McpClientProperties {
     public void setHttpProxy(Proxy httpProxy) {
         this.httpProxyInstance = httpProxy;
         this.httpProxy = null;
+    }
+
+    public void setHttpSslSupplier(HttpSslSupplier httpSslSupplier) {
+        this.httpSslSupplier = httpSslSupplier;
+    }
+
+    public HttpSslSupplier getHttpSslSupplier() {
+        return httpSslSupplier;
     }
 
     public Duration getRequestTimeout() {

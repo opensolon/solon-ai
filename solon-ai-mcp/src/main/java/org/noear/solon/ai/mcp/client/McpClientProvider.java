@@ -41,6 +41,7 @@ import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.data.cache.LocalCacheService;
+import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
 
@@ -182,6 +183,10 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
             if (clientProps.getHttpProxy() != null) {
                 webBuilder.proxy(clientProps.getHttpProxy());
+            }
+
+            if (clientProps.getHttpSslSupplier() != null) {
+                webBuilder.ssl(clientProps.getHttpSslSupplier());
             }
 
             clientTransport = WebRxSseClientTransport.builder(webBuilder)
@@ -771,6 +776,11 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         public Builder httpProxy(String host, int port) {
             return httpProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port)));
+        }
+
+        public Builder httpSslSupplier(HttpSslSupplier httpSslSupplier) {
+            props.setHttpSslSupplier(httpSslSupplier);
+            return this;
         }
 
         public Builder requestTimeout(Duration requestTimeout) {
