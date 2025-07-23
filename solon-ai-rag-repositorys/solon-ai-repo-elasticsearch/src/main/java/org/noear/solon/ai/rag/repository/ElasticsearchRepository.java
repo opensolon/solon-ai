@@ -265,7 +265,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
 
             //回调进度
             if (progressCallback != null) {
-                progressCallback.accept(batchIndex++, batchList.size());
+                progressCallback.accept(++batchIndex, batchList.size());
             }
         }
     }
