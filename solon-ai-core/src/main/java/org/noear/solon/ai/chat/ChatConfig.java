@@ -30,7 +30,9 @@ import java.util.*;
  */
 public class ChatConfig extends AiConfig {
     private final Map<String, FunctionTool> defaultTools = new LinkedHashMap<>();
+    private final Map<String, Object> defaultToolsContext = new LinkedHashMap<>();
     private final List<RankEntity<ChatInterceptor>> defaultInterceptors = new ArrayList<>();
+    private final Map<String, Object> defaultOptions = new LinkedHashMap<>();
 
     /**
      * 设置默认工具（用于属性提示）
@@ -75,6 +77,28 @@ public class ChatConfig extends AiConfig {
 
 
     /**
+     * 添加默认工具上下文
+     */
+    public void addDefaultToolsContext(String key, Object value) {
+        defaultToolsContext.put(key, value);
+    }
+
+    /**
+     * 添加默认工具上下文
+     */
+    public void addDefaultToolsContext(Map<String, Object> toolsContext) {
+        defaultToolsContext.putAll(toolsContext);
+    }
+
+
+    /**
+     * 获取默认工具上下文
+     */
+    public Map<String, Object> getDefaultToolsContext() {
+        return defaultToolsContext;
+    }
+
+    /**
      * 添加默认拦截器
      */
     public void addDefaultInterceptor(int index, ChatInterceptor interceptor) {
@@ -86,6 +110,20 @@ public class ChatConfig extends AiConfig {
      */
     public List<RankEntity<ChatInterceptor>> getDefaultInterceptors() {
         return defaultInterceptors;
+    }
+
+    /**
+     * 添加默认选项
+     */
+    public void addDefaultOption(String key, Object value) {
+        defaultOptions.put(key, value);
+    }
+
+    /**
+     * 获取所有默认选项
+     */
+    public Map<String, Object> getDefaultOptions() {
+        return defaultOptions;
     }
 
     @Override

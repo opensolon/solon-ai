@@ -63,6 +63,14 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         this.dialect = dialect;
         this.session = session;
         this.options = new ChatOptions();
+
+        if (Utils.isNotEmpty(config.getDefaultToolsContext())) {
+            this.options.toolsContext().putAll(config.getDefaultToolsContext());
+        }
+
+        if (Utils.isNotEmpty(config.getDefaultOptions())) {
+            this.options.options().putAll(config.getDefaultOptions());
+        }
     }
 
     /**

@@ -223,6 +223,22 @@ public class ChatModel implements AiModel {
         }
 
         /**
+         * 默认工具上下文添加
+         */
+        public Builder defaultToolsContextAdd(String key, Object value) {
+            config.addDefaultToolsContext(key, value);
+            return this;
+        }
+
+        /**
+         * 默认工具上下文添加
+         */
+        public Builder defaultToolsContextAdd(Map<String, Object> toolsContext) {
+            config.addDefaultToolsContext(toolsContext);
+            return this;
+        }
+
+        /**
          * 添加默认拦截器
          *
          * @param interceptor 拦截器
@@ -239,6 +255,14 @@ public class ChatModel implements AiModel {
          */
         public Builder defaultInterceptorAdd(int index, ChatInterceptor interceptor) {
             config.addDefaultInterceptor(index, interceptor);
+            return this;
+        }
+
+        /**
+         * 添加默认选项
+         */
+        public Builder defaultOptionAdd(String key, Object val) {
+            config.addDefaultOption(key, val);
             return this;
         }
 
