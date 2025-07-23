@@ -395,7 +395,7 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
 
             //回调进度
             if (progressCallback != null) {
-                progressCallback.accept(batchIndex++, batchList.size());
+                progressCallback.accept(++batchIndex, batchList.size());
             }
         }
     }

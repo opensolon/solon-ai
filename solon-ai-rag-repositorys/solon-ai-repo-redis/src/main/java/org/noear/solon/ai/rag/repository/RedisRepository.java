@@ -167,7 +167,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
 
             //回调进度
             if (progressCallback != null) {
-                progressCallback.accept(batchIndex++, batchList.size());
+                progressCallback.accept(++batchIndex, batchList.size());
             }
         }
     }
