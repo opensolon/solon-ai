@@ -230,7 +230,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         try {
             if (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE)) {
-                TextStreamUtil.parseSseStream(httpResp.body(), httpResp.contentEncoding(), new SimpleSubscriber<ServerSentEvent>()
+                TextStreamUtil.parseSseStream(httpResp, new SimpleSubscriber<ServerSentEvent>()
                         .doOnSubscribe(subscriber::onSubscribe)//不要做订阅（外部不支持多次触发）
                         .doOnNext(event -> {
                             return onEventStream(resp, event, subscriber);
@@ -240,7 +240,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                         })
                         .doOnError(subscriber::onError));
             } else {
-                TextStreamUtil.parseLineStream(httpResp.body(), httpResp.contentEncoding(), new SimpleSubscriber<String>()
+                TextStreamUtil.parseLineStream(httpResp, new SimpleSubscriber<String>()
                         .doOnSubscribe(subscriber::onSubscribe)
                         .doOnNext(data -> {
                             return onEventStream(resp, new ServerSentEvent(null, data), subscriber);
