@@ -255,69 +255,72 @@ public abstract class AbstractChatDialect implements ChatDialect {
          * 有可能一直无：...
          * */
 
-        String reasoning_content = oMessage.get("reasoning_content").getRawString();
-        if (reasoning_content == null) {
-            reasoning_content = oMessage.get("reasoning").getRawString();
-        }
+        if (Utils.isEmpty(toolCallsRaw)) {
+            //如果没有工具调用
+            String reasoning_content = oMessage.get("reasoning_content").getRawString();
+            if (reasoning_content == null) {
+                reasoning_content = oMessage.get("reasoning").getRawString();
+            }
 
-        if (reasoning_content != null) {
-            resp.has_reasoning_field = true;
-            //有思考专属内容的协议
-            if (resp.isStream()) {
-                //如果是流返回（可能要拆成多条流消息）
-                if (Utils.isEmpty(content)) {
-                    if (resp.in_thinking == false) {
-                        //说明是第一次
-                        messageList.add(new AssistantMessage("<think>", true));
-                        messageList.add(new AssistantMessage("\n\n", true));
-                        if (Utils.isNotEmpty(reasoning_content)) {
+            if (reasoning_content != null) {
+                resp.has_reasoning_field = true;
+                //有思考专属内容的协议
+                if (resp.isStream()) {
+                    //如果是流返回（可能要拆成多条流消息）
+                    if (Utils.isEmpty(content)) {
+                        if (resp.in_thinking == false) {
+                            //说明是第一次
+                            messageList.add(new AssistantMessage("<think>", true));
+                            messageList.add(new AssistantMessage("\n\n", true));
+                            if (Utils.isNotEmpty(reasoning_content)) {
+                                content = reasoning_content;
+                            }
+                        } else {
                             content = reasoning_content;
                         }
-                    } else {
-                        content = reasoning_content;
-                    }
 
-                    resp.in_thinking = true;
-                } else {
-                    if (resp.in_thinking) {
-                        //说明是最后一次
-                        messageList.add(new AssistantMessage("</think>", true));
-                        messageList.add(new AssistantMessage("\n\n", false));
-                    }
-
-                    resp.in_thinking = false;
-                }
-            } else {
-                //如查是单次返回
-                if (Utils.isNotEmpty(reasoning_content)) {
-                    content = "<think>\n\n" + reasoning_content + "</think>\n\n" + content;
-                }
-            }
-        } else if (content != null) {
-            if (resp.has_reasoning_field) { //有些情况，后面就没字段了
-                //有推理字段的
-                if (resp.in_thinking) {
-                    if(resp.isStream()){
-                        //说明是最后一次
-                        messageList.add(new AssistantMessage("</think>", true));
-                        messageList.add(new AssistantMessage("\n\n", false));
-                    }
-
-                    resp.in_thinking = false;
-                }
-            } else {
-                //分析 think 状态（无推理字段的）
-                if (resp.isStream()) {
-                    //如果是流返回
-                    if (content.startsWith("<think>")) {
                         resp.in_thinking = true;
                     } else {
                         if (resp.in_thinking) {
-                            int thinkEnd = content.indexOf("</think>");
-                            if (thinkEnd >= 0) { //可能是个开始符
-                                resp.in_thinking = false;
-                                messageList.add(new AssistantMessage(content, true));
-                                return messageList;
+                            //说明是最后一次
+                            messageList.add(new AssistantMessage("</think>", true));
+                            messageList.add(new AssistantMessage("\n\n", false));
+                        }
+
+                        resp.in_thinking = false;
+                    }
+                } else {
+                    //如查是单次返回
+                    if (Utils.isNotEmpty(reasoning_content)) {
+                        content = "<think>\n\n" + reasoning_content + "</think>\n\n" + content;
+                    }
+                }
+            } else if (content != null) {
+                if (resp.has_reasoning_field) { //有些情况，后面就没字段了
+                    //有推理字段的
+                    if (resp.in_thinking) {
+                        if (resp.isStream()) {
+                            //说明是最后一次
+                            messageList.add(new AssistantMessage("</think>", true));
+                            messageList.add(new AssistantMessage("\n\n", false));
+                        }
+
+                        resp.in_thinking = false;
+                    }
+                } else {
+                    //分析 think 状态（无推理字段的）
+                    if (resp.isStream()) {
+                        //如果是流返回
+                        if (content.startsWith("<think>")) {
+                            resp.in_thinking = true;
+                        } else {
+                            if (resp.in_thinking) {
+                                int thinkEnd = content.indexOf("</think>");
+                                if (thinkEnd >= 0) { //可能是个开始符
+                                    resp.in_thinking = false;
+                                    messageList.add(new AssistantMessage(content, true));
+                                    return messageList;
+                                }
                             }
                         }
                     }
