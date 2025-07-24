@@ -253,6 +253,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
          * 有可能一直有：reasoning_content 或 reasoning
          * 有可能时有时无：reasoning_content 或 reasoning
          * 有可能一直无：...
+         * 也可能和内容都为空: ...
          * */
 
         if (Utils.isEmpty(toolCallsRaw) && resp.hasToolCallBuilders() == false) {
@@ -262,7 +263,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 reasoning_content = oMessage.get("reasoning").getRawString();
             }
 
-            if (reasoning_content != null) {
+            if (Utils.isNotEmpty(reasoning_content)) {
                 resp.has_reasoning_field = true;
                 //有思考专属内容的协议
                 if (resp.isStream()) {
@@ -295,7 +296,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                         content = "<think>\n\n" + reasoning_content + "</think>\n\n" + content;
                     }
                 }
-            } else if (content != null) {
+            } else if (Utils.isNotEmpty(content)) {
                 if (resp.has_reasoning_field) { //有些情况，后面就没字段了
                     //有推理字段的
                     if (resp.in_thinking) {

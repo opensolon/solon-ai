@@ -5,6 +5,8 @@ import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+
 /**
  * @author noear 2025/1/28 created
  */
@@ -19,6 +21,7 @@ public class DeepSeekR1Test extends AbsThinkTest{
     protected ChatModel.Builder getChatModelBuilder() {
         return ChatModel.of(apiUrl)
                 .apiKey(apiKey)
-                .model(model);
+                .model(model)
+                .timeout(Duration.ofSeconds(160));
     }
 }
