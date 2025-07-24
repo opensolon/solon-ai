@@ -313,12 +313,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             if (resp.isFinished()) {
                 if (resp.toolCallBuilders.size() > 0) {
-                    try {
-                        return buildStreamToolMessage(resp, subscriber);
-                    } finally {
-                        //用完清掉
-                        resp.toolCallBuilders.clear();
-                    }
+                    return buildStreamToolMessage(resp, subscriber);
                 }
             }
         }
@@ -327,26 +322,31 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private boolean buildStreamToolMessage(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
-        ONode oNode = dialect.buildAssistantMessageNode(resp.toolCallBuilders);
+        try {
+            ONode oNode = dialect.buildAssistantMessageNode(resp.toolCallBuilders);
 
-        List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
+            List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
 
-        session.addMessage(assistantMessages);
+            session.addMessage(assistantMessages);
 
-        List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
+            List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
 
-        if (Utils.isEmpty(returnDirectMessages)) {
-            //没有要求直接返回
-            stream().subscribe(subscriber);
-            return false; //不触发外层的完成事件
-        } else {
-            //要求直接返回（转为新的响应消息）
-            AssistantMessage message = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
-            resp.reset();
-            resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
-            resp.aggregationMessageContent.setLength(0);
-            publishResponse(subscriber, resp, resp.lastChoice());
-            return true; //触发外层的完成事件
+            if (Utils.isEmpty(returnDirectMessages)) {
+                //没有要求直接返回
+                stream().subscribe(subscriber);
+                return false; //不触发外层的完成事件
+            } else {
+                //要求直接返回（转为新的响应消息）
+                AssistantMessage message = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
+                resp.reset();
+                resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
+                resp.aggregationMessageContent.setLength(0);
+                publishResponse(subscriber, resp, resp.lastChoice());
+                return true; //触发外层的完成事件
+            }
+        } finally {
+            //用完清掉
+            resp.toolCallBuilders.clear();
         }
     }
 

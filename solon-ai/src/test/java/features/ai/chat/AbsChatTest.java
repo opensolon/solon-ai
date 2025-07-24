@@ -4,6 +4,7 @@ import features.ai.chat.tool.Case10Tools;
 import features.ai.chat.tool.Case8Tools;
 import features.ai.chat.tool.ReturnTools;
 import features.ai.chat.tool.Tools;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
@@ -22,6 +23,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -116,6 +118,28 @@ public abstract class AbsChatTest {
         log.info("{}", respRef.get().getAggregationMessage());
         assert respRef.get().getAggregationMessage() != null;
         assert respRef.get().getAggregationMessage().getContent().contains("晴");
+    }
+
+    @Test
+    public void case3_wather_stream_finished() throws Exception {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolsAdd(new Tools())
+                .build();
+
+        AtomicInteger atomicInteger = new AtomicInteger();
+        CountDownLatch doneLatch = new CountDownLatch(1);
+        chatModel.prompt("今天杭州的天气情况？")
+                .stream().subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnComplete(() -> {
+                            atomicInteger.incrementAndGet();
+                            doneLatch.countDown();
+                        }).doOnError(err -> {
+                            doneLatch.countDown();
+                        }));
+
+        doneLatch.await();
+        Thread.sleep(100);
+        Assertions.assertEquals(1, atomicInteger.get(), "完成事件");
     }
 
     @Test
