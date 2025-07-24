@@ -81,7 +81,7 @@ public class McpClientProperties {
     /**
      * http ssl 提供者
      * */
-    private HttpSslSupplier httpSslSupplier;
+    private HttpSslSupplier httpSsl;
 
     /**
      * 请求超时
@@ -194,12 +194,12 @@ public class McpClientProperties {
         this.httpProxy = null;
     }
 
-    public void setHttpSslSupplier(HttpSslSupplier httpSslSupplier) {
-        this.httpSslSupplier = httpSslSupplier;
+    public void setHttpSsl(HttpSslSupplier httpSslSupplier) {
+        this.httpSsl = httpSslSupplier;
     }
 
-    public HttpSslSupplier getHttpSslSupplier() {
-        return httpSslSupplier;
+    public HttpSslSupplier getHttpSsl() {
+        return httpSsl;
     }
 
     public Duration getRequestTimeout() {

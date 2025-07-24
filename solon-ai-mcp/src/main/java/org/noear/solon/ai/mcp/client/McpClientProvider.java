@@ -185,8 +185,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 webBuilder.proxy(clientProps.getHttpProxy());
             }
 
-            if (clientProps.getHttpSslSupplier() != null) {
-                webBuilder.ssl(clientProps.getHttpSslSupplier());
+            if (clientProps.getHttpSsl() != null) {
+                webBuilder.ssl(clientProps.getHttpSsl());
             }
 
             clientTransport = WebRxSseClientTransport.builder(webBuilder)
@@ -778,8 +778,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             return httpProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port)));
         }
 
-        public Builder httpSslSupplier(HttpSslSupplier httpSslSupplier) {
-            props.setHttpSslSupplier(httpSslSupplier);
+        public Builder httpSsl(HttpSslSupplier httpSslSupplier) {
+            props.setHttpSsl(httpSslSupplier);
             return this;
         }
 
