@@ -106,12 +106,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     public McpClientProvider(McpClientProperties clientProps) {
-        if (clientProps.getHeartbeatInterval() != null) {
-            if (clientProps.getHeartbeatInterval().getSeconds() < 10L) {
-                throw new IllegalArgumentException("HeartbeatInterval cannot be less than 10s!");
-            }
-        }
-
         if (McpChannel.STDIO.equals(clientProps.getChannel())) {
             //stdio 通道
             if (clientProps.getServerParameters() == null) {
@@ -260,6 +254,10 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         }
 
         if (clientProps.getHeartbeatInterval() == null) {
+            return;
+        }
+
+        if (clientProps.getHeartbeatInterval().getSeconds() < 5L) {
             return;
         }
 
