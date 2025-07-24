@@ -86,10 +86,11 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                 String finish_reason = oChoice1.get("finish_reason").getString();
 
                 List<AssistantMessage> messageList;
-                if (oChoice1.contains("message")) {  //object=chat.completion
-                    messageList = parseAssistantMessage(resp, oChoice1.get("message"));
-                } else {  //object=chat.completion.chunk
+                if (resp.isStream()) {   //object=chat.completion.chunk
                     messageList = parseAssistantMessage(resp, oChoice1.get("delta"));
+                } else {
+                    //object=chat.completion
+                    messageList = parseAssistantMessage(resp, oChoice1.get("message"));
                 }
 
                 for (AssistantMessage msg1 : messageList) {

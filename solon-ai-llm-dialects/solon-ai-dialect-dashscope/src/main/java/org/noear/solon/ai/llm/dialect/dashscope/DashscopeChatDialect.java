@@ -117,12 +117,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
             for (ONode oChoice1 : oResp.get("output").get("choices").ary()) {
                 String finish_reason = oChoice1.get("finish_reason").getString();
 
-                List<AssistantMessage> messageList;
-                if (oChoice1.contains("delta")) {  //object=chat.completion.chunk
-                    messageList = parseAssistantMessage(resp, oChoice1.get("delta"));
-                } else { //object=chat.completion
-                    messageList = parseAssistantMessage(resp, oChoice1.get("message"));
-                }
+                List<AssistantMessage> messageList = parseAssistantMessage(resp, oChoice1.get("message"));
 
                 for (AssistantMessage msg1 : messageList) {
                     resp.addChoice(new ChatChoice(index, created, finish_reason, msg1));

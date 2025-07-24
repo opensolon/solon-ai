@@ -212,7 +212,7 @@ public class WebRxSseClientTransport implements McpClientTransport {
 
 					try {
 						if(logger.isDebugEnabled()) {
-							logger.debug("Mcp-response: {}",event.toString());
+							logger.debug("mcp-response: {}",event.toString());
 						}
 
 						if (ENDPOINT_EVENT_TYPE.equals(event.getEvent())) {
@@ -280,7 +280,7 @@ public class WebRxSseClientTransport implements McpClientTransport {
 			String jsonText = this.objectMapper.writeValueAsString(message);
 
 			if (logger.isDebugEnabled()) {
-				logger.debug("Mcp-request: {}", jsonText);
+				logger.debug("mcp-request: {}", jsonText);
 			}
 
 			CompletableFuture<HttpResponse> future = webBuilder.build(endpoint)

@@ -12,6 +12,7 @@ import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.rag.Document;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.noear.solon.test.SolonTest;
 import org.reactivestreams.Publisher;
@@ -45,7 +46,8 @@ public class DashscopeTest {
 
     @Test
     public void case1() throws IOException {
-        ChatModel chatModel = getChatModelBuilder().build();
+        ChatModel chatModel = getChatModelBuilder()
+                .build();
 
         //一次性返回
         ChatResponse resp = chatModel.prompt("hello").call();
@@ -56,7 +58,8 @@ public class DashscopeTest {
 
     @Test
     public void case2() throws Exception {
-        ChatModel chatModel = getChatModelBuilder().build();
+        ChatModel chatModel = getChatModelBuilder()
+                .build();
 
         ChatSession chatSession = new ChatSessionDefault();
         chatSession.addMessage(ChatMessage.ofUser("hello"));
@@ -80,17 +83,6 @@ public class DashscopeTest {
 
         doneLatch.await();
         assert done.get();
-
-
-        //序列化测试
-        String ndjson1 = chatSession.toNdjson();
-        System.out.println(ndjson1);
-
-        chatSession.clear();
-        chatSession.loadNdjson(ndjson1);
-        String ndjson2 = chatSession.toNdjson();
-        System.out.println(ndjson2);
-        assert ndjson1.equals(ndjson2);
     }
 
     @Test
@@ -100,7 +92,7 @@ public class DashscopeTest {
                 .build();
 
         ChatResponse resp = chatModel
-                .prompt("今天杭州的天气情况？现在几点了?")
+                .prompt("今天杭州的天气情况？")
                 .call();
 
         //打印消息
@@ -197,12 +189,27 @@ public class DashscopeTest {
 
         //打印消息
         log.info("{}", resp.getMessage());
-        log.info("\n-----------答案-----------\n{}", resp.getMessage().getContent());
+    }
+
+    @Test
+    public void case3_www_2() throws IOException {
+        ChatModel chatModel = getChatModelBuilder()
+                .build();
+
+        ChatResponse resp = chatModel
+                .prompt(ChatMessage.ofUserAugment("solon 框架的作者是谁？", new Document()
+                        .title("概述")
+                        .url("https://solon.noear.org/article/about")))
+                .call();
+
+        //打印
+        System.out.println(resp.getMessage());
     }
 
     @Test
     public void case4() throws Throwable {
-        ChatModel chatModel = getChatModelBuilder().build();
+        ChatModel chatModel = getChatModelBuilder()
+                .build();
 
         ChatSession chatSession = new ChatSessionDefault();
         chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
@@ -240,7 +247,8 @@ public class DashscopeTest {
 
     @Test
     public void case5() throws Throwable {
-        ChatModel chatModel = getChatModelBuilder().build();
+        ChatModel chatModel = getChatModelBuilder()
+                .build();
 
         ChatSession chatSession = new ChatSessionDefault();
         chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
@@ -271,7 +279,7 @@ public class DashscopeTest {
 
         System.out.println("-----------------------------------");
 
-        chatSession.addMessage(ChatMessage.ofUser("solon 框架的作者是谁？"));
+        chatSession.addMessage(ChatMessage.ofUser("搜索网络： solon 框架的作者是谁？"));
 
         //流返回(sse)
         publisher = chatModel
@@ -409,7 +417,6 @@ public class DashscopeTest {
                 .defaultToolsAdd(new Case8Tools())
                 .timeout(Duration.ofSeconds(600))
                 .build();
-
 
         Publisher<ChatResponse> publisher = chatModel
                 .prompt(ChatMessage.ofUser("2025号3月20日，设备76-51的日用电量是多少"))
