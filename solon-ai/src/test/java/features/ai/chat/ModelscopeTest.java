@@ -35,7 +35,7 @@ public class ModelscopeTest {
     private static final Logger log = LoggerFactory.getLogger(ModelscopeTest.class);
     private static final String apiUrl = "https://api-inference.modelscope.cn/v1/chat/completions";
     private static final String apiKey = "a90656bf-08b2-47c8-b791-f5be78fe15de";
-    private static final String model = "Qwen/Qwen3-32B"; //deepseek-reasoner//deepseek-chat
+    private static final String model = "deepseek-ai/DeepSeek-V3-0324"; //"Qwen/Qwen3-32B";
 
     private ChatModel.Builder getChatModelBuilder() {
         return ChatModel.of(apiUrl)
