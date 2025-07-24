@@ -76,6 +76,13 @@ public class ChatResponseDefault implements ChatResponse {
     }
 
     /**
+     * 是否有工具构建器
+     */
+    public boolean hasToolCallBuilders() {
+        return Utils.isNotEmpty(toolCallBuilders);
+    }
+
+    /**
      * 获取所有选择
      */
     @Override

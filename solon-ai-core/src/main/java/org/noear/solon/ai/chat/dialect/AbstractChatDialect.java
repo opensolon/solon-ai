@@ -255,8 +255,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
          * 有可能一直无：...
          * */
 
-        if (Utils.isEmpty(toolCallsRaw)) {
-            //如果没有工具调用
+        if (Utils.isEmpty(toolCallsRaw) && resp.hasToolCallBuilders() == false) {
+            //如果没有工具调用（且没有工具构建）
             String reasoning_content = oMessage.get("reasoning_content").getRawString();
             if (reasoning_content == null) {
                 reasoning_content = oMessage.get("reasoning").getRawString();

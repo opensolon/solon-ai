@@ -16,6 +16,7 @@
 package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
@@ -97,7 +98,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                     resp.addChoice(new ChatChoice(index, created, finish_reason, msg1));
                 }
 
-                if ("stop".equals(finish_reason)) {
+                if (Utils.isNotEmpty(finish_reason)) {
                     resp.setFinished(true);
                 }
             }

@@ -123,7 +123,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                     resp.addChoice(new ChatChoice(index, created, finish_reason, msg1));
                 }
 
-                if ("stop".equals(finish_reason)) {
+                if (Utils.isNotEmpty(finish_reason)) {
                     resp.setFinished(true);
                 }
 
