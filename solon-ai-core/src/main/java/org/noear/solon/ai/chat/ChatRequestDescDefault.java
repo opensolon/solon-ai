@@ -313,7 +313,12 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             if (resp.isFinished()) {
                 if (resp.toolCallBuilders.size() > 0) {
-                    return buildStreamToolMessage(resp, subscriber);
+                    try {
+                        return buildStreamToolMessage(resp, subscriber);
+                    } finally {
+                        //用完清掉
+                        resp.toolCallBuilders.clear();
+                    }
                 }
             }
         }
