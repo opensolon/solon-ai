@@ -4,14 +4,14 @@
 * 新增 solon-ai-repo-pgvector 插件
 * 新增 solon-ai-search-baidu 插件
 * 添加 solon-ai-core `TextLoader(byte[])(SupplierEx<InputStream>)` 构造方法
-* 添加 solon-ai `ChatConfig:defaultToolsContext`（默认工具上下文）, `defaultOptions`（默认选项） 属性
-* 添加 solon-ai `RepositoryStorable:insert(list,progressCallback)` 和 `asyncInsert(list,progressCallback)` 方法，支持进度获取
+* 添加 solon-ai-core `ChatConfig:defaultToolsContext`（默认工具上下文）, `defaultOptions`（默认选项） 属性
+* 添加 solon-ai-core `RepositoryStorable:insert(list,progressCallback)` 和 `asyncInsert(list,progressCallback)` 方法，支持进度获取
 * 添加 solon-ai-mcp 客户端 ssl 定制支持
 * 优化 solon-ai 方言 think 思考内容和字段的兼容性处理
 * 优化 solon-ai 方言处理与 modelscope（魔搭社区）的兼容性
 * 优化 solon-ai 方言处理与 siliconflow（硅基流动）的兼容性
+* 优化 solon-ai 方言处理的流式节点识别兼容性
 * 优化 solon-ai 用户消息的请求构建（当内容为空时，不添加 text）
-* 优化 solon-ai 言方处理的流式节点识别
 * 优化 solon-ai-mcp McpClientProvider 心跳间隔控制（5s 以下忽略）
 * 优化 solon-ai-mcp McpServerContext 增加 stdio 代理支持（环境变量自动转为 ctx:header）
 * mcp WebRxSseClientTransport 添加 debug 日志打印
