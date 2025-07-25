@@ -1,4 +1,4 @@
-package features.ai.mcp.client.sse;
+package lab.ai.mcp.client;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.tool.FunctionTool;
