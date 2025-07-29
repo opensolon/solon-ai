@@ -3,6 +3,8 @@
 ### 3.4.3
 
 * 新增 solon-ai-repo-mysql 插件
+* 优化 solon-ai-mcp JsonSchema.additionalProperties 兼容性（兼容 bool, map）
+* 优化 solon-ai-mcp McpClientProvider 改为 McpAsyncClient（为异常需求提供支持）
 
 
 ### 3.4.1
