@@ -221,7 +221,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
 
             if (client.isInitialized() == false) {
-                client.initialize();
+                client.initialize().block();
             }
 
             return client;
