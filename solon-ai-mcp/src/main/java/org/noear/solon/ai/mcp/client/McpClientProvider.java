@@ -15,8 +15,8 @@
  */
 package org.noear.solon.ai.mcp.client;
 
+import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.client.transport.WebRxSseClientTransport;
@@ -44,6 +44,7 @@ import org.noear.solon.data.cache.LocalCacheService;
 import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
+import reactor.core.publisher.Mono;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -87,7 +88,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     private final AtomicBoolean isStarted = new AtomicBoolean(false);
     private final McpClientProperties clientProps;
     private ScheduledExecutorService heartbeatExecutor;
-    private McpSyncClient client;
+    private McpAsyncClient client;
     private McpSchema.LoggingLevel loggingLevel = McpSchema.LoggingLevel.INFO;
     private LocalCacheService localCache = new LocalCacheService();
 
@@ -134,7 +135,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     /**
      * 构建同步客户端
      */
-    private McpSyncClient buildClient() {
+    private McpAsyncClient buildClient() {
         McpClientTransport clientTransport;
 
         if (McpChannel.STDIO.equals(clientProps.getChannel())) {
@@ -188,12 +189,13 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                     .build();
         }
 
-        return McpClient.sync(clientTransport)
+        return McpClient.async(clientTransport)
                 .clientInfo(new McpSchema.Implementation(clientProps.getName(), clientProps.getVersion()))
                 .requestTimeout(clientProps.getRequestTimeout())
                 .initializationTimeout(clientProps.getInitializationTimeout())
                 .loggingConsumer(logging -> {
                     logging.setLevel(loggingLevel);
+                    return Mono.empty();
                 })
                 .build();
     }
@@ -202,7 +204,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     /**
      * 获取客户端
      */
-    public McpSyncClient getClient() {
+    public McpAsyncClient getClient() {
         LOCKER.lock();
 
         try {
@@ -219,7 +221,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
 
             if (client.isInitialized() == false) {
-                client.initialize();
+                client.initialize().block();
             }
 
             return client;
@@ -399,7 +401,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     public McpSchema.CallToolResult callTool(String name, Map<String, Object> args) {
         try {
             McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
-            McpSchema.CallToolResult result = getClient().callTool(callToolRequest);
+            McpSchema.CallToolResult result = getClient().callTool(callToolRequest).block();
 
             if (result.getIsError() == null || result.getIsError() == false) {
                 return result;
@@ -449,7 +451,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     public McpSchema.ReadResourceResult readResource(String uri) {
         try {
             McpSchema.ReadResourceRequest callToolRequest = new McpSchema.ReadResourceRequest(uri);
-            McpSchema.ReadResourceResult result = getClient().readResource(callToolRequest);
+            McpSchema.ReadResourceResult result = getClient().readResource(callToolRequest).block();
 
             if (Utils.isEmpty(result.getContents())) {
                 throw new McpException("Read resource Failed");
@@ -509,7 +511,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     public McpSchema.GetPromptResult getPrompt(String name, Map<String, Object> args) {
         try {
             McpSchema.GetPromptRequest callToolRequest = new McpSchema.GetPromptRequest(name, args);
-            McpSchema.GetPromptResult result = getClient().getPrompt(callToolRequest);
+            McpSchema.GetPromptResult result = getClient().getPrompt(callToolRequest).block();
 
             if (Utils.isEmpty(result.getMessages())) {
                 throw new McpException("Read resource Failed");
@@ -560,9 +562,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         McpSchema.ListToolsResult result = null;
         if (cursor == null) {
-            result = getClient().listTools();
+            result = getClient().listTools().block();
         } else {
-            result = getClient().listTools(cursor);
+            result = getClient().listTools(cursor).block();
         }
 
         for (McpSchema.Tool tool : result.getTools()) {
@@ -603,9 +605,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         McpSchema.ListResourcesResult result = null;
         if (cursor == null) {
-            result = getClient().listResources();
+            result = getClient().listResources().block();
         } else {
-            result = getClient().listResources(cursor);
+            result = getClient().listResources(cursor).block();
         }
 
         for (McpSchema.Resource resource : result.getResources()) {
@@ -641,9 +643,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         McpSchema.ListResourceTemplatesResult result = null;
         if (cursor == null) {
-            result = getClient().listResourceTemplates();
+            result = getClient().listResourceTemplates().block();
         } else {
-            result = getClient().listResourceTemplates(cursor);
+            result = getClient().listResourceTemplates(cursor).block();
         }
 
         for (McpSchema.ResourceTemplate resource : result.getResourceTemplates()) {
@@ -680,9 +682,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         McpSchema.ListPromptsResult result = null;
         if (cursor == null) {
-            result = getClient().listPrompts();
+            result = getClient().listPrompts().block();
         } else {
-            result = getClient().listPrompts(cursor);
+            result = getClient().listPrompts(cursor).block();
         }
 
         for (McpSchema.Prompt prompt : result.getPrompts()) {
