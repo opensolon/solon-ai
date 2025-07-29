@@ -1,4 +1,10 @@
 
+
+### 3.4.3
+
+* 新增 solon-ai-repo-mysql 插件
+
+
 ### 3.4.1
 
 * 新增 solon-ai-repo-pgvector 插件
