@@ -1,5 +1,7 @@
 package demo.ai.mcp.client_ssl;
 
+import io.modelcontextprotocol.spec.McpSchema;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.net.http.impl.HttpSslSupplierDefault;
 
@@ -9,9 +11,17 @@ import org.noear.solon.net.http.impl.HttpSslSupplierDefault;
 public class SslDemo {
     public void case1() {
         //通过 queryString 传递（需要 3.2.1-M1 或之后）
-        McpClientProvider toolProvider = McpClientProvider.builder()
+        McpClientProvider clientProvider = McpClientProvider.builder()
                 .apiUrl("http://xxx.xxx.xxx/sse?key=yyy")
                 .httpSsl(HttpSslSupplierDefault.getInstance())
                 .build();
+
+
+        clientProvider.getClient()
+                .callTool(new McpSchema.CallToolRequest("demo", Utils.asMap("a", 1)))
+                .doOnNext(rest ->{
+                    System.out.println(rest);
+                })
+                .subscribe();
     }
 }
