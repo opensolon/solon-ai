@@ -212,7 +212,16 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                                 if (resp.code() < 400) {
                                     parseResp(resp, subscriberProxy);
                                 } else {
-                                    subscriberProxy.onError(new HttpException("Error code:" + resp.code()));
+                                    String message = resp.bodyAsString();
+
+                                    String description;
+                                    if (Utils.isEmpty(message)) {
+                                        description = "Error code:" + resp.code();
+                                    } else {
+                                        description = "Error code:" + resp.code() + ", message:" + message;
+                                    }
+
+                                    subscriberProxy.onError(new HttpException(description));
                                 }
                             } catch (IOException e) {
                                 subscriberProxy.onError(e);
