@@ -197,6 +197,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                     logging.setLevel(loggingLevel);
                     return Mono.empty();
                 })
+                .withConnectOnInit(false) //初始化放到后面（更可控）
                 .build();
     }
 

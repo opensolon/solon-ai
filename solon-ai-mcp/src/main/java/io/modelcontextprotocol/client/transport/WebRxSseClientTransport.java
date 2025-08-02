@@ -200,7 +200,7 @@ public class WebRxSseClientTransport implements McpClientTransport {
 		CompletableFuture<Void> future = new CompletableFuture<>();
 		connectionFuture.set(future);
 
-		if(sseSubscriber != null){
+		if (sseSubscriber != null) {
 			sseSubscriber.cancel();
 		}
 
@@ -211,8 +211,8 @@ public class WebRxSseClientTransport implements McpClientTransport {
 					}
 
 					try {
-						if(logger.isDebugEnabled()) {
-							logger.debug("mcp-response: {}",event.toString());
+						if (logger.isDebugEnabled()) {
+							logger.debug("mcp-response: {}", event.toString());
 						}
 
 						if (ENDPOINT_EVENT_TYPE.equals(event.getEvent())) {
@@ -235,6 +235,10 @@ public class WebRxSseClientTransport implements McpClientTransport {
 						future.completeExceptionally(error);
 					}
 				});
+
+		if (logger.isDebugEnabled()) {
+			logger.debug("mcp-connect: {}", this.sseEndpoint);
+		}
 
 		webBuilder.build(this.sseEndpoint)
 				.execAsSseStream("GET")

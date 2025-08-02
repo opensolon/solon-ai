@@ -7,6 +7,7 @@
 * 优化 solon-ai-core 方言的 tool_calls 消息的构建（更好的兼容 vllm）
 * 优化 solon-ai-mcp JsonSchema.additionalProperties 兼容性（兼容 bool, map）
 * 优化 solon-ai-mcp McpClientProvider 改为 McpAsyncClient（为异常需求提供支持）
+* 优化 solon-ai-mcp 初始化控制（禁用 connectOnInit），增加连接打印
 
 
 ### 3.4.1
