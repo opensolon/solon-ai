@@ -4,6 +4,7 @@
 
 * 新增 solon-ai-repo-mysql 插件
 * 优化 solon-ai-core ChatRequestDescDefault http 异常转换描述
+* 优化 solon-ai-core 方言的 tool_calls 消息的构建（更好的兼容 vllm）
 * 优化 solon-ai-mcp JsonSchema.additionalProperties 兼容性（兼容 bool, map）
 * 优化 solon-ai-mcp McpClientProvider 改为 McpAsyncClient（为异常需求提供支持）
 

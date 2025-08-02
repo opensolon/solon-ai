@@ -38,7 +38,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
     protected void buildChatMessageNodeDo(ONode oNode, AssistantMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
-        oNode.set("content", msg.getResultContent());
+        if (Utils.isNotEmpty(msg.getResultContent())) {
+            oNode.set("content", msg.getResultContent());
+        }
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
             oNode.set("tool_calls", ONode.load(msg.getToolCallsRaw()));
@@ -169,7 +171,11 @@ public abstract class AbstractChatDialect implements ChatDialect {
                         .set("type", "function")
                         .getOrNew("function").build(n2 -> {
                             n2.set("name", kv.getValue().nameBuilder.toString());
-                            n2.set("arguments", kv.getValue().argumentsBuilder.toString());
+                            if (kv.getValue().argumentsBuilder.length() > 0) {
+                                n2.set("arguments", kv.getValue().argumentsBuilder.toString());
+                            } else {
+                                n2.set("arguments", "{}");
+                            }
                         });
             }
         });
