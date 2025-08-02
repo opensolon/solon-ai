@@ -174,6 +174,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                             if (kv.getValue().argumentsBuilder.length() > 0) {
                                 n2.set("arguments", kv.getValue().argumentsBuilder.toString());
                             } else {
+                                // vllm 不能传空
                                 n2.set("arguments", "{}");
                             }
                         });
