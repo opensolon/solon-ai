@@ -59,6 +59,7 @@ public class McpServerProperties {
     /**
      * 服务器SSE心跳间隔（空表示不启用）
      */
+    @Deprecated
     private Duration heartbeatInterval = Duration.ofSeconds(30);
 
     /**

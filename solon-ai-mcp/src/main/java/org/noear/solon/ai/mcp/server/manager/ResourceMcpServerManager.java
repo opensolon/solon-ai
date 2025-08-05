@@ -59,12 +59,7 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
     @Override
     public void remove(McpSyncServer server, String resourceUri) {
         if (server != null) {
-            if (resourceUri.indexOf('{') < 0) {
-                server.removeResource(resourceUri);
-            } else {
-                server.removeResourceTemplate(resourceUri);
-            }
-
+            server.removeResource(resourceUri);
             resourcesMap.remove(resourceUri);
         }
     }
@@ -73,81 +68,41 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
     public void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionResource functionResource) {
         resourcesMap.put(functionResource.uri(), functionResource);
 
-        if (functionResource.uri().indexOf('{') < 0) {
-            //resourceSpec
-            McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
-                    new McpSchema.Resource(functionResource.uri(), functionResource.name(), functionResource.description(), functionResource.mimeType(), null),
-                    (exchange, request) -> {
-                        try {
-                            ContextHolder.currentSet(new McpServerContext(exchange));
+        //resourceSpec
+        McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
+                McpSchema.Resource.builder()
+                        .uri(functionResource.uri())
+                        .name(functionResource.name()).title(functionResource.title()).description(functionResource.description())
+                        .mimeType(functionResource.mimeType()).build(),
+                (exchange, request) -> {
+                    try {
+                        ContextHolder.currentSet(new McpServerContext(exchange));
 
-                            Text res = functionResource.handle(request.getUri());
+                        Text res = functionResource.handle(request.getUri());
 
-                            if (res.isBase64()) {
-                                return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                                        request.getUri(),
-                                        functionResource.mimeType(),
-                                        res.getContent())));
-                            } else {
-                                return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                                        request.getUri(),
-                                        functionResource.mimeType(),
-                                        res.getContent())));
-                            }
-                        } catch (Throwable ex) {
-                            ex = Utils.throwableUnwrap(ex);
-                            throw new McpException(ex.getMessage(), ex);
-                        } finally {
-                            ContextHolder.currentRemove();
+                        if (res.isBase64()) {
+                            return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
+                                    request.getUri(),
+                                    functionResource.mimeType(),
+                                    res.getContent())));
+                        } else {
+                            return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
+                                    request.getUri(),
+                                    functionResource.mimeType(),
+                                    res.getContent())));
                         }
-                    });
+                    } catch (Throwable ex) {
+                        ex = Utils.throwableUnwrap(ex);
+                        throw new McpException(ex.getMessage(), ex);
+                    } finally {
+                        ContextHolder.currentRemove();
+                    }
+                });
 
-            if (server != null) {
-                server.addResource(resourceSpec);
-            } else {
-                mcpServerSpec.resources(resourceSpec);
-            }
+        if (server != null) {
+            server.addResource(resourceSpec);
         } else {
-            //resourceTemplates
-            McpSchema.Annotations annotations = null;//new McpSchema.Annotations(Arrays.asList(McpSchema.Role.USER), 0.5);
-
-            McpServerFeatures.SyncResourceTemplateSpecification resourceSpec = new McpServerFeatures.SyncResourceTemplateSpecification(
-                    new McpSchema.ResourceTemplate(functionResource.uri(),
-                            functionResource.name(),
-                            functionResource.description(),
-                            functionResource.mimeType(),
-                            annotations),
-                    (exchange, request) -> {
-                        try {
-                            ContextHolder.currentSet(new McpServerContext(exchange));
-
-                            Text res = functionResource.handle(request.getUri());
-
-                            if (res.isBase64()) {
-                                return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                                        request.getUri(),
-                                        functionResource.mimeType(),
-                                        res.getContent())));
-                            } else {
-                                return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                                        request.getUri(),
-                                        functionResource.mimeType(),
-                                        res.getContent())));
-                            }
-                        } catch (Throwable ex) {
-                            ex = Utils.throwableUnwrap(ex);
-                            throw new McpException(ex.getMessage(), ex);
-                        } finally {
-                            ContextHolder.currentRemove();
-                        }
-                    });
-
-
-            if (server != null) {
-                server.addResourceTemplate(resourceSpec);
-            } else {
-                mcpServerSpec.resourceTemplates(resourceSpec);
-            }
+            mcpServerSpec.resources(resourceSpec);
         }
     }
 }

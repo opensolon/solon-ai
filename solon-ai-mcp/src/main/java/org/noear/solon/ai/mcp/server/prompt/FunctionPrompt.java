@@ -34,6 +34,11 @@ public interface FunctionPrompt {
     String name();
 
     /**
+     * 标题
+     */
+    String title();
+
+    /**
      * 描述
      */
     String description();

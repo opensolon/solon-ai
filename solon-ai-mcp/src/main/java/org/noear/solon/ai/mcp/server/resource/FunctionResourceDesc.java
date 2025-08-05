@@ -32,6 +32,7 @@ public class FunctionResourceDesc implements FunctionResource {
 
     private final String name;
     private String uri;
+    private String title;
     private String description;
     private String mimeType;
     private Function<String, Text> doHandler;
@@ -51,7 +52,17 @@ public class FunctionResourceDesc implements FunctionResource {
     }
 
     /**
-     * 申明函数描述
+     * 申明资源标题
+     *
+     * @param title 参数
+     */
+    public FunctionResourceDesc title(String title) {
+        this.title = title;
+        return this;
+    }
+
+    /**
+     * 申明资源描述
      *
      * @param description 参数
      */
@@ -81,13 +92,18 @@ public class FunctionResourceDesc implements FunctionResource {
     }
 
     @Override
+    public String uri() {
+        return uri;
+    }
+
+    @Override
     public String name() {
         return name;
     }
 
     @Override
-    public String uri() {
-        return uri;
+    public String title() {
+        return title;
     }
 
     @Override

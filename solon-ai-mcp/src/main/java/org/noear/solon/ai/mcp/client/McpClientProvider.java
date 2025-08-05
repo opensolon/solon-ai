@@ -197,7 +197,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                     logging.setLevel(loggingLevel);
                     return Mono.empty();
                 })
-                .withConnectOnInit(false) //初始化放到后面（更可控）
+                //.withConnectOnInit(false) //初始化放到后面（更可控）
                 .build();
     }
 
@@ -570,13 +570,15 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         for (McpSchema.Tool tool : result.getTools()) {
             String name = tool.getName();
+            String title = tool.getTitle();
             String description = tool.getDescription();
-            Boolean returnDirect = tool.getReturnDirect();
+            Boolean returnDirect = (tool.getAnnotations() == null ? false : tool.getAnnotations().getReturnDirect());
             String inputSchema = ONode.load(tool.getInputSchema()).toJson();
             String outputSchema = (tool.getOutputSchema() == null ? null : ONode.load(tool.getOutputSchema()).toJson());
 
             FunctionToolDesc functionRefer = new FunctionToolDesc(
                     name,
+                    title,
                     description,
                     returnDirect,
                     inputSchema,

@@ -82,6 +82,11 @@ public class MethodFunctionPrompt implements FunctionPrompt {
     }
 
     @Override
+    public String title() {
+        return mapping.title();
+    }
+
+    @Override
     public String description() {
         return mapping.description();
     }

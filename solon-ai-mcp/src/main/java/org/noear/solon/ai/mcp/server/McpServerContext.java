@@ -20,14 +20,14 @@ import java.util.Collection;
 public class McpServerContext extends ContextEmpty {
     /// /////////////////////////
     private final McpSyncServerExchange serverExchange;
-    private final Context context;
+    private Context context;
 
     public McpServerContext(McpSyncServerExchange serverExchange) {
         this.serverExchange = serverExchange;
 
-        if (serverExchange.getSession().getTransport() instanceof WebRxSseServerTransportProvider.WebRxMcpSessionTransport) {
-            this.context = ((WebRxSseServerTransportProvider.WebRxMcpSessionTransport) serverExchange.getSession().getTransport()).getContext();
+        this.context = (Context) serverExchange.transportContext().get(Context.class.getName());
 
+        if (this.context != null) {
             for (KeyValues<String> kv : context.paramMap()) {
                 for (String v : kv.getValues()) {
                     this.paramMap().add(kv.getKey(), v);
@@ -42,10 +42,7 @@ public class McpServerContext extends ContextEmpty {
             }
         } else {
             this.context = new ContextEmpty();
-
-            if (serverExchange.getSession().getTransport() instanceof StdioServerTransportProvider.StdioMcpSessionTransport) {
-                this.headerMap().addAll(System.getenv());
-            }
+            this.headerMap().addAll(System.getenv());
         }
     }
 
@@ -54,7 +51,7 @@ public class McpServerContext extends ContextEmpty {
      */
     @Override
     public String sessionId() {
-        return serverExchange.getSession().getId();
+        return serverExchange.sessionId();
     }
 
     /// ////////////////

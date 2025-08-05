@@ -74,9 +74,15 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
         // 获取 outputSchema JSON 字符串（可能为 null 或空）
         String outSchemaJson = mcpServerProps.isEnableOutputSchema() ? functionTool.outputSchema() : null;
 
+        McpSchema.ToolAnnotations toolAnnotations = new McpSchema.ToolAnnotations();
+        toolAnnotations.setReturnDirect(functionTool.returnDirect());
+
         // 注册实际调用逻辑
         McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(
-                new McpSchema.Tool(functionTool.name(), functionTool.description(), functionTool.returnDirect(), inSchemaJson, outSchemaJson),
+                McpSchema.Tool.builder()
+                        .name(functionTool.name()).title(functionTool.title()).description(functionTool.description())
+                        .annotations(toolAnnotations)
+                        .inputSchema(inSchemaJson).outputSchema(outSchemaJson).build(),
                 (exchange, request) -> {
                     try {
                         ContextHolder.currentSet(new McpServerContext(exchange));

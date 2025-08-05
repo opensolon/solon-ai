@@ -18,8 +18,10 @@ package org.noear.solon.ai.mcp.server;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
+import io.modelcontextprotocol.server.transport.IMcpHttpServerTransport;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
+import io.modelcontextprotocol.server.transport.WebRxStatelessServerTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import org.noear.solon.Solon;
@@ -337,16 +339,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
         if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
             WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
             tmp.toHttpHandler(Solon.app());
-
-            if (serverProperties.getHeartbeatInterval() != null
-                    && serverProperties.getHeartbeatInterval().getSeconds() > 0) {
-                //启用 sse 心跳（保持客户端不断开）
-                RunUtil.delayAndRepeat(() -> {
-                    RunUtil.runAndTry(() -> {
-                        tmp.sendHeartbeat();
-                    });
-                }, serverProperties.getHeartbeatInterval().toMillis());
-            }
         }
     }
 
@@ -354,12 +346,12 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 暂停（主要用于测试）
      */
     public boolean pause() {
-        if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
-            WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
+        if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
+            IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
 
             //如果有注册
-            if (Utils.isNotEmpty(Solon.app().router().getBy(tmp.getSseEndpoint()))) {
-                Solon.app().router().remove(tmp.getSseEndpoint());
+            if (Utils.isNotEmpty(Solon.app().router().getBy(tmp.getMcpEndpoint()))) {
+                Solon.app().router().remove(tmp.getMcpEndpoint());
                 return true;
             }
         }
@@ -371,11 +363,11 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 恢复（主要用于测试）
      */
     public boolean resume() {
-        if (mcpTransportProvider instanceof WebRxSseServerTransportProvider) {
-            WebRxSseServerTransportProvider tmp = (WebRxSseServerTransportProvider) mcpTransportProvider;
+        if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
+            IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
 
             //如果没有注册
-            if (Utils.isEmpty(Solon.app().router().getBy(tmp.getSseEndpoint()))) {
+            if (Utils.isEmpty(Solon.app().router().getBy(tmp.getMcpEndpoint()))) {
                 tmp.toHttpHandler(Solon.app());
                 return true;
             }

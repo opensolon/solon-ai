@@ -38,6 +38,11 @@ public @interface ResourceMapping {
     String name() default "";
 
     /**
+     * 标题
+     */
+    String title() default "";
+
+    /**
      * 描述
      */
     String description() default "";

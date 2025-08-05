@@ -77,7 +77,7 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
         }
 
         McpServerFeatures.SyncPromptSpecification promptSpec = new McpServerFeatures.SyncPromptSpecification(
-                new McpSchema.Prompt(functionPrompt.name(), functionPrompt.description(), promptArguments),
+                new McpSchema.Prompt(functionPrompt.name(), functionPrompt.title(), functionPrompt.description(), promptArguments),
                 (exchange, request) -> {
                     try {
                         ContextHolder.currentSet(new McpServerContext(exchange));
