@@ -42,16 +42,27 @@ public @interface McpServerEndpoint {
     /**
      * 通道
      */
-    String channel() default McpChannel.SSE;
+    String channel() default McpChannel.STREAMABLE_HTTP;
+
+    /**
+     * MCP 端点
+     */
+    String mcpEndpoint() default "/mcp";
 
     /**
      * SSE 端点
+     *
+     * @deprecated 3.5
      */
+    @Deprecated
     String sseEndpoint() default "/sse";
 
     /**
      * Message 端点（默认根据 sse 端点自动构建）
+     *
+     * @deprecated 3.5
      */
+    @Deprecated
     String messageEndpoint() default "";
 
     /**
@@ -62,5 +73,5 @@ public @interface McpServerEndpoint {
     /**
      * 启用输出架构
      */
-    boolean enableOutputSchema() default false;
+    boolean enableOutputSchema() default true;
 }

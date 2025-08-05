@@ -44,16 +44,27 @@ public class McpServerProperties {
     /**
      * 通道
      */
-    private String channel = McpChannel.SSE;
+    private String channel = McpChannel.STREAMABLE_HTTP;
+    
+    /**
+     * mcp 端点（路径）
+     */
+    private String mcpEndpoint = "/mcp";
 
     /**
      * sse 端点（路径）
+     *
+     * @deprecated 3.5
      */
+    @Deprecated
     private String sseEndpoint = "/sse";
 
     /**
      * message 端点（路径）
+     *
+     * @deprecated 3.5
      */
+    @Deprecated
     private String messageEndpoint;
 
     /**

@@ -69,74 +69,78 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
 
     @Override
     public void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionPrompt functionPrompt) {
-        promptsMap.put(functionPrompt.name(), functionPrompt);
+        try {
+            promptsMap.put(functionPrompt.name(), functionPrompt);
 
-        List<McpSchema.PromptArgument> promptArguments = new ArrayList<>();
-        for (ParamDesc p1 : functionPrompt.params()) {
-            promptArguments.add(new McpSchema.PromptArgument(p1.name(), p1.description(), p1.required()));
-        }
+            List<McpSchema.PromptArgument> promptArguments = new ArrayList<>();
+            for (ParamDesc p1 : functionPrompt.params()) {
+                promptArguments.add(new McpSchema.PromptArgument(p1.name(), p1.description(), p1.required()));
+            }
 
-        McpServerFeatures.SyncPromptSpecification promptSpec = new McpServerFeatures.SyncPromptSpecification(
-                new McpSchema.Prompt(functionPrompt.name(), functionPrompt.title(), functionPrompt.description(), promptArguments),
-                (exchange, request) -> {
-                    try {
-                        ContextHolder.currentSet(new McpServerContext(exchange));
+            McpServerFeatures.SyncPromptSpecification promptSpec = new McpServerFeatures.SyncPromptSpecification(
+                    new McpSchema.Prompt(functionPrompt.name(), functionPrompt.title(), functionPrompt.description(), promptArguments),
+                    (exchange, request) -> {
+                        try {
+                            ContextHolder.currentSet(new McpServerContext(exchange));
 
-                        Collection<ChatMessage> prompts = functionPrompt.handle(request.getArguments());
-                        List<McpSchema.PromptMessage> promptMessages = new ArrayList<>();
-                        for (ChatMessage msg : prompts) {
-                            if (msg.getRole() == ChatRole.ASSISTANT) {
-                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent(msg.getContent())));
-                            } else if (msg.getRole() == ChatRole.USER) {
-                                UserMessage userMessage = (UserMessage) msg;
+                            Collection<ChatMessage> prompts = functionPrompt.handle(request.getArguments());
+                            List<McpSchema.PromptMessage> promptMessages = new ArrayList<>();
+                            for (ChatMessage msg : prompts) {
+                                if (msg.getRole() == ChatRole.ASSISTANT) {
+                                    promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent(msg.getContent())));
+                                } else if (msg.getRole() == ChatRole.USER) {
+                                    UserMessage userMessage = (UserMessage) msg;
 
-                                if (Utils.isEmpty(userMessage.getMedias())) {
-                                    //如果没有媒体
-                                    promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                            new McpSchema.TextContent(msg.getContent())));
-                                } else {
-                                    //如果有，分解消息
-
-                                    //1.先转媒体（如果是图片）
-                                    for (AiMedia media : userMessage.getMedias()) {
-                                        if (media instanceof Image) {
-                                            Image mediaImage = (Image) media;
-                                            if (mediaImage.getB64Json() != null) {
-                                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                        new McpSchema.ImageContent(null, null,
-                                                                mediaImage.getB64Json(),
-                                                                mediaImage.getMimeType())));
-                                            } else {
-                                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                        new McpSchema.ImageContent(null, null,
-                                                                mediaImage.getUrl(),
-                                                                mediaImage.getMimeType())));
-                                            }
-                                        }
-                                    }
-
-                                    //2.再转文本
-                                    if (Utils.isNotEmpty(msg.getContent())) {
+                                    if (Utils.isEmpty(userMessage.getMedias())) {
+                                        //如果没有媒体
                                         promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
                                                 new McpSchema.TextContent(msg.getContent())));
+                                    } else {
+                                        //如果有，分解消息
+
+                                        //1.先转媒体（如果是图片）
+                                        for (AiMedia media : userMessage.getMedias()) {
+                                            if (media instanceof Image) {
+                                                Image mediaImage = (Image) media;
+                                                if (mediaImage.getB64Json() != null) {
+                                                    promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
+                                                            new McpSchema.ImageContent(null, null,
+                                                                    mediaImage.getB64Json(),
+                                                                    mediaImage.getMimeType())));
+                                                } else {
+                                                    promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
+                                                            new McpSchema.ImageContent(null, null,
+                                                                    mediaImage.getUrl(),
+                                                                    mediaImage.getMimeType())));
+                                                }
+                                            }
+                                        }
+
+                                        //2.再转文本
+                                        if (Utils.isNotEmpty(msg.getContent())) {
+                                            promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
+                                                    new McpSchema.TextContent(msg.getContent())));
+                                        }
                                     }
                                 }
                             }
+
+                            return new McpSchema.GetPromptResult(functionPrompt.description(), promptMessages);
+                        } catch (Throwable ex) {
+                            ex = Utils.throwableUnwrap(ex);
+                            throw new McpException(ex.getMessage(), ex);
+                        } finally {
+                            ContextHolder.currentRemove();
                         }
+                    });
 
-                        return new McpSchema.GetPromptResult(functionPrompt.description(), promptMessages);
-                    } catch (Throwable ex) {
-                        ex = Utils.throwableUnwrap(ex);
-                        throw new McpException(ex.getMessage(), ex);
-                    } finally {
-                        ContextHolder.currentRemove();
-                    }
-                });
-
-        if (server != null) {
-            server.addPrompt(promptSpec);
-        } else {
-            mcpServerSpec.prompts(promptSpec);
+            if (server != null) {
+                server.addPrompt(promptSpec);
+            } else {
+                mcpServerSpec.prompts(promptSpec);
+            }
+        } catch (Throwable ex) {
+            throw new McpException("Prompt add failed, prompt: " + functionPrompt.name(), ex);
         }
     }
 }

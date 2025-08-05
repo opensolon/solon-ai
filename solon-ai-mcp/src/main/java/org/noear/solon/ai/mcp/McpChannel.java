@@ -24,4 +24,5 @@ package org.noear.solon.ai.mcp;
 public interface McpChannel {
     static final String STDIO = "stdio";
     static final String SSE = "sse";
+    static final String STREAMABLE_HTTP = "streamable";
 }

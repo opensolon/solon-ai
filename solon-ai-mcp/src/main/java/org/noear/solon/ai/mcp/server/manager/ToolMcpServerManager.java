@@ -66,41 +66,45 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
 
     @Override
     public void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionTool functionTool) {
-        //内部登记
-        toolsMap.put(functionTool.name(), functionTool);
+        try {
+            //内部登记
+            toolsMap.put(functionTool.name(), functionTool);
 
-        // 构建 inputSchema JSON 字符串
-        String inSchemaJson = buildJsonSchema(functionTool).toJson();
-        // 获取 outputSchema JSON 字符串（可能为 null 或空）
-        String outSchemaJson = mcpServerProps.isEnableOutputSchema() ? functionTool.outputSchema() : null;
+            // 构建 inputSchema JSON 字符串
+            String inSchemaJson = buildJsonSchema(functionTool).toJson();
+            // 获取 outputSchema JSON 字符串（可能为 null 或空）
+            String outSchemaJson = mcpServerProps.isEnableOutputSchema() ? functionTool.outputSchema() : null;
 
-        McpSchema.ToolAnnotations toolAnnotations = new McpSchema.ToolAnnotations();
-        toolAnnotations.setReturnDirect(functionTool.returnDirect());
+            McpSchema.ToolAnnotations toolAnnotations = new McpSchema.ToolAnnotations();
+            toolAnnotations.setReturnDirect(functionTool.returnDirect());
 
-        // 注册实际调用逻辑
-        McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(
-                McpSchema.Tool.builder()
-                        .name(functionTool.name()).title(functionTool.title()).description(functionTool.description())
-                        .annotations(toolAnnotations)
-                        .inputSchema(inSchemaJson).outputSchema(outSchemaJson).build(),
-                (exchange, request) -> {
-                    try {
-                        ContextHolder.currentSet(new McpServerContext(exchange));
+            // 注册实际调用逻辑
+            McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(
+                    McpSchema.Tool.builder()
+                            .name(functionTool.name()).title(functionTool.title()).description(functionTool.description())
+                            .annotations(toolAnnotations)
+                            .inputSchema(inSchemaJson).outputSchema(outSchemaJson).build(),
+                    (exchange, request) -> {
+                        try {
+                            ContextHolder.currentSet(new McpServerContext(exchange));
 
-                        String rst = functionTool.handle(request);
-                        return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
-                    } catch (Throwable ex) {
-                        ex = Utils.throwableUnwrap(ex);
-                        throw new McpException(ex.getMessage(), ex);
-                    } finally {
-                        ContextHolder.currentRemove();
-                    }
-                });
+                            String rst = functionTool.handle(request);
+                            return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
+                        } catch (Throwable ex) {
+                            ex = Utils.throwableUnwrap(ex);
+                            throw new McpException(ex.getMessage(), ex);
+                        } finally {
+                            ContextHolder.currentRemove();
+                        }
+                    });
 
-        if (server != null) {
-            server.addTool(toolSpec);
-        } else {
-            mcpServerSpec.tools(toolSpec);
+            if (server != null) {
+                server.addTool(toolSpec);
+            } else {
+                mcpServerSpec.tools(toolSpec);
+            }
+        } catch (Throwable ex) {
+            throw new McpException("Tool add failed, tool: " + functionTool.name(), ex);
         }
     }
 
