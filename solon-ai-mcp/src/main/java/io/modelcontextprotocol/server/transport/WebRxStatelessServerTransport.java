@@ -189,7 +189,10 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 
 		private String mcpEndpoint = "/mcp";
 
-		private McpTransportContextExtractor<Context> contextExtractor = (serverRequest, context) -> context;
+		private McpTransportContextExtractor<Context> contextExtractor = (serverRequest, context) -> {
+			context.put(Context.class.getName(), serverRequest);
+			return context;
+		};
 
 		private Builder() {
 			// used by a static method

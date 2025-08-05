@@ -647,7 +647,10 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 
 		private boolean disallowDelete = false;
 
-		private McpTransportContextExtractor<Context> contextExtractor = (serverRequest, context) -> context;
+		private McpTransportContextExtractor<Context> contextExtractor = (serverRequest, context) -> {
+			context.put(Context.class.getName(), serverRequest);
+			return context;
+		};
 
 		private Duration keepAliveInterval;
 
