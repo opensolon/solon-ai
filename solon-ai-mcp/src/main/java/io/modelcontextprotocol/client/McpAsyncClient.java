@@ -1,27 +1,49 @@
 /*
  * Copyright 2024-2024 the original author or authors.
  */
+
 package io.modelcontextprotocol.client;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import io.modelcontextprotocol.spec.*;
-import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
-import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
-import io.modelcontextprotocol.spec.McpSchema.*;
-import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.Utils;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import lombok.var;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+
+import io.modelcontextprotocol.spec.McpClientSession;
+import io.modelcontextprotocol.spec.McpClientTransport;
+import io.modelcontextprotocol.spec.McpError;
+import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
+import io.modelcontextprotocol.spec.McpSchema.CreateMessageRequest;
+import io.modelcontextprotocol.spec.McpSchema.CreateMessageResult;
+import io.modelcontextprotocol.spec.McpSchema.ElicitRequest;
+import io.modelcontextprotocol.spec.McpSchema.ElicitResult;
+import io.modelcontextprotocol.spec.McpSchema.GetPromptRequest;
+import io.modelcontextprotocol.spec.McpSchema.GetPromptResult;
+import io.modelcontextprotocol.spec.McpSchema.ListPromptsResult;
+import io.modelcontextprotocol.spec.McpSchema.LoggingLevel;
+import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
+import io.modelcontextprotocol.spec.McpSchema.PaginatedRequest;
+import io.modelcontextprotocol.spec.McpSchema.Root;
+import io.modelcontextprotocol.spec.McpClientSession.NotificationHandler;
+import io.modelcontextprotocol.spec.McpClientSession.RequestHandler;
+import io.modelcontextprotocol.util.Assert;
+import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.Sinks;
-
-import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
 
 /**
  * The Model Context Protocol (MCP) client implementation that provides asynchronous
@@ -55,51 +77,46 @@ import java.util.function.Function;
  *
  * @author Dariusz Jędrzejczyk
  * @author Christian Tzolov
+ * @author Jihoon Kim
  * @see McpClient
  * @see McpSchema
  * @see McpClientSession
+ * @see McpClientTransport
  */
 public class McpAsyncClient {
 
 	private static final Logger logger = LoggerFactory.getLogger(McpAsyncClient.class);
 
-	private static TypeReference<Void> VOID_TYPE_REFERENCE = new TypeReference<Void>() {
+	private static final TypeReference<Void> VOID_TYPE_REFERENCE = new TypeReference<Void>() {
 	};
 
-	protected final Sinks.One<McpSchema.InitializeResult> initializedSink = Sinks.one();
+	public static final TypeReference<Object> OBJECT_TYPE_REF = new TypeReference<Object>() {
+	};
 
-	private AtomicBoolean initialized = new AtomicBoolean(false);
+	public static final TypeReference<PaginatedRequest> PAGINATED_REQUEST_TYPE_REF = new TypeReference<PaginatedRequest>() {
+	};
 
-	/**
-	 * The max timeout to await for the client-server connection to be initialized.
-	 */
-	private final Duration initializationTimeout;
+	public static final TypeReference<McpSchema.InitializeResult> INITIALIZE_RESULT_TYPE_REF = new TypeReference<McpSchema.InitializeResult>() {
+	};
 
-	/**
-	 * The MCP session implementation that manages bidirectional JSON-RPC communication
-	 * between clients and servers.
-	 */
-	private final McpClientSession mcpSession;
+	public static final TypeReference<CreateMessageRequest> CREATE_MESSAGE_REQUEST_TYPE_REF = new TypeReference<CreateMessageRequest>() {
+	};
+
+	public static final TypeReference<LoggingMessageNotification> LOGGING_MESSAGE_NOTIFICATION_TYPE_REF = new TypeReference<LoggingMessageNotification>() {
+	};
+
+	public static final TypeReference<McpSchema.ProgressNotification> PROGRESS_NOTIFICATION_TYPE_REF = new TypeReference<McpSchema.ProgressNotification>() {
+	};
 
 	/**
 	 * Client capabilities.
 	 */
-	private final ClientCapabilities clientCapabilities;
+	private final McpSchema.ClientCapabilities clientCapabilities;
 
 	/**
 	 * Client implementation information.
 	 */
 	private final McpSchema.Implementation clientInfo;
-
-	/**
-	 * Server capabilities.
-	 */
-	private McpSchema.ServerCapabilities serverCapabilities;
-
-	/**
-	 * Server implementation information.
-	 */
-	private McpSchema.Implementation serverInfo;
 
 	/**
 	 * Roots define the boundaries of where servers can operate within the filesystem,
@@ -120,14 +137,23 @@ public class McpAsyncClient {
 	private Function<CreateMessageRequest, Mono<CreateMessageResult>> samplingHandler;
 
 	/**
-	 * Client transport implementation.
+	 * MCP provides a standardized way for servers to request additional information from
+	 * users through the client during interactions. This flow allows clients to maintain
+	 * control over user interactions and data sharing while enabling servers to gather
+	 * necessary information dynamically. Servers can request structured data from users
+	 * with optional JSON schemas to validate responses.
 	 */
-	private final McpTransport transport;
+	private Function<ElicitRequest, Mono<ElicitResult>> elicitationHandler;
 
 	/**
-	 * Supported protocol versions.
+	 * Client transport implementation.
 	 */
-	private List<String> protocolVersions = Collections.singletonList(McpSchema.LATEST_PROTOCOL_VERSION);
+	private final McpClientTransport transport;
+
+	/**
+	 * The lifecycle initializer that manages the client-server connection initialization.
+	 */
+	private final LifecycleInitializer initializer;
 
 	/**
 	 * Create a new McpAsyncClient with the given transport and session request-response
@@ -138,7 +164,7 @@ public class McpAsyncClient {
 	 * @param features the MCP Client supported features.
 	 */
 	McpAsyncClient(McpClientTransport transport, Duration requestTimeout, Duration initializationTimeout,
-			McpClientFeatures.Async features, boolean connectOnInit) {
+				   McpClientFeatures.Async features) {
 
 		Assert.notNull(transport, "Transport must not be null");
 		Assert.notNull(requestTimeout, "Request timeout must not be null");
@@ -148,10 +174,15 @@ public class McpAsyncClient {
 		this.clientCapabilities = features.getClientCapabilities();
 		this.transport = transport;
 		this.roots = new ConcurrentHashMap<>(features.getRoots());
-		this.initializationTimeout = initializationTimeout;
 
 		// Request Handlers
 		Map<String, RequestHandler<?>> requestHandlers = new HashMap<>();
+
+		// Ping MUST respond with an empty data, but not NULL response.
+		requestHandlers.put(McpSchema.METHOD_PING, params -> {
+			logger.debug("Received ping: {}", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+			return Mono.just(Utils.asMap());
+		});
 
 		// Roots List Request Handler
 		if (this.clientCapabilities.getRoots() != null) {
@@ -167,13 +198,22 @@ public class McpAsyncClient {
 			requestHandlers.put(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, samplingCreateMessageHandler());
 		}
 
+		// Elicitation Handler
+		if (this.clientCapabilities.getElicitation() != null) {
+			if (features.getElicitationHandler() == null) {
+				throw new McpError("Elicitation handler must not be null when client capabilities include elicitation");
+			}
+			this.elicitationHandler = features.getElicitationHandler();
+			requestHandlers.put(McpSchema.METHOD_ELICITATION_CREATE, elicitationCreateHandler());
+		}
+
 		// Notification Handlers
 		Map<String, NotificationHandler> notificationHandlers = new HashMap<>();
 
 		// Tools Change Notification
 		List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumersFinal = new ArrayList<>();
 		toolsChangeConsumersFinal
-			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Tools changed: {}", notification)));
+				.add((notification) -> Mono.fromRunnable(() -> logger.debug("Tools changed: {}", notification)));
 
 		if (!Utils.isEmpty(features.getToolsChangeConsumers())) {
 			toolsChangeConsumersFinal.addAll(features.getToolsChangeConsumers());
@@ -184,7 +224,7 @@ public class McpAsyncClient {
 		// Resources Change Notification
 		List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumersFinal = new ArrayList<>();
 		resourcesChangeConsumersFinal
-			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Resources changed: {}", notification)));
+				.add((notification) -> Mono.fromRunnable(() -> logger.debug("Resources changed: {}", notification)));
 
 		if (!Utils.isEmpty(features.getResourcesChangeConsumers())) {
 			resourcesChangeConsumersFinal.addAll(features.getResourcesChangeConsumers());
@@ -193,10 +233,22 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_RESOURCES_LIST_CHANGED,
 				asyncResourcesChangeNotificationHandler(resourcesChangeConsumersFinal));
 
+		// Resources Update Notification
+		List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumersFinal = new ArrayList<>();
+		resourcesUpdateConsumersFinal
+				.add((notification) -> Mono.fromRunnable(() -> logger.debug("Resources updated: {}", notification)));
+
+		if (!Utils.isEmpty(features.getResourcesUpdateConsumers())) {
+			resourcesUpdateConsumersFinal.addAll(features.getResourcesUpdateConsumers());
+		}
+
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_RESOURCES_UPDATED,
+				asyncResourcesUpdatedNotificationHandler(resourcesUpdateConsumersFinal));
+
 		// Prompts Change Notification
 		List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumersFinal = new ArrayList<>();
 		promptsChangeConsumersFinal
-			.add((notification) -> Mono.fromRunnable(() -> logger.debug("Prompts changed: {}", notification)));
+				.add((notification) -> Mono.fromRunnable(() -> logger.debug("Prompts changed: {}", notification)));
 		if (!Utils.isEmpty(features.getPromptsChangeConsumers())) {
 			promptsChangeConsumersFinal.addAll(features.getPromptsChangeConsumers());
 		}
@@ -212,11 +264,28 @@ public class McpAsyncClient {
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_MESSAGE,
 				asyncLoggingNotificationHandler(loggingConsumersFinal));
 
-		this.mcpSession = new McpClientSession(requestTimeout, transport, requestHandlers, notificationHandlers);
-
-		if (connectOnInit) {
-			this.mcpSession.openSSE();
+		// Utility Progress Notification
+		List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumersFinal = new ArrayList<>();
+		progressConsumersFinal
+				.add((notification) -> Mono.fromRunnable(() -> logger.debug("Progress: {}", notification)));
+		if (!Utils.isEmpty(features.getProgressConsumers())) {
+			progressConsumersFinal.addAll(features.getProgressConsumers());
 		}
+		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_PROGRESS,
+				asyncProgressNotificationHandler(progressConsumersFinal));
+
+		this.initializer = new LifecycleInitializer(clientCapabilities, clientInfo, transport.protocolVersions(),
+				initializationTimeout, ctx -> new McpClientSession(requestTimeout, transport, requestHandlers,
+				notificationHandlers, con -> con.contextWrite(ctx)));
+		this.transport.setExceptionHandler(this.initializer::handleException);
+	}
+
+	/**
+	 * Get the current initialization result.
+	 * @return the initialization result.
+	 */
+	public McpSchema.InitializeResult getCurrentInitializationResult() {
+		return this.initializer.currentInitializationResult();
 	}
 
 	/**
@@ -224,7 +293,18 @@ public class McpAsyncClient {
 	 * @return The server capabilities
 	 */
 	public McpSchema.ServerCapabilities getServerCapabilities() {
-		return this.serverCapabilities;
+		McpSchema.InitializeResult initializeResult = this.initializer.currentInitializationResult();
+		return initializeResult != null ? initializeResult.getCapabilities() : null;
+	}
+
+	/**
+	 * Get the server instructions that provide guidance to the client on how to interact
+	 * with this server.
+	 * @return The server instructions
+	 */
+	public String getServerInstructions() {
+		McpSchema.InitializeResult initializeResult = this.initializer.currentInitializationResult();
+		return initializeResult != null ? initializeResult.getInstructions() : null;
 	}
 
 	/**
@@ -232,7 +312,8 @@ public class McpAsyncClient {
 	 * @return The server implementation details
 	 */
 	public McpSchema.Implementation getServerInfo() {
-		return this.serverInfo;
+		McpSchema.InitializeResult initializeResult = this.initializer.currentInitializationResult();
+		return initializeResult != null ? initializeResult.getServerInfo() : null;
 	}
 
 	/**
@@ -240,7 +321,7 @@ public class McpAsyncClient {
 	 * @return true if the client-server connection is initialized
 	 */
 	public boolean isInitialized() {
-		return this.initialized.get();
+		return this.initializer.isInitialized();
 	}
 
 	/**
@@ -263,7 +344,8 @@ public class McpAsyncClient {
 	 * Closes the client connection immediately.
 	 */
 	public void close() {
-		this.mcpSession.close();
+		this.initializer.close();
+		this.transport.close();
 	}
 
 	/**
@@ -271,26 +353,19 @@ public class McpAsyncClient {
 	 * @return A Mono that completes when the connection is closed
 	 */
 	public Mono<Void> closeGracefully() {
-		return this.mcpSession.closeGracefully();
-	}
-
-	// ---------------------------
-	// open an SSE stream
-	// ---------------------------
-	/**
-	 * The client may issue an HTTP GET to the MCP endpoint. This can be used to open an
-	 * SSE stream, allowing the server to communicate to the client, without the client
-	 * first sending data via HTTP POST.
-	 */
-	public void openSSE() {
-		this.mcpSession.openSSE();
+		return Mono.defer(() -> {
+			return this.initializer.closeGracefully().then(transport.closeGracefully());
+		});
 	}
 
 	// --------------------------
 	// Initialization
 	// --------------------------
 	/**
-	 * The initialization phase MUST be the first interaction between client and server.
+	 * The initialization phase should be the first interaction between client and server.
+	 * The client will ensure it happens in case it has not been explicitly called and in
+	 * case of transport session invalidation.
+	 * <p>
 	 * During this phase, the client and server:
 	 * <ul>
 	 * <li>Establish protocol version compatibility</li>
@@ -301,69 +376,23 @@ public class McpAsyncClient {
 	 * The client MUST initiate this phase by sending an initialize request containing:
 	 * The protocol version the client supports, client's capabilities and clients
 	 * implementation information.
-	 * <p/>
+	 * <p>
 	 * The server MUST respond with its own capabilities and information.
-	 * <p/>
+	 * </p>
 	 * After successful initialization, the client MUST send an initialized notification
 	 * to indicate it is ready to begin normal operations.
 	 * @return the initialize result.
 	 * @see <a href=
 	 * "https://github.com/modelcontextprotocol/specification/blob/main/docs/specification/basic/lifecycle.md#initialization">MCP
 	 * Initialization Spec</a>
+	 * </p>
 	 */
 	public Mono<McpSchema.InitializeResult> initialize() {
-
-		String latestVersion = this.protocolVersions.get(this.protocolVersions.size() - 1);
-
-		McpSchema.InitializeRequest initializeRequest = new McpSchema.InitializeRequest(// @formatter:off
-				latestVersion,
-				this.clientCapabilities,
-				this.clientInfo); // @formatter:on
-
-		Mono<McpSchema.InitializeResult> result = this.mcpSession.sendRequest(McpSchema.METHOD_INITIALIZE,
-				initializeRequest, new TypeReference<McpSchema.InitializeResult>() {
-				});
-
-		return result.flatMap(initializeResult -> {
-
-			this.serverCapabilities = initializeResult.getCapabilities();
-			this.serverInfo = initializeResult.getServerInfo();
-
-			logger.info("Server response with Protocol: {}, Capabilities: {}, Info: {} and Instructions {}",
-					initializeResult.getProtocolVersion(), initializeResult.getCapabilities(), initializeResult.getServerInfo(),
-					initializeResult.getInstructions());
-
-			if (!this.protocolVersions.contains(initializeResult.getProtocolVersion())) {
-				return Mono.error(new McpError(
-						"Unsupported protocol version from the server: " + initializeResult.getProtocolVersion()));
-			}
-
-			return this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_INITIALIZED, null).doOnSuccess(v -> {
-				this.initialized.set(true);
-				this.initializedSink.tryEmitValue(initializeResult);
-			}).thenReturn(initializeResult);
-		});
-	}
-
-	/**
-	 * Utility method to handle the common pattern of checking initialization before
-	 * executing an operation.
-	 * @param <T> The type of the result Mono
-	 * @param actionName The action to perform if the client is initialized
-	 * @param operation The operation to execute if the client is initialized
-	 * @return A Mono that completes with the result of the operation
-	 */
-	private <T> Mono<T> withInitializationCheck(String actionName,
-			Function<McpSchema.InitializeResult, Mono<T>> operation) {
-		return this.initializedSink.asMono()
-			.timeout(this.initializationTimeout)
-			.onErrorResume(TimeoutException.class,
-					ex -> Mono.error(new McpError("Client must be initialized before " + actionName)))
-			.flatMap(operation);
+		return this.initializer.withIntitialization("by explicit API call", init -> Mono.just(init.initializeResult()));
 	}
 
 	// --------------------------
-	// Basic Utilites
+	// Basic Utilities
 	// --------------------------
 
 	/**
@@ -371,9 +400,8 @@ public class McpAsyncClient {
 	 * @return A Mono that completes with the server's ping response
 	 */
 	public Mono<Object> ping() {
-		return this.withInitializationCheck("pinging the server", initializedResult -> this.mcpSession
-			.sendRequest(McpSchema.METHOD_PING, null, new TypeReference<Object>() {
-			}));
+		return this.initializer.withIntitialization("pinging the server",
+				init -> init.mcpSession().sendRequest(McpSchema.METHOD_PING, null, OBJECT_TYPE_REF));
 	}
 
 	// --------------------------
@@ -453,18 +481,16 @@ public class McpAsyncClient {
 	 * @return A Mono that completes when the notification is sent.
 	 */
 	public Mono<Void> rootsListChangedNotification() {
-		return this.withInitializationCheck("sending roots list changed notification",
-				initResult -> this.mcpSession.sendNotification(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED));
+		return this.initializer.withIntitialization("sending roots list changed notification",
+				init -> init.mcpSession().sendNotification(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED));
 	}
 
 	private RequestHandler<McpSchema.ListRootsResult> rootsListRequestHandler() {
 		return params -> {
 			@SuppressWarnings("unused")
-			PaginatedRequest request = transport.unmarshalFrom(params,
-					new TypeReference<PaginatedRequest>() {
-					});
+			McpSchema.PaginatedRequest request = transport.unmarshalFrom(params, PAGINATED_REQUEST_TYPE_REF);
 
-			List<Root> roots = new ArrayList<>(this.roots.values());
+			List<Root> roots = this.roots.values().stream().collect(Collectors.toList());
 
 			return Mono.just(new McpSchema.ListRootsResult(roots));
 		};
@@ -475,11 +501,21 @@ public class McpAsyncClient {
 	// --------------------------
 	private RequestHandler<CreateMessageResult> samplingCreateMessageHandler() {
 		return params -> {
-			CreateMessageRequest request = transport.unmarshalFrom(params,
-					new TypeReference<CreateMessageRequest>() {
-					});
+			McpSchema.CreateMessageRequest request = transport.unmarshalFrom(params, CREATE_MESSAGE_REQUEST_TYPE_REF);
 
 			return this.samplingHandler.apply(request);
+		};
+	}
+
+	// --------------------------
+	// Elicitation
+	// --------------------------
+	private RequestHandler<ElicitResult> elicitationCreateHandler() {
+		return params -> {
+			ElicitRequest request = transport.unmarshalFrom(params, new TypeReference<ElicitRequest>() {
+			});
+
+			return this.elicitationHandler.apply(request);
 		};
 	}
 
@@ -504,20 +540,27 @@ public class McpAsyncClient {
 	 * @see #listTools()
 	 */
 	public Mono<McpSchema.CallToolResult> callTool(McpSchema.CallToolRequest callToolRequest) {
-		return this.withInitializationCheck("calling tools", initializedResult -> {
-			if (this.serverCapabilities.getTools() == null) {
+		return this.initializer.withIntitialization("calling tools", init -> {
+			if (init.initializeResult().getCapabilities().getTools() == null) {
 				return Mono.error(new McpError("Server does not provide tools capability"));
 			}
-			return this.mcpSession.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF);
+			return init.mcpSession()
+					.sendRequest(McpSchema.METHOD_TOOLS_CALL, callToolRequest, CALL_TOOL_RESULT_TYPE_REF);
 		});
 	}
 
 	/**
 	 * Retrieves the list of all tools provided by the server.
-	 * @return A Mono that emits the list of tools result.
+	 * @return A Mono that emits the list of all tools result
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools() {
-		return this.listTools(null);
+		return this.listTools(McpSchema.FIRST_PAGE)
+				.expand(result -> (result.getNextCursor() != null) ? this.listTools(result.getNextCursor()) : Mono.empty())
+				.reduce(new McpSchema.ListToolsResult(new ArrayList<>(), null), (allToolsResult, result) -> {
+					allToolsResult.getTools().addAll(result.getTools());
+					return allToolsResult;
+				})
+				.map(result -> new McpSchema.ListToolsResult(Collections.unmodifiableList(result.getTools()), null));
 	}
 
 	/**
@@ -526,12 +569,13 @@ public class McpAsyncClient {
 	 * @return A Mono that emits the list of tools result
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools(String cursor) {
-		return this.withInitializationCheck("listing tools", initializedResult -> {
-			if (this.serverCapabilities.getTools() == null) {
+		return this.initializer.withIntitialization("listing tools", init -> {
+			if (init.initializeResult().getCapabilities().getTools() == null) {
 				return Mono.error(new McpError("Server does not provide tools capability"));
 			}
-			return this.mcpSession.sendRequest(McpSchema.METHOD_TOOLS_LIST, new PaginatedRequest(cursor),
-					LIST_TOOLS_RESULT_TYPE_REF);
+			return init.mcpSession()
+					.sendRequest(McpSchema.METHOD_TOOLS_LIST, new McpSchema.PaginatedRequest(cursor),
+							LIST_TOOLS_RESULT_TYPE_REF);
 		});
 	}
 
@@ -539,13 +583,13 @@ public class McpAsyncClient {
 			List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers) {
 		// TODO: params are not used yet
 		return params -> this.listTools()
-			.flatMap(listToolsResult -> Flux.fromIterable(toolsChangeConsumers)
-				.flatMap(consumer -> consumer.apply(listToolsResult.getTools()))
-				.onErrorResume(error -> {
-					logger.error("Error handling tools list change notification", error);
-					return Mono.empty();
-				})
-				.then());
+				.flatMap(listToolsResult -> Flux.fromIterable(toolsChangeConsumers)
+						.flatMap(consumer -> consumer.apply(listToolsResult.getTools()))
+						.onErrorResume(error -> {
+							logger.error("Error handling tools list change notification", error);
+							return Mono.empty();
+						})
+						.then());
 	}
 
 	// --------------------------
@@ -565,12 +609,18 @@ public class McpAsyncClient {
 	 * Retrieves the list of all resources provided by the server. Resources represent any
 	 * kind of UTF-8 encoded data that an MCP server makes available to clients, such as
 	 * database records, API responses, log files, and more.
-	 * @return A Mono that completes with the list of resources result.
+	 * @return A Mono that completes with the list of all resources result
 	 * @see McpSchema.ListResourcesResult
 	 * @see #readResource(McpSchema.Resource)
 	 */
 	public Mono<McpSchema.ListResourcesResult> listResources() {
-		return this.listResources(null);
+		return this.listResources(McpSchema.FIRST_PAGE)
+				.expand(result -> (result.getNextCursor() != null) ? this.listResources(result.getNextCursor()) : Mono.empty())
+				.reduce(new McpSchema.ListResourcesResult(new ArrayList<>(), null), (allResourcesResult, result) -> {
+					allResourcesResult.getResources().addAll(result.getResources());
+					return allResourcesResult;
+				})
+				.map(result -> new McpSchema.ListResourcesResult(Collections.unmodifiableList(result.getResources()), null));
 	}
 
 	/**
@@ -583,12 +633,13 @@ public class McpAsyncClient {
 	 * @see #readResource(McpSchema.Resource)
 	 */
 	public Mono<McpSchema.ListResourcesResult> listResources(String cursor) {
-		return this.withInitializationCheck("listing resources", initializedResult -> {
-			if (this.serverCapabilities.getResources() == null) {
+		return this.initializer.withIntitialization("listing resources", init -> {
+			if (init.initializeResult().getCapabilities().getResources() == null) {
 				return Mono.error(new McpError("Server does not provide the resources capability"));
 			}
-			return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new PaginatedRequest(cursor),
-					LIST_RESOURCES_RESULT_TYPE_REF);
+			return init.mcpSession()
+					.sendRequest(McpSchema.METHOD_RESOURCES_LIST, new McpSchema.PaginatedRequest(cursor),
+							LIST_RESOURCES_RESULT_TYPE_REF);
 		});
 	}
 
@@ -614,12 +665,12 @@ public class McpAsyncClient {
 	 * @see McpSchema.ReadResourceResult
 	 */
 	public Mono<McpSchema.ReadResourceResult> readResource(McpSchema.ReadResourceRequest readResourceRequest) {
-		return this.withInitializationCheck("reading resources", initializedResult -> {
-			if (this.serverCapabilities.getResources() == null) {
+		return this.initializer.withIntitialization("reading resources", init -> {
+			if (init.initializeResult().getCapabilities().getResources() == null) {
 				return Mono.error(new McpError("Server does not provide the resources capability"));
 			}
-			return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_READ, readResourceRequest,
-					READ_RESOURCE_RESULT_TYPE_REF);
+			return init.mcpSession()
+					.sendRequest(McpSchema.METHOD_RESOURCES_READ, readResourceRequest, READ_RESOURCE_RESULT_TYPE_REF);
 		});
 	}
 
@@ -627,11 +678,20 @@ public class McpAsyncClient {
 	 * Retrieves the list of all resource templates provided by the server. Resource
 	 * templates allow servers to expose parameterized resources using URI templates,
 	 * enabling dynamic resource access based on variable parameters.
-	 * @return A Mono that completes with the list of resource templates result.
+	 * @return A Mono that completes with the list of all resource templates result
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates() {
-		return this.listResourceTemplates(null);
+		return this.listResourceTemplates(McpSchema.FIRST_PAGE)
+				.expand(result -> (result.getNextCursor() != null) ? this.listResourceTemplates(result.getNextCursor())
+						: Mono.empty())
+				.reduce(new McpSchema.ListResourceTemplatesResult(new ArrayList<>(), null),
+						(allResourceTemplatesResult, result) -> {
+							allResourceTemplatesResult.getResourceTemplates().addAll(result.getResourceTemplates());
+							return allResourceTemplatesResult;
+						})
+				.map(result -> new McpSchema.ListResourceTemplatesResult(
+						Collections.unmodifiableList(result.getResourceTemplates()), null));
 	}
 
 	/**
@@ -643,12 +703,13 @@ public class McpAsyncClient {
 	 * @see McpSchema.ListResourceTemplatesResult
 	 */
 	public Mono<McpSchema.ListResourceTemplatesResult> listResourceTemplates(String cursor) {
-		return this.withInitializationCheck("listing resource templates", initializedResult -> {
-			if (this.serverCapabilities.getResources() == null) {
+		return this.initializer.withIntitialization("listing resource templates", init -> {
+			if (init.initializeResult().getCapabilities().getResources() == null) {
 				return Mono.error(new McpError("Server does not provide the resources capability"));
 			}
-			return this.mcpSession.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST,
-					new PaginatedRequest(cursor), LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF);
+			return init.mcpSession()
+					.sendRequest(McpSchema.METHOD_RESOURCES_TEMPLATES_LIST, new McpSchema.PaginatedRequest(cursor),
+							LIST_RESOURCE_TEMPLATES_RESULT_TYPE_REF);
 		});
 	}
 
@@ -662,8 +723,8 @@ public class McpAsyncClient {
 	 * @see #unsubscribeResource(McpSchema.UnsubscribeRequest)
 	 */
 	public Mono<Void> subscribeResource(McpSchema.SubscribeRequest subscribeRequest) {
-		return this.withInitializationCheck("subscribing to resources", initializedResult -> this.mcpSession
-			.sendRequest(McpSchema.METHOD_RESOURCES_SUBSCRIBE, subscribeRequest, VOID_TYPE_REFERENCE));
+		return this.initializer.withIntitialization("subscribing to resources", init -> init.mcpSession()
+				.sendRequest(McpSchema.METHOD_RESOURCES_SUBSCRIBE, subscribeRequest, VOID_TYPE_REFERENCE));
 	}
 
 	/**
@@ -676,50 +737,74 @@ public class McpAsyncClient {
 	 * @see #subscribeResource(McpSchema.SubscribeRequest)
 	 */
 	public Mono<Void> unsubscribeResource(McpSchema.UnsubscribeRequest unsubscribeRequest) {
-		return this.withInitializationCheck("unsubscribing from resources", initializedResult -> this.mcpSession
-			.sendRequest(McpSchema.METHOD_RESOURCES_UNSUBSCRIBE, unsubscribeRequest, VOID_TYPE_REFERENCE));
+		return this.initializer.withIntitialization("unsubscribing from resources", init -> init.mcpSession()
+				.sendRequest(McpSchema.METHOD_RESOURCES_UNSUBSCRIBE, unsubscribeRequest, VOID_TYPE_REFERENCE));
 	}
 
 	private NotificationHandler asyncResourcesChangeNotificationHandler(
 			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers) {
 		return params -> listResources().flatMap(listResourcesResult -> Flux.fromIterable(resourcesChangeConsumers)
-			.flatMap(consumer -> consumer.apply(listResourcesResult.getResources()))
-			.onErrorResume(error -> {
-				logger.error("Error handling resources list change notification", error);
-				return Mono.empty();
-			})
-			.then());
+				.flatMap(consumer -> consumer.apply(listResourcesResult.getResources()))
+				.onErrorResume(error -> {
+					logger.error("Error handling resources list change notification", error);
+					return Mono.empty();
+				})
+				.then());
+	}
+
+	private NotificationHandler asyncResourcesUpdatedNotificationHandler(
+			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers) {
+		return params -> {
+			McpSchema.ResourcesUpdatedNotification resourcesUpdatedNotification = transport.unmarshalFrom(params,
+					new TypeReference<McpSchema.ResourcesUpdatedNotification>() {
+					});
+
+			return readResource(new McpSchema.ReadResourceRequest(resourcesUpdatedNotification.getUri()))
+					.flatMap(readResourceResult -> Flux.fromIterable(resourcesUpdateConsumers)
+							.flatMap(consumer -> consumer.apply(readResourceResult.getContents()))
+							.onErrorResume(error -> {
+								logger.error("Error handling resource update notification", error);
+								return Mono.empty();
+							})
+							.then());
+		};
 	}
 
 	// --------------------------
 	// Prompts
 	// --------------------------
-	private static final TypeReference<ListPromptsResult> LIST_PROMPTS_RESULT_TYPE_REF = new TypeReference<ListPromptsResult>() {
+	private static final TypeReference<McpSchema.ListPromptsResult> LIST_PROMPTS_RESULT_TYPE_REF = new TypeReference<McpSchema.ListPromptsResult>() {
 	};
 
-	private static final TypeReference<GetPromptResult> GET_PROMPT_RESULT_TYPE_REF = new TypeReference<GetPromptResult>() {
+	private static final TypeReference<McpSchema.GetPromptResult> GET_PROMPT_RESULT_TYPE_REF = new TypeReference<McpSchema.GetPromptResult>() {
 	};
 
 	/**
 	 * Retrieves the list of all prompts provided by the server.
-	 * @return A Mono that completes with the list of prompts result.
-	 * @see ListPromptsResult
+	 * @return A Mono that completes with the list of all prompts result.
+	 * @see McpSchema.ListPromptsResult
 	 * @see #getPrompt(GetPromptRequest)
 	 */
 	public Mono<ListPromptsResult> listPrompts() {
-		return this.listPrompts(null);
+		return this.listPrompts(McpSchema.FIRST_PAGE)
+				.expand(result -> (result.getNextCursor() != null) ? this.listPrompts(result.getNextCursor()) : Mono.empty())
+				.reduce(new ListPromptsResult(new ArrayList<>(), null), (allPromptsResult, result) -> {
+					allPromptsResult.getPrompts().addAll(result.getPrompts());
+					return allPromptsResult;
+				})
+				.map(result -> new McpSchema.ListPromptsResult(Collections.unmodifiableList(result.getPrompts()), null));
 	}
 
 	/**
 	 * Retrieves a paginated list of prompts provided by the server.
 	 * @param cursor Optional pagination cursor from a previous list request
 	 * @return A Mono that completes with the list of prompts result.
-	 * @see ListPromptsResult
+	 * @see McpSchema.ListPromptsResult
 	 * @see #getPrompt(GetPromptRequest)
 	 */
 	public Mono<ListPromptsResult> listPrompts(String cursor) {
-		return this.withInitializationCheck("listing prompts", initializedResult -> this.mcpSession
-			.sendRequest(McpSchema.METHOD_PROMPT_LIST, new PaginatedRequest(cursor), LIST_PROMPTS_RESULT_TYPE_REF));
+		return this.initializer.withIntitialization("listing prompts", init -> init.mcpSession()
+				.sendRequest(McpSchema.METHOD_PROMPT_LIST, new PaginatedRequest(cursor), LIST_PROMPTS_RESULT_TYPE_REF));
 	}
 
 	/**
@@ -727,40 +812,47 @@ public class McpAsyncClient {
 	 * including all parameters and instructions for generating AI content.
 	 * @param getPromptRequest The request containing the ID of the prompt to retrieve.
 	 * @return A Mono that completes with the prompt result.
-	 * @see GetPromptRequest
-	 * @see GetPromptResult
+	 * @see McpSchema.GetPromptRequest
+	 * @see McpSchema.GetPromptResult
 	 * @see #listPrompts()
 	 */
 	public Mono<GetPromptResult> getPrompt(GetPromptRequest getPromptRequest) {
-		return this.withInitializationCheck("getting prompts", initializedResult -> this.mcpSession
-			.sendRequest(McpSchema.METHOD_PROMPT_GET, getPromptRequest, GET_PROMPT_RESULT_TYPE_REF));
+		return this.initializer.withIntitialization("getting prompts", init -> init.mcpSession()
+				.sendRequest(McpSchema.METHOD_PROMPT_GET, getPromptRequest, GET_PROMPT_RESULT_TYPE_REF));
 	}
 
 	private NotificationHandler asyncPromptsChangeNotificationHandler(
 			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers) {
 		return params -> listPrompts().flatMap(listPromptsResult -> Flux.fromIterable(promptsChangeConsumers)
-			.flatMap(consumer -> consumer.apply(listPromptsResult.getPrompts()))
-			.onErrorResume(error -> {
-				logger.error("Error handling prompts list change notification", error);
-				return Mono.empty();
-			})
-			.then());
+				.flatMap(consumer -> consumer.apply(listPromptsResult.getPrompts()))
+				.onErrorResume(error -> {
+					logger.error("Error handling prompts list change notification", error);
+					return Mono.empty();
+				})
+				.then());
 	}
 
 	// --------------------------
 	// Logging
 	// --------------------------
+	/**
+	 * Create a notification handler for logging notifications from the server. This
+	 * handler automatically distributes logging messages to all registered consumers.
+	 * @param loggingConsumers List of consumers that will be notified when a logging
+	 * message is received. Each consumer receives the logging message notification.
+	 * @return A NotificationHandler that processes log notifications by distributing the
+	 * message to all registered consumers
+	 */
 	private NotificationHandler asyncLoggingNotificationHandler(
 			List<Function<LoggingMessageNotification, Mono<Void>>> loggingConsumers) {
 
 		return params -> {
-			LoggingMessageNotification loggingMessageNotification = transport.unmarshalFrom(params,
-					new TypeReference<LoggingMessageNotification>() {
-					});
+			McpSchema.LoggingMessageNotification loggingMessageNotification = transport.unmarshalFrom(params,
+					LOGGING_MESSAGE_NOTIFICATION_TYPE_REF);
 
 			return Flux.fromIterable(loggingConsumers)
-				.flatMap(consumer -> consumer.apply(loggingMessageNotification))
-				.then();
+					.flatMap(consumer -> consumer.apply(loggingMessageNotification))
+					.then();
 		};
 	}
 
@@ -769,19 +861,39 @@ public class McpAsyncClient {
 	 * will only receive log messages at or above the specified severity level.
 	 * @param loggingLevel The minimum logging level to receive.
 	 * @return A Mono that completes when the logging level is set.
-	 * @see LoggingLevel
+	 * @see McpSchema.LoggingLevel
 	 */
 	public Mono<Void> setLoggingLevel(LoggingLevel loggingLevel) {
 		if (loggingLevel == null) {
 			return Mono.error(new McpError("Logging level must not be null"));
 		}
 
-		return this.withInitializationCheck("setting logging level", initializedResult -> {
-			String levelName = this.transport.unmarshalFrom(loggingLevel, new TypeReference<String>() {
-			});
-			Map<String, Object> params = Collections.singletonMap("level", levelName);
-			return this.mcpSession.sendNotification(McpSchema.METHOD_LOGGING_SET_LEVEL, params);
+		return this.initializer.withIntitialization("setting logging level", init -> {
+			var params = new McpSchema.SetLevelRequest(loggingLevel);
+			return init.mcpSession().sendRequest(McpSchema.METHOD_LOGGING_SET_LEVEL, params, OBJECT_TYPE_REF).then();
 		});
+	}
+
+	/**
+	 * Create a notification handler for progress notifications from the server. This
+	 * handler automatically distributes progress notifications to all registered
+	 * consumers.
+	 * @param progressConsumers List of consumers that will be notified when a progress
+	 * message is received. Each consumer receives the progress notification.
+	 * @return A NotificationHandler that processes progress notifications by distributing
+	 * the message to all registered consumers
+	 */
+	private NotificationHandler asyncProgressNotificationHandler(
+			List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers) {
+
+		return params -> {
+			McpSchema.ProgressNotification progressNotification = transport.unmarshalFrom(params,
+					PROGRESS_NOTIFICATION_TYPE_REF);
+
+			return Flux.fromIterable(progressConsumers)
+					.flatMap(consumer -> consumer.apply(progressNotification))
+					.then();
+		};
 	}
 
 	/**
@@ -790,7 +902,28 @@ public class McpAsyncClient {
 	 * @param protocolVersions the Client supported protocol versions.
 	 */
 	void setProtocolVersions(List<String> protocolVersions) {
-		this.protocolVersions = protocolVersions;
+		this.initializer.setProtocolVersions(protocolVersions);
+	}
+
+	// --------------------------
+	// Completions
+	// --------------------------
+	private static final TypeReference<McpSchema.CompleteResult> COMPLETION_COMPLETE_RESULT_TYPE_REF = new TypeReference<McpSchema.CompleteResult>() {
+	};
+
+	/**
+	 * Sends a completion/complete request to generate value suggestions based on a given
+	 * reference and argument. This is typically used to provide auto-completion options
+	 * for user input fields.
+	 * @param completeRequest The request containing the prompt or resource reference and
+	 * argument for which to generate completions.
+	 * @return A Mono that completes with the result containing completion suggestions.
+	 * @see McpSchema.CompleteRequest
+	 * @see McpSchema.CompleteResult
+	 */
+	public Mono<McpSchema.CompleteResult> completeCompletion(McpSchema.CompleteRequest completeRequest) {
+		return this.initializer.withIntitialization("complete completions", init -> init.mcpSession()
+				.sendRequest(McpSchema.METHOD_COMPLETION_COMPLETE, completeRequest, COMPLETION_COMPLETE_RESULT_TYPE_REF));
 	}
 
 }

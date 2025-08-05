@@ -7,8 +7,7 @@ package io.modelcontextprotocol.util;
 import reactor.util.annotation.Nullable;
 
 import java.net.URI;
-import java.util.Collection;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Miscellaneous utility methods.
@@ -111,4 +110,49 @@ public final class Utils {
 		return endpointPath.startsWith(basePath);
 	}
 
+	/**
+	 * 转为一个可变 List
+	 */
+	public static <T> List<T> asList(T... ary) {
+		if (ary == null) {
+			return new ArrayList<>();
+		} else {
+			List<T> list = new ArrayList<>(ary.length);
+			Collections.addAll(list, ary);
+			return list;
+		}
+	}
+	/**
+	 * 转为一个可变 Set
+	 */
+	public static <T> Set<T> asSet(T... ary) {
+		if (ary == null) {
+			return new HashSet<>();
+		} else {
+			Set<T> list = new HashSet<>(ary.length);
+			Collections.addAll(list, ary);
+			return list;
+		}
+	}
+
+
+	/**
+	 * 转为一个可变 Map
+	 */
+	public static Map asMap(Object... keyValues) {
+		if(keyValues == null || keyValues.length == 0) {
+			return new LinkedHashMap<>();
+		}
+
+		if (keyValues.length % 2 != 0) {
+			throw new IllegalArgumentException("keyValues.length % 2 != 0");
+		}
+
+		Map map = new LinkedHashMap(keyValues.length / 2);
+		for (int i = 0; i < keyValues.length; i += 2) {
+			map.put(keyValues[i], keyValues[i + 1]);
+		}
+
+		return map;
+	}
 }

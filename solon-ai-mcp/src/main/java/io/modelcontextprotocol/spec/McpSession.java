@@ -7,10 +7,8 @@ package io.modelcontextprotocol.spec;
 import com.fasterxml.jackson.core.type.TypeReference;
 import reactor.core.publisher.Mono;
 
-import java.util.Map;
-
 /**
- * Represents a Model Control Protocol (MCP) session that handles communication between
+ * Represents a Model Context Protocol (MCP) session that handles communication between
  * clients and the server. This interface provides methods for sending requests and
  * notifications, as well as managing the session lifecycle.
  *
@@ -24,24 +22,6 @@ import java.util.Map;
  * @author Dariusz Jędrzejczyk
  */
 public interface McpSession {
-
-	/**
-	 * Retrieve the session id.
-	 * @return session id
-	 */
-	String getId();
-
-	/**
-	 * Called by the {@link McpServerTransportProvider} once the session is determined.
-	 * The purpose of this method is to dispatch the message to an appropriate handler as
-	 * specified by the MCP server implementation
-	 * ({@link io.modelcontextprotocol.server.McpAsyncServer} or
-	 * {@link io.modelcontextprotocol.server.McpSyncServer}) via
-	 * {@link McpServerSession.Factory} that the server creates.
-	 * @param message the incoming JSON-RPC message
-	 * @return a Mono that completes when the message is processed
-	 */
-	Mono<Void> handle(McpSchema.JSONRPCMessage message);
 
 	/**
 	 * Sends a request to the model counterparty and expects a response of type T.
@@ -81,10 +61,10 @@ public interface McpSession {
 	 * parameters with the notification.
 	 * </p>
 	 * @param method the name of the notification method to be sent to the counterparty
-	 * @param params a map of parameters to be sent with the notification
+	 * @param params parameters to be sent with the notification
 	 * @return a Mono that completes when the notification has been sent
 	 */
-	Mono<Void> sendNotification(String method, Map<String, Object> params);
+	Mono<Void> sendNotification(String method, Object params);
 
 	/**
 	 * Closes the session and releases any associated resources asynchronously.
