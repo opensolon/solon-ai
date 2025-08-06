@@ -25,7 +25,7 @@ public class McpServerConfig {
     public McpServerEndpointProvider demo2(McpServerTool2 serverTool) {
         McpServerEndpointProvider serverEndpoint = McpServerEndpointProvider.builder()
                 .name("demo2")
-                .sseEndpoint("/demo2/sse")
+                .mcpEndpoint("/demo2/sse")
                 .build();
 
         serverEndpoint.addTool(new MethodToolProvider(serverTool));

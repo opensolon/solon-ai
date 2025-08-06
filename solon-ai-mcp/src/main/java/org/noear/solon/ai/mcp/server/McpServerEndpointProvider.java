@@ -16,13 +16,9 @@
 package org.noear.solon.ai.mcp.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.client.transport.WebRxSseClientTransport;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
-import io.modelcontextprotocol.server.transport.IMcpHttpServerTransport;
-import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
-import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
-import io.modelcontextprotocol.server.transport.WebRxStreamableServerTransportProvider;
+import io.modelcontextprotocol.server.transport.*;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
 import org.noear.solon.Solon;
@@ -113,6 +109,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
                         .sseEndpoint(this.mcpEndpoint)
                         .messageEndpoint(this.messageEndpoint)
+                        .keepAliveInterval(serverProperties.getHeartbeatInterval())
                         .objectMapper(new ObjectMapper())
                         .build();
 
@@ -122,6 +119,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
             } else {
                 this.mcpTransportProvider = WebRxStreamableServerTransportProvider.builder()
                         .mcpEndpoint(this.mcpEndpoint)
+                        .keepAliveInterval(serverProperties.getHeartbeatInterval())
                         .objectMapper(new ObjectMapper())
                         .build();
 
@@ -470,8 +468,19 @@ public class McpServerEndpointProvider implements LifecycleBean {
         }
 
         /**
-         * SSE 端点
+         * MCP 端点
          */
+        public Builder mcpEndpoint(String mcpEndpoint) {
+            props.setMcpEndpoint(mcpEndpoint);
+            return this;
+        }
+
+        /**
+         * SSE 端点
+         *
+         * @deprecated 3.5
+         */
+        @Deprecated
         public Builder sseEndpoint(String sseEndpoint) {
             props.setSseEndpoint(sseEndpoint);
             return this;
@@ -479,7 +488,10 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
         /**
          * Message 端点
+         *
+         * @deprecated 3.5
          */
+        @Deprecated
         public Builder messageEndpoint(String messageEndpoint) {
             props.setMessageEndpoint(messageEndpoint);
             return this;

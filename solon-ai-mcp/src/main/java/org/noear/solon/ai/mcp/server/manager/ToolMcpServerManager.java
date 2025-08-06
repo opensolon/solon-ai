@@ -74,6 +74,10 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
             String inSchemaJson = buildJsonSchema(functionTool).toJson();
             // 获取 outputSchema JSON 字符串（可能为 null 或空）
             String outSchemaJson = mcpServerProps.isEnableOutputSchema() ? functionTool.outputSchema() : null;
+            if(Utils.isEmpty(outSchemaJson)) {
+                outSchemaJson = "{}";
+            }
+
 
             McpSchema.ToolAnnotations toolAnnotations = new McpSchema.ToolAnnotations();
             toolAnnotations.setReturnDirect(functionTool.returnDirect());

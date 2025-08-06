@@ -22,17 +22,12 @@
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai</artifactId>
+            <artifactId>solon-ai-core</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-web-sse</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-data</artifactId>
         </dependency>
 
         <dependency>

@@ -18,7 +18,6 @@ package org.noear.solon.ai.mcp.server;
 import lombok.Getter;
 import lombok.Setter;
 import org.noear.solon.ai.mcp.McpChannel;
-import org.noear.solon.annotation.BindProps;
 
 import java.time.Duration;
 
@@ -44,7 +43,7 @@ public class McpServerProperties {
     /**
      * 通道
      */
-    private String channel = McpChannel.STREAMABLE_HTTP;
+    private String channel = McpChannel.STREAMABLE;
     
     /**
      * mcp 端点（路径）
@@ -70,7 +69,6 @@ public class McpServerProperties {
     /**
      * 服务器SSE心跳间隔（空表示不启用）
      */
-    @Deprecated
     private Duration heartbeatInterval = Duration.ofSeconds(30);
 
     /**
