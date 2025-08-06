@@ -18,7 +18,7 @@
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai</artifactId>
+            <artifactId>solon-ai-core</artifactId>
         </dependency>
 
         <dependency>
@@ -28,12 +28,12 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-data</artifactId>
+            <artifactId>solon-web-rx</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-web-rx</artifactId>
+            <artifactId>solon-cache</artifactId>
         </dependency>
 
         <dependency>
@@ -81,6 +81,12 @@
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-logging-simple</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai</artifactId>
             <scope>test</scope>
         </dependency>
 
