@@ -23,6 +23,8 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -119,10 +121,30 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	}
 
 	public void sendHeartbeat() {
-		for (McpServerSession session : sessions.values()) {
-			((WebRxMcpSessionTransport) session.getTransport()).sendHeartbeat();
-		}
-	}
+        List<String> invalidSesssionIds = new ArrayList<>();
+
+        //发送心跳
+        for (McpServerSession session : sessions.values()) {
+            try {
+                ((WebRxMcpSessionTransport) session.getTransport()).sendHeartbeat();
+            } catch (Throwable e) {
+                invalidSesssionIds.add(session.getId());
+            }
+        }
+
+        //移除无效会话
+        for (String sesssionId : invalidSesssionIds) {
+            McpServerSession session = sessions.remove(sesssionId);
+            if (session != null) {
+                //不要在上面关，不然会引起集合变化
+                try {
+                    session.close();
+                } catch (Throwable ignore) {
+                    //ignore
+                }
+            }
+        }
+    }
 
 	public void toHttpHandler(SolonApp app) {
 		if (app != null) {
