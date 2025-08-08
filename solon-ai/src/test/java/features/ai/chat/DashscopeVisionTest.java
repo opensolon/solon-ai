@@ -1,11 +1,11 @@
 package features.ai.chat;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.media.Audio;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
-import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.net.http.HttpUtils;
@@ -112,7 +112,7 @@ public class DashscopeVisionTest {
         String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
 
         // session会话
-        ChatSession chatSession = new ChatSessionDefault("sessionID");
+        ChatSession chatSession =  InMemoryChatSession.builder().sessionId("sessionID").build();
 
         ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", Image.ofUrl(imageUrl)))
                 .call();

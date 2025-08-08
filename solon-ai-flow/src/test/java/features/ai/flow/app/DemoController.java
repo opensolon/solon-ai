@@ -1,7 +1,7 @@
 package features.ai.flow.app;
 
 import org.noear.solon.ai.chat.ChatSession;
-import org.noear.solon.ai.chat.ChatSessionDefault;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.ai.flow.events.Events;
 import org.noear.solon.ai.flow.events.NodeEvent;
@@ -35,7 +35,7 @@ public class DemoController {
         });
 
         //保存会话记录
-        ChatSession chatSession = chatSessionMap.computeIfAbsent(ctx.sessionId(), k -> new ChatSessionDefault(ctx.sessionId()));
+        ChatSession chatSession = chatSessionMap.computeIfAbsent(ctx.sessionId(), k -> InMemoryChatSession.builder().sessionId(ctx.sessionId()).build());
         flowContext.put(Attrs.CTX_CHAT_SESSION, chatSession);
 
         flowEngine.eval("chat_case2", flowContext);
@@ -47,7 +47,7 @@ public class DemoController {
         FlowContext flowContext = new FlowContext();
 
         //保存会话记录
-        ChatSession chatSession = chatSessionMap.computeIfAbsent(ctx.sessionId(), k -> new ChatSessionDefault(ctx.sessionId()));
+        ChatSession chatSession = chatSessionMap.computeIfAbsent(ctx.sessionId(), k -> InMemoryChatSession.builder().sessionId(ctx.sessionId()).build());
         flowContext.put(Attrs.CTX_CHAT_SESSION, chatSession);
 
         flowEngine.eval("chat_case2_json", flowContext);
@@ -59,7 +59,7 @@ public class DemoController {
         FlowContext flowContext = new FlowContext();
 
         //保存会话记录
-        ChatSession chatSession = chatSessionMap.computeIfAbsent(ctx.sessionId(), k -> new ChatSessionDefault(ctx.sessionId()));
+        ChatSession chatSession = chatSessionMap.computeIfAbsent(ctx.sessionId(), k -> InMemoryChatSession.builder().sessionId(ctx.sessionId()).build());
         flowContext.put(Attrs.CTX_CHAT_SESSION, chatSession);
 
         flowEngine.eval("pk_case2", flowContext);

@@ -10,7 +10,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
-import org.noear.solon.ai.chat.ChatSessionDefault;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.rag.Document;
@@ -51,7 +51,7 @@ public abstract class AbsChatTest {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
-        ChatSession chatSession = new ChatSessionDefault();
+        ChatSession chatSession = InMemoryChatSession.builder().build();
         chatSession.addMessage(ChatMessage.ofUser("hello"));
 
         //流返回
@@ -223,7 +223,7 @@ public abstract class AbsChatTest {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
-        ChatSession chatSession = new ChatSessionDefault();
+        ChatSession chatSession = InMemoryChatSession.builder().build();
         chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
 
         //流返回(sse)
@@ -262,7 +262,7 @@ public abstract class AbsChatTest {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
-        ChatSession chatSession = new ChatSessionDefault();
+        ChatSession chatSession = InMemoryChatSession.builder().build();
         chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
 
         //流返回(sse)
@@ -363,7 +363,7 @@ public abstract class AbsChatTest {
 
         AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
-        ChatSession chatSession = new ChatSessionDefault();
+        ChatSession chatSession = InMemoryChatSession.builder().build();
         chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
 
         chatModel.prompt(chatSession)
@@ -397,7 +397,7 @@ public abstract class AbsChatTest {
 
         AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
-        ChatSession chatSession = new ChatSessionDefault();
+        ChatSession chatSession = InMemoryChatSession.builder().build();
         chatSession.addMessage(ChatMessage.ofUser("杭州天气和北京降雨量如何？"));
 
         chatModel.prompt(chatSession)
