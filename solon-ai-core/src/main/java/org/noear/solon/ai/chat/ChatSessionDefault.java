@@ -17,9 +17,9 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.lang.Preview;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -28,11 +28,11 @@ import java.util.List;
  *
  * @author noear
  * @since 3.1
+ * @deprecated 3.4 {@link InMemoryChatSession}
  */
+@Deprecated
 @Preview("3.1")
-public class ChatSessionDefault implements ChatSession {
-    private final String sessionId;
-    private final List<ChatMessage> messages;
+public class ChatSessionDefault extends InMemoryChatSession implements ChatSession {
 
     public ChatSessionDefault() {
         this(Utils.uuid());
@@ -47,13 +47,7 @@ public class ChatSessionDefault implements ChatSession {
     }
 
     protected ChatSessionDefault(String sessionId, List<ChatMessage> messages) {
-        this.sessionId = sessionId;
-
-        if (messages == null) {
-            this.messages = new ArrayList<>();
-        } else {
-            this.messages = messages;
-        }
+        super(sessionId, messages, 0);
     }
 
     /**

@@ -5,9 +5,9 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
-import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
@@ -30,7 +30,7 @@ public abstract class AbsThinkTest {
     public void case2() throws Exception {
         ChatModel chatModel = getChatModelBuilder().build();
 
-        ChatSession chatSession = new ChatSessionDefault();
+        ChatSession chatSession = InMemoryChatSession.builder().build();
         chatSession.addMessage(ChatMessage.ofUser("hello"));
 
         //流返回
@@ -76,7 +76,7 @@ public abstract class AbsThinkTest {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
-        ChatSession chatSession = new ChatSessionDefault();
+        ChatSession chatSession = InMemoryChatSession.builder().build();
         chatSession.addMessage("如何保证睡眠质量？");
 
         //流返回

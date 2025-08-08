@@ -20,9 +20,9 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatSession;
-import org.noear.solon.ai.chat.ChatSessionDefault;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
@@ -98,7 +98,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
         if (data != null) {
             //构建会话（可在发起流程时传递）
             String chatSessionKey = node.getMetaOrDefault(META_CHAT_SESSION, Attrs.CTX_CHAT_SESSION);
-            ChatSession chatSession = context.computeIfAbsent(chatSessionKey, k -> new ChatSessionDefault());
+            ChatSession chatSession = context.computeIfAbsent(chatSessionKey, k -> InMemoryChatSession.builder().build());
 
             if (Utils.isEmpty(chatSession.getMessages())) {
                 String systemPrompt = node.getMeta(META_SYSTEM_PROMPT);
