@@ -36,6 +36,7 @@ public class FunctionPromptDesc implements FunctionPrompt {
     private final String name;
     private final List<ParamDesc> params;
 
+    private String title;
     private String description;
     private Function<Map<String, Object>, Collection<ChatMessage>> doHandler;
 
@@ -45,7 +46,17 @@ public class FunctionPromptDesc implements FunctionPrompt {
     }
 
     /**
-     * 申明函数描述
+     * 申明提示语标题
+     *
+     * @param title 参数
+     */
+    public FunctionPromptDesc title(String title) {
+        this.title = title;
+        return this;
+    }
+
+    /**
+     * 申明提示语描述
      *
      * @param description 参数
      */
@@ -91,6 +102,11 @@ public class FunctionPromptDesc implements FunctionPrompt {
     @Override
     public String name() {
         return name;
+    }
+
+    @Override
+    public String title() {
+        return title;
     }
 
     @Override

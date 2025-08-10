@@ -20,6 +20,8 @@ import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.client.transport.WebRxSseClientTransport;
+import io.modelcontextprotocol.client.transport.WebRxStreamableHttpTransport;
+import io.modelcontextprotocol.server.transport.WebRxStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack.ONode;
@@ -184,8 +186,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 webBuilder.ssl(clientProps.getHttpSsl());
             }
 
-            clientTransport = WebRxSseClientTransport.builder(webBuilder)
-                    .sseEndpoint(endpoint)
+            clientTransport = WebRxStreamableHttpTransport.builder(webBuilder)
+                    .endpoint(endpoint)
                     .build();
         }
 
@@ -197,7 +199,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                     logging.setLevel(loggingLevel);
                     return Mono.empty();
                 })
-                .withConnectOnInit(false) //初始化放到后面（更可控）
+                //.withConnectOnInit(false) //初始化放到后面（更可控）
                 .build();
     }
 
@@ -570,13 +572,15 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         for (McpSchema.Tool tool : result.getTools()) {
             String name = tool.getName();
+            String title = tool.getTitle();
             String description = tool.getDescription();
-            Boolean returnDirect = tool.getReturnDirect();
+            Boolean returnDirect = (tool.getAnnotations() == null ? false : tool.getAnnotations().getReturnDirect());
             String inputSchema = ONode.load(tool.getInputSchema()).toJson();
             String outputSchema = (tool.getOutputSchema() == null ? null : ONode.load(tool.getOutputSchema()).toJson());
 
             FunctionToolDesc functionRefer = new FunctionToolDesc(
                     name,
+                    title,
                     description,
                     returnDirect,
                     inputSchema,

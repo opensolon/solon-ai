@@ -54,13 +54,27 @@ public class McpSyncServer {
 	 */
 	private final McpAsyncServer asyncServer;
 
+	private final boolean immediateExecution;
+
 	/**
 	 * Creates a new synchronous server that wraps the provided async server.
 	 * @param asyncServer The async server to wrap
 	 */
 	public McpSyncServer(McpAsyncServer asyncServer) {
+		this(asyncServer, false);
+	}
+
+	/**
+	 * Creates a new synchronous server that wraps the provided async server.
+	 * @param asyncServer The async server to wrap
+	 * @param immediateExecution Tools, prompts, and resources handlers execute work
+	 * without blocking code offloading. Do NOT set to true if the {@code asyncServer}'s
+	 * transport is non-blocking.
+	 */
+	public McpSyncServer(McpAsyncServer asyncServer, boolean immediateExecution) {
 		Assert.notNull(asyncServer, "Async server must not be null");
 		this.asyncServer = asyncServer;
+		this.immediateExecution = immediateExecution;
 	}
 
 	/**
@@ -68,7 +82,9 @@ public class McpSyncServer {
 	 * @param toolHandler The tool handler to add
 	 */
 	public void addTool(McpServerFeatures.SyncToolSpecification toolHandler) {
-		this.asyncServer.addTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler)).block();
+		this.asyncServer
+				.addTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler, this.immediateExecution))
+				.block();
 	}
 
 	/**
@@ -84,7 +100,10 @@ public class McpSyncServer {
 	 * @param resourceHandler The resource handler to add
 	 */
 	public void addResource(McpServerFeatures.SyncResourceSpecification resourceHandler) {
-		this.asyncServer.addResource(McpServerFeatures.AsyncResourceSpecification.fromSync(resourceHandler)).block();
+		this.asyncServer
+				.addResource(
+						McpServerFeatures.AsyncResourceSpecification.fromSync(resourceHandler, this.immediateExecution))
+				.block();
 	}
 
 	/**
@@ -96,29 +115,14 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * Add a new resource template handler.
-	 * @param resourceHandler The resource handler to add
-	 */
-	public void addResourceTemplate(McpServerFeatures.SyncResourceTemplateSpecification resourceHandler) {
-		this.asyncServer
-				.addResourceTemplate(McpServerFeatures.AsyncResourceTemplateSpecification.fromSync(resourceHandler))
-				.block();
-	}
-
-	/**
-	 * Remove a resource template handler.
-	 * @param resourceUri The URI of the resource template handler to remove
-	 */
-	public void removeResourceTemplate(String resourceUri) {
-		this.asyncServer.removeResourceTemplate(resourceUri).block();
-	}
-
-	/**
 	 * Add a new prompt handler.
 	 * @param promptSpecification The prompt specification to add
 	 */
 	public void addPrompt(McpServerFeatures.SyncPromptSpecification promptSpecification) {
-		this.asyncServer.addPrompt(McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification)).block();
+		this.asyncServer
+				.addPrompt(
+						McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification, this.immediateExecution))
+				.block();
 	}
 
 	/**
@@ -160,6 +164,13 @@ public class McpSyncServer {
 	}
 
 	/**
+	 * Notify clients that the resources have updated.
+	 */
+	public void notifyResourcesUpdated(McpSchema.ResourcesUpdatedNotification resourcesUpdatedNotification) {
+		this.asyncServer.notifyResourcesUpdated(resourcesUpdatedNotification).block();
+	}
+
+	/**
 	 * Notify clients that the list of available prompts has changed.
 	 */
 	public void notifyPromptsListChanged() {
@@ -167,9 +178,16 @@ public class McpSyncServer {
 	}
 
 	/**
-	 * Send a logging message notification to all clients.
-	 * @param loggingMessageNotification The logging message notification to send
+	 * This implementation would, incorrectly, broadcast the logging message to all
+	 * connected clients, using a single minLoggingLevel for all of them. Similar to the
+	 * sampling and roots, the logging level should be set per client session and use the
+	 * ServerExchange to send the logging message to the right client.
+	 * @param loggingMessageNotification The logging message to send
+	 * @deprecated Use
+	 * {@link McpSyncServerExchange#loggingNotification(LoggingMessageNotification)}
+	 * instead.
 	 */
+	@Deprecated
 	public void loggingNotification(LoggingMessageNotification loggingMessageNotification) {
 		this.asyncServer.loggingNotification(loggingMessageNotification).block();
 	}
@@ -195,4 +213,5 @@ public class McpSyncServer {
 	public McpAsyncServer getAsyncServer() {
 		return this.asyncServer;
 	}
+
 }

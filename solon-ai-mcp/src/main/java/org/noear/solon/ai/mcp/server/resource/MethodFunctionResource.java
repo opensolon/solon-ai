@@ -51,6 +51,7 @@ public class MethodFunctionResource implements FunctionResource {
     private final Type returnType;
 
     private final String name;
+    private final String title;
     private final ResourceMapping mapping;
     private final String mimeType;
 
@@ -73,6 +74,8 @@ public class MethodFunctionResource implements FunctionResource {
 
         //断言
         Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
+
+        this.title = mapping.title();
 
         Produces producesAnno = method.getAnnotation(Produces.class);
         if (producesAnno != null) {
@@ -103,6 +106,11 @@ public class MethodFunctionResource implements FunctionResource {
     @Override
     public String name() {
         return name;
+    }
+
+    @Override
+    public String title() {
+        return title;
     }
 
     @Override

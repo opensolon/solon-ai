@@ -4,9 +4,9 @@
 
 package io.modelcontextprotocol.util;
 
-import reactor.util.annotation.Nullable;
-
 import java.util.Collection;
+
+import reactor.util.annotation.Nullable;
 
 /**
  * Assertion utility class that assists in validating arguments.
@@ -56,7 +56,35 @@ public final class Assert {
 	 * @throws IllegalArgumentException if the text does not contain valid text content
 	 */
 	public static void hasText(@Nullable String text, String message) {
-		if (!Utils.hasText(text)) {
+		if (!hasText(text)) {
+			throw new IllegalArgumentException(message);
+		}
+	}
+
+	/**
+	 * Check whether the given {@code String} contains actual <em>text</em>.
+	 * <p>
+	 * More specifically, this method returns {@code true} if the {@code String} is not
+	 * {@code null}, its length is greater than 0, and it contains at least one
+	 * non-whitespace character.
+	 * @param str the {@code String} to check (may be {@code null})
+	 * @return {@code true} if the {@code String} is not {@code null}, its length is
+	 * greater than 0, and it does not contain whitespace only
+	 * @see Character#isWhitespace
+	 */
+	public static boolean hasText(@Nullable String str) {
+		return Utils.hasText(str);
+	}
+
+	/**
+	 * Assert a boolean expression, throwing an {@code IllegalArgumentException} if the
+	 * expression evaluates to {@code false}.
+	 * @param expression a boolean expression
+	 * @param message the exception message to use if the assertion fails
+	 * @throws IllegalArgumentException if {@code expression} is {@code false}
+	 */
+	public static void isTrue(boolean expression, String message) {
+		if (!expression) {
 			throw new IllegalArgumentException(message);
 		}
 	}

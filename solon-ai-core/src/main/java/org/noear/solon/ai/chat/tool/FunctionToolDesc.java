@@ -34,16 +34,19 @@ public class FunctionToolDesc implements FunctionTool {
     static final Logger log = LoggerFactory.getLogger(FunctionToolDesc.class);
 
     private final String name;
+    private String title;
+    private String description;
+
     private final List<ParamDesc> params = new ArrayList<>();
     private Type returnType;
-    private String description;
     private boolean returnDirect = false;
     private Function<Map<String, Object>, String> doHandler;
     private String inputSchema;
     private String outputSchema;
 
-    public FunctionToolDesc(String name, String description, Boolean returnDirect, String inputSchema, String outputSchema, Function<Map<String, Object>, String> handler) {
+    public FunctionToolDesc(String name, String title, String description, Boolean returnDirect, String inputSchema, String outputSchema, Function<Map<String, Object>, String> handler) {
         this.name = name;
+        this.title = title;
         this.description = description;
         this.inputSchema = inputSchema;
         this.outputSchema = outputSchema;
@@ -56,6 +59,16 @@ public class FunctionToolDesc implements FunctionTool {
      */
     public FunctionToolDesc(String name) {
         this.name = name;
+    }
+
+    /**
+     * 申明函数标题
+     *
+     * @param title 参数
+     */
+    public FunctionToolDesc title(String title) {
+        this.title = title;
+        return this;
     }
 
     /**
@@ -185,6 +198,13 @@ public class FunctionToolDesc implements FunctionTool {
         return name;
     }
 
+    /**
+     * 函数标题
+     */
+    @Override
+    public String title() {
+        return title;
+    }
 
     /**
      * 函数描述
@@ -273,6 +293,7 @@ public class FunctionToolDesc implements FunctionTool {
     public String toString() {
         return "FunctionToolDesc{" +
                 "name='" + name + '\'' +
+                ", title='" + title + '\'' +
                 ", description='" + description + '\'' +
                 ", returnDirect=" + returnDirect +
                 ", inputSchema=" + inputSchema() +

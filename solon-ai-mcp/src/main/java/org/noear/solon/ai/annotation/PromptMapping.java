@@ -33,6 +33,11 @@ public @interface PromptMapping {
     String name() default "";
 
     /**
+     * 标题
+     */
+    String title() default "";
+
+    /**
      * 描述
      */
     String description();

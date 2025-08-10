@@ -17,7 +17,7 @@ import java.util.Collection;
 /**
  * @author noear 2025/4/8 created
  */
-@McpServerEndpoint(sseEndpoint = "/demo4/sse")
+@McpServerEndpoint(mcpEndpoint = "/demo4/sse")
 public class McpServerTool4 {
     @ToolMapping(description = "查询城市降雨量")
     public String getRainfall(@Param(name = "location", description = "城市位置") String location) {
