@@ -347,38 +347,43 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
 	}
 
 	private Flux<McpSchema.JSONRPCMessage> extractError(HttpResponse response, String sessionRepresentation) {
-		//todo: createError
-		return Flux.<McpSchema.JSONRPCMessage>defer(() -> {
-			try {
-				HttpResponseException e = response.createError();
-				byte[] body = e.bodyBytes();
+        //todo: createError
+        return Flux.<McpSchema.JSONRPCMessage>defer(() -> {
+            try {
+                HttpResponseException e = response.createError();
+                byte[] body = e.bodyBytes();
 
-				McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = null;
-				Exception toPropagate;
-				try {
-					McpSchema.JSONRPCResponse jsonRpcResponse = objectMapper.readValue(body,
-							McpSchema.JSONRPCResponse.class);
-					jsonRpcError = jsonRpcResponse.getError();
-					toPropagate = jsonRpcError != null ? new McpError(jsonRpcError)
-							: new McpError("Can't parse the jsonResponse " + jsonRpcResponse);
-				} catch (IOException ex) {
-					toPropagate = new RuntimeException("Sending request failed", e);
-					logger.debug("Received content together with {} HTTP code response: {}", e.code(), body);
-				}
+                Exception toPropagate;
 
-				// Some implementations can return 400 when presented with a
-				// session id that it doesn't know about, so we will
-				// invalidate the session
-				// https://github.com/modelcontextprotocol/typescript-sdk/issues/389
-				if (e.code() == StatusCodes.CODE_BAD_REQUEST) {
-					return Flux.error(new McpTransportSessionNotFoundException(sessionRepresentation, toPropagate));
-				}
-				return Flux.error(toPropagate);
-			} catch (Exception ex) {
-				return Flux.error(ex);
-			}
-		});
-	}
+                if (body == null || body.length == 0) {
+                    toPropagate = new RuntimeException("Sending request failed(" + e.getMessage()+")", e);
+                } else {
+                    try {
+                        McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = null;
+                        McpSchema.JSONRPCResponse jsonRpcResponse = objectMapper.readValue(body,
+                                McpSchema.JSONRPCResponse.class);
+                        jsonRpcError = jsonRpcResponse.getError();
+                        toPropagate = jsonRpcError != null ? new McpError(jsonRpcError)
+                                : new McpError("Can't parse the jsonResponse " + jsonRpcResponse);
+                    } catch (IOException ex) {
+                        toPropagate = new RuntimeException("Sending request failed", e);
+                        logger.debug("Received content together with {} HTTP code response: {}", e.code(), body);
+                    }
+                }
+
+                // Some implementations can return 400 when presented with a
+                // session id that it doesn't know about, so we will
+                // invalidate the session
+                // https://github.com/modelcontextprotocol/typescript-sdk/issues/389
+                if (e.code() == StatusCodes.CODE_BAD_REQUEST) {
+                    return Flux.error(new McpTransportSessionNotFoundException(sessionRepresentation, toPropagate));
+                }
+                return Flux.error(toPropagate);
+            } catch (Exception ex) {
+                return Flux.error(ex);
+            }
+        });
+    }
 
 	private Flux<McpSchema.JSONRPCMessage> eventStream(McpTransportStream<Disposable> stream, HttpResponse response) {
 		McpTransportStream<Disposable> sessionStream = stream != null ? stream

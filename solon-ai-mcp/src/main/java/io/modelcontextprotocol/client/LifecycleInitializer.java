@@ -294,7 +294,7 @@ class LifecycleInitializer {
                     .onErrorResume(ex -> {
                         logger.warn("Failed to initialize", ex);
                         return Mono.error(
-                                new McpError("Client failed to initialize " + actionName + " due to: " + ex.getMessage()));
+                                new McpError("Client failed to initialize " + actionName + " due to: " + ex.getMessage(), ex));
                     })
                     .flatMap(operation);
         });

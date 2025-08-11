@@ -19,6 +19,10 @@ public class McpError extends RuntimeException {
 		super(error.toString());
 	}
 
+    public McpError(Object error, Throwable cause) {
+        super(error.toString(), cause);
+    }
+
 	public JSONRPCError getJsonRpcError() {
 		return jsonRpcError;
 	}
