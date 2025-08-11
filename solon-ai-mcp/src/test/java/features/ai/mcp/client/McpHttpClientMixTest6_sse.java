@@ -14,10 +14,7 @@ import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 import org.noear.solon.test.SolonTest;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * @author noear 2025/5/1 created
@@ -27,7 +24,8 @@ import java.util.List;
 public class McpHttpClientMixTest6_sse {
     McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.SSE)
-            .apiUrl("http://localhost:8081/demo6/sse?user=1")
+            .apiUrl("http://localhost:8081/demo6/sse?token=3")
+            .headerSet("user", "2")
             .cacheSeconds(30)
             .build();
 
