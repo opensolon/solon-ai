@@ -46,7 +46,7 @@ public class McpClientProperties {
     /**
      * 通道
      */
-    private String channel = McpChannel.SSE;
+    private String channel = McpChannel.STREAMABLE;
 
     /**
      * 接口完整地址

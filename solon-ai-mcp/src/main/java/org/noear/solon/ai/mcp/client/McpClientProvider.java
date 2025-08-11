@@ -185,9 +185,15 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 webBuilder.ssl(clientProps.getHttpSsl());
             }
 
-            clientTransport = WebRxStreamableHttpTransport.builder(webBuilder)
-                    .endpoint(endpoint)
-                    .build();
+            if (McpChannel.SSE.equals(clientProps.getChannel())) {
+                clientTransport = WebRxSseClientTransport.builder(webBuilder)
+                        .sseEndpoint(endpoint)
+                        .build();
+            }else {
+                clientTransport = WebRxStreamableHttpTransport.builder(webBuilder)
+                        .endpoint(endpoint)
+                        .build();
+            }
         }
 
         return McpClient.async(clientTransport)
