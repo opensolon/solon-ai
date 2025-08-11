@@ -23,7 +23,7 @@ import java.util.List;
  */
 @Slf4j
 @SolonTest(McpServerApp.class)
-public class McpSseClientMixTest2 {
+public class McpHttpClientMixTest2 {
     McpClientProvider mcpClient = McpClientProvider.builder()
             .apiUrl("http://localhost:8081/demo2/sse?user=1")
             .cacheSeconds(30)

@@ -19,7 +19,7 @@ import java.util.Map;
  */
 @Slf4j
 @SolonTest(McpServerApp.class)
-public class McpSseClientMixTest4 {
+public class McpHttpClientMixTest4 {
     McpClientProvider mcpClient = McpClientProvider.builder()
             .apiUrl("http://localhost:8081/demo4/sse?token=3")
             .headerSet("user", "2")

@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 @SolonTest(McpServerApp.class)
-public class McpSseClientTest {
+public class McpHttpClientTest {
     //简化客户端
     @Test
     public void case1() throws Exception {

@@ -5,7 +5,6 @@ import io.modelcontextprotocol.spec.McpError;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.net.http.HttpException;
 import org.noear.solon.test.SolonTest;
 
 /**
@@ -13,7 +12,7 @@ import org.noear.solon.test.SolonTest;
  */
 @Slf4j
 @SolonTest(McpServerApp.class)
-public class McpSseAuthTest {
+public class McpHttpAuthTest {
     @Test
     public void case1() {
         McpClientProvider mcpClient = McpClientProvider.builder()

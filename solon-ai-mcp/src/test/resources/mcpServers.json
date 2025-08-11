@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "server1": {
-      "type": "sse",
+      "type": "streamable",
       "url": "http://localhost:8081/demo2/sse",
       "headers": {
         "Token": "value"
