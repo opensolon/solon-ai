@@ -124,6 +124,31 @@ public class ToolSchemaUtil {
         }
     }
 
+    /**
+     * 乎略输出架构
+     * */
+    public static boolean isIgnoreOutputSchema(Type type) {
+        if (type == void.class) {
+            return true;
+        } else if (type == String.class) {
+            return true;
+        } else if (type == Boolean.class) {
+            return true;
+        } else if (type instanceof Class) {
+            Class clz = ((Class) type);
+
+            if (Number.class.isAssignableFrom(clz)) {
+                return true;
+            } else if (Date.class.isAssignableFrom(clz)) {
+                return true;
+            }
+
+            return clz.isPrimitive() || clz.isEnum();
+        }
+
+        return false;
+    }
+
 
     /**
      * 处理 ParameterizedType 类型（如 Result<T>、List<T>、Map<K,V> 等），并自动识别并解析带泛型字段的包装类（保留结构并替换泛型类型）

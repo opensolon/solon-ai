@@ -16,6 +16,7 @@ import org.noear.solon.annotation.Param;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Date;
 
 /**
  * @author noear 2025/4/29 created
@@ -82,6 +83,17 @@ public class ToolSchemaUtilTest {
         JsonSchema schema = generator.generateSchema(CaseBo.class);
         JsonNode jsonNode = mapper.valueToTree(schema);
         System.out.println(jsonNode.toPrettyString());
+    }
+
+    @Test
+    public void ignoreOutputSchemaTest() {
+        assert ToolSchemaUtil.isIgnoreOutputSchema(String.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(Integer.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(int.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(Date.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(Boolean.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(boolean.class);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(BigDecimal.class);
     }
 
     public static class User {

@@ -240,8 +240,8 @@ public class FunctionToolDesc implements FunctionTool {
         if (outputSchema == null) {
             if (returnType != null) {
                 ONode outputSchemaNode = new ONode();
-                // 如果返回类型，则需要处理
-                if (returnType != void.class) {
+
+                if (ToolSchemaUtil.isIgnoreOutputSchema(returnType) == false) {
                     ToolSchemaUtil.buildToolParamNode(returnType, "", outputSchemaNode);
                     outputSchema = outputSchemaNode.toJson();
                 } else {
