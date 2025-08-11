@@ -23,7 +23,7 @@ import java.util.List;
 @SolonTest(McpApp.class)
 public class McpClientTest {
     McpClientProvider mcpClient = McpClientProvider.builder()
-            .apiUrl("http://localhost:8081/mcp/sse?user=1")
+            .apiUrl("http://localhost:8081/mcp/")
             .cacheSeconds(30)
             .build();
 
@@ -35,7 +35,7 @@ public class McpClientTest {
 
         assert tools.size() == 1;
 
-        assert ("[FunctionToolDesc{name='getWeather', description='查询天气预报', returnDirect=true, inputSchema={\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"城市位置\"}},\"required\":[\"location\"]}, outputSchema={\"type\":\"string\"}}]")
+        assert ("[FunctionToolDesc{name='getWeather', title='', description='查询天气预报', returnDirect=true, inputSchema={\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"城市位置\"}},\"required\":[\"location\"]}, outputSchema=null}]")
                 .equals(tools.toString());
     }
 
@@ -58,9 +58,9 @@ public class McpClientTest {
 
         Collection<FunctionResource> list = mcpClient.getResources();
         System.out.println(list);
-        assert list.size() == 1;
+        assert list.size() == 2;
 
-        assert "config://app-version".equals(new ArrayList<>(list).get(0).uri());
+        assert "config://app-version".equals(new ArrayList<>(list).get(1).uri());
     }
 
     @Test
@@ -68,7 +68,7 @@ public class McpClientTest {
         String resource = mcpClient.readResourceAsText("db://users/12/email").getContent();
 
         assert Utils.isNotEmpty(resource);
-        log.warn("{}", resource);
+        log.warn("resource-get: {}", resource);
 
         assert "12@example.com".equals(resource);
 
@@ -83,12 +83,10 @@ public class McpClientTest {
     public void resource9() throws Exception {
         Collection<FunctionResource> resources = mcpClient.getResources();
         System.out.println(resources);
-        assert resources.size() == 1;
+        assert resources.size() == 2;
 
-        assert ("[FunctionResourceDesc{name='getAppVersion', " +
-                "uri='config://app-version', " +
-                "description='获取应用版本号', " +
-                "mimeType='text/config'}]").equals(resources.toString());
+        assert ("[FunctionResourceDesc{name='getEmail', uri='db://users/{user_id}/email', description='根据用户ID查询邮箱', mimeType=''}, FunctionResourceDesc{name='getAppVersion', uri='config://app-version', description='获取应用版本号', mimeType='text/config'}]")
+                .equals(resources.toString());
     }
 
     @Test

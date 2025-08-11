@@ -417,9 +417,12 @@ public class McpServerEndpointProvider implements LifecycleBean {
             String name = Solon.cfg().getByTmpl(endpointAnno.name());
             String version = Solon.cfg().getByTmpl(endpointAnno.version());
             String channel = Solon.cfg().getByTmpl(endpointAnno.channel());
+            String heartbeatInterval = Solon.cfg().getByTmpl(endpointAnno.heartbeatInterval());
+
+            String mcpEndpoint = Solon.cfg().getByTmpl(endpointAnno.mcpEndpoint());
+            //@deprecated  3.5 //2025-08-11
             String sseEndpoint = Solon.cfg().getByTmpl(endpointAnno.sseEndpoint());
             String messageEndpoint = Solon.cfg().getByTmpl(endpointAnno.messageEndpoint());
-            String heartbeatInterval = Solon.cfg().getByTmpl(endpointAnno.heartbeatInterval());
 
 
             if (Utils.isEmpty(name)) {
@@ -430,6 +433,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
             props.setVersion(version);
             props.setChannel(channel);
+            props.setMcpEndpoint(mcpEndpoint);
             props.setSseEndpoint(sseEndpoint);
             props.setMessageEndpoint(messageEndpoint);
             props.setEnableOutputSchema(endpointAnno.enableOutputSchema());

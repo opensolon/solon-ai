@@ -47,7 +47,7 @@ public @interface McpServerEndpoint {
     /**
      * MCP 端点
      */
-    String mcpEndpoint() default "/mcp";
+    String mcpEndpoint() default "";
 
     /**
      * SSE 端点
@@ -55,7 +55,7 @@ public @interface McpServerEndpoint {
      * @deprecated 3.5
      */
     @Deprecated
-    String sseEndpoint() default "/sse";
+    String sseEndpoint() default "";
 
     /**
      * Message 端点（默认根据 sse 端点自动构建）
@@ -66,12 +66,12 @@ public @interface McpServerEndpoint {
     String messageEndpoint() default "";
 
     /**
-     * 服务器SSE心跳间隔（空表示不启用）
+     * 服务器心跳间隔（空表示不启用）
      */
     String heartbeatInterval() default "30s";
 
     /**
      * 启用输出架构
      */
-    boolean enableOutputSchema() default true;
+    boolean enableOutputSchema() default false;
 }

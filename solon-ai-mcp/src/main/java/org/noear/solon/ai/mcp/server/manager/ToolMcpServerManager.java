@@ -72,28 +72,34 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
 
             // 构建 inputSchema JSON 字符串
             String inSchemaJson = buildJsonSchema(functionTool).toJson();
-            // 获取 outputSchema JSON 字符串（可能为 null 或空）
-            String outSchemaJson = mcpServerProps.isEnableOutputSchema() ? functionTool.outputSchema() : null;
-            if(Utils.isEmpty(outSchemaJson)) {
-                outSchemaJson = "{}";
-            }
-
 
             McpSchema.ToolAnnotations toolAnnotations = new McpSchema.ToolAnnotations();
             toolAnnotations.setReturnDirect(functionTool.returnDirect());
 
+            McpSchema.Tool.Builder toolBuilder = McpSchema.Tool.builder()
+                    .name(functionTool.name()).title(functionTool.title()).description(functionTool.description())
+                    .annotations(toolAnnotations)
+                    .inputSchema(inSchemaJson);
+
+            if(mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())){
+                toolBuilder.outputSchema(functionTool.outputSchema());
+            }
+
             // 注册实际调用逻辑
             McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(
-                    McpSchema.Tool.builder()
-                            .name(functionTool.name()).title(functionTool.title()).description(functionTool.description())
-                            .annotations(toolAnnotations)
-                            .inputSchema(inSchemaJson).outputSchema(outSchemaJson).build(),
+                    toolBuilder.build(),
                     (exchange, request) -> {
                         try {
                             ContextHolder.currentSet(new McpServerContext(exchange));
 
                             String rst = functionTool.handle(request);
-                            return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
+
+                            if(mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())){
+                                Map<String,Object> map = ONode.load(rst).toObject(Map.class);
+                                return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false, map);
+                            } else {
+                                return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
+                            }
                         } catch (Throwable ex) {
                             ex = Utils.throwableUnwrap(ex);
                             throw new McpException(ex.getMessage(), ex);

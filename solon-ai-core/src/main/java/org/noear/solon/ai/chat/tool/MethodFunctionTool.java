@@ -102,9 +102,10 @@ public class MethodFunctionTool implements FunctionTool {
             // 如果返回类型，则需要处理
             if (returnType != void.class) {
                 ToolSchemaUtil.buildToolParamNode(returnType, "", outputSchemaNode);
+                outputSchema = outputSchemaNode.toJson();
+            } else {
+                outputSchema = "";
             }
-
-            outputSchema = outputSchemaNode.toJson();
         }
     }
 
