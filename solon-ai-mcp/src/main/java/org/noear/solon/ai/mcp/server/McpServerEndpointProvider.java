@@ -36,7 +36,9 @@ import org.noear.solon.ai.mcp.server.prompt.PromptProvider;
 import org.noear.solon.ai.mcp.server.resource.ResourceProvider;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ConvertUtil;
+import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,17 +77,35 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
         if (McpChannel.SSE.equals(serverProperties.getChannel())) {
             //sse
-            this.mcpEndpoint = serverProperties.getSseEndpoint();
+            if (Utils.isEmpty(serverProperties.getSseEndpoint())) {
+                this.mcpEndpoint = serverProperties.getMcpEndpoint();
+            } else {
+                this.mcpEndpoint = serverProperties.getSseEndpoint();
+            }
+
+            //断言
+            Assert.notEmpty(this.mcpEndpoint, "MCP sse endpoint is empty");
 
             if (Utils.isEmpty(serverProperties.getMessageEndpoint())) {
-                this.messageEndpoint = this.mcpEndpoint;
+                this.messageEndpoint = PathUtil.joinUri(this.mcpEndpoint , "/sse"); //兼容 2024 版协议风格
             } else {
                 this.messageEndpoint = serverProperties.getMessageEndpoint();
             }
-        } else {
+        } else if(McpChannel.STREAMABLE.equals(serverProperties.getChannel())) {
             //streamable
-            this.mcpEndpoint = serverProperties.getMcpEndpoint();
+            if (Utils.isEmpty(serverProperties.getMcpEndpoint())) {
+                this.mcpEndpoint = serverProperties.getSseEndpoint();
+            } else {
+                this.mcpEndpoint = serverProperties.getMcpEndpoint();
+            }
+
+            //断言
+            Assert.notEmpty(this.mcpEndpoint, "MCP endpoint is empty");
+
             this.messageEndpoint = this.mcpEndpoint;
+        } else {
+            this.mcpEndpoint = null;
+            this.messageEndpoint = null;
         }
 
 

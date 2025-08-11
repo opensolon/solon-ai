@@ -16,8 +16,6 @@ import java.util.Collection;
 /**
  * @author noear 2025/4/8 created
  */
-@Mapping("/demo2/sse")
-@Controller
 @McpServerEndpoint(mcpEndpoint = "/demo2/sse")
 public class McpServerTool2 {
     @ToolMapping(description = "查询天气预报", returnDirect = true)

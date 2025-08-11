@@ -28,7 +28,7 @@ public class McpSseClientTest {
     @Test
     public void case1() throws Exception {
         McpClientProvider mcpClient = Utils.loadProps("app-client.yml")
-                .getProp("solon.ai.mcp.client.demo1")
+                .getProp("solon.ai.mcp.client.demo2")
                 .toBean(McpClientProvider.class);
 
         String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
@@ -135,7 +135,7 @@ public class McpSseClientTest {
     @Test
     public void case4() throws Exception {
         McpClientProvider toolProvider = Utils.loadProps("app-client.yml")
-                .getProp("solon.ai.mcp.client.demo1")
+                .getProp("solon.ai.mcp.client.demo2")
                 .toBean(McpClientProvider.class);
 
         McpClientProvider toolProvider2 = McpClientProvider.builder()
@@ -156,7 +156,7 @@ public class McpSseClientTest {
         //打印消息
         log.info("{}", resp.getMessage());
 
-        assert resp.getMessage().getContent().contains("北京");
+        assert resp.getContent().contains("北京");
         toolProvider.close();
         toolProvider2.close();
     }
@@ -164,7 +164,7 @@ public class McpSseClientTest {
     @Test
     public void case4_stream() throws Exception {
         McpClientProvider toolProvider = Utils.loadProps("app-client.yml")
-                .getProp("solon.ai.mcp.client.demo1")
+                .getProp("solon.ai.mcp.client.demo2")
                 .toBean(McpClientProvider.class);
 
         McpClientProvider toolProvider2 = McpClientProvider.builder()

@@ -1,6 +1,7 @@
 package features.ai.mcp.client;
 
 import demo.ai.mcp.server.McpServerApp;
+import io.modelcontextprotocol.spec.McpError;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -39,7 +40,7 @@ public class McpSseAuthTest {
         }
 
         assert error != null;
-        assert error instanceof HttpException;
+        assert error instanceof McpError;
         assert error.getMessage().contains("401");
     }
 }

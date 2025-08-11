@@ -25,5 +25,5 @@ public interface McpChannel {
     static final String STDIO = "stdio";
     static final String SSE = "sse";
     static final String STREAMABLE = "streamable";
-    static final String STATELESS = "Stateless";
+//    static final String STATELESS = "Stateless";
 }
