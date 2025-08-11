@@ -87,11 +87,11 @@ public class McpServerEndpointProvider implements LifecycleBean {
             Assert.notEmpty(this.mcpEndpoint, "MCP sse endpoint is empty");
 
             if (Utils.isEmpty(serverProperties.getMessageEndpoint())) {
-                this.messageEndpoint = PathUtil.joinUri(this.mcpEndpoint , "/message"); //兼容 2024 版协议风格
+                this.messageEndpoint = PathUtil.joinUri(this.mcpEndpoint, "/message"); //兼容 2024 版协议风格
             } else {
                 this.messageEndpoint = serverProperties.getMessageEndpoint();
             }
-        } else if(McpChannel.STREAMABLE.equals(serverProperties.getChannel())) {
+        } else if (McpChannel.STREAMABLE.equals(serverProperties.getChannel())) {
             //streamable
             if (Utils.isEmpty(serverProperties.getMcpEndpoint())) {
                 this.mcpEndpoint = serverProperties.getSseEndpoint();
@@ -361,6 +361,15 @@ public class McpServerEndpointProvider implements LifecycleBean {
                     serverProperties.getName(),
                     serverProperties.getVersion(),
                     McpChannel.STDIO,
+                    toolManager.count(),
+                    resourceManager.count(),
+                    promptManager.count());
+        } else if (McpChannel.STREAMABLE.equalsIgnoreCase(serverProperties.getChannel())) {
+            log.info("Mcp-Server started, name={}, version={}, channel={}, mcpEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
+                    serverProperties.getName(),
+                    serverProperties.getVersion(),
+                    McpChannel.STREAMABLE,
+                    this.mcpEndpoint,
                     toolManager.count(),
                     resourceManager.count(),
                     promptManager.count());
