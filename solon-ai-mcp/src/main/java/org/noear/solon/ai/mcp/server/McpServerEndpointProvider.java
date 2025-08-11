@@ -87,7 +87,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
             Assert.notEmpty(this.mcpEndpoint, "MCP sse endpoint is empty");
 
             if (Utils.isEmpty(serverProperties.getMessageEndpoint())) {
-                this.messageEndpoint = PathUtil.joinUri(this.mcpEndpoint , "/sse"); //兼容 2024 版协议风格
+                this.messageEndpoint = PathUtil.joinUri(this.mcpEndpoint , "/message"); //兼容 2024 版协议风格
             } else {
                 this.messageEndpoint = serverProperties.getMessageEndpoint();
             }
