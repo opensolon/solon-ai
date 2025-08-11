@@ -202,47 +202,47 @@ public class McpServerSession implements McpLoggableSession {
 	 * @return a Mono that completes when the message is processed
 	 */
 	public Mono<Void> handle(McpSchema.JSONRPCMessage message) {
-		return Mono.defer(() -> {
-			// TODO handle errors for communication to without initialization happening
-			// first
-			if (message instanceof McpSchema.JSONRPCResponse) {
-				McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) message;
-				logger.debug("Received Response: {}", response);
-				var sink = pendingResponses.remove(response.getId());
-				if (sink == null) {
-					logger.warn("Unexpected response for unknown id {}", response.getId());
-				}
-				else {
-					sink.success(response);
-				}
-				return Mono.empty();
-			}
-			else if (message instanceof McpSchema.JSONRPCRequest) {
-				McpSchema.JSONRPCRequest request = (McpSchema.JSONRPCRequest) message;
-				logger.debug("Received request: {}", request);
-				return handleIncomingRequest(request).onErrorResume(error -> {
-					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.getId(), null,
-							new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-									error.getMessage(), null));
-					// TODO: Should the error go to SSE or back as POST return?
-					return this.transport.sendMessage(errorResponse).then(Mono.empty());
-				}).flatMap(this.transport::sendMessage);
-			}
-			else if (message instanceof McpSchema.JSONRPCNotification) {
-				McpSchema.JSONRPCNotification notification = (McpSchema.JSONRPCNotification) message;
-				// TODO handle errors for communication to without initialization
-				// happening first
-				logger.debug("Received notification: {}", notification);
-				// TODO: in case of error, should the POST request be signalled?
-				return handleIncomingNotification(notification)
-						.doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()));
-			}
-			else {
-				logger.warn("Received unknown message type: {}", message);
-				return Mono.empty();
-			}
-		});
-	}
+        return Mono.deferContextual((ctx) -> {
+            McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
+
+            // TODO handle errors for communication to without initialization happening
+            // first
+            if (message instanceof McpSchema.JSONRPCResponse) {
+                McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) message;
+                logger.debug("Received Response: {}", response);
+                var sink = pendingResponses.remove(response.getId());
+                if (sink == null) {
+                    logger.warn("Unexpected response for unknown id {}", response.getId());
+                } else {
+                    sink.success(response);
+                }
+                return Mono.empty();
+            } else if (message instanceof McpSchema.JSONRPCRequest) {
+                McpSchema.JSONRPCRequest request = (McpSchema.JSONRPCRequest) message;
+                logger.debug("Received request: {}", request);
+                return handleIncomingRequest(request)
+                        .onErrorResume(error -> {
+                            var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.getId(), null,
+                                    new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+                                            error.getMessage(), null));
+                            // TODO: Should the error go to SSE or back as POST return?
+                            return this.transport.sendMessage(errorResponse).then(Mono.empty());
+                        }).flatMap(this.transport::sendMessage);
+            } else if (message instanceof McpSchema.JSONRPCNotification) {
+                McpSchema.JSONRPCNotification notification = (McpSchema.JSONRPCNotification) message;
+                // TODO handle errors for communication to without initialization
+                // happening first
+                logger.debug("Received notification: {}", notification);
+                // TODO: in case of error, should the POST request be signalled?
+                return handleIncomingNotification(notification)
+                        .contextWrite(ctx2 -> ctx2.put(McpTransportContext.KEY, transportContext))
+                        .doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()));
+            } else {
+                logger.warn("Received unknown message type: {}", message);
+                return Mono.empty();
+            }
+        });
+    }
 
 	/**
 	 * Handles an incoming JSON-RPC request by routing it to the appropriate handler.
@@ -290,13 +290,14 @@ public class McpServerSession implements McpLoggableSession {
 	 * @return A Mono that completes when the notification is processed
 	 */
 	private Mono<Void> handleIncomingNotification(McpSchema.JSONRPCNotification notification) {
-		return Mono.defer(() -> {
+		return Mono.deferContextual((ctx) -> {
+            McpTransportContext transportContext = ctx.getOrDefault(McpTransportContext.KEY, McpTransportContext.EMPTY);
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.getMethod())) {
 				this.state.lazySet(STATE_INITIALIZED);
 				// FIXME: The session ID passed here is not the same as the one in the
 				// legacy SSE transport.
 				exchangeSink.tryEmitValue(new McpAsyncServerExchange(this.id, this, clientCapabilities.get(),
-						clientInfo.get(), McpTransportContext.EMPTY));
+						clientInfo.get(), transportContext));
 			}
 
 			var handler = notificationHandlers.get(notification.getMethod());
