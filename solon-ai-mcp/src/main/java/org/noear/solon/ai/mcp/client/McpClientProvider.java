@@ -149,6 +149,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             //sse 通道
             URI url = URI.create(clientProps.getApiUrl());
             String baseUri = url.getScheme() + "://" + url.getAuthority();
+
             String endpoint = null;
             if (Utils.isEmpty(url.getRawQuery())) {
                 endpoint = url.getRawPath();

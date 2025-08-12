@@ -1,8 +1,6 @@
 package org.noear.solon.ai.mcp.server;
 
 import io.modelcontextprotocol.server.McpSyncServerExchange;
-import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
-import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.handle.SessionState;
@@ -25,9 +23,11 @@ public class McpServerContext extends ContextEmpty {
     public McpServerContext(McpSyncServerExchange serverExchange) {
         this.serverExchange = serverExchange;
 
+        //通响 transportContext 获取连接时的 context
         this.context = (Context) serverExchange.transportContext().get(Context.class.getName());
 
         if (this.context != null) {
+            //如果有，则是 http
             for (KeyValues<String> kv : context.paramMap()) {
                 for (String v : kv.getValues()) {
                     this.paramMap().add(kv.getKey(), v);
@@ -41,6 +41,7 @@ public class McpServerContext extends ContextEmpty {
                 }
             }
         } else {
+            //如果没有，则是 stdio
             this.context = new ContextEmpty();
             this.headerMap().addAll(System.getenv());
         }

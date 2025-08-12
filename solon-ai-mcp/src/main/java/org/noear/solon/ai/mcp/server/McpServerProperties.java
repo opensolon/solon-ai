@@ -48,7 +48,7 @@ public class McpServerProperties {
     /**
      * mcp 端点（路径）
      */
-    private String mcpEndpoint = "/mcp";
+    private String mcpEndpoint;
 
     /**
      * sse 端点（路径）
@@ -56,7 +56,7 @@ public class McpServerProperties {
      * @deprecated 3.5
      */
     @Deprecated
-    private String sseEndpoint = "/sse";
+    private String sseEndpoint;
 
     /**
      * message 端点（路径）

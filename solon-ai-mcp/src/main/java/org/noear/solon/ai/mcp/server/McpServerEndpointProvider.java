@@ -187,7 +187,10 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     /**
      * MESSAGE 端点
+     *
+     * @deprecated 3.5
      */
+    @Deprecated
     public String getMessageEndpoint() {
         return messageEndpoint;
     }
@@ -511,7 +514,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
         /**
          * SSE 端点
          *
-         * @deprecated 3.5
+         * @deprecated 3.5 {@link #mcpEndpoint(String)}
          */
         @Deprecated
         public Builder sseEndpoint(String sseEndpoint) {
