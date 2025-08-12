@@ -51,25 +51,21 @@ public abstract class AbsChatTest {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
-        ChatSession chatSession = InMemoryChatSession.builder().build();
-        chatSession.addMessage(ChatMessage.ofUser("hello"));
-
         //流返回
-        Publisher<ChatResponse> publisher = chatModel.prompt(chatSession).stream();
-
         CountDownLatch doneLatch = new CountDownLatch(1);
         AtomicBoolean done = new AtomicBoolean(false);
-        publisher.subscribe(new SimpleSubscriber<ChatResponse>()
-                .doOnNext(resp -> {
-                    log.info("{} - {}", resp.isFinished(), resp.getMessage());
-                    done.set(resp.isFinished());
-                }).doOnComplete(() -> {
-                    log.debug("::完成!");
-                    doneLatch.countDown();
-                }).doOnError(err -> {
-                    doneLatch.countDown();
-                    err.printStackTrace();
-                }));
+        chatModel.prompt("hello").stream()
+                .subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnNext(resp -> {
+                            log.info("{} - {}", resp.isFinished(), resp.getMessage());
+                            done.set(resp.isFinished());
+                        }).doOnComplete(() -> {
+                            log.debug("::完成!");
+                            doneLatch.countDown();
+                        }).doOnError(err -> {
+                            doneLatch.countDown();
+                            err.printStackTrace();
+                        }));
 
         doneLatch.await();
         assert done.get();
