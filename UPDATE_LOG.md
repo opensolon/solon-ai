@@ -2,7 +2,8 @@
 
 ### 3.5.0
 
-* solon-ai-mcp 完成 mcp v0.11.0 适配（支持 2025-03-26 版本协议）
+* 新增 solon-ai-mcp mcp-java-sdk v0.11.0 适配（支持 2025-03-26 版本协议）
+* 调整 默认通道由 sse 改为 streamable
 
 ### 3.4.3
 
