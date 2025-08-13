@@ -2,7 +2,7 @@ package demo.ai.mcp.server;
 
 import org.noear.solon.Solon;
 import org.noear.solon.annotation.Import;
-import org.noear.solon.boot.http.HttpServerConfigure;
+import org.noear.solon.server.http.HttpServerConfigure;
 
 /**
  * @author noear 2025/4/8 created
