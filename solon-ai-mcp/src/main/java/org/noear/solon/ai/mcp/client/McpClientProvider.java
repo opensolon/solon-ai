@@ -108,6 +108,10 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     public McpClientProvider(McpClientProperties clientProps) {
+        if (Utils.isEmpty(clientProps.getChannel())) {
+            throw new IllegalArgumentException("The channel is required");
+        }
+
         if (McpChannel.STDIO.equals(clientProps.getChannel())) {
             //stdio 通道
             if (clientProps.getServerParameters() == null) {

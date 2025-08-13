@@ -3,8 +3,10 @@ server.idleTimeout: 120000
 
 solon.ai.mcp.server:
   demo1:
+    channel: streamable
     sseEndpoint: "/sse"
   demo2:
+    channel: streamable
     sseEndpoint: "/demo2/sse"
 
 solon.logging.logger:

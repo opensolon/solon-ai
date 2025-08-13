@@ -4,6 +4,7 @@ import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.test.SolonTest;
 
@@ -18,6 +19,7 @@ public class McpRedirectTest5 {
     @Test
     public void tool1() throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
                 .apiUrl("http://localhost:8081/demo5/jump/sse")
                 .build();
 

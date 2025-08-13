@@ -1,6 +1,7 @@
 package features.ai.mcp.client;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 
 /**
@@ -10,6 +11,7 @@ public class McpClientErrTest {
     @Test
     public void connTest() throws Throwable {
         McpClientProvider clientProvider = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
                 .apiUrl("https://mcp.map.baidu.com/sse")
                 .build();
 

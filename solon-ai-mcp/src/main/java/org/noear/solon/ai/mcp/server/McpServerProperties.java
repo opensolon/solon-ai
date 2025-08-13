@@ -43,7 +43,7 @@ public class McpServerProperties {
     /**
      * 通道
      */
-    private String channel = McpChannel.STREAMABLE;
+    private String channel;
     
     /**
      * mcp 端点（路径）

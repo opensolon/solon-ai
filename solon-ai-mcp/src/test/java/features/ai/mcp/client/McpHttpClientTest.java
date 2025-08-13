@@ -7,6 +7,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
 import org.noear.solon.annotation.Inject;
@@ -50,6 +51,7 @@ public class McpHttpClientTest {
     @Test
     public void case1_2() throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
 
@@ -67,6 +69,7 @@ public class McpHttpClientTest {
     @Test
     public void case2() throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
 
@@ -120,6 +123,7 @@ public class McpHttpClientTest {
     @Test
     public void case3() throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
                 .apiUrl("http://localhost:8081/demo2/sse")
                 .build();
 
@@ -139,6 +143,7 @@ public class McpHttpClientTest {
                 .toBean(McpClientProvider.class);
 
         McpClientProvider toolProvider2 = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
                 .apiUrl("http://localhost:8081/demo4/sse")
                 .build();
 
@@ -168,6 +173,7 @@ public class McpHttpClientTest {
                 .toBean(McpClientProvider.class);
 
         McpClientProvider toolProvider2 = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
                 .apiUrl("http://localhost:8081/demo4/sse")
                 .build();
 

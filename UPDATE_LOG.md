@@ -7,7 +7,7 @@
 ### 3.5.0
 
 * 新增 solon-ai-mcp mcp-java-sdk v0.11.0 适配（支持 2025-03-26 版本协议）
-* 调整 默认通道由 sse 改为 streamable
+* 调整 solon-ai-mcp channel 取消默认值，且为必填（为兼容过度，有明确的开发时、启动时提醒）
 
 ### 3.4.3
 

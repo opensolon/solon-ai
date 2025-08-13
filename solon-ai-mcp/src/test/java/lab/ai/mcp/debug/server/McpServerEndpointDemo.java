@@ -4,6 +4,7 @@ import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.handle.Context;
@@ -11,7 +12,7 @@ import org.noear.solon.core.handle.Context;
 import java.util.Arrays;
 import java.util.Collection;
 
-@McpServerEndpoint(mcpEndpoint = "/mcp/")
+@McpServerEndpoint(channel = McpChannel.STREAMABLE, mcpEndpoint = "/mcp/")
 public class McpServerEndpointDemo {
     @ToolMapping(description = "查询天气预报", returnDirect = true)
     public String getWeather(@Param(description = "城市位置") String location, Context ctx) {

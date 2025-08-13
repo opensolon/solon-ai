@@ -42,7 +42,7 @@ public @interface McpServerEndpoint {
     /**
      * 通道
      */
-    String channel() default McpChannel.STREAMABLE;
+    String channel();
 
     /**
      * MCP 端点

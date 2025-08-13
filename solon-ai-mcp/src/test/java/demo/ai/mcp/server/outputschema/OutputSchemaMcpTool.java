@@ -4,6 +4,7 @@ import demo.ai.mcp.server.outputschema.dataobject.CityInfo;
 import demo.ai.mcp.server.outputschema.dataobject.Result;
 import demo.ai.mcp.server.outputschema.dataobject.UserInfo;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.annotation.Param;
 
@@ -22,7 +23,7 @@ import java.util.*;
  * 输出：data:{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"getTags","description":"获取标签列表","returnDirect":false,"inputSchema":{"type":"object","properties":{},"required":[]},"outputSchema":{"type":"object","properties":{"code":{"type":"string"},"message":{"type":"string"},"data":{"type":"array","items":{"type":"string"}}}}},{"name":"getWeather","description":"查询天气预报","returnDirect":false,"inputSchema":{"type":"object","properties":{"city":{"description":"城市","type":"string"}},"required":["city"]},"outputSchema":{"type":"string"}},{"name":"getWeather0","description":"查询天气预报","returnDirect":false,"inputSchema":{"type":"object","properties":{"city":{"description":"城市","type":"string"}},"required":["city"]}},{"name":"listCities","description":"获取所有城市信息","returnDirect":false,"inputSchema":{"type":"object","properties":{},"required":[]},"outputSchema":{"type":"object","properties":{"code":{"type":"string"},"message":{"type":"string"},"data":{"type":"array","items":{"type":"object","properties":{"name":{"description":"城市名","type":"string"},"code":{"description":"城市编码","type":"string"}},"required":["name","code"]}}}}},{"name":"getConfigs","description":"获取配置项","returnDirect":false,"inputSchema":{"type":"object","properties":{},"required":[]},"outputSchema":{"type":"object","properties":{"type":"object","properties":{},"required":[]}}},{"name":"getCurrentUser","description":"获取当前用户信息","returnDirect":false,"inputSchema":{"type":"object","properties":{},"required":[]},"outputSchema":{"type":"object","properties":{"code":{"type":"string"},"message":{"type":"string"},"data":{"type":"object","properties":{"name":{"description":"用户名","type":"string"},"age":{"description":"年龄","type":"integer"}},"required":["name","age"]}}}},{"name":"getSetting","description":"获取某个设置项","returnDirect":false,"inputSchema":{"type":"object","properties":{"key":{"description":"键","type":"string"}},"required":["key"]},"outputSchema":{"type":"string"}},{"name":"getUserInfo","description":"获取用户信息","returnDirect":false,"inputSchema":{"type":"object","properties":{"userId":{"description":"用户ID","type":"integer"}},"required":["userId"]},"outputSchema":{"type":"object","properties":{"name":{"description":"用户名","type":"string"},"age":{"description":"年龄","type":"integer"}},"required":["name","age"]}}]}}
  * @author ityangs@163.com 2025年05月20日15:54:04
  */
-@McpServerEndpoint(sseEndpoint = "/mcp/outputSchema/sse")
+@McpServerEndpoint(channel = McpChannel.STREAMABLE, sseEndpoint = "/mcp/outputSchema/sse")
 public class OutputSchemaMcpTool {
 
     @ToolMapping(description = "查询天气预报")

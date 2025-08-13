@@ -4,6 +4,7 @@ import demo.ai.mcp.server.McpServerApp;
 import io.modelcontextprotocol.spec.McpError;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.test.SolonTest;
 
@@ -16,6 +17,7 @@ public class McpHttpAuthTest {
     @Test
     public void case1() {
         McpClientProvider mcpClient = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
                 .apiUrl("http://localhost:8081/auth/sse?user=1")
                 .cacheSeconds(30)
                 .build();
@@ -26,6 +28,7 @@ public class McpHttpAuthTest {
     @Test
     public void case2() {
         McpClientProvider mcpClient = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
                 .apiUrl("http://localhost:8081/auth/sse?user=2")
                 .cacheSeconds(30)
                 .build();

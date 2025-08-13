@@ -11,10 +11,13 @@ solon.ai:
   mcp:
     client:
         demo1:
+          channel: streamable
           apiUrl: "http://localhost:8081/sse"
         demo2:
+          channel: streamable
           apiUrl: "http://localhost:8081/demo2/sse"
         proxy1:
+          channel: streamable
           apiUrl: "http://localhost:8081/sse"
           httpProxy:
             type: "HTTP"

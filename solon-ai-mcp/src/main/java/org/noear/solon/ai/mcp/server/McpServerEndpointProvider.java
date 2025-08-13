@@ -72,31 +72,36 @@ public class McpServerEndpointProvider implements LifecycleBean {
         this(Props.from(properties).bindTo(new McpServerProperties()));
     }
 
-    public McpServerEndpointProvider(McpServerProperties serverProperties) {
-        this.serverProperties = serverProperties;
+    public McpServerEndpointProvider(McpServerProperties serverProps) {
+        if (Utils.isEmpty(serverProps.getChannel())) {
+            throw new IllegalArgumentException("The channel is required");
+        }
 
-        if (McpChannel.SSE.equals(serverProperties.getChannel())) {
+
+        this.serverProperties = serverProps;
+
+        if (McpChannel.SSE.equals(serverProps.getChannel())) {
             //sse
-            if (Utils.isEmpty(serverProperties.getSseEndpoint())) {
-                this.mcpEndpoint = serverProperties.getMcpEndpoint();
+            if (Utils.isEmpty(serverProps.getSseEndpoint())) {
+                this.mcpEndpoint = serverProps.getMcpEndpoint();
             } else {
-                this.mcpEndpoint = serverProperties.getSseEndpoint();
+                this.mcpEndpoint = serverProps.getSseEndpoint();
             }
 
             //断言
             Assert.notEmpty(this.mcpEndpoint, "MCP sse endpoint is empty");
 
-            if (Utils.isEmpty(serverProperties.getMessageEndpoint())) {
+            if (Utils.isEmpty(serverProps.getMessageEndpoint())) {
                 this.messageEndpoint = PathUtil.joinUri(this.mcpEndpoint, "/message"); //兼容 2024 版协议风格
             } else {
-                this.messageEndpoint = serverProperties.getMessageEndpoint();
+                this.messageEndpoint = serverProps.getMessageEndpoint();
             }
-        } else if (McpChannel.STREAMABLE.equals(serverProperties.getChannel())) {
+        } else if (McpChannel.STREAMABLE.equals(serverProps.getChannel())) {
             //streamable
-            if (Utils.isEmpty(serverProperties.getMcpEndpoint())) {
-                this.mcpEndpoint = serverProperties.getSseEndpoint();
+            if (Utils.isEmpty(serverProps.getMcpEndpoint())) {
+                this.mcpEndpoint = serverProps.getSseEndpoint();
             } else {
-                this.mcpEndpoint = serverProperties.getMcpEndpoint();
+                this.mcpEndpoint = serverProps.getMcpEndpoint();
             }
 
             //断言
@@ -116,36 +121,36 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 .logging()
                 .build();
 
-        if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
+        if (McpChannel.STDIO.equalsIgnoreCase(serverProps.getChannel())) {
             //stdio 通道
             this.mcpTransportProvider = new StdioServerTransportProvider();
 
             mcpServerSpec = McpServer.sync((StdioServerTransportProvider) this.mcpTransportProvider)
                     .capabilities(serverCapabilities)
-                    .serverInfo(serverProperties.getName(), serverProperties.getVersion());
+                    .serverInfo(serverProps.getName(), serverProps.getVersion());
         } else {
             //sse 通道
-            if (McpChannel.SSE.equals(serverProperties.getChannel())) {
+            if (McpChannel.SSE.equals(serverProps.getChannel())) {
                 this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
                         .sseEndpoint(this.mcpEndpoint)
                         .messageEndpoint(this.messageEndpoint)
-                        .keepAliveInterval(serverProperties.getHeartbeatInterval())
+                        .keepAliveInterval(serverProps.getHeartbeatInterval())
                         .objectMapper(new ObjectMapper())
                         .build();
 
                 mcpServerSpec = McpServer.sync((WebRxSseServerTransportProvider) this.mcpTransportProvider)
                         .capabilities(serverCapabilities)
-                        .serverInfo(serverProperties.getName(), serverProperties.getVersion());
+                        .serverInfo(serverProps.getName(), serverProps.getVersion());
             } else {
                 this.mcpTransportProvider = WebRxStreamableServerTransportProvider.builder()
                         .mcpEndpoint(this.mcpEndpoint)
-                        .keepAliveInterval(serverProperties.getHeartbeatInterval())
+                        .keepAliveInterval(serverProps.getHeartbeatInterval())
                         .objectMapper(new ObjectMapper())
                         .build();
 
                 mcpServerSpec = McpServer.sync((WebRxStreamableServerTransportProvider) this.mcpTransportProvider)
                         .capabilities(serverCapabilities)
-                        .serverInfo(serverProperties.getName(), serverProperties.getVersion());
+                        .serverInfo(serverProps.getName(), serverProps.getVersion());
             }
         }
     }

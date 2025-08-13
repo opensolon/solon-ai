@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.test.SolonTest;
 
@@ -20,6 +21,7 @@ import java.util.Map;
 @SolonTest(McpServerApp.class)
 public class OutputSchemaMcpToolTest {
     static McpClientProvider mcpClient = McpClientProvider.builder()
+            .channel(McpChannel.STREAMABLE)
             .apiUrl("http://localhost:8081/mcp/outputSchema/sse")
             .build();
 
