@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.rag.loader;
 
+import org.noear.solon.Solon;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.core.util.IoUtil;
 import org.noear.solon.core.util.SupplierEx;
@@ -34,7 +35,7 @@ import java.util.List;
  * @author noear
  * @since 3.1
  */
-public class TextLoader extends AbstractDocumentLoader {
+public class TextLoader extends AbstractOptionsDocumentLoader<TextLoader.Options, TextLoader> {
     private final SupplierEx<InputStream> source;
 
     public TextLoader(File file) throws IOException {
@@ -61,15 +62,25 @@ public class TextLoader extends AbstractDocumentLoader {
      */
     public TextLoader(SupplierEx<InputStream> source) {
         this.source = source;
+        this.options = new Options();
     }
 
     @Override
     public List<Document> load() {
         try (InputStream stream = source.get()) {
-            String temp = IoUtil.transferToString(stream);
+            String temp = IoUtil.transferToString(stream, options.charset);
             return Arrays.asList(new Document(temp).metadata(additionalMetadata));
         } catch (Throwable e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public static class Options {
+        private String charset = Solon.encoding();
+
+        public Options charset(String charset) {
+            this.charset = charset;
+            return this;
         }
     }
 }
