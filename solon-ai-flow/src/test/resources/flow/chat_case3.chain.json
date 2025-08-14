@@ -102,7 +102,7 @@
           "v_targetPort": "port_t1",
           "nextId": "input",
           "id": "edge_d5tm3o6qal",
-          "condition": "context.counter().incr(\"demo\") < 10"
+          "condition": "context.incrAdd(\"demo\", 1) < 10"
         },
         {
           "v_source": "node_e6gk4zedb6",

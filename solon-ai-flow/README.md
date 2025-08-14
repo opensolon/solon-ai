@@ -190,7 +190,7 @@ layout:
   - type: "exclusive"
     link:
       - nextId: model_a
-        condition: 'context.counter().incr("demo") < 10'
+        condition: 'context.incrAdd("demo", 1) < 10'
       - nextId: end
   - type: "end"
     id: "end"

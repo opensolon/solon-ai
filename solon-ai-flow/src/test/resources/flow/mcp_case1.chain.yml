@@ -14,5 +14,6 @@ layout:
         apiUrl: "http://127.0.0.1:11434/api/chat"
       mcpServers:
         mcp1:
+          type: sse
           url: "http://127.0.0.1:8080/mcp/sse"
   - task: "@ConsoleOutput"

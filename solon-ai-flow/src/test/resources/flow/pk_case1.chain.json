@@ -157,7 +157,7 @@
           "v_targetPort": "port_t1",
           "nextId": "model_a",
           "id": "edge_5v6ijolwt",
-          "condition": "context.counter().incr(\"demo\") < 5"
+          "condition": "context.incrAdd(\"demo\", 1) < 5"
         },
         {
           "v_source": "node_olz5ys235s",
