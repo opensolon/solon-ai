@@ -33,7 +33,7 @@ public interface AiPropertyComponent extends AiComponent {
      * 设置属性
      */
     default Object getProperty(FlowContext context, String name) throws Throwable {
-        List temp = context.get(Attrs.CTX_PROPERTY + "_" + name);
+        List temp = context.getAs(Attrs.CTX_PROPERTY + "_" + name);
         if (Utils.isEmpty(temp)) {
             return null;
         } else {
@@ -42,7 +42,7 @@ public interface AiPropertyComponent extends AiComponent {
     }
 
     default List getPropertyAll(FlowContext context, String name) throws Throwable {
-        return context.get(Attrs.CTX_PROPERTY + "_" + name);
+        return context.getAs(Attrs.CTX_PROPERTY + "_" + name);
     }
 
     /**
