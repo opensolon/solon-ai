@@ -48,9 +48,11 @@ public class ChatDialectManager {
      * @param config 聊天配置
      */
     public static ChatDialect select(ChatConfig config) {
-        for (RankEntity<ChatDialect> d : dialects) {
-            if (d.target.matched(config)) {
-                return d.target;
+        if (config != null) {
+            for (RankEntity<ChatDialect> d : dialects) {
+                if (d.target.matched(config)) {
+                    return d.target;
+                }
             }
         }
 

@@ -24,6 +24,7 @@ import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.Props;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.net.InetSocketAddress;
@@ -49,8 +50,12 @@ public class ChatModel implements AiModel {
     }
 
     public ChatModel(ChatConfig config) {
-        this.dialect = ChatDialectManager.select(config);
         this.config = config;
+        this.dialect = ChatDialectManager.select(config);
+
+        Assert.notNull(config, "The config cannot be null");
+        Assert.notNull(dialect, "The dialect cannot be null, check the config or dependencies");
+
     }
 
     /**
