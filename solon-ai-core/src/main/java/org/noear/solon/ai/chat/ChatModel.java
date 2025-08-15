@@ -50,11 +50,12 @@ public class ChatModel implements AiModel {
     }
 
     public ChatModel(ChatConfig config) {
+        Assert.notNull(config, "The config is required");
+
         this.config = config;
         this.dialect = ChatDialectManager.select(config);
 
-        Assert.notNull(config, "The config cannot be null");
-        Assert.notNull(dialect, "The dialect cannot be null, check the config or dependencies");
+        Assert.notNull(dialect, "The dialect(provider) no matched, check config or dependencies");
 
     }
 
