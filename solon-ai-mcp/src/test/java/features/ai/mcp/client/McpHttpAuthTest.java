@@ -23,6 +23,7 @@ public class McpHttpAuthTest {
                 .build();
 
         mcpClient.getTools();
+        mcpClient.close();
     }
 
     @Test
@@ -40,6 +41,7 @@ public class McpHttpAuthTest {
             error = e;
             e.printStackTrace();
         }
+        mcpClient.close();
 
         assert error != null;
         assert error instanceof McpError;

@@ -2,6 +2,7 @@ package features.ai.mcp.client;
 
 import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
@@ -21,7 +22,7 @@ import java.util.Map;
 @Slf4j
 @SolonTest(McpServerApp.class)
 public class McpHttpClientMixTest4 {
-    McpClientProvider mcpClient = McpClientProvider.builder()
+    static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.STREAMABLE)
             .apiUrl("http://localhost:8081/demo4/sse?token=3")
             .headerSet("user", "2")
@@ -31,6 +32,11 @@ public class McpHttpClientMixTest4 {
     private static final String apiUrl = "http://127.0.0.1:11434/api/chat";
     private static final String provider = "ollama";
     private static final String model = "llama3.2"; //"llama3.2";//deepseek-r1:1.5b;
+
+    @AfterAll
+    public static void aft(){
+        mcpClient.close();
+    }
 
     @Test
     public void tool1() throws Exception {

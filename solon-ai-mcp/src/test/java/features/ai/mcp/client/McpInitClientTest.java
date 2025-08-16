@@ -38,5 +38,7 @@ public class McpInitClientTest {
         client.initialize();
 
         client.listTools();
+
+        client.close();
     }
 }

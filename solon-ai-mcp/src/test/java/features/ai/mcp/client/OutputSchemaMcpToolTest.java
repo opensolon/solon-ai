@@ -26,6 +26,11 @@ public class OutputSchemaMcpToolTest {
             .build();
 
     @AfterAll
+    public static void aft(){
+        mcpClient.close();
+    }
+
+    @AfterAll
     public static void close() {
         mcpClient.close();
     }

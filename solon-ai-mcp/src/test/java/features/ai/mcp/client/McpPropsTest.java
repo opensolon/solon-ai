@@ -41,6 +41,7 @@ public class McpPropsTest {
                 fromMcpServers("classpath:mcpServers.json");
 
         assert tmp.size() == 2;
+        tmp.close();
     }
 
     @Test
@@ -49,5 +50,6 @@ public class McpPropsTest {
                 fromMcpServers("classpath:mcpServers2.json");
 
         assert tmp.size() == 2;
+        tmp.close();
     }
 }

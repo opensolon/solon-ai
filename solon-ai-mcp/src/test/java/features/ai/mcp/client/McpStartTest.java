@@ -28,5 +28,6 @@ public class McpStartTest {
         endpointProvider.addPrompt(new MethodPromptProvider(mcpServerTool2));
 
         endpointProvider.postStart();
+        endpointProvider.stop();
     }
 }
