@@ -368,16 +368,17 @@ public class McpServerEndpointProvider implements LifecycleBean {
             log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
                     serverProperties.getName(),
                     serverProperties.getVersion(),
-                    McpChannel.STDIO,
+                    serverProperties.getChannel(),
                     toolManager.count(),
                     resourceManager.count(),
                     promptManager.count());
-        } else if (McpChannel.STREAMABLE.equalsIgnoreCase(serverProperties.getChannel())) {
-            log.info("Mcp-Server started, name={}, version={}, channel={}, mcpEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
+        } else if (McpChannel.SSE.equalsIgnoreCase(serverProperties.getChannel())) {
+            log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
                     serverProperties.getName(),
                     serverProperties.getVersion(),
-                    McpChannel.STREAMABLE,
+                    serverProperties.getChannel(),
                     this.mcpEndpoint,
+                    this.messageEndpoint,
                     toolManager.count(),
                     resourceManager.count(),
                     promptManager.count());
@@ -385,7 +386,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
             log.info("Mcp-Server started, name={}, version={}, channel={}, mcpEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
                     serverProperties.getName(),
                     serverProperties.getVersion(),
-                    McpChannel.SSE,
+                    serverProperties.getChannel(),
                     this.mcpEndpoint,
                     toolManager.count(),
                     resourceManager.count(),
