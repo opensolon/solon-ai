@@ -235,7 +235,7 @@ public class McpClientSession implements McpSession {
 		return Mono.defer(() -> {
 			var handler = notificationHandlers.get(notification.getMethod());
 			if (handler == null) {
-				logger.error("No handler registered for notification method: {}", notification.getMethod());
+                logger.warn("No handler registered for notification method: {}", notification);
 				return Mono.empty();
 			}
 			return handler.handle(notification.getParams());

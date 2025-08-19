@@ -302,7 +302,7 @@ public class McpServerSession implements McpLoggableSession {
 
 			var handler = notificationHandlers.get(notification.getMethod());
 			if (handler == null) {
-				logger.error("No handler registered for notification method: {}", notification.getMethod());
+                logger.warn("No handler registered for notification method: {}", notification);
 				return Mono.empty();
 			}
 			return this.exchangeSink.asMono().flatMap(exchange -> handler.handle(exchange, notification.getParams()));

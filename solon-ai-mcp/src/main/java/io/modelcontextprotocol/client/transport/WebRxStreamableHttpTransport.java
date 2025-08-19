@@ -133,11 +133,8 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
 				return Mono.empty();
 			} else {
 				return Mono.fromFuture(webClientBuilder.build(this.endpoint)
-								.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
-								.fill(http -> {
-									http.header(HttpHeaders.MCP_SESSION_ID, sessionId);
-									http.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION);
-								})
+                                .header(HttpHeaders.MCP_SESSION_ID, sessionId)
+                                .header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 								.execAsync("DELETE"))
 						.onErrorComplete(e -> {
 							logger.warn("Got error when closing transport", e);
