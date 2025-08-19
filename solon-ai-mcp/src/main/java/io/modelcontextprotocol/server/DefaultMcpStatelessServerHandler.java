@@ -35,9 +35,22 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
         }
         return requestHandler.handle(transportContext, request.getParams())
                 .map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.getId(), result, null))
-                .onErrorResume(t -> Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.getId(), null,
-                        new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR, t.getMessage(),
-                                null))));
+                .onErrorResume(t -> {
+                    McpSchema.JSONRPCResponse.JSONRPCError error = null;
+                    if (t instanceof McpError) {
+                        McpError mcpError = (McpError) t;
+                        if (mcpError.getJsonRpcError() != null) {
+                            error = mcpError.getJsonRpcError();
+                        }
+                    }
+
+                    if (error == null) {
+                        error = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+                                t.getMessage(), null);
+                    }
+
+                    return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.getId(), null, error));
+                });
     }
 
     @Override

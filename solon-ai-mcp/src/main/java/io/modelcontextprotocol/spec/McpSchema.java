@@ -434,6 +434,21 @@ public final class McpSchema {
 			@JsonProperty("listChanged") Boolean listChanged;
 		}
 
+        /**
+         * Create a mutated copy of this object with the specified changes.
+         * @return A new Builder instance with the same values as this object.
+         */
+        public Builder mutate() {
+            var builder = new Builder();
+            builder.completions = this.completions;
+            builder.experimental = this.experimental;
+            builder.logging = this.logging;
+            builder.prompts = this.prompts;
+            builder.resources = this.resources;
+            builder.tools = this.tools;
+            return builder;
+        }
+
 		public static Builder builder() {
 			return new Builder();
 		}
