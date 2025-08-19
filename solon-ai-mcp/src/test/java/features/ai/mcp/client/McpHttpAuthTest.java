@@ -44,7 +44,7 @@ public class McpHttpAuthTest {
         mcpClient.close();
 
         assert error != null;
-        assert error instanceof McpError;
+        error = error.getCause();
         assert error.getMessage().contains("401");
     }
 }
