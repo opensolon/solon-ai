@@ -75,11 +75,7 @@ public class InMemoryChatSession implements ChatSession {
      */
     @Override
     public List<ChatMessage> getMessages() {
-        if (maxMessages > 0 && messages.size() > maxMessages) {
-            return messages.subList(messages.size() - maxMessages, messages.size());
-        } else {
-            return messages;
-        }
+        return messages;
     }
 
     /**
