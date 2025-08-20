@@ -21,10 +21,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.lang.Preview;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 /**
  * 内存聊天会话
@@ -35,20 +32,22 @@ import java.util.List;
 @Preview("3.4")
 public class InMemoryChatSession implements ChatSession {
     protected final String sessionId;
-    protected final List<ChatMessage> messages;
+    protected final List<ChatMessage> messages = new ArrayList<>();
     protected final int maxMessages;
 
-    protected InMemoryChatSession(String sessionId, List<ChatMessage> messages, int maxMessages) {
+    protected InMemoryChatSession(String sessionId, List<SystemMessage> systemMessages, List<ChatMessage> messages, int maxMessages) {
         if (sessionId == null) {
             this.sessionId = Utils.guid();
         } else {
             this.sessionId = sessionId;
         }
 
-        if (messages == null) {
-            this.messages = new ArrayList<>();
-        } else {
-            this.messages = messages;
+        if (systemMessages != null) {
+            this.messages.addAll(systemMessages);
+        }
+
+        if (messages != null) {
+            this.messages.addAll(messages);
         }
 
         this.maxMessages = maxMessages;
@@ -84,11 +83,10 @@ public class InMemoryChatSession implements ChatSession {
     @Override
     public void addMessage(Collection<? extends ChatMessage> messages) {
         if (Utils.isNotEmpty(messages)) {
-
             this.messages.addAll(messages);
 
             //处理最大消息数
-            if (this.messages.size() > maxMessages) {
+            if (maxMessages > 0 && this.messages.size() > maxMessages) {
                 //移除非SystemMessage
                 removeNonSystemMessages(messages.size());
             }
@@ -99,9 +97,9 @@ public class InMemoryChatSession implements ChatSession {
      * 移除size个非SystemMessage
      */
     private void removeNonSystemMessages(int size) {
-
         Iterator<ChatMessage> iterator = this.messages.iterator();
         int removeNums = 0;
+
         while (iterator.hasNext() && removeNums < size) {
             ChatMessage message = iterator.next();
             if (!(message instanceof SystemMessage)) {
@@ -126,6 +124,7 @@ public class InMemoryChatSession implements ChatSession {
     public static class Builder {
         private String sessionId;
         private List<ChatMessage> messages;
+        private List<SystemMessage> systemMessages;
         private int maxMessages;
 
         /**
@@ -137,12 +136,21 @@ public class InMemoryChatSession implements ChatSession {
         }
 
         /**
+         * 系统消息
+         */
+        public Builder systemMessages(SystemMessage... systemMessages) {
+            this.systemMessages = Arrays.asList(systemMessages);
+            return this;
+        }
+
+        /**
          * 聊天消息
          */
         public Builder messages(List<ChatMessage> messages) {
             this.messages = messages;
             return this;
         }
+
 
         /**
          * 最大消息数
@@ -156,7 +164,7 @@ public class InMemoryChatSession implements ChatSession {
          * 构建
          */
         public InMemoryChatSession build() {
-            return new InMemoryChatSession(sessionId, messages, maxMessages);
+            return new InMemoryChatSession(sessionId, systemMessages, messages, maxMessages);
         }
     }
 }

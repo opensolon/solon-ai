@@ -47,7 +47,7 @@ public class ChatSessionDefault extends InMemoryChatSession implements ChatSessi
     }
 
     protected ChatSessionDefault(String sessionId, List<ChatMessage> messages) {
-        super(sessionId, messages, 0);
+        super(sessionId, null, messages, 0);
     }
 
     /**

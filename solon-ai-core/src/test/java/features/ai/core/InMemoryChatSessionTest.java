@@ -3,6 +3,7 @@ package features.ai.core;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 
 /**
@@ -40,9 +41,9 @@ public class InMemoryChatSessionTest {
     public void maxSize1() {
         InMemoryChatSession session = InMemoryChatSession.builder()
                 .maxMessages(3)
+                .systemMessages(ChatMessage.ofSystem("system"))
                 .build();
 
-        session.addMessage(ChatMessage.ofSystem("system"));
         session.addMessage(ChatMessage.ofUser("1"));
         session.addMessage(ChatMessage.ofUser("2"));
         session.addMessage(ChatMessage.ofUser("3"));
