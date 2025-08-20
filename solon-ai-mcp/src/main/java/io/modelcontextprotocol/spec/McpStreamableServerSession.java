@@ -224,12 +224,16 @@ public class McpStreamableServerSession implements McpLoggableSession {
                 // JSONize
             }
             // TODO: encapsulate this inside the stream itself
-            var sink = stream.pendingResponses.remove(response.getId());
+            MonoSink<McpSchema.JSONRPCResponse> sink = null;
+
+            if (response.getId() != null) {
+                sink = stream.pendingResponses.remove(response.getId());
+            }
+
             if (sink == null) {
                 return Mono.error(new McpError("Unexpected response for unknown id " + response.getId())); // TODO
                 // JSONize
-            }
-            else {
+            } else {
                 sink.success(response);
             }
             return Mono.empty();

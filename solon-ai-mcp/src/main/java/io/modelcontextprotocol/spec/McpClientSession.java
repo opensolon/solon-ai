@@ -151,16 +151,20 @@ public class McpClientSession implements McpSession {
 
 	private void handle(McpSchema.JSONRPCMessage message) {
 		if (message instanceof McpSchema.JSONRPCResponse) {
-			McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) message;
-			logger.debug("Received Response: {}", response);
-			var sink = pendingResponses.remove(response.getId());
-			if (sink == null) {
-				logger.warn("Unexpected response for unknown id {}", response.getId());
-			}
-			else {
-				sink.success(response);
-			}
-		}
+            McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) message;
+            logger.debug("Received Response: {}", response);
+            MonoSink<McpSchema.JSONRPCResponse> sink = null;
+
+            if (response.getId() != null) {
+                sink = pendingResponses.remove(response.getId());
+            }
+
+            if (sink == null) {
+                logger.warn("Unexpected response for unknown id {}", response.getId());
+            } else {
+                sink.success(response);
+            }
+        }
 		else if (message instanceof McpSchema.JSONRPCRequest) {
 			McpSchema.JSONRPCRequest request = (McpSchema.JSONRPCRequest) message;
 			logger.debug("Received request: {}", request);

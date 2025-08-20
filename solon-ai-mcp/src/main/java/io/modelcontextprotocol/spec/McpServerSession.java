@@ -210,7 +210,12 @@ public class McpServerSession implements McpLoggableSession {
             if (message instanceof McpSchema.JSONRPCResponse) {
                 McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) message;
                 logger.debug("Received Response: {}", response);
-                var sink = pendingResponses.remove(response.getId());
+                MonoSink<McpSchema.JSONRPCResponse> sink = null;
+
+                if(response.getId() != null) {
+                    sink = pendingResponses.remove(response.getId());
+                }
+
                 if (sink == null) {
                     logger.warn("Unexpected response for unknown id {}", response.getId());
                 } else {
