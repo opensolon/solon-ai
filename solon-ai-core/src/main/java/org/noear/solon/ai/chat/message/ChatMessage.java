@@ -75,53 +75,62 @@ public interface ChatMessage extends Serializable {
     /**
      * 构建系统消息
      */
-    static ChatMessage ofSystem(String content) {
+    static SystemMessage ofSystem(String content) {
         return new SystemMessage(content);
     }
 
     /**
      * 构建用户消息
      */
-    static ChatMessage ofUser(String content) {
+    static UserMessage ofUser(String content) {
         return new UserMessage(content, null);
     }
 
     /**
      * 构建用户消息
      */
-    static ChatMessage ofUser(String content, List<AiMedia> medias) {
+    static UserMessage ofUser(String content, List<AiMedia> medias) {
         return new UserMessage(content, medias);
     }
 
     /**
      * 构建用户消息
      */
-    static ChatMessage ofUser(String content, AiMedia... medias) {
+    static UserMessage ofUser(String content, AiMedia... medias) {
         return new UserMessage(content, Arrays.asList(medias));
     }
 
     /**
      * 构建用户消息
      */
-    static ChatMessage ofUser(AiMedia media) {
+    static UserMessage ofUser(AiMedia media) {
         return new UserMessage("", Arrays.asList(media));
     }
 
     /**
      * 构建工具消息
      */
-    static ChatMessage ofTool(String content, String name, String toolCallId) {
+    static ToolMessage ofTool(String content, String name, String toolCallId) {
         return ofTool(content, name, toolCallId, false);
     }
 
     /**
      * 构建工具消息
      */
-    static ChatMessage ofTool(String content, String name, String toolCallId, boolean returnDirect) {
+    static ToolMessage ofTool(String content, String name, String toolCallId, boolean returnDirect) {
         return new ToolMessage(content, name, toolCallId, returnDirect);
     }
 
     /// //////////////////
+
+    /**
+     * 用户消息增强
+     */
+    static UserMessage ofUserAugment(String message, Object context) {
+        String newContent = String.format("%s\n\n Now: %s\n\n References: %s", message,
+                LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME), context);
+        return new UserMessage(newContent);
+    }
 
     /**
      * 创建系统消息模板
@@ -137,15 +146,6 @@ public interface ChatMessage extends Serializable {
         return new UserMessageTemplate(tmpl);
     }
 
-
-    /**
-     * 用户消息增强
-     */
-    static ChatMessage ofUserAugment(String message, Object context) {
-        String newContent = String.format("%s\n\n Now: %s\n\n References: %s", message,
-                LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME), context);
-        return new UserMessage(newContent);
-    }
 
     /**
      * 创建用户消息模板
