@@ -35,4 +35,29 @@ public class InMemoryChatSessionTest {
         log.warn("{}", session.getMessages());
         assert "[{role=user, content='3'}, {role=user, content='4'}, {role=user, content='5'}]".equals(session.getMessages().toString());
     }
+
+    @Test
+    public void maxSize1() {
+        InMemoryChatSession session = InMemoryChatSession.builder()
+                .maxMessages(3)
+                .build();
+
+        session.addMessage(ChatMessage.ofSystem("system"));
+        session.addMessage(ChatMessage.ofUser("1"));
+        session.addMessage(ChatMessage.ofUser("2"));
+        session.addMessage(ChatMessage.ofUser("3"));
+
+        log.warn("{}", session.getMessages());
+        assert "[{role=system, content='system'}, {role=user, content='2'}, {role=user, content='3'}]".equals(session.getMessages().toString());
+
+        session.addMessage(ChatMessage.ofUser("4"));
+
+        log.warn("{}", session.getMessages());
+        assert "[{role=system, content='system'}, {role=user, content='3'}, {role=user, content='4'}]".equals(session.getMessages().toString());
+
+        session.addMessage(ChatMessage.ofUser("5"));
+
+        log.warn("{}", session.getMessages());
+        assert "[{role=system, content='system'}, {role=user, content='4'}, {role=user, content='5'}]".equals(session.getMessages().toString());
+    }
 }

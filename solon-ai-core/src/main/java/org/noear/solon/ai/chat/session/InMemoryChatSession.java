@@ -18,10 +18,12 @@ package org.noear.solon.ai.chat.session;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -73,11 +75,7 @@ public class InMemoryChatSession implements ChatSession {
      */
     @Override
     public List<ChatMessage> getMessages() {
-        if (maxMessages > 0 && messages.size() > maxMessages) {
-            return messages.subList(messages.size() - maxMessages, messages.size());
-        } else {
-            return messages;
-        }
+        return messages;
     }
 
     /**
@@ -88,6 +86,27 @@ public class InMemoryChatSession implements ChatSession {
         if (Utils.isNotEmpty(messages)) {
             for (ChatMessage m : messages) {
                 this.messages.add(m);
+
+                if (this.messages.size() > maxMessages) {
+                    //移除第一个非SystemMessage
+                    removeNonSystemMessages();
+                }
+            }
+        }
+    }
+
+    /**
+     * 移除第一个非SystemMessage,保留SystemMessage
+     */
+    private void removeNonSystemMessages() {
+
+        Iterator<ChatMessage> iterator = this.messages.iterator();
+        boolean removed = false;
+        while (iterator.hasNext() && !removed) {
+            ChatMessage message = iterator.next();
+            if (!(message instanceof SystemMessage)) {
+                iterator.remove();
+                removed = true;
             }
         }
     }
@@ -111,7 +130,6 @@ public class InMemoryChatSession implements ChatSession {
 
         /**
          * 会话 id
-         *
          */
         public Builder sessionId(String sessionId) {
             this.sessionId = sessionId;
@@ -120,7 +138,6 @@ public class InMemoryChatSession implements ChatSession {
 
         /**
          * 聊天消息
-         *
          */
         public Builder messages(List<ChatMessage> messages) {
             this.messages = messages;
@@ -129,7 +146,6 @@ public class InMemoryChatSession implements ChatSession {
 
         /**
          * 最大消息数
-         *
          */
         public Builder maxMessages(int maxMessages) {
             this.maxMessages = maxMessages;
@@ -138,7 +154,6 @@ public class InMemoryChatSession implements ChatSession {
 
         /**
          * 构建
-         *
          */
         public InMemoryChatSession build() {
             return new InMemoryChatSession(sessionId, messages, maxMessages);
