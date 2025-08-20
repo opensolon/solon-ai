@@ -84,29 +84,29 @@ public class InMemoryChatSession implements ChatSession {
     @Override
     public void addMessage(Collection<? extends ChatMessage> messages) {
         if (Utils.isNotEmpty(messages)) {
-            for (ChatMessage m : messages) {
-                this.messages.add(m);
 
-                if (this.messages.size() > maxMessages) {
-                    //移除第一个非SystemMessage
-                    removeNonSystemMessages();
-                }
+            this.messages.addAll(messages);
+
+            //处理最大消息数
+            if (this.messages.size() > maxMessages) {
+                //移除非SystemMessage
+                removeNonSystemMessages(messages.size());
             }
         }
     }
 
     /**
-     * 移除第一个非SystemMessage,保留SystemMessage
+     * 移除size个非SystemMessage
      */
-    private void removeNonSystemMessages() {
+    private void removeNonSystemMessages(int size) {
 
         Iterator<ChatMessage> iterator = this.messages.iterator();
-        boolean removed = false;
-        while (iterator.hasNext() && !removed) {
+        int removeNums = 0;
+        while (iterator.hasNext() && removeNums < size) {
             ChatMessage message = iterator.next();
             if (!(message instanceof SystemMessage)) {
                 iterator.remove();
-                removed = true;
+                removeNums++;
             }
         }
     }
