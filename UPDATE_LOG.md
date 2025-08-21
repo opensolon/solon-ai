@@ -1,3 +1,9 @@
+### 可测试目标
+
+* Trae
+* Dify
+* Cherry Studio
+
 
 ### 3.5.1
 
