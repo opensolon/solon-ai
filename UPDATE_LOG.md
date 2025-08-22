@@ -12,6 +12,7 @@
 
 ### 3.5.1
 
+* 优化 solon-ai-mcp McpClientProvider 配置向 McpServers json 格式上靠
 * 修复 solon-ai-mcp 服务端传输层的会话长连会超时的问题
 * 修复 solon-ai-mcp 客户端提供者心跳失效的问题
 * mcp `McpSchema:*Capabilities` 添加 `@JsonIgnoreProperties(ignoreUnknown = true)` 增强跨协议版本兼容性

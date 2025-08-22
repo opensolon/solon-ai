@@ -19,9 +19,8 @@ import java.util.Collection;
 public class McpStdioToSseServerDemo implements ToolProvider, ResourceProvider {
     McpClientProvider stdioToolProvider = McpClientProvider.builder()
             .channel(McpChannel.STDIO) //表示使用 stdio
-            .serverParameters(McpServerParameters.builder("java")
-                    .args("-jar", "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar")
-                    .build())
+            .command("java")
+            .args("-jar", "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar")
             .build();
 
     @Override

@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.mcp.client;
 
-import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.util.ProxyDesc;
 import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
@@ -23,8 +22,7 @@ import org.noear.solon.net.http.HttpTimeout;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Mcp 客户端属性
@@ -44,24 +42,33 @@ public class McpClientProperties {
     private String version = "1.0.0";
 
     /**
-     * 通道
+     * 通道（传输方式）
      */
     private String channel;
 
     /**
-     * 接口完整地址
+     * http 接口完整地址
+     *
+     * @deprecated 3.5 {@link #url}
      */
+    @Deprecated
     private String apiUrl;
 
     /**
-     * 接口密钥
+     * http 接口完整地址
+     */
+    private String url;
+
+    /**
+     * http 接口密钥
      */
     private String apiKey;
 
     /**
-     * 请求头信息
+     * http 请求头信息
      */
     private final Map<String, String> headers = new LinkedHashMap<>();
+
 
     /**
      * http 超时
@@ -80,33 +87,52 @@ public class McpClientProperties {
 
     /**
      * http ssl 提供者
-     * */
+     *
+     */
     private HttpSslSupplier httpSsl;
 
     /**
-     * 请求超时
+     * mcp 请求超时
      */
     private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
 
     /**
-     * 初始化超时
+     * mcp 初始化超时
      */
     private Duration initializationTimeout = Duration.ofSeconds(20);
 
     /**
-     * 心跳间隔（辅助自动重连）
+     * mcp 心跳间隔（辅助自动重连）
      */
     private Duration heartbeatInterval = Duration.ofSeconds(15);
 
     /**
-     * 缓存秒数
+     * mcp 缓存秒数
      */
     private int cacheSeconds = 30; // Default timeout
 
     /**
      * 服务端参数（用于 stdio）
+     *
+     * @deprecated 3.5
      */
+    @Deprecated
     private McpServerParameters serverParameters;
+
+
+    /// ////////////
+    /**
+     * stdio 命令
+     */
+    private String command;
+    /**
+     * stdio 参数
+     */
+    private List<String> args = new ArrayList<>();
+    /**
+     * stdio 命令环境变量
+     */
+    private Map<String, String> env = new HashMap<>();
 
 
     public McpClientProperties() {
@@ -146,18 +172,47 @@ public class McpClientProperties {
         this.channel = channel;
     }
 
+    /**
+     * @deprecated 3.5 {@link #getUrl()}
+     * */
+    @Deprecated
     public String getApiUrl() {
         return apiUrl;
     }
-
+    /**
+     * @deprecated 3.5 {@link #setUrl(String)}
+     * */
+    @Deprecated
     public void setApiUrl(String apiUrl) {
         this.apiUrl = apiUrl;
     }
 
+    public String getUrl() {
+        if(apiUrl != null){
+            return apiUrl;
+        }
+
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.apiUrl = null;
+        this.url = url;
+    }
+
+
+    /**
+     * @deprecated 3.5 {@link #getHeaders()}
+     * */
+    @Deprecated
     public String getApiKey() {
         return apiKey;
     }
 
+    /**
+     * @deprecated 3.5 {@link #setHeaders(Map)}
+     * */
+    @Deprecated
     public void setApiKey(String apiKey) {
         this.apiKey = apiKey;
     }
@@ -235,12 +290,64 @@ public class McpClientProperties {
         this.cacheSeconds = cacheSeconds;
     }
 
+    /**
+     * @deprecated 3.5 {@link #getCommand()}
+     */
+    @Deprecated
     public McpServerParameters getServerParameters() {
         return serverParameters;
     }
 
+    /**
+     * @deprecated 3.5 {@link #setCommand(String)}
+     */
+    @Deprecated
     public void setServerParameters(McpServerParameters serverParameters) {
         this.serverParameters = serverParameters;
+    }
+
+
+    /// ////////////
+
+    public String getCommand() {
+        if (serverParameters != null) {
+            return serverParameters.getCommand();
+        }
+
+        return command;
+    }
+
+    public void setCommand(String command) {
+        this.serverParameters = null;
+        this.command = command;
+    }
+
+    public List<String> getArgs() {
+        if (serverParameters != null) {
+            return serverParameters.getArgs();
+        }
+
+        return args;
+    }
+
+    public void setArgs(List<String> args) {
+        this.serverParameters = null;
+
+        this.args = args;
+    }
+
+    public Map<String, String> getEnv() {
+        if (serverParameters != null) {
+            return serverParameters.getEnv();
+        }
+
+        return env;
+    }
+
+    public void setEnv(Map<String, String> env) {
+        this.serverParameters = null;
+
+        this.env = env;
     }
 
     @Override
@@ -257,7 +364,9 @@ public class McpClientProperties {
                 ", requestTimeout=" + requestTimeout +
                 ", initializationTimeout=" + initializationTimeout +
                 ", heartbeatInterval=" + heartbeatInterval +
-                ", serverParameters=" + serverParameters +
+                ", command='" + command + '\'' +
+                ", args=" + args +
+                ", env=" + env +
                 '}';
     }
 }

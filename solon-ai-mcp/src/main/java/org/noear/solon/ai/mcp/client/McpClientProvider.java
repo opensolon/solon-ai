@@ -40,6 +40,7 @@ import org.noear.solon.ai.media.Text;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.data.cache.LocalCacheService;
 import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
@@ -113,13 +114,13 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         if (McpChannel.STDIO.equals(clientProps.getChannel())) {
             //stdio 通道
-            if (clientProps.getServerParameters() == null) {
-                throw new IllegalArgumentException("ServerParameters is null!");
+            if (clientProps.getCommand() == null) {
+                throw new IllegalArgumentException("Command is null!");
             }
         } else {
             //sse 通道
-            if (Utils.isEmpty(clientProps.getApiUrl())) {
-                throw new IllegalArgumentException("ApiUrl is empty!");
+            if (Utils.isEmpty(clientProps.getUrl())) {
+                throw new IllegalArgumentException("Url is empty!");
             }
         }
 
@@ -144,13 +145,13 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         if (McpChannel.STDIO.equals(clientProps.getChannel())) {
             //stdio 通道
-            clientTransport = new StdioClientTransport(ServerParameters.builder(clientProps.getServerParameters().getCommand())
-                    .args(clientProps.getServerParameters().getArgs())
-                    .env(clientProps.getServerParameters().getEnv())
+            clientTransport = new StdioClientTransport(ServerParameters.builder(clientProps.getCommand())
+                    .args(clientProps.getArgs())
+                    .env(clientProps.getEnv())
                     .build());
         } else {
             //sse 通道
-            URI url = URI.create(clientProps.getApiUrl());
+            URI url = URI.create(clientProps.getUrl());
             String baseUri = url.getScheme() + "://" + url.getAuthority();
 
             String endpoint = null;
@@ -193,7 +194,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 clientTransport = WebRxSseClientTransport.builder(webBuilder)
                         .sseEndpoint(endpoint)
                         .build();
-            }else {
+            } else {
                 clientTransport = WebRxStreamableHttpTransport.builder(webBuilder)
                         .endpoint(endpoint)
                         .build();
@@ -741,6 +742,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     public static class Builder {
         private McpClientProperties props = new McpClientProperties();
 
+        // for mcp
+
         public Builder name(String name) {
             props.setName(name);
             return this;
@@ -756,22 +759,39 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             return this;
         }
 
-        public Builder apiUrl(String apiUrl) {
-            props.setApiUrl(apiUrl);
+        public Builder requestTimeout(Duration requestTimeout) {
+            props.setRequestTimeout(requestTimeout);
             return this;
         }
 
-        public Builder apiKey(String apiKey) {
-            props.setApiKey(apiKey);
+        public Builder initializationTimeout(Duration initializationTimeout) {
+            props.setInitializationTimeout(initializationTimeout);
             return this;
         }
 
-        public Builder headerSet(String name, String value) {
+        public Builder heartbeatInterval(Duration heartbeatInterval) {
+            props.setHeartbeatInterval(heartbeatInterval);
+            return this;
+        }
+
+        public Builder cacheSeconds(int cacheSeconds) {
+            props.setCacheSeconds(cacheSeconds);
+            return this;
+        }
+
+        // for http
+
+        public Builder url(String url) {
+            props.setApiUrl(url);
+            return this;
+        }
+
+        public Builder header(String name, String value) {
             props.getHeaders().put(name, value);
             return this;
         }
 
-        public Builder headerSet(Map<String, String> headers) {
+        public Builder headers(Map<String, String> headers) {
             if (Utils.isNotEmpty(headers)) {
                 props.getHeaders().putAll(headers);
             }
@@ -797,31 +817,99 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             return this;
         }
 
-        public Builder requestTimeout(Duration requestTimeout) {
-            props.setRequestTimeout(requestTimeout);
+        //for studio
+
+        public Builder command(String command) {
+            Assert.notNull(command, "The command can not be null");
+            props.setCommand(command);
             return this;
         }
 
-        public Builder initializationTimeout(Duration initializationTimeout) {
-            props.setInitializationTimeout(initializationTimeout);
+        public Builder args(String... args) {
+            Assert.notNull(args, "The args can not be null");
+            props.setArgs(Arrays.asList(args));
             return this;
         }
 
-        public Builder heartbeatInterval(Duration heartbeatInterval) {
-            props.setHeartbeatInterval(heartbeatInterval);
+        public Builder args(List<String> args) {
+            Assert.notNull(args, "The args can not be null");
+            props.setArgs(new ArrayList<>(args));
             return this;
         }
 
-        public Builder cacheSeconds(int cacheSeconds) {
-            props.setCacheSeconds(cacheSeconds);
+        public Builder arg(String arg) {
+            Assert.notNull(arg, "The arg can not be null");
+            props.getArgs().add(arg);
+            return this;
+        }
+
+        public Builder env(Map<String, String> env) {
+            if (Utils.isNotEmpty(env)) {
+                props.getEnv().putAll(env);
+            }
+            return this;
+        }
+
+        public Builder addEnvVar(String key, String value) {
+            Assert.notNull(key, "The key can not be null");
+            Assert.notNull(value, "The value can not be null");
+            props.getEnv().put(key, value);
+            return this;
+        }
+
+        /// ////////////
+
+        /**
+         * @deprecated 3.5 {@link #url(String)}
+         *
+         */
+        @Deprecated
+        public Builder apiUrl(String apiUrl) {
+            props.setApiUrl(apiUrl);
+            return this;
+        }
+
+        /**
+         * @deprecated 3.5 {@link #header(String, String)}
+         */
+        @Deprecated
+        public Builder apiKey(String apiKey) {
+            props.setApiKey(apiKey);
+            return this;
+        }
+
+        /***
+         * @deprecated 3.5 {@link #header(String, String)}
+         * */
+        @Deprecated
+        public Builder headerSet(String name, String value) {
+            props.getHeaders().put(name, value);
+            return this;
+        }
+
+        /***
+         * @deprecated 3.5 {@link #headers(Map)}
+         * */
+        @Deprecated
+        public Builder headerSet(Map<String, String> headers) {
+            if (Utils.isNotEmpty(headers)) {
+                props.getHeaders().putAll(headers);
+            }
             return this;
         }
 
         /**
          * 服务端参数（用于 stdio）
+         *
+         * @deprecated 3.5 {@link #command(String)}
          */
+        @Deprecated
         public Builder serverParameters(McpServerParameters serverParameters) {
-            props.setServerParameters(serverParameters);
+            Assert.notNull(serverParameters, "The serverParameters can not be null");
+
+            props.setCommand(serverParameters.getCommand());
+            props.setArgs(serverParameters.getArgs());
+            props.setEnv(serverParameters.getEnv());
             return this;
         }
 

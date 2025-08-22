@@ -20,9 +20,9 @@ public class McpPropsTest {
         McpClientProperties clientProperties = Solon.cfg().toBean("solon.ai.mcp.client.demo1", McpClientProperties.class);
 
         assert McpChannel.STDIO.equalsIgnoreCase(clientProperties.getChannel());
-        assert clientProperties.getServerParameters().getArgs().size() == 2;
-        assert "-jar".equalsIgnoreCase(clientProperties.getServerParameters().getArgs().get(0));
-        assert clientProperties.getServerParameters().getEnv().size() == 1;
+        assert clientProperties.getArgs().size() == 2;
+        assert "-jar".equalsIgnoreCase(clientProperties.getArgs().get(0));
+        assert clientProperties.getEnv().size() == 1;
     }
 
     @Test
@@ -30,9 +30,9 @@ public class McpPropsTest {
         McpClientProperties clientProperties = Solon.cfg().toBean("solon.ai.mcp.client.demo2", McpClientProperties.class);
 
         assert McpChannel.STDIO.equalsIgnoreCase(clientProperties.getChannel());
-        assert clientProperties.getServerParameters().getArgs().size() == 2;
-        assert "-jar".equalsIgnoreCase(clientProperties.getServerParameters().getArgs().get(0));
-        assert clientProperties.getServerParameters().getEnv().size() == 1;
+        assert clientProperties.getArgs().size() == 2;
+        assert "-jar".equalsIgnoreCase(clientProperties.getArgs().get(0));
+        assert clientProperties.getEnv().size() == 1;
     }
 
     @Test

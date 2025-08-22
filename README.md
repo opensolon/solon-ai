@@ -210,11 +210,10 @@ String rst = clientToolProvider.callToolAsText("getWeather", Map.of("location", 
 public class McpStdioToSseServerDemo implements ToolProvider {
     McpClientProvider stdioToolProvider = McpClientProvider.builder()
             .channel(McpChannel.STDIO) //表示使用 stdio
-            .serverParameters(ServerParameters.builder("npx")
-                    .args("-y", "@gitee/mcp-gitee@latest")
-                    .addEnvVar("GITEE_API_BASE", "https://gitee.com/api/v5")
-                    .addEnvVar("GITEE_ACCESS_TOKEN", "<your personal access token>")
-                    .build())
+            .command("npx")
+            .args("-y", "@gitee/mcp-gitee@latest")
+            .addEnvVar("GITEE_API_BASE", "https://gitee.com/api/v5")
+            .addEnvVar("GITEE_ACCESS_TOKEN", "<your personal access token>")
             .build();
 
     @Override

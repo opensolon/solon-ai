@@ -20,9 +20,8 @@ public class McpStdioClientTest {
         //服务端不能开启控制台的日志，不然会污染协议流
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STDIO) //表示使用 stdio
-                .serverParameters(McpServerParameters.builder("java")
-                        .args("-jar", "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar")
-                        .build())
+                .command("java")
+                .args("-jar", "/Users/noear/Downloads/demo-mcp-stdio/target/demo-mcp-stdio.jar")
                 .build();
 
         //args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "dir")

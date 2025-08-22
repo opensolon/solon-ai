@@ -215,10 +215,14 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
         }
 
 
-        McpClientProvider.Builder builder = McpClientProvider.builder().channel(type);
+        McpClientProvider.Builder builder = McpClientProvider.builder();
+
+        builder.channel(type);
 
         if (McpChannel.STDIO.equalsIgnoreCase(type)) {
-            builder.serverParameters(serverParameters);
+            builder.command(serverParameters.getCommand());
+            builder.args(serverParameters.getArgs());
+            builder.env(serverParameters.getEnv());
         } else {
             builder.apiUrl(serverParameters.getUrl());
             builder.headerSet(serverParameters.getEnv());
