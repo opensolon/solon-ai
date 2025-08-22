@@ -249,7 +249,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (Utils.isNotEmpty(toolCalls)) {
             toolCallsRaw = toolCallsNode.toObject(List.class);
-            resp.in_thinking = false;
+            resp.in_thinking = false; //重置状态
         }
 
         if (searchResultsNode != null) {
