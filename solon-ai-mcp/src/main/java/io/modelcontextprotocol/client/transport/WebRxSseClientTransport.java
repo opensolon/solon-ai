@@ -253,7 +253,7 @@ public class WebRxSseClientTransport implements McpClientTransport {
 								.bodyOfJson(jsonText)
 								.execAsync("POST"))
 						.doOnSuccess(response -> {
-							logger.debug("Message sent successfully");
+							logger.debug("Message sent successfully: {}", jsonText);
 						})
 						.doOnError(error -> {
 							if (!isClosing) {
