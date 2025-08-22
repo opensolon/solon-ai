@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
@@ -23,6 +24,7 @@ import java.util.List;
 @SolonTest(McpApp.class)
 public class McpClientTest {
     McpClientProvider mcpClient = McpClientProvider.builder()
+            .channel(McpChannel.STREAMABLE)
             .apiUrl("http://localhost:8081/mcp/")
             .cacheSeconds(30)
             .build();
