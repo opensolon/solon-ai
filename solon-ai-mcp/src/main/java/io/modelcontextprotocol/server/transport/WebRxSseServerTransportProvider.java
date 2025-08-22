@@ -270,7 +270,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 		// Send initial endpoint event
 		try {
-			SseEmitter sseBuilder = new SseEmitter(0L);
+			SseEmitter sseBuilder = new SseEmitter(-1L);
 			sseBuilder.onCompletion(() -> {
 				logger.debug("SSE connection completed for session: {}", sessionId);
 				sessions.remove(sessionId);

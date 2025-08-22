@@ -260,7 +260,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 		logger.debug("Handling GET request for session: {}", sessionId);
 
 		try {
-			SseEmitter sseEmitter = new SseEmitter(0L);
+			SseEmitter sseEmitter = new SseEmitter(-1L);
 
 			sseEmitter.onTimeout(() -> {
 				logger.debug("SSE connection timed out for session: {}", sessionId);
@@ -407,7 +407,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 			} else if (message instanceof McpSchema.JSONRPCRequest) {
 				McpSchema.JSONRPCRequest jsonrpcRequest = (McpSchema.JSONRPCRequest) message;
 				// For streaming responses, we need to return SSE
-				SseEmitter sseEmitter = new SseEmitter(0L);
+				SseEmitter sseEmitter = new SseEmitter(-1L);
 
 				sseEmitter.onCompletion(() -> {
 					logger.debug("Request response stream completed for session: {}", sessionId);
