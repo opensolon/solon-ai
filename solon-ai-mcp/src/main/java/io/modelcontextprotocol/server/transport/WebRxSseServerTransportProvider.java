@@ -416,7 +416,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 				try {
 					String jsonText = objectMapper.writeValueAsString(message);
 					sseBuilder.send(new SseEvent().id(sessionId).name(MESSAGE_EVENT_TYPE).data(jsonText));
-					logger.debug("Message sent to session {}", sessionId);
+					logger.debug("Message sent to session {}: {}", sessionId, jsonText);
 				}
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", sessionId, e.getMessage());

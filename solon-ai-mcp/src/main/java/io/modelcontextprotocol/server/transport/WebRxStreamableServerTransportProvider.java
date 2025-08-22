@@ -564,7 +564,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 					this.sseEmitter.send(new SseEvent().id(messageId != null ? messageId : this.sessionId)
 							.name(MESSAGE_EVENT_TYPE)
 							.data(jsonText));
-					logger.debug("Message sent to session {} with ID {}", this.sessionId, messageId);
+					logger.debug("Message sent to session {} with ID {}: {}", this.sessionId, messageId, jsonText);
 				}
 				catch (Exception e) {
 					logger.error("Failed to send message to session {}: {}", this.sessionId, e.getMessage());
