@@ -252,6 +252,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     private void heartbeatHandle() {
+        if (clientProps.getHeartbeatInterval() == null) {
+            return;
+        }
+
+        if (clientProps.getHeartbeatInterval().getSeconds() < 5L) {
+            return;
+        }
+
         if (heartbeatExecutor == null) {
             heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
         }
@@ -264,14 +272,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      */
     private void heartbeatHandleDo() {
         if (heartbeatExecutor == null) {
-            return;
-        }
-
-        if (clientProps.getHeartbeatInterval() == null) {
-            return;
-        }
-
-        if (clientProps.getHeartbeatInterval().getSeconds() < 5L) {
             return;
         }
 
