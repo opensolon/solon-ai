@@ -275,6 +275,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             return;
         }
 
+        //单次延后执行
         heartbeatExecutor.schedule(() -> {
             if (Thread.currentThread().isInterrupted()) {
                 //如果中断
