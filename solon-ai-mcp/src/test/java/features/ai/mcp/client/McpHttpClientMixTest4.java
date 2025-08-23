@@ -39,7 +39,7 @@ public class McpHttpClientMixTest4 {
     }
 
     @Test
-    public void tool1() throws Exception {
+    public void tool1_model() throws Exception {
         //没有参数的工具
         String response = mcpClient.callToolAsText("spotIntro", Collections.emptyMap()).getContent();
 

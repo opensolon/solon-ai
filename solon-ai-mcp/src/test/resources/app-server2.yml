@@ -1,0 +1,6 @@
+server.port: 8082
+server.idleTimeout: 120000
+server.context-path: "test"
+
+solon.logging.logger:
+  root.level: TRACE

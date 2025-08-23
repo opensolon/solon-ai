@@ -137,7 +137,7 @@ public class McpHttpClientTest {
 
     //与模型绑定
     @Test
-    public void case4() throws Exception {
+    public void case4_model() throws Exception {
         McpClientProvider toolProvider = Utils.loadProps("app-client.yml")
                 .getProp("solon.ai.mcp.client.demo2")
                 .toBean(McpClientProvider.class);
@@ -167,7 +167,7 @@ public class McpHttpClientTest {
     }
 
     @Test
-    public void case4_stream() throws Exception {
+    public void case4_model_stream() throws Exception {
         McpClientProvider toolProvider = Utils.loadProps("app-client.yml")
                 .getProp("solon.ai.mcp.client.demo2")
                 .toBean(McpClientProvider.class);
