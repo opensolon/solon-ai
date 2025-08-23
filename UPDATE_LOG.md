@@ -12,10 +12,12 @@
 
 ### 3.5.1
 
+* 添加 solon-ai-mcp McpServerEndpointProvider:Builder 添加 context-path 配置
 * 优化 solon-ai-mcp McpClientProvider 配置向 McpServers json 格式上靠
 * 修复 solon-ai-core `think-> tool -> think` 时，工具调用的内容无法加入到对话的问题
 * 修复 solon-ai-mcp 服务端传输层的会话长连会超时的问题
 * 修复 solon-ai-mcp 客户端提供者心跳失效的问题
+* 修复 solon-ai-mcp SSE 传输时 message 端点未附加 context-path 的问题
 * mcp `McpSchema:*Capabilities` 添加 `@JsonIgnoreProperties(ignoreUnknown = true)` 增强跨协议版本兼容性
 
 

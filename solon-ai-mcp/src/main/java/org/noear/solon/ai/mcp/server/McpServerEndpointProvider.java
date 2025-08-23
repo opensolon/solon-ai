@@ -134,6 +134,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
                         .sseEndpoint(this.mcpEndpoint)
                         .messageEndpoint(this.messageEndpoint)
+                        .baseUrl(serverProps.getContextPath())
                         .keepAliveInterval(serverProps.getHeartbeatInterval())
                         .objectMapper(new ObjectMapper())
                         .build();
@@ -474,6 +475,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
             props.setMcpEndpoint(mcpEndpoint);
             props.setSseEndpoint(sseEndpoint);
             props.setMessageEndpoint(messageEndpoint);
+            props.setContextPath(Solon.cfg().serverContextPath()); //@since 2025-08-23
             props.setEnableOutputSchema(endpointAnno.enableOutputSchema());
 
             if (Utils.isEmpty(heartbeatInterval)) {
@@ -536,6 +538,17 @@ public class McpServerEndpointProvider implements LifecycleBean {
         @Deprecated
         public Builder messageEndpoint(String messageEndpoint) {
             props.setMessageEndpoint(messageEndpoint);
+            return this;
+        }
+
+        /**
+         * 上下文路径（主要是 messageEndpoint 输出时使用）
+         *
+         * @deprecated 3.5
+         */
+        @Deprecated
+        public Builder contextPath(String contextPath) {
+            props.setContextPath(contextPath);
             return this;
         }
 

@@ -44,7 +44,7 @@ public class McpServerProperties {
      * 通道
      */
     private String channel;
-    
+
     /**
      * mcp 端点（路径）
      */
@@ -65,6 +65,15 @@ public class McpServerProperties {
      */
     @Deprecated
     private String messageEndpoint;
+
+    /**
+     * 上下文路径（主要给 messageEndpoint 使用）
+     *
+     * @since 3.5
+     * @deprecated 3.5
+     */
+    @Deprecated
+    private String contextPath;
 
     /**
      * 服务器SSE心跳间隔（空表示不启用）
