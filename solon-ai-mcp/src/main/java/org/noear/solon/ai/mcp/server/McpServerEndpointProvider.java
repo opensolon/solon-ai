@@ -77,6 +77,12 @@ public class McpServerEndpointProvider implements LifecycleBean {
             throw new IllegalArgumentException("The channel is required");
         }
 
+        if(serverProps.getContextPath() == null) {
+            if (Solon.app() != null) {
+                serverProps.setContextPath(Solon.cfg().serverContextPath()); //@since 2025-08-23
+            }
+        }
+
 
         this.serverProperties = serverProps;
 
@@ -475,7 +481,6 @@ public class McpServerEndpointProvider implements LifecycleBean {
             props.setMcpEndpoint(mcpEndpoint);
             props.setSseEndpoint(sseEndpoint);
             props.setMessageEndpoint(messageEndpoint);
-            props.setContextPath(Solon.cfg().serverContextPath()); //@since 2025-08-23
             props.setEnableOutputSchema(endpointAnno.enableOutputSchema());
 
             if (Utils.isEmpty(heartbeatInterval)) {
