@@ -1,13 +1,16 @@
 package org.noear.solon.ai.a2a.client;
 
-import lombok.SneakyThrows;
 import org.noear.solon.ai.a2a.model.AgentCard;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.reactivestreams.Publisher;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -69,8 +72,37 @@ public class A2AAgent {
         });
     }
 
-    @SneakyThrows
-    public ChatResponse chat(String userMessage) {
+    public ChatResponse chatCall(String prompt) throws IOException {
+        return chatModel.prompt(buildSystemMessage(),
+                        ChatMessage.ofUser(prompt))
+                .options(o -> o.toolsAdd(agentTools))
+                .call();
+    }
+
+    public ChatResponse chatCall(ChatSession session) throws IOException {
+        session.addMessage(buildSystemMessage());
+
+        return chatModel.prompt(session)
+                .options(o -> o.toolsAdd(agentTools))
+                .call();
+    }
+
+    public Publisher<ChatResponse> chatStream(String prompt) {
+        return chatModel.prompt(buildSystemMessage(),
+                        ChatMessage.ofUser(prompt))
+                .options(o -> o.toolsAdd(agentTools))
+                .stream();
+    }
+
+    public Publisher<ChatResponse> chatStream(ChatSession session) {
+        session.addMessage(buildSystemMessage());
+
+        return chatModel.prompt(session)
+                .options(o -> o.toolsAdd(agentTools))
+                .stream();
+    }
+
+    private SystemMessage buildSystemMessage() {
         StringBuilder systemPrompt = new StringBuilder(
                 "您是一位擅长分配任务的专家，负责将用户请求分解为子代理可以执行的任务。能够将用户请求分配给合适的远程代理。\n" +
                         "\n" +
@@ -91,8 +123,6 @@ public class A2AAgent {
             systemPrompt.append(item).append("\n");
         }
 
-        return chatModel.prompt(ChatMessage.ofSystem(systemPrompt.toString()), ChatMessage.ofUser(userMessage))
-                .options(o -> o.toolsAdd(agentTools))
-                .call();
+        return ChatMessage.ofSystem(systemPrompt.toString());
     }
 }
