@@ -15,8 +15,8 @@ import java.util.Collection;
 /**
  * @author noear 2025/4/8 created
  */
-@McpServerEndpoint(channel = McpChannel.STREAMABLE, mcpEndpoint = "/ctx2/sse")
-public class McpServerTool2 {
+@McpServerEndpoint(channel = McpChannel.SSE, mcpEndpoint = "/ctx3/sse")
+public class McpServerTool3 {
     @ToolMapping(description = "查询天气预报", returnDirect = true)
     public String getWeather(@Param(description = "城市位置") String location, Context ctx) {
         System.out.println("------------: sessionId: " + ctx.sessionId());

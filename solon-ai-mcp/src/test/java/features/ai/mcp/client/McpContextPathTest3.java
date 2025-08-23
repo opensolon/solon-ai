@@ -25,10 +25,10 @@ import java.util.List;
  */
 @Slf4j
 @SolonTest(McpServerApp.class)
-public class McpContextPathTest {
+public class McpContextPathTest3 {
     static McpClientProvider mcpClient = McpClientProvider.builder()
-            .channel(McpChannel.STREAMABLE)
-            .apiUrl("http://localhost:8082/test/ctx2/sse?user=1")
+            .channel(McpChannel.SSE)
+            .apiUrl("http://localhost:8082/test/ctx3/sse?user=1")
             .cacheSeconds(30)
             .build();
 
