@@ -2,6 +2,7 @@ package org.noear.solon.ai.a2a.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.Map;
 
@@ -9,8 +10,9 @@ import java.util.Map;
  * DataPart represents a structured data segment within a message part
  * @author by HaiTao.Wang on 2025/8/21.
  */
-@Data
 @AllArgsConstructor
+@NoArgsConstructor
+@Data
 public class DataPart implements Part {
     /**
      * Kind is the part type - data for DataParts

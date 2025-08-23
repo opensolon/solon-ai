@@ -2,6 +2,7 @@ package org.noear.solon.ai.a2a.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 import java.util.Map;
@@ -10,8 +11,9 @@ import java.util.Map;
  * Message represents a single message exchanged between user and agent
  * @author by HaiTao.Wang on 2025/8/21.
  */
-@Data
 @AllArgsConstructor
+@NoArgsConstructor
+@Data
 public class Message {
     /**
      * MessageId is the identifier created by the message creator
