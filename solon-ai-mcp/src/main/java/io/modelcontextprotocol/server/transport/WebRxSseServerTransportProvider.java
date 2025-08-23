@@ -17,6 +17,7 @@ import org.noear.solon.SolonApp;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Entity;
 import org.noear.solon.core.handle.StatusCodes;
+import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.web.sse.SseEmitter;
 import org.noear.solon.web.sse.SseEvent;
 import org.slf4j.Logger;
@@ -93,8 +94,6 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 	private final String sseEndpoint;
 
-	private final String baseUrl;
-
 	private McpServerSession.Factory sessionFactory;
 
 	/**
@@ -138,8 +137,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 
 		this.objectMapper = objectMapper;
-		this.baseUrl = baseUrl;
-		this.messageEndpoint = messageEndpoint;
+		this.messageEndpoint = PathUtil.joinUri(baseUrl, messageEndpoint);
 		this.sseEndpoint = sseEndpoint;
         this.contextExtractor = contextExtractor;
 
@@ -270,36 +268,36 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 		// Send initial endpoint event
 		try {
-			SseEmitter sseBuilder = new SseEmitter(-1L);
-			sseBuilder.onCompletion(() -> {
-				logger.debug("SSE connection completed for session: {}", sessionId);
-				sessions.remove(sessionId);
+            SseEmitter sseBuilder = new SseEmitter(-1L);
+            sseBuilder.onCompletion(() -> {
+                logger.debug("SSE connection completed for session: {}", sessionId);
+                sessions.remove(sessionId);
                 sessionRequests.remove(sessionId);
-			});
-			sseBuilder.onTimeout(() -> {
-				logger.debug("SSE connection timed out for session: {}", sessionId);
-				sessions.remove(sessionId);
+            });
+            sseBuilder.onTimeout(() -> {
+                logger.debug("SSE connection timed out for session: {}", sessionId);
+                sessions.remove(sessionId);
                 sessionRequests.remove(sessionId);
-			});
+            });
 
-			sseBuilder.onInited(emitter -> {
-				WebRxMcpSessionTransport sessionTransport = new WebRxMcpSessionTransport(sessionId, sseBuilder);
-				McpServerSession session = sessionFactory.create(sessionTransport);
-				this.sessions.put(sessionId, session);
+            sseBuilder.onInited(emitter -> {
+                WebRxMcpSessionTransport sessionTransport = new WebRxMcpSessionTransport(sessionId, sseBuilder);
+                McpServerSession session = sessionFactory.create(sessionTransport);
+                this.sessions.put(sessionId, session);
                 this.sessionRequests.put(sessionId, request);
 
-				try {
-					sseBuilder.send(new SseEvent().id(sessionId)
-							.name(ENDPOINT_EVENT_TYPE)
-							.data(this.baseUrl + this.messageEndpoint + "?sessionId=" + sessionId));
-				} catch (Exception e) {
-					logger.error("Failed to send initial endpoint event: {}", e.getMessage());
-					sseBuilder.error(e);
-				}
-			});
+                try {
+                    sseBuilder.send(new SseEvent().id(sessionId)
+                            .name(ENDPOINT_EVENT_TYPE)
+                            .data(this.messageEndpoint + "?sessionId=" + sessionId));
+                } catch (Exception e) {
+                    logger.error("Failed to send initial endpoint event: {}", e.getMessage());
+                    sseBuilder.error(e);
+                }
+            });
 
-			return sseBuilder;
-		}
+            return sseBuilder;
+        }
 		catch (Exception e) {
 			logger.error("Failed to send initial endpoint event to session {}: {}", sessionId, e.getMessage());
 			sessions.remove(sessionId);
