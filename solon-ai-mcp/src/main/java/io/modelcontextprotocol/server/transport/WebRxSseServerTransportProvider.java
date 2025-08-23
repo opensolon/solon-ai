@@ -91,6 +91,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	private final ObjectMapper objectMapper;
 
 	private final String messageEndpoint;
+    private final String messageEndpointFull;
 
 	private final String sseEndpoint;
 
@@ -137,7 +138,8 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		Assert.notNull(sseEndpoint, "SSE endpoint must not be null");
 
 		this.objectMapper = objectMapper;
-		this.messageEndpoint = PathUtil.joinUri(baseUrl, messageEndpoint);
+        this.messageEndpoint = messageEndpoint;
+		this.messageEndpointFull = PathUtil.joinUri(baseUrl, messageEndpoint);
 		this.sseEndpoint = sseEndpoint;
         this.contextExtractor = contextExtractor;
 
@@ -289,7 +291,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
                 try {
                     sseBuilder.send(new SseEvent().id(sessionId)
                             .name(ENDPOINT_EVENT_TYPE)
-                            .data(this.messageEndpoint + "?sessionId=" + sessionId));
+                            .data(this.messageEndpointFull + "?sessionId=" + sessionId));
                 } catch (Exception e) {
                     logger.error("Failed to send initial endpoint event: {}", e.getMessage());
                     sseBuilder.error(e);
