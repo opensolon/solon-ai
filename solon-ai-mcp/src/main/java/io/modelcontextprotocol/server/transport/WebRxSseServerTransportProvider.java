@@ -529,10 +529,12 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		 * @return This builder instance for method chaining
 		 */
 		public Builder baseUrl(String baseUrl) {
-			Assert.notNull(baseUrl, "Base URL must not be null");
-			this.baseUrl = baseUrl;
-			return this;
-		}
+            if (baseUrl != null) {
+                this.baseUrl = baseUrl;
+            }
+
+            return this;
+        }
 
 		/**
 		 * Sets the endpoint path where clients will send their messages.
