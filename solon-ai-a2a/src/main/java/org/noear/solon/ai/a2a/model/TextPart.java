@@ -10,8 +10,8 @@ import java.util.Map;
  * TextPart represents a text segment within parts
  * @author by HaiTao.Wang on 2025/8/21.
  */
-@AllArgsConstructor
 @NoArgsConstructor
+@AllArgsConstructor
 @Data
 public class TextPart implements Part {
     /**

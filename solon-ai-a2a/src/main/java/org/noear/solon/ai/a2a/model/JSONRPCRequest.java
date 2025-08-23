@@ -3,12 +3,14 @@ package org.noear.solon.ai.a2a.model;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.experimental.Accessors;
 
 /**
  * @author by HaiTao.Wang on 2025/8/21.
  */
 @AllArgsConstructor
 @NoArgsConstructor
+@Accessors(chain = true)
 @Data
 public class JSONRPCRequest {
 

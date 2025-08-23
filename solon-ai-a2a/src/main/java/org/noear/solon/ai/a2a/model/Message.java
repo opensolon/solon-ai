@@ -1,5 +1,7 @@
 package org.noear.solon.ai.a2a.model;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -11,9 +13,9 @@ import java.util.Map;
  * Message represents a single message exchanged between user and agent
  * @author by HaiTao.Wang on 2025/8/21.
  */
-@AllArgsConstructor
-@NoArgsConstructor
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class Message {
     /**
      * MessageId is the identifier created by the message creator
@@ -33,8 +35,14 @@ public class Message {
     /**
      * Parts is the message content
      */
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "kind")
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = TextPart.class, name = "text"),
+            @JsonSubTypes.Type(value = DataPart.class, name = "data"),
+            @JsonSubTypes.Type(value = FilePart.class, name = "file")
+    })
     List<Part> parts;
-    
+
     /**
      * ContextId is the context the message is associated with
      */
