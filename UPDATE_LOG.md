@@ -12,6 +12,7 @@
 
 ### 3.5.1
 
+* 新增 solon-ai-a2a 插件
 * 添加 solon-ai-mcp McpServerEndpointProvider:Builder 添加 context-path 配置
 * 优化 solon-ai-mcp McpClientProvider 配置向 McpServers json 格式上靠
 * 修复 solon-ai-core `think-> tool -> think` 时，工具调用的内容无法加入到对话的问题

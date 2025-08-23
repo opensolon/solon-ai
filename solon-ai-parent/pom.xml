@@ -48,6 +48,12 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>solon-ai-a2a</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-flow</artifactId>
                 <version>${project.version}</version>
             </dependency>

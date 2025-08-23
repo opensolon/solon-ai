@@ -19,6 +19,7 @@
     <modules>
         <module>../../solon-ai</module>
         <module>../../solon-ai-core</module>
+        <module>../../solon-ai-a2a</module>
         <module>../../solon-ai-flow</module>
         <module>../../solon-ai-mcp</module>
         <module>../../solon-ai-parent</module>
