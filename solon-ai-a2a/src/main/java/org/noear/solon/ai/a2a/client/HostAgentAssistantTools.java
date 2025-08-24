@@ -13,10 +13,10 @@ import java.util.Map;
 /**
  * @author haiTao.Wang on 2025/8/21.
  */
-class A2AAgentAssistantTools {
-    private A2AAgent hostAgent;
+class HostAgentAssistantTools {
+    private HostAgent hostAgent;
 
-    public A2AAgentAssistantTools(A2AAgent hostAgent) {
+    public HostAgentAssistantTools(HostAgent hostAgent) {
         this.hostAgent = hostAgent;
     }
 

@@ -19,7 +19,7 @@ import java.util.Map;
 /**
  * @author by HaiTao.Wang on 2025/8/21.
  */
-public class A2AAgent {
+public class HostAgent {
     private ChatModel chatModel = null;
     private final ToolProvider agentTools;
     private final List<AgentCard> agentCards;
@@ -29,11 +29,11 @@ public class A2AAgent {
 
     public final Map<String, A2AClient> a2AClientMap;
 
-    public A2AAgent() {
+    public HostAgent() {
         this.agentCards = new ArrayList<>();
         this.agentInfo = new ArrayList<>();
         this.a2AClientMap = new HashMap<>();
-        this.agentTools = new MethodToolProvider(new A2AAgentAssistantTools(this));
+        this.agentTools = new MethodToolProvider(new HostAgentAssistantTools(this));
     }
 
     public List<Map<String, String>> getAgentInfo() {
