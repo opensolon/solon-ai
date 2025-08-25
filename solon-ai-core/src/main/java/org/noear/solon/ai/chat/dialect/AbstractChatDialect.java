@@ -249,6 +249,11 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (Utils.isNotEmpty(toolCalls)) {
             toolCallsRaw = toolCallsNode.toObject(List.class);
+            if (resp.in_thinking && resp.isStream()) {
+                //说明是思考结束立刻调用了工具，需要添加思考的结束标识
+                messageList.add(new AssistantMessage("</think>", true));
+                messageList.add(new AssistantMessage("\n\n", false));
+            }
             resp.in_thinking = false; //重置状态
         }
 
