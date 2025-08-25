@@ -41,6 +41,7 @@ import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.data.cache.LocalCacheService;
 import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
@@ -288,13 +289,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 //如果未关闭，尝试心跳
                 if (isStarted.get()) {
                     //如果已开始，则心跳发送
-                    getClient()
-                            .ping()
-                            .doOnError(err -> {
-                                //如果失败，重置（下次会尝试重连）
-                                this.reset();
-                            })
-                            .subscribe();
+                    RunUtil.runAndTry(() -> {
+                        try {
+                            getClient().ping().block();
+                        } catch (Throwable ex) {
+                            //如果失败，重置（下次会尝试重连）
+                            this.reset();
+                        }
+                    });
                 }
 
                 heartbeatHandleDo();
