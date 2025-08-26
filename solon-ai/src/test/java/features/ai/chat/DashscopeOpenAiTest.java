@@ -10,7 +10,7 @@ import org.noear.solon.test.SolonTest;
 public class DashscopeOpenAiTest extends AbsChatTest{
     private static final String apiUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
     private static final String apiKey = "sk-1ffe449611a74e61ad8e71e1b35a9858";
-    private static final String model = "qwen-turbo-latest";//"llama3.2"; //deepseek-r1:1.5b;
+    private static final String model = "qwen-turbo-latest"; //"deepseek-r1-distill-qwen-1.5b";  //
 
     protected ChatModel.Builder getChatModelBuilder() {
         return ChatModel.of(apiUrl)

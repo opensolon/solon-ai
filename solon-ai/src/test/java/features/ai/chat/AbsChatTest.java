@@ -35,7 +35,7 @@ public abstract class AbsChatTest {
     protected abstract ChatModel.Builder getChatModelBuilder();
 
     @Test
-    public void case1() throws IOException {
+    public void case1_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
@@ -47,7 +47,7 @@ public abstract class AbsChatTest {
     }
 
     @Test
-    public void case2() throws Exception {
+    public void case2_stream() throws Exception {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
@@ -72,7 +72,7 @@ public abstract class AbsChatTest {
     }
 
     @Test
-    public void case3_wather() throws IOException {
+    public void case3_wather_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
@@ -139,7 +139,7 @@ public abstract class AbsChatTest {
     }
 
     @Test
-    public void case3_wather_rainfall() throws IOException {
+    public void case3_wather_rainfall_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
@@ -186,7 +186,7 @@ public abstract class AbsChatTest {
 
 
     @Test
-    public void case3_www() throws IOException {
+    public void case3_www_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Tools())
                 .build();
@@ -200,7 +200,7 @@ public abstract class AbsChatTest {
     }
 
     @Test
-    public void case3_www_2() throws IOException {
+    public void case3_www2_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
@@ -217,7 +217,7 @@ public abstract class AbsChatTest {
     }
 
     @Test
-    public void case4() throws Throwable {
+    public void case4_tool_stream() throws Throwable {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
@@ -256,7 +256,7 @@ public abstract class AbsChatTest {
     }
 
     @Test
-    public void case5() throws Throwable {
+    public void case5_tool_stream() throws Throwable {
         ChatModel chatModel = getChatModelBuilder()
                 .build();
 
@@ -422,7 +422,7 @@ public abstract class AbsChatTest {
     }
 
     @Test
-    public void case8() throws Exception {
+    public void case8_tool_stream() throws Exception {
         ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Case8Tools())
                 .timeout(Duration.ofSeconds(600))
@@ -457,7 +457,7 @@ public abstract class AbsChatTest {
     }
 
     @Test
-    public void case10() throws Exception {
+    public void case10_tool_call() throws Exception {
         //没有参数的工具
         ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new Case10Tools())
