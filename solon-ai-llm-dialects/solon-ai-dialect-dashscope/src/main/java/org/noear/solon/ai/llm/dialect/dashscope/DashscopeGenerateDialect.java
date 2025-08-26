@@ -28,7 +28,7 @@ import java.util.Map;
  * DashScope 图型模型方言（阿里云产品）
  *
  * @author noear
- * @since 3.1
+ * @since 3.5
  */
 
 public class DashscopeGenerateDialect extends AbstractGenerateDialect {

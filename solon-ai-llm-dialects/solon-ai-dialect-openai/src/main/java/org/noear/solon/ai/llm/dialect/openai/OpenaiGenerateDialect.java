@@ -28,7 +28,7 @@ import java.util.List;
 
 /**
  * @author noear
- * @since 3.1
+ * @since 3.5
  */
 public class OpenaiGenerateDialect extends AbstractGenerateDialect {
     private static OpenaiGenerateDialect instance = new OpenaiGenerateDialect();
