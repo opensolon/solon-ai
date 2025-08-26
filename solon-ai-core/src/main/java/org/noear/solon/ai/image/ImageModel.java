@@ -64,8 +64,8 @@ public class ImageModel implements AiModel {
     /**
      * 输入（支持丰富参数形态）
      */
-    public ImageRequestDesc prompt(Map prompt) {
-        return new ImageRequestDesc(config, dialect, null, prompt);
+    public ImageRequestDesc prompt(ImagePrompt prompt) {
+        return new ImageRequestDesc(config, dialect, null, prompt.toMap());
     }
 
 
