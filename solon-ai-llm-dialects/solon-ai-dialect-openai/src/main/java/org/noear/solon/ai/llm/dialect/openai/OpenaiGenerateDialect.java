@@ -23,6 +23,7 @@ import org.noear.solon.ai.generate.GenerateException;
 import org.noear.solon.ai.generate.GenerateResponse;
 import org.noear.solon.ai.media.Image;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -58,7 +59,16 @@ public class OpenaiGenerateDialect extends AbstractGenerateDialect {
         if (oResp.contains("error")) {
             return new GenerateResponse(model, new GenerateException(oResp.get("error").getString()), null, null);
         } else {
-            List<Image> data = oResp.get("data").toObjectList(Image.class);
+            List<Image> data = null;
+
+            if (oResp.contains("task_id")) {
+                //异步模式只返回任务 id
+                String url = config.getTaskUrlAndId(oResp.get("task_id").getString());
+                data = Arrays.asList(Image.ofUrl(url));
+            } else if (oResp.contains("data")) {
+                //同步模式直接有结果
+                data = oResp.get("data").toObjectList(Image.class);
+            }
 
             AiUsage usage = null;
             if (oResp.contains("usage")) {

@@ -19,6 +19,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.lang.Nullable;
+import org.noear.solon.lang.Preview;
 
 import java.util.List;
 
@@ -26,8 +27,9 @@ import java.util.List;
  * 生成响应
  *
  * @author noear
- * @since 3.1
+ * @since 3.5
  */
+@Preview("3.5")
 public class GenerateResponse {
     private final String model;
     private final GenerateException error;

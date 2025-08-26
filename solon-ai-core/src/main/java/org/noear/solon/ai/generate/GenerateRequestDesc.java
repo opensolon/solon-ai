@@ -16,6 +16,7 @@
 package org.noear.solon.ai.generate;
 
 import org.noear.solon.ai.generate.dialect.GenerateDialect;
+import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,8 +29,9 @@ import java.util.function.Consumer;
  * 生成请求描述
  *
  * @author noear
- * @since 3.1
+ * @since 3.5
  */
+@Preview("3.5")
 public class GenerateRequestDesc {
     private static final Logger log = LoggerFactory.getLogger(GenerateRequestDesc.class);
 

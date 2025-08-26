@@ -31,9 +31,9 @@ import java.util.Properties;
  * 生成模型
  *
  * @author noear
- * @since 3.1
+ * @since 3.5
  */
-@Preview("3.1")
+@Preview("3.5")
 public class GenerateModel implements AiModel {
     private final GenerateConfig config;
     private final GenerateDialect dialect;
@@ -114,6 +114,14 @@ public class GenerateModel implements AiModel {
          */
         public Builder(GenerateConfig config) {
             this.config = config;
+        }
+
+        /**
+         * 异步任务地址
+         */
+        public Builder taskUrl(String taskUrl) {
+            config.setTaskUrl(taskUrl);
+            return this;
         }
 
         /**

@@ -27,9 +27,9 @@ import java.util.Map;
  * 生成模型方言
  *
  * @author noear
- * @since 3.1
+ * @since 3.5
  */
-@Preview("3.1")
+@Preview("3.5")
 public interface GenerateDialect extends AiModelDialect {
     /**
      * 是否为默认

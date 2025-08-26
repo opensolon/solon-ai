@@ -89,22 +89,19 @@ public class DashscopeGenerateDialect extends AbstractGenerateDialect {
 
         String model = oResp.get("model").getString();
 
-
-        //https://dashscope.aliyuncs.com/api/v1/tasks/
-
         if (oResp.contains("code") && !Utils.isEmpty(oResp.get("code").getString())) {
             return new GenerateResponse(model, new GenerateException(oResp.get("code").getString() + ": " + oResp.get("message").getString()), null, null);
         } else {
             List<Image> data = null;
             ONode oOutput = oResp.get("output");
 
-            if (oOutput.contains("results")) {
+            if (oOutput.contains("task_id")) {
+                //异步模式只返回任务 id
+                String url = config.getTaskUrlAndId(oOutput.get("task_id").getString());
+                data = Arrays.asList(Image.ofUrl(url));
+            } else if (oOutput.contains("results")) {
                 //同步模式直接有结果
                 data = oOutput.get("results").toObjectList(Image.class);
-            } else {
-                //异步模式只返回任务 id
-                String url = "https://dashscope.aliyuncs.com/api/v1/tasks/" + oOutput.get("task_id").getString();
-                data = Arrays.asList(Image.ofUrl(url));
             }
 
             return new GenerateResponse(model, null, data, null);

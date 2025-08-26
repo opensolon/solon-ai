@@ -18,6 +18,7 @@ package org.noear.solon.ai.generate.dialect;
 import org.noear.solon.ai.generate.GenerateConfig;
 import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.core.util.RankEntity;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,7 +30,9 @@ import java.util.List;
  * 生成模型方言管理
  *
  * @author noear
+ * @since 3.5
  */
+@Preview("3.5")
 public class GenerateDialectManager {
     static final Logger log = LoggerFactory.getLogger(GenerateDialectManager.class);
 

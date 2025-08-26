@@ -16,6 +16,7 @@
 package org.noear.solon.ai.generate;
 
 import org.noear.solon.Utils;
+import org.noear.solon.lang.Preview;
 
 import java.util.Map;
 
@@ -25,6 +26,7 @@ import java.util.Map;
  * @author noear
  * @since 3.5
  */
+@Preview("3.5")
 public interface GeneratePrompt {
     static GeneratePrompt ofKeyValues(Object... keyValues) {
         return new GeneratePromptDefault(Utils.asMap(keyValues));

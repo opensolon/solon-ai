@@ -22,9 +22,9 @@ import org.noear.solon.lang.Preview;
  * 生成异常
  *
  * @author noear
- * @since 3.1
+ * @since 3.5
  */
-@Preview("3.1")
+@Preview("3.5")
 public class GenerateException extends SolonException {
     public GenerateException(String message) {
         super(message);

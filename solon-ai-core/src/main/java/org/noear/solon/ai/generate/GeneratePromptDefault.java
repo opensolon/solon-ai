@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.generate;
 
+import org.noear.solon.lang.Preview;
+
 import java.util.Map;
 
 /**
@@ -23,6 +25,7 @@ import java.util.Map;
  * @author noear
  * @since 3.5
  */
+@Preview("3.5")
 public class GeneratePromptDefault implements GeneratePrompt {
     private Map<String, Object> map;
 

@@ -26,7 +26,7 @@ import java.util.Map;
  * 生成模型方言虚拟类
  *
  * @author noear
- * @since 3.1
+ * @since 3.5
  */
 public abstract class AbstractGenerateDialect implements GenerateDialect {
     @Override

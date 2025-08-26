@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.generate;
 
+import org.noear.solon.lang.Preview;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -22,8 +24,9 @@ import java.util.Map;
  * 生成选项
  *
  * @author noear
- * @since 3.1
+ * @since 3.5
  */
+@Preview("3.5")
 public class GenerateOptions {
     public static GenerateOptions of() {
         return new GenerateOptions();

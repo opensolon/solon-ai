@@ -22,15 +22,30 @@ import org.noear.solon.lang.Preview;
  * 生成配置
  *
  * @author noear
- * @since 3.1
+ * @since 3.5
  */
-@Preview("3.1")
+@Preview("3.5")
 public class GenerateConfig extends AiConfig {
+    private String taskUrl;
+
+    public String getTaskUrl() {
+        return taskUrl;
+    }
+
+    public void setTaskUrl(String taskUrl) {
+        this.taskUrl = taskUrl;
+    }
+
+    public String getTaskUrlAndId(String taskId) {
+        return taskUrl + taskId;
+    }
+
     @Override
     public String toString() {
         return "GenerateConfig{" +
                 "apiUrl='" + apiUrl + '\'' +
                 ", apiKey='" + apiKey + '\'' +
+                ", taskUrl='" + taskUrl + '\'' +
                 ", provider='" + provider + '\'' +
                 ", model='" + model + '\'' +
                 ", headers=" + headers +

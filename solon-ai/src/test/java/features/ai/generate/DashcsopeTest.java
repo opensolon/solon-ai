@@ -18,6 +18,7 @@ public class DashcsopeTest {
     private static final Logger log = LoggerFactory.getLogger(features.ai.chat.DashscopeTest.class);
 
     private static final String apiKey = "sk-1ffe449611a74e61ad8e71e1b35a9858";
+    private static final String taskUrl = "https://dashscope.aliyuncs.com/api/v1/tasks/";
 
 
     @Test
@@ -26,6 +27,7 @@ public class DashcsopeTest {
         String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis";
         GenerateModel generateModel = GenerateModel.of(apiUrl)
                 .apiKey(apiKey)
+                .taskUrl(taskUrl)
                 .model("wanx2.1-t2i-turbo")
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
@@ -38,6 +40,7 @@ public class DashcsopeTest {
         //打印消息
         log.info("{}", resp.getImage());
         assert resp.getImage().getUrl() != null;
+        assert resp.getImage().getUrl().startsWith("https://");
     }
 
     @Test
@@ -46,6 +49,7 @@ public class DashcsopeTest {
         String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image2image/image-synthesis";
         GenerateModel generateModel = GenerateModel.of(apiUrl)
                 .apiKey(apiKey)
+                .taskUrl(taskUrl)
                 .model("wanx2.1-imageedit")
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
@@ -60,6 +64,7 @@ public class DashcsopeTest {
 
         log.warn("{}", resp.getData());
         assert resp.getImage().getUrl() != null;
+        assert resp.getImage().getUrl().startsWith("https://");
     }
 
     @Test
@@ -68,6 +73,7 @@ public class DashcsopeTest {
         String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis";
         GenerateModel generateModel = GenerateModel.of(apiUrl)
                 .apiKey(apiKey)
+                .taskUrl(taskUrl)
                 .model("wan2.2-i2v-plus")
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
@@ -82,5 +88,6 @@ public class DashcsopeTest {
 
         log.warn("{}", resp.getData());
         assert resp.getImage().getUrl() != null;
+        assert resp.getImage().getUrl().startsWith("https://");
     }
 }

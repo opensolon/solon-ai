@@ -20,24 +20,27 @@ import java.util.Base64;
 @SolonTest
 public class GiteeaiTest {
     private static final Logger log = LoggerFactory.getLogger(GiteeaiTest.class);
-    private static final String apiUrl = "https://ai.gitee.com/v1/images/generations";
     private static final String apiKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
-    private static final String model = "stable-diffusion-3.5-large-turbo";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
+    private static final String taskUrl = "https://ai.gitee.com/v1/task/";
 
     @Test
     public void case1() throws IOException {
-        GenerateModel generateModel = GenerateModel.of(apiUrl).apiKey(apiKey).model(model).build();
+        String apiUrl = "https://ai.gitee.com/v1/images/generations";
+        String model = "stable-diffusion-3.5-large-turbo";
+
+        GenerateModel generateModel = GenerateModel.of(apiUrl)
+                .apiKey(apiKey)
+                .taskUrl(taskUrl)
+                .model(model)
+                .build();
 
         //一次性返回
         GenerateResponse resp = generateModel.prompt("a white siamese cat")
                 .options(o -> o.size("1024x1024"))
                 .call();
 
-        byte[] bytes = Base64.getDecoder().decode(resp.getImage().getB64Json());
-        File file = new File("/Users/noear/Downloads/ai-tmp1.jpg");
-        file.createNewFile();
-        file.deleteOnExit();
-        IoUtil.transferTo(new ByteArrayInputStream(bytes), new FileOutputStream(file));
+        assert resp.getImage().getB64Json() != null;
+        assert resp.getImage().getB64Json().length() > 100;
 
         //打印消息
         //log.info("{}", resp.getImage());
