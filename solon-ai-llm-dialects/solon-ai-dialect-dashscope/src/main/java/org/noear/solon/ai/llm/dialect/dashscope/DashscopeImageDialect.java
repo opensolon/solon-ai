@@ -60,14 +60,16 @@ public class DashscopeImageDialect extends AbstractImageDialect {
     }
 
     @Override
-    public String buildRequestJson(ImageConfig config, ImageOptions options, String prompt) {
+    public String buildRequestJson(ImageConfig config, ImageOptions options, String promptStr, Map promptMap) {
         return new ONode().build(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
 
-            if (Utils.isNotEmpty(prompt)) {
-                n.getOrNew("input").set("prompt", prompt);
+            if (Utils.isNotEmpty(promptStr)) {
+                n.getOrNew("input").set("prompt", promptStr);
+            } else if (Utils.isNotEmpty(promptMap)) {
+                n.set("input", ONode.load(promptMap));
             }
 
             n.getOrNew("parameters").build(n1 -> {

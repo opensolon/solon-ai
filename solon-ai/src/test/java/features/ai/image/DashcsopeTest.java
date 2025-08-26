@@ -1,6 +1,7 @@
 package features.ai.image;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.image.ImageModel;
 import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.core.util.IoUtil;
@@ -20,17 +21,16 @@ import java.util.Base64;
 @SolonTest
 public class DashcsopeTest {
     private static final Logger log = LoggerFactory.getLogger(features.ai.chat.DashscopeTest.class);
+
     private static final String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis";
     private static final String apiKey = "sk-1ffe449611a74e61ad8e71e1b35a9858";
-    private static final String provider = "dashscope";
-    private static final String model = "wanx2.1-t2i-turbo";//"llama3.2"; //deepseek-r1:1.5b;
+
 
     @Test
     public void case1() throws IOException {
         ImageModel chatModel = ImageModel.of(apiUrl)
                 .apiKey(apiKey)
-                .provider(provider)
-                .model(model)
+                .model("wanx2.1-t2i-turbo")
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
 
@@ -42,5 +42,24 @@ public class DashcsopeTest {
         //打印消息
         log.info("{}", resp.getImage());
         assert resp.getImage().getUrl() != null;
+    }
+
+    @Test
+    public void case2() throws IOException {
+        ImageModel imageModel = ImageModel.of(apiUrl)
+                .apiKey(apiKey)
+                .model("wanx2.1-imageedit")
+                .headerSet("X-DashScope-Async", "enable")
+                .build();
+
+        ImageResponse resp = imageModel.prompt(Utils.asMap(
+                        "function", "stylization_all",
+                        "prompt", "转换成法国绘本风格",
+                        "base_image_url", "http://wanx.alicdn.com/material/20250318/stylization_all_1.jpeg")
+                )
+                .options(o -> o.optionAdd("n", 1))
+                .call();
+
+        log.warn("{}", resp.getData());
     }
 }

@@ -21,6 +21,8 @@ import org.noear.solon.ai.image.ImageOptions;
 import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.lang.Preview;
 
+import java.util.Map;
+
 /**
  * 图像模型方言
  *
@@ -46,11 +48,12 @@ public interface ImageDialect extends AiModelDialect {
     /**
      * 构建请求数据
      *
-     * @param config  聊天配置
-     * @param options 聊天选项
-     * @param prompt  提示语
+     * @param config    聊天配置
+     * @param options   聊天选项
+     * @param promptStr 提示语文本形态
+     * @param promptMap 提示语字典形态
      */
-    String buildRequestJson(ImageConfig config, ImageOptions options, String prompt);
+    String buildRequestJson(ImageConfig config, ImageOptions options, String promptStr, Map promptMap);
 
     /**
      * 分析响应数据

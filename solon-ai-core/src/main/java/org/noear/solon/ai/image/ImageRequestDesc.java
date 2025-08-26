@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -34,13 +35,16 @@ public class ImageRequestDesc {
 
     private final ImageConfig config;
     private final ImageDialect dialect;
-    private final String prompt;
+    private final String promptStr;
+    private final Map promptMap;
+
     private ImageOptions options;
 
-    protected ImageRequestDesc(ImageConfig config, ImageDialect dialect, String prompt) {
+    protected ImageRequestDesc(ImageConfig config, ImageDialect dialect, String promptStr, Map promptMap) {
         this.config = config;
         this.dialect = dialect;
-        this.prompt = prompt;
+        this.promptStr = promptStr;
+        this.promptMap = promptMap;
         this.options = new ImageOptions();
     }
 
@@ -71,7 +75,7 @@ public class ImageRequestDesc {
     public ImageResponse call() throws IOException {
         HttpUtils httpUtils = config.createHttpUtils();
 
-        String reqJson = dialect.buildRequestJson(config, options, prompt);
+        String reqJson = dialect.buildRequestJson(config, options, promptStr, promptMap);
 
         if (log.isDebugEnabled()) {
             log.debug("ai-request: {}", reqJson);

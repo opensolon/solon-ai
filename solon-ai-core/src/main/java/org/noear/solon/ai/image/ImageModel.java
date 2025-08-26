@@ -25,6 +25,7 @@ import org.noear.solon.lang.Preview;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -57,7 +58,14 @@ public class ImageModel implements AiModel {
      * 输入
      */
     public ImageRequestDesc prompt(String prompt) {
-        return new ImageRequestDesc(config, dialect, prompt);
+        return new ImageRequestDesc(config, dialect, prompt, null);
+    }
+
+    /**
+     * 输入（支持丰富参数形态）
+     */
+    public ImageRequestDesc prompt(Map prompt) {
+        return new ImageRequestDesc(config, dialect, null, prompt);
     }
 
 
