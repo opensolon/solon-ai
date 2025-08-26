@@ -22,7 +22,7 @@ public class DashcsopeTest {
 
 
     @Test
-    public void case1() throws IOException {
+    public void case1_text2image() throws IOException {
         //生成图片
         String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis";
         GenerateModel generateModel = GenerateModel.of(apiUrl)
@@ -38,13 +38,13 @@ public class DashcsopeTest {
                 .call();
 
         //打印消息
-        log.info("{}", resp.getImage());
-        assert resp.getImage().getUrl() != null;
-        assert resp.getImage().getUrl().startsWith("https://");
+        log.info("{}", resp.getContent());
+        assert resp.getContent().getUrl() != null;
+        assert resp.getContent().getUrl().startsWith("https://");
     }
 
     @Test
-    public void case2() throws IOException {
+    public void case2_image2image() throws IOException {
         //编辑图片
         String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image2image/image-synthesis";
         GenerateModel generateModel = GenerateModel.of(apiUrl)
@@ -63,12 +63,12 @@ public class DashcsopeTest {
                 .call();
 
         log.warn("{}", resp.getData());
-        assert resp.getImage().getUrl() != null;
-        assert resp.getImage().getUrl().startsWith("https://");
+        assert resp.getContent().getUrl() != null;
+        assert resp.getContent().getUrl().startsWith("https://");
     }
 
     @Test
-    public void case3() throws IOException {
+    public void case3_video() throws IOException {
         //生成动画
         String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis";
         GenerateModel generateModel = GenerateModel.of(apiUrl)
@@ -87,7 +87,7 @@ public class DashcsopeTest {
                 .call();
 
         log.warn("{}", resp.getData());
-        assert resp.getImage().getUrl() != null;
-        assert resp.getImage().getUrl().startsWith("https://");
+        assert resp.getContent().getUrl() != null;
+        assert resp.getContent().getUrl().startsWith("https://");
     }
 }

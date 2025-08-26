@@ -33,10 +33,10 @@ import java.util.List;
 public class GenerateResponse {
     private final String model;
     private final GenerateException error;
-    private final List<Image> data;
+    private final List<GenerateContent> data;
     private final AiUsage usage;
 
-    public GenerateResponse(String model, GenerateException error, List<Image> data, AiUsage usage) {
+    public GenerateResponse(String model, GenerateException error, List<GenerateContent> data, AiUsage usage) {
         this.model = model;
         this.error = error;
         this.data = data;
@@ -69,7 +69,7 @@ public class GenerateResponse {
      * 获取数据
      */
     @Nullable
-    public List<Image> getData() {
+    public List<GenerateContent> getData() {
         return data;
     }
 
@@ -77,7 +77,7 @@ public class GenerateResponse {
      * 获取图片
      */
     @Nullable
-    public Image getImage() {
+    public GenerateContent getContent() {
         if (hasData()) {
             return data.get(0);
         } else {

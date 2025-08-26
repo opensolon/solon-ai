@@ -17,6 +17,7 @@ package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack.ONode;
 import org.noear.solon.ai.AiUsage;
+import org.noear.solon.ai.generate.GenerateContent;
 import org.noear.solon.ai.generate.dialect.AbstractGenerateDialect;
 import org.noear.solon.ai.generate.GenerateConfig;
 import org.noear.solon.ai.generate.GenerateException;
@@ -59,15 +60,15 @@ public class OpenaiGenerateDialect extends AbstractGenerateDialect {
         if (oResp.contains("error")) {
             return new GenerateResponse(model, new GenerateException(oResp.get("error").getString()), null, null);
         } else {
-            List<Image> data = null;
+            List<GenerateContent> data = null;
 
             if (oResp.contains("task_id")) {
                 //异步模式只返回任务 id
                 String url = config.getTaskUrlAndId(oResp.get("task_id").getString());
-                data = Arrays.asList(Image.ofUrl(url));
+                data = Arrays.asList(GenerateContent.builder().url(url).build());
             } else if (oResp.contains("data")) {
                 //同步模式直接有结果
-                data = oResp.get("data").toObjectList(Image.class);
+                data = oResp.get("data").toObjectList(GenerateContent.class);
             }
 
             AiUsage usage = null;

@@ -17,6 +17,7 @@ package org.noear.solon.ai.llm.dialect.ollama;
 
 import org.noear.snack.ONode;
 import org.noear.solon.ai.AiUsage;
+import org.noear.solon.ai.generate.GenerateContent;
 import org.noear.solon.ai.generate.dialect.AbstractGenerateDialect;
 import org.noear.solon.ai.generate.GenerateConfig;
 import org.noear.solon.ai.generate.GenerateException;
@@ -50,7 +51,7 @@ public class OllamaGenerateDialect extends AbstractGenerateDialect {
         if (oResp.contains("error")) {
             return new GenerateResponse(model, new GenerateException(oResp.get("error").getString()), null, null);
         } else {
-            List<Image> data = oResp.get("data").toObjectList(Image.class);
+            List<GenerateContent> data = oResp.get("data").toObjectList(GenerateContent.class);
 
             AiUsage usage = null;
             if (oResp.contains("prompt_eval_count")) {

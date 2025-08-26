@@ -17,11 +17,8 @@ package org.noear.solon.ai.llm.dialect.dashscope;
 
 import org.noear.snack.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.generate.*;
 import org.noear.solon.ai.generate.dialect.AbstractGenerateDialect;
-import org.noear.solon.ai.generate.GenerateConfig;
-import org.noear.solon.ai.generate.GenerateException;
-import org.noear.solon.ai.generate.GenerateOptions;
-import org.noear.solon.ai.generate.GenerateResponse;
 import org.noear.solon.ai.media.Image;
 
 import java.util.Arrays;
@@ -92,16 +89,16 @@ public class DashscopeGenerateDialect extends AbstractGenerateDialect {
         if (oResp.contains("code") && !Utils.isEmpty(oResp.get("code").getString())) {
             return new GenerateResponse(model, new GenerateException(oResp.get("code").getString() + ": " + oResp.get("message").getString()), null, null);
         } else {
-            List<Image> data = null;
+            List<GenerateContent> data = null;
             ONode oOutput = oResp.get("output");
 
             if (oOutput.contains("task_id")) {
                 //异步模式只返回任务 id
                 String url = config.getTaskUrlAndId(oOutput.get("task_id").getString());
-                data = Arrays.asList(Image.ofUrl(url));
+                data = Arrays.asList(GenerateContent.builder().url(url).build());
             } else if (oOutput.contains("results")) {
                 //同步模式直接有结果
-                data = oOutput.get("results").toObjectList(Image.class);
+                data = oOutput.get("results").toObjectList(GenerateContent.class);
             }
 
             return new GenerateResponse(model, null, data, null);
