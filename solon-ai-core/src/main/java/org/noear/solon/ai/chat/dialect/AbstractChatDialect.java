@@ -236,10 +236,16 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return new ToolCall(index, callId, name, argStr, argMap);
     }
 
+    protected String parseAssistantMessageContent(ChatResponseDefault resp, ONode oContent) {
+        return oContent.getRawString();
+    }
+
     public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
         List<AssistantMessage> messageList = new ArrayList<>();
 
-        String content = oMessage.get("content").getRawString();
+        ONode oContent = oMessage.get("content");
+
+        String content = parseAssistantMessageContent(resp, oContent);
         ONode toolCallsNode = oMessage.getOrNull("tool_calls");
         ONode searchResultsNode = oMessage.getOrNull("search_results");
 
@@ -343,7 +349,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         if (content != null || toolCallsRaw != null) {
-            messageList.add(new AssistantMessage(content, resp.in_thinking, toolCallsRaw, toolCalls, searchResultsRaw));
+            Object contentRaw = oContent.toObject();
+            messageList.add(new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw));
         }
 
         return messageList;
