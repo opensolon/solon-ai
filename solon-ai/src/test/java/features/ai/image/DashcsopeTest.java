@@ -1,20 +1,14 @@
 package features.ai.image;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.Utils;
 import org.noear.solon.ai.image.ImageModel;
 import org.noear.solon.ai.image.ImagePrompt;
 import org.noear.solon.ai.image.ImageResponse;
-import org.noear.solon.core.util.IoUtil;
 import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Base64;
 
 /**
  * @author noear 2025/1/28 created
@@ -56,7 +50,7 @@ public class DashcsopeTest {
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
 
-        ImageResponse resp = imageModel.prompt(ImagePrompt.from(
+        ImageResponse resp = imageModel.prompt(ImagePrompt.of(
                         "function", "stylization_all",
                         "prompt", "转换成法国绘本风格",
                         "base_image_url", "http://wanx.alicdn.com/material/20250318/stylization_all_1.jpeg")
@@ -78,7 +72,7 @@ public class DashcsopeTest {
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
 
-        ImageResponse resp = imageModel.prompt(ImagePrompt.from(
+        ImageResponse resp = imageModel.prompt(ImagePrompt.of(
                         "prompt", "一只猫在草地上奔跑",
                         "img_url", "https://cdn.translate.alibaba.com/r/wanx-demo-1.png")
                 )
