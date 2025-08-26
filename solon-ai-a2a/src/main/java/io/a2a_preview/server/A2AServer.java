@@ -3,7 +3,6 @@ package io.a2a_preview.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.a2a_preview.model.*;
-import org.noear.solon.ai.a2a.model.*;
 
 import java.time.Instant;
 import java.util.ArrayList;

@@ -3,7 +3,6 @@ package io.a2a_preview.client;
 
 import io.a2a_preview.model.*;
 import org.noear.snack.ONode;
-import org.noear.solon.ai.a2a.model.*;
 import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
 

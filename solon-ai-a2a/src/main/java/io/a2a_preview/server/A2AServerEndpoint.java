@@ -2,7 +2,6 @@ package io.a2a_preview.server;
 
 import io.a2a_preview.model.*;
 import org.noear.snack.ONode;
-import org.noear.solon.ai.a2a.model.*;
 import org.noear.solon.annotation.*;
 import org.noear.solon.web.sse.SseEmitter;
 import org.noear.solon.web.sse.SseEvent;
