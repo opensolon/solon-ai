@@ -237,7 +237,40 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     protected String parseAssistantMessageContent(ChatResponseDefault resp, ONode oContent) {
-        return oContent.getRawString();
+        if (oContent.isValue()) {
+            //一般输出都是单值
+            return oContent.getRawString();
+        } else {
+            ONode contentItem = null;
+            if (oContent.isArray()) {
+                //有些输出会是列表（取第一个）
+                if (oContent.ary().size() > 0) {
+                    contentItem = oContent.get(0);
+                }
+            } else if (oContent.isObject()) {
+                //有些输出会是字典
+                contentItem = oContent;
+            }
+
+            if (contentItem != null) {
+                if (contentItem.isObject()) {
+                    //优先取文本
+                    if (contentItem.contains("text")) {
+                        return contentItem.get("text").getRawString();
+                    } else if (contentItem.contains("image")) {
+                        return contentItem.get("image").getRawString();
+                    } else if (contentItem.contains("audio")) {
+                        return contentItem.get("audio").getRawString();
+                    } else if (contentItem.contains("video")) {
+                        return contentItem.get("video").getRawString();
+                    }
+                } else if (contentItem.isValue()) {
+                    return contentItem.getRawString();
+                }
+            }
+        }
+
+        return null;
     }
 
     public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {

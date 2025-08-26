@@ -157,19 +157,6 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
-        String content = oMessage.get("content").getString();
-        if (oMessage.get("content").isArray()) {
-            ONode contentArray = oMessage.get("content");
-            if (contentArray.ary().size() > 0) {
-                content = contentArray.get(0).get("text").getString();
-            }
-        }
-        oMessage.set("content", content);
-        return super.parseAssistantMessage(resp, oMessage);
-    }
-
-    @Override
     protected void buildChatMessageNodeDo(ONode oNode, UserMessage msg) {
         List<AiMedia> medias = msg.getMedias();
         String content = msg.getContent();

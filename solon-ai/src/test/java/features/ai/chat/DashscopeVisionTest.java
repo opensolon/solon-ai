@@ -33,7 +33,6 @@ public class DashscopeVisionTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apkKey) //需要指定供应商，用于识别接口风格（也称为方言）
                 .model(model)
-                .provider(provider)
                 .timeout(Duration.ofSeconds(300))
                 .build();
 
@@ -53,7 +52,6 @@ public class DashscopeVisionTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apkKey) //需要指定供应商，用于识别接口风格（也称为方言）
                 .model(model)
-                .provider(provider)
                 .timeout(Duration.ofSeconds(300))
                 .build();
 
@@ -76,14 +74,13 @@ public class DashscopeVisionTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apkKey) //需要指定供应商，用于识别接口风格（也称为方言）
                 .model(model)
-                .provider(provider)
                 .timeout(Duration.ofSeconds(300))
                 .build();
 
         String imageUrl = "https://solon.noear.org/img/solon/favicon256.png";
         Image image = Image.ofUrl(imageUrl);
         //一次性返回
-        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？，这两张图片一样吗",image,image))
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？，这两张图片一样吗", image, image))
                 .call();
 
         //打印消息
@@ -96,7 +93,6 @@ public class DashscopeVisionTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apkKey) // 需要指定供应商，用于识别接口风格（也称为方言）
                 .model(model)
-                .provider(provider)
                 .timeout(Duration.ofSeconds(300))
                 .build();
 
@@ -104,7 +100,6 @@ public class DashscopeVisionTest {
         ChatModel chatModel2 = ChatModel.of(apiUrl)
                 .apiKey(apkKey) // 需要指定供应商，用于识别接口风格（也称为方言）
                 .model("qwen-audio-turbo-latest")
-                .provider(provider)
                 .timeout(Duration.ofSeconds(300))
                 .build();
 
@@ -112,7 +107,7 @@ public class DashscopeVisionTest {
         String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
 
         // session会话
-        ChatSession chatSession =  InMemoryChatSession.builder().sessionId("sessionID").build();
+        ChatSession chatSession = InMemoryChatSession.builder().sessionId("sessionID").build();
 
         ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", Image.ofUrl(imageUrl)))
                 .call();
@@ -148,7 +143,6 @@ public class DashscopeVisionTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .apiKey(apkKey) // 需要指定供应商，用于识别接口风格（也称为方言）
                 .model("qwen-audio-turbo-latest")
-                .provider(provider)
                 .timeout(Duration.ofSeconds(300))
                 .build();
 
@@ -161,5 +155,24 @@ public class DashscopeVisionTest {
         log.info("{}", resp.getMessage());
     }
 
+    @Test
+    public void case5() throws IOException {
+        ChatModel chatModel = ChatModel.of(apiUrl)
+                .apiKey(apkKey) //需要指定供应商，用于识别接口风格（也称为方言）
+                .model("qwen-image-edit") //图片编辑
+                .timeout(Duration.ofSeconds(300))
+                .build();
 
+        String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
+
+        //一次性返回
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("把黑线框变成红的", Image.ofUrl(imageUrl)))
+                .call();
+
+        //打印消息
+        log.info("{}", resp.getMessage());
+
+        assert resp.hasContent();
+        assert resp.getContent().contains("https://");
+    }
 }

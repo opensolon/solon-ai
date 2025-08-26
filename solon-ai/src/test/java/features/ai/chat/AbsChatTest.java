@@ -212,6 +212,8 @@ public abstract class AbsChatTest {
 
         //打印
         System.out.println(resp.getMessage());
+        assert resp.hasContent();
+        assert resp.getContent().contains("solon");
     }
 
     @Test
