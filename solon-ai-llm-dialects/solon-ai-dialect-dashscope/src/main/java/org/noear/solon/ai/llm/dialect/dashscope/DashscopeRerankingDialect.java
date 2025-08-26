@@ -34,6 +34,8 @@ import java.util.Map;
  */
 
 public class DashscopeRerankingDialect extends AbstractRerankingDialect {
+    private static final String URL_PREFIX = "https://dashscope.aliyuncs.com/api/v1/services/";
+
     private static DashscopeRerankingDialect instance = new DashscopeRerankingDialect();
 
     public static DashscopeRerankingDialect getInstance() {
@@ -47,7 +49,13 @@ public class DashscopeRerankingDialect extends AbstractRerankingDialect {
      */
     @Override
     public boolean matched(RerankingConfig config) {
-        return "dashscope".equals(config.getProvider());
+        if ("dashscope".equals(config.getProvider())) {
+            return true;
+        } else if (config.getApiUrl().startsWith(URL_PREFIX)) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override

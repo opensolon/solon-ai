@@ -35,6 +35,8 @@ import java.util.Map;
 public class DashscopeImageDialect extends AbstractImageDialect {
     //https://help.aliyun.com/zh/model-studio/developer-reference
 
+    private static final String URL_PREFIX = "https://dashscope.aliyuncs.com/api/v1/services/";
+
     private static DashscopeImageDialect instance = new DashscopeImageDialect();
 
     public static DashscopeImageDialect getInstance() {
@@ -48,8 +50,13 @@ public class DashscopeImageDialect extends AbstractImageDialect {
      */
     @Override
     public boolean matched(ImageConfig config) {
-        return "dashscope".equals(config.getProvider());
-
+        if ("dashscope".equals(config.getProvider())) {
+            return true;
+        } else if (config.getApiUrl().startsWith(URL_PREFIX)) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override

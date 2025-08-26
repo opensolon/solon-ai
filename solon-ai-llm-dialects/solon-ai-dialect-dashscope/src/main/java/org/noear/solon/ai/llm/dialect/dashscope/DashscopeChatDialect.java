@@ -43,6 +43,8 @@ import java.util.Map;
 public class DashscopeChatDialect extends AbstractChatDialect {
     //https://help.aliyun.com/zh/model-studio/developer-reference
 
+    private static final String URL_PREFIX = "https://dashscope.aliyuncs.com/api/v1/services/";
+
     private static DashscopeChatDialect instance = new DashscopeChatDialect();
 
     public static DashscopeChatDialect getInstance() {
@@ -56,8 +58,13 @@ public class DashscopeChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "dashscope".equals(config.getProvider());
-
+        if ("dashscope".equals(config.getProvider())) {
+            return true;
+        } else if (config.getApiUrl().startsWith(URL_PREFIX)) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override
