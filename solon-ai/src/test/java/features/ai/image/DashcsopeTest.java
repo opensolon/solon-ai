@@ -50,7 +50,7 @@ public class DashcsopeTest {
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
 
-        ImageResponse resp = imageModel.prompt(ImagePrompt.of(
+        ImageResponse resp = imageModel.prompt(ImagePrompt.ofKeyValues(
                         "function", "stylization_all",
                         "prompt", "转换成法国绘本风格",
                         "base_image_url", "http://wanx.alicdn.com/material/20250318/stylization_all_1.jpeg")
@@ -72,7 +72,7 @@ public class DashcsopeTest {
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
 
-        ImageResponse resp = imageModel.prompt(ImagePrompt.of(
+        ImageResponse resp = imageModel.prompt(ImagePrompt.ofKeyValues(
                         "prompt", "一只猫在草地上奔跑",
                         "img_url", "https://cdn.translate.alibaba.com/r/wanx-demo-1.png")
                 )

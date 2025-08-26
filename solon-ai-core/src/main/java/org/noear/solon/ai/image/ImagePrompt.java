@@ -26,11 +26,11 @@ import java.util.Map;
  * @since 3.5
  */
 public interface ImagePrompt {
-    static ImagePrompt of(Object... keyValues) {
+    static ImagePrompt ofKeyValues(Object... keyValues) {
         return new ImagePromptDefault(Utils.asMap(keyValues));
     }
 
-    static ImagePrompt from(Map<String, Object> map) {
+    static ImagePrompt ofMap(Map<String, Object> map) {
         return new ImagePromptDefault(map);
     }
 
