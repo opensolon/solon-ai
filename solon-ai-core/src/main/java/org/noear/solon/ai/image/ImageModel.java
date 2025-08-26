@@ -19,6 +19,7 @@ import org.noear.solon.ai.AiModel;
 import org.noear.solon.ai.image.dialect.ImageDialect;
 import org.noear.solon.ai.image.dialect.ImageDialectManager;
 import org.noear.solon.core.Props;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.net.InetSocketAddress;
@@ -43,6 +44,10 @@ public class ImageModel implements AiModel {
     }
 
     public ImageModel(ImageConfig config) {
+        Assert.notNull(config, "The config is required");
+        Assert.notNull(config.getApiUrl(), "The config.apiUrl is required");
+        Assert.notNull(config.getModel(), "The config.model is required");
+
         this.dialect = ImageDialectManager.select(config);
         this.config = config;
     }

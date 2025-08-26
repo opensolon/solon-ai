@@ -20,6 +20,7 @@ import org.noear.solon.ai.embedding.dialect.EmbeddingDialect;
 import org.noear.solon.ai.embedding.dialect.EmbeddingDialectManager;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.core.Props;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
@@ -48,6 +49,10 @@ public class EmbeddingModel implements AiModel {
     }
 
     public EmbeddingModel(EmbeddingConfig config) {
+        Assert.notNull(config, "The config is required");
+        Assert.notNull(config.getApiUrl(), "The config.apiUrl is required");
+        Assert.notNull(config.getModel(), "The config.model is required");
+
         this.dialect = EmbeddingDialectManager.select(config);
         this.config = config;
     }

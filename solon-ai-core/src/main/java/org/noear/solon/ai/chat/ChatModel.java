@@ -51,6 +51,8 @@ public class ChatModel implements AiModel {
 
     public ChatModel(ChatConfig config) {
         Assert.notNull(config, "The config is required");
+        Assert.notNull(config.getApiUrl(), "The config.apiUrl is required");
+        Assert.notNull(config.getModel(), "The config.model is required");
 
         this.config = config;
         this.dialect = ChatDialectManager.select(config);
