@@ -22,7 +22,6 @@ import org.noear.solon.ai.generate.dialect.AbstractGenerateDialect;
 import org.noear.solon.ai.generate.GenerateConfig;
 import org.noear.solon.ai.generate.GenerateException;
 import org.noear.solon.ai.generate.GenerateResponse;
-import org.noear.solon.ai.media.Image;
 
 import java.util.List;
 

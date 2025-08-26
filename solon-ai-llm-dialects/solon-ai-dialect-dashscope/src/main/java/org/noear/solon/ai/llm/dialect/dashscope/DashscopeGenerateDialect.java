@@ -19,7 +19,6 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.generate.*;
 import org.noear.solon.ai.generate.dialect.AbstractGenerateDialect;
-import org.noear.solon.ai.media.Image;
 
 import java.util.Arrays;
 import java.util.List;
