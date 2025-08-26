@@ -22,12 +22,12 @@ import java.util.Base64;
 public class DashcsopeTest {
     private static final Logger log = LoggerFactory.getLogger(features.ai.chat.DashscopeTest.class);
 
-    private static final String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis";
     private static final String apiKey = "sk-1ffe449611a74e61ad8e71e1b35a9858";
 
 
     @Test
     public void case1() throws IOException {
+        String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis";
         ImageModel chatModel = ImageModel.of(apiUrl)
                 .apiKey(apiKey)
                 .model("wanx2.1-t2i-turbo")
@@ -46,6 +46,7 @@ public class DashcsopeTest {
 
     @Test
     public void case2() throws IOException {
+        String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image2image/image-synthesis";
         ImageModel imageModel = ImageModel.of(apiUrl)
                 .apiKey(apiKey)
                 .model("wanx2.1-imageedit")
@@ -61,5 +62,6 @@ public class DashcsopeTest {
                 .call();
 
         log.warn("{}", resp.getData());
+        assert resp.getImage().getUrl() != null;
     }
 }
