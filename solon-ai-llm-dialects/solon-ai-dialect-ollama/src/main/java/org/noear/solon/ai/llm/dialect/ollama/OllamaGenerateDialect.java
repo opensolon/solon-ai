@@ -23,6 +23,7 @@ import org.noear.solon.ai.generate.GenerateConfig;
 import org.noear.solon.ai.generate.GenerateException;
 import org.noear.solon.ai.generate.GenerateResponse;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -50,7 +51,15 @@ public class OllamaGenerateDialect extends AbstractGenerateDialect {
         if (oResp.contains("error")) {
             return new GenerateResponse(model, new GenerateException(oResp.get("error").getString()), null, null);
         } else {
-            List<GenerateContent> data = oResp.get("data").toObjectList(GenerateContent.class);
+            List<GenerateContent> data = null;
+            if (oResp.contains("response")) {
+                //文本模型生成
+                String text = oResp.get("response").getString();
+                data = Arrays.asList(GenerateContent.builder().text(text).build());
+            } else if (oResp.contains("data")) {
+                //图像模型生成
+                data = oResp.get("data").toObjectList(GenerateContent.class);
+            }
 
             AiUsage usage = null;
             if (oResp.contains("prompt_eval_count")) {
