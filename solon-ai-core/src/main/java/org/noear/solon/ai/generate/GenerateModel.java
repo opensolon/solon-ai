@@ -25,6 +25,7 @@ import org.noear.solon.lang.Preview;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -65,6 +66,13 @@ public class GenerateModel implements AiModel {
      */
     public GenerateRequestDesc prompt(GeneratePrompt prompt) {
         return new GenerateRequestDesc(config, dialect, null, prompt.toMap());
+    }
+
+    /**
+     * 输入（支持丰富参数形态）
+     */
+    public GenerateRequestDesc prompt(Map<String, Object> prompt) {
+        return new GenerateRequestDesc(config, dialect, null, prompt);
     }
 
 

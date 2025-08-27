@@ -324,7 +324,7 @@ public abstract class AbsChatTest {
 
 
     @Test
-    public void case6_wather_return() throws IOException {
+    public void case6_wather_return_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new ReturnTools())
                 .build();
@@ -339,7 +339,7 @@ public abstract class AbsChatTest {
     }
 
     @Test
-    public void case6_wather_rainfall_return() throws IOException {
+    public void case6_wather_rainfall_return_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
                 .defaultToolsAdd(new ReturnTools())
                 .build();

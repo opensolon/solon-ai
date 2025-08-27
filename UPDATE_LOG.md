@@ -13,6 +13,7 @@
 ### 3.5.1
 
 * 新增 solon-ai-a2a 插件
+* 新增 solon-ai-core GenerateModel 接口，替代 ImageModel
 * 新增 solon-ai-core ChatModel 增加多媒体内容输出（增强感知型模型的兼容，比如输出图片或视频）
 * 新增 solon-ai-core ImageModel 增加结构体提示语输入（比如图片编辑模型）
 * 添加 solon-ai-core AbstractChatDialect 对多媒体内容输出的支持
