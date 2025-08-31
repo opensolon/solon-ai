@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.util.ParamDesc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -261,6 +262,9 @@ public class FunctionToolDesc implements FunctionTool {
         try {
             return doHandle(args);
         } catch (Throwable ex) {
+            //解包
+            ex = Utils.throwableUnwrap(ex);
+
             if (log.isWarnEnabled()) {
                 log.warn("Tool handle error, name: '{}'", name, ex);
             }
