@@ -9,7 +9,7 @@ import org.noear.solon.annotation.Param;
  */
 public class Server2Tools {
 
-    @ToolMapping(description = "根据天气推荐旅游景点", returnDirect = true)
+    @ToolMapping(description = "根据天气推荐旅游景点")
     public String recommendTourist(@Param(description = "天气") String weather) {
         if (StringUtil.isEmpty(weather)) {
             return "请输入天气";

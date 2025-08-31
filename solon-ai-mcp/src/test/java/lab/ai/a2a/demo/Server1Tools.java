@@ -8,7 +8,7 @@ import org.noear.solon.annotation.Param;
  */
 public class Server1Tools {
 
-    @ToolMapping(description = "查询天气预报", returnDirect = true)
+    @ToolMapping(description = "查询天气预报")
     public String getWeather(@Param(description = "城市位置") String location) {
         return location + "天气晴";
     }
