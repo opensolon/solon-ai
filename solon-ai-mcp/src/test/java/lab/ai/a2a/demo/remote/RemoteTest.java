@@ -1,10 +1,11 @@
 package lab.ai.a2a.demo.remote;
 
-import lab.ai.a2a.Agent;
-import lab.ai.a2a.HostAgent;
+import lab.ai.a2a.A2AAgentAssistant;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -19,17 +20,28 @@ import java.time.Duration;
 public class RemoteTest {
     @Test
     public void hostAgent_call() throws Throwable {
+        A2AAgentAssistant agentAssistant = new A2AAgentAssistant();
+
+        agentAssistant.register(agent1());
+        agentAssistant.register(agent2());
+
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .model("qwen2.5:latest")
                 .provider("ollama")
+                .timeout(Duration.ofMinutes(10))
+                .defaultToolsAdd(agentAssistant)
                 .build();
 
-        HostAgent hostAgent = new HostAgent(chatModel);
+        InMemoryChatSession chatSession = InMemoryChatSession.builder()
+                .systemMessages(agentAssistant.systemMessage())
+                .maxMessages(10)
+                .build();
 
-        hostAgent.register(agent1());
-        hostAgent.register(agent2());
+        chatSession.addMessage(ChatMessage.ofUser("杭州今天的天气适合去哪里玩？"));
 
-        ChatResponse chatResponse = hostAgent.chatCall("杭州今天的天气适合去哪里玩？");
+        ChatResponse chatResponse = chatModel
+                .prompt(chatSession)
+                .call();
 
         System.err.println(chatResponse.getContent());
     }
