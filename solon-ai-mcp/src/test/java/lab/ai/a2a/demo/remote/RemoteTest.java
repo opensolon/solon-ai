@@ -44,6 +44,8 @@ public class RemoteTest {
                 .call();
 
         System.err.println(chatResponse.getContent());
+
+        System.exit(0);
     }
 
 //    @Test
