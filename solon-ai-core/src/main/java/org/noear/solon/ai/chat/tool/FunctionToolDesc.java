@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
 import java.util.*;
-import java.util.function.Function;
 
 /**
  * 函数工具描述（相当于构建器）
@@ -41,11 +40,11 @@ public class FunctionToolDesc implements FunctionTool {
     private final List<ParamDesc> params = new ArrayList<>();
     private Type returnType;
     private boolean returnDirect = false;
-    private Function<Map<String, Object>, String> doHandler;
+    private ToolHandler doHandler;
     private String inputSchema;
     private String outputSchema;
 
-    public FunctionToolDesc(String name, String title, String description, Boolean returnDirect, String inputSchema, String outputSchema, Function<Map<String, Object>, String> handler) {
+    public FunctionToolDesc(String name, String title, String description, Boolean returnDirect, String inputSchema, String outputSchema, ToolHandler handler) {
         this.name = name;
         this.title = title;
         this.description = description;
@@ -184,7 +183,7 @@ public class FunctionToolDesc implements FunctionTool {
      *
      * @param handler 处理器
      */
-    public FunctionToolDesc doHandle(Function<Map<String, Object>, String> handler) {
+    public FunctionToolDesc doHandle(ToolHandler handler) {
         this.doHandler = handler;
         return this;
     }
@@ -288,9 +287,9 @@ public class FunctionToolDesc implements FunctionTool {
                 }
             }
 
-            return doHandler.apply(argsNew);
+            return doHandler.handle(argsNew);
         } else {
-            return doHandler.apply(args);
+            return doHandler.handle(args);
         }
     }
 
