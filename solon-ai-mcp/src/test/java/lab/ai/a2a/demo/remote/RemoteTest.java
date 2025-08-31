@@ -20,7 +20,7 @@ public class RemoteTest {
     @Test
     public void hostAgent_call() throws Throwable {
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
-                .model("qwen2.5:1.5b")
+                .model("qwen2.5:latest")
                 .provider("ollama")
                 .build();
 
@@ -37,7 +37,7 @@ public class RemoteTest {
 //    @Test
 //    public void hostAgent_stream() throws Throwable {
 //        ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
-//                .model("qwen2.5:1.5b")
+//                .model("qwen2.5:latest")
 //                .provider("ollama")
 //                .build();
 //

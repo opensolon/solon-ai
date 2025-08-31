@@ -15,7 +15,7 @@ import org.noear.solon.annotation.Param;
 @McpServerEndpoint(channel = McpChannel.STREAMABLE, mcpEndpoint = "mcp2")
 public class Server2 implements AgentTaskHandler {
     ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
-            .model("qwen2.5:1.5b")
+            .model("qwen2.5:latest")
             .provider("ollama")
             .defaultToolsAdd(new Server2Tools())
             .build();
