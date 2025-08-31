@@ -800,6 +800,13 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             return this;
         }
 
+        public Builder timeout(Duration duration) {
+            httpTimeout(HttpTimeout.of((int) duration.getSeconds()));
+            initializationTimeout(duration);
+            requestTimeout(duration);
+            return this;
+        }
+
         public Builder httpTimeout(HttpTimeout httpTimeout) {
             props.setHttpTimeout(httpTimeout);
             return this;
