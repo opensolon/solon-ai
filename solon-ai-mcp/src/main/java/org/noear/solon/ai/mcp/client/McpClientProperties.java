@@ -69,11 +69,15 @@ public class McpClientProperties {
      */
     private final Map<String, String> headers = new LinkedHashMap<>();
 
+    /**
+     * 超时
+     */
+    private Duration timeout = Duration.ofSeconds(30); // Default timeout
 
     /**
-     * http 超时
+     * http 超时（默认随 timeout）
      */
-    private HttpTimeout httpTimeout = HttpTimeout.of(10, 60, 60);
+    private HttpTimeout httpTimeout;
 
     /**
      * http 代理简单描述
@@ -92,14 +96,15 @@ public class McpClientProperties {
     private HttpSslSupplier httpSsl;
 
     /**
-     * mcp 请求超时
+     * mcp 请求超时（默认随 timeout）
      */
-    private Duration requestTimeout = Duration.ofSeconds(20); // Default timeout
+    private Duration requestTimeout;
 
     /**
-     * mcp 初始化超时
+     * mcp 初始化超时（默认随 timeout）
      */
-    private Duration initializationTimeout = Duration.ofSeconds(20);
+    private Duration initializationTimeout;
+
 
     /**
      * mcp 心跳间隔（辅助自动重连）
@@ -174,21 +179,22 @@ public class McpClientProperties {
 
     /**
      * @deprecated 3.5 {@link #getUrl()}
-     * */
+     */
     @Deprecated
     public String getApiUrl() {
         return apiUrl;
     }
+
     /**
      * @deprecated 3.5 {@link #setUrl(String)}
-     * */
+     */
     @Deprecated
     public void setApiUrl(String apiUrl) {
         this.apiUrl = apiUrl;
     }
 
     public String getUrl() {
-        if(apiUrl != null){
+        if (apiUrl != null) {
             return apiUrl;
         }
 
@@ -203,7 +209,7 @@ public class McpClientProperties {
 
     /**
      * @deprecated 3.5 {@link #getHeaders()}
-     * */
+     */
     @Deprecated
     public String getApiKey() {
         return apiKey;
@@ -211,7 +217,7 @@ public class McpClientProperties {
 
     /**
      * @deprecated 3.5 {@link #setHeaders(Map)}
-     * */
+     */
     @Deprecated
     public void setApiKey(String apiKey) {
         this.apiKey = apiKey;
@@ -225,6 +231,13 @@ public class McpClientProperties {
         this.headers.putAll(headers);
     }
 
+    public Duration getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(Duration timeout) {
+        this.timeout = timeout;
+    }
 
     public HttpTimeout getHttpTimeout() {
         return httpTimeout;
@@ -350,6 +363,27 @@ public class McpClientProperties {
         this.env = env;
     }
 
+    /**
+     * 预备
+     */
+    public void prepare() {
+        if (timeout == null) {
+            timeout = Duration.ofSeconds(30);
+        }
+
+        if (httpTimeout == null) {
+            httpTimeout = HttpTimeout.of((int) timeout.getSeconds());
+        }
+
+        if (initializationTimeout == null) {
+            initializationTimeout = timeout;
+        }
+
+        if (requestTimeout == null) {
+            requestTimeout = timeout;
+        }
+    }
+
     @Override
     public String toString() {
         return "McpClientProperties{" +
@@ -359,10 +393,11 @@ public class McpClientProperties {
                 ", apiUrl='" + apiUrl + '\'' +
                 ", apiKey='" + apiKey + '\'' +
                 ", headers=" + headers +
-                ", httpTimeout=" + httpTimeout +
+                ", timeout=" + timeout +
+                ", httpTimeout=" + httpTimeout + //默认随 timeout
                 ", httpProxy=" + getHttpProxy() +
-                ", requestTimeout=" + requestTimeout +
-                ", initializationTimeout=" + initializationTimeout +
+                ", requestTimeout=" + requestTimeout + //默认随 timeout
+                ", initializationTimeout=" + initializationTimeout + //默认随 timeout
                 ", heartbeatInterval=" + heartbeatInterval +
                 ", command='" + command + '\'' +
                 ", args=" + args +

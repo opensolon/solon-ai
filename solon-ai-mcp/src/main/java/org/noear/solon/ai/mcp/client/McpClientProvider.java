@@ -113,6 +113,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             throw new IllegalArgumentException("The channel is required");
         }
 
+        //预备（对超时做检测）
+        clientProps.prepare();
+
         if (McpChannel.STDIO.equals(clientProps.getChannel())) {
             //stdio 通道
             if (clientProps.getCommand() == null) {
@@ -801,9 +804,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         }
 
         public Builder timeout(Duration duration) {
-            httpTimeout(HttpTimeout.of((int) duration.getSeconds()));
-            initializationTimeout(duration);
-            requestTimeout(duration);
+            props.setTimeout(duration);
             return this;
         }
 
