@@ -23,16 +23,9 @@ import java.util.Collection;
  * @author noear
  * @since 3.2
  */
-public interface PromptProvider extends AutoCloseable {
+public interface PromptProvider {
     /**
      * 获取提示语
      */
     Collection<FunctionPrompt> getPrompts();
-
-    /**
-     * 关闭
-     */
-    default void close() {
-
-    }
 }

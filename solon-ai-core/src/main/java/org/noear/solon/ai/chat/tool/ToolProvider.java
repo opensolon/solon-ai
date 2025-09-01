@@ -23,16 +23,9 @@ import java.util.Collection;
  * @author noear
  * @since 3.1
  */
-public interface ToolProvider extends AutoCloseable {
+public interface ToolProvider {
     /**
      * 获取工具
      */
     Collection<FunctionTool> getTools();
-
-    /**
-     * 关闭
-     */
-    default void close() {
-
-    }
 }
