@@ -1,4 +1,4 @@
-package lab.ai.a2a.demo;
+package lab.ai.a2a.demo.tool_only;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Param;
@@ -6,7 +6,7 @@ import org.noear.solon.annotation.Param;
 /**
  * @author haiTao.Wang on 2025/8/21.
  */
-public class Server1Tools {
+public class Tools1 {
 
     @ToolMapping(description = "查询天气预报")
     public String getWeather(@Param(description = "城市位置") String location) {

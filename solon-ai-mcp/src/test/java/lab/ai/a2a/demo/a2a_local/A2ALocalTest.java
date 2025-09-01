@@ -1,8 +1,8 @@
 package lab.ai.a2a.demo.a2a_local;
 
 import lab.ai.a2a.AgentDispatcher;
-import lab.ai.a2a.demo.Server1Tools;
-import lab.ai.a2a.demo.Server2Tools;
+import lab.ai.a2a.demo.a2a.Tools1;
+import lab.ai.a2a.demo.a2a.Tools2;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -71,7 +71,7 @@ public class A2ALocalTest {
                 .model("qwen2.5:latest")
                 .provider("ollama")
                 .timeout(Duration.ofMinutes(10))
-                .defaultToolsAdd(new Server1Tools())
+                .defaultToolsAdd(new Tools1())
                 .build();
 
         return new FunctionToolDesc("weather_agent")
@@ -88,7 +88,7 @@ public class A2ALocalTest {
                 .model("qwen2.5:latest")
                 .provider("ollama")
                 .timeout(Duration.ofMinutes(10))
-                .defaultToolsAdd(new Server2Tools())
+                .defaultToolsAdd(new Tools2())
                 .build();
 
         return new FunctionToolDesc("spot_agent")

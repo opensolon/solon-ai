@@ -1,7 +1,5 @@
 package lab.ai.a2a.demo.tool_only;
 
-import lab.ai.a2a.demo.Server1Tools;
-import lab.ai.a2a.demo.Server2Tools;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -24,8 +22,8 @@ public class ToolOnlyTest {
                 .model("qwen2.5:latest")
                 .provider("ollama")
                 .timeout(Duration.ofMinutes(10))
-                .defaultToolsAdd(new Server1Tools())
-                .defaultToolsAdd(new Server2Tools())
+                .defaultToolsAdd(new Tools1())
+                .defaultToolsAdd(new Tools2())
                 .build();
 
         InMemoryChatSession chatSession = InMemoryChatSession.builder()

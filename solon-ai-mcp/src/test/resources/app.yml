@@ -1,2 +1,2 @@
 solon.logging.logger:
-  root.level: INFO
+  root.level: DEBUG

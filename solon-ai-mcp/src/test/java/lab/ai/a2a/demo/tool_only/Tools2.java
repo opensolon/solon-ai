@@ -1,4 +1,4 @@
-package lab.ai.a2a.demo;
+package lab.ai.a2a.demo.tool_only;
 
 import org.noear.snack.core.utils.StringUtil;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -7,7 +7,7 @@ import org.noear.solon.annotation.Param;
 /**
  * @author haiTao.Wang on 2025/8/21.
  */
-public class Server2Tools {
+public class Tools2 {
 
     @ToolMapping(description = "根据天气推荐旅游景点")
     public String recommendTourist(@Param(description = "天气") String weather) {
