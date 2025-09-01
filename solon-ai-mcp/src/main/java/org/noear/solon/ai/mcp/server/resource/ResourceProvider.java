@@ -23,9 +23,16 @@ import java.util.Collection;
  * @author noear
  * @since 3.2
  */
-public interface ResourceProvider {
+public interface ResourceProvider extends AutoCloseable {
     /**
      * 获取资源
      */
     Collection<FunctionResource> getResources();
+
+    /**
+     * 关闭
+     */
+    default void close() {
+
+    }
 }
