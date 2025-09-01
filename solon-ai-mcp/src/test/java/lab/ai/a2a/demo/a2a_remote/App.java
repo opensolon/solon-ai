@@ -1,4 +1,4 @@
-package lab.ai.a2a.demo.remote;
+package lab.ai.a2a.demo.a2a_remote;
 
 import org.noear.solon.Solon;
 

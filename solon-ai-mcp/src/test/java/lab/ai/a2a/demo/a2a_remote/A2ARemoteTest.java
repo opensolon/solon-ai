@@ -1,6 +1,6 @@
-package lab.ai.a2a.demo.remote;
+package lab.ai.a2a.demo.a2a_remote;
 
-import lab.ai.a2a.A2AAgentAssistant;
+import lab.ai.a2a.AgentDispatcher;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -17,10 +17,10 @@ import java.time.Duration;
  * @author noear 2025/8/31 created
  */
 @SolonTest(App.class) //用于启动 Server1 和 Server2
-public class RemoteTest {
+public class A2ARemoteTest {
     @Test
     public void hostAgent_call() throws Throwable {
-        A2AAgentAssistant agentAssistant = new A2AAgentAssistant();
+        AgentDispatcher agentAssistant = new AgentDispatcher();
 
         agentAssistant.register(agent1());
         agentAssistant.register(agent2());
@@ -45,7 +45,7 @@ public class RemoteTest {
 
         System.err.println(chatResponse.getContent());
 
-        System.exit(-9);
+        agentAssistant.close();
     }
 
 //    @Test

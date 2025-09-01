@@ -1,6 +1,5 @@
-package lab.ai.a2a.demo.self;
+package lab.ai.a2a.demo.tool_only;
 
-import lab.ai.a2a.A2AAgentAssistant;
 import lab.ai.a2a.demo.Server1Tools;
 import lab.ai.a2a.demo.Server2Tools;
 import org.junit.jupiter.api.Test;
@@ -18,7 +17,7 @@ import java.time.Duration;
  *
  */
 @SolonTest
-public class SelfTest {
+public class ToolOnlyTest {
     @Test
     public void hostAgent_call() throws Throwable {
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")

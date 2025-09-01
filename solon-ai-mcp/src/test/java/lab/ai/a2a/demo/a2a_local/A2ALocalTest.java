@@ -1,6 +1,6 @@
-package lab.ai.a2a.demo.local;
+package lab.ai.a2a.demo.a2a_local;
 
-import lab.ai.a2a.A2AAgentAssistant;
+import lab.ai.a2a.AgentDispatcher;
 import lab.ai.a2a.demo.Server1Tools;
 import lab.ai.a2a.demo.Server2Tools;
 import org.junit.jupiter.api.Test;
@@ -18,10 +18,10 @@ import java.time.Duration;
  * @author noear 2025/8/31 created
  */
 @SolonTest
-public class LocalTest {
+public class A2ALocalTest {
     @Test
     public void hostAgent_call() throws Throwable {
-        A2AAgentAssistant agentAssistant = new A2AAgentAssistant();
+        AgentDispatcher agentAssistant = new AgentDispatcher();
 
         agentAssistant.register(agent1());
         agentAssistant.register(agent2());
@@ -79,12 +79,7 @@ public class LocalTest {
                 .stringParamAdd("message", "任务消息")
                 .doHandle(args -> {
                     String message = (String) args.get("message");
-
-                    try {
-                        return chatModel.prompt(message).call().getMessage().getResultContent();
-                    } catch (Throwable ex) {
-                        throw new RuntimeException(ex);
-                    }
+                    return chatModel.prompt(message).call().getMessage().getResultContent();
                 });
     }
 
@@ -101,12 +96,7 @@ public class LocalTest {
                 .stringParamAdd("message", "任务消息")
                 .doHandle(args -> {
                     String message = (String) args.get("message");
-
-                    try {
-                        return chatModel.prompt(message).call().getMessage().getResultContent();
-                    } catch (Throwable ex) {
-                        throw new RuntimeException(ex);
-                    }
+                    return chatModel.prompt(message).call().getMessage().getResultContent();
                 });
     }
 }
