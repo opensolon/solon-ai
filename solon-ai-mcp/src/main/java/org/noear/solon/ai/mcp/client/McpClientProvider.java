@@ -43,6 +43,7 @@ import org.noear.solon.core.Props;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.data.cache.LocalCacheService;
+import org.noear.solon.data.util.StringMutexLock;
 import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
@@ -61,6 +62,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -86,13 +88,24 @@ import java.util.function.Supplier;
 public class McpClientProvider implements ToolProvider, ResourceProvider, PromptProvider, Closeable {
     private final ReentrantLock LOCKER = new ReentrantLock();
 
+
+
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
     private final AtomicBoolean isStarted = new AtomicBoolean(false);
     private final McpClientProperties clientProps;
     private ScheduledExecutorService heartbeatExecutor;
     private McpAsyncClient client;
     private McpSchema.LoggingLevel loggingLevel = McpSchema.LoggingLevel.INFO;
-    private LocalCacheService localCache = new LocalCacheService();
+
+    private static final String cache_prefix_tools = "getTools:";
+    private static final String cache_prefix_resource = "getResources:";
+    private static final String cache_prefix_resource_templates = "getResourceTemplates:";
+    private static final String cache_prefix_prompts = "getPrompts:";
+
+    private LocalCacheService cacheService = new LocalCacheService();
+    private final StringMutexLock cacheLocker = new StringMutexLock();
+
+
 
     /**
      * 用于支持注入
@@ -138,7 +151,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * 清理缓存
      */
     public void clearCache() {
-        localCache.clear();
+        cacheService.clear();
     }
 
     /**
@@ -213,8 +226,54 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                     logging.setLevel(loggingLevel);
                     return Mono.empty();
                 })
+                .toolsChangeConsumer(this::onToolsChange)
+                .resourcesChangeConsumer(this::onResourcesChange)
+                .resourcesUpdateConsumer(this::onResourcesUpdate)
+                .promptsChangeConsumer(this::onPromptsChange)
                 //.withConnectOnInit(false) //初始化放到后面（更可控）
                 .build();
+    }
+
+    private Mono<Void> onToolsChange(List<McpSchema.Tool> tools) {
+        cacheService.remove(cache_prefix_tools + null);
+
+        if (clientProps.getToolsChangeConsumer() != null) {
+            return clientProps.getToolsChangeConsumer().apply(tools);
+        } else {
+            return Mono.empty();
+        }
+    }
+
+    private Mono<Void> onResourcesChange(List<McpSchema.Resource> resources) {
+        cacheService.remove(cache_prefix_resource + null);
+        cacheService.remove(cache_prefix_resource_templates + null);
+
+        if (clientProps.getResourcesChangeConsumer() != null) {
+            return clientProps.getResourcesChangeConsumer().apply(resources);
+        } else {
+            return Mono.empty();
+        }
+    }
+
+    private Mono<Void> onResourcesUpdate(List<McpSchema.ResourceContents> resourceContents) {
+        cacheService.remove(cache_prefix_resource + null);
+        cacheService.remove(cache_prefix_resource_templates + null);
+
+        if (clientProps.getResourcesUpdateConsumer() != null) {
+            return clientProps.getResourcesUpdateConsumer().apply(resourceContents);
+        } else {
+            return Mono.empty();
+        }
+    }
+
+    private Mono<Void> onPromptsChange(List<McpSchema.Prompt> prompts) {
+        cacheService.remove(cache_prefix_prompts + null);
+
+        if (clientProps.getPromptsChangeConsumer() != null) {
+            return clientProps.getPromptsChangeConsumer().apply(prompts);
+        } else {
+            return Mono.empty();
+        }
     }
 
 
@@ -549,7 +608,12 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      */
     private <T> T getByCache(String key, Type type, Supplier<T> supplier) {
         if (clientProps.getCacheSeconds() > 0) {
-            return localCache.getOrStore(key, type, clientProps.getCacheSeconds(), supplier);
+            cacheLocker.lock(key);
+            try {
+                return cacheService.getOrStore(key, type, clientProps.getCacheSeconds(), supplier);
+            } finally {
+                cacheLocker.unlock(key);
+            }
         } else {
             return supplier.get();
         }
@@ -570,7 +634,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param cursor 游标
      */
     public Collection<FunctionTool> getTools(String cursor) {
-        return getByCache("getTools:" + cursor,
+        return getByCache(cache_prefix_tools + cursor,
                 Collection.class,
                 () -> getToolsDo(cursor));
     }
@@ -614,8 +678,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         return getResources(null);
     }
 
+
     public Collection<FunctionResource> getResources(String cursor) {
-        return getByCache("getResources:" + cursor,
+        return getByCache(cache_prefix_resource + cursor,
                 Collection.class,
                 () -> getResourcesDo(cursor));
     }
@@ -652,8 +717,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         return getResourceTemplates(null);
     }
 
+
     public Collection<FunctionResource> getResourceTemplates(String cursor) {
-        return getByCache("getResourceTemplates:" + cursor,
+        return getByCache(cache_prefix_resource_templates + cursor,
                 Collection.class,
                 () -> getResourceTemplatesDo(cursor));
     }
@@ -691,8 +757,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         return getPrompts(null);
     }
 
+
     public Collection<FunctionPrompt> getPrompts(String cursor) {
-        return getByCache("getPrompts:" + cursor,
+        return getByCache(cache_prefix_prompts + cursor,
                 Collection.class,
                 () -> getPromptsDo(cursor));
     }
@@ -920,6 +987,42 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             props.setCommand(serverParameters.getCommand());
             props.setArgs(serverParameters.getArgs());
             props.setEnv(serverParameters.getEnv());
+            return this;
+        }
+
+        /**
+         * 工具变更消费者
+         *
+         */
+        public Builder toolsChangeConsumer(Function<List<McpSchema.Tool>, Mono<Void>> toolsChangeConsumer) {
+            props.setToolsChangeConsumer(toolsChangeConsumer);
+            return this;
+        }
+
+        /**
+         * 资源变更消费者
+         *
+         */
+        public Builder resourcesChangeConsumer(Function<List<McpSchema.Resource>, Mono<Void>> resourcesChangeConsumer) {
+            props.setResourcesChangeConsumer(resourcesChangeConsumer);
+            return this;
+        }
+
+        /**
+         * 资源更新消费者
+         *
+         */
+        public Builder resourcesUpdateConsumer(Function<List<McpSchema.ResourceContents>, Mono<Void>> resourcesUpdateConsumer) {
+            props.setResourcesUpdateConsumer(resourcesUpdateConsumer);
+            return this;
+        }
+
+        /**
+         * 提示语变更消费者
+         *
+         */
+        public Builder promptsChangeConsumer(Function<List<McpSchema.Prompt>, Mono<Void>> promptsChangeConsumer) {
+            props.setPromptsChangeConsumer(promptsChangeConsumer);
             return this;
         }
 

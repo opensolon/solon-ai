@@ -59,6 +59,7 @@ public class McpChangeSyncTest {
                     return "hello world";
                 }));
 
+        Thread.sleep(10);
         mcpClient.clearCache();
         String rst2 = mcpClient.getTools().toString();
         System.out.println(rst2);
@@ -70,6 +71,56 @@ public class McpChangeSyncTest {
 
         Thread.sleep(10);
         mcpClient.clearCache();
+        assert mcpClient.getTools().size() == 1;
+        mcpClient.close();
+    }
+
+    @Test
+    public void case2() throws Exception {
+        McpClientProvider mcpClient = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
+                .apiUrl("http://localhost:8081/demo2/sse")
+                .build();
+
+        Thread.sleep(10);
+        assert mcpClient.getTools().size() == 1;
+        serverEndpointProvider.addTool(new FunctionToolDesc("hello")
+                .description("打招呼")
+                .doHandle((args) -> {
+                    return "hello world";
+                }));
+
+
+        Thread.sleep(10);
+        assert mcpClient.getTools().size() == 2;
+
+        serverEndpointProvider.addTool(new FunctionToolDesc("hello2")
+                .description("打招呼")
+                .doHandle((args) -> {
+                    return "hello world";
+                }));
+
+
+        Thread.sleep(10);
+        assert mcpClient.getTools().size() == 3;
+
+        serverEndpointProvider.removeTool("hello2");
+        serverEndpointProvider.addTool(new FunctionToolDesc("hello2")
+                .description("打招呼2222")
+                .doHandle((args) -> {
+                    return "hello world";
+                }));
+
+        Thread.sleep(10);
+        String rst2 = mcpClient.getTools().toString();
+        System.out.println(rst2);
+        assert rst2.contains("打招呼2222");
+
+
+        serverEndpointProvider.removeTool("hello");
+        serverEndpointProvider.removeTool("hello2");
+
+        Thread.sleep(10);
         assert mcpClient.getTools().size() == 1;
         mcpClient.close();
     }

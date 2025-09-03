@@ -10,6 +10,14 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+
+### 3.5.2
+
+* 添加 solon-ai-mcp McpClientProperties:timeout 属性，方便简化超时配置（可省略 httpTimeout, requestTimeout, initializationTimeout）
+* 添加 solon-ai-mcp McpClientProvider:toolsChangeConsumer,resourcesChangeConsumer,resourcesUpdateConsumer,promptsChangeConsumer 配置支持
+* 添加 solon-ai-mcp McpClientProvider 缓存锁和变更刷新控制
+* 调整 solon-ai-core FunctionToolDesc:doHandle 改用 ToolHandler 参数类型（之前为 Function），方便传递异常
+
 ### 3.5.1
 
 * 新增 solon-ai-a2a 插件
@@ -42,7 +50,7 @@
 * 优化 solon-ai-core ChatRequestDescDefault http 异常转换描述
 * 优化 solon-ai-core 方言的 tool_calls 消息的构建（更好的兼容 vllm）
 * 优化 solon-ai-mcp JsonSchema.additionalProperties 兼容性（兼容 bool, map）
-* 优化 solon-ai-mcp McpClientProvider 改为 McpAsyncClient（为异常需求提供支持）
+* 优化 solon-ai-mcp McpClientProvider 改为 McpAsyncClient（为异步需求提供支持）
 * 优化 solon-ai-mcp 初始化控制（禁用 connectOnInit），增加连接打印
 
 
