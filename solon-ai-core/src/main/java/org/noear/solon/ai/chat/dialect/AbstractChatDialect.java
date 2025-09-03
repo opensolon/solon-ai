@@ -236,10 +236,49 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return new ToolCall(index, callId, name, argStr, argMap);
     }
 
+    protected String parseAssistantMessageContent(ChatResponseDefault resp, ONode oContent) {
+        if (oContent.isValue()) {
+            //一般输出都是单值
+            return oContent.getRawString();
+        } else {
+            ONode contentItem = null;
+            if (oContent.isArray()) {
+                //有些输出会是列表（取第一个）
+                if (oContent.ary().size() > 0) {
+                    contentItem = oContent.get(0);
+                }
+            } else if (oContent.isObject()) {
+                //有些输出会是字典
+                contentItem = oContent;
+            }
+
+            if (contentItem != null) {
+                if (contentItem.isObject()) {
+                    //优先取文本
+                    if (contentItem.contains("text")) {
+                        return contentItem.get("text").getRawString();
+                    } else if (contentItem.contains("image")) {
+                        return contentItem.get("image").getRawString();
+                    } else if (contentItem.contains("audio")) {
+                        return contentItem.get("audio").getRawString();
+                    } else if (contentItem.contains("video")) {
+                        return contentItem.get("video").getRawString();
+                    }
+                } else if (contentItem.isValue()) {
+                    return contentItem.getRawString();
+                }
+            }
+        }
+
+        return null;
+    }
+
     public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
         List<AssistantMessage> messageList = new ArrayList<>();
 
-        String content = oMessage.get("content").getRawString();
+        ONode oContent = oMessage.get("content");
+
+        String content = parseAssistantMessageContent(resp, oContent);
         ONode toolCallsNode = oMessage.getOrNull("tool_calls");
         ONode searchResultsNode = oMessage.getOrNull("search_results");
 
@@ -249,6 +288,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (Utils.isNotEmpty(toolCalls)) {
             toolCallsRaw = toolCallsNode.toObject(List.class);
+            if (resp.in_thinking && resp.isStream()) {
+                //说明是思考结束立刻调用了工具，需要添加思考的结束标识
+                messageList.add(new AssistantMessage("</think>", true));
+                messageList.add(new AssistantMessage("\n\n", false));
+            }
+            resp.in_thinking = false; //重置状态
         }
 
         if (searchResultsNode != null) {
@@ -337,7 +382,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         if (content != null || toolCallsRaw != null) {
-            messageList.add(new AssistantMessage(content, resp.in_thinking, toolCallsRaw, toolCalls, searchResultsRaw));
+            Object contentRaw = oContent.toObject();
+            messageList.add(new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw));
         }
 
         return messageList;

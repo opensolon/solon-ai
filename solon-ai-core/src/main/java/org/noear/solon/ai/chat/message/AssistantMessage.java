@@ -35,6 +35,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     private List<ToolCall> toolCalls;
     private List<Map> toolCallsRaw;
     private List<Map> searchResultsRaw;
+    private Object contentRaw;
 
     //纯思考；纯内容；混合内容
     private boolean isThinking;
@@ -44,23 +45,29 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     public AssistantMessage(String content) {
-        this(content, false, null, null, null);
+        this(content, false, null, null, null, null);
     }
 
     public AssistantMessage(String content, boolean isThinking) {
-        this(content, isThinking, null, null, null);
+        this(content, isThinking, null, null, null, null);
     }
 
     public AssistantMessage(String content, boolean isThinking, List<Map> searchResultsRaw) {
-        this(content, isThinking, null, null, searchResultsRaw);
+        this(content, isThinking, null, null, null, searchResultsRaw);
     }
 
-    public AssistantMessage(String content, boolean isThinking, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
+    public AssistantMessage(String content, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
         this.content = content;
         this.isThinking = isThinking;
         this.toolCallsRaw = toolCallsRaw;
         this.toolCalls = toolCalls;
         this.searchResultsRaw = searchResultsRaw;
+
+        if (contentRaw == null) {
+            this.contentRaw = content;
+        } else {
+            this.contentRaw = contentRaw;
+        }
     }
 
     /**
@@ -80,6 +87,14 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     /**
+     * 原生内容（可能是 String、Map、List、null）
+     *
+     */
+    public Object getContentRaw() {
+        return contentRaw;
+    }
+
+    /**
      * 结果内容（没有推理标签的内容）
      */
     private transient String resultContent;
@@ -89,9 +104,9 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             if (content == null) {
                 resultContent = "";
             } else {
-                int tinkIndex = content.indexOf("</think>");
-                if (tinkIndex > -1) {
-                    resultContent = content.substring(tinkIndex + 8).trim();
+                int thinkIndex = content.indexOf("</think>");
+                if (thinkIndex > -1) {
+                    resultContent = content.substring(thinkIndex + 8).trim();
                 } else {
                     resultContent = content;
                 }
@@ -146,6 +161,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
 
         if (content != null) {
             buf.append(", content='").append(content).append('\'');
+        }
+
+        if (contentRaw != null) {
+            buf.append(", contentRaw=").append(contentRaw);
         }
 
         if (Utils.isNotEmpty(metadata)) {
