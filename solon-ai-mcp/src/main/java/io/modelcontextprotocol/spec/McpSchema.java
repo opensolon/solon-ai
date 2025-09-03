@@ -427,6 +427,7 @@ public final class McpSchema {
 		}
 	
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+        @JsonIgnoreProperties(ignoreUnknown = true)
 		@Data
 		@AllArgsConstructor
 		@NoArgsConstructor
@@ -435,6 +436,7 @@ public final class McpSchema {
 		}
 
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+        @JsonIgnoreProperties(ignoreUnknown = true)
 		@Data
 		@AllArgsConstructor
 		@NoArgsConstructor
@@ -444,6 +446,7 @@ public final class McpSchema {
 		}
 
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+        @JsonIgnoreProperties(ignoreUnknown = true)
 		@Data
 		@AllArgsConstructor
 		@NoArgsConstructor
