@@ -15,16 +15,20 @@
  */
 package org.noear.solon.ai.mcp.client;
 
+import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.util.ProxyDesc;
 import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
+import reactor.core.publisher.Mono;
 
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Mcp 客户端属性
@@ -107,6 +111,14 @@ public class McpClientProperties {
      * 服务端参数（用于 stdio）
      */
     private McpServerParameters serverParameters;
+
+    /// ///////////////////////
+
+
+    private transient Function<List<McpSchema.Tool>, Mono<Void>> toolsChangeConsumer;
+    private transient Function<List<McpSchema.Resource>, Mono<Void>> resourcesChangeConsumer;
+    private transient Function<List<McpSchema.ResourceContents>, Mono<Void>> resourcesUpdateConsumer;
+    private transient Function<List<McpSchema.Prompt>, Mono<Void>> promptsChangeConsumer;
 
 
     public McpClientProperties() {
@@ -242,6 +254,40 @@ public class McpClientProperties {
     public void setServerParameters(McpServerParameters serverParameters) {
         this.serverParameters = serverParameters;
     }
+
+
+    public void setToolsChangeConsumer(Function<List<McpSchema.Tool>, Mono<Void>> toolsChangeConsumer) {
+        this.toolsChangeConsumer = toolsChangeConsumer;
+    }
+
+    public Function<List<McpSchema.Tool>, Mono<Void>> getToolsChangeConsumer() {
+        return toolsChangeConsumer;
+    }
+
+    public void setResourcesChangeConsumer(Function<List<McpSchema.Resource>, Mono<Void>> resourcesChangeConsumer) {
+        this.resourcesChangeConsumer = resourcesChangeConsumer;
+    }
+
+    public Function<List<McpSchema.Resource>, Mono<Void>> getResourcesChangeConsumer() {
+        return resourcesChangeConsumer;
+    }
+
+    public void setResourcesUpdateConsumer(Function<List<McpSchema.ResourceContents>, Mono<Void>> resourcesUpdateConsumer) {
+        this.resourcesUpdateConsumer = resourcesUpdateConsumer;
+    }
+
+    public Function<List<McpSchema.ResourceContents>, Mono<Void>> getResourcesUpdateConsumer() {
+        return resourcesUpdateConsumer;
+    }
+
+    public void setPromptsChangeConsumer(Function<List<McpSchema.Prompt>, Mono<Void>> promptsChangeConsumer) {
+        this.promptsChangeConsumer = promptsChangeConsumer;
+    }
+
+    public Function<List<McpSchema.Prompt>, Mono<Void>> getPromptsChangeConsumer() {
+        return promptsChangeConsumer;
+    }
+
 
     @Override
     public String toString() {
