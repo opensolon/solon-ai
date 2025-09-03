@@ -1,4 +1,11 @@
 
+### 3.4.4
+
+* 添加 solon-ai-dialect-dashscope 通过接口地址识别方言
+* 添加 solon-ai-mcp McpClientProperties:toolsChangeConsumer,resourcesChangeConsumer,resourcesUpdateConsumer,promptsChangeConsumer 配置支持
+* 添加 solon-ai-mcp McpClientProvider 缓存锁和变更刷新控制
+* 修复 solon-ai-core think-> tool -> think 时，工具调用的内容无法加入到对话的问题
+* mcp XxxCapabilities 添加 `ignoreUnknown=true` 增强旧协议兼容
 
 ### 3.4.3
 
