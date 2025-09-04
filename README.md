@@ -6,7 +6,7 @@ Solon-AI
 <p align="center">
 	<strong>Java AI & MCP 应用开发框架（支持已知 AI 开发的各种能力）</strong>
     <br/>
-    <strong>【基于 Solon 应用开发框架构建】</strong>
+    <strong>克制、高效、开放</strong>
 </p>
 <p align="center">
 	<a href="https://solon.noear.org/article/learn-solon-ai">https://solon.noear.org/article/learn-solon-ai</a>
