@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiModel;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
@@ -83,7 +84,7 @@ public class ChatModel implements AiModel {
      * 提示语
      */
     public ChatRequestDesc prompt(ChatMessage... messages) {
-        return prompt(new ArrayList<>(Arrays.asList(messages)));
+        return prompt(Utils.asList(messages));
     }
 
     /**
