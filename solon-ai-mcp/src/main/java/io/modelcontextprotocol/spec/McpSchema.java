@@ -2163,6 +2163,22 @@ public final class McpSchema {
 		public String getIdentifier() {
 			return getName();
 		}
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj)
+                return true;
+            if (obj == null || getClass() != obj.getClass())
+                return false;
+            PromptReference that = (PromptReference) obj;
+            return java.util.Objects.equals(getIdentifier(), that.getIdentifier())
+                    && java.util.Objects.equals(getType(), that.getType());
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(getIdentifier(), getType());
+        }
 	}
 
 	/**
