@@ -228,8 +228,7 @@ public class FunctionToolDesc implements FunctionTool {
     @Override
     public String inputSchema() {
         if (inputSchema == null) {
-            inputSchema = ToolSchemaUtil.buildToolParametersNode(params, new ONode())
-                    .toJson();
+            inputSchema = ToolSchemaUtil.buildInputSchema(params);
         }
 
         return inputSchema;
@@ -239,11 +238,8 @@ public class FunctionToolDesc implements FunctionTool {
     public String outputSchema() {
         if (outputSchema == null) {
             if (returnType != null) {
-                ONode outputSchemaNode = new ONode();
-
                 if (ToolSchemaUtil.isIgnoreOutputSchema(returnType) == false) {
-                    ToolSchemaUtil.buildTypeSchemaNode(returnType, "", outputSchemaNode);
-                    outputSchema = outputSchemaNode.toJson();
+                    outputSchema = ToolSchemaUtil.buildOutputSchema(returnType);
                 } else {
                     outputSchema = "";
                 }

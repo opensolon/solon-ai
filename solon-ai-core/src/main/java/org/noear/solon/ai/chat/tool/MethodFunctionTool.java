@@ -92,17 +92,13 @@ public class MethodFunctionTool implements FunctionTool {
             }
         }
 
-        inputSchema = ToolSchemaUtil.buildToolParametersNode(params, new ONode())
-                .toJson();
+        inputSchema = ToolSchemaUtil.buildInputSchema(params);
 
         // 输出参数 outputSchema
         {
             Type returnType = method.getGenericReturnType();
-            ONode outputSchemaNode = new ONode();
-
             if (ToolSchemaUtil.isIgnoreOutputSchema(returnType) == false) {
-                ToolSchemaUtil.buildTypeSchemaNode(returnType, "", outputSchemaNode);
-                outputSchema = outputSchemaNode.toJson();
+                outputSchema = ToolSchemaUtil.buildOutputSchema(returnType);
             } else {
                 outputSchema = "";
             }

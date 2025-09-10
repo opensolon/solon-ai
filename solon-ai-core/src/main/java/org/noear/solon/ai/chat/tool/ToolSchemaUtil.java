@@ -70,6 +70,22 @@ public class ToolSchemaUtil {
     }
 
     /**
+     * 构建工具输入架构
+     *
+     * @param toolParams       工具参数
+     */
+    public static String buildInputSchema(List<ParamDesc> toolParams) {
+        return buildToolParametersNode(toolParams, new ONode()).toJson();
+    }
+
+    /**
+     * 构建类型的架构节点
+     * */
+    public static String buildOutputSchema(Type type) {
+        return buildTypeSchemaNode(type, "", new ONode()).toJson();
+    }
+
+    /**
      * 构建工具参数节点
      *
      * @param toolParams       工具参数
@@ -100,18 +116,6 @@ public class ToolSchemaUtil {
         return schemaParentNode;
     }
 
-    /**
-     * 主入口方法：构建 Schema 节点（递归处理）
-     *
-     * @since 3.1
-     * @since 3.3
-     * @deprecated 3.5
-     */
-    @Deprecated
-    public static void buildToolParamNode(Type type, String description, ONode schemaNode) {
-        buildTypeSchemaNode(type, description, schemaNode);
-    }
-
 
     /**
      * 构建类型的架构节点
@@ -120,7 +124,7 @@ public class ToolSchemaUtil {
      * @since 3.3
      * @since 3.5
      */
-    public static void buildTypeSchemaNode(Type type, String description, ONode schemaNode) {
+    public static ONode buildTypeSchemaNode(Type type, String description, ONode schemaNode) {
         if (type instanceof ParameterizedType) {
             //处理 ParameterizedType 类型（泛型），如 List<T>、Map<K,V>、Optional<T> 等
             handleParameterizedType((ParameterizedType) type, description, schemaNode);
@@ -135,15 +139,8 @@ public class ToolSchemaUtil {
         if (Utils.isNotEmpty(description)) {
             schemaNode.set("description", description);
         }
-    }
 
-    /**
-     * 构建类型的架构节点
-     * */
-    public static String buildTypeSchema(Type type) {
-        ONode schemaNode = new ONode();
-        buildTypeSchemaNode(type, "", schemaNode);
-        return schemaNode.toJson();
+        return schemaNode;
     }
 
     /**
@@ -424,5 +421,19 @@ public class ToolSchemaUtil {
         } else {
             throw new IllegalArgumentException("Unsupported type: " + type);
         }
+    }
+
+    /// ////
+
+    /**
+     * 主入口方法：构建 Schema 节点（递归处理）
+     *
+     * @since 3.1
+     * @since 3.3
+     * @deprecated 3.5
+     */
+    @Deprecated
+    public static void buildToolParamNode(Type type, String description, ONode schemaNode) {
+        buildTypeSchemaNode(type, description, schemaNode);
     }
 }
