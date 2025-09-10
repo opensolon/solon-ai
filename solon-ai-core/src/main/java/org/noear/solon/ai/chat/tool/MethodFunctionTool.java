@@ -101,7 +101,7 @@ public class MethodFunctionTool implements FunctionTool {
             ONode outputSchemaNode = new ONode();
 
             if (ToolSchemaUtil.isIgnoreOutputSchema(returnType) == false) {
-                ToolSchemaUtil.buildToolParamNode(returnType, "", outputSchemaNode);
+                ToolSchemaUtil.buildTypeSchemaNode(returnType, "", outputSchemaNode);
                 outputSchema = outputSchemaNode.toJson();
             } else {
                 outputSchema = "";

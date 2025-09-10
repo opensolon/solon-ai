@@ -86,7 +86,7 @@ public class ToolSchemaUtil {
 
             for (ParamDesc fp : toolParams) {
                 propertiesNode.getOrNew(fp.name()).build(paramNode -> {
-                    buildToolParamNode(fp.type(), fp.description(), paramNode);
+                    buildTypeSchemaNode(fp.type(), fp.description(), paramNode);
                 });
 
                 if (fp.required()) {
@@ -100,14 +100,27 @@ public class ToolSchemaUtil {
         return schemaParentNode;
     }
 
-
     /**
      * 主入口方法：构建 Schema 节点（递归处理）
      *
      * @since 3.1
      * @since 3.3
+     * @deprecated 3.5
      */
+    @Deprecated
     public static void buildToolParamNode(Type type, String description, ONode schemaNode) {
+        buildTypeSchemaNode(type, description, schemaNode);
+    }
+
+
+    /**
+     * 构建类型的架构节点
+     *
+     * @since 3.1
+     * @since 3.3
+     * @since 3.5
+     */
+    public static void buildTypeSchemaNode(Type type, String description, ONode schemaNode) {
         if (type instanceof ParameterizedType) {
             //处理 ParameterizedType 类型（泛型），如 List<T>、Map<K,V>、Optional<T> 等
             handleParameterizedType((ParameterizedType) type, description, schemaNode);
@@ -122,6 +135,15 @@ public class ToolSchemaUtil {
         if (Utils.isNotEmpty(description)) {
             schemaNode.set("description", description);
         }
+    }
+
+    /**
+     * 构建类型的架构节点
+     * */
+    public static String buildTypeSchema(Type type) {
+        ONode schemaNode = new ONode();
+        buildTypeSchemaNode(type, "", schemaNode);
+        return schemaNode.toJson();
     }
 
     /**
@@ -178,7 +200,7 @@ public class ToolSchemaUtil {
 
         // —— 3. Optional<T> ——
         if (isOptionalType(rawType)) {
-            buildToolParamNode(pt.getActualTypeArguments()[0], description, schemaNode);
+            buildTypeSchemaNode(pt.getActualTypeArguments()[0], description, schemaNode);
             return;
         }
 
@@ -224,7 +246,7 @@ public class ToolSchemaUtil {
 
             // 构建字段 schema 结构
             ONode fieldSchema = new ONode();
-            buildToolParamNode(fieldType, null, fieldSchema);
+            buildTypeSchemaNode(fieldType, null, fieldSchema);
             props.set(field.getName(), fieldSchema);
         }
     }
@@ -237,7 +259,7 @@ public class ToolSchemaUtil {
         // 数组
         if (clazz.isArray()) {
             schemaNode.set("type", TYPE_ARRAY);
-            buildToolParamNode(clazz.getComponentType(), null, schemaNode.getOrNew("items"));
+            buildTypeSchemaNode(clazz.getComponentType(), null, schemaNode.getOrNew("items"));
             return;
         }
 
@@ -297,7 +319,7 @@ public class ToolSchemaUtil {
         schemaNode.set("type", TYPE_ARRAY);
         Type[] actualTypeArguments = pt.getActualTypeArguments();
         if (actualTypeArguments.length > 0) {
-            buildToolParamNode(actualTypeArguments[0], null, schemaNode.getOrNew("items"));
+            buildTypeSchemaNode(actualTypeArguments[0], null, schemaNode.getOrNew("items"));
         }
     }
 
@@ -349,7 +371,7 @@ public class ToolSchemaUtil {
 
                 if (fp != null) {
                     propertiesNode.getOrNew(fp.name()).build(paramNode -> {
-                        buildToolParamNode(fp.type(), fp.description(), paramNode);
+                        buildTypeSchemaNode(fp.type(), fp.description(), paramNode);
                     });
 
                     if (fp.required()) {
