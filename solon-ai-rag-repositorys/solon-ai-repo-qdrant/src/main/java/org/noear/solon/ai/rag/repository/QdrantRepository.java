@@ -100,7 +100,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
      * 批量存储文档（支持更新）
      * */
     @Override
-    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
             if (progressCallback != null) {
@@ -145,9 +145,14 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
     }
 
     @Override
-    public void delete(String... ids) throws IOException {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
+            return;
+        }
+
         try {
-            List<PointId> pointIds = Arrays.stream(ids).map(id -> PointId.newBuilder().setUuid(id).build())
+            List<PointId> pointIds = Arrays.stream(ids)
+                    .map(id -> PointId.newBuilder().setUuid(id).build())
                     .collect(Collectors.toList());
 
             config.client.deleteAsync(config.collectionName, pointIds).get();
@@ -157,7 +162,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
     }
 
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         try {
             List<RetrievedPoint> points = config.client.retrieveAsync(
                     GetPoints.newBuilder().setCollectionName(config.collectionName)

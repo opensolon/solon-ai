@@ -91,7 +91,7 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
      * 批量存储文档（支持更新）
      * */
     @Override
-    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
             if (progressCallback != null) {
@@ -151,7 +151,11 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     @Override
-    public void delete(String... ids) throws IOException {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
+            return;
+        }
+
         for (String id : ids) {
             CollectionDataDelReq req = new CollectionDataDelReq(config.collectionName, id);
             ServerResponse<Void> response = config.client.deleteCollectionData(req);
@@ -163,7 +167,7 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         QueryBuilder queryBuilder = QueryBuilder.lambda(config.collectionName);
         queryBuilder.eq(config.idFieldName, id);
         ServerResponse<List<VectorSearchResult>> response = config.client.queryCollectionData(queryBuilder);

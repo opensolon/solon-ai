@@ -57,13 +57,13 @@ public class QdrantRepositoryTest {
         assert list.size() == 0;
 
         Document doc = new Document("Test content");
-        repository.insert(Collections.singletonList(doc));
+        repository.save(Collections.singletonList(doc));
         String key = doc.getId();
 
-        assertTrue(repository.exists(key), "Document should exist after storing");
+        assertTrue(repository.existsById(key), "Document should exist after storing");
 
-        repository.delete(doc.getId());
-        assertFalse(repository.exists(key), "Document should not exist after removal");
+        repository.deleteById(doc.getId());
+        assertFalse(repository.existsById(key), "Document should not exist after removal");
     }
 
     @Test
@@ -85,7 +85,7 @@ public class QdrantRepositoryTest {
         documents.add(doc1);
         documents.add(doc2);
         documents.add(doc3);
-        repository.insert(documents);
+        repository.save(documents);
 
         try {
             // 1. 使用OR表达式过滤进行搜索
@@ -116,7 +116,7 @@ public class QdrantRepositoryTest {
             assertEquals(2, categoryResults.size());
         } finally {
             // 清理测试数据
-            repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+            repository.deleteById(doc1.getId(), doc2.getId(), doc3.getId());
         }
     }
 
@@ -147,7 +147,7 @@ public class QdrantRepositoryTest {
 
         try {
             // 插入测试文档
-            repository.insert(documents);
+            repository.save(documents);
 
             // 等待索引更新
             Thread.sleep(1000);
@@ -236,7 +236,7 @@ public class QdrantRepositoryTest {
         } finally {
             // 清理测试文档
             try {
-                repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+                repository.deleteById(doc1.getId(), doc2.getId(), doc3.getId());
             } catch (Exception e) {
                 System.err.println("清理测试文档失败: " + e.getMessage());
             }
@@ -273,7 +273,7 @@ public class QdrantRepositoryTest {
 
         try {
             // 插入测试文档
-            repository.insert(documents);
+            repository.save(documents);
 
             // 等待索引更新
             Thread.sleep(1000);
@@ -326,7 +326,7 @@ public class QdrantRepositoryTest {
         } finally {
             // 清理测试文档
             try {
-                repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+                repository.deleteById(doc1.getId(), doc2.getId(), doc3.getId());
             } catch (Exception e) {
                 System.err.println("清理测试文档失败: " + e.getMessage());
             }
@@ -353,6 +353,6 @@ public class QdrantRepositoryTest {
         List<Document> documents = new SplitterPipeline().next(new RegexTextSplitter())
                 .next(new TokenSizeTextSplitter(500)).split(loader.load());
 
-        repository.insert(documents);
+        repository.save(documents);
     }
 }

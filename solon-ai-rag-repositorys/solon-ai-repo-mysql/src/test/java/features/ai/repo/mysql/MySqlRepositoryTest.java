@@ -91,7 +91,7 @@ public class MySqlRepositoryTest {
                 .next(new TokenSizeTextSplitter(500))
                 .split(loader.load());
 
-        repository.insert(documents); //（推入文档）
+        repository.save(documents); //（推入文档）
     }
 
     @AfterEach
@@ -115,15 +115,15 @@ public class MySqlRepositoryTest {
         assert list.isEmpty();
 
         Document doc = new Document("Test content");
-        repository.insert(Collections.singletonList(doc));
+        repository.save(Collections.singletonList(doc));
         String key = doc.getId();
 
         Thread.sleep(1000);
-        assertTrue(repository.exists(key), "Document should exist after storing");
+        assertTrue(repository.existsById(key), "Document should exist after storing");
 
         Thread.sleep(1000);
-        repository.delete(doc.getId());
-        assertFalse(repository.exists(key), "Document should not exist after removal");
+        repository.deleteById(doc.getId());
+        assertFalse(repository.existsById(key), "Document should not exist after removal");
     }
 
     @Test
@@ -134,14 +134,14 @@ public class MySqlRepositoryTest {
         documents.add(doc);
 
         try {
-            repository.insert(documents);
+            repository.save(documents);
             Thread.sleep(1000);
             // 删除文档
-            repository.delete(doc.getId());
+            repository.deleteById(doc.getId());
 
             Thread.sleep(1000);
             // 验证文档已被删除
-            assertFalse(repository.exists(doc.getId()), "文档应该已被删除");
+            assertFalse(repository.existsById(doc.getId()), "文档应该已被删除");
 
         } catch (Exception e) {
             fail("测试过程中发生异常: " + e.getMessage());
@@ -209,7 +209,7 @@ public class MySqlRepositoryTest {
         documents.add(doc1);
         documents.add(doc2);
         documents.add(doc3);
-        repository.insert(documents);
+        repository.save(documents);
 
         try {
             // 1. 使用OR表达式过滤进行搜索
@@ -240,7 +240,7 @@ public class MySqlRepositoryTest {
             assertEquals(2, categoryResults.size());
         } finally {
             // 清理测试数据
-            repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+            repository.deleteById(doc1.getId(), doc2.getId(), doc3.getId());
         }
     }
 
@@ -270,7 +270,7 @@ public class MySqlRepositoryTest {
             documents.add(doc3);
 
             // 插入测试文档
-            repository.insert(documents);
+            repository.save(documents);
 
             // 等待索引更新
             Thread.sleep(1000);

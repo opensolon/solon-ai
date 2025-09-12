@@ -164,7 +164,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
      * 存储文档列表（支持更新）
      */
     @Override
-    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
             if (progressCallback != null) {
@@ -291,8 +291,8 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
      * 删除指定 ID 的文档
      */
     @Override
-    public void delete(String... ids) throws IOException {
-        if (ids == null || ids.length == 0) {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
             return;
         }
 
@@ -311,7 +311,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
      * 检查文档是否存在
      */
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         String sql = "SELECT COUNT(*) FROM " + config.tableName + " WHERE id = ?";
 
         try (Connection conn = dataSource.getConnection();

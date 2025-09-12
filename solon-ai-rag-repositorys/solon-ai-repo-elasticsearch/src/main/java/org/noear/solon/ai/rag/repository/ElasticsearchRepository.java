@@ -247,7 +247,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      * @author 小奶奶花生米
      */
     @Override
-    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
             if (progressCallback != null) {
@@ -319,7 +319,11 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      * 删除指定ID的文档
      */
     @Override
-    public void delete(String... ids) throws IOException {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
+            return;
+        }
+
         for (String id : ids) {
             //不支持星号删除
             Request request = new Request("DELETE", "/" + config.indexName + "/_doc/" + id);
@@ -329,7 +333,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
     }
 
     @Override
-    public boolean exists(String id) {
+    public boolean existsById(String id) {
         try {
             Request request = new Request("HEAD", "/" + config.indexName + "/_doc/" + id);
             org.elasticsearch.client.Response response = config.client.getLowLevelClient().performRequest(request);

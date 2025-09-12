@@ -5,12 +5,10 @@ import io.milvus.v2.client.MilvusClientV2;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.loader.MarkdownLoader;
 import org.noear.solon.ai.rag.repository.MilvusRepository;
-import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +18,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 public class AsyncInsertDemoTest {
 
@@ -61,7 +58,7 @@ public class AsyncInsertDemoTest {
         BiConsumer<Integer, Integer> progressCallback = (idx, total) -> {
             log.info("处理进度：{}/{}", idx, total);
         };
-        CompletableFuture<Void> future = repository.asyncInsert(load, progressCallback);
+        CompletableFuture<Void> future = repository.asyncSave(load, progressCallback);
 
         log.info("开始插入向量数据库");
         //阻塞住线程

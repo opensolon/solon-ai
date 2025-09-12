@@ -149,7 +149,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
      * @throws IOException 如果存储过程中发生 IO 错误
      */
     @Override
-    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
             if (progressCallback != null) {
@@ -212,8 +212,8 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
      * @param ids 文档 ID
      */
     @Override
-    public void delete(String... ids) throws IOException {
-        if (ids == null || ids.length == 0) {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
             return;
         }
 
@@ -232,7 +232,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
     }
 
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         return config.client.exists(config.keyPrefix + id);
     }
 

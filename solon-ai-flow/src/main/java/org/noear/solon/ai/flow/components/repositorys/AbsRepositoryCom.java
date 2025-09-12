@@ -65,7 +65,7 @@ public abstract class AbsRepositoryCom extends AbsAiComponent implements AiIoCom
                     String text = HttpUtils.http(uri).get();
 
                     List<Document> documents = splitterPipeline.split(text);
-                    repository.insert(documents);
+                    repository.save(documents);
                 }
             }
         }
@@ -94,10 +94,10 @@ public abstract class AbsRepositoryCom extends AbsAiComponent implements AiIoCom
             setOutput(context, node, data);
         } else if (data instanceof Document) {
             //插入
-            repository.insert(Arrays.asList((Document) data));
+            repository.save(Arrays.asList((Document) data));
         } else if (data instanceof List) {
             //插入
-            repository.insert((List<Document>) data);
+            repository.save((List<Document>) data);
         } else {
             throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
         }

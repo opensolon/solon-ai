@@ -45,7 +45,7 @@ public class InMemoryRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     @Override
-    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
             if (progressCallback != null) {
@@ -89,14 +89,14 @@ public class InMemoryRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     @Override
-    public void delete(String... ids) {
+    public void deleteById(String... ids) {
         for (String id : ids) {
             store.remove(id);
         }
     }
 
     @Override
-    public boolean exists(String id) {
+    public boolean existsById(String id) {
         return store.containsKey(id);
     }
 

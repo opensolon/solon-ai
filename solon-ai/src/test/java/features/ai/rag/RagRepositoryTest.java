@@ -58,6 +58,6 @@ public class RagRepositoryTest {
                 .next(new TokenSizeTextSplitter(500))
                 .split(text);
 
-        repository.insert(documents); //（推入文档）
+        repository.save(documents); //（推入文档）
     }
 }

@@ -100,7 +100,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      * 批量存储文档（支持更新）
      */
     @Override
-    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
             if (progressCallback != null) {
@@ -168,12 +168,12 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      * 删除指定ID的文档
      */
     @Override
-    public void delete(String... ids) throws IOException {
-        if (ids == null || ids.length == 0) {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
             return;
         }
 
-        List<String> idList = new ArrayList<>(Arrays.asList(ids));
+        List<String> idList = Arrays.asList(ids);
 
         // 删除文档
         config.client.deleteDocuments(collectionId, idList);
@@ -183,7 +183,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      * 检查文档是否存在
      */
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         if (Utils.isEmpty(id)) {
             return false;
         }

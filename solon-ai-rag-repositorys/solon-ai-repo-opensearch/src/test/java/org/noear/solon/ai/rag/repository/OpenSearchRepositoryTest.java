@@ -16,11 +16,9 @@ import org.noear.solon.ai.rag.splitter.TokenSizeTextSplitter;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.test.SolonTest;
-import org.opensearch.client.RequestOptions;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.RestClientBuilder;
 import org.opensearch.client.RestHighLevelClient;
-import org.opensearch.client.indices.GetIndexRequest;
 
 import java.io.IOException;
 import java.util.*;
@@ -142,7 +140,7 @@ public class OpenSearchRepositoryTest {
 
         List<Document> documents = new ArrayList<>();
         documents.add(doc);
-        repository.insert(documents);
+        repository.save(documents);
 
         // 等待索引刷新
         try {
@@ -152,10 +150,10 @@ public class OpenSearchRepositoryTest {
         }
 
         // 验证文档已存储
-        assertTrue(repository.exists(doc.getId()), "文档应该已被存储");
+        assertTrue(repository.existsById(doc.getId()), "文档应该已被存储");
 
         // 删除文档
-        repository.delete(doc.getId());
+        repository.deleteById(doc.getId());
 
         // 等待索引刷新
         try {
@@ -165,7 +163,7 @@ public class OpenSearchRepositoryTest {
         }
 
         // 验证文档已被删除
-        assertFalse(repository.exists(doc.getId()), "文档应该已被删除");
+        assertFalse(repository.existsById(doc.getId()), "文档应该已被删除");
     }
 
     @Test
@@ -241,7 +239,7 @@ public class OpenSearchRepositoryTest {
         documents.add(doc3);
 
         // 插入测试文档
-        repository.insert(documents);
+        repository.save(documents);
 
         // 等待索引更新
         Thread.sleep(1000);
@@ -291,7 +289,7 @@ public class OpenSearchRepositoryTest {
 
         } finally {
             // 清理测试文档
-            repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+            repository.deleteById(doc1.getId(), doc2.getId(), doc3.getId());
         }
     }
 
@@ -315,6 +313,6 @@ public class OpenSearchRepositoryTest {
                 .collect(Collectors.toList());
 
         // 存储文档
-        repository.insert(documents);
+        repository.save(documents);
     }
 }

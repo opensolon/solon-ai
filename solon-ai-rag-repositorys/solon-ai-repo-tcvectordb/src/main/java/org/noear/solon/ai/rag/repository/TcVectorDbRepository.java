@@ -213,7 +213,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
      * @throws IOException 如果存储过程发生IO错误
      */
     @Override
-    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
             if (progressCallback != null) {
@@ -281,8 +281,8 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
      * @throws IOException 如果删除过程发生IO错误
      */
     @Override
-    public void delete(String... ids) throws IOException {
-        if (ids == null || ids.length == 0) {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
             return;
         }
 
@@ -307,7 +307,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
      * @throws IOException 如果检查过程发生IO错误
      */
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         try {
             // 查询指定ID的文档
             QueryParam queryParam = QueryParam.newBuilder()

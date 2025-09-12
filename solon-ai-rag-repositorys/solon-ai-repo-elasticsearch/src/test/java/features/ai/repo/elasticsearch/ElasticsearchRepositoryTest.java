@@ -283,10 +283,10 @@ public class ElasticsearchRepositoryTest {
         documents.add(doc);
 
         try {
-            repository.insert(documents);
+            repository.save(documents);
             Thread.sleep(1000);
             // 删除文档
-            repository.delete(doc.getId());
+            repository.deleteById(doc.getId());
 
             Thread.sleep(1000);
             // 验证文档已被删除
@@ -395,7 +395,7 @@ public class ElasticsearchRepositoryTest {
         documents.add(lowRelevanceDoc);
 
         // 插入文档
-        repository.insert(documents);
+        repository.save(documents);
         // 等待索引刷新
         try {
             Thread.sleep(1000);
@@ -429,7 +429,7 @@ public class ElasticsearchRepositoryTest {
         assertTrue(mediumThresholdResults.size() >= highThresholdResults.size());
 
         // 清理测试数据
-        repository.delete("high_score", "medium_score", "low_score");
+        repository.deleteById("high_score", "medium_score", "low_score");
     }
 
     @Test
@@ -453,7 +453,7 @@ public class ElasticsearchRepositoryTest {
         documents.add(doc2);
 
         // 插入文档
-        repository.insert(documents);
+        repository.save(documents);
         // 等待索引刷新
         try {
             Thread.sleep(1000);
@@ -462,8 +462,8 @@ public class ElasticsearchRepositoryTest {
         }
 
         // 验证文档存在
-        assertTrue(repository.exists("doc1"));
-        assertTrue(repository.exists("doc2"));
+        assertTrue(repository.existsById("doc1"));
+        assertTrue(repository.existsById("doc2"));
 
         // 搜索文档
         QueryCondition condition = new QueryCondition("test");
@@ -471,7 +471,7 @@ public class ElasticsearchRepositoryTest {
         assertFalse(results.isEmpty());
 
         // 删除文档
-        repository.delete("doc1");
+        repository.deleteById("doc1");
         // 等待索引刷新
         try {
             Thread.sleep(1000);
@@ -480,8 +480,8 @@ public class ElasticsearchRepositoryTest {
         }
 
         // 验证文档已删除
-        assertFalse(repository.exists("doc1"));
-        assertTrue(repository.exists("doc2"));
+        assertFalse(repository.existsById("doc1"));
+        assertTrue(repository.existsById("doc2"));
     }
 
     @Test
@@ -507,7 +507,7 @@ public class ElasticsearchRepositoryTest {
             documents.add(doc3);
 
             // 插入测试文档
-            repository.insert(documents);
+            repository.save(documents);
 
             // 等待索引更新
             Thread.sleep(1000);
@@ -596,7 +596,7 @@ public class ElasticsearchRepositoryTest {
         } finally {
             // 清理测试文档
             try {
-                repository.delete("expr_test_1", "expr_test_2", "expr_test_3");
+                repository.deleteById("expr_test_1", "expr_test_2", "expr_test_3");
             } catch (Exception e) {
                 System.err.println("清理测试文档失败: " + e.getMessage());
             }
@@ -622,7 +622,7 @@ public class ElasticsearchRepositoryTest {
         documents.add(doc1);
         documents.add(doc2);
         documents.add(doc3);
-        repository.insert(documents);
+        repository.save(documents);
 
         Thread.sleep(1000);
         try {
@@ -654,7 +654,7 @@ public class ElasticsearchRepositoryTest {
             assertEquals(2, categoryResults.size());
         } finally {
             // 清理测试数据
-            repository.delete(doc1.getId(), doc2.getId(), doc3.getId());
+            repository.deleteById(doc1.getId(), doc2.getId(), doc3.getId());
         }
     }
 
@@ -684,7 +684,7 @@ public class ElasticsearchRepositoryTest {
             documents.add(doc3);
 
             // 插入测试文档
-            repository.insert(documents);
+            repository.save(documents);
 
             // 等待索引更新
             Thread.sleep(1000);
@@ -822,7 +822,7 @@ public class ElasticsearchRepositoryTest {
             documents.add(doc3);
 
             // 插入测试文档
-            repository.insert(documents);
+            repository.save(documents);
 
             // 等待索引更新
             Thread.sleep(1000);
@@ -966,7 +966,7 @@ public class ElasticsearchRepositoryTest {
             documents.add(doc3);
 
             // 插入测试文档
-            repository.insert(documents);
+            repository.save(documents);
 
             // 等待索引更新
             Thread.sleep(1000);
@@ -1109,7 +1109,7 @@ public class ElasticsearchRepositoryTest {
             documents.add(doc3);
 
             // 插入测试文档
-            repository.insert(documents);
+            repository.save(documents);
 
             // 等待索引更新
             Thread.sleep(1000);
@@ -1252,7 +1252,7 @@ public class ElasticsearchRepositoryTest {
             documents.add(doc3);
 
             // 插入测试文档
-            repository.insert(documents);
+            repository.save(documents);
 
             // 等待索引更新
             Thread.sleep(1000);
@@ -1396,7 +1396,7 @@ public class ElasticsearchRepositoryTest {
             documents.add(doc3);
 
             // 插入测试文档
-            repository.insert(documents);
+            repository.save(documents);
 
             // 等待索引更新
             Thread.sleep(1000);
@@ -1469,7 +1469,7 @@ public class ElasticsearchRepositoryTest {
         } finally {
             // 清理测试文档
             try {
-                repository.delete("combined_test_1", "combined_test_2", "combined_test_3");
+                repository.deleteById("combined_test_1", "combined_test_2", "combined_test_3");
             } catch (Exception e) {
                 System.err.println("清理测试文档失败: " + e.getMessage());
             }
@@ -1508,7 +1508,7 @@ public class ElasticsearchRepositoryTest {
                 .collect(Collectors.toList());
 
         // 存储文档
-        repository.insert(documents);
+        repository.save(documents);
     }
 
     /**

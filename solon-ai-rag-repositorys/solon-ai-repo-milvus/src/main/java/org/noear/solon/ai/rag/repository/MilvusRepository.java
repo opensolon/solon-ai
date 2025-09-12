@@ -154,7 +154,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
      * 批量存储文档（支持更新）
      * */
     @Override
-    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
             if (progressCallback != null) {
@@ -200,15 +200,21 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
     }
 
     @Override
-    public void delete(String... ids) throws IOException {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
+            return;
+        }
+
+        List<Object> idList = Arrays.asList(ids);
+
         config.client.delete(DeleteReq.builder()
                 .collectionName(config.collectionName)
-                .ids(Arrays.asList(ids))
+                .ids(idList)
                 .build());
     }
 
     @Override
-    public boolean exists(String id) throws IOException {
+    public boolean existsById(String id) throws IOException {
         return config.client.get(GetReq.builder()
                 .collectionName(config.collectionName)
                 .ids(Arrays.asList(id))

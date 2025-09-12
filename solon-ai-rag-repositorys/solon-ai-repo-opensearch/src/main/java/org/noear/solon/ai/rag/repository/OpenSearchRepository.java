@@ -377,7 +377,7 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
      * @throws IOException 如果存储过程中发生IO错误
      */
     @Override
-    public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+    public void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
             //回调进度
             if (progressCallback != null) {
@@ -457,7 +457,11 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
      * 删除指定ID的文档
      */
     @Override
-    public void delete(String... ids) throws IOException {
+    public void deleteById(String... ids) throws IOException {
+        if (Utils.isEmpty(ids)) {
+            return;
+        }
+
         for (String id : ids) {
             Request request = new Request("DELETE", "/" + config.indexName + "/_doc/" + id);
             config.client.getLowLevelClient().performRequest(request);
@@ -469,7 +473,7 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
      * 检查文档是否存在
      */
     @Override
-    public boolean exists(String id) {
+    public boolean existsById(String id) {
         try {
             Request request = new Request("HEAD", "/" + config.indexName + "/_doc/" + id);
             org.opensearch.client.Response response = config.client.getLowLevelClient().performRequest(request);

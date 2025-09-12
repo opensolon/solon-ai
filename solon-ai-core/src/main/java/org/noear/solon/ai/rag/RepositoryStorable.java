@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
-import java.util.function.Function;
 
 /**
  * 可存储的知识库（可存储）
@@ -34,17 +33,18 @@ import java.util.function.Function;
 @Preview("3.1")
 public interface RepositoryStorable extends Repository {
     /**
-     * 异步插件
+     * 异步保存文档
      *
-     * @param documents 文档集
+     * @param documents        文档集
      * @param progressCallback 进度回调
+     * @since 3.5
      */
-    default CompletableFuture<Void> asyncInsert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) {
+    default CompletableFuture<Void> asyncSave(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) {
         CompletableFuture<Void> future = new CompletableFuture<>();
 
         RunUtil.async(() -> {
             try {
-                insert(documents, progressCallback);
+                save(documents, progressCallback);
                 future.complete(null);
             } catch (Exception ex) {
                 future.completeExceptionally(ex);
@@ -55,39 +55,119 @@ public interface RepositoryStorable extends Repository {
     }
 
     /**
-     * 插入
+     * 保存文档
      *
-     * @param documents 文档集
+     * @param documents        文档集
      * @param progressCallback 进度回调
+     * @since 3.5
      */
-    void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException;
+    void save(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException;
+
+
+    /**
+     * 保存文档
+     *
+     * @param documents 文档集
+     * @since 3.5
+     */
+    default void save(List<Document> documents) throws IOException {
+        save(documents, null);
+    }
+
+    /**
+     * 保存文档
+     *
+     * @param documents 文档集
+     * @since 3.5
+     */
+    default void save(Document... documents) throws IOException {
+        save(Arrays.asList(documents));
+    }
+
+    /**
+     * 删除文档
+     *
+     * @param ids 文档IDs
+     * @since 3.5
+     */
+    void deleteById(String... ids) throws IOException;
+
+    /**
+     * 是否存在文档
+     *
+     * @param id 文档ID
+     * @since 3.5
+     */
+    boolean existsById(String id) throws IOException;
+
+    //========
+
+    /**
+     * 异步插件
+     *
+     * @param documents        文档集
+     * @param progressCallback 进度回调
+     * @deprecated 3.5 {@link #asyncSave(List, BiConsumer)}
+     */
+    @Deprecated
+    default CompletableFuture<Void> asyncInsert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) {
+        return asyncSave(documents, progressCallback);
+    }
+
+    /**
+     * 插入
+     *
+     * @param documents        文档集
+     * @param progressCallback 进度回调
+     * @deprecated 3.5 {@link #save(List, BiConsumer)}
+     */
+    @Deprecated
+    default void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
+        save(documents, progressCallback);
+    }
 
 
     /**
      * 插入
      *
      * @param documents 文档集
+     * @deprecated 3.5 {@link #save(List)}
      */
+    @Deprecated
     default void insert(List<Document> documents) throws IOException {
-        insert(documents, null);
+        save(documents);
     }
 
     /**
      * 插入
      *
      * @param documents 文档集
+     * @deprecated 3.5 {@link #save(Document...)}
      */
+    @Deprecated
     default void insert(Document... documents) throws IOException {
-        insert(Arrays.asList(documents));
+        save(documents);
     }
 
     /**
-     * 删除
+     * 删除文档
+     *
+     * @param ids 文档IDs
+     * @deprecated 3.5 {@link #deleteById(String...)}
      */
-    void delete(String... ids) throws IOException;
+    @Deprecated
+    default void delete(String... ids) throws IOException {
+        deleteById(ids);
+    }
 
     /**
-     * 是否存在
+     * 是否存在文档
+     *
+     * @param id 文档ID
+     * @deprecated 3.5 {@link #existsById(String)}
      */
-    boolean exists(String id) throws IOException;
+    @Deprecated
+    default boolean exists(String id) throws IOException {
+        return existsById(id);
+    }
 }
