@@ -25,7 +25,7 @@
         <dependency>
             <groupId>io.qdrant</groupId>
             <artifactId>client</artifactId>
-            <version>1.13.0</version>
+            <version>${qdrant-client.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
