@@ -398,7 +398,7 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
         int batchIndex = 0;
         for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
-            batchInsertDo(batch);
+            batchSaveDo(batch);
 
             //回调进度
             if (progressCallback != null) {
@@ -407,7 +407,7 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
         }
     }
 
-    private void batchInsertDo(List<Document> batch) throws IOException{
+    private void batchSaveDo(List<Document> batch) throws IOException{
         StringBuilder buf = new StringBuilder();
         for (Document doc : batch) {
             buf.append("{\"index\":{\"_index\":\"").append(config.indexName)

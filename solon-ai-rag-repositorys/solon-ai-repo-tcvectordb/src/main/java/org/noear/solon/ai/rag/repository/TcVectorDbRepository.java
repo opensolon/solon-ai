@@ -234,7 +234,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
         List<List<Document>> batchList = ListUtil.partition(documents, config.embeddingBatchSize);
         int batchIndex = 0;
         for (List<Document> batch : batchList) {
-            batchInsertDo(batch);
+            batchSaveDo(batch);
 
             //回调进度
             if (progressCallback != null) {
@@ -243,7 +243,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
         }
     }
 
-    private void batchInsertDo(List<Document> batch) throws IOException{
+    private void batchSaveDo(List<Document> batch) throws IOException{
         // 准备上传到VectorDB的文档
         List<com.tencent.tcvectordb.model.Document> batchDocs = new ArrayList<>();
         for (Document document : batch) {

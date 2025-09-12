@@ -112,7 +112,7 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
         int batchIndex = 0;
         for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
-            batchInsertDo(batch);
+            batchSaveDo(batch);
 
             //回调进度
             if (progressCallback != null) {
@@ -123,7 +123,7 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
 
     }
 
-    private void batchInsertDo(List<Document> batch) throws IOException{
+    private void batchSaveDo(List<Document> batch) throws IOException{
         for (Document doc : batch) {
             Map<String, Object> map = new HashMap<>();
             map.put(config.idFieldName, doc.getId());

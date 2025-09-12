@@ -121,7 +121,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         int batchIndex = 0;
         for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
-            batchInsertDo(batch);
+            batchSaveDo(batch);
 
             //回调进度
             if (progressCallback != null) {
@@ -136,7 +136,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
      * @param batch 文档列表
      * @throws IOException 如果添加失败
      */
-    private void batchInsertDo(List<Document> batch) throws IOException {
+    private void batchSaveDo(List<Document> batch) throws IOException {
         List<String> ids = new ArrayList<>();
         List<List<Float>> embeddings = new ArrayList<>();
         List<Map<String, Object>> metadatas = new ArrayList<>();

@@ -101,7 +101,7 @@ public class DashVectorRepository implements RepositoryStorable, RepositoryLifec
         int batchIndex = 0;
         for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
-            batchInsertDo(batch);
+            batchSaveDo(batch);
 
             //回调进度
             if (progressCallback != null) {
@@ -116,7 +116,7 @@ public class DashVectorRepository implements RepositoryStorable, RepositoryLifec
      * @param batch 文档列表
      * @throws IOException 如果添加失败
      */
-    private void batchInsertDo(List<Document> batch) throws IOException {
+    private void batchSaveDo(List<Document> batch) throws IOException {
         List<Doc> docs = new ArrayList<>();
         Doc doc;
         Map<String, Object> map;

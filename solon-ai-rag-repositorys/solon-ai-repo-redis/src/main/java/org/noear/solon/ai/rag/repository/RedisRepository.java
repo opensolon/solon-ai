@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.BiConsumer;
 
 import org.noear.snack.ONode;
@@ -170,7 +169,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         int batchIndex = 0;
         for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
-            batchInsertDo(batch);
+            batchSaveDo(batch);
 
             //回调进度
             if (progressCallback != null) {
@@ -179,7 +178,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         }
     }
 
-    private void batchInsertDo(List<Document> batch) {
+    private void batchSaveDo(List<Document> batch) {
         PipelineBase pipeline = null;
         try {
             pipeline = config.client.pipelined();

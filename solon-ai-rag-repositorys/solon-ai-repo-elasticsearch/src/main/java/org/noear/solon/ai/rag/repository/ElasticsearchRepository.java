@@ -268,7 +268,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         int batchIndex = 0;
         for (List<Document> batch : batchList) {
             config.embeddingModel.embed(batch);
-            batchInsertDo(batch);
+            batchSaveDo(batch);
 
             //回调进度
             if (progressCallback != null) {
@@ -277,42 +277,34 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
         }
     }
 
-    private void batchInsertDo(List<Document> batch) throws IOException{
+    private void batchSaveDo(List<Document> batch) throws IOException{
         StringBuilder buf = new StringBuilder();
         for (Document doc : batch) {
-            insertBuild(buf, doc);
+            buf.append("{\"index\":{\"_index\":\"").append(config.indexName)
+                    .append("\",\"_id\":\"").append(doc.getId()).append("\"}}\n");
+
+            Map<String, Object> source = new HashMap<>();
+            source.put("content", doc.getContent());
+            source.put("metadata", doc.getMetadata());
+            source.put("embedding", doc.getEmbedding());
+
+            // 保存URL，如果存在
+            if (doc.getUrl() != null) {
+                source.put("url", doc.getUrl());
+            }
+
+            // 将metadata内部字段平铺到顶层
+            if (doc.getMetadata() != null) {
+                for (Map.Entry<String, Object> entry : doc.getMetadata().entrySet()) {
+                    source.put(entry.getKey(), entry.getValue());
+                }
+            }
+
+            buf.append(ONode.stringify(source)).append("\n");
         }
 
         executeBulkRequest(buf.toString());
         refreshIndex();
-    }
-
-
-    /**
-     * 将文档添加到批量索引操作中
-     */
-    private void insertBuild(StringBuilder buf, Document doc) {
-        buf.append("{\"index\":{\"_index\":\"").append(config.indexName)
-                .append("\",\"_id\":\"").append(doc.getId()).append("\"}}\n");
-
-        Map<String, Object> source = new HashMap<>();
-        source.put("content", doc.getContent());
-        source.put("metadata", doc.getMetadata());
-        source.put("embedding", doc.getEmbedding());
-
-        // 保存URL，如果存在
-        if (doc.getUrl() != null) {
-            source.put("url", doc.getUrl());
-        }
-
-        // 将metadata内部字段平铺到顶层
-        if (doc.getMetadata() != null) {
-            for (Map.Entry<String, Object> entry : doc.getMetadata().entrySet()) {
-                source.put(entry.getKey(), entry.getValue());
-            }
-        }
-
-        buf.append(ONode.stringify(source)).append("\n");
     }
 
     /**

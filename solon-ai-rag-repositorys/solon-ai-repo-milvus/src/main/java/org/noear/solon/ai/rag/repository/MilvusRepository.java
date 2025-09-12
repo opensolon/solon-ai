@@ -173,7 +173,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
         for (List<Document> batch : batchList) {
             // 批量embedding
             config.embeddingModel.embed(batch);
-            batchInsertDo(batch);
+            batchSaveDo(batch);
 
             //回调进度
             if (progressCallback != null) {
@@ -182,7 +182,7 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
         }
     }
 
-    private void batchInsertDo(List<Document> batch) throws IOException {
+    private void batchSaveDo(List<Document> batch) throws IOException {
         // 转换成json存储
         List<JsonObject> docObjs = batch.stream().map(this::toJsonObject)
                 .collect(Collectors.toList());

@@ -187,7 +187,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
             config.embeddingModel.embed(batch);
 
             try (Connection conn = dataSource.getConnection()) {
-                batchInsertDo(conn, batch);
+                batchSaveDo(conn, batch);
             } catch (SQLException e) {
                 throw new IOException("Failed to insert documents", e);
             }
@@ -202,7 +202,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
     /**
      * 批量插入文档
      */
-    private void batchInsertDo(Connection conn, List<Document> documents) throws SQLException {
+    private void batchSaveDo(Connection conn, List<Document> documents) throws SQLException {
         StringBuilder sql = new StringBuilder();
         sql.append("INSERT INTO ").append(config.tableName).append(" (id, content, embedding, metadata");
 
