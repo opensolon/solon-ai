@@ -35,6 +35,7 @@ import org.noear.solon.ai.mcp.server.prompt.PromptProvider;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 import org.noear.solon.ai.mcp.server.resource.FunctionResourceDesc;
 import org.noear.solon.ai.mcp.server.resource.ResourceProvider;
+import org.noear.solon.ai.media.Audio;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.media.Text;
 import org.noear.solon.ai.mcp.McpChannel;
@@ -465,6 +466,29 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 return Image.ofBase64(imageContent.getData(), imageContent.getMimeType());
             } else {
                 throw new IllegalArgumentException("The tool result content is not a image content.");
+            }
+        }
+    }
+
+    /**
+     * 调用工具并转为音频
+     *
+     * @param name 工具名
+     * @param args 调用参数
+     */
+    public Audio callToolAsAudio(String name, Map<String, Object> args) {
+        McpSchema.CallToolResult result = callTool(name, args);
+
+        if (Utils.isEmpty(result.getContent())) {
+            return null;
+        } else {
+            McpSchema.Content tmp = result.getContent().get(0);
+
+            if (tmp instanceof McpSchema.AudioContent) {
+                McpSchema.AudioContent audioContent = (McpSchema.AudioContent) tmp;
+                return Audio.ofBase64(audioContent.getData(), audioContent.getMimeType());
+            } else {
+                throw new IllegalArgumentException("The tool result content is not a audio content.");
             }
         }
     }
