@@ -21,5 +21,5 @@ package org.noear.solon.ai.mcp.server;
  * @author noear
  * @since 3.5
  */
-public interface IMcpServerEndpointDeclaration {
+public interface IMcpServerEndpoint {
 }
