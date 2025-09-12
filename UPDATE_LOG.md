@@ -17,6 +17,7 @@
 * 添加 solon-ai-mcp McpClientProperties:timeout 属性，方便简化超时配置（可省略 httpTimeout, requestTimeout, initializationTimeout）
 * 添加 solon-ai-mcp McpClientProvider:toolsChangeConsumer,resourcesChangeConsumer,resourcesUpdateConsumer,promptsChangeConsumer 配置支持
 * 添加 solon-ai-mcp McpClientProvider 缓存锁和变更刷新控制
+* 添加 solon-ai-mcp IMcpServerEndpoint 接口（方便可批量获取组件）
 * 优化 solon-ai-core RepositoryStorable 接口定义，用 save 替代 insert(标为弃用)
 * 调整 solon-ai-core FunctionToolDesc:doHandle 改用 ToolHandler 参数类型（之前为 Function），方便传递异常
 
