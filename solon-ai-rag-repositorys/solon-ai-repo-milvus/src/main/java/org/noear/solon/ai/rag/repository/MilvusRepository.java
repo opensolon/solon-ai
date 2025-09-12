@@ -19,10 +19,7 @@ import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.common.DataType;
 import io.milvus.v2.common.IndexParam;
 import io.milvus.v2.service.collection.request.*;
-import io.milvus.v2.service.vector.request.DeleteReq;
-import io.milvus.v2.service.vector.request.GetReq;
-import io.milvus.v2.service.vector.request.InsertReq;
-import io.milvus.v2.service.vector.request.SearchReq;
+import io.milvus.v2.service.vector.request.*;
 import io.milvus.v2.service.vector.request.SearchReq.SearchReqBuilder;
 import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.response.SearchResp;
@@ -190,13 +187,13 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
         List<JsonObject> docObjs = batch.stream().map(this::toJsonObject)
                 .collect(Collectors.toList());
 
-        InsertReq insertReq = InsertReq.builder()
+        UpsertReq upsertReq = UpsertReq.builder()
                 .collectionName(config.collectionName)
                 .data(docObjs)
                 .build();
 
         // 如果需要更新，请先移除再插入（即不支持更新）
-        config.client.insert(insertReq);
+        config.client.upsert(upsertReq);
     }
 
     @Override

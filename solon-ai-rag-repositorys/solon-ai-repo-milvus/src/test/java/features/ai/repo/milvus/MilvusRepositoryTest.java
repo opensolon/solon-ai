@@ -68,11 +68,15 @@ public class MilvusRepositoryTest {
         repository.save(Collections.singletonList(doc));
         String key = doc.getId();
 
+        Thread.sleep(1000);
+
         // 验证存储成功
         assertTrue(repository.existsById(key), "Document should exist after storing");
 
         // 删除文档
         repository.deleteById(doc.getId());
+
+        Thread.sleep(1000);
 
         // 验证删除成功
         assertFalse(repository.existsById(key), "Document should not exist after removal");
@@ -98,6 +102,8 @@ public class MilvusRepositoryTest {
         documents.add(doc2);
         documents.add(doc3);
         repository.save(documents);
+
+        Thread.sleep(1000);
 
         try {
             // 1. 使用OR表达式过滤进行搜索
