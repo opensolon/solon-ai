@@ -207,7 +207,7 @@ public class TcVectorDbRepository implements RepositoryStorable, RepositoryLifec
     }
 
     /**
-     * 批量存储文档
+     * 批量存储文档（支持更新）
      *
      * @param documents 要存储的文档列表
      * @throws IOException 如果存储过程发生IO错误

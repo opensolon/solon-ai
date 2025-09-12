@@ -87,6 +87,9 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
         }
     }
 
+    /**
+     * 批量存储文档（支持更新）
+     * */
     @Override
     public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
@@ -95,6 +98,13 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
                 progressCallback.accept(0, 0);
             }
             return;
+        }
+
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
+            }
         }
 
         // 分块处理
@@ -115,8 +125,6 @@ public class VectoRexRepository implements RepositoryStorable, RepositoryLifecyc
 
     private void batchInsertDo(List<Document> batch) throws IOException{
         for (Document doc : batch) {
-            doc.id(Utils.uuid());
-
             Map<String, Object> map = new HashMap<>();
             map.put(config.idFieldName, doc.getId());
             map.put(config.embeddingFieldName, doc.getEmbedding());

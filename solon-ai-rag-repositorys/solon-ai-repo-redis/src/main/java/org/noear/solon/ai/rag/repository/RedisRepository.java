@@ -143,7 +143,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
     }
 
     /**
-     * 存储文档列表
+     * 批量存储文档（支持更新）
      *
      * @param documents 待存储的文档列表
      * @throws IOException 如果存储过程中发生 IO 错误
@@ -156,6 +156,13 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
                 progressCallback.accept(0, 0);
             }
             return;
+        }
+
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
+            }
         }
 
         // 分块处理
@@ -177,10 +184,6 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
         try {
             pipeline = config.client.pipelined();
             for (Document doc : batch) {
-                if (doc.getId() == null) {
-                    doc.id(UUID.randomUUID().toString());
-                }
-
                 String key = config.keyPrefix + doc.getId();
 
                 // 存储为 JSON 格式，注意字段名称需要与索引定义匹配

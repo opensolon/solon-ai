@@ -161,7 +161,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
     }
 
     /**
-     * 存储文档列表
+     * 存储文档列表（支持更新）
      */
     @Override
     public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
@@ -171,6 +171,13 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
                 progressCallback.accept(0, 0);
             }
             return;
+        }
+
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
+            }
         }
 
         // 分块处理
@@ -229,10 +236,6 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
 
         try (PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
             for (Document doc : documents) {
-                if (doc.getId() == null) {
-                    doc.id(Utils.uuid());
-                }
-
                 int paramIndex = 1;
                 stmt.setString(paramIndex++, doc.getId());
                 stmt.setString(paramIndex++, doc.getContent());

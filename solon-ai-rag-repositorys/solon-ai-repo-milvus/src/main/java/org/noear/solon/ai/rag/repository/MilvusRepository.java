@@ -150,6 +150,9 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                 .build());
     }
 
+    /**
+     * 批量存储文档（支持更新）
+     * */
     @Override
     public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
         if (Utils.isEmpty(documents)) {
@@ -158,6 +161,13 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
                 progressCallback.accept(0, 0);
             }
             return;
+        }
+
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
+            }
         }
 
         // 分块处理
@@ -236,10 +246,6 @@ public class MilvusRepository implements RepositoryStorable, RepositoryLifecycle
 
     // 文档转为 JsonObject
     private JsonObject toJsonObject(Document doc) {
-        if (doc.getId() == null) {
-            doc.id(Utils.uuid());
-        }
-
         return gson.toJsonTree(doc).getAsJsonObject();
     }
 

@@ -371,7 +371,7 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
     }
 
     /**
-     * 批量存储文档
+     * 批量存储文档（支持更新）
      *
      * @param documents 要存储的文档列表
      * @throws IOException 如果存储过程中发生IO错误
@@ -384,6 +384,13 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
                 progressCallback.accept(0, 0);
             }
             return;
+        }
+
+        // 确保所有文档都有ID
+        for (Document doc : documents) {
+            if (Utils.isEmpty(doc.getId())) {
+                doc.id(Utils.uuid());
+            }
         }
 
         // 分块处理
@@ -403,10 +410,6 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
     private void batchInsertDo(List<Document> batch) throws IOException{
         StringBuilder buf = new StringBuilder();
         for (Document doc : batch) {
-            if (doc.getId() == null) {
-                doc.id(Utils.uuid());
-            }
-
             buf.append("{\"index\":{\"_index\":\"").append(config.indexName)
                     .append("\",\"_id\":\"").append(doc.getId()).append("\"}}\n");
 

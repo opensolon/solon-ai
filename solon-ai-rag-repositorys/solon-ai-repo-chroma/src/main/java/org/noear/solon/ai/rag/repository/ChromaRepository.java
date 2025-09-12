@@ -97,7 +97,7 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
     }
 
     /**
-     * 批量存储文档
+     * 批量存储文档（支持更新）
      */
     @Override
     public void insert(List<Document> documents, BiConsumer<Integer, Integer> progressCallback) throws IOException {
