@@ -17,7 +17,7 @@ package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.TmplUtil;
+import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.lang.Preview;
 
 import java.util.HashMap;
@@ -66,7 +66,7 @@ public class SystemMessageTemplate {
      * 生成
      */
     public SystemMessage generate() {
-        String content = TmplUtil.parse(tmpl, params);
+        String content = SnEL.evalTmpl(tmpl, params);
         return new SystemMessage(content);
     }
 }

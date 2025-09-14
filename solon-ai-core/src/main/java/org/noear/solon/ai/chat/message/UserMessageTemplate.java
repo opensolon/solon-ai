@@ -18,7 +18,7 @@ package org.noear.solon.ai.chat.message;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.TmplUtil;
+import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -88,7 +88,7 @@ public class UserMessageTemplate {
      * 生成
      */
     public UserMessage generate() {
-        String content = TmplUtil.parse(tmpl, params);
+        String content = SnEL.evalTmpl(tmpl, params);
         return new UserMessage(content, medias);
     }
 }
