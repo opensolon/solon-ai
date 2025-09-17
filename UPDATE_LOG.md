@@ -14,7 +14,7 @@
 ### 3.6.0
 
 * 优化 solon-ai-core XxxMessageTemplate 使用 SnEL 替代 TmplUtil
-* 修复 solon-ai-core chatModel.stream 与流控的兼容性。
+* 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
 
 ### 3.5.2
 
