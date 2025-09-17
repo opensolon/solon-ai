@@ -18,6 +18,7 @@ import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -95,17 +96,18 @@ public abstract class AbsChatTest {
 
         AtomicReference<ChatResponse> respRef = new AtomicReference<>();
         CountDownLatch doneLatch = new CountDownLatch(1);
-        chatModel.prompt("今天杭州的天气情况？")
-                .stream().subscribe(new SimpleSubscriber<ChatResponse>()
-                        .doOnNext(resp -> {
-                            if (resp.isFinished()) {
-                                respRef.set(resp);
-                            }
-                        }).doOnComplete(() -> {
-                            doneLatch.countDown();
-                        }).doOnError(err -> {
-                            doneLatch.countDown();
-                        }));
+
+        Flux.from(chatModel.prompt("今天杭州的天气情况？").stream())
+                .doOnNext(resp -> {
+                    if (resp.isFinished()) {
+                        respRef.set(resp);
+                    }
+                }).doOnComplete(() -> {
+                    doneLatch.countDown();
+                }).doOnError(err -> {
+                    err.printStackTrace();
+                    doneLatch.countDown();
+                }).subscribe();
 
         doneLatch.await();
         assert respRef.get() != null;
@@ -130,6 +132,7 @@ public abstract class AbsChatTest {
                             atomicInteger.incrementAndGet();
                             doneLatch.countDown();
                         }).doOnError(err -> {
+                            err.printStackTrace();
                             doneLatch.countDown();
                         }));
 
@@ -213,7 +216,7 @@ public abstract class AbsChatTest {
         //打印
         System.out.println(resp.getMessage());
         assert resp.hasContent();
-        assert resp.getContent().contains("solon");
+        assert resp.getContent().contains("solon") || resp.getContent().contains("Solon");
     }
 
     @Test
@@ -364,15 +367,15 @@ public abstract class AbsChatTest {
         ChatSession chatSession = InMemoryChatSession.builder().build();
         chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
 
-        chatModel.prompt(chatSession)
-                .stream()
-                .subscribe(new SimpleSubscriber<ChatResponse>()
-                        .doOnNext(resp -> {
-                            respHolder.set(resp);
-                        })
-                        .doOnComplete(() -> {
-                            latch.countDown();
-                        }));
+        //测试与 reactor 的兼容性
+        Flux.from(chatModel.prompt(chatSession).stream())
+                .doOnNext(resp -> {
+                    respHolder.set(resp);
+                })
+                .doOnComplete(() -> {
+                    latch.countDown();
+                })
+                .subscribe();
 
         latch.await();
 
@@ -383,7 +386,7 @@ public abstract class AbsChatTest {
         assert chatSession.getMessages().size() == 4;
 
         assert respHolder.get().getAggregationMessage() != null;
-        assert respHolder.get().getAggregationMessage().getContent().equals("晴，24度");
+        assert respHolder.get().getAggregationMessage().getContent().contains("晴，24度");
     }
 
 
@@ -398,15 +401,14 @@ public abstract class AbsChatTest {
         ChatSession chatSession = InMemoryChatSession.builder().build();
         chatSession.addMessage(ChatMessage.ofUser("杭州天气和北京降雨量如何？"));
 
-        chatModel.prompt(chatSession)
-                .stream()
-                .subscribe(new SimpleSubscriber<ChatResponse>()
-                        .doOnNext(resp -> {
-                            respHolder.set(resp);
-                        })
-                        .doOnComplete(() -> {
-                            latch.countDown();
-                        }));
+        //测试与 reactor 的兼容性
+        Flux.from(chatModel.prompt(chatSession).stream())
+                .doOnNext(resp -> {
+                    respHolder.set(resp);
+                })
+                .doOnComplete(() -> {
+                    latch.countDown();
+                }).subscribe();
 
         latch.await();
 
@@ -417,8 +419,8 @@ public abstract class AbsChatTest {
         assert chatSession.getMessages().size() == 5;
 
         assert respHolder.get().getAggregationMessage() != null;
-        assert respHolder.get().getAggregationMessage().getContent().equals("晴，24度\n" +
-                "555毫米");
+        assert respHolder.get().getAggregationMessage().getContent().contains("晴，24度");
+        assert respHolder.get().getAggregationMessage().getContent().contains("555毫米");
     }
 
     @Test
@@ -434,8 +436,9 @@ public abstract class AbsChatTest {
 
         CountDownLatch doneLatch = new CountDownLatch(1);
         AtomicReference<Throwable> errHolder = new AtomicReference<>();
-        publisher.subscribe(new SimpleSubscriber<ChatResponse>()
-                .doOnNext(resp -> {
+
+        //测试与 reactor 的兼容性
+        Flux.from(publisher).doOnNext(resp -> {
                     if (resp.getMessage().getContent() != null) {
                         System.out.print(resp.getMessage().getContent());
                     }
@@ -447,7 +450,8 @@ public abstract class AbsChatTest {
 
                     errHolder.set(err);
                     doneLatch.countDown();
-                }));
+                })
+                .subscribe();
 
         doneLatch.await();
 

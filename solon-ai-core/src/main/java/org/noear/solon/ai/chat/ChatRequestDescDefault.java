@@ -19,12 +19,12 @@ import org.noear.snack.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.*;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
-import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCallException;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.core.util.RankEntity;
@@ -265,7 +265,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private void onEventEnd(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
-        if (resp.isFinished() == false && resp.toolCallBuilders.size() > 0) {
+        if (resp.toolCallBuilders.size() > 0) {
             if (buildStreamToolMessage(resp, subscriber) == false) {
                 return;
             }
@@ -320,11 +320,11 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 }
             }
 
-            if (resp.isFinished()) {
-                if (resp.toolCallBuilders.size() > 0) {
-                    return buildStreamToolMessage(resp, subscriber);
-                }
-            }
+//            if (resp.isFinished()) {
+//                if (resp.toolCallBuilders.size() > 0) {
+//                    return buildStreamToolMessage(resp, subscriber);
+//                }
+//            }
         }
 
         return true;

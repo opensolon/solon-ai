@@ -15,7 +15,7 @@ public class DeepSeekR1Test extends AbsThinkTest{
     //JQC6M0GTNPGSCEXZOBUGUX0HVHCOLDIMN6XOSSSA
     private static final Logger log = LoggerFactory.getLogger(DeepSeekR1Test.class);
     private static final String apiUrl = "https://api.deepseek.com/v1/chat/completions";
-    private static final String apiKey = "sk-9f4415ddc570496581897c22e3d41a54";
+    private static final String apiKey = "sk-cc0af00391474299b8642af78f601c88";
     private static final String model = "deepseek-reasoner"; //deepseek-reasoner//deepseek-chat
 
     protected ChatModel.Builder getChatModelBuilder() {

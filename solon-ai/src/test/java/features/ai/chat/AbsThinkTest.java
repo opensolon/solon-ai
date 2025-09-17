@@ -12,6 +12,7 @@ import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,7 +85,9 @@ public abstract class AbsThinkTest {
 
         List<String> list = new ArrayList<>();
         CountDownLatch doneLatch = new CountDownLatch(1);
-        publisher.subscribe(new SimpleSubscriber<ChatResponse>()
+
+        //测试与 reactor 的兼容性
+        Flux.from(publisher)
                 .doOnNext(resp -> {
                     list.add(resp.getMessage().getContent());
                 }).doOnComplete(() -> {
@@ -93,7 +96,8 @@ public abstract class AbsThinkTest {
                 }).doOnError(err -> {
                     err.printStackTrace();
                     doneLatch.countDown();
-                }));
+                })
+                .subscribe();
 
         doneLatch.await();
 

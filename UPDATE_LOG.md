@@ -10,6 +10,9 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+### 3.5.3
+
+* 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
 
 ### 3.5.2
 
