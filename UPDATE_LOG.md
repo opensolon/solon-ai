@@ -1,4 +1,8 @@
 
+### 3.4.5
+
+* 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
+
 ### 3.4.4
 
 * 添加 solon-ai-dialect-dashscope 通过接口地址识别方言

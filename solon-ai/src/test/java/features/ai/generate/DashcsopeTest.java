@@ -1,9 +1,9 @@
-package features.ai.image;
+package features.ai.generate;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.image.ImageModel;
-import org.noear.solon.ai.image.ImagePrompt;
-import org.noear.solon.ai.image.ImageResponse;
+import org.noear.solon.ai.generate.GenerateModel;
+import org.noear.solon.ai.generate.GeneratePrompt;
+import org.noear.solon.ai.generate.GenerateResponse;
 import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,39 +18,43 @@ public class DashcsopeTest {
     private static final Logger log = LoggerFactory.getLogger(features.ai.chat.DashscopeTest.class);
 
     private static final String apiKey = "sk-1ffe449611a74e61ad8e71e1b35a9858";
+    private static final String taskUrl = "https://dashscope.aliyuncs.com/api/v1/tasks/";
 
 
     @Test
-    public void case1() throws IOException {
+    public void case1_text2image() throws IOException {
         //生成图片
         String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis";
-        ImageModel chatModel = ImageModel.of(apiUrl)
+        GenerateModel generateModel = GenerateModel.of(apiUrl)
                 .apiKey(apiKey)
+                .taskUrl(taskUrl)
                 .model("wanx2.1-t2i-turbo")
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
 
         //一次性返回
-        ImageResponse resp = chatModel.prompt("a white siamese cat")
+        GenerateResponse resp = generateModel.prompt("a white siamese cat")
                 .options(o -> o.size("1024x1024"))
                 .call();
 
         //打印消息
-        log.info("{}", resp.getImage());
-        assert resp.getImage().getUrl() != null;
+        log.info("{}", resp.getContent());
+        assert resp.getContent().getUrl() != null;
+        assert resp.getContent().getUrl().startsWith("https://");
     }
 
     @Test
-    public void case2() throws IOException {
+    public void case2_image2image() throws IOException {
         //编辑图片
         String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image2image/image-synthesis";
-        ImageModel imageModel = ImageModel.of(apiUrl)
+        GenerateModel generateModel = GenerateModel.of(apiUrl)
                 .apiKey(apiKey)
+                .taskUrl(taskUrl)
                 .model("wanx2.1-imageedit")
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
 
-        ImageResponse resp = imageModel.prompt(ImagePrompt.ofKeyValues(
+        GenerateResponse resp = generateModel.prompt(GeneratePrompt.ofKeyValues(
                         "function", "stylization_all",
                         "prompt", "转换成法国绘本风格",
                         "base_image_url", "http://wanx.alicdn.com/material/20250318/stylization_all_1.jpeg")
@@ -59,20 +63,22 @@ public class DashcsopeTest {
                 .call();
 
         log.warn("{}", resp.getData());
-        assert resp.getImage().getUrl() != null;
+        assert resp.getContent().getUrl() != null;
+        assert resp.getContent().getUrl().startsWith("https://");
     }
 
     @Test
-    public void case3() throws IOException {
+    public void case3_video() throws IOException {
         //生成动画
         String apiUrl = "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis";
-        ImageModel imageModel = ImageModel.of(apiUrl)
+        GenerateModel generateModel = GenerateModel.of(apiUrl)
                 .apiKey(apiKey)
+                .taskUrl(taskUrl)
                 .model("wan2.2-i2v-plus")
                 .headerSet("X-DashScope-Async", "enable")
                 .build();
 
-        ImageResponse resp = imageModel.prompt(ImagePrompt.ofKeyValues(
+        GenerateResponse resp = generateModel.prompt(GeneratePrompt.ofKeyValues(
                         "prompt", "一只猫在草地上奔跑",
                         "img_url", "https://cdn.translate.alibaba.com/r/wanx-demo-1.png")
                 )
@@ -81,6 +87,7 @@ public class DashcsopeTest {
                 .call();
 
         log.warn("{}", resp.getData());
-        assert resp.getImage().getUrl() != null;
+        assert resp.getContent().getUrl() != null;
+        assert resp.getContent().getUrl().startsWith("https://");
     }
 }
