@@ -11,6 +11,11 @@
 *  channel 概念改为 transport （并保持兼容）???
 
 
+### 3.6.0
+
+* 优化 solon-ai-core XxxMessageTemplate 使用 SnEL 替代 TmplUtil
+* 修复 solon-ai-core chatModel.stream 与流控的兼容性。
+
 ### 3.5.2
 
 * 添加 solon-ai-core ToolSchemaUtil 简化方法

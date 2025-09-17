@@ -265,7 +265,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private void onEventEnd(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
-        if (resp.isFinished() == false && resp.toolCallBuilders.size() > 0) {
+        if (resp.toolCallBuilders.size() > 0) {
             if (buildStreamToolMessage(resp, subscriber) == false) {
                 return;
             }
@@ -320,11 +320,11 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 }
             }
 
-            if (resp.isFinished()) {
-                if (resp.toolCallBuilders.size() > 0) {
-                    return buildStreamToolMessage(resp, subscriber);
-                }
-            }
+//            if (resp.isFinished()) {
+//                if (resp.toolCallBuilders.size() > 0) {
+//                    return buildStreamToolMessage(resp, subscriber);
+//                }
+//            }
         }
 
         return true;
