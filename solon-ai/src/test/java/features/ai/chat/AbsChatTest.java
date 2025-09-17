@@ -96,18 +96,19 @@ public abstract class AbsChatTest {
 
         AtomicReference<ChatResponse> respRef = new AtomicReference<>();
         CountDownLatch doneLatch = new CountDownLatch(1);
-        chatModel.prompt("今天杭州的天气情况？")
-                .stream().subscribe(new SimpleSubscriber<ChatResponse>()
-                        .doOnNext(resp -> {
-                            if (resp.isFinished()) {
-                                respRef.set(resp);
-                            }
-                        }).doOnComplete(() -> {
-                            doneLatch.countDown();
-                        }).doOnError(err -> {
-                            err.printStackTrace();
-                            doneLatch.countDown();
-                        }));
+
+        Flux.from(chatModel.prompt("今天杭州的天气情况？").stream())
+                .doOnNext(resp -> {
+                    if (resp.isFinished()) {
+                        respRef.set(resp);
+                    }
+                }).doOnComplete(() -> {
+                    doneLatch.countDown();
+                }).doOnError(err -> {
+                    err.printStackTrace();
+                    doneLatch.countDown();
+                })
+                .subscribe();
 
         doneLatch.await();
         assert respRef.get() != null;
