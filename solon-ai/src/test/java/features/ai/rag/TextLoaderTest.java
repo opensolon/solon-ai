@@ -17,7 +17,7 @@ public class TextLoaderTest {
     @Test
     public void case1() throws Throwable {
         TextLoader textLoader = new TextLoader(ResourceUtil.getResource("app.yml"));
-        textLoader.options(o -> o.charset("utf-8"));
+        //textLoader.options(o -> o.charset("utf-8"));
 
         List<Document> documentList = textLoader.load();
 
