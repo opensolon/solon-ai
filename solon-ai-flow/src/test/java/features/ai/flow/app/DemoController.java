@@ -30,8 +30,8 @@ public class DemoController {
         FlowContext flowContext = FlowContext.of();
 
         //事件
-        flowContext.<NodeEvent, String>eventBus().listen(Events.EVENT_FLOW_NODE_END, (event) -> {
-            event.getContent().getContext();
+        flowContext.eventBus().<NodeEvent>listen(Events.EVENT_FLOW_NODE_END, (event) -> {
+            event.getPayload().getContext();
         });
 
         //保存会话记录
