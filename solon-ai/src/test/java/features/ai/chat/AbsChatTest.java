@@ -38,7 +38,7 @@ public abstract class AbsChatTest {
     @Test
     public void case1_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
-                .timeout(Duration.ofSeconds(600))
+                .timeout(Duration.ofMinutes(10))
                 .build();
 
         //一次性返回
