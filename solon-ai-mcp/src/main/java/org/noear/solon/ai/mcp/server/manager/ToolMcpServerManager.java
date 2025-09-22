@@ -102,7 +102,7 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
                             }
                         } catch (Throwable ex) {
                             ex = Utils.throwableUnwrap(ex);
-                            throw new McpException(ex.getMessage(), ex);
+                            return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(ex.getMessage())), true);
                         } finally {
                             ContextHolder.currentRemove();
                         }
