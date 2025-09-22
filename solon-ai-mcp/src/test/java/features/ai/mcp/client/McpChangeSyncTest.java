@@ -2,6 +2,7 @@ package features.ai.mcp.client;
 
 import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.mcp.McpChannel;
@@ -91,8 +92,8 @@ public class McpChangeSyncTest {
                 }));
 
 
-        Thread.sleep(10);
-        assert mcpClient.getTools().size() == 2;
+        Thread.sleep(100);
+        Assertions.assertEquals(2, mcpClient.getTools().size());
 
         serverEndpointProvider.addTool(new FunctionToolDesc("hello2")
                 .description("打招呼")
