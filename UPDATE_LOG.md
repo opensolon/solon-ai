@@ -2,6 +2,9 @@
 ### 3.4.5
 
 * 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
+* 调整 solon-ai-map getPrompt,readResource,callTool 取消自动异常转换（侧重原始返回）
+* 调整 solon-ai-map callTool 错误结果传递，自动添加 'Error:' （方便 llm 识别）
+* 修复 solon-ai-mcp callTool isError=true 时，不能正常与 llm 交互的问题
 
 ### 3.4.4
 
