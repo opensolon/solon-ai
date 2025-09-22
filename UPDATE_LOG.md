@@ -17,6 +17,7 @@
 * 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
 * 修复 solon-ai-mcp callTool isError=true 时，不能正常与 llm 交互的问题
 * 修复 solon-ai-mcp ToolAnnotations:returnDirect 为 null 时的传递兼容性
+* 调整 solon-ai-map getPrompt,readResource,callTool 取消自动异常转换（侧重原始返回）
 
 ### 3.5.2
 

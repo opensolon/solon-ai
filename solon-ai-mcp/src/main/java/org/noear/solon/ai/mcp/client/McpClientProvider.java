@@ -505,16 +505,13 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      */
     public McpSchema.CallToolResult callTool(String name, Map<String, Object> args) {
         McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
-        McpSchema.CallToolResult result = getClient().callTool(callToolRequest)
-                .doOnError(err -> {
-                    this.reset();
-                })
-                .block();
+        McpSchema.CallToolResult result = getClient().callTool(callToolRequest).block();
 
         if (result.getIsError() != null && result.getIsError()) {
             log.warn("The callTool result is error: {}", result);
         }
 
+        //方便调试看变量
         return result;
     }
 
@@ -549,19 +546,11 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param uri 资源地址
      */
     public McpSchema.ReadResourceResult readResource(String uri) {
-        try {
-            McpSchema.ReadResourceRequest callToolRequest = new McpSchema.ReadResourceRequest(uri);
-            McpSchema.ReadResourceResult result = getClient().readResource(callToolRequest).block();
+        McpSchema.ReadResourceRequest callToolRequest = new McpSchema.ReadResourceRequest(uri);
+        McpSchema.ReadResourceResult result = getClient().readResource(callToolRequest).block();
 
-            if (Utils.isEmpty(result.getContents())) {
-                throw new McpException("Read resource Failed");
-            } else {
-                return result;
-            }
-        } catch (RuntimeException ex) {
-            this.reset();
-            throw ex;
-        }
+        //方便调试看变量
+        return result;
     }
 
     /// /////////////////////////////
@@ -609,19 +598,11 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param args 参数
      */
     public McpSchema.GetPromptResult getPrompt(String name, Map<String, Object> args) {
-        try {
-            McpSchema.GetPromptRequest callToolRequest = new McpSchema.GetPromptRequest(name, args);
-            McpSchema.GetPromptResult result = getClient().getPrompt(callToolRequest).block();
+        McpSchema.GetPromptRequest callToolRequest = new McpSchema.GetPromptRequest(name, args);
+        McpSchema.GetPromptResult result = getClient().getPrompt(callToolRequest).block();
 
-            if (Utils.isEmpty(result.getMessages())) {
-                throw new McpException("Read resource Failed");
-            } else {
-                return result;
-            }
-        } catch (RuntimeException ex) {
-            this.reset();
-            throw ex;
-        }
+        //方便调试看变量
+        return result;
     }
 
     /// ///////////
