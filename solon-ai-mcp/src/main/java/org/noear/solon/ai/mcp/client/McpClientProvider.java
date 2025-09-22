@@ -676,7 +676,12 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             String name = tool.getName();
             String title = tool.getTitle();
             String description = tool.getDescription();
-            Boolean returnDirect = (tool.getAnnotations() == null ? false : tool.getAnnotations().getReturnDirect());
+
+            Boolean returnDirect = (tool.getAnnotations() == null ? null : tool.getAnnotations().getReturnDirect());
+            if (returnDirect == null) {
+                returnDirect = false;
+            }
+
             String inputSchema = ONode.load(tool.getInputSchema()).toJson();
             String outputSchema = (tool.getOutputSchema() == null ? null : ONode.load(tool.getOutputSchema()).toJson());
 
