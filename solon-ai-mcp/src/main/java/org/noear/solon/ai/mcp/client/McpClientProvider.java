@@ -504,19 +504,18 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param args 调用参数
      */
     public McpSchema.CallToolResult callTool(String name, Map<String, Object> args) {
-        try {
-            McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
-            McpSchema.CallToolResult result = getClient().callTool(callToolRequest).block();
+        McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
+        McpSchema.CallToolResult result = getClient().callTool(callToolRequest)
+                .doOnError(err -> {
+                    this.reset();
+                })
+                .block();
 
-            if (result.getIsError() != null || result.getIsError()) {
-                log.warn("The callTool result is error: {}", result);
-            }
-
-            return result;
-        } catch (RuntimeException ex) {
-            this.reset();
-            throw ex;
+        if (result.getIsError() != null && result.getIsError()) {
+            log.warn("The callTool result is error: {}", result);
         }
+
+        return result;
     }
 
     /// /////////////////////////////
