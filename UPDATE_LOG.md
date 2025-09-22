@@ -15,6 +15,7 @@
 
 * 优化 solon-ai-core XxxMessageTemplate 使用 SnEL 替代 TmplUtil
 * 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
+* 修复 solon-ai-mcp callTool isError=true 时，不能正常与 llm 交互的问题
 
 ### 3.5.2
 

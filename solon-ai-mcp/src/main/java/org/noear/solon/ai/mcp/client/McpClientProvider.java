@@ -48,6 +48,8 @@ import org.noear.solon.data.util.StringMutexLock;
 import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.io.Closeable;
@@ -87,6 +89,8 @@ import java.util.function.Supplier;
  * @since 3.1
  */
 public class McpClientProvider implements ToolProvider, ResourceProvider, PromptProvider, Closeable {
+    static final Logger log = LoggerFactory.getLogger(McpClientProvider.class);
+
     private final ReentrantLock LOCKER = new ReentrantLock();
 
 
@@ -504,15 +508,11 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
             McpSchema.CallToolResult result = getClient().callTool(callToolRequest).block();
 
-            if (result.getIsError() == null || result.getIsError() == false) {
-                return result;
-            } else {
-                if (Utils.isEmpty(result.getContent())) {
-                    throw new McpException("Call Toll Failed");
-                } else {
-                    throw new McpException(result.getContent().get(0).toString());
-                }
+            if (result.getIsError() != null || result.getIsError()) {
+                log.warn("The callTool result is error: {}", result);
             }
+
+            return result;
         } catch (RuntimeException ex) {
             this.reset();
             throw ex;
