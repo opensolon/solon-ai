@@ -444,7 +444,17 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             McpSchema.Content tmp = result.getContent().get(0);
 
             if (tmp instanceof McpSchema.TextContent) {
-                return Text.of(false, ((McpSchema.TextContent) tmp).getText());
+                String textContent = ((McpSchema.TextContent) tmp).getText();
+                if (result.getIsError() != null && result.getIsError()) {
+                    //如果是错误信息，自动添加 Error: 开头（方便 llm 识别）
+                    if (textContent.startsWith("Error:")) {
+                        return Text.of(false, textContent);
+                    } else {
+                        return Text.of(false, "Error: " + textContent);
+                    }
+                } else {
+                    return Text.of(false, textContent);
+                }
             } else {
                 throw new IllegalArgumentException("The tool result content is not a text content.");
             }
@@ -508,7 +518,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         McpSchema.CallToolResult result = getClient().callTool(callToolRequest).block();
 
         if (result.getIsError() != null && result.getIsError()) {
-            log.warn("The callTool result is error: {}", result);
+            log.warn("The tool result is error: {}", result);
         }
 
         //方便调试看变量
@@ -566,23 +576,26 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         McpSchema.GetPromptResult result = getPrompt(name, args);
 
-        for (McpSchema.PromptMessage pm : result.getMessages()) {
-            McpSchema.Content content = pm.getContent();
-            if (pm.getRole() == McpSchema.Role.ASSISTANT) {
-                if (content instanceof McpSchema.TextContent) {
-                    tmp.add(ChatMessage.ofAssistant(((McpSchema.TextContent) content).getText()));
-                }
-            } else {
-                if (content instanceof McpSchema.TextContent) {
-                    tmp.add(ChatMessage.ofUser(((McpSchema.TextContent) content).getText()));
-                } else if (content instanceof McpSchema.ImageContent) {
-                    McpSchema.ImageContent imageContent = ((McpSchema.ImageContent) content);
-                    String contentData = imageContent.getData();
+        if (Utils.isNotEmpty(result.getMessages())) {
+            //如果非空
+            for (McpSchema.PromptMessage pm : result.getMessages()) {
+                McpSchema.Content content = pm.getContent();
+                if (pm.getRole() == McpSchema.Role.ASSISTANT) {
+                    if (content instanceof McpSchema.TextContent) {
+                        tmp.add(ChatMessage.ofAssistant(((McpSchema.TextContent) content).getText()));
+                    }
+                } else {
+                    if (content instanceof McpSchema.TextContent) {
+                        tmp.add(ChatMessage.ofUser(((McpSchema.TextContent) content).getText()));
+                    } else if (content instanceof McpSchema.ImageContent) {
+                        McpSchema.ImageContent imageContent = ((McpSchema.ImageContent) content);
+                        String contentData = imageContent.getData();
 
-                    if (contentData.contains("://")) {
-                        tmp.add(ChatMessage.ofUser(Image.ofUrl(contentData)));
-                    } else {
-                        tmp.add(ChatMessage.ofUser(Image.ofBase64(contentData, imageContent.getMimeType())));
+                        if (contentData.contains("://")) {
+                            tmp.add(ChatMessage.ofUser(Image.ofUrl(contentData)));
+                        } else {
+                            tmp.add(ChatMessage.ofUser(Image.ofBase64(contentData, imageContent.getMimeType())));
+                        }
                     }
                 }
             }
