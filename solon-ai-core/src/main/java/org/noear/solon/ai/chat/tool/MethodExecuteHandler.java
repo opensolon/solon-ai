@@ -17,8 +17,9 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack.ONode;
 import org.noear.snack.core.Feature;
+import org.noear.solon.core.handle.AbstractEntityReader;
+import org.noear.solon.core.handle.ActionExecuteHandler;
 import org.noear.solon.core.handle.Context;
-import org.noear.solon.core.mvc.ActionExecuteHandlerDefault;
 import org.noear.solon.core.util.LazyReference;
 import org.noear.solon.core.wrap.MethodWrap;
 import org.noear.solon.core.wrap.ParamWrap;
@@ -33,13 +34,18 @@ import java.util.List;
  * @since 1.0
  * @since 2.8
  * */
-public class MethodExecuteHandler extends ActionExecuteHandlerDefault {
+public class MethodExecuteHandler extends AbstractEntityReader implements ActionExecuteHandler {
     private static MethodExecuteHandler instance = new MethodExecuteHandler();
     public static MethodExecuteHandler getInstance(){
         return instance;
     }
 
     public static final String MCP_BODY_ATTR = "MCP_BODY";
+
+    @Override
+    public Object[] resolveArguments(Context ctx, Object target, MethodWrap mWrap) throws Throwable {
+        return doRead(ctx, target, mWrap);
+    }
 
     /**
      * 转换 body
