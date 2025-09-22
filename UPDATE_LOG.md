@@ -13,6 +13,7 @@
 ### 3.5.3
 
 * 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
+* 修复 solon-ai-mcp ToolAnnotations:returnDirect 为 null 时的传递兼容性
 
 ### 3.5.2
 
