@@ -19,6 +19,15 @@
 * 修复 solon-ai-mcp ToolAnnotations:returnDirect 为 null 时的传递兼容性
 * 调整 solon-ai-map getPrompt,readResource,callTool 取消自动异常转换（侧重原始返回）
 
+
+### 3.5.3
+
+* 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
+* 调整 solon-ai-map getPrompt,readResource,callTool 取消自动异常转换（侧重原始返回）
+* 调整 solon-ai-map callTool 错误结果传递，自动添加 'Error:' （方便 llm 识别）
+* 修复 solon-ai-mcp callTool isError=true 时，不能正常与 llm 交互的问题
+* 修复 solon-ai-mcp ToolAnnotations:returnDirect 为 null 时的传递兼容性
+
 ### 3.5.2
 
 * 添加 solon-ai-core ToolSchemaUtil 简化方法
@@ -46,7 +55,6 @@
 * 修复 solon-ai-mcp SSE 传输时 message 端点未附加 context-path 的问题
 * mcp `McpSchema:*Capabilities` 添加 `@JsonIgnoreProperties(ignoreUnknown = true)` 增强跨协议版本兼容性
 
-
 ### 3.5.0
 
 * 新增 solon-ai-mcp mcp-java-sdk v0.11.0 适配（支持 2025-03-26 版本协议）
@@ -54,6 +62,12 @@
   * 如果默认值仍为 sse ，升级后可能忘了修改了升级
   * 如果默认值改为 streamable，升级后会造成不兼容
 
+### 3.4.5
+
+* 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
+* 调整 solon-ai-map getPrompt,readResource,callTool 取消自动异常转换（侧重原始返回）
+* 调整 solon-ai-map callTool 错误结果传递，自动添加 'Error:' （方便 llm 识别）
+* 修复 solon-ai-mcp callTool isError=true 时，不能正常与 llm 交互的问题
 
 ### 3.4.4
 
