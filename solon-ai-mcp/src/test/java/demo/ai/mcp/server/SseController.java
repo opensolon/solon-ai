@@ -15,7 +15,7 @@ import java.util.UUID;
  */
 @Slf4j
 @Controller
-public class McpSseTest {
+public class SseController {
     @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
     @Mapping("/test/sse1")
     public Flux<SseEvent> sse1() {
