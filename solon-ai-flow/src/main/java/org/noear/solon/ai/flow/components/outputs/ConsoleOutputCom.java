@@ -38,7 +38,7 @@ public class ConsoleOutputCom extends VarOutputCom implements AiIoComponent {
         super.setOutput(context, node, data);
 
         //格式化输出
-        String format = node.getMeta(META_FORMAT);
+        String format = node.getMetaAsString(META_FORMAT);
         if (Utils.isEmpty(format)) {
             System.out.println(data);
         } else {

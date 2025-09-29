@@ -30,6 +30,7 @@ import org.noear.solon.ai.flow.components.AiPropertyComponent;
 import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.ai.mcp.client.McpProviders;
 import org.noear.solon.annotation.Component;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ClassUtil;
 import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.flow.FlowContext;
@@ -60,7 +61,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
         ChatModel chatModel = (ChatModel) node.attachment;
         if (chatModel == null) {
             ChatConfig chatConfig = ONode.load(node.getMeta(META_CHAT_CONFIG)).toObject(ChatConfig.class);
-            assert chatConfig != null;
+            Assert.notNull(chatConfig, "chatConfig");
             ChatModel.Builder chatModelBuilder = ChatModel.of(chatConfig);
 
             //toolProviders
@@ -101,14 +102,14 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
             ChatSession chatSession = context.computeIfAbsent(chatSessionKey, k -> InMemoryChatSession.builder().build());
 
             if (Utils.isEmpty(chatSession.getMessages())) {
-                String systemPrompt = node.getMeta(META_SYSTEM_PROMPT);
+                String systemPrompt = node.getMetaAsString(META_SYSTEM_PROMPT);
                 if (Utils.isNotEmpty(systemPrompt)) {
                     String systemPromptStr = SnEL.evalTmpl(systemPrompt, context.model());
                     chatSession.addMessage(ChatMessage.ofSystem(systemPromptStr));
                 }
             }
 
-            boolean isStream = "true".equals(node.getMeta(META_STREAM));
+            boolean isStream = "true".equals(node.getMetaAsString(META_STREAM));
 
             if (data instanceof String) {
                 //字符串

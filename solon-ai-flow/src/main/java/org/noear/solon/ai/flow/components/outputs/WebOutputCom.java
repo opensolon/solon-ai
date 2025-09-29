@@ -49,7 +49,7 @@ public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
         Context ctx = Context.current();
 
         //格式化输出
-        String format = node.getMeta(META_FORMAT);
+        String format = node.getMetaAsString(META_FORMAT);
         if (Utils.isEmpty(format)) {
             final StringBuilder buf = new StringBuilder();
 
