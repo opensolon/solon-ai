@@ -10,6 +10,11 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+
+### 3.5.5
+
+* 修复 solon-ai-mcp WebRxSseClientTransport:sendMessage 使用 okhttp 适配时可能会出错的问题（原因：没有显式申明 accept）
+
 ### 3.5.3
 
 * 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
