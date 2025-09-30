@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.net.http.impl.okhttp.OkHttpUtilsFactory;
 
 import java.util.Collection;
 
@@ -16,7 +17,25 @@ public class ModelscopeTest {
         //https://modelscope.cn/mcp/servers/@antvis/mcp-server-chart
         McpClientProvider clientProvider = McpClientProvider.builder()
                 .channel(McpChannel.SSE)
-                .apiUrl("https://mcp.api-inference.modelscope.net/9059e0e1da5743/sse")
+                .apiUrl("https://mcp.api-inference.modelscope.net/ec844bf2103647/sse")
+                .build();
+
+        Collection<FunctionTool> tools = clientProvider.getTools();
+
+        System.out.println("------------------------------------------------");
+        System.out.println(tools);
+
+        assert tools != null;
+        assert tools.size() > 1;
+    }
+
+    @Test
+    public void case1_okhttp() {
+        //https://modelscope.cn/mcp/servers/@antvis/mcp-server-chart
+        McpClientProvider clientProvider = McpClientProvider.builder()
+                .channel(McpChannel.SSE)
+                .httpFactory(OkHttpUtilsFactory.getInstance())
+                .apiUrl("https://mcp.api-inference.modelscope.net/ec844bf2103647/sse")
                 .build();
 
         Collection<FunctionTool> tools = clientProvider.getTools();
@@ -33,7 +52,25 @@ public class ModelscopeTest {
         //https://modelscope.cn/mcp/servers/chevalblanc/MCP-BING-CN
         McpClientProvider clientProvider = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("https://mcp.api-inference.modelscope.net/a707ccd11ea647/mcp")
+                .apiUrl("https://mcp.api-inference.modelscope.net/a6c83fbd332d4f/mcp")
+                .build();
+
+        Collection<FunctionTool> tools = clientProvider.getTools();
+
+        System.out.println("------------------------------------------------");
+        System.out.println(tools);
+
+        assert tools != null;
+        assert tools.size() > 1;
+    }
+
+    @Test
+    public void case2_okhttp() {
+        //https://modelscope.cn/mcp/servers/chevalblanc/MCP-BING-CN
+        McpClientProvider clientProvider = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
+                .httpFactory(OkHttpUtilsFactory.getInstance())
+                .apiUrl("https://mcp.api-inference.modelscope.net/a6c83fbd332d4f/mcp")
                 .build();
 
         Collection<FunctionTool> tools = clientProvider.getTools();

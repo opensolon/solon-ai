@@ -19,6 +19,8 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.ai.util.ProxyDesc;
 import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
+import org.noear.solon.net.http.HttpUtilsFactory;
+import org.noear.solon.net.http.impl.jdk.JdkHttpUtilsFactory;
 import reactor.core.publisher.Mono;
 
 import java.net.InetSocketAddress;
@@ -94,9 +96,13 @@ public class McpClientProperties {
 
     /**
      * http ssl 提供者
-     *
      */
     private HttpSslSupplier httpSsl;
+
+    /**
+     * http 工厂
+     */
+    private HttpUtilsFactory httpFactory = JdkHttpUtilsFactory.getInstance();
 
     /**
      * mcp 请求超时（默认随 timeout）
@@ -280,6 +286,14 @@ public class McpClientProperties {
 
     public HttpSslSupplier getHttpSsl() {
         return httpSsl;
+    }
+
+    public void setHttpFactory(HttpUtilsFactory httpFactory) {
+        this.httpFactory = httpFactory;
+    }
+
+    public HttpUtilsFactory getHttpFactory() {
+        return httpFactory;
     }
 
     public Duration getRequestTimeout() {
