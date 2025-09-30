@@ -2,6 +2,7 @@ package lab.ai.mcp.client;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 
 import java.util.Collection;
@@ -14,7 +15,8 @@ public class ModelscopeTest {
     public void case1() {
         //https://modelscope.cn/mcp/servers/@antvis/mcp-server-chart
         McpClientProvider clientProvider = McpClientProvider.builder()
-                .apiUrl("https://mcp.api-inference.modelscope.net/381da551144140/sse")
+                .channel(McpChannel.SSE)
+                .apiUrl("https://mcp.api-inference.modelscope.net/d48901dcf2604b/sse")
                 .build();
 
         Collection<FunctionTool> tools = clientProvider.getTools();

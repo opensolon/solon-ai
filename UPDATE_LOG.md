@@ -14,6 +14,7 @@
 ### 3.6.0
 
 * 优化 solon-ai-core XxxMessageTemplate 使用 SnEL 替代 TmplUtil
+* 修复 solon-ai-mcp WebRxSseClientTransport 使用 okhttp 适配时可能会出错的问题（原因：没有显式申明 accept）
 
 
 ### 3.5.3
