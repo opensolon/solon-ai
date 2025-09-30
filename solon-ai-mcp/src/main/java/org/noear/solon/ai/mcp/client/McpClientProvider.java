@@ -48,6 +48,7 @@ import org.noear.solon.data.util.StringMutexLock;
 import org.noear.solon.net.http.HttpSslSupplier;
 import org.noear.solon.net.http.HttpTimeout;
 import org.noear.solon.net.http.HttpUtilsBuilder;
+import org.noear.solon.net.http.HttpUtilsFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -190,7 +191,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
             //超时
             HttpUtilsBuilder webBuilder = new HttpUtilsBuilder();
+
             webBuilder.baseUri(baseUri);
+            webBuilder.factory(clientProps.getHttpFactory());
 
             if (Utils.isNotEmpty(clientProps.getApiKey())) {
                 webBuilder.headerSet("Authorization", "Bearer " + clientProps.getApiKey());
@@ -913,6 +916,11 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         public Builder httpSsl(HttpSslSupplier httpSslSupplier) {
             props.setHttpSsl(httpSslSupplier);
+            return this;
+        }
+
+        public Builder httpFactory(HttpUtilsFactory httpUtilsFactory) {
+            props.setHttpFactory(httpUtilsFactory);
             return this;
         }
 
