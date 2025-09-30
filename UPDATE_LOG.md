@@ -15,7 +15,7 @@
 
 * 优化 solon-ai-core XxxMessageTemplate 使用 SnEL 替代 TmplUtil
 * 添加 McpClientProvider:httpFactory 默认为 jdkhttp（okhttp 有些平台不兼容），不再随 HttpUtils 的全局走
-* 修复 solon-ai-mcp WebRxSseClientTransport 使用 okhttp 适配时可能会出错的问题（原因：没有显式申明 accept）
+* 添加 solon-ai-mcp McpClientProvider:httpFactory 默认为 jdkhttp（okhttp 有些平台不兼容），不再随 HttpUtils 的全局走
 
 
 ### 3.5.3
