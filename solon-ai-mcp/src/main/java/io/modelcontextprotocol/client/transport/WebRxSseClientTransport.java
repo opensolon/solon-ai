@@ -249,7 +249,6 @@ public class WebRxSseClientTransport implements McpClientTransport {
 
 				return Mono.fromFuture(webClientBuilder.build(messageEndpointUri)
 								.contentType(MimeType.APPLICATION_JSON_VALUE)
-                                .accept(MimeType.TEXT_EVENT_STREAM_VALUE)
 								.header(HttpHeaders.PROTOCOL_VERSION, MCP_PROTOCOL_VERSION)
 								.bodyOfJson(jsonText)
 								.execAsync("POST"))
