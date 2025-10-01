@@ -11,6 +11,10 @@
 *  channel 概念改为 transport （并保持兼容）???
 
 
+### 3.5.6
+
+* mcp 移除 WebRxSseClientTransport:sendMessage 的 accept 声明（是在 3.5.5 时加的，此处没必要）
+
 ### 3.5.5
 
 * 添加 solon-ai-mcp McpClientProvider:httpFactory 默认为 jdkhttp（okhttp 有些平台不兼容），不再随 HttpUtils 的全局走
