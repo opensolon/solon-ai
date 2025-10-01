@@ -55,9 +55,9 @@ public class GiteeaiTest {
 
         //一次性返回
         GenerateResponse resp = generateModel.prompt(GeneratePrompt.ofKeyValues(
+                        "prompt", "大海的哥",
                         "task", "text2music"
                 ))
-                .options(o -> o.size("1024x1024"))
                 .call();
 
         log.warn("{}", resp.getData());
