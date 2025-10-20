@@ -13,10 +13,38 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 This project includes:
+  Apache Commons Codec under Apache-2.0
+  Apache Commons Collections under Apache License, Version 2.0
+  Apache Commons Compress under Apache-2.0
+  Apache Commons CSV under Apache-2.0
+  Apache Commons IO under Apache-2.0
+  Apache Commons Lang under Apache-2.0
+  Apache Commons Logging under Apache-2.0
+  Apache Commons Math under Apache License, Version 2.0
+  Apache James :: Mime4j :: Core under Apache License, Version 2.0
+  Apache James :: Mime4j :: DOM under Apache License, Version 2.0
+  Apache Log4j API under Apache-2.0
+  Apache POI under Apache License, Version 2.0
+  Apache POI - API based on OPC and OOXML schemas under Apache License, Version 2.0
+  Apache POI - Common under Apache License, Version 2.0
+  Apache Tika core under Apache-2.0
+  Apache Tika html parser module under Apache-2.0
+  Apache Tika mail commons under Apache-2.0
+  Apache Tika Microsoft parser module under Apache-2.0
+  Apache Tika text parser module under Apache-2.0
+  Apache Tika XML parser module under Apache-2.0
+  Apache Tika ZIP commons under Apache-2.0
   asm under BSD-3-Clause
+  Bouncy Castle ASN.1 Extension and Utility APIs under Bouncy Castle Licence
+  Bouncy Castle JavaMail S/MIME APIs under Bouncy Castle Licence
+  Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs under Bouncy Castle Licence
+  Bouncy Castle Provider under Bouncy Castle Licence
   Byte Buddy (without dependencies) under Apache License, Version 2.0
   Byte Buddy agent under Apache License, Version 2.0
-  HikariCP under The Apache Software License, Version 2.0
+  curvesapi under BSD License
+  Jackcess under Apache License, Version 2.0
+  Jackcess Encrypt under Apache License, Version 2.0
+  java-libpst under The Apache Software License, Version 2.0
   JavaPoet under Apache 2.0
   JTokkit under MIT License
   JUnit Jupiter (Aggregator) under Eclipse Public License v2.0
@@ -25,14 +53,13 @@ This project includes:
   JUnit Jupiter Params under Eclipse Public License v2.0
   JUnit Platform Commons under Eclipse Public License v2.0
   JUnit Platform Engine API under Eclipse Public License v2.0
+  juniversalchardet under Mozilla Public License Version 1.1 or GENERAL PUBLIC LICENSE, version 3 (GPL-3.0) or GNU LESSER GENERAL PUBLIC LICENSE, version 3 (LGPL-3.0)
   mockito-core under The MIT License
   mockito-junit-jupiter under The MIT License
-  MySQL Connector/J under The GNU General Public License, v2 with Universal FOSS Exception, v1.0
   Non-Blocking Reactive Foundation for the JVM under Apache License, Version 2.0
   Objenesis under Apache License, Version 2.0
   org.apiguardian:apiguardian-api under The Apache License, Version 2.0
   org.opentest4j:opentest4j under The Apache License, Version 2.0
-  Protocol Buffers [Core] under BSD-3-Clause
   reactive-streams under MIT-0
   SLF4J API Module under MIT
   snack4 under The Apache Software License, Version 2.0
@@ -43,7 +70,7 @@ This project includes:
   solon-ai-dialect-dashscope under The Apache Software License, Version 2.0
   solon-ai-dialect-ollama under The Apache Software License, Version 2.0
   solon-ai-dialect-openai under The Apache Software License, Version 2.0
-  solon-ai-load-ddl under The Apache Software License, Version 2.0
+  solon-ai-load-ppt under The Apache Software License, Version 2.0
   solon-aot under The Apache Software License, Version 2.0
   solon-cache under The Apache Software License, Version 2.0
   solon-config-plus under The Apache Software License, Version 2.0
@@ -61,5 +88,9 @@ This project includes:
   solon-test under The Apache Software License, Version 2.0
   solon-web-rx under The Apache Software License, Version 2.0
   solon-web-sse under The Apache Software License, Version 2.0
-  SQLite JDBC under The Apache Software License, Version 2.0
+  SparseBitSet under The Apache Software License, Version 2.0
+  TagSoup under Apache License 2.0
+  Xerces2-j under The Apache Software License, Version 2.0
+  XML Commons External Components XML APIs under The Apache Software License, Version 2.0 or The SAX License or The W3C License
+  XmlBeans under The Apache Software License, Version 2.0
 

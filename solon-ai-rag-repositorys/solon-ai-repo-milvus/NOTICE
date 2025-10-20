@@ -23,6 +23,7 @@ This project includes:
   Byte Buddy agent under Apache License, Version 2.0
   Checker Qual under The MIT License
   commonmark-java core under BSD 2-Clause License
+  dami2 under The Apache Software License, Version 2.0
   error-prone annotations under Apache 2.0
   FindBugs-jsr305 under The Apache Software License, Version 2.0
   Google Android Annotations Library under Apache 2.0
@@ -58,6 +59,7 @@ This project includes:
   milvus-sdk-java under Apache License, Version 2.0
   mockito-core under The MIT License
   mockito-junit-jupiter under The MIT License
+  Non-Blocking Reactive Foundation for the JVM under Apache License, Version 2.0
   Objenesis under Apache License, Version 2.0
   okhttp under The Apache Software License, Version 2.0
   okio under The Apache Software License, Version 2.0
@@ -68,26 +70,34 @@ This project includes:
   proto-google-common-protos under Apache-2.0
   Protocol Buffers [Core] under BSD-3-Clause
   reactive-streams under MIT-0
-  SLF4J API Module under MIT License
-  snack3 under The Apache Software License, Version 2.0
+  SLF4J API Module under MIT
+  snack4 under The Apache Software License, Version 2.0
   SnakeYAML under Apache License, Version 2.0
   solon under The Apache Software License, Version 2.0
   solon-ai under The Apache Software License, Version 2.0
+  solon-ai-core under The Apache Software License, Version 2.0
+  solon-ai-dialect-dashscope under The Apache Software License, Version 2.0
+  solon-ai-dialect-ollama under The Apache Software License, Version 2.0
+  solon-ai-dialect-openai under The Apache Software License, Version 2.0
   solon-ai-load-html under The Apache Software License, Version 2.0
   solon-ai-load-markdown under The Apache Software License, Version 2.0
   solon-ai-repo-milvus under The Apache Software License, Version 2.0
   solon-aot under The Apache Software License, Version 2.0
+  solon-cache under The Apache Software License, Version 2.0
   solon-config-plus under The Apache Software License, Version 2.0
   solon-config-yaml under The Apache Software License, Version 2.0
   solon-data under The Apache Software License, Version 2.0
+  solon-expression under The Apache Software License, Version 2.0
   solon-flow under The Apache Software License, Version 2.0
+  solon-handle under The Apache Software License, Version 2.0
   solon-logging under The Apache Software License, Version 2.0
   solon-logging-simple under The Apache Software License, Version 2.0
-  solon-mvc under The Apache Software License, Version 2.0
   solon-net-httputils under The Apache Software License, Version 2.0
   solon-proxy under The Apache Software License, Version 2.0
   solon-rx under The Apache Software License, Version 2.0
   solon-security-vault under The Apache Software License, Version 2.0
   solon-serialization under The Apache Software License, Version 2.0
   solon-test under The Apache Software License, Version 2.0
+  solon-web-rx under The Apache Software License, Version 2.0
+  solon-web-sse under The Apache Software License, Version 2.0
 

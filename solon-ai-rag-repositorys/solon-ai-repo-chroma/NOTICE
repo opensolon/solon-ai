@@ -16,7 +16,6 @@ This project includes:
   asm under BSD-3-Clause
   Byte Buddy (without dependencies) under Apache License, Version 2.0
   Byte Buddy agent under Apache License, Version 2.0
-  HikariCP under The Apache Software License, Version 2.0
   JavaPoet under Apache 2.0
   JTokkit under MIT License
   JUnit Jupiter (Aggregator) under Eclipse Public License v2.0
@@ -27,12 +26,10 @@ This project includes:
   JUnit Platform Engine API under Eclipse Public License v2.0
   mockito-core under The MIT License
   mockito-junit-jupiter under The MIT License
-  MySQL Connector/J under The GNU General Public License, v2 with Universal FOSS Exception, v1.0
   Non-Blocking Reactive Foundation for the JVM under Apache License, Version 2.0
   Objenesis under Apache License, Version 2.0
   org.apiguardian:apiguardian-api under The Apache License, Version 2.0
   org.opentest4j:opentest4j under The Apache License, Version 2.0
-  Protocol Buffers [Core] under BSD-3-Clause
   reactive-streams under MIT-0
   SLF4J API Module under MIT
   snack4 under The Apache Software License, Version 2.0
@@ -43,7 +40,7 @@ This project includes:
   solon-ai-dialect-dashscope under The Apache Software License, Version 2.0
   solon-ai-dialect-ollama under The Apache Software License, Version 2.0
   solon-ai-dialect-openai under The Apache Software License, Version 2.0
-  solon-ai-load-ddl under The Apache Software License, Version 2.0
+  solon-ai-repo-chroma under The Apache Software License, Version 2.0
   solon-aot under The Apache Software License, Version 2.0
   solon-cache under The Apache Software License, Version 2.0
   solon-config-plus under The Apache Software License, Version 2.0
@@ -61,5 +58,4 @@ This project includes:
   solon-test under The Apache Software License, Version 2.0
   solon-web-rx under The Apache Software License, Version 2.0
   solon-web-sse under The Apache Software License, Version 2.0
-  SQLite JDBC under The Apache Software License, Version 2.0
 
