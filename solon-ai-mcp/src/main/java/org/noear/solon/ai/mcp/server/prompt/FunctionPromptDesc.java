@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.prompt;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.util.ParamDesc;
 import org.slf4j.Logger;
@@ -135,7 +135,7 @@ public class FunctionPromptDesc implements FunctionPrompt {
     private Collection<ChatMessage> doHandle(Map<String, Object> args) throws Throwable {
         Map<String, Object> argsNew = new HashMap<>();
 
-        ONode argsNode = ONode.load(args);
+        ONode argsNode = ONode.ofBean(args);
         for (ParamDesc p1 : this.params) {
             ONode v1 = argsNode.getOrNull(p1.name());
             if (v1 == null) {
@@ -143,7 +143,7 @@ public class FunctionPromptDesc implements FunctionPrompt {
                 argsNew.put(p1.name(), null);
             } else {
                 //用 ONode 可以自动转换类型
-                argsNew.put(p1.name(), v1.toObject(p1.type()));
+                argsNew.put(p1.name(), v1.toBean(p1.type()));
             }
         }
 

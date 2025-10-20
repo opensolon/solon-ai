@@ -1,6 +1,6 @@
 package org.noear.solon.ai.rag.repository;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
@@ -215,7 +215,7 @@ public class MySqlRepository implements RepositoryStorable, RepositoryLifecycle 
                 
                 // 将 float[] 转换为 JSON 数组存储
                 stmt.setObject(paramIndex++, floatArrayToJson(doc.getEmbedding()), Types.VARCHAR);
-                stmt.setObject(paramIndex++, ONode.stringify(doc.getMetadata()), Types.VARCHAR);
+                stmt.setObject(paramIndex++, ONode.serialize(doc.getMetadata()), Types.VARCHAR);
 
                 // 设置元数据字段
                 if (Utils.isNotEmpty(config.metadataFields)) {
@@ -234,7 +234,7 @@ public class MySqlRepository implements RepositoryStorable, RepositoryLifecycle 
                                     }
                                     break;
                                 case JSON:
-                                    stmt.setObject(paramIndex++, ONode.stringify(value), Types.VARCHAR);
+                                    stmt.setObject(paramIndex++, ONode.serialize(value), Types.VARCHAR);
                                     break;
                             }
                         } else {

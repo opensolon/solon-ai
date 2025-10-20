@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.mcp.client;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
@@ -129,7 +129,7 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
 
         URL res = ResourceUtil.findResource(uri);
         String json = ResourceUtil.getResourceAsString(res);
-        ONode jsonDom = ONode.loadStr(json);
+        ONode jsonDom = ONode.ofJson(json);
 
         return parseMcpServers(jsonDom);
     }
@@ -148,7 +148,7 @@ public class McpProviders implements ToolProvider, ResourceProvider, PromptProvi
         }
 
         Map<String, McpServerParameters> mcpServers = mcpServersNode
-                .toObject(new HashMap<String, McpServerParameters>() {
+                .toBean(new HashMap<String, McpServerParameters>() {
                 }.getClass());
 
         return mcpServers;

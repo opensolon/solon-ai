@@ -2,7 +2,7 @@ package io.a2a_preview.client;
 
 
 import io.a2a_preview.model.*;
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
 
@@ -99,7 +99,7 @@ public class A2AClient {
 
 
 
-                String requestBody = ONode.stringify(request);
+                String requestBody = ONode.serialize(request);
 
                 HttpUtils req = HttpUtils.http(baseUrl + "/a2a/stream")
                         .contentType("application/json")

@@ -15,7 +15,8 @@
  */
 package org.noear.solon.ai.llm.dialect.openai;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
+import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.embedding.Embedding;
 import org.noear.solon.ai.embedding.EmbeddingConfig;
@@ -53,17 +54,18 @@ public class OpenaiEmbeddingDialect extends AbstractEmbeddingDialect {
 
     @Override
     public EmbeddingResponse parseResponseJson(EmbeddingConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("error")) {
+        if (oResp.hasKey("error")) {
             return new EmbeddingResponse(model, new EmbeddingException(oResp.get("error").getString()), null, null);
         } else {
-            List<Embedding> data = oResp.get("data").toObjectList(Embedding.class);
+            List<Embedding> data = oResp.get("data").toBean(new TypeRef<List<Embedding>>() {
+            });
             AiUsage usage = null;
 
-            if (oResp.contains("usage")) {
+            if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
                 usage = new AiUsage(
                         oUsage.get("prompt_tokens").getInt(),

@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.flow.components.models;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
@@ -25,7 +25,6 @@ import org.noear.solon.ai.image.ImageConfig;
 import org.noear.solon.ai.image.ImageModel;
 import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.annotation.Component;
-import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 
@@ -46,7 +45,7 @@ public class ImageModelCom extends AbsAiComponent implements AiIoComponent, AiPr
         //构建聊天模型（预热后，会缓存住）
         ImageModel imageModel = (ImageModel) node.attachment;
         if (imageModel == null) {
-            ImageConfig imageConfig = ONode.load(node.getMeta(META_IMAGE_CONFIG)).toObject(ImageConfig.class);
+            ImageConfig imageConfig = ONode.ofBean(node.getMeta(META_IMAGE_CONFIG)).toBean(ImageConfig.class);
             assert imageConfig != null;
             ImageModel.Builder imageModelBuilder = ImageModel.of(imageConfig);
 

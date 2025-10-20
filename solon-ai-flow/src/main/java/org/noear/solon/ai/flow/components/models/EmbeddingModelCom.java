@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.flow.components.models;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.embedding.EmbeddingConfig;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
@@ -41,7 +41,7 @@ public class EmbeddingModelCom extends AbsAiComponent implements AiPropertyCompo
 
         if (embeddingModel == null) {
             //构建
-            EmbeddingConfig embeddingConfig = ONode.load(node.getMeta(META_EMBEDDING_CONFIG)).toObject(EmbeddingConfig.class);
+            EmbeddingConfig embeddingConfig = ONode.ofBean(node.getMeta(META_EMBEDDING_CONFIG)).toBean(EmbeddingConfig.class);
             embeddingModel = EmbeddingModel.of(embeddingConfig).build();
         }
 

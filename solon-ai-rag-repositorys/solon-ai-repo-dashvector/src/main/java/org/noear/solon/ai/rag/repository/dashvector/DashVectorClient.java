@@ -4,9 +4,8 @@ import java.io.IOException;
 import java.util.*;
 import java.util.logging.Logger;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.rag.Document;
 import org.noear.solon.core.util.MultiMap;
 import org.noear.solon.net.http.HttpUtils;
 
@@ -206,7 +205,7 @@ public class DashVectorClient{
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("docs",documents);
 
-            String jsonBody = ONode.stringify(requestBody);
+            String jsonBody = ONode.serialize(requestBody);
             AddDocResponse response = http(endpoint).bodyOfJson(jsonBody).postAs(AddDocResponse.class);
 
             if (response.hasError()) {

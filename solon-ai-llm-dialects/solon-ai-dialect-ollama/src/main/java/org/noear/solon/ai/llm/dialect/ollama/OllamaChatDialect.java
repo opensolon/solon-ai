@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.llm.dialect.ollama;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.AiUsage;
@@ -85,14 +85,14 @@ public class OllamaChatDialect extends AbstractChatDialect {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
         oNode.set("content", "");
-        oNode.getOrNew("tool_calls").asArray().build(n1 -> {
+        oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<Integer, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
                 n1.addNew().set("id", kv.getValue().idBuilder.toString())
                         .set("type", "function")
-                        .getOrNew("function").build(n2 -> {
+                        .getOrNew("function").then(n2 -> {
                             n2.set("name", kv.getValue().nameBuilder.toString());
-                            n2.set("arguments", ONode.loadStr(kv.getValue().argumentsBuilder.toString()));
+                            n2.set("arguments", ONode.ofJson(kv.getValue().argumentsBuilder.toString()));
                         });
             }
         });
@@ -103,13 +103,13 @@ public class OllamaChatDialect extends AbstractChatDialect {
     @Override
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         //解析
-        ONode oResp = ONode.load(json);
+        ONode oResp = ONode.ofJson(json);
 
         if (oResp.isObject() == false) {
             return false;
         }
 
-        if (oResp.contains("error")) {
+        if (oResp.hasKey("error")) {
             resp.setError(new ChatException(oResp.get("error").getString()));
         } else {
             resp.setModel(oResp.get("model").getString());
@@ -156,12 +156,12 @@ public class OllamaChatDialect extends AbstractChatDialect {
 
         if (n1fArgs.isValue()) {
             //有可能是 json string
-            n1fArgs = ONode.loadStr(argStr);
+            n1fArgs = ONode.ofJson(argStr);
         }
 
         Map<String, Object> argMap = null;
         if (n1fArgs.isObject()) {
-            argMap = n1fArgs.toObject(Map.class);
+            argMap = n1fArgs.toBean(Map.class);
         }
         return new ToolCall(index, callId, name, argStr, argMap);
     }

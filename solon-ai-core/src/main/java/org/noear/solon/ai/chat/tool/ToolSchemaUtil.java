@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Param;
@@ -97,11 +97,11 @@ public class ToolSchemaUtil {
         ONode requiredNode = new ONode(schemaParentNode.options()).asArray();
 
         schemaParentNode.set("type", TYPE_OBJECT);
-        schemaParentNode.getOrNew("properties").build(propertiesNode -> {
+        schemaParentNode.getOrNew("properties").then(propertiesNode -> {
             propertiesNode.asObject();
 
             for (ParamDesc fp : toolParams) {
-                propertiesNode.getOrNew(fp.name()).build(paramNode -> {
+                propertiesNode.getOrNew(fp.name()).then(paramNode -> {
                     buildTypeSchemaNode(fp.type(), fp.description(), paramNode);
                 });
 
@@ -229,7 +229,7 @@ public class ToolSchemaUtil {
         }
 
         schemaNode.set("type", TYPE_OBJECT);
-        ONode props = schemaNode.getNew("properties");
+        ONode props = schemaNode.getOrNew("properties");
 
         for (Field field : clazz.getDeclaredFields()) {
             field.setAccessible(true);
@@ -337,7 +337,7 @@ public class ToolSchemaUtil {
      */
     private static void handleEnumType(Class<?> clazz, ONode schemaNode) {
         schemaNode.set("type", TYPE_STRING);
-        schemaNode.getOrNew("enum").build(n -> {
+        schemaNode.getOrNew("enum").then(n -> {
             for (Object e : clazz.getEnumConstants()) {
                 n.add(e.toString());
             }
@@ -360,14 +360,14 @@ public class ToolSchemaUtil {
 
         ONode requiredNode = new ONode(schemaNode.options()).asArray();
 
-        schemaNode.getOrNew("properties").build(propertiesNode -> {
+        schemaNode.getOrNew("properties").then(propertiesNode -> {
             propertiesNode.asObject();
 
             for (FieldWrap fw : ClassWrap.get(clazz).getAllFieldWraps()) {
                 ParamDesc fp = paramOf(fw.getField());
 
                 if (fp != null) {
-                    propertiesNode.getOrNew(fp.name()).build(paramNode -> {
+                    propertiesNode.getOrNew(fp.name()).then(paramNode -> {
                         buildTypeSchemaNode(fp.type(), fp.description(), paramNode);
                     });
 

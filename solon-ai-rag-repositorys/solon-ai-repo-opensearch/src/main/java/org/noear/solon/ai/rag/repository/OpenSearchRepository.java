@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
@@ -185,7 +185,7 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
 
         Map<String, Object> requestBody = buildSearchRequest(condition, queryVector);
 
-        request.setJsonEntity(ONode.stringify(requestBody));
+        request.setJsonEntity(ONode.serialize(requestBody));
         org.opensearch.client.Response response = config.client.getLowLevelClient().performRequest(request);
         return IoUtil.transferToString(response.getEntity().getContent(), "UTF-8");
     }
@@ -351,7 +351,7 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
      * 解析搜索响应
      */
     private List<Document> parseSearchResponse(String responseBody) {
-        Map<String, Object> responseMap = ONode.loadStr(responseBody).toObject(Map.class);
+        Map<String, Object> responseMap = ONode.deserialize(responseBody, Map.class);
         List<Document> results = new ArrayList<>();
 
         Map<String, Object> hits = (Map<String, Object>) responseMap.get("hits");
@@ -429,7 +429,7 @@ public class OpenSearchRepository implements RepositoryStorable, RepositoryLifec
                 }
             }
 
-            buf.append(ONode.stringify(source)).append("\n");
+            buf.append(ONode.serialize(source)).append("\n");
         }
 
         executeBulkRequest(buf.toString());

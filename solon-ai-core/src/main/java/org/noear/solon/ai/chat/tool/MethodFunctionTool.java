@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.snack.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -78,7 +77,7 @@ public class MethodFunctionTool implements FunctionTool {
                 || mapping.resultConverter() == ToolCallResultConverterDefault.class) {
             resultConverter = ToolCallResultConverterDefault.getInstance();
         } else {
-            if (Solon.context() != null) {
+            if (Solon.app() != null) {
                 resultConverter = Solon.context().getBeanOrNew(mapping.resultConverter());
             } else {
                 resultConverter = ClassUtil.newInstance(mapping.resultConverter());

@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.rag.repository;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
@@ -240,7 +240,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
                 stmt.setString(paramIndex++, doc.getId());
                 stmt.setString(paramIndex++, doc.getContent());
                 stmt.setArray(paramIndex++, conn.createArrayOf("float4", toFloatArray(doc.getEmbedding())));
-                stmt.setObject(paramIndex++, ONode.stringify(doc.getMetadata()), Types.OTHER);
+                stmt.setObject(paramIndex++, ONode.serialize(doc.getMetadata()), Types.OTHER);
 
                 // 设置元数据字段
                 if (Utils.isNotEmpty(config.metadataFields)) {
@@ -259,7 +259,7 @@ public class PgVectorRepository implements RepositoryStorable, RepositoryLifecyc
                                     }
                                     break;
                                 case JSON:
-                                    stmt.setObject(paramIndex++, ONode.stringify(value), Types.OTHER);
+                                    stmt.setObject(paramIndex++, ONode.serialize(value), Types.OTHER);
                                     break;
                             }
                         } else {

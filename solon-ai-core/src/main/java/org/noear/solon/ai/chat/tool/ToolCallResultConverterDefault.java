@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.core.exception.ConvertException;
@@ -69,6 +69,6 @@ public class ToolCallResultConverterDefault implements ToolCallResultConverter {
             }
         }
 
-        return ONode.load(obj).toJson();
+        return ONode.serialize(obj);
     }
 }

@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.logging.Logger;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.core.util.MultiMap;
 import org.noear.solon.net.http.HttpUtils;
@@ -74,7 +74,7 @@ public class ChromaClient {
             String endpoint = baseUrl + "api/v1/heartbeat";
             String response = http(endpoint).get();
 
-            Map<String, Object> responseMap = ONode.loadStr(response).toObject(Map.class);
+            Map<String, Object> responseMap = ONode.deserialize(response, Map.class);
             return responseMap.containsKey("nanosecond heartbeat");
         } catch (Exception e) {
             logger.warning("Health check failed: " + e.getMessage());
@@ -203,7 +203,7 @@ public class ChromaClient {
 
             // 尝试解析为ChromaResponse
             try {
-                ChromaResponse response = ONode.loadStr(responseStr).toObject(ChromaResponse.class);
+                ChromaResponse response = ONode.deserialize(responseStr, ChromaResponse.class);
                 if (response.hasError()) {
                     throw new IOException("Failed to delete collection: " + response.getMessage());
                 }
@@ -248,7 +248,7 @@ public class ChromaClient {
                 requestBody.put("metadatas", metadatas);
             }
 
-            String jsonBody = ONode.stringify(requestBody);
+            String jsonBody = ONode.serialize(requestBody);
 
             String responseStr = http(endpoint).bodyOfJson(jsonBody).post();
 
@@ -269,7 +269,7 @@ public class ChromaClient {
 
             // 尝试解析为Map
             try {
-                Map<String, Object> response = ONode.loadStr(responseStr).toObject(Map.class);
+                Map<String, Object> response = ONode.deserialize(responseStr, Map.class);
                 if (response.containsKey("error")) {
                     throw new IOException("Failed to add documents: " + response.get("message"));
                 }

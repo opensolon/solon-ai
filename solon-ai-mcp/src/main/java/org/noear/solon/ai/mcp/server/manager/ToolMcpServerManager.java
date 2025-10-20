@@ -19,7 +19,7 @@ import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.spec.McpSchema;
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.exception.McpException;
@@ -95,7 +95,7 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
                             String rst = functionTool.handle(request);
 
                             if(mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())){
-                                Map<String,Object> map = ONode.load(rst).toObject(Map.class);
+                                Map<String,Object> map = ONode.deserialize(rst, Map.class);
                                 return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false, map);
                             } else {
                                 return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
@@ -121,7 +121,7 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
     protected ONode buildJsonSchema(FunctionTool functionTool) {
         ONode jsonSchema = new ONode();
         jsonSchema.set("$schema", "http://json-schema.org/draft-07/schema#");
-        jsonSchema.setAll(ONode.loadStr(functionTool.inputSchema()));
+        jsonSchema.setAll(ONode.ofJson(functionTool.inputSchema()).getObject());
 
         return jsonSchema;
     }

@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.llm.dialect.dashscope;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.AiUsage;
@@ -69,12 +69,12 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
     @Override
     public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
-        return new ONode().build(n -> {
+        return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
 
-            n.getOrNew("input").getOrNew("messages").build(n1 -> {
+            n.getOrNew("input").getOrNew("messages").then(n1 -> {
                 for (ChatMessage m1 : messages) {
                     if (m1.isThinking() == false) {
                         n1.add(buildChatMessageNode(m1));
@@ -84,7 +84,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
             n.set("stream", isStream);
 
-            n.getOrNew("parameters").build(n1 -> {
+            n.getOrNew("parameters").then(n1 -> {
                 for (Map.Entry<String, Object> kv : options.options().entrySet()) {
                     n1.set(kv.getKey(), kv.getValue());
                 }
@@ -108,20 +108,20 @@ public class DashscopeChatDialect extends AbstractChatDialect {
         }
 
         //解析
-        ONode oResp = ONode.load(json);
+        ONode oResp = ONode.ofJson(json);
 
         if (oResp.isObject() == false) {
             return false;
         }
 
-        if (oResp.contains("code") && !Utils.isEmpty(oResp.get("code").getString())) {
+        if (oResp.hasKey("code") && !Utils.isEmpty(oResp.get("code").getString())) {
             resp.setError(new ChatException(oResp.get("code").getString() + ": " + oResp.get("message").getString()));
         } else {
             resp.setModel(config.getModel());
 
             int index = 0;
             Date created = null;
-            for (ONode oChoice1 : oResp.get("output").get("choices").ary()) {
+            for (ONode oChoice1 : oResp.get("output").get("choices").getArray()) {
                 String finish_reason = oChoice1.get("finish_reason").getString();
 
                 List<AssistantMessage> messageList = parseAssistantMessage(resp, oChoice1.get("message"));
@@ -165,21 +165,21 @@ public class DashscopeChatDialect extends AbstractChatDialect {
             medias = Arrays.asList();
         }
         final List<AiMedia> finalMedias = medias;
-        ONode contentNode = new ONode().build(n -> {
+        ONode contentNode = new ONode().then(n -> {
             for (AiMedia media : finalMedias) {
                 if (media instanceof Image) {
-                    n.add(new ONode().build(n1 -> {
+                    n.add(new ONode().then(n1 -> {
                         n1.set("image", media.toDataString(true));
                     }));
                 }else if (media instanceof Audio) {
-                    n.add(new ONode().build(n1 -> {
+                    n.add(new ONode().then(n1 -> {
                         n1.set("audio", media.toDataString(true));
                     }));
                 }
             }
 
             if (Utils.isNotEmpty(content)) {
-                n.add(new ONode().build(n1 -> {
+                n.add(new ONode().then(n1 -> {
                     n1.set("text", content);
                 }));
             }

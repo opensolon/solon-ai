@@ -16,7 +16,7 @@
 package org.noear.solon.ai.flow.components.repositorys;
 
 import org.noear.redisx.RedisClient;
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.flow.components.Attrs;
 import org.noear.solon.ai.rag.RepositoryStorable;
@@ -50,8 +50,8 @@ public class RedisRepositoryCom extends AbsRepositoryCom {
             Assert.notNull(embeddingModel, "Missing embeddingModel property!");
 
 
-            Properties redisProperties = ONode.loadObj(node.getMeta(META_REDIS_CONFIG))
-                    .toObject(Properties.class);
+            Properties redisProperties = ONode.ofBean(node.getMeta(META_REDIS_CONFIG))
+                    .toBean(Properties.class);
 
             RedisClient redisClient = new RedisClient(redisProperties);
 

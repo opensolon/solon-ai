@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.rag.search;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.AiConfig;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
@@ -134,10 +134,10 @@ public class BaiduWebSearchRepository implements Repository {
      * 解析响应结果
      */
     private List<Document> parseResponse(String respJson, QueryCondition condition) throws IOException {
-        ONode respNode = ONode.load(respJson);
+        ONode respNode = ONode.ofJson(respJson);
         
         // 检查错误
-        if (respNode.contains("code")) {
+        if (respNode.hasKey("code")) {
             int code = respNode.get("code").getInt();
             String message = respNode.get("message").getString();
             if (code != 0) {
@@ -148,11 +148,11 @@ public class BaiduWebSearchRepository implements Repository {
         List<Document> docs = new ArrayList<>();
         
         // AI搜索：先处理choices中的AI回答
-        if (searchType == SearchType.AI && respNode.contains("choices")) {
+        if (searchType == SearchType.AI && respNode.hasKey("choices")) {
             ONode choicesArray = respNode.get("choices");
-            if (choicesArray.isArray() && choicesArray.count() > 0) {
+            if (choicesArray.isArray() && choicesArray.getArrayUnsafe().size() > 0) {
                 ONode firstChoice = choicesArray.get(0);
-                if (firstChoice.contains("message")) {
+                if (firstChoice.hasKey("message")) {
                     String aiContent = firstChoice.get("message").get("content").getString();
                     if (aiContent != null && !aiContent.trim().isEmpty()) {
                         docs.add(new Document(aiContent.trim())
@@ -165,10 +165,10 @@ public class BaiduWebSearchRepository implements Repository {
         }
         
         // 处理references中的搜索结果（基础搜索和AI搜索都有）
-        if (respNode.contains("references")) {
+        if (respNode.hasKey("references")) {
             ONode referencesArray = respNode.get("references");
             if (referencesArray.isArray()) {
-                for (ONode ref : referencesArray.ary()) {
+                for (ONode ref : referencesArray.getArrayUnsafe()) {
                     String content = ref.get("content").getString();
                     String title = ref.get("title").getString();
                     String url = ref.get("url").getString();
@@ -185,21 +185,21 @@ public class BaiduWebSearchRepository implements Repository {
                         }
                         
                         // 添加百度搜索相关元数据
-                        if (ref.contains("id")) {
+                        if (ref.hasKey("id")) {
                             doc.metadata("id", ref.get("id").getString());
                         }
-                        if (ref.contains("date") && ref.get("date").getString() != null) {
+                        if (ref.hasKey("date") && ref.get("date").getString() != null) {
                             doc.metadata("date", ref.get("date").getString());
                         }
-                        if (ref.contains("type")) {
+                        if (ref.hasKey("type")) {
                             doc.metadata("type", ref.get("type").getString());
                         } else {
                             doc.metadata("type", "web");  // 默认为web类型
                         }
-                        if (ref.contains("web_anchor")) {
+                        if (ref.hasKey("web_anchor")) {
                             doc.metadata("web_anchor", ref.get("web_anchor").getString());
                         }
-                        if (ref.contains("icon")) {
+                        if (ref.hasKey("icon")) {
                             doc.metadata("icon", ref.get("icon").getString());
                         }
                         

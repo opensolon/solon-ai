@@ -22,7 +22,7 @@ import io.qdrant.client.grpc.Collections.VectorParams;
 import io.qdrant.client.grpc.JsonWithInt;
 import io.qdrant.client.grpc.Points.*;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
@@ -208,7 +208,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
         payload.put(config.contentFieldName, value(doc.getContent()));
 
         if (doc.getMetadata() != null) {
-            String metadataJson = ONode.stringify(doc.getMetadata());
+            String metadataJson = ONode.serialize(doc.getMetadata());
             payload.put("metadata", value(metadataJson));
         }
 

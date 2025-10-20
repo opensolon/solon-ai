@@ -15,7 +15,8 @@
  */
 package org.noear.solon.ai.llm.dialect.openai;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
+import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.image.ImageConfig;
@@ -51,17 +52,17 @@ public class OpenaiImageDialect extends AbstractImageDialect {
 
     @Override
     public ImageResponse parseResponseJson(ImageConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("error")) {
+        if (oResp.hasKey("error")) {
             return new ImageResponse(model, new ImageException(oResp.get("error").getString()), null, null);
         } else {
-            List<Image> data = oResp.get("data").toObjectList(Image.class);
+            List<Image> data = oResp.get("data").toBean(new  TypeRef<List<Image>>() {});
 
             AiUsage usage = null;
-            if (oResp.contains("usage")) {
+            if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
                 usage = new AiUsage(
                         oUsage.get("prompt_tokens").getInt(),

@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.llm.dialect.dashscope;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.embedding.*;
@@ -61,18 +61,18 @@ public class DashscopeEmbeddingDialect extends AbstractEmbeddingDialect {
 
     @Override
     public String buildRequestJson(EmbeddingConfig config, EmbeddingOptions options, List<String> input) {
-        return new ONode().build(n -> {
+        return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
 
-            n.getOrNew("input").getOrNew("texts").build(n1 -> {
+            n.getOrNew("input").getOrNew("texts").then(n1 -> {
                 for (String m1 : input) {
                     n1.add(m1);
                 }
             });
 
-            n.getOrNew("parameters").build(n1 -> {
+            n.getOrNew("parameters").then(n1 -> {
                 for (Map.Entry<String, Object> kv : options.options().entrySet()) {
                     n1.set(kv.getKey(), kv.getValue());
                 }
@@ -84,29 +84,29 @@ public class DashscopeEmbeddingDialect extends AbstractEmbeddingDialect {
 
     @Override
     public EmbeddingResponse parseResponseJson(EmbeddingConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("code") && !Utils.isEmpty(oResp.get("code").getString())) {
+        if (oResp.hasKey("code") && !Utils.isEmpty(oResp.get("code").getString())) {
             return new EmbeddingResponse(model, new EmbeddingException(oResp.get("code").getString() + ": " + oResp.get("message").getString()), null, null);
         } else {
             List<Embedding> data = new ArrayList<>();
-            for (ONode n1 : oResp.get("output").get("embeddings").ary()) {
+            for (ONode n1 : oResp.get("output").get("embeddings").getArray()) {
                 int index = 0;
-                if (n1.contains("text_index")) {
+                if (n1.hasKey("text_index")) {
                     index = n1.get("text_index").getInt();
                 } else {
                     index = n1.get("index").getInt();
                 }
 
-                data.add(new Embedding(index, n1.get("embedding").toObject(float[].class)));
+                data.add(new Embedding(index, n1.get("embedding").toBean(float[].class)));
             }
 
 
             AiUsage usage = null;
 
-            if (oResp.contains("usage")) {
+            if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
                 int total_tokens = oUsage.get("total_tokens").getInt();
                 usage = new AiUsage(

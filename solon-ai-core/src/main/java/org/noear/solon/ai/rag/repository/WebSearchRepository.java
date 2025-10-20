@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.rag.repository;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.AiConfig;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
@@ -64,7 +64,7 @@ public class WebSearchRepository implements Repository {
         String respJson = httpUtils.bodyOfJson(reqNode.toJson())
                 .post();
 
-        ONode respNode = ONode.load(respJson);
+        ONode respNode = ONode.ofJson(respJson);
 
         int code = respNode.get("code").getInt();
         String msg = respNode.get("msg").getString();
@@ -75,7 +75,7 @@ public class WebSearchRepository implements Repository {
 
         List<Document> docs = new ArrayList<>();
 
-        for (ONode n1 : respNode.get("data").get("webPages").get("value").ary()) {
+        for (ONode n1 : respNode.get("data").get("webPages").get("value").getArray()) {
             docs.add(new Document(n1.get("snippet").getString())
                     .title(n1.get("title").getString())
                     .url(n1.get("url").getString()));

@@ -23,7 +23,7 @@ import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.embedding.EmbeddingModel;
 import org.noear.solon.ai.rag.Document;
@@ -173,7 +173,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
 
         Map<String, Object> requestBody = translate(condition, queryVector);
 
-        request.setJsonEntity(ONode.stringify(requestBody));
+        request.setJsonEntity(ONode.serialize(requestBody));
         org.elasticsearch.client.Response response = config.client.getLowLevelClient().performRequest(request);
         return IoUtil.transferToString(response.getEntity().getContent(), "UTF-8");
     }
@@ -185,7 +185,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
      * @return 文档列表
      */
     private List<Document> parseSearchResponse(String responseBody) {
-        Map<String, Object> responseMap = ONode.loadStr(responseBody).toObject(Map.class);
+        Map<String, Object> responseMap = ONode.deserialize(responseBody, Map.class);
         List<Document> results = new ArrayList<>();
 
         Map<String, Object> hits = (Map<String, Object>) responseMap.get("hits");
@@ -300,7 +300,7 @@ public class ElasticsearchRepository implements RepositoryStorable, RepositoryLi
                 }
             }
 
-            buf.append(ONode.stringify(source)).append("\n");
+            buf.append(ONode.serialize(source)).append("\n");
         }
 
         executeBulkRequest(buf.toString());

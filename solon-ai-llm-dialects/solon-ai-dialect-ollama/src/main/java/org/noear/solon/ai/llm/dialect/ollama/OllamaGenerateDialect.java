@@ -15,7 +15,8 @@
  */
 package org.noear.solon.ai.llm.dialect.ollama;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
+import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.generate.GenerateContent;
 import org.noear.solon.ai.generate.dialect.AbstractGenerateDialect;
@@ -44,25 +45,25 @@ public class OllamaGenerateDialect extends AbstractGenerateDialect {
 
     @Override
     public GenerateResponse parseResponseJson(GenerateConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("error")) {
+        if (oResp.hasKey("error")) {
             return new GenerateResponse(model, new GenerateException(oResp.get("error").getString()), null, null);
         } else {
             List<GenerateContent> data = null;
-            if (oResp.contains("response")) {
+            if (oResp.hasKey("response")) {
                 //文本模型生成
                 String text = oResp.get("response").getString();
                 data = Arrays.asList(GenerateContent.builder().text(text).build());
-            } else if (oResp.contains("data")) {
+            } else if (oResp.hasKey("data")) {
                 //图像模型生成
-                data = oResp.get("data").toObjectList(GenerateContent.class);
+                data = oResp.get("data").toBean(new TypeRef<List<GenerateContent>>() { });
             }
 
             AiUsage usage = null;
-            if (oResp.contains("prompt_eval_count")) {
+            if (oResp.hasKey("prompt_eval_count")) {
                 int prompt_eval_count = oResp.get("prompt_eval_count").getInt();
                 usage = new AiUsage(
                         prompt_eval_count,

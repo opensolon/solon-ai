@@ -1,6 +1,6 @@
 package org.noear.solon.ai.rag.repository.dashvector;
 
-import org.noear.snack.annotation.ONodeAttr;
+import org.noear.snack4.annotation.ONodeAttr;
 
 import java.io.Serializable;
 

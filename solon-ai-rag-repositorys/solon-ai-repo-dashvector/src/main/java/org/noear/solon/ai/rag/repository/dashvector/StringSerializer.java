@@ -1,6 +1,6 @@
 package org.noear.solon.ai.rag.repository.dashvector;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.core.serialize.Serializer;
 
 import java.io.IOException;
@@ -38,7 +38,7 @@ public class StringSerializer implements Serializer<String> {
      */
     @Override
     public String serialize(Object obj) throws IOException {
-        return ONode.loadObj(obj).toJson();
+        return ONode.serialize(obj);
     }
 
     /**
@@ -50,9 +50,9 @@ public class StringSerializer implements Serializer<String> {
     @Override
     public Object deserialize(String data, Type toType) throws IOException {
         if (toType == null) {
-            return ONode.loadStr(data);
+            return ONode.deserialize(data);
         } else {
-            return ONode.loadStr(data).toObject(toType);
+            return ONode.deserialize(data, toType);
         }
     }
 }

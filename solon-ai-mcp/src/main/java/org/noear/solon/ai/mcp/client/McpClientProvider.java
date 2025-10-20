@@ -23,7 +23,7 @@ import io.modelcontextprotocol.client.transport.WebRxSseClientTransport;
 import io.modelcontextprotocol.client.transport.WebRxStreamableHttpTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -679,8 +679,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 returnDirect = false;
             }
 
-            String inputSchema = ONode.load(tool.getInputSchema()).toJson();
-            String outputSchema = (tool.getOutputSchema() == null ? null : ONode.load(tool.getOutputSchema()).toJson());
+            String inputSchema = ONode.serialize(tool.getInputSchema());
+            String outputSchema = (tool.getOutputSchema() == null ? null : ONode.serialize(tool.getOutputSchema()));
 
             FunctionToolDesc functionRefer = new FunctionToolDesc(
                     name,

@@ -22,7 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.noear.snack.core.utils.StringUtil;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.lang.Preview;
@@ -80,9 +80,9 @@ public class DdlLoader extends AbstractOptionsDocumentLoader<DdlLoader.Options, 
         try (Connection connection = dataSource.getConnection()) {
             String sql = this.jdbcLoadConfig.getShcemaTableQuerySql();
 
-            if (StringUtil.isEmpty(targetSchema)) {
+            if (Utils.isEmpty(targetSchema)) {
                 //全库全表
-            } else if (StringUtil.isEmpty(targetTable)) {
+            } else if (Utils.isEmpty(targetTable)) {
                 //单库全表
                 Map<String, String> schemaTableQueryTempleateConfigMap = new HashMap<>(1);
                 schemaTableQueryTempleateConfigMap.put("tableSchema", targetSchema);

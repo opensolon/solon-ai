@@ -15,7 +15,8 @@
  */
 package org.noear.solon.ai.llm.dialect.ollama;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
+import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.embedding.Embedding;
 import org.noear.solon.ai.embedding.EmbeddingConfig;
@@ -46,23 +47,23 @@ public class OllamaEmbeddingDialect extends AbstractEmbeddingDialect {
 
     @Override
     public EmbeddingResponse parseResponseJson(EmbeddingConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("error")) {
+        if (oResp.hasKey("error")) {
             return new EmbeddingResponse(model, new EmbeddingException(oResp.get("error").getString()), null, null);
         } else {
             List<Embedding> data = new ArrayList<>();
             int dataIndex = 0;
-            for (float[] embed : oResp.get("embeddings").toObjectList(float[].class)) {
+            for (float[] embed : oResp.get("embeddings").toBean(new TypeRef<List<float[]>>() { })) {
                 data.add(new Embedding(dataIndex, embed));
                 dataIndex++;
             }
 
             AiUsage usage = null;
 
-            if (oResp.contains("prompt_eval_count")) {
+            if (oResp.hasKey("prompt_eval_count")) {
                 int prompt_eval_count = oResp.get("prompt_eval_count").getInt();
                 usage = new AiUsage(
                         prompt_eval_count,

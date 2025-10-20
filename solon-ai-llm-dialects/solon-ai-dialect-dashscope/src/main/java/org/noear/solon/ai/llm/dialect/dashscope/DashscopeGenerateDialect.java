@@ -15,7 +15,8 @@
  */
 package org.noear.solon.ai.llm.dialect.dashscope;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
+import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.generate.*;
 import org.noear.solon.ai.generate.dialect.AbstractGenerateDialect;
@@ -60,7 +61,7 @@ public class DashscopeGenerateDialect extends AbstractGenerateDialect {
 
     @Override
     public String buildRequestJson(GenerateConfig config, GenerateOptions options, String promptStr, Map promptMap) {
-        return new ONode().build(n -> {
+        return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
@@ -68,10 +69,10 @@ public class DashscopeGenerateDialect extends AbstractGenerateDialect {
             if (Utils.isNotEmpty(promptStr)) {
                 n.getOrNew("input").set("prompt", promptStr);
             } else if (Utils.isNotEmpty(promptMap)) {
-                n.set("input", ONode.load(promptMap));
+                n.set("input", ONode.ofBean(promptMap));
             }
 
-            n.getOrNew("parameters").build(n1 -> {
+            n.getOrNew("parameters").then(n1 -> {
                 for (Map.Entry<String, Object> kv : options.options().entrySet()) {
                     n1.set(kv.getKey(), kv.getValue());
                 }
@@ -81,23 +82,23 @@ public class DashscopeGenerateDialect extends AbstractGenerateDialect {
 
     @Override
     public GenerateResponse parseResponseJson(GenerateConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("code") && !Utils.isEmpty(oResp.get("code").getString())) {
+        if (oResp.hasKey("code") && !Utils.isEmpty(oResp.get("code").getString())) {
             return new GenerateResponse(model, new GenerateException(oResp.get("code").getString() + ": " + oResp.get("message").getString()), null, null);
         } else {
             List<GenerateContent> data = null;
             ONode oOutput = oResp.get("output");
 
-            if (oOutput.contains("task_id")) {
+            if (oOutput.hasKey("task_id")) {
                 //异步模式只返回任务 id
                 String url = config.getTaskUrlAndId(oOutput.get("task_id").getString());
                 data = Arrays.asList(GenerateContent.builder().url(url).build());
-            } else if (oOutput.contains("results")) {
+            } else if (oOutput.hasKey("results")) {
                 //同步模式直接有结果
-                data = oOutput.get("results").toObjectList(GenerateContent.class);
+                data = oOutput.get("results").toBean(new TypeRef<List<GenerateContent>>() {  });
             }
 
             return new GenerateResponse(model, null, data, null);

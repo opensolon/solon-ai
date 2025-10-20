@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.llm.dialect.openai;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.reranking.Reranking;
 import org.noear.solon.ai.reranking.RerankingConfig;
@@ -51,16 +51,16 @@ public class OpenaiRerankingDialect extends AbstractRerankingDialect {
 
     @Override
     public RerankingResponse parseResponseJson(RerankingConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("error")) {
+        if (oResp.hasKey("error")) {
             return new RerankingResponse(model, new RerankingException(oResp.get("error").getString()), null, null);
         } else {
             List<Reranking> results = new ArrayList<>();
 
-            for(ONode n1 : oResp.get("results").ary()){
+            for(ONode n1 : oResp.get("results").getArray()){
                 Reranking r1 = new Reranking(
                         n1.get("index").getInt(),
                         n1.get("document").get("text").getString(),
@@ -71,7 +71,7 @@ public class OpenaiRerankingDialect extends AbstractRerankingDialect {
 
             AiUsage usage = null;
 
-            if (oResp.contains("usage")) {
+            if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
                 usage = new AiUsage(
                         oUsage.get("prompt_tokens").getInt(),

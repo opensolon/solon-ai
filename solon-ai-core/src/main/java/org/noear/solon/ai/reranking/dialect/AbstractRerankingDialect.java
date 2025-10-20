@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.reranking.dialect;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.reranking.RerankingConfig;
@@ -33,14 +33,14 @@ import java.util.Map;
 public abstract class AbstractRerankingDialect implements RerankingDialect {
     @Override
     public String buildRequestJson(RerankingConfig config, RerankingOptions options, String query, List<Document> documents) {
-        return new ONode().build(n -> {
+        return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
 
             n.set("query", query);
 
-            n.getOrNew("documents").build(n1 -> {
+            n.getOrNew("documents").then(n1 -> {
                 for (Document doc : documents) {
                     n1.add(doc.getContent());
                 }

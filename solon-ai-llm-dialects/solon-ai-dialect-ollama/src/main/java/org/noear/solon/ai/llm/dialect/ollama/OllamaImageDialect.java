@@ -15,7 +15,8 @@
  */
 package org.noear.solon.ai.llm.dialect.ollama;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
+import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.image.ImageConfig;
@@ -43,17 +44,17 @@ public class OllamaImageDialect extends AbstractImageDialect {
 
     @Override
     public ImageResponse parseResponseJson(ImageConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("error")) {
+        if (oResp.hasKey("error")) {
             return new ImageResponse(model, new ImageException(oResp.get("error").getString()), null, null);
         } else {
-            List<Image> data = oResp.get("data").toObjectList(Image.class);
+            List<Image> data = oResp.get("data").toBean(new TypeRef<List<Image>>() {});
 
             AiUsage usage = null;
-            if (oResp.contains("prompt_eval_count")) {
+            if (oResp.hasKey("prompt_eval_count")) {
                 int prompt_eval_count = oResp.get("prompt_eval_count").getInt();
                 usage = new AiUsage(
                         prompt_eval_count,

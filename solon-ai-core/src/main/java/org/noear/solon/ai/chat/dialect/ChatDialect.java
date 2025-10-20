@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat.dialect;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.AiModelDialect;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatResponseDefault;

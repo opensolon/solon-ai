@@ -15,8 +15,8 @@
  */
 package org.noear.solon.ai.chat.message;
 
-import org.noear.snack.ONode;
-import org.noear.snack.core.Feature;
+import org.noear.snack4.ONode;
+import org.noear.snack4.Feature;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.chat.ChatRole;
 
@@ -174,24 +174,24 @@ public interface ChatMessage extends Serializable {
      * 序列化为 json
      */
     static String toJson(ChatMessage message) {
-        return ONode.load(message, Feature.EnumUsingName).toJson();
+        return ONode.ofBean(message, Feature.Write_EnumUsingName).toJson();
     }
 
     /**
      * 从 json 反序列化为消息
      */
     static ChatMessage fromJson(String json) {
-        ONode oNode = ONode.loadStr(json);
+        ONode oNode = ONode.ofJson(json);
         ChatRole role = ChatRole.valueOf(oNode.get("role").getString());
 
         if (role == ChatRole.TOOL) {
-            return oNode.toObject(ToolMessage.class);
+            return oNode.toBean(ToolMessage.class);
         } else if (role == ChatRole.SYSTEM) {
-            return oNode.toObject(SystemMessage.class);
+            return oNode.toBean(SystemMessage.class);
         } else if (role == ChatRole.USER) {
-            return oNode.toObject(UserMessage.class);
+            return oNode.toBean(UserMessage.class);
         } else {
-            return oNode.toObject(AssistantMessage.class);
+            return oNode.toBean(AssistantMessage.class);
         }
     }
 }

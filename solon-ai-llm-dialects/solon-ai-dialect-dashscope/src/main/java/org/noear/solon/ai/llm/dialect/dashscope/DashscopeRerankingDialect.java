@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.llm.dialect.dashscope;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.rag.Document;
@@ -60,15 +60,15 @@ public class DashscopeRerankingDialect extends AbstractRerankingDialect {
 
     @Override
     public String buildRequestJson(RerankingConfig config, RerankingOptions options, String query, List<Document> documents) {
-        return new ONode().build(n -> {
+        return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
 
-            n.getOrNew("input").build(n1->{
+            n.getOrNew("input").then(n1->{
                 n1.set("query", query);
 
-                n1.getOrNew("documents").build(n2 -> {
+                n1.getOrNew("documents").then(n2 -> {
                     for (Document doc : documents) {
                         n2.add(doc.getContent());
                     }
@@ -84,16 +84,16 @@ public class DashscopeRerankingDialect extends AbstractRerankingDialect {
 
     @Override
     public RerankingResponse parseResponseJson(RerankingConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("message")) {
+        if (oResp.hasKey("message")) {
             return new RerankingResponse(model, new RerankingException(oResp.get("message").getString()), null, null);
         } else {
             List<Reranking> results = new ArrayList<>();
 
-            for (ONode n1 : oResp.get("output").get("results").ary()) {
+            for (ONode n1 : oResp.get("output").get("results").getArray()) {
                 Reranking r1 = new Reranking(
                         n1.get("index").getInt(),
                         n1.get("document").get("text").getString(),
@@ -104,7 +104,7 @@ public class DashscopeRerankingDialect extends AbstractRerankingDialect {
 
             AiUsage usage = null;
 
-            if (oResp.contains("usage")) {
+            if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
                 int total_tokens = oUsage.get("total_tokens").getInt();
                 usage = new AiUsage(

@@ -16,7 +16,7 @@
 package org.noear.solon.ai.rag.loader;
 
 import org.apache.poi.ss.usermodel.*;
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 
@@ -88,7 +88,7 @@ public class ExcelLoader extends AbstractOptionsDocumentLoader<ExcelLoader.Optio
 
                     if (readAll.size() > 0) {
                         if (options.documentMaxRows < 0) {
-                            documents.add(new Document(ONode.stringify(readAll)).metadata(this.additionalMetadata));
+                            documents.add(new Document(ONode.serialize(readAll)).metadata(this.additionalMetadata));
                         } else {
                             int totalSize = readAll.size();
                             int numBatches = (totalSize + options.documentMaxRows - 1) / options.documentMaxRows; // 计算总批次数
@@ -98,7 +98,7 @@ public class ExcelLoader extends AbstractOptionsDocumentLoader<ExcelLoader.Optio
 
                                 List<Map<String, Object>> batch = readAll.subList(start, end);
 
-                                documents.add(new Document(ONode.stringify(batch)).metadata(this.additionalMetadata));
+                                documents.add(new Document(ONode.serialize(batch)).metadata(this.additionalMetadata));
                             }
                         }
                     }

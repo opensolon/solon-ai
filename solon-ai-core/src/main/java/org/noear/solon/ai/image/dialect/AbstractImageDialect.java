@@ -15,12 +15,11 @@
  */
 package org.noear.solon.ai.image.dialect;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.image.ImageConfig;
 import org.noear.solon.ai.image.ImageOptions;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -32,7 +31,7 @@ import java.util.Map;
 public abstract class AbstractImageDialect implements ImageDialect {
     @Override
     public String buildRequestJson(ImageConfig config, ImageOptions options, String promptStr, Map promptMap) {
-        return new ONode().build(n -> {
+        return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
@@ -42,7 +41,7 @@ public abstract class AbstractImageDialect implements ImageDialect {
                 n.set("prompt", promptStr);
             } else if (Utils.isNotEmpty(promptMap)) {
                 //字典形态
-                n.setAll(ONode.load(promptMap));
+                n.setAll(ONode.ofBean(promptMap).getObject());
             }
 
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {

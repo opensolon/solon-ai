@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.flow.components.models;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
@@ -60,7 +60,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
         //构建聊天模型（预热后，会缓存住）
         ChatModel chatModel = (ChatModel) node.attachment;
         if (chatModel == null) {
-            ChatConfig chatConfig = ONode.load(node.getMeta(META_CHAT_CONFIG)).toObject(ChatConfig.class);
+            ChatConfig chatConfig = ONode.ofJson(node.getMeta(META_CHAT_CONFIG)).toBean(ChatConfig.class);
             Assert.notNull(chatConfig, "chatConfig");
             ChatModel.Builder chatModelBuilder = ChatModel.of(chatConfig);
 
@@ -78,7 +78,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
             //mcpServers
             Object mcpServers = node.getMeta(META_MCP_SERVERS);
             if (mcpServers != null) {
-                ONode mcpServersNode = ONode.loadObj(mcpServers);
+                ONode mcpServersNode = ONode.ofBean(mcpServers);
                 McpProviders mcpProviders = McpProviders.fromMcpServers(mcpServersNode);
                 if (mcpProviders != null) {
                     chatModelBuilder.defaultToolsAdd(mcpProviders);

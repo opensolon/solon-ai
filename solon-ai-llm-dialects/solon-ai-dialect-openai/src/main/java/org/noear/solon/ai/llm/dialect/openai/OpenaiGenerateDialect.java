@@ -15,7 +15,8 @@
  */
 package org.noear.solon.ai.llm.dialect.openai;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
+import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.generate.GenerateContent;
 import org.noear.solon.ai.generate.dialect.AbstractGenerateDialect;
@@ -52,26 +53,27 @@ public class OpenaiGenerateDialect extends AbstractGenerateDialect {
 
     @Override
     public GenerateResponse parseResponseJson(GenerateConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
-        if (oResp.contains("error")) {
+        if (oResp.hasKey("error")) {
             return new GenerateResponse(model, new GenerateException(oResp.get("error").getString()), null, null);
         } else {
             List<GenerateContent> data = null;
 
-            if (oResp.contains("task_id")) {
+            if (oResp.hasKey("task_id")) {
                 //异步模式只返回任务 id
                 String url = config.getTaskUrlAndId(oResp.get("task_id").getString());
                 data = Arrays.asList(GenerateContent.builder().url(url).build());
-            } else if (oResp.contains("data")) {
+            } else if (oResp.hasKey("data")) {
                 //同步模式直接有结果
-                data = oResp.get("data").toObjectList(GenerateContent.class);
+                data = oResp.get("data").toBean(new TypeRef<List<GenerateContent>>() {
+                });
             }
 
             AiUsage usage = null;
-            if (oResp.contains("usage")) {
+            if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
                 usage = new AiUsage(
                         oUsage.get("prompt_tokens").getInt(),

@@ -1,6 +1,6 @@
 package lab.ai.a2a;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.SystemMessage;
@@ -31,7 +31,7 @@ public class AgentDispatcher implements ToolProvider , AutoCloseable {
         dispatcherTools.add(new FunctionToolDesc("list_agents")
                 .description("列出可用于委派任务的可用代理。")
                 .doHandle(args -> {
-                    return ONode.stringify(agentInfo);
+                    return ONode.serialize(agentInfo);
                 }));
 
 

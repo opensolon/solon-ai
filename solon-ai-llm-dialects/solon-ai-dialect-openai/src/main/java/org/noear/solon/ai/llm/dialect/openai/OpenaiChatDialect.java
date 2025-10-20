@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.llm.dialect.openai;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.*;
@@ -67,7 +67,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         }
 
         //解析
-        ONode oResp = ONode.load(json);
+        ONode oResp = ONode.ofJson(json);
 
         if (oResp.isObject() == false) {
             return false;
@@ -75,14 +75,14 @@ public class OpenaiChatDialect extends AbstractChatDialect {
 
         if ("error".equals(oResp.get("object").getString())) {
             resp.setError(new ChatException(oResp.get("message").getString()));
-        } else if (oResp.contains("error")) {
+        } else if (oResp.hasKey("error")) {
             resp.setError(new ChatException(oResp.get("error").getString()));
         } else {
             resp.setModel(oResp.get("model").getString());
 
             Date created = new Date(oResp.get("created").getLong() * 1000);
 
-            for (ONode oChoice1 : oResp.get("choices").ary()) {
+            for (ONode oChoice1 : oResp.get("choices").getArray()) {
                 int index = oChoice1.get("index").getInt();
                 String finish_reason = oChoice1.get("finish_reason").getString();
 

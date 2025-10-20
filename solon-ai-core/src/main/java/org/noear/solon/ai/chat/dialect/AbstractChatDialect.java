@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat.dialect;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.media.Audio;
@@ -43,7 +43,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
-            oNode.set("tool_calls", ONode.load(msg.getToolCallsRaw()));
+            oNode.set("tool_calls", ONode.ofBean(msg.getToolCallsRaw()));
         }
     }
 
@@ -70,7 +70,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (Utils.isEmpty(msg.getMedias())) {
             oNode.set("content", msg.getContent());
         } else {
-            oNode.getOrNew("content").build(n1 -> {
+            oNode.getOrNew("content").then(n1 -> {
                 if (Utils.isNotEmpty(msg.getContent())) {
                     n1.addNew().set("type", "text").set("text", msg.getContent());
                 }
@@ -119,14 +119,14 @@ public abstract class AbstractChatDialect implements ChatDialect {
             return;
         }
 
-        n.getOrNew("tools").build(n1 -> {
+        n.getOrNew("tools").then(n1 -> {
             for (FunctionTool func : tools) {
-                n1.addNew().build(n2 -> {
+                n1.addNew().then(n2 -> {
                     n2.set("type", "function");
-                    n2.getOrNew("function").build(toolNode -> {
+                    n2.getOrNew("function").then(toolNode -> {
                         toolNode.set("name", func.name());
                         toolNode.set("description", func.description());
-                        toolNode.set("parameters", ONode.loadStr(func.inputSchema()));
+                        toolNode.set("parameters", ONode.ofJson(func.inputSchema()));
                     });
                 });
             }
@@ -135,12 +135,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
     @Override
     public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
-        return new ONode().build(n -> {
+        return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
 
-            n.getOrNew("messages").build(n1 -> {
+            n.getOrNew("messages").then(n1 -> {
                 for (ChatMessage m1 : messages) {
                     if (m1.isThinking() == false) {
                         n1.add(buildChatMessageNode(m1));
@@ -151,7 +151,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             n.set("stream", isStream);
 
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {
-                n.set(kv.getKey(), ONode.loadObj(kv.getValue()));
+                n.set(kv.getKey(), ONode.ofBean(kv.getValue()));
             }
 
             ChatMessage lastMessage = messages.get(messages.size() - 1);
@@ -164,12 +164,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
         oNode.set("content", "");
-        oNode.getOrNew("tool_calls").asArray().build(n1 -> {
+        oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<Integer, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
                 n1.addNew().set("id", kv.getValue().idBuilder.toString())
                         .set("type", "function")
-                        .getOrNew("function").build(n2 -> {
+                        .getOrNew("function").then(n2 -> {
                             n2.set("name", kv.getValue().nameBuilder.toString());
                             if (kv.getValue().argumentsBuilder.length() > 0) {
                                 n2.set("arguments", kv.getValue().argumentsBuilder.toString());
@@ -208,7 +208,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         List<ToolCall> toolCalls = new ArrayList<>();
 
-        for (ONode n1 : toolCallsNode.ary()) {
+        for (ONode n1 : toolCallsNode.getArray()) {
             toolCalls.add(parseToolCall(n1));
         }
 
@@ -224,14 +224,16 @@ public abstract class AbstractChatDialect implements ChatDialect {
         ONode n1fArgs = n1f.get("arguments");
         String argStr = n1fArgs.getString();
 
-        if (n1fArgs.isValue()) {
+        if (n1fArgs.isString()) {
             //有可能是 json string
-            n1fArgs = ONode.loadStr(argStr);
+            if (ONode.hasNestedJson(argStr)) {
+                n1fArgs = ONode.ofJson(argStr);
+            }
         }
 
         Map<String, Object> argMap = null;
         if (n1fArgs.isObject()) {
-            argMap = n1fArgs.toObject(Map.class);
+            argMap = n1fArgs.toBean(Map.class);
         }
         return new ToolCall(index, callId, name, argStr, argMap);
     }
@@ -239,12 +241,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
     protected String parseAssistantMessageContent(ChatResponseDefault resp, ONode oContent) {
         if (oContent.isValue()) {
             //一般输出都是单值
-            return oContent.getRawString();
+            return oContent.getValueAs();
         } else {
             ONode contentItem = null;
             if (oContent.isArray()) {
                 //有些输出会是列表（取第一个）
-                if (oContent.ary().size() > 0) {
+                if (oContent.getArrayUnsafe().size() > 0) {
                     contentItem = oContent.get(0);
                 }
             } else if (oContent.isObject()) {
@@ -255,17 +257,17 @@ public abstract class AbstractChatDialect implements ChatDialect {
             if (contentItem != null) {
                 if (contentItem.isObject()) {
                     //优先取文本
-                    if (contentItem.contains("text")) {
-                        return contentItem.get("text").getRawString();
-                    } else if (contentItem.contains("image")) {
-                        return contentItem.get("image").getRawString();
-                    } else if (contentItem.contains("audio")) {
-                        return contentItem.get("audio").getRawString();
-                    } else if (contentItem.contains("video")) {
-                        return contentItem.get("video").getRawString();
+                    if (contentItem.hasKey("text")) {
+                        return contentItem.get("text").getValueAs();
+                    } else if (contentItem.hasKey("image")) {
+                        return contentItem.get("image").getValueAs();
+                    } else if (contentItem.hasKey("audio")) {
+                        return contentItem.get("audio").getValueAs();
+                    } else if (contentItem.hasKey("video")) {
+                        return contentItem.get("video").getValueAs();
                     }
                 } else if (contentItem.isValue()) {
-                    return contentItem.getRawString();
+                    return contentItem.getValueAs();
                 }
             }
         }
@@ -287,7 +289,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         List<Map> searchResultsRaw = null;
 
         if (Utils.isNotEmpty(toolCalls)) {
-            toolCallsRaw = toolCallsNode.toObject(List.class);
+            toolCallsRaw = toolCallsNode.toBean(List.class);
             if (resp.in_thinking && resp.isStream()) {
                 //说明是思考结束立刻调用了工具，需要添加思考的结束标识
                 messageList.add(new AssistantMessage("</think>", true));
@@ -297,7 +299,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         if (searchResultsNode != null) {
-            searchResultsRaw = searchResultsNode.toObject(List.class);
+            searchResultsRaw = searchResultsNode.toBean(List.class);
         }
 
         /**
@@ -310,9 +312,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (Utils.isEmpty(toolCallsRaw) && resp.hasToolCallBuilders() == false) {
             //如果没有工具调用（且没有工具构建）
-            String reasoning_content = oMessage.get("reasoning_content").getRawString();
+            String reasoning_content = oMessage.get("reasoning_content").getValueAs();
             if (reasoning_content == null) {
-                reasoning_content = oMessage.get("reasoning").getRawString();
+                reasoning_content = oMessage.get("reasoning").getValueAs();
             }
 
             if (Utils.isNotEmpty(reasoning_content)) {
@@ -382,7 +384,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         if (content != null || toolCallsRaw != null) {
-            Object contentRaw = oContent.toObject();
+            Object contentRaw = oContent.toBean();
             messageList.add(new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw));
         }
 

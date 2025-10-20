@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.generate.dialect;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.generate.GenerateConfig;
 import org.noear.solon.ai.generate.GenerateOptions;
@@ -31,7 +31,7 @@ import java.util.Map;
 public abstract class AbstractGenerateDialect implements GenerateDialect {
     @Override
     public String buildRequestJson(GenerateConfig config, GenerateOptions options, String promptStr, Map promptMap) {
-        return new ONode().build(n -> {
+        return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
@@ -41,7 +41,7 @@ public abstract class AbstractGenerateDialect implements GenerateDialect {
                 n.set("prompt", promptStr);
             } else if (Utils.isNotEmpty(promptMap)) {
                 //字典形态
-                n.setAll(ONode.load(promptMap));
+                n.setAll(ONode.ofBean(promptMap).getObject());
             }
 
             for (Map.Entry<String, Object> kv : options.options().entrySet()) {

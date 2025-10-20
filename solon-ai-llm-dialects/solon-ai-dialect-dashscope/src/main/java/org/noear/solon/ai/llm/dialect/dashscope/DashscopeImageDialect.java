@@ -15,7 +15,8 @@
  */
 package org.noear.solon.ai.llm.dialect.dashscope;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
+import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.image.*;
 import org.noear.solon.ai.image.dialect.AbstractImageDialect;
@@ -61,7 +62,7 @@ public class DashscopeImageDialect extends AbstractImageDialect {
 
     @Override
     public String buildRequestJson(ImageConfig config, ImageOptions options, String promptStr, Map promptMap) {
-        return new ONode().build(n -> {
+        return new ONode().then(n -> {
             if (Utils.isNotEmpty(config.getModel())) {
                 n.set("model", config.getModel());
             }
@@ -69,10 +70,10 @@ public class DashscopeImageDialect extends AbstractImageDialect {
             if (Utils.isNotEmpty(promptStr)) {
                 n.getOrNew("input").set("prompt", promptStr);
             } else if (Utils.isNotEmpty(promptMap)) {
-                n.set("input", ONode.load(promptMap));
+                n.set("input", ONode.ofBean(promptMap));
             }
 
-            n.getOrNew("parameters").build(n1 -> {
+            n.getOrNew("parameters").then(n1 -> {
                 for (Map.Entry<String, Object> kv : options.options().entrySet()) {
                     n1.set(kv.getKey(), kv.getValue());
                 }
@@ -82,22 +83,22 @@ public class DashscopeImageDialect extends AbstractImageDialect {
 
     @Override
     public ImageResponse parseResponseJson(ImageConfig config, String respJson) {
-        ONode oResp = ONode.load(respJson);
+        ONode oResp = ONode.ofJson(respJson);
 
         String model = oResp.get("model").getString();
 
 
         //https://dashscope.aliyuncs.com/api/v1/tasks/
 
-        if (oResp.contains("code") && !Utils.isEmpty(oResp.get("code").getString())) {
+        if (oResp.hasKey("code") && !Utils.isEmpty(oResp.get("code").getString())) {
             return new ImageResponse(model, new ImageException(oResp.get("code").getString() + ": " + oResp.get("message").getString()), null, null);
         } else {
             List<Image> data = null;
             ONode oOutput = oResp.get("output");
 
-            if (oOutput.contains("results")) {
+            if (oOutput.hasKey("results")) {
                 //同步模式直接有结果
-                data = oOutput.get("results").toObjectList(Image.class);
+                data = oOutput.get("results").toBean(new TypeRef<List<Image>>() { });
             } else {
                 //异步模式只返回任务 id
                 String url = "https://dashscope.aliyuncs.com/api/v1/tasks/" + oOutput.get("task_id").getString();

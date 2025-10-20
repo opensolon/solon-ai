@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.rag.splitter;
 
-import org.noear.snack.ONode;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.DocumentSplitter;
@@ -85,9 +85,9 @@ public class JsonSplitter implements DocumentSplitter {
     protected List<Document> splitJson(String josn) {
         List<Document> tmp = new ArrayList<>();
 
-        ONode oNode = ONode.load(josn);
+        ONode oNode = ONode.ofJson(josn);
         if (oNode.isArray()) {
-            for (ONode n1 : oNode.ary()) {
+            for (ONode n1 : oNode.getArrayUnsafe()) {
                 splitJsonNode(n1, tmp);
             }
         } else {
@@ -102,11 +102,11 @@ public class JsonSplitter implements DocumentSplitter {
      */
     protected void splitJsonNode(ONode oNode, List<Document> docs) {
         if (oNode.isArray()) {
-            for (ONode n1 : oNode.ary()) {
+            for (ONode n1 : oNode.getArrayUnsafe()) {
                 splitJsonNode(n1, docs);
             }
         } else if (oNode.isObject()) {
-            Map<String, Object> jsonData = oNode.toObject(Map.class);
+            Map<String, Object> jsonData = oNode.toBean(Map.class);
 
             docs.add(new Document(buildContent(jsonData), buildMetadata(jsonData)));
         }
