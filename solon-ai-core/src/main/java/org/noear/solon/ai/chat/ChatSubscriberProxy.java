@@ -50,7 +50,7 @@ public class ChatSubscriberProxy<T> implements Subscriber<T> {
         if (subscribed.compareAndSet(false, true)) {
             subscriber.onSubscribe(subscription);
         } else {
-            subscription.request(1L);
+            subscription.request(Long.MAX_VALUE);
         }
     }
 
