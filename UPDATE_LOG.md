@@ -1,4 +1,8 @@
 
+### 3.4.7
+
+* 修复 solon-ai-core chatModel:stream 长流输出可能出错的问题
+
 ### 3.4.5
 
 * 优化 solon-ai-core chatModel.stream 与背压处理的兼容性
