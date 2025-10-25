@@ -15,12 +15,12 @@
  */
 package org.noear.solon.ai.chat.tool;
 
+import org.noear.eggg.FieldEggg;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Param;
-import org.noear.solon.core.wrap.ClassWrap;
-import org.noear.solon.core.wrap.FieldWrap;
+import org.noear.solon.core.util.EgggUtil;
 import org.noear.solon.lang.Nullable;
 
 import java.lang.reflect.*;
@@ -363,7 +363,7 @@ public class ToolSchemaUtil {
         schemaNode.getOrNew("properties").then(propertiesNode -> {
             propertiesNode.asObject();
 
-            for (FieldWrap fw : ClassWrap.get(clazz).getAllFieldWraps()) {
+            for (FieldEggg fw : EgggUtil.getClassEggg(clazz).getFieldEgggs()) {
                 ParamDesc fp = paramOf(fw.getField());
 
                 if (fp != null) {

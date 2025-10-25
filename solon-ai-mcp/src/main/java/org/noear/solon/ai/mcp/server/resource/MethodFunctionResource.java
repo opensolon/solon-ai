@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
+import org.noear.eggg.MethodEggg;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.chat.tool.MethodExecuteHandler;
@@ -30,8 +31,6 @@ import org.noear.solon.core.wrap.MethodWrap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Method;
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -48,7 +47,6 @@ public class MethodFunctionResource implements FunctionResource {
 
     private final BeanWrap beanWrap;
     private final MethodWrap methodWrap;
-    private final Type returnType;
 
     private final String name;
     private final String title;
@@ -60,13 +58,12 @@ public class MethodFunctionResource implements FunctionResource {
     //path key 列表
     private List<String> pathKeys;
 
-    public MethodFunctionResource(BeanWrap beanWrap, Method method) {
+    public MethodFunctionResource(BeanWrap beanWrap, MethodEggg methodEggg) {
         this.beanWrap = beanWrap;
-        this.methodWrap = new MethodWrap(beanWrap.context(), method.getDeclaringClass(), method);
-        this.returnType = method.getGenericReturnType();
+        this.methodWrap = new MethodWrap(beanWrap.context(), beanWrap.rawClz(), methodEggg);
 
-        this.mapping = method.getAnnotation(ResourceMapping.class);
-        this.name = Utils.annoAlias(mapping.name(), method.getName());
+        this.mapping = methodEggg.getMethod().getAnnotation(ResourceMapping.class);
+        this.name = Utils.annoAlias(mapping.name(), methodEggg.getName());
 
 
         //断言
@@ -77,7 +74,7 @@ public class MethodFunctionResource implements FunctionResource {
 
         this.title = mapping.title();
 
-        Produces producesAnno = method.getAnnotation(Produces.class);
+        Produces producesAnno = methodEggg.getMethod().getAnnotation(Produces.class);
         if (producesAnno != null) {
             this.mimeType = producesAnno.value();
         } else {

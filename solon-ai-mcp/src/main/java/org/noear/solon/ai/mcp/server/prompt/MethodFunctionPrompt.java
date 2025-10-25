@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.prompt;
 
+import org.noear.eggg.MethodEggg;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -29,7 +30,6 @@ import org.noear.solon.core.wrap.MethodWrap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.*;
 
@@ -49,11 +49,11 @@ public class MethodFunctionPrompt implements FunctionPrompt {
     private final PromptMapping mapping;
     private final List<ParamDesc> params;
 
-    public MethodFunctionPrompt(BeanWrap beanWrap, Method method) {
+    public MethodFunctionPrompt(BeanWrap beanWrap, MethodEggg methodEggg) {
         this.beanWrap = beanWrap;
-        this.methodWrap = new MethodWrap(beanWrap.context(), method.getDeclaringClass(), method);
-        this.mapping = method.getAnnotation(PromptMapping.class);
-        this.name = Utils.annoAlias(mapping.name(), method.getName());
+        this.methodWrap = new MethodWrap(beanWrap.context(), beanWrap.rawClz(), methodEggg);
+        this.mapping = methodEggg.getMethod().getAnnotation(PromptMapping.class);
+        this.name = Utils.annoAlias(mapping.name(), methodEggg.getName());
 
         //断言
         Assert.notNull(mapping, "@PromptMapping annotation is missing");
@@ -62,13 +62,13 @@ public class MethodFunctionPrompt implements FunctionPrompt {
         Assert.notEmpty(mapping.description(), "PromptMapping description cannot be empty");
 
         //检查返回类型
-        if (Collection.class.isAssignableFrom(method.getReturnType()) == false) {
+        if (Collection.class.isAssignableFrom(methodEggg.getReturnTypeEggg().getType()) == false) {
             throw new IllegalArgumentException("@PromptMapping return type is not Collection");
         }
 
         this.params = new ArrayList<>();
 
-        for (Parameter p1 : method.getParameters()) {
+        for (Parameter p1 : methodEggg.getParameters()) {
             ParamDesc toolParam = ToolSchemaUtil.paramOf(p1);
             if(toolParam != null) {
                 this.params.add(toolParam);

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.tool;
 
+import org.noear.eggg.MethodEggg;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -28,7 +29,6 @@ import org.noear.solon.core.wrap.MethodWrap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.*;
@@ -56,19 +56,19 @@ public class MethodFunctionTool implements FunctionTool {
     private String outputSchema;
 
 
-    public MethodFunctionTool(BeanWrap beanWrap, Method method) {
+    public MethodFunctionTool(BeanWrap beanWrap, MethodEggg methodEggg) {
         this.beanWrap = beanWrap;
-        this.methodWrap = new MethodWrap(beanWrap.context(), method.getDeclaringClass(), method);
-        this.returnType = method.getGenericReturnType();
+        this.methodWrap = new MethodWrap(beanWrap.context(), beanWrap.rawClz(), methodEggg);
+        this.returnType = methodEggg.getMethod().getGenericReturnType();
 
-        ToolMapping mapping = method.getAnnotation(ToolMapping.class);
+        ToolMapping mapping = methodEggg.getMethod().getAnnotation(ToolMapping.class);
 
         //断言
         Assert.notNull(mapping, "@ToolMapping annotation is missing");
         //断言
         Assert.notEmpty(mapping.description(), "ToolMapping description cannot be empty");
 
-        this.name = Utils.annoAlias(mapping.name(), method.getName());
+        this.name = Utils.annoAlias(mapping.name(), methodEggg.getName());
         this.title = mapping.title();
         this.description = mapping.description();
         this.returnDirect = mapping.returnDirect();
@@ -84,7 +84,7 @@ public class MethodFunctionTool implements FunctionTool {
             }
         }
 
-        for (Parameter p1 : method.getParameters()) {
+        for (Parameter p1 : methodEggg.getParameters()) {
             ParamDesc toolParam = ToolSchemaUtil.paramOf(p1);
             if (toolParam != null) {
                 params.add(toolParam);
@@ -95,7 +95,7 @@ public class MethodFunctionTool implements FunctionTool {
 
         // 输出参数 outputSchema
         {
-            Type returnType = method.getGenericReturnType();
+            Type returnType = methodEggg.getReturnTypeEggg().getGenericType();
             if (ToolSchemaUtil.isIgnoreOutputSchema(returnType) == false) {
                 outputSchema = ToolSchemaUtil.buildOutputSchema(returnType);
             } else {

@@ -15,11 +15,13 @@
  */
 package org.noear.solon.ai.mcp.server.prompt;
 
+import org.noear.eggg.ClassEggg;
+import org.noear.eggg.MethodEggg;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.core.BeanWrap;
+import org.noear.solon.core.util.EgggUtil;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -43,9 +45,10 @@ public class MethodPromptProvider implements PromptProvider {
 
     public MethodPromptProvider(BeanWrap beanWrap) {
         //添加带注释的工具
-        for (Method method : beanWrap.clz().getMethods()) {
-            if (method.isAnnotationPresent(PromptMapping.class)) {
-                MethodFunctionPrompt resc = new MethodFunctionPrompt(beanWrap, method);
+        ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.rawClz());
+        for (MethodEggg me : classEggg.getPublicMethodEgggs()) {
+            if (me.getMethod().isAnnotationPresent(PromptMapping.class)) {
+                MethodFunctionPrompt resc = new MethodFunctionPrompt(beanWrap, me);
                 prompts.add(resc);
             }
         }

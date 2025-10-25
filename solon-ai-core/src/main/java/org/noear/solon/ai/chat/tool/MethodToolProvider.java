@@ -15,12 +15,13 @@
  */
 package org.noear.solon.ai.chat.tool;
 
+import org.noear.eggg.ClassEggg;
+import org.noear.eggg.MethodEggg;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.annotation.Mapping;
 import org.noear.solon.core.BeanWrap;
+import org.noear.solon.core.util.EgggUtil;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -44,10 +45,11 @@ public class MethodToolProvider implements ToolProvider {
 
     public MethodToolProvider(BeanWrap beanWrap) {
         //添加带注释的工具
-        for (Method method : beanWrap.clz().getMethods()) {
+        ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.rawClz());
+        for (MethodEggg me : classEggg.getPublicMethodEgggs()) {
             //兼容 mvc 注解
-            if (method.isAnnotationPresent(ToolMapping.class)) {
-                MethodFunctionTool func = new MethodFunctionTool(beanWrap, method);
+            if (me.getMethod().isAnnotationPresent(ToolMapping.class)) {
+                MethodFunctionTool func = new MethodFunctionTool(beanWrap, me);
                 tools.add(func);
             }
         }

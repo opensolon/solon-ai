@@ -15,11 +15,13 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
+import org.noear.eggg.ClassEggg;
+import org.noear.eggg.MethodEggg;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.core.BeanWrap;
+import org.noear.solon.core.util.EgggUtil;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -43,9 +45,10 @@ public class MethodResourceProvider implements ResourceProvider {
 
     public MethodResourceProvider(BeanWrap beanWrap) {
         //添加带注释的工具
-        for (Method method : beanWrap.clz().getMethods()) {
-            if (method.isAnnotationPresent(ResourceMapping.class)) {
-                MethodFunctionResource resc = new MethodFunctionResource(beanWrap, method);
+        ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.rawClz());
+        for (MethodEggg me : classEggg.getPublicMethodEgggs()) {
+            if (me.getMethod().isAnnotationPresent(ResourceMapping.class)) {
+                MethodFunctionResource resc = new MethodFunctionResource(beanWrap, me);
                 resources.add(resc);
             }
         }
