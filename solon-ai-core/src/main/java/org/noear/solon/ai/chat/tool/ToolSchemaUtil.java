@@ -363,7 +363,7 @@ public class ToolSchemaUtil {
         schemaNode.getOrNew("properties").then(propertiesNode -> {
             propertiesNode.asObject();
 
-            for (FieldEggg fw : EgggUtil.getClassEggg(clazz).getFieldEgggs()) {
+            for (FieldEggg fw : EgggUtil.getClassEggg(clazz).getAllFieldEgggs()) {
                 ParamDesc fp = paramOf(fw.getField());
 
                 if (fp != null) {
