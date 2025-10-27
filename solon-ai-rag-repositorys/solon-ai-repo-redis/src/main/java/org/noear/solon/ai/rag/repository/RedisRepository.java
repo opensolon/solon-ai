@@ -35,7 +35,7 @@ import org.noear.solon.ai.rag.util.ListUtil;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.ai.rag.util.SimilarityUtil;
 
-import redis.clients.jedis.PipelineBase;
+import redis.clients.jedis.AbstractPipeline;
 import redis.clients.jedis.UnifiedJedis;
 import redis.clients.jedis.json.Path;
 import redis.clients.jedis.search.FTCreateParams;
@@ -179,7 +179,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
     }
 
     private void batchSaveDo(List<Document> batch) {
-        PipelineBase pipeline = null;
+        AbstractPipeline pipeline = null;
         try {
             pipeline = config.client.pipelined();
             for (Document doc : batch) {
@@ -216,7 +216,7 @@ public class RedisRepository implements RepositoryStorable, RepositoryLifecycle 
             return;
         }
 
-        PipelineBase pipeline = null;
+        AbstractPipeline pipeline = null;
         try {
             pipeline = config.client.pipelined();
             for (String id : ids) {
