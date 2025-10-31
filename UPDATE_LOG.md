@@ -11,6 +11,10 @@
 *  channel 概念改为 transport （并保持兼容）???
 
 
+### v3.7.0
+
+* jedis 升为 7.0.0 （通过 redisx）
+
 ### 3.6.0
 
 * 优化 solon-ai-core XxxMessageTemplate 使用 SnEL 替代 TmplUtil
