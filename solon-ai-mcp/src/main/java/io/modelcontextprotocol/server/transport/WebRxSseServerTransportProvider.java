@@ -242,8 +242,6 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * the server is shutting down or the connection fails
 	 */
 	private void handleSseConnection(Context request) throws Throwable {
-		request.contentType("");
-
 		Object returnValue = handleSseConnectionDo(request);
 		if (returnValue instanceof Entity) {
 			Entity entity = (Entity) returnValue;
@@ -321,8 +319,6 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * with error details in case of failures
 	 */
 	private void handleMessage(Context request) throws Throwable {
-		request.contentType("");
-
 		Entity entity = handleMessageDo(request);
 		if (entity.body() != null) {
 			if (entity.body() instanceof McpError) {

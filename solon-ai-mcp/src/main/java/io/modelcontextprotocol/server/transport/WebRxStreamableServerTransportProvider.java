@@ -216,8 +216,6 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	 * @return A ServerResponse configured for SSE communication, or an error response
 	 */
 	private void handleGet(Context request) throws Throwable {
-		request.contentType("");
-
 		Object returnValue = handleGetDo(request);
 		if (returnValue instanceof Entity) {
 			Entity entity = (Entity) returnValue;
@@ -317,8 +315,6 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	 * @return A ServerResponse indicating success or appropriate error status
 	 */
 	private void handlePost(Context request) throws Throwable {
-		request.contentType("");
-
 		Object returnValue = handlePostDo(request);
 		if (returnValue instanceof Entity) {
 			Entity entity = (Entity) returnValue;
@@ -450,8 +446,6 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	 * @return A ServerResponse indicating success or appropriate error status
 	 */
 	private void handleDelete(Context request) throws Throwable {
-		request.contentType("");
-
 		Entity entity = handleDeleteDo(request);
 		if (entity.body() != null) {
 			if (entity.body() instanceof McpError) {
