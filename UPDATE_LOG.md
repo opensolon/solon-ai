@@ -10,6 +10,10 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+### 3.6.3
+
+* 优化 solon-ai-mcp 取消 request.contentType("") 设置
+
 
 ### 3.6.1
 
