@@ -84,14 +84,10 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 	}
 
 	private void handleGet(Context request) {
-		request.contentType("");
-
 		request.status(StatusCodes.CODE_METHOD_NOT_ALLOWED);
 	}
 
 	private void handlePost(Context request) throws Throwable {
-		request.contentType("");
-
 		Entity entity = handlePostDo(request);
 		if (entity.body() != null) {
 			if (entity.body() instanceof McpError) {
