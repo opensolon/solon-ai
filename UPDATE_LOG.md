@@ -1,4 +1,9 @@
 
+
+### 3.4.8
+
+* 修复 solon-ai parseToolCall 接收 stream 中间消息时可能会异常（添加 hasNestedJsonBlock 检测）
+
 ### 3.4.7
 
 * 修复 solon-ai-core chatModel:stream 长流输出可能出错的问题
