@@ -11,8 +11,13 @@
 *  channel 概念改为 transport （并保持兼容）???
 
 
+### 3.5.7
+
+* 优化 solon-ai-mcp 取消 request.contentType("") 设置
+
 ### 3.5.6
 
+* 修复 solon-ai-core chatModel:stream 长流输出可能出错的问题
 * mcp 移除 WebRxSseClientTransport:sendMessage 的 accept 声明（是在 3.5.5 时加的，此处没必要）
 
 ### 3.5.5
