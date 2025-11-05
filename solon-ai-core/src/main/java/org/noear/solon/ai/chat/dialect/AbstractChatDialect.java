@@ -225,8 +225,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
         String argStr = n1fArgs.getString();
 
         if (n1fArgs.isValue()) {
-            //有可能是 json string
-            n1fArgs = ONode.loadStr(argStr);
+            //有可能是 json string（如果不是不用管，可能只是流的中间消息）
+            if (hasNestedJsonBlock(argStr)) {
+                n1fArgs = ONode.loadStr(argStr);
+            }
         }
 
         Map<String, Object> argMap = null;
@@ -387,5 +389,34 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         return messageList;
+    }
+
+    protected boolean hasNestedJsonBlock(String str) {
+        if (str == null || str.isEmpty()) {
+            return false;
+        }
+
+        int start = 0;
+        int end = str.length() - 1;
+
+        // 跳过开头空白
+        while (start <= end && Character.isWhitespace(str.charAt(start))) {
+            start++;
+        }
+
+        // 跳过结尾空白
+        while (end >= start && Character.isWhitespace(str.charAt(end))) {
+            end--;
+        }
+
+        // 检查有效长度
+        if (start >= end) {
+            return false;
+        }
+
+        char first = str.charAt(start);
+        char last = str.charAt(end);
+
+        return (first == '{' && last == '}') || (first == '[' && last == ']');
     }
 }
