@@ -11,6 +11,8 @@
 *  channel 概念改为 transport （并保持兼容）???
 
 
+
+
 ### 3.6.4
 
 * 修复 solon-ai parseToolCall 接收 stream 中间消息时可能会异常（添加 hasNestedJsonBlock 检测）
@@ -27,6 +29,16 @@
 ### 3.6.0
 
 * 优化 solon-ai-core XxxMessageTemplate 使用 SnEL 替代 TmplUtil
+
+
+### 3.5.8
+
+* 修复 solon-ai parseToolCall 接收 stream 中间消息时可能会异常（添加 hasNestedJsonBlock 检测）
+
+### 3.5.7
+
+* 优化 solon-ai-mcp 取消 request.contentType("") 设置
+
 
 ### 3.5.5
 
