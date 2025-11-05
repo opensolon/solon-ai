@@ -13,6 +13,8 @@
 
 ### v3.7.0
 
+* 修复 solon-ai parseToolCall 接收 stream 中间消息时可能会异常（添加 hasNestedJsonBlock 检测）
+* 优化 solon-ai-mcp 取消 request.contentType("") 设置
 * jedis 升为 7.0.0 （通过 redisx）
 
 ### 3.6.0
