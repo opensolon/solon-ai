@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.eggg.FieldEggg;
+import org.noear.eggg.TypeEggg;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.util.ParamDesc;
@@ -49,7 +50,7 @@ public class ToolSchemaUtil {
     /**
      * 构建参数申明
      * */
-    public static @Nullable ParamDesc paramOf(AnnotatedElement ae) {
+    public static @Nullable ParamDesc paramOf(AnnotatedElement ae, TypeEggg typeEggg) {
         Param p1Anno = ae.getAnnotation(Param.class);
         if (p1Anno == null) {
             return null;
@@ -61,11 +62,11 @@ public class ToolSchemaUtil {
         if (ae instanceof Parameter) {
             Parameter p1 = (Parameter) ae;
             String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-            return new ParamDesc(name, p1.getParameterizedType(), p1Anno.required(), p1Anno.description());
+            return new ParamDesc(name, typeEggg.getGenericType(), p1Anno.required(), p1Anno.description());
         } else {
             Field p1 = (Field) ae;
             String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-            return new ParamDesc(name, p1.getGenericType(), p1Anno.required(), p1Anno.description());
+            return new ParamDesc(name, typeEggg.getGenericType(), p1Anno.required(), p1Anno.description());
         }
     }
 
@@ -364,7 +365,7 @@ public class ToolSchemaUtil {
             propertiesNode.asObject();
 
             for (FieldEggg fw : EgggUtil.getClassEggg(clazz).getAllFieldEgggs()) {
-                ParamDesc fp = paramOf(fw.getField());
+                ParamDesc fp = paramOf(fw.getField(), fw.getTypeEggg());
 
                 if (fp != null) {
                     propertiesNode.getOrNew(fp.name()).then(paramNode -> {

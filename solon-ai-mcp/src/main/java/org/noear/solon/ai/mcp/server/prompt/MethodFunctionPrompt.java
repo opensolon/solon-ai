@@ -16,6 +16,7 @@
 package org.noear.solon.ai.mcp.server.prompt;
 
 import org.noear.eggg.MethodEggg;
+import org.noear.eggg.ParamEggg;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -68,8 +69,8 @@ public class MethodFunctionPrompt implements FunctionPrompt {
 
         this.params = new ArrayList<>();
 
-        for (Parameter p1 : methodEggg.getParameters()) {
-            ParamDesc toolParam = ToolSchemaUtil.paramOf(p1);
+        for (ParamEggg p1 : methodEggg.getParamEgggAry()) {
+            ParamDesc toolParam = ToolSchemaUtil.paramOf(p1.getParam(), p1.getTypeEggg());
             if(toolParam != null) {
                 this.params.add(toolParam);
             }

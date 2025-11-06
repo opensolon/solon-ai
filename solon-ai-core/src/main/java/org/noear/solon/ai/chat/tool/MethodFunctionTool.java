@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.eggg.MethodEggg;
+import org.noear.eggg.ParamEggg;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -84,8 +85,8 @@ public class MethodFunctionTool implements FunctionTool {
             }
         }
 
-        for (Parameter p1 : methodEggg.getParameters()) {
-            ParamDesc toolParam = ToolSchemaUtil.paramOf(p1);
+        for (ParamEggg p1 : methodEggg.getParamEgggAry()) {
+            ParamDesc toolParam = ToolSchemaUtil.paramOf(p1.getParam(), p1.getTypeEggg());
             if (toolParam != null) {
                 params.add(toolParam);
             }
