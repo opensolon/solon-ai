@@ -230,6 +230,10 @@ public class ToolSchemaUtil {
         ONode props = schemaNode.getOrNew("properties");
 
         for (FieldEggg fe : typeEggg.getClassEggg().getAllFieldEgggs()) {
+            if(fe.isStatic() || fe.isTransient()){
+                continue;
+            }
+
             Type fieldType = fe.getGenericType();
 
             // 如果字段类型是泛型变量 T，替换为实际类型
