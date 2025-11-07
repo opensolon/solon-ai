@@ -69,7 +69,7 @@ public class ChatModel implements AiModel {
         if (prompt instanceof ChatSession) {
             return new ChatRequestDescDefault(config, dialect, (ChatSession) prompt);
         } else {
-            return new ChatRequestDescDefault(config, dialect,  InMemoryChatSession.builder().messages(prompt.getMessages()).build());
+            return new ChatRequestDescDefault(config, dialect, InMemoryChatSession.builder().messages(prompt.getMessages()).build());
         }
     }
 
@@ -301,6 +301,9 @@ public class ChatModel implements AiModel {
             return proxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port)));
         }
 
+        /**
+         * 构建
+         */
         public ChatModel build() {
             return new ChatModel(config);
         }

@@ -56,17 +56,24 @@ public class ChatOptions {
     /// ////////////
 
     /**
-     * 所有工具
-     */
-    public Collection<FunctionTool> tools() {
-        return tools.values();
-    }
-
-    /**
      * 工具上下文（附加参数）
      */
     public Map<String, Object> toolsContext() {
         return toolsContext;
+    }
+
+    public ChatOptions toolsContext(Map<String, Object> toolsContext) {
+        this.toolsContext.putAll(toolsContext);
+        return this;
+    }
+
+    /// ////////////
+
+    /**
+     * 所有工具
+     */
+    public Collection<FunctionTool> tools() {
+        return tools.values();
     }
 
     /**
@@ -123,11 +130,6 @@ public class ChatOptions {
         FunctionToolDesc decl = new FunctionToolDesc(name);
         toolBuilder.accept(decl);
         tools.put(decl.name(), decl);
-        return this;
-    }
-
-    public ChatOptions toolsContext(Map<String, Object> toolsContext) {
-        this.toolsContext.putAll(toolsContext);
         return this;
     }
 
