@@ -17,6 +17,7 @@
 
 ### 3.5.7
 
+* 修复 solon-ai-mcp 可能出现 Unknown media type 错误（取消 request.contentType 空设置）
 * 优化 solon-ai-mcp 取消 request.contentType("") 设置
 
 ### 3.5.6
