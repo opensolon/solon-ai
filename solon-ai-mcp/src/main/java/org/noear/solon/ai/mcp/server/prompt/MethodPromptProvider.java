@@ -45,7 +45,7 @@ public class MethodPromptProvider implements PromptProvider {
 
     public MethodPromptProvider(BeanWrap beanWrap) {
         //添加带注释的工具
-        ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.rawClz());
+        ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.clz());
         for (MethodEggg me : classEggg.getPublicMethodEgggs()) {
             if (me.getMethod().isAnnotationPresent(PromptMapping.class)) {
                 MethodFunctionPrompt resc = new MethodFunctionPrompt(beanWrap, me);

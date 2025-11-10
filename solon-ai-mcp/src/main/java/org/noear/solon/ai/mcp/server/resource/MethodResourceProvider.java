@@ -45,7 +45,7 @@ public class MethodResourceProvider implements ResourceProvider {
 
     public MethodResourceProvider(BeanWrap beanWrap) {
         //添加带注释的工具
-        ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.rawClz());
+        ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.clz());
         for (MethodEggg me : classEggg.getPublicMethodEgggs()) {
             if (me.getMethod().isAnnotationPresent(ResourceMapping.class)) {
                 MethodFunctionResource resc = new MethodFunctionResource(beanWrap, me);

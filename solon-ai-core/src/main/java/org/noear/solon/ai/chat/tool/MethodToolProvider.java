@@ -45,7 +45,7 @@ public class MethodToolProvider implements ToolProvider {
 
     public MethodToolProvider(BeanWrap beanWrap) {
         //添加带注释的工具
-        ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.rawClz());
+        ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.clz());
         for (MethodEggg me : classEggg.getPublicMethodEgggs()) {
             //兼容 mvc 注解
             if (me.getMethod().isAnnotationPresent(ToolMapping.class)) {
