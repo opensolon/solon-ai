@@ -13,6 +13,7 @@
 ### v3.7.2
 
 * 修复 solon-ai bean 有其它框架代理后，不能识别注解的问题
+* 修复 solon-ai ToolSchemaUtil 部分泛型识别失败的问题
 
 
 ### v3.7.0
