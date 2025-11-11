@@ -149,7 +149,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                 long completionTokens = oUsage.get("output_tokens").getLong();
                 long totalTokens = oUsage.get("total_tokens").getLong();
 
-                resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens));
+                resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens, oUsage));
             }
         }
 

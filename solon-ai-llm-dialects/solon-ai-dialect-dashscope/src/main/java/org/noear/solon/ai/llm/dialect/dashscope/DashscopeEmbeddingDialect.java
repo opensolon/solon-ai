@@ -108,12 +108,9 @@ public class DashscopeEmbeddingDialect extends AbstractEmbeddingDialect {
 
             if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
-                int total_tokens = oUsage.get("total_tokens").getInt();
-                usage = new AiUsage(
-                        total_tokens,
-                        0,
-                        total_tokens
-                );
+                long total_tokens = oUsage.get("total_tokens").getLong();
+
+                usage = new AiUsage(total_tokens, 0L, total_tokens, oUsage);
             }
 
             return new EmbeddingResponse(model, null, data, usage);

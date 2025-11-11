@@ -67,11 +67,10 @@ public class OpenaiEmbeddingDialect extends AbstractEmbeddingDialect {
 
             if (oResp.hasKey("usage")) {
                 ONode oUsage = oResp.get("usage");
-                usage = new AiUsage(
-                        oUsage.get("prompt_tokens").getInt(),
-                        0,
-                        oUsage.get("total_tokens").getInt()
-                );
+                long prompt_tokens = oUsage.get("prompt_tokens").getLong();
+                long total_tokens = oUsage.get("total_tokens").getLong();
+
+                usage = new AiUsage(prompt_tokens, 0L, total_tokens, oUsage);
             }
 
             return new EmbeddingResponse(model, null, data, usage);

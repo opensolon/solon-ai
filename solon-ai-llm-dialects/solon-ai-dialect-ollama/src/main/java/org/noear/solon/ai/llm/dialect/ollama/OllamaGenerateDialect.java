@@ -64,12 +64,9 @@ public class OllamaGenerateDialect extends AbstractGenerateDialect {
 
             AiUsage usage = null;
             if (oResp.hasKey("prompt_eval_count")) {
-                int prompt_eval_count = oResp.get("prompt_eval_count").getInt();
-                usage = new AiUsage(
-                        prompt_eval_count,
-                        0,
-                        prompt_eval_count
-                );
+                long prompt_eval_count = oResp.get("prompt_eval_count").getLong();
+
+                usage = new AiUsage(prompt_eval_count, 0L, prompt_eval_count, oResp);
             }
 
             return new GenerateResponse(model, null, data, usage);

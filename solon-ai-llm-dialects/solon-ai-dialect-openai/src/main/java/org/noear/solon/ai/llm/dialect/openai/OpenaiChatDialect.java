@@ -115,7 +115,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
                 long completionTokens = oUsage.get("completion_tokens").getLong();
                 long totalTokens = oUsage.get("total_tokens").getLong();
 
-                resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens));
+                resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens, oUsage));
             }
         }
 

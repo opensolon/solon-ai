@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -28,11 +29,13 @@ public class AiUsage {
     private final long promptTokens;
     private final long completionTokens;
     private final long totalTokens;
+    private final ONode source;
 
-    public AiUsage(long promptTokens, long completionTokens, long totalTokens) {
+    public AiUsage(long promptTokens, long completionTokens, long totalTokens, ONode source) {
         this.promptTokens = promptTokens;
         this.completionTokens = completionTokens;
         this.totalTokens = totalTokens;
+        this.source = source;
     }
 
     /**
@@ -54,5 +57,12 @@ public class AiUsage {
      */
     public long totalTokens() {
         return totalTokens;
+    }
+
+    /**
+     * 源数据
+     */
+    public ONode getSource() {
+        return source;
     }
 }
