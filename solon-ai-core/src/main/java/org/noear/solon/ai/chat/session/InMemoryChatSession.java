@@ -17,8 +17,11 @@ package org.noear.solon.ai.chat.session;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.SystemMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -95,6 +98,7 @@ public class InMemoryChatSession implements ChatSession {
 
     /**
      * 移除size个非SystemMessage
+     * 当删除调用 ToolCall 的 AssistantMessage 时，需要删除后续对应的 ToolMessage，可能会导致实际删除的 size 大于传入的 size.
      */
     private void removeNonSystemMessages(int size) {
         Iterator<ChatMessage> iterator = this.messages.iterator();
@@ -105,6 +109,16 @@ public class InMemoryChatSession implements ChatSession {
             if (!(message instanceof SystemMessage)) {
                 iterator.remove();
                 removeNums++;
+                if (message instanceof AssistantMessage) {
+                    List<ToolCall> toolCalls = ((AssistantMessage) message).getToolCalls();
+                    // 存在 toolCall 调用的 AssistantMessage，需要删除后续对应的ToolMessage
+                    if (Utils.isNotEmpty(toolCalls)) {
+                        while (iterator.hasNext() && iterator.next() instanceof ToolMessage) {
+                            iterator.remove();
+                            removeNums++;
+                        }
+                    }
+                }
             }
         }
     }
