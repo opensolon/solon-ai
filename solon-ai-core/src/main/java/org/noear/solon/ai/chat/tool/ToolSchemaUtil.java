@@ -189,7 +189,6 @@ public class ToolSchemaUtil {
         // Map
         if (Map.class.isAssignableFrom(typeEggg.getType())) {
             schemaNode.set("type", TYPE_OBJECT);
-            //schemaNode.getOrNew("properties").set("type", TYPE_OBJECT); // fallback
             return;
         }
 
