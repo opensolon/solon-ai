@@ -28,6 +28,9 @@ import java.lang.reflect.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URI;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 
 /**
@@ -216,6 +219,24 @@ public class ToolSchemaUtil {
             return;
         }
 
+        if (LocalDateTime.class.isAssignableFrom(typeEggg.getType())) {
+            schemaNode.set("type", TYPE_STRING);
+            schemaNode.set("format", "date-time");
+            return;
+        }
+
+        if (LocalDate.class.isAssignableFrom(typeEggg.getType())) {
+            schemaNode.set("type", TYPE_STRING);
+            schemaNode.set("format", "date");
+            return;
+        }
+
+        if (LocalTime.class.isAssignableFrom(typeEggg.getType())) {
+            schemaNode.set("type", TYPE_STRING);
+            schemaNode.set("format", "time");
+            return;
+        }
+
         // Uri
         if (URI.class.isAssignableFrom(typeEggg.getType())) {
             schemaNode.set("type", TYPE_STRING);
@@ -298,21 +319,6 @@ public class ToolSchemaUtil {
             return TYPE_BOOLEAN;
         } else {
             return TYPE_OBJECT;
-        }
-    }
-
-    /**
-     * 获取原始类型
-     *
-     * @since 3.3
-     */
-    public static Class<?> getRawClass(Type type) {
-        if (type instanceof ParameterizedType) {
-            return (Class<?>) ((ParameterizedType) type).getRawType();
-        } else if (type instanceof Class) {
-            return (Class<?>) type;
-        } else {
-            throw new IllegalArgumentException("Unsupported type: " + type);
         }
     }
 
