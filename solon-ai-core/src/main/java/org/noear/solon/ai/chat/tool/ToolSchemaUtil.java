@@ -255,9 +255,13 @@ public class ToolSchemaUtil {
             return;
         }
 
-        if(Void.class == typeEggg.getType() || Object.class == typeEggg.getType()) {
-            schemaNode.set("type", TYPE_OBJECT);
+        if(Void.class == typeEggg.getType() || void.class == typeEggg.getType()) {
+            schemaNode.set("type", TYPE_NULL);
             return;
+        }
+
+        if(Object.class == typeEggg.getType()){
+            schemaNode.set("type", TYPE_OBJECT);
         }
 
 
