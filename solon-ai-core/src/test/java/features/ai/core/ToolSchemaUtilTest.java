@@ -7,6 +7,7 @@ import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
 import com.fasterxml.jackson.module.jsonSchema.JsonSchemaGenerator;
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
+import org.noear.snack4.jsonschema.SchemaKeyword;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
@@ -22,8 +23,8 @@ import java.util.Date;
 public class ToolSchemaUtilTest {
     @Test
     public void type_case1() {
-        ONode schemaNode = new ONode();
-        ToolSchemaUtil.buildTypeSchemaNode(BigDecimal.class, "test", schemaNode);
+        ONode schemaNode = ToolSchemaUtil.createSchema(BigDecimal.class)
+                .set(SchemaKeyword.DESCRIPTION, "test");
 
         System.out.println(schemaNode);
         assert "{\"type\":\"number\",\"description\":\"test\"}"
@@ -32,8 +33,8 @@ public class ToolSchemaUtilTest {
 
     @Test
     public void type_case2() {
-        ONode schemaNode = new ONode();
-        ToolSchemaUtil.buildTypeSchemaNode(String[].class, "test", schemaNode);
+        ONode schemaNode = ToolSchemaUtil.createSchema(String[].class)
+                .set(SchemaKeyword.DESCRIPTION, "test");
 
         System.out.println(schemaNode);
         assert "{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"test\"}"
@@ -43,8 +44,8 @@ public class ToolSchemaUtilTest {
 
     @Test
     public void entity_case1() {
-        ONode schemaNode = new ONode();
-        ToolSchemaUtil.buildTypeSchemaNode(User.class, "test", schemaNode);
+        ONode schemaNode = ToolSchemaUtil.createSchema(User.class)
+                .set(SchemaKeyword.DESCRIPTION, "test");
 
         System.out.println(schemaNode);
         assert "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"用户Id\"},\"name\":{\"type\":\"string\",\"description\":\"用户名\"}},\"required\":[\"id\",\"name\"],\"description\":\"test\"}"
@@ -53,8 +54,8 @@ public class ToolSchemaUtilTest {
 
     @Test
     public void entity_case2() {
-        ONode schemaNode = new ONode();
-        ToolSchemaUtil.buildTypeSchemaNode(User[].class, "test", schemaNode);
+        ONode schemaNode = ToolSchemaUtil.createSchema(User[].class)
+                .set(SchemaKeyword.DESCRIPTION, "test");
 
         System.out.println(schemaNode);
         assert "{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"用户Id\"},\"name\":{\"type\":\"string\",\"description\":\"用户名\"}},\"required\":[\"id\",\"name\"]},\"description\":\"test\"}"
@@ -69,7 +70,7 @@ public class ToolSchemaUtilTest {
 
         System.out.println(functionTool.inputSchema());
 
-        assert "{\"type\":\"object\",\"properties\":{\"caseBo\":{\"type\":\"object\",\"properties\":{\"caseId\":{\"type\":\"integer\",\"description\":\"案件ID, 传递时使用String类型\"},\"comMeaDuration\":{\"type\":\"integer\",\"description\":\"行政强制措施期限\"},\"aFloat1\":{\"type\":\"number\",\"description\":\"aFloat1\"},\"aDouble1\":{\"type\":\"number\",\"description\":\"aDouble1\"},\"discretionSummary\":{\"type\":\"string\",\"description\":\"自由裁量情况总结\"},\"ext\":{\"type\":\"object\",\"description\":\"案件的拓展数据\"},\"alist1\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"alist1\"},\"penaltyNoticeTime\":{\"type\":\"string\",\"format\":\"date-time\",\"description\":\"行政处罚告知时间\"},\"needDefense\":{\"type\":\"boolean\",\"description\":\"是否陈述申辩\"},\"defenseRecorder\":{\"type\":\"string\",\"description\":\"陈述申辩记录人\"},\"defensePerson\":{\"type\":\"string\",\"description\":\"陈述申辩人\"},\"caseVal\":{\"type\":\"number\",\"description\":\"案值（万元）\"},\"caseVal2\":{\"type\":\"integer\",\"description\":\"案值2（万元）\"}},\"required\":[\"caseId\",\"comMeaDuration\",\"aFloat1\",\"aDouble1\",\"discretionSummary\",\"ext\",\"alist1\",\"penaltyNoticeTime\",\"needDefense\",\"defenseRecorder\",\"defensePerson\",\"caseVal\",\"caseVal2\"],\"description\":\"查询条件\"},\"pageNum\":{\"type\":\"integer\",\"description\":\"页码\"},\"pageSize\":{\"type\":\"integer\",\"description\":\"每页条数\"}},\"required\":[\"caseBo\",\"pageNum\",\"pageSize\"]}"
+        assert "{\"type\":\"object\",\"properties\":{\"caseBo\":{\"type\":\"object\",\"properties\":{\"aDouble1\":{\"type\":\"number\",\"description\":\"aDouble1\"},\"aFloat1\":{\"type\":\"number\",\"description\":\"aFloat1\"},\"alist1\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"alist1\"},\"caseId\":{\"type\":\"integer\",\"description\":\"案件ID, 传递时使用String类型\"},\"caseVal\":{\"type\":\"number\",\"description\":\"案值（万元）\"},\"caseVal2\":{\"type\":\"integer\",\"description\":\"案值2（万元）\"},\"comMeaDuration\":{\"type\":\"integer\",\"description\":\"行政强制措施期限\"},\"defensePerson\":{\"type\":\"string\",\"description\":\"陈述申辩人\"},\"defenseRecorder\":{\"type\":\"string\",\"description\":\"陈述申辩记录人\"},\"discretionSummary\":{\"type\":\"string\",\"description\":\"自由裁量情况总结\"},\"ext\":{\"type\":\"object\",\"additionalProperties\":true,\"description\":\"案件的拓展数据\"},\"needDefense\":{\"type\":\"boolean\",\"description\":\"是否陈述申辩\"},\"penaltyNoticeTime\":{\"type\":\"string\",\"format\":\"date-time\",\"description\":\"行政处罚告知时间\"}},\"required\":[\"caseId\",\"comMeaDuration\",\"aFloat1\",\"aDouble1\",\"discretionSummary\",\"ext\",\"alist1\",\"penaltyNoticeTime\",\"needDefense\",\"defenseRecorder\",\"defensePerson\",\"caseVal\",\"caseVal2\"],\"description\":\"查询条件\"},\"pageNum\":{\"type\":\"integer\",\"description\":\"页码\"},\"pageSize\":{\"type\":\"integer\",\"description\":\"每页条数\"}},\"required\":[\"caseBo\",\"pageNum\",\"pageSize\"]}"
                 .equals(functionTool.inputSchema());
     }
 
