@@ -60,7 +60,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
         //构建聊天模型（预热后，会缓存住）
         ChatModel chatModel = (ChatModel) node.attachment;
         if (chatModel == null) {
-            ChatConfig chatConfig = ONode.ofJson(node.getMeta(META_CHAT_CONFIG)).toBean(ChatConfig.class);
+            ChatConfig chatConfig = ONode.ofBean(node.getMeta(META_CHAT_CONFIG)).toBean(ChatConfig.class);
             Assert.notNull(chatConfig, "chatConfig");
             ChatModel.Builder chatModelBuilder = ChatModel.of(chatConfig);
 
