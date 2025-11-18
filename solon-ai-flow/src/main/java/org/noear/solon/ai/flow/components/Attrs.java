@@ -36,4 +36,5 @@ public interface Attrs {
     String PROP_EMBEDDING_MODEL = "embeddingModel";
     String PROP_CHAT_MODEL = "chatModel";
     String PROP_IMAGE_MODEL = "imageModel";
+    String PROP_GENERATE_MODEL = "generateModel";
 }
