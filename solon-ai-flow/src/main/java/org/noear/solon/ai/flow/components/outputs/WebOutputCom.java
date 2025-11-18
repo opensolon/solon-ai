@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
+import org.noear.solon.ai.generate.GenerateResponse;
 import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.core.handle.Context;
@@ -90,6 +91,14 @@ public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
                 buf.append(resp.getImage().getUrl());
 
                 ctx.render(ChatMessage.ofAssistant("![](" + resp.getImage().getUrl() + ")"));
+                ctx.output("\n");
+                ctx.flush();
+            } else if (data instanceof GenerateResponse) {
+                GenerateResponse resp = (GenerateResponse) data;
+
+                buf.append(resp.getContent().getValue());
+
+                ctx.render(ChatMessage.ofAssistant("![](" + resp.getContent().getValue() + ")"));
                 ctx.output("\n");
                 ctx.flush();
             } else {

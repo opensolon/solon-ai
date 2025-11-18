@@ -52,6 +52,16 @@ public class GenerateContent implements Serializable {
         return url;
     }
 
+    public String getValue() {
+        if (url != null) {
+            return url;
+        } else if (b64_json != null) {
+            return b64_json;
+        } else {
+            return text;
+        }
+    }
+
     public String getMimeType() {
         return mimeType;
     }

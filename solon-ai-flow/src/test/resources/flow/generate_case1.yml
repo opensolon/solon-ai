@@ -1,0 +1,16 @@
+id: generate_case1
+title: "生成图像"
+layout:
+  - task: "@VarInput"
+    meta:
+      message: "a white siamese cat"
+  - task: "@GenerateModel"
+    meta:
+      generateConfig: # "@type": "org.noear.solon.ai.generate.GenerateConfig"
+        model: "stable-diffusion-3.5-large-turbo"
+        apiUrl: "https://ai.gitee.com/v1/images/generations"
+        apiKey: "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18"
+        taskUrl: "https://ai.gitee.com/v1/task/"
+        defaultOptions:
+          size: "1024x1024"
+  - task: "@ConsoleOutput"

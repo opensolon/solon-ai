@@ -64,4 +64,25 @@ public class GiteeaiTest {
         assert resp.getContent().getUrl() != null;
         assert resp.getContent().getUrl().startsWith("https://");
     }
+
+    @Test
+    public void case2_music2() throws IOException {
+        String apiUrl = "https://ai.gitee.com/v1/async/music/generations";
+        String model = "ACE-Step-v1-3.5B";
+
+        GenerateModel generateModel = GenerateModel.of(apiUrl)
+                .apiKey(apiKey)
+                .taskUrl(taskUrl)
+                .model(model)
+                .build();
+
+        //一次性返回
+        GenerateResponse resp = generateModel.prompt("大海的哥")
+                .options(o -> o.optionAdd("task", "text2music"))
+                .call();
+
+        log.warn("{}", resp.getData());
+        assert resp.getContent().getUrl() != null;
+        assert resp.getContent().getUrl().startsWith("https://");
+    }
 }

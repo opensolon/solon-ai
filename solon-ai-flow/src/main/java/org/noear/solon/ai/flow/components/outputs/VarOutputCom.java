@@ -18,16 +18,14 @@ package org.noear.solon.ai.flow.components.outputs;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
+import org.noear.solon.ai.generate.GenerateResponse;
 import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.reactivestreams.Publisher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -74,6 +72,10 @@ public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
             ImageResponse resp = (ImageResponse) data;
 
             buf.append(resp.getImage().getUrl());
+        } else if (data instanceof GenerateResponse) {
+            GenerateResponse resp = (GenerateResponse) data;
+
+            buf.append(resp.getContent().getValue());
         } else {
             buf.append(data);
         }

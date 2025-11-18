@@ -1,0 +1,16 @@
+id: generate_case2
+title: "生成声音"
+layout:
+  - task: "@VarInput"
+    meta:
+      message: "大海的哥"
+  - task: "@GenerateModel"
+    meta:
+      generateConfig: # "@type": "org.noear.solon.ai.generate.GenerateConfig"
+        model: "ACE-Step-v1-3.5B"
+        apiUrl: "https://ai.gitee.com/v1/images/generations"
+        apiKey: "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18"
+        taskUrl: "https://ai.gitee.com/v1/task/"
+        defaultOptions:
+          task: "text2music"
+  - task: "@ConsoleOutput"

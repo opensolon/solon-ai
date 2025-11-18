@@ -72,8 +72,8 @@ public class GenerateModelCom extends AbsAiComponent implements AiIoComponent, A
                 throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
             }
 
-            GenerateResponse resp = generateModel.prompt(promptStr).call();
-            setOutput(context, node, resp);
+            data = generateModel.prompt(promptStr).call();
+            setOutput(context, node, data);
         }
     }
 }
