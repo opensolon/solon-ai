@@ -165,6 +165,14 @@ public class GenerateModel implements AiModel {
         }
 
         /**
+         * 添加默认选项
+         */
+        public Builder defaultOptionAdd(String key, Object val) {
+            config.addDefaultOption(key, val);
+            return this;
+        }
+
+        /**
          * 网络超时
          */
         public Builder timeout(Duration timeout) {

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.generate;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.generate.dialect.GenerateDialect;
 import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
@@ -48,6 +49,10 @@ public class GenerateRequestDesc {
         this.promptStr = promptStr;
         this.promptMap = promptMap;
         this.options = new GenerateOptions();
+
+        if (Utils.isNotEmpty(config.getDefaultOptions())) {
+            this.options.options().putAll(config.getDefaultOptions());
+        }
     }
 
     /**

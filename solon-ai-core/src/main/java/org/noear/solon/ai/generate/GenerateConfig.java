@@ -18,6 +18,9 @@ package org.noear.solon.ai.generate;
 import org.noear.solon.ai.AiConfig;
 import org.noear.solon.lang.Preview;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * 生成配置
  *
@@ -27,17 +30,41 @@ import org.noear.solon.lang.Preview;
 @Preview("3.5")
 public class GenerateConfig extends AiConfig {
     private String taskUrl;
+    private final Map<String, Object> defaultOptions = new LinkedHashMap<>();
 
+    /**
+     * 获取任务地址
+     */
     public String getTaskUrl() {
         return taskUrl;
     }
 
+    /**
+     * 获取任务地址和ID
+     */
+    public String getTaskUrlAndId(String taskId) {
+        return taskUrl + taskId;
+    }
+
+    /**
+     * 设置任务地址
+     */
     public void setTaskUrl(String taskUrl) {
         this.taskUrl = taskUrl;
     }
 
-    public String getTaskUrlAndId(String taskId) {
-        return taskUrl + taskId;
+    /**
+     * 添加默认选项
+     */
+    public void addDefaultOption(String key, Object value) {
+        defaultOptions.put(key, value);
+    }
+
+    /**
+     * 获取所有默认选项
+     */
+    public Map<String, Object> getDefaultOptions() {
+        return defaultOptions;
     }
 
     @Override
@@ -50,6 +77,7 @@ public class GenerateConfig extends AiConfig {
                 ", model='" + model + '\'' +
                 ", headers=" + headers +
                 ", timeout=" + timeout +
+                ", defaultOptions=" + defaultOptions +
                 '}';
     }
 }

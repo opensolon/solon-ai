@@ -13,6 +13,7 @@
 ### v3.7.2
 
 * 引入 snack4-jsonschema 优化 ToolSchemaUtil
+* 添加 solon-ai GenerateModel defaultOptions 配置支持
 * 修复 solon-ai bean 有其它框架代理后，不能识别注解的问题
 * 修复 solon-ai ToolSchemaUtil 部分泛型识别失败的问题
 * 修复 solon-ai-flow ChatModelCom 加载 chatConfig 配置会出错的问题
