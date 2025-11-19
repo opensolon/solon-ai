@@ -98,7 +98,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     if (m1Node != null) {
                         if (Utils.isNotEmpty(m1.metas())) {
                             for (Map.Entry<String, Object> entry : m1.metas().entrySet()) {
-                                if (m1Node.hasKey(entry.getKey())) {
+                                if (m1Node.hasKey(entry.getKey()) == false) {
                                     m1Node.set(entry.getKey(), ONode.ofBean(entry.getValue()));
                                 }
                             }
