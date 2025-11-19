@@ -52,6 +52,7 @@ public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
         //格式化输出
         String format = node.getMetaAsString(META_FORMAT);
         if (Utils.isEmpty(format)) {
+            //没有格式符
             final StringBuilder buf = new StringBuilder();
 
             if (data instanceof Publisher) {
@@ -113,6 +114,7 @@ public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
 
             setOutput(context, node, data);
         } else {
+            //有格式符
             data = VarOutputCom.getInputAsString(data);
 
             setOutput(context, node, data);
