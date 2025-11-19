@@ -31,7 +31,6 @@ import org.noear.solon.core.wrap.MethodWrap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Parameter;
 import java.util.*;
 
 /**
@@ -48,7 +47,7 @@ public class MethodFunctionPrompt implements FunctionPrompt {
 
     private final String name;
     private final PromptMapping mapping;
-    private final List<ParamDesc> params;
+    private final Map<String, ParamDesc> params;
 
     public MethodFunctionPrompt(BeanWrap beanWrap, MethodEggg methodEggg) {
         this.beanWrap = beanWrap;
@@ -67,12 +66,12 @@ public class MethodFunctionPrompt implements FunctionPrompt {
             throw new IllegalArgumentException("@PromptMapping return type is not Collection");
         }
 
-        this.params = new ArrayList<>();
+        this.params = new LinkedHashMap<>();
 
         for (ParamEggg p1 : methodEggg.getParamEgggAry()) {
-            ParamDesc toolParam = ToolSchemaUtil.paramOf(p1.getParam(), p1.getTypeEggg());
-            if(toolParam != null) {
-                this.params.add(toolParam);
+            Map<String, ParamDesc> paramMap = ToolSchemaUtil.buildInputParams(p1.getParam(), p1.getTypeEggg());
+            if (Utils.isNotEmpty(paramMap)) {
+                params.putAll(paramMap);
             }
         }
     }
@@ -94,7 +93,7 @@ public class MethodFunctionPrompt implements FunctionPrompt {
 
     @Override
     public Collection<ParamDesc> params() {
-        return params;
+        return params.values();
     }
 
     @Override

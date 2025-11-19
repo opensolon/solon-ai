@@ -26,6 +26,7 @@ import org.noear.snack4.jsonschema.SchemaKeyword;
 import org.noear.snack4.jsonschema.SchemaType;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.util.ParamDesc;
+import org.noear.solon.annotation.Body;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Nullable;
 
@@ -62,32 +63,56 @@ public class ToolSchemaUtil {
 
     /**
      * 构建参数申明
-     *
      */
     public static @Nullable ParamDesc paramOf(AnnotatedElement ae, TypeEggg typeEggg) {
         Param p1Anno = ae.getAnnotation(Param.class);
-        if (p1Anno == null) {
-            return null;
+        if (p1Anno != null) {
+            if (ae instanceof Parameter) {
+                Parameter p1 = (Parameter) ae;
+                String name = Utils.annoAlias(p1Anno.name(), p1.getName());
+                return new ParamDesc(name, typeEggg.getGenericType(), p1Anno.required(), p1Anno.description());
+            } else {
+                Field p1 = (Field) ae;
+                String name = Utils.annoAlias(p1Anno.name(), p1.getName());
+                return new ParamDesc(name, typeEggg.getGenericType(), p1Anno.required(), p1Anno.description());
+            }
         }
 
-        //断言
-        //Assert.notEmpty(p1Anno.description(), "Param description cannot be empty");
+        return null;
+    }
 
-        if (ae instanceof Parameter) {
-            Parameter p1 = (Parameter) ae;
-            String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-            return new ParamDesc(name, typeEggg.getGenericType(), p1Anno.required(), p1Anno.description());
+    /**
+     * 构建参数申明（支持 @Param 和 @Body 注解）
+     */
+    public static @Nullable Map<String, ParamDesc> buildInputParams(AnnotatedElement ae, TypeEggg typeEggg) {
+        ParamDesc pd1 = paramOf(ae, typeEggg);
+
+        if (pd1 != null) {
+            return Collections.singletonMap(pd1.name(), pd1);
         } else {
-            Field p1 = (Field) ae;
-            String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-            return new ParamDesc(name, typeEggg.getGenericType(), p1Anno.required(), p1Anno.description());
+            Map<String, ParamDesc> paramMap = new LinkedHashMap<>();
+            Body b1Anno = ae.getAnnotation(Body.class);
+
+            if (b1Anno != null) {
+                for (FieldEggg fg1 : typeEggg.getClassEggg().getAllFieldEgggs()) {
+                    pd1 = paramOf(fg1.getField(), fg1.getTypeEggg());
+
+                    if(pd1 == null){
+                        pd1 = new ParamDesc(fg1.getName(), fg1.getGenericType(),false, "");
+                    }
+
+                    paramMap.put(pd1.name(), pd1);
+                }
+            }
+
+            return paramMap;
         }
     }
 
     /**
      * 构建输入架构
      */
-    public static String buildInputSchema(List<ParamDesc> paramAry) {
+    public static String buildInputSchema(Collection<ParamDesc> paramAry) {
         ONode rootNode = new ONode();
 
         ONode requiredNode = new ONode().asArray();

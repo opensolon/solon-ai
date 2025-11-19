@@ -30,7 +30,6 @@ import org.noear.solon.core.wrap.MethodWrap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.*;
 
@@ -51,7 +50,7 @@ public class MethodFunctionTool implements FunctionTool {
     private final String title;
     private final String description;
     private final boolean returnDirect;
-    private final List<ParamDesc> params = new ArrayList<>();
+    private final Map<String, ParamDesc> params;
     private final ToolCallResultConverter resultConverter;
     private final String inputSchema;
     private String outputSchema;
@@ -73,6 +72,7 @@ public class MethodFunctionTool implements FunctionTool {
         this.title = mapping.title();
         this.description = mapping.description();
         this.returnDirect = mapping.returnDirect();
+        this.params = new LinkedHashMap<>();
 
         if (mapping.resultConverter() == ToolCallResultConverter.class
                 || mapping.resultConverter() == ToolCallResultConverterDefault.class) {
@@ -86,13 +86,13 @@ public class MethodFunctionTool implements FunctionTool {
         }
 
         for (ParamEggg p1 : methodEggg.getParamEgggAry()) {
-            ParamDesc toolParam = ToolSchemaUtil.paramOf(p1.getParam(), p1.getTypeEggg());
-            if (toolParam != null) {
-                params.add(toolParam);
+            Map<String, ParamDesc> paramMap = ToolSchemaUtil.buildInputParams(p1.getParam(), p1.getTypeEggg());
+            if (Utils.isNotEmpty(paramMap)) {
+                params.putAll(paramMap);
             }
         }
 
-        inputSchema = ToolSchemaUtil.buildInputSchema(params);
+        inputSchema = ToolSchemaUtil.buildInputSchema(params.values());
 
         // 输出参数 outputSchema
         {
