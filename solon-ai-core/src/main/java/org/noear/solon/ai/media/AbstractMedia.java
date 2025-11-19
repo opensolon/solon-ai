@@ -18,6 +18,7 @@ package org.noear.solon.ai.media;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -26,10 +27,31 @@ import java.util.Map;
  * @author noear
  * @since 3.2
  */
-public abstract class AbstractMedia implements AiMedia {
+public abstract class AbstractMedia<T extends AbstractMedia> implements AiMedia {
     protected String b64_json; //就是 base64-str
     protected String url;
     protected String mimeType;
+
+
+    protected Map<String, Object> metadata;
+
+    @Override
+    public Map<String, Object> metas() {
+        if (metadata == null) {
+            metadata = new LinkedHashMap<>();
+        }
+
+        return metadata;
+    }
+
+    /**
+     * 添加元信息
+     *
+     */
+    public T metaAdd(String key, Object value) {
+        metas().put(key, value);
+        return (T) this;
+    }
 
     /**
      * 获取 base64

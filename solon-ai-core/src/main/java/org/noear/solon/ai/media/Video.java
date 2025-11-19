@@ -26,7 +26,7 @@ import java.util.Base64;
  * @author noear
  * @since 3.1
  */
-public class Video extends AbstractMedia implements AiMedia {
+public class Video extends AbstractMedia<Video> implements AiMedia {
     @Override
     public String getMimeType() {
         if (Utils.isEmpty(mimeType)) {

@@ -18,6 +18,7 @@ package org.noear.solon.ai.media;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -60,6 +61,18 @@ public class Text implements AiMedia {
     public String getMimeType() {
         return mimeType;
     }
+
+    protected Map<String, Object> metadata;
+
+    @Override
+    public Map<String, Object> metas() {
+        if (metadata == null) {
+            metadata = new LinkedHashMap<>();
+        }
+
+        return metadata;
+    }
+
 
     @Override
     public String toDataString(boolean useMime) {

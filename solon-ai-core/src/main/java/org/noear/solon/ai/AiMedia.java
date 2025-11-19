@@ -25,6 +25,11 @@ import java.util.Map;
  */
 public interface AiMedia {
     /**
+     * 源信息
+     */
+    Map<String, Object> metas();
+
+    /**
      * 转为数据字符串
      */
     String toDataString(boolean useMime);

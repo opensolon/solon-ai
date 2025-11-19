@@ -75,13 +75,34 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     n1.addNew().set("type", "text").set("text", msg.getContent());
                 }
 
-                for (AiMedia media : msg.getMedias()) {
-                    if (media instanceof Image) {
-                        n1.addNew().set("type", "image_url").getOrNew("image_url").set("url", media.toDataString(true));
-                    } else if (media instanceof Audio) {
-                        n1.addNew().set("type", "audio_url").getOrNew("audio_url").set("url", media.toDataString(true));
-                    } else if (media instanceof Video) {
-                        n1.addNew().set("type", "video_url").getOrNew("video_url").set("url", media.toDataString(true));
+                for (AiMedia m1 : msg.getMedias()) {
+                    ONode m1Node = null;
+                    if (m1 instanceof Image) {
+                        m1Node = n1.addNew();
+
+                        m1Node.set("type", "image_url");
+                        m1Node.getOrNew("image_url").set("url", m1.toDataString(true));
+
+                    } else if (m1 instanceof Audio) {
+                        m1Node = n1.addNew();
+
+                        m1Node.set("type", "audio_url");
+                        m1Node.getOrNew("audio_url").set("url", m1.toDataString(true));
+                    } else if (m1 instanceof Video) {
+                        m1Node = n1.addNew();
+
+                        m1Node.set("type", "video_url");
+                        m1Node.getOrNew("video_url").set("url", m1.toDataString(true));
+                    }
+
+                    if (m1Node != null) {
+                        if (Utils.isNotEmpty(m1.metas())) {
+                            for (Map.Entry<String, Object> entry : m1.metas().entrySet()) {
+                                if (m1Node.hasKey(entry.getKey())) {
+                                    m1Node.set(entry.getKey(), ONode.ofBean(entry.getValue()));
+                                }
+                            }
+                        }
                     }
                 }
             });
