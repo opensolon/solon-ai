@@ -36,17 +36,5 @@
         <module>../../solon-ai-rag-loaders/solon-ai-load-pdf</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-ppt</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-word</module>
-
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-chroma</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-dashvector</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-elasticsearch</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-milvus</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-qdrant</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-redis</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-tcvectordb</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-opensearch</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-pgvector</module>
-
-        <module>../../solon-ai-rag-searchs/solon-ai-search-baidu</module>
     </modules>
 </project>
