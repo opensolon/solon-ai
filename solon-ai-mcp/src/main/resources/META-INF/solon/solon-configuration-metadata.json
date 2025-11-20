@@ -1,0 +1,85 @@
+{
+  "properties": [
+    {
+      "name": "solon.mcp.client.*.name",
+      "type": "java.lang.String",
+      "description": "客户端名称",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+    {
+      "name": "solon.mcp.client.*.version",
+      "type": "java.lang.String",
+      "description": "客户端版本号",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+    {
+      "name": "solon.mcp.client.*.channel",
+      "type": "java.lang.String",
+      "description": "通讯方式（或通道）",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+    {
+      "name": "solon.mcp.client.*.url",
+      "type": "java.lang.String",
+      "description": "服务端接口完整地址",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+    {
+      "name": "solon.mcp.client.*.headers",
+      "type": "java.util.Map",
+      "description": "http 请求头"
+    },
+    {
+      "name": "solon.mcp.client.*.httpTimeout",
+      "type": "org.noear.solon.net.http.HttpTimeout",
+      "description": "http 超时",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+    {
+      "name": "solon.mcp.client.*.cacheSeconds",
+      "type": "java.lang.Integer",
+      "defaultValue": 30,
+      "description": "mcp 缓存秒数",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+    {
+      "name": "solon.mcp.client.*.requestTimeout",
+      "type": "java.time.Duration",
+      "defaultValue": "30s",
+      "description": "mcp 请求等待超时",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+    {
+      "name": "solon.mcp.client.*.initializationTimeout",
+      "type": "java.time.Duration",
+      "defaultValue": "30s",
+      "description": "mcp 初始化等待超时",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+    {
+      "name": "solon.mcp.client.*.heartbeatInterval",
+      "type": "java.time.Duration",
+      "description": "mcp 心跳间隔",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    }
+  ],
+  "hints": [
+    {
+      "name": "solon.mcp.client.*.channel",
+      "values": [
+        {
+          "value": "stdio",
+          "description": "stdio"
+        },
+        {
+          "value": "sse",
+          "description": "sse"
+        },
+        {
+          "value": "streamable",
+          "description": "streamable"
+        }
+      ]
+    }
+  ]
+}
