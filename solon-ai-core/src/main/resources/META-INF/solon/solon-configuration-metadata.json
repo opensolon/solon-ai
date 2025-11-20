@@ -1,0 +1,168 @@
+{
+  "properties": [
+    {
+      "name": "solon.ai.chat.*.apiUrl",
+      "type": "java.lang.String",
+      "description": "模型接口完整地址"
+    },
+    {
+      "name": "solon.ai.chat.*.apiKey",
+      "type": "java.lang.String",
+      "description": "模型接口密钥"
+    },
+    {
+      "name": "solon.ai.chat.*.provider",
+      "type": "java.lang.String",
+      "description": "模型服务提供者"
+    },
+    {
+      "name": "solon.ai.chat.*.model",
+      "type": "java.lang.String",
+      "description": "模型名字"
+    },
+    {
+      "name": "solon.ai.chat.*.timeout",
+      "type": "java.lang.String",
+      "defaultValue": "60s",
+      "description": "请求超时"
+    },
+    {
+      "name": "solon.ai.chat.*.headers",
+      "type": "java.util.Map",
+      "description": "请求头"
+    },
+    {
+      "name": "solon.ai.chat.*.proxy.type",
+      "type": "java.net.Proxy.Type",
+      "description": "请求代理类型"
+    },
+    {
+      "name": "solon.ai.chat.*.proxy.host",
+      "type": "java.lang.String",
+      "description": "请求代理主机"
+    },
+    {
+      "name": "solon.ai.chat.*.proxy.port",
+      "type": "java.lang.Integer",
+      "description": "请求代理端口"
+    },
+    {
+      "name": "solon.ai.chat.*.defaultToolsContext",
+      "type": "java.util.Map",
+      "description": "默认工具上下文"
+    },
+    {
+      "name": "solon.ai.chat.*.defaultOptions",
+      "type": "java.util.Map",
+      "description": "默认选项"
+    },
+
+
+
+    {
+      "name": "solon.ai.generate.*.apiUrl",
+      "type": "java.lang.String",
+      "description": "模型接口完整地址"
+    },
+    {
+      "name": "solon.ai.generate.*.apiKey",
+      "type": "java.lang.String",
+      "description": "模型接口密钥"
+    },
+    {
+      "name": "solon.ai.generate.*.provider",
+      "type": "java.lang.String",
+      "description": "模型服务提供者"
+    },
+    {
+      "name": "solon.ai.generate.*.model",
+      "type": "java.lang.String",
+      "description": "模型名字"
+    },
+    {
+      "name": "solon.ai.generate.*.timeout",
+      "type": "java.lang.String",
+      "defaultValue": "60s",
+      "description": "请求超时"
+    },
+    {
+      "name": "solon.ai.generate.*.headers",
+      "type": "java.util.Map",
+      "description": "请求头"
+    },
+
+
+
+    {
+      "name": "solon.ai.embed.*.apiUrl",
+      "type": "java.lang.String",
+      "description": "模型接口完整地址"
+    },
+    {
+      "name": "solon.ai.embed.*.apiKey",
+      "type": "java.lang.String",
+      "description": "模型接口密钥"
+    },
+    {
+      "name": "solon.ai.embed.*.provider",
+      "type": "java.lang.String",
+      "description": "模型服务提供者"
+    },
+    {
+      "name": "solon.ai.embed.*.model",
+      "type": "java.lang.String",
+      "description": "模型名字"
+    },
+    {
+      "name": "solon.ai.embed.*.timeout",
+      "type": "java.lang.String",
+      "defaultValue": "60s",
+      "description": "请求超时"
+    },
+    {
+      "name": "solon.ai.embed.*.headers",
+      "type": "java.util.Map",
+      "description": "请求头"
+    },
+    {
+      "name": "solon.ai.embed.*.batchSize",
+      "type": "java.lang.Integer",
+      "defaultValue": 10,
+      "description": "批处理大小"
+    },
+
+
+
+    {
+      "name": "solon.ai.rerank.*.apiUrl",
+      "type": "java.lang.String",
+      "description": "模型接口完整地址"
+    },
+    {
+      "name": "solon.ai.rerank.*.apiKey",
+      "type": "java.lang.String",
+      "description": "模型接口密钥"
+    },
+    {
+      "name": "solon.ai.rerank.*.provider",
+      "type": "java.lang.String",
+      "description": "模型服务提供者"
+    },
+    {
+      "name": "solon.ai.rerank.*.model",
+      "type": "java.lang.String",
+      "description": "模型名字"
+    },
+    {
+      "name": "solon.ai.rerank.*.timeout",
+      "type": "java.lang.String",
+      "defaultValue": "60s",
+      "description": "请求超时"
+    },
+    {
+      "name": "solon.ai.rerank.*.headers",
+      "type": "java.util.Map",
+      "description": "请求头"
+    }
+  ]
+}
