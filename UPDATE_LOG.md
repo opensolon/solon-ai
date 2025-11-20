@@ -20,6 +20,7 @@
 * 修复 solon-ai bean 有其它框架代理后，不能识别注解的问题
 * 修复 solon-ai ToolSchemaUtil 部分泛型识别失败的问题
 * 修复 solon-ai-flow ChatModelCom 加载 chatConfig 配置会出错的问题
+* 修复 solon-ai-mcp/mcp-sdk listTools 的 nextCursor 为空时，不能正常获取问题
 
 
 ### v3.7.0
