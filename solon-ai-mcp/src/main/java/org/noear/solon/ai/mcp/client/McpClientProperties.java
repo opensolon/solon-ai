@@ -66,7 +66,10 @@ public class McpClientProperties {
 
     /**
      * http 接口密钥
+     *
+     * @deprecated 3.7 {@link #headers}
      */
+    @Deprecated
     private String apiKey;
 
     /**

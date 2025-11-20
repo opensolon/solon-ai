@@ -21,7 +21,7 @@
     {
       "name": "solon.mcp.client.*.url",
       "type": "java.lang.String",
-      "description": "服务端接口完整地址",
+      "description": "http 接口完整地址",
       "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
     },
     {
@@ -35,6 +35,28 @@
       "description": "http 超时",
       "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
     },
+
+    {
+      "name": "solon.mcp.client.*.command",
+      "type": "java.lang.String",
+      "description": "stdio 命令",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+    {
+      "name": "solon.mcp.client.*.args",
+      "type": "java.lang.String[]",
+      "description": "stdio 命令参数",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+    {
+      "name": "solon.mcp.client.*.env",
+      "type": "java.util.Map",
+      "description": "stdio 环境变量",
+      "sourceType": "org.noear.solon.ai.mcp.client.McpClientProperties"
+    },
+
+
+
     {
       "name": "solon.mcp.client.*.cacheSeconds",
       "type": "java.lang.Integer",
