@@ -12,6 +12,10 @@
 
 
 
+### 3.6.5
+
+
+* 修复 solon-ai-mcp/mcp-sdk listTools 的 nextCursor 为空时，不能正常获取问题
 
 ### 3.6.4
 

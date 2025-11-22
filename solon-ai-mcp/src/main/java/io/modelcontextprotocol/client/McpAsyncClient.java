@@ -557,7 +557,7 @@ public class McpAsyncClient {
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools() {
 		return this.listTools(McpSchema.FIRST_PAGE)
-				.expand(result -> (result.getNextCursor() != null) ? this.listTools(result.getNextCursor()) : Mono.empty())
+				.expand(result -> Utils.hasText(result.getNextCursor()) ? this.listTools(result.getNextCursor()) : Mono.empty())
 				.reduce(new McpSchema.ListToolsResult(new ArrayList<>(), null), (allToolsResult, result) -> {
 					allToolsResult.getTools().addAll(result.getTools());
 					return allToolsResult;
