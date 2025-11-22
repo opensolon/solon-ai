@@ -556,14 +556,14 @@ public class McpAsyncClient {
 	 * @return A Mono that emits the list of all tools result
 	 */
 	public Mono<McpSchema.ListToolsResult> listTools() {
-		return this.listTools(McpSchema.FIRST_PAGE)
-				.expand(result -> (result.getNextCursor() != null) ? this.listTools(result.getNextCursor()) : Mono.empty())
-				.reduce(new McpSchema.ListToolsResult(new ArrayList<>(), null), (allToolsResult, result) -> {
-					allToolsResult.getTools().addAll(result.getTools());
-					return allToolsResult;
-				})
-				.map(result -> new McpSchema.ListToolsResult(Collections.unmodifiableList(result.getTools()), null));
-	}
+        return this.listTools(McpSchema.FIRST_PAGE)
+                .expand(result -> Utils.hasText(result.getNextCursor()) ? this.listTools(result.getNextCursor()) : Mono.empty())
+                .reduce(new McpSchema.ListToolsResult(new ArrayList<>(), null), (allToolsResult, result) -> {
+                    allToolsResult.getTools().addAll(result.getTools());
+                    return allToolsResult;
+                })
+                .map(result -> new McpSchema.ListToolsResult(Collections.unmodifiableList(result.getTools()), null));
+    }
 
 	/**
 	 * Retrieves a paginated list of tools provided by the server.

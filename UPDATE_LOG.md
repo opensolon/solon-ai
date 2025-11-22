@@ -10,6 +10,9 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+### 3.5.9
+
+* 修复 solon-ai-mcp/mcp-sdk listTools 的 nextCursor 为空时，不能正常获取问题
 
 ### 3.5.8
 
