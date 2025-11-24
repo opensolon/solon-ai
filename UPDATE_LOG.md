@@ -57,6 +57,25 @@
 
 * 优化 solon-ai-core XxxMessageTemplate 使用 SnEL 替代 TmplUtil
 
+
+### 3.5.9
+
+* 修复 solon-ai-mcp/mcp-sdk listTools 的 nextCursor 为空时，不能正常获取问题
+
+### 3.5.8
+
+* 修复 solon-ai parseToolCall 接收 stream 中间消息时可能会异常（添加 hasNestedJsonBlock 检测）
+
+### 3.5.7
+
+* 修复 solon-ai-mcp 可能出现 Unknown media type 错误（取消 request.contentType 空设置）
+* 优化 solon-ai-mcp 取消 request.contentType("") 设置
+
+### 3.5.6
+
+* 修复 solon-ai-core chatModel:stream 长流输出可能出错的问题
+* mcp 移除 WebRxSseClientTransport:sendMessage 的 accept 声明（是在 3.5.5 时加的，此处没必要）
+
 ### 3.5.5
 
 * 添加 McpClientProvider:httpFactory 默认为 jdkhttp（okhttp 有些平台不兼容），不再随 HttpUtils 的全局走
