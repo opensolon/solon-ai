@@ -25,13 +25,18 @@ import org.noear.snack4.jsonschema.JsonSchema;
 import org.noear.snack4.jsonschema.SchemaKeyword;
 import org.noear.snack4.jsonschema.SchemaType;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.tool.impl.BodyAnnoDetector;
+import org.noear.solon.ai.chat.tool.impl.ParamAnnoResolver;
 import org.noear.solon.ai.util.ParamDesc;
-import org.noear.solon.annotation.Body;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Nullable;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 /**
  * Tool 架构工具
@@ -43,6 +48,11 @@ import java.util.*;
  * @since 3.7
  */
 public class ToolSchemaUtil {
+    private static List<Predicate<AnnotatedElement>> bodyDetectors = new CopyOnWriteArrayList<>();
+    private static List<BiFunction<AnnotatedElement, TypeEggg, ParamDesc>> paramResolvers = new CopyOnWriteArrayList<>();
+
+    private static JsonSchema jsonSchema = JsonSchema.builder().build();
+
     static {
         EgggUtil.addDigestAddin(Param.class, (EgggDigestAddin<Param>) (ce, ae, anno) -> {
             String name = Utils.annoAlias(anno.value(), anno.value());
@@ -57,24 +67,53 @@ public class ToolSchemaUtil {
 
             return new ONodeAttrHolder(name, null, anno.description(), anno.required());
         });
+
+        bodyDetectors.add(new BodyAnnoDetector());
+        paramResolvers.add(new ParamAnnoResolver());
     }
 
-    private static JsonSchema jsonSchema = JsonSchema.builder().build();
+    /**
+     * 添加主体注解探测器
+     */
+    public static void addBodyDetector(Predicate<AnnotatedElement> detector) {
+        bodyDetectors.add(detector);
+    }
 
     /**
-     * 构建参数申明
+     * 添加参数注解探测器
      */
-    public static @Nullable ParamDesc paramOf(AnnotatedElement ae, TypeEggg typeEggg) {
-        Param p1Anno = ae.getAnnotation(Param.class);
-        if (p1Anno != null) {
-            if (ae instanceof Parameter) {
-                Parameter p1 = (Parameter) ae;
-                String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-                return new ParamDesc(name, typeEggg.getGenericType(), p1Anno.required(), p1Anno.description());
-            } else {
-                Field p1 = (Field) ae;
-                String name = Utils.annoAlias(p1Anno.name(), p1.getName());
-                return new ParamDesc(name, typeEggg.getGenericType(), p1Anno.required(), p1Anno.description());
+    public static void addParamResolver(BiFunction<AnnotatedElement, TypeEggg, ParamDesc> resolver) {
+        paramResolvers.add(resolver);
+    }
+
+    /**
+     * 添加节点描述处理
+     */
+    public static void addNodeDescribe(Class<? extends Annotation> annoType, EgggDigestAddin digestAddin) {
+        EgggUtil.addDigestAddin(annoType, digestAddin);
+    }
+
+    /**
+     * 检测是否有 body 注解
+     */
+    private static boolean hasBodyAnno(AnnotatedElement element) {
+        for (Predicate<AnnotatedElement> d1 : bodyDetectors) {
+            if (d1.test(element)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 获取参数描声明（可能为 null）
+     */
+    private static @Nullable ParamDesc getParamDesc(AnnotatedElement element, TypeEggg typeEggg) {
+        for (BiFunction<AnnotatedElement, TypeEggg, ParamDesc> r1 : paramResolvers) {
+            ParamDesc pd = r1.apply(element, typeEggg);
+            if (pd != null) {
+                return pd;
             }
         }
 
@@ -82,23 +121,32 @@ public class ToolSchemaUtil {
     }
 
     /**
+     * 构建参数申明
+     *
+     * @deprecated 3.7 {@link #getParamDesc(AnnotatedElement, TypeEggg)}
+     */
+    @Deprecated
+    public static @Nullable ParamDesc paramOf(AnnotatedElement ae, TypeEggg typeEggg) {
+        return getParamDesc(ae, typeEggg);
+    }
+
+    /**
      * 构建参数申明（支持 @Param 和 @Body 注解）
      */
     public static @Nullable Map<String, ParamDesc> buildInputParams(AnnotatedElement ae, TypeEggg typeEggg) {
-        ParamDesc pd1 = paramOf(ae, typeEggg);
+        ParamDesc pd1 = getParamDesc(ae, typeEggg);
 
         if (pd1 != null) {
             return Collections.singletonMap(pd1.name(), pd1);
         } else {
             Map<String, ParamDesc> paramMap = new LinkedHashMap<>();
-            Body b1Anno = ae.getAnnotation(Body.class);
 
-            if (b1Anno != null) {
+            if (hasBodyAnno(ae)) {
                 for (FieldEggg fg1 : typeEggg.getClassEggg().getAllFieldEgggs()) {
-                    pd1 = paramOf(fg1.getField(), fg1.getTypeEggg());
+                    pd1 = getParamDesc(fg1.getField(), fg1.getTypeEggg());
 
-                    if(pd1 == null){
-                        pd1 = new ParamDesc(fg1.getName(), fg1.getGenericType(),false, "");
+                    if (pd1 == null) {
+                        pd1 = new ParamDesc(fg1.getName(), fg1.getGenericType(), false, "");
                     }
 
                     paramMap.put(pd1.name(), pd1);

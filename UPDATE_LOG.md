@@ -10,6 +10,12 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+
+
+### v3.7.3
+
+* 优化 ToolSchemaUtil 扩展能力，支持注解处理定制（方便第三方集成）
+
 ### v3.7.2
 
 * 引入 snack4-jsonschema 优化 ToolSchemaUtil
