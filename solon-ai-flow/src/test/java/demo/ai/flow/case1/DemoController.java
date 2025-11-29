@@ -1,4 +1,4 @@
-package demo.ai.flow;
+package demo.ai.flow.case1;
 
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;

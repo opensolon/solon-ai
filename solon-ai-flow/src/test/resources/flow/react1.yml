@@ -1,0 +1,13 @@
+id: demo1
+layout:
+  - {type: 'start'}
+  - {task: '@agent', id: 'agent'}
+  - {task: '@review', id: 'review', type: exclusive, link: [
+      {nextId: 'final_approval', title: 'approved', when: '"APPROVED".equals(review_status)'},
+      {nextId: 'final_failure', title: 'failed', when: '"REJECTED".equals(review_status) && revision_count.get() >= MAX_REVISIONS'},
+      {nextId: 'agent', title: 'revise', when: '"REJECTED".equals(review_status) && revision_count.get() < MAX_REVISIONS'},
+      {nextId: 'review', title: 'review'}
+    ]}
+  - {task: '@final_approval', id: 'final_approval', link: 'end'}
+  - {task: '@final_failure', id: 'final_failure', link: 'end'}
+  - {type: 'end', id: 'end'}
