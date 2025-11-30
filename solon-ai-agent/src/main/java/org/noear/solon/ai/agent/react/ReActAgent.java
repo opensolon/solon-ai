@@ -1,5 +1,6 @@
-package org.noear.solon.ai.agent;
+package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 
 /**
@@ -7,7 +8,7 @@ import org.noear.solon.ai.chat.ChatModel;
  * @author noear 2025/11/30 created
  *
  */
-public class ReActAgent implements Agent{
+public class ReActAgent implements Agent {
     public ReActAgent(ChatModel chatModel) {
 
     }
