@@ -4,8 +4,10 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.List;
+import java.util.Collection;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -14,11 +16,13 @@ import java.util.stream.Collectors;
  * @author noear 2025/11/30 created
  */
 public class ReActAgent implements Agent {
+    private static final Logger log = LoggerFactory.getLogger(ReActAgent.class);
+
     private final ChatModel chatModel;
-    private final List<FunctionTool> toolList;
+    private final Collection<FunctionTool> toolList;
     private final int maxLoop;
 
-    public ReActAgent(ChatModel chatModel, List<FunctionTool> toolList, int maxLoop) {
+    public ReActAgent(ChatModel chatModel, Collection<FunctionTool> toolList, int maxLoop) {
         this.chatModel = chatModel;
         this.toolList = toolList;
         this.maxLoop = maxLoop;
@@ -31,7 +35,7 @@ public class ReActAgent implements Agent {
 
         // 2. 注入工具描述
         String toolDescriptions = toolList.stream()
-                .map(t -> "Name: " + t.name() + "\nDescription: " + t.description())
+                .map(t -> "Name: " + t.name() + "\nDescription: " + t.description() + "\nInputSchema: " + t.inputSchema() )
                 .collect(Collectors.joining("\n\n"));
 
         history.append("可用的工具:\n").append(toolDescriptions).append("\n\n");
@@ -41,8 +45,11 @@ public class ReActAgent implements Agent {
         int maxSteps = maxLoop; // 设置最大循环次数，防止无限循环
         for (int step = 0; step < maxSteps; step++) {
             // 3. 模型推理 (Thought/Action)
+
+            log.info("ReAct-Request: {}", history);
             String response = chatModel.prompt(history.toString()).call().getContent();
             history.append(response).append("\n");
+            log.info("ReAct-Response: {}", response);
 
             // 4. 解析模型输出
             if (response.contains("Answer:")) {
