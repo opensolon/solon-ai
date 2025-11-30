@@ -6,5 +6,5 @@ package org.noear.solon.ai.agent;
  *
  */
 public interface Agent {
-    String run(String question);
+    String run(String prompt) throws Throwable;
 }
