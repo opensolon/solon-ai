@@ -218,7 +218,16 @@ public class WebRxSseClientTransport implements McpClientTransport {
 				logger.debug("Received unrecognized SSE event type: {}", event);
 				s.complete();
 			}
-		}).transform(handler)).subscribe();
+		}).transform(handler)).doOnError(error -> {
+                    if (!isClosing) {
+                        messageEndpointSink.tryEmitError(error);
+                    }
+                })
+                .doOnComplete(() -> {
+                    if (!isClosing) {
+                        messageEndpointSink.tryEmitError(new RuntimeException("SSE connection completed before endpoint event"));
+                    }
+                }).subscribe();
 
 		// The connection is established once the server sends the endpoint event
 		return messageEndpointSink.asMono().then();
