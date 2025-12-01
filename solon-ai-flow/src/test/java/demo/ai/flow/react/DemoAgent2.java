@@ -34,20 +34,20 @@ public class DemoAgent2 {
 
         log.info("--- 启动内容审核2 Agent ---");
 
-        Graph graph = Graph.create("demo2", g -> {
-            g.addStart("start").linkAdd("agent");
+        Graph graph = Graph.create("demo2", decl -> {
+            decl.addStart("start").linkAdd("agent");
 
-            g.addActivity("agent").task(new AiNodeAgent(chatModel)).linkAdd("review");
-            g.addExclusive("review").task(new AiNodeReview())
+            decl.addActivity("agent").task(new AiNodeAgent(chatModel)).linkAdd("review");
+            decl.addExclusive("review").task(new AiNodeReview())
                     .linkAdd("final_approval", lc -> lc.when(fc -> "APPROVED".equals(fc.get("review_status"))))
                     .linkAdd("final_failure", lc -> lc.when(fc -> "REJECTED".equals(fc.get("review_status")) && fc.<AtomicInteger>getAs("revision_count").get() >= MAX_REVISIONS))
                     .linkAdd("agent", lc -> lc.when(fc -> "REJECTED".equals(fc.get("review_status")) && fc.<AtomicInteger>getAs("revision_count").get() < MAX_REVISIONS))
                     .linkAdd("review");
 
-            g.addActivity("final_approval").task(new AiNodeFinalApproval()).linkAdd("end");
-            g.addActivity("final_failure").task(new AiNodeFinalFailure()).linkAdd("end");
+            decl.addActivity("final_approval").task(new AiNodeFinalApproval()).linkAdd("end");
+            decl.addActivity("final_failure").task(new AiNodeFinalFailure()).linkAdd("end");
 
-            g.addEnd("end");
+            decl.addEnd("end");
         });
 
         //执行
