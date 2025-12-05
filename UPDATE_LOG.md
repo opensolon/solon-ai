@@ -11,6 +11,9 @@
 *  channel 概念改为 transport （并保持兼容）???
 
 
+### v3.7.4
+
+* 优化 solon-ai-mcp mcp StreamableHttp 模式下 服务端正常返回时 客户端异常日志打印的情况
 
 ### v3.7.3
 
