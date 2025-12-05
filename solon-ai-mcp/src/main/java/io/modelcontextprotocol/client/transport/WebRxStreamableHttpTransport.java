@@ -212,7 +212,7 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
 						} else if (isNotAllowed(response)) {
 							logger.debug("The server does not support SSE streams, using request-response mode.");
 							return Flux.empty();
-						} else if (isNotFound(response)) {
+                        } else if (isNotFound(response)) {
                             if (transportSession.sessionId().isPresent()) {
                                 String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
                                 return mcpSessionNotFoundError(sessionIdRepresentation);
@@ -220,12 +220,15 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                             else {
                                 return this.extractError(response, MISSING_SESSION_ID);
                             }
-						} else {
-							//todo: createError
-							return Flux.<McpSchema.JSONRPCMessage>error(response.createError()).doOnError(e -> {
-								logger.info("Opening an SSE stream failed. This can be safely ignored.", e);
-							});
-						}
+                        } else {
+                            String sessionRepresentation = sessionIdOrPlaceholder(transportSession);
+                            if (response.code() >= StatusCodes.CODE_OK && response.code() < StatusCodes.CODE_MULTIPLE_CHOICES) {
+                                String ct = response.contentType();
+                                logger.info("GET returned {} with content-type '{}', no SSE opened for session {}", response.code(), ct, sessionRepresentation);
+                                return Flux.empty();
+                            }
+                            return this.extractError(response, sessionRepresentation);
+                        }
 					})
 					.flatMap(jsonrpcMessage -> this.handler.get().apply(Mono.just(jsonrpcMessage)))
 					.onErrorComplete(t -> {
@@ -430,7 +433,13 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
 					try {
 						String responseMessage = response.bodyAsString();
 
-						if (sentMessage instanceof McpSchema.JSONRPCNotification && Utils.hasText(responseMessage)) {
+						if (!Utils.hasText(responseMessage)) {
+							// 空响应体：不解析，直接完成，避免无内容反序列化错误
+							s.complete();
+							return;
+						}
+
+						if (sentMessage instanceof McpSchema.JSONRPCNotification) {
 							logger.warn("Notification: {} received non-compliant response: {}", sentMessage, responseMessage);
 							s.complete();
 						} else {
