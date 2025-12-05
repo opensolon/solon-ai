@@ -10,6 +10,11 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+
+### 3.5.10
+
+* 优化 solon-ai-mcp MCP 客户端与服务端异常链接状态 立即返回
+
 ### 3.5.9
 
 * 修复 solon-ai-mcp/mcp-sdk listTools 的 nextCursor 为空时，不能正常获取问题
