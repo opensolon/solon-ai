@@ -80,7 +80,7 @@ public class ToolSchemaUtil {
     }
 
     /**
-     * 添加参数注解探测器
+     * 添加参数注解分析器
      */
     public static void addParamResolver(BiFunction<AnnotatedElement, TypeEggg, ParamDesc> resolver) {
         paramResolvers.add(resolver);

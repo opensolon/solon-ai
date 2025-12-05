@@ -14,7 +14,8 @@
 
 ### v3.7.3
 
-* 优化 ToolSchemaUtil 扩展能力，支持注解处理定制（方便第三方集成）
+* 优化 solon-ai-core ToolSchemaUtil 扩展能力，支持注解处理定制（方便第三方集成）
+* 优化 solon-ai-mcp MCP 客户端与服务端异常链接状态 立即返回
 
 ### v3.7.2
 
