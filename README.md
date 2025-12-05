@@ -52,7 +52,7 @@ Solon-AI
 
 ## 简介
 
-面向全场景的 Java AI 应用开发框架（支持已知 AI 开发的各种能力）。是 Solon 项目的一部分。也可嵌入到 SpringBoot、jFinal、Vert.x 等框架中使用。
+面向全场景的 Java AI 应用开发框架（支持已知 AI 开发的各种能力）。是 Solon 项目的一部分。也可嵌入到 SpringBoot、jFinal、Vert.X、Quarkus、Micronaut 等框架中使用。
 
 其中 solon-ai(& mcp) 的嵌入示例：
 
