@@ -82,43 +82,27 @@ public interface ChatSession extends ChatPrompt {
      * 转为 ndjson
      */
     default String toNdjson() throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        toNdjson(out);
-        return new String(out.toByteArray(), Solon.encoding());
+        return ChatMessage.toNdjson(getMessages());
     }
 
     /**
      * 转为 ndjson
      */
     default void toNdjson(OutputStream out) throws IOException {
-        for (ChatMessage msg : getMessages()) {
-            out.write(ChatMessage.toJson(msg).getBytes(Solon.encoding()));
-            out.write("\n".getBytes(Solon.encoding()));
-            out.flush();
-        }
+        ChatMessage.toNdjson(getMessages(), out);
     }
 
     /**
      * 加载 ndjson
      */
     default void loadNdjson(String ndjson) throws IOException {
-        loadNdjson(new ByteArrayInputStream(ndjson.getBytes(Solon.encoding())));
+        ChatMessage.fromNdjson(ndjson, this::addMessage);
     }
 
     /**
      * 加载 ndjson
      */
     default void loadNdjson(InputStream ins) throws IOException {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(ins))) {
-            while (true) {
-                String json = reader.readLine();
-
-                if (Utils.isEmpty(json)) {
-                    break;
-                } else {
-                    addMessage(ChatMessage.fromJson(json));
-                }
-            }
-        }
+        ChatMessage.fromNdjson(ins, this::addMessage);
     }
 }

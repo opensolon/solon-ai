@@ -17,15 +17,16 @@ package org.noear.solon.ai.chat.message;
 
 import org.noear.snack4.ONode;
 import org.noear.snack4.Feature;
+import org.noear.solon.Solon;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.chat.ChatRole;
 
 import java.io.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * 聊天消息
@@ -168,7 +169,8 @@ public interface ChatMessage extends Serializable {
         return ofUserAugment(message, context);
     }
 
-    /// //////////////////
+
+    /// /////////////////////////////////
 
     /**
      * 序列化为 json
@@ -192,6 +194,66 @@ public interface ChatMessage extends Serializable {
             return oNode.toBean(UserMessage.class);
         } else {
             return oNode.toBean(AssistantMessage.class);
+        }
+    }
+
+    /**
+     * 序列化为 ndjson
+     */
+    static String toNdjson(Collection<ChatMessage> messages) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        toNdjson(messages, out);
+        return new String(out.toByteArray(), Solon.encoding());
+    }
+
+    /**
+     * 序列化为 ndjson
+     */
+    static void toNdjson(Collection<ChatMessage> messages, OutputStream out) throws IOException {
+        for (ChatMessage msg : messages) {
+            out.write(ChatMessage.toJson(msg).getBytes(Solon.encoding()));
+            out.write("\n".getBytes(Solon.encoding()));
+            out.flush();
+        }
+    }
+
+    /**
+     * 从 ndjson 反序列化为消息
+     */
+    static List<ChatMessage> fromNdjson(String ndjson) throws IOException {
+        return fromNdjson(new ByteArrayInputStream(ndjson.getBytes(Solon.encoding())));
+    }
+
+    /**
+     * 从 ndjson 反序列化为消息
+     */
+    static void fromNdjson(String ndjson, Consumer<ChatMessage> consumer) throws IOException {
+        fromNdjson(new ByteArrayInputStream(ndjson.getBytes(Solon.encoding())), consumer);
+    }
+
+    /**
+     * 从 ndjson 反序列化为消息
+     */
+    static List<ChatMessage> fromNdjson(InputStream ins) throws IOException {
+        List<ChatMessage> messageList = new ArrayList<>();
+        fromNdjson(ins, messageList::add);
+        return messageList;
+    }
+
+    /**
+     * 从 ndjson 反序列化为消息
+     */
+    static void fromNdjson(InputStream ins, Consumer<ChatMessage> consumer) throws IOException {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(ins))) {
+            while (true) {
+                String json = reader.readLine();
+
+                if (Utils.isEmpty(json)) {
+                    break;
+                } else {
+                    consumer.accept(ChatMessage.fromJson(json));
+                }
+            }
         }
     }
 }
