@@ -52,7 +52,7 @@ public class ToolChain {
             if (index < interceptorList.size()) {
                 return interceptorList.get(index++).target.interceptTool(req, this);
             } else {
-                return lastHandler.handle(req.getArgs());
+                return lastHandler.handleAsync(req.getArgs()).get();
             }
         }
     }

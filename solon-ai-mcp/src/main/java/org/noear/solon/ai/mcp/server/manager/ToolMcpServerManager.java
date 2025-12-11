@@ -91,24 +91,27 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
             McpServerFeatures.AsyncToolSpecification toolSpec = new McpServerFeatures.AsyncToolSpecification(
                     toolBuilder.build(),
                     (exchange, request) -> {
-                        return ContextHolder.currentWith(new McpServerContext(exchange), () -> {
-                            try {
-                                String rst = functionTool.handle(request);
+                        return Mono.create(sink -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange), () -> {
+                                functionTool.handleAsync(request).whenComplete((rst, err) -> {
+                                    final McpSchema.CallToolResult result;
 
-                                final McpSchema.CallToolResult result;
-                                if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
-                                    Map<String, Object> map = ONode.deserialize(rst, Map.class);
-                                    result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false, map);
-                                } else {
-                                    result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
-                                }
+                                    if (err != null) {
+                                        err = Utils.throwableUnwrap(err);
+                                        result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(err.getMessage())), true);
+                                    } else {
 
-                                return Mono.just(result);
-                            } catch (Throwable ex) {
-                                ex = Utils.throwableUnwrap(ex);
-                                final McpSchema.CallToolResult result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(ex.getMessage())), true);
-                                return Mono.just(result);
-                            }
+                                        if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
+                                            Map<String, Object> map = ONode.deserialize(rst, Map.class);
+                                            result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false, map);
+                                        } else {
+                                            result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
+                                        }
+                                    }
+
+                                    sink.success(result);
+                                });
+                            });
                         });
                     });
 

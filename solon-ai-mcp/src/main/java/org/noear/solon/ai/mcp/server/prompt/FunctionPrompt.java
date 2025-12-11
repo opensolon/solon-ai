@@ -20,6 +20,7 @@ import org.noear.solon.ai.util.ParamDesc;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 函数提示语
@@ -52,4 +53,16 @@ public interface FunctionPrompt {
      * 处理
      */
     Collection<ChatMessage> handle(Map<String, Object> args) throws Throwable;
+
+    default CompletableFuture<Collection<ChatMessage>> handleAsync(Map<String, Object> args) {
+        CompletableFuture future = new CompletableFuture();
+
+        try {
+            future.complete(handle(args));
+        } catch (Throwable e) {
+            future.completeExceptionally(e);
+        }
+
+        return future;
+    }
 }

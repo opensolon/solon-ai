@@ -17,6 +17,8 @@ package org.noear.solon.ai.mcp.server.resource;
 
 import org.noear.solon.ai.media.Text;
 
+import java.util.concurrent.CompletableFuture;
+
 /**
  * 函数资源
  *
@@ -53,4 +55,16 @@ public interface FunctionResource {
      * 处理
      */
     Text handle(String reqUri) throws Throwable;
+
+    default CompletableFuture<Text> handleAsync(String reqUri) {
+        CompletableFuture future = new CompletableFuture();
+
+        try {
+            future.complete(handle(reqUri));
+        } catch (Throwable e) {
+            future.completeExceptionally(e);
+        }
+
+        return future;
+    }
 }

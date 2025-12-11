@@ -18,14 +18,12 @@ package org.noear.solon.ai.mcp.server.manager;
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
-import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
-import org.noear.solon.ai.media.Text;
 import org.noear.solon.core.handle.ContextHolder;
 import reactor.core.publisher.Mono;
 
@@ -78,28 +76,31 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
                             .name(functionResource.name()).title(functionResource.title()).description(functionResource.description())
                             .mimeType(functionResource.mimeType()).build(),
                     (exchange, request) -> {
-                        return ContextHolder.currentWith(new McpServerContext(exchange), () -> {
-                            try {
-                                Text res = functionResource.handle(request.getUri());
+                        return Mono.create(sink -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange), () -> {
+                                functionResource.handleAsync(request.getUri()).whenComplete((res, err) -> {
 
-                                final McpSchema.ReadResourceResult result;
-                                if (res.isBase64()) {
-                                    result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                                            request.getUri(),
-                                            functionResource.mimeType(),
-                                            res.getContent())));
-                                } else {
-                                    result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                                            request.getUri(),
-                                            functionResource.mimeType(),
-                                            res.getContent())));
-                                }
+                                    if (err != null) {
+                                        err = Utils.throwableUnwrap(err);
+                                        sink.error(new McpException(err.getMessage(), err));
+                                    } else {
+                                        final McpSchema.ReadResourceResult result;
+                                        if (res.isBase64()) {
+                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
+                                                    request.getUri(),
+                                                    functionResource.mimeType(),
+                                                    res.getContent())));
+                                        } else {
+                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
+                                                    request.getUri(),
+                                                    functionResource.mimeType(),
+                                                    res.getContent())));
+                                        }
+                                        sink.success(result);
+                                    }
+                                });
 
-                                return Mono.just(result);
-                            } catch (Throwable ex) {
-                                ex = Utils.throwableUnwrap(ex);
-                                throw new McpException(ex.getMessage(), ex);
-                            }
+                            });
                         });
                     });
 

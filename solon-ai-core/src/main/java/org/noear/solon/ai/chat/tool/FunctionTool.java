@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 函数工具
@@ -85,4 +86,16 @@ public interface FunctionTool extends ChatTool {
      * 处理
      */
     String handle(Map<String, Object> args) throws Throwable;
+
+   default CompletableFuture<String> handleAsync(Map<String, Object> args){
+       CompletableFuture future = new CompletableFuture();
+
+       try {
+           future.complete(handle(args));
+       } catch (Throwable e) {
+           future.completeExceptionally(e);
+       }
+
+       return future;
+   }
 }
