@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 
 /**
@@ -122,17 +123,62 @@ public class MethodFunctionResource implements FunctionResource {
 
     @Override
     public Text handle(String reqUri) throws Throwable {
+        return handleAsync(reqUri).get();
+    }
+
+    @Override
+    public CompletableFuture<Text> handleAsync(String reqUri) {
+        CompletableFuture<Text> returnFuture = new CompletableFuture<>();
+
         try {
-            return doHandle(reqUri);
+            Object handleR = doHandle(reqUri);
+
+            if (handleR instanceof CompletableFuture) {
+                CompletableFuture<Object> handleF = (CompletableFuture<Object>) handleR;
+                handleF.whenComplete((rst1, ex) -> {
+                    if (ex != null) {
+                        if (log.isWarnEnabled()) {
+                            log.warn("Resource handle error, name: '{}'", name, ex);
+                        }
+                        returnFuture.completeExceptionally(ex);
+                    } else {
+                        doConvert(rst1, returnFuture);
+                    }
+                });
+            } else {
+                doConvert(handleR, returnFuture);
+            }
+
         } catch (Throwable ex) {
             if (log.isWarnEnabled()) {
                 log.warn("Resource handle error, name: '{}'", name, ex);
             }
-            throw ex;
+            returnFuture.completeExceptionally(ex);
+        }
+
+        return returnFuture;
+    }
+
+    private void doConvert(Object rst, CompletableFuture<Text> returnFuture) {
+        try {
+            final Text rst2;
+            if (rst instanceof Text) {
+                rst2 = (Text) rst;
+            } else if (rst instanceof byte[]) {
+                String blob = Base64.getEncoder().encodeToString((byte[]) rst);
+                rst2 = Text.of(true, blob);
+            } else {
+                String text = String.valueOf(rst);
+                rst2 = Text.of(false, text);
+            }
+
+            returnFuture.complete(rst2);
+        } catch (Throwable ex) {
+            returnFuture.completeExceptionally(ex);
         }
     }
 
-    private Text doHandle(String reqUri) throws Throwable {
+    private Object doHandle(String reqUri) throws Throwable {
         Context ctx = Context.current();
         if (ctx == null) {
             ctx = new ContextEmpty();
@@ -143,15 +189,7 @@ public class MethodFunctionResource implements FunctionResource {
         ctx.result = MethodExecuteHandler.getInstance()
                 .executeHandle(ctx, beanWrap.get(), methodWrap);
 
-        if (ctx.result instanceof Text) {
-            return (Text) ctx.result;
-        } else if (ctx.result instanceof byte[]) {
-            String blob = Base64.getEncoder().encodeToString((byte[]) ctx.result);
-            return Text.of(true, blob);
-        } else {
-            String text = String.valueOf(ctx.result);
-            return Text.of(false, text);
-        }
+        return ctx.result;
     }
 
     private void bindPathVarDo(Context c, String reqUri) throws Throwable {

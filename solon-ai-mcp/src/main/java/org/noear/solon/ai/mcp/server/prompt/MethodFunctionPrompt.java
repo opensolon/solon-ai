@@ -32,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 方法构建的函数提示语
@@ -98,18 +99,43 @@ public class MethodFunctionPrompt implements FunctionPrompt {
 
     @Override
     public Collection<ChatMessage> handle(Map<String, Object> args) throws Throwable {
+        return handleAsync(args).get();
+    }
+
+    @Override
+    public CompletableFuture<Collection<ChatMessage>> handleAsync(Map<String, Object> args) {
+        CompletableFuture<Collection<ChatMessage>> returnFuture = new CompletableFuture<>();
+
         try {
-            return doHandle(args);
+            Object handleR = doHandle(args);
+
+            if (handleR instanceof CompletableFuture) {
+                CompletableFuture<Object> handleF = (CompletableFuture<Object>) handleR;
+                handleF.whenComplete((rst1, ex) -> {
+                    if (ex != null) {
+                        if (log.isWarnEnabled()) {
+                            log.warn("Prompt handle error, name: '{}'", name, ex);
+                        }
+                        returnFuture.completeExceptionally(ex);
+                    } else {
+                        returnFuture.complete((Collection<ChatMessage>) rst1);
+                    }
+                });
+            } else {
+                returnFuture.complete((Collection<ChatMessage>) handleR);
+            }
+
         } catch (Throwable ex) {
             if (log.isWarnEnabled()) {
                 log.warn("Prompt handle error, name: '{}'", name, ex);
             }
-
-            throw ex;
+            returnFuture.completeExceptionally(ex);
         }
+
+        return returnFuture;
     }
 
-    private Collection<ChatMessage> doHandle(Map<String, Object> args) throws Throwable {
+    private Object doHandle(Map<String, Object> args) throws Throwable {
         Context ctx = Context.current();
         if (ctx == null) {
             ctx = new ContextEmpty();
@@ -120,6 +146,6 @@ public class MethodFunctionPrompt implements FunctionPrompt {
         ctx.result = MethodExecuteHandler.getInstance()
                 .executeHandle(ctx, beanWrap.get(), methodWrap);
 
-        return (Collection<ChatMessage>) ctx.result;
+        return ctx.result;
     }
 }

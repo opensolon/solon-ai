@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 方法构建的函数工具
@@ -153,17 +154,58 @@ public class MethodFunctionTool implements FunctionTool {
      */
     @Override
     public String handle(Map<String, Object> args) throws Throwable {
+        return handleAsync(args).get();
+    }
+
+    @Override
+    public CompletableFuture<String> handleAsync(Map<String, Object> args) {
+        CompletableFuture<String> returnFuture = new CompletableFuture<>();
+
         try {
-            return doHandle(args);
+            Object handleR = doHandle(args);
+
+            if (handleR instanceof CompletableFuture) {
+                CompletableFuture<Object> handleF = (CompletableFuture<Object>) handleR;
+                handleF.whenComplete((rst1, ex) -> {
+                    if (ex != null) {
+                        if (log.isWarnEnabled()) {
+                            log.warn("Tool handle error, name: '{}'", name, ex);
+                        }
+                        returnFuture.completeExceptionally(ex);
+                    } else {
+                        doConvert(rst1, returnFuture);
+                    }
+                });
+            } else {
+                doConvert(handleR, returnFuture);
+            }
+
         } catch (Throwable ex) {
             if (log.isWarnEnabled()) {
                 log.warn("Tool handle error, name: '{}'", name, ex);
             }
-            throw ex;
+            returnFuture.completeExceptionally(ex);
+        }
+
+        return returnFuture;
+    }
+
+    private void doConvert(Object rst, CompletableFuture<String> returnFuture) {
+        try {
+            final String rst2;
+            if (resultConverter == null) {
+                rst2 = String.valueOf(rst);
+            } else {
+                rst2 = resultConverter.convert(rst, returnType);
+            }
+
+            returnFuture.complete(rst2);
+        } catch (Throwable ex2) {
+            returnFuture.completeExceptionally(ex2);
         }
     }
 
-    private String doHandle(Map<String, Object> args) throws Throwable {
+    private Object doHandle(Map<String, Object> args) throws Throwable {
         Context ctx = Context.current();
         if (ctx == null) {
             ctx = new ContextEmpty();
@@ -174,11 +216,7 @@ public class MethodFunctionTool implements FunctionTool {
         ctx.result = MethodExecuteHandler.getInstance()
                 .executeHandle(ctx, beanWrap.get(), methodWrap);
 
-        if (resultConverter == null) {
-            return String.valueOf(ctx.result);
-        } else {
-            return resultConverter.convert(ctx.result, returnType);
-        }
+        return ctx.result;
     }
 
     @Override
