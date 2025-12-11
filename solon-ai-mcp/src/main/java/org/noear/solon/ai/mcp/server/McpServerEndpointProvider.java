@@ -16,8 +16,8 @@
 package org.noear.solon.ai.mcp.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
-import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.*;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
@@ -55,7 +55,7 @@ import java.util.*;
 public class McpServerEndpointProvider implements LifecycleBean {
     private static Logger log = LoggerFactory.getLogger(McpServerEndpointProvider.class);
     private final McpServerTransportProviderBase mcpTransportProvider;
-    private final McpServer.SyncSpecification mcpServerSpec;
+    private final McpServer.AsyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
 
     private final PromptMcpServerManager promptManager = new PromptMcpServerManager();
@@ -66,7 +66,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private final String messageEndpoint;
 
     private McpSchema.LoggingLevel loggingLevel = McpSchema.LoggingLevel.INFO;
-    private McpSyncServer server;
+    private McpAsyncServer server;
 
     public McpServerEndpointProvider(Properties properties) {
         this(Props.from(properties).bindTo(new McpServerProperties()));
@@ -77,7 +77,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
             throw new IllegalArgumentException("The channel is required");
         }
 
-        if(serverProps.getContextPath() == null) {
+        if (serverProps.getContextPath() == null) {
             if (Solon.app() != null) {
                 serverProps.setContextPath(Solon.cfg().serverContextPath()); //@since 2025-08-23
             }
@@ -131,7 +131,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
             //stdio 通道
             this.mcpTransportProvider = new StdioServerTransportProvider();
 
-            mcpServerSpec = McpServer.sync((StdioServerTransportProvider) this.mcpTransportProvider)
+            mcpServerSpec = McpServer.async((StdioServerTransportProvider) this.mcpTransportProvider)
                     .capabilities(serverCapabilities)
                     .serverInfo(serverProps.getName(), serverProps.getVersion());
         } else {
@@ -145,7 +145,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                         .objectMapper(new ObjectMapper())
                         .build();
 
-                mcpServerSpec = McpServer.sync((WebRxSseServerTransportProvider) this.mcpTransportProvider)
+                mcpServerSpec = McpServer.async((WebRxSseServerTransportProvider) this.mcpTransportProvider)
                         .capabilities(serverCapabilities)
                         .serverInfo(serverProps.getName(), serverProps.getVersion());
             } else {
@@ -155,7 +155,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
                         .objectMapper(new ObjectMapper())
                         .build();
 
-                mcpServerSpec = McpServer.sync((WebRxStreamableServerTransportProvider) this.mcpTransportProvider)
+                mcpServerSpec = McpServer.async((WebRxStreamableServerTransportProvider) this.mcpTransportProvider)
                         .capabilities(serverCapabilities)
                         .serverInfo(serverProps.getName(), serverProps.getVersion());
             }
@@ -165,7 +165,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     /**
      * 获取服务端（postStart 后有效）
      */
-    public @Nullable McpSyncServer getServer() {
+    public @Nullable McpAsyncServer getServer() {
         return server;
     }
 

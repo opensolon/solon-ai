@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.manager;
 
+import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -26,6 +27,7 @@ import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.core.handle.ContextHolder;
+import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -57,15 +59,15 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
     }
 
     @Override
-    public void remove(McpSyncServer server, String toolName) {
+    public void remove(McpAsyncServer server, String toolName) {
         if (server != null) {
-            server.removeTool(toolName);
+            server.removeTool(toolName).block();
             toolsMap.remove(toolName);
         }
     }
 
     @Override
-    public void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionTool functionTool) {
+    public void add(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionTool functionTool) {
         try {
             //内部登记
             toolsMap.put(functionTool.name(), functionTool);
@@ -81,37 +83,39 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
                     .annotations(toolAnnotations)
                     .inputSchema(inSchemaJson);
 
-            if(mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())){
+            if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
                 toolBuilder.outputSchema(functionTool.outputSchema());
             }
 
             // 注册实际调用逻辑
-            McpServerFeatures.SyncToolSpecification toolSpec = new McpServerFeatures.SyncToolSpecification(
+            McpServerFeatures.AsyncToolSpecification toolSpec = new McpServerFeatures.AsyncToolSpecification(
                     toolBuilder.build(),
                     (exchange, request) -> {
-                        try {
-                            ContextHolder.currentSet(new McpServerContext(exchange));
+                        return ContextHolder.currentWith(new McpServerContext(exchange), () -> {
+                            try {
+                                String rst = functionTool.handle(request);
 
-                            String rst = functionTool.handle(request);
+                                final McpSchema.CallToolResult result;
+                                if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
+                                    Map<String, Object> map = ONode.deserialize(rst, Map.class);
+                                    result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false, map);
+                                } else {
+                                    result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
+                                }
 
-                            if(mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())){
-                                Map<String,Object> map = ONode.deserialize(rst, Map.class);
-                                return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false, map);
-                            } else {
-                                return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
+                                return Mono.just(result);
+                            } catch (Throwable ex) {
+                                ex = Utils.throwableUnwrap(ex);
+                                final McpSchema.CallToolResult result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(ex.getMessage())), true);
+                                return Mono.just(result);
                             }
-                        } catch (Throwable ex) {
-                            ex = Utils.throwableUnwrap(ex);
-                            return new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(ex.getMessage())), true);
-                        } finally {
-                            ContextHolder.currentRemove();
-                        }
+                        });
                     });
 
             if (server != null) {
-                server.addTool(toolSpec);
+                server.addTool(toolSpec).block();
             } else {
-                mcpServerSpec.tools(toolSpec);
+                mcpServerSpec.tools(toolSpec).build();
             }
         } catch (Throwable ex) {
             throw new McpException("Tool add failed, tool: " + functionTool.name(), ex);

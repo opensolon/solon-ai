@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.manager;
 
+import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -26,6 +27,7 @@ import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 import org.noear.solon.ai.media.Text;
 import org.noear.solon.core.handle.ContextHolder;
+import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -57,53 +59,54 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
     }
 
     @Override
-    public void remove(McpSyncServer server, String resourceUri) {
+    public void remove(McpAsyncServer server, String resourceUri) {
         if (server != null) {
-            server.removeResource(resourceUri);
+            server.removeResource(resourceUri).block();
             resourcesMap.remove(resourceUri);
         }
     }
 
     @Override
-    public void add(McpSyncServer server, McpServer.SyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionResource functionResource) {
+    public void add(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionResource functionResource) {
         try {
             resourcesMap.put(functionResource.uri(), functionResource);
 
             //resourceSpec
-            McpServerFeatures.SyncResourceSpecification resourceSpec = new McpServerFeatures.SyncResourceSpecification(
+            McpServerFeatures.AsyncResourceSpecification resourceSpec = new McpServerFeatures.AsyncResourceSpecification(
                     McpSchema.Resource.builder()
                             .uri(functionResource.uri())
                             .name(functionResource.name()).title(functionResource.title()).description(functionResource.description())
                             .mimeType(functionResource.mimeType()).build(),
                     (exchange, request) -> {
-                        try {
-                            ContextHolder.currentSet(new McpServerContext(exchange));
+                        return ContextHolder.currentWith(new McpServerContext(exchange), () -> {
+                            try {
+                                Text res = functionResource.handle(request.getUri());
 
-                            Text res = functionResource.handle(request.getUri());
+                                final McpSchema.ReadResourceResult result;
+                                if (res.isBase64()) {
+                                    result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
+                                            request.getUri(),
+                                            functionResource.mimeType(),
+                                            res.getContent())));
+                                } else {
+                                    result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
+                                            request.getUri(),
+                                            functionResource.mimeType(),
+                                            res.getContent())));
+                                }
 
-                            if (res.isBase64()) {
-                                return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                                        request.getUri(),
-                                        functionResource.mimeType(),
-                                        res.getContent())));
-                            } else {
-                                return new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                                        request.getUri(),
-                                        functionResource.mimeType(),
-                                        res.getContent())));
+                                return Mono.just(result);
+                            } catch (Throwable ex) {
+                                ex = Utils.throwableUnwrap(ex);
+                                throw new McpException(ex.getMessage(), ex);
                             }
-                        } catch (Throwable ex) {
-                            ex = Utils.throwableUnwrap(ex);
-                            throw new McpException(ex.getMessage(), ex);
-                        } finally {
-                            ContextHolder.currentRemove();
-                        }
+                        });
                     });
 
             if (server != null) {
-                server.addResource(resourceSpec);
+                server.addResource(resourceSpec).block();
             } else {
-                mcpServerSpec.resources(resourceSpec);
+                mcpServerSpec.resources(resourceSpec).build();
             }
         } catch (Throwable ex) {
             throw new McpException("Resource add failed, resource: " + functionResource.uri(), ex);

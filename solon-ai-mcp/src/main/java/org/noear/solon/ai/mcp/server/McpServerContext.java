@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server;
 
+import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
@@ -32,10 +33,10 @@ import java.util.Collection;
  */
 public class McpServerContext extends ContextEmpty {
     /// /////////////////////////
-    private final McpSyncServerExchange serverExchange;
+    private final McpAsyncServerExchange serverExchange;
     private Context context;
 
-    public McpServerContext(McpSyncServerExchange serverExchange) {
+    public McpServerContext(McpAsyncServerExchange serverExchange) {
         this.serverExchange = serverExchange;
 
         //通响 transportContext 获取连接时的 context
