@@ -19,7 +19,6 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.net.http.HttpUtils;
 
-import java.util.Map;
 
 /**
  * Openai 聊天模型方言
