@@ -195,6 +195,11 @@ public class ChatResponseDefault implements ChatResponse {
     public boolean has_reasoning_field;
 
     /**
+     * 最后的 callIdx
+     * */
+    public int lastToolCallIdx;
+
+    /**
      * 重置响应数据
      */
     public void reset() {

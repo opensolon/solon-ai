@@ -1,5 +1,9 @@
 [
   {
+    "name": "org.noear.solon.ai.llm.dialect.openai.ClaudeChatDialect",
+    "allDeclaredConstructors": true
+  },
+  {
     "name": "org.noear.solon.ai.llm.dialect.openai.OpenaiChatDialect",
     "allDeclaredConstructors": true
   },
