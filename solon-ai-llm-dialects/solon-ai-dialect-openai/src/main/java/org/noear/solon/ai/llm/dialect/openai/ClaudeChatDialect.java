@@ -45,7 +45,7 @@ public class ClaudeChatDialect extends OpenaiChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return config.getModel().toLowerCase().startsWith("claude");
+        return "claude".equals(config.getProvider());
     }
 
     @Override
