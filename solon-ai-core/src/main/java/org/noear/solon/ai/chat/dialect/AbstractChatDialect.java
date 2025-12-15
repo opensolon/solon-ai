@@ -24,6 +24,7 @@ import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.media.Video;
+import org.noear.solon.net.http.HttpUtils;
 
 import java.util.*;
 
@@ -34,6 +35,23 @@ import java.util.*;
  * @since 3.1
  */
 public abstract class AbstractChatDialect implements ChatDialect {
+    public HttpUtils createHttpUtils(ChatConfig config) {
+        HttpUtils httpUtils = HttpUtils
+                .http(config.getApiUrl())
+                .timeout((int) config.getTimeout().getSeconds());
+
+        if (config.getProxy() != null) {
+            httpUtils.proxy(config.getProxy());
+        }
+
+        if (Utils.isNotEmpty(config.getApiKey())) {
+            httpUtils.header("Authorization", "Bearer " + config.getApiKey());
+        }
+
+        httpUtils.headers(config.getHeaders());
+
+        return httpUtils;
+    }
 
     protected void buildChatMessageNodeDo(ONode oNode, AssistantMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());

@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.lang.Preview;
+import org.noear.solon.net.http.HttpUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -50,6 +51,13 @@ public interface ChatDialect extends AiModelDialect {
      * @param config 聊天配置
      */
     boolean matched(ChatConfig config);
+
+    /**
+     * 创建 http 工具
+     *
+     * @param config 聊天配置
+     */
+    HttpUtils createHttpUtils(ChatConfig config);
 
     /**
      * 构建请求数据

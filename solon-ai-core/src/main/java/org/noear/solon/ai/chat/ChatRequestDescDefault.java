@@ -125,7 +125,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      * 调用
      */
     private ChatResponse doCall(ChatRequest req) throws IOException {
-        HttpUtils httpUtils = config.createHttpUtils();
+        HttpUtils httpUtils = dialect.createHttpUtils(config);
 
         String reqJson = req.toRequestData();
 
@@ -194,7 +194,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      * 流响应
      */
     private Publisher<ChatResponse> doStream(ChatRequest req) {
-        HttpUtils httpUtils = config.createHttpUtils();
+        HttpUtils httpUtils = dialect.createHttpUtils(config);
 
         String reqJson = req.toRequestData();
 
