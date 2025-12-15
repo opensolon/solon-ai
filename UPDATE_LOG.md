@@ -10,6 +10,9 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+### v3.8.0
+
+* 添加 solon-ai-dialect-openai ClaudeChatDialect 方言
 
 ### v3.7.4
 

@@ -42,6 +42,7 @@ public class ChatDialectManager {
         register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.openai.OpenaiChatDialect"));
 
         register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.openai.ClaudeChatDialect"));
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.openai.GeminiChatDialect"));
     }
 
     /**
