@@ -42,7 +42,7 @@ public class ChatResponseDefault implements ChatResponse {
     protected AiUsage usage;
     protected String model;
     protected boolean finished;
-    protected final Map<Integer, ToolCallBuilder> toolCallBuilders = new ConcurrentHashMap();
+    protected final Map<String, ToolCallBuilder> toolCallBuilders = new ConcurrentHashMap();
 
     //取合消息内容
     protected StringBuilder aggregationMessageContent = new StringBuilder();
@@ -195,9 +195,9 @@ public class ChatResponseDefault implements ChatResponse {
     public boolean has_reasoning_field;
 
     /**
-     * 最后的 callIdx
+     * 最后的 callId
      * */
-    public int lastToolCallIdx;
+    public String lastToolCallId;
 
     /**
      * 重置响应数据

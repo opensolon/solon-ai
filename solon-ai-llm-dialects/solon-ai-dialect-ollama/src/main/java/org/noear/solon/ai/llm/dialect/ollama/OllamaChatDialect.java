@@ -81,12 +81,12 @@ public class OllamaChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public ONode buildAssistantMessageNode(Map<Integer, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
         oNode.set("content", "");
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
-            for (Map.Entry<Integer, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
+            for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
                 n1.addNew().set("id", kv.getValue().idBuilder.toString())
                         .set("type", "function")
@@ -133,7 +133,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
 
                 resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens, oResp));
 
-                if(resp.hasChoices() == false) {
+                if (resp.hasChoices() == false) {
                     resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage("")));
                 }
             }
@@ -144,7 +144,6 @@ public class OllamaChatDialect extends AbstractChatDialect {
 
     @Override
     protected ToolCall parseToolCall(ChatResponseDefault resp, ONode n1) {
-        int index = -1; //n1.get("index").getInt();它是没有值的
         String callId = n1.get("id").getString();
 
         ONode n1f = n1.get("function");
@@ -152,7 +151,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
         ONode n1fArgs = n1f.get("arguments");
         String argStr = n1fArgs.getString();
 
-        index = name.hashCode();
+        String index = name;
 
         if (n1fArgs.isValue()) {
             //有可能是 json string

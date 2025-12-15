@@ -181,12 +181,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     @Override
-    public ONode buildAssistantMessageNode(Map<Integer, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
         oNode.set("content", "");
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
-            for (Map.Entry<Integer, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
+            for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
                 n1.addNew().set("id", kv.getValue().idBuilder.toString())
                         .set("type", "function")
@@ -237,7 +237,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     protected ToolCall parseToolCall(ChatResponseDefault resp, ONode n1) {
-        int index = n1.get("index").getInt();
+        String index = n1.get("index").getString();
         String callId = n1.get("id").getString();
 
         //claude.index 可能都是 0

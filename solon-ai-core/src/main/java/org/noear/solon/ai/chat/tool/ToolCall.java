@@ -26,7 +26,7 @@ import java.util.Map;
  * @since 3.1
  */
 public class ToolCall implements Serializable {
-    private int index;
+    private String index;
     private String id;
     private String name;
     private String argumentsStr;
@@ -36,7 +36,7 @@ public class ToolCall implements Serializable {
         //用于序列化
     }
 
-    public ToolCall(int index, String id, String name, String argumentsStr, Map<String, Object> arguments) {
+    public ToolCall(String index, String id, String name, String argumentsStr, Map<String, Object> arguments) {
         this.index = index;
         this.id = id;
         this.name = name;
@@ -53,7 +53,7 @@ public class ToolCall implements Serializable {
     /**
      * 索引位（流式调用时）
      */
-    public int index() {
+    public String index() {
         return index;
     }
 

@@ -53,10 +53,10 @@ public class ClaudeChatDialect extends OpenaiChatDialect {
         String callId = n1.get("id").getString();
 
         if (Utils.isNotEmpty(callId)) {
-            resp.lastToolCallIdx++; //不为空，加一次
+            resp.lastToolCallId = callId;
         }
 
-        int index = resp.lastToolCallIdx;
+        String index = resp.lastToolCallId;
 
         ONode n1f = n1.get("function");
         String name = n1f.get("name").getString();
