@@ -143,7 +143,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    protected ToolCall parseToolCall(ONode n1) {
+    protected ToolCall parseToolCall(ChatResponseDefault resp, ONode n1) {
         int index = -1; //n1.get("index").getInt();它是没有值的
         String callId = n1.get("id").getString();
 

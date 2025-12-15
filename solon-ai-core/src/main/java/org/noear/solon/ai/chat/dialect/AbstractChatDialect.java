@@ -222,7 +222,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
     /**
      * 解析工具调用
      */
-    protected List<ToolCall> parseToolCalls(ONode toolCallsNode) {
+    protected List<ToolCall> parseToolCalls(ChatResponseDefault resp, ONode toolCallsNode) {
         if (toolCallsNode == null) {
             return null;
         }
@@ -230,15 +230,17 @@ public abstract class AbstractChatDialect implements ChatDialect {
         List<ToolCall> toolCalls = new ArrayList<>();
 
         for (ONode n1 : toolCallsNode.getArray()) {
-            toolCalls.add(parseToolCall(n1));
+            toolCalls.add(parseToolCall(resp, n1));
         }
 
         return toolCalls;
     }
 
-    protected ToolCall parseToolCall(ONode n1) {
+    protected ToolCall parseToolCall(ChatResponseDefault resp, ONode n1) {
         int index = n1.get("index").getInt();
         String callId = n1.get("id").getString();
+
+        //claude.index 可能都是 0
 
         ONode n1f = n1.get("function");
         String name = n1f.get("name").getString();
@@ -306,7 +308,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         ONode searchResultsNode = oMessage.getOrNull("search_results");
 
         List<Map> toolCallsRaw = null;
-        List<ToolCall> toolCalls = parseToolCalls(toolCallsNode);
+        List<ToolCall> toolCalls = parseToolCalls(resp, toolCallsNode);
         List<Map> searchResultsRaw = null;
 
         if (Utils.isNotEmpty(toolCalls)) {
