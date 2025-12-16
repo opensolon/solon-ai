@@ -4,9 +4,11 @@
 
 package io.modelcontextprotocol.json.schema;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.ServiceLoader;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Stream;
 
 /**
  * Internal utility class for creating a default {@link JsonSchemaValidator} instance.
@@ -27,7 +29,11 @@ final class JsonSchemaInternal {
 	 */
 	static JsonSchemaValidator getDefaultValidator() {
 		if (defaultValidator == null) {
-			defaultValidator = JsonSchemaInternal.createDefaultValidator();
+			synchronized (JsonSchemaInternal.class) {
+				if (defaultValidator == null) {
+					defaultValidator = JsonSchemaInternal.createDefaultValidator();
+				}
+			}
 		}
 		return defaultValidator;
 	}
@@ -41,43 +47,52 @@ final class JsonSchemaInternal {
 	 */
 	static JsonSchemaValidator createDefaultValidator() {
 		AtomicReference<IllegalStateException> ex = new AtomicReference<>();
-		return ServiceLoader.load(JsonSchemaValidatorSupplier.class).stream().flatMap(p -> {
+		List<JsonSchemaValidator> validators = new ArrayList<>();
+
+		ServiceLoader<JsonSchemaValidatorSupplier> loader = ServiceLoader.load(JsonSchemaValidatorSupplier.class);
+		Iterator<JsonSchemaValidatorSupplier> iterator = loader.iterator();
+
+		while (iterator.hasNext()) {
+			JsonSchemaValidatorSupplier supplier = null;
 			try {
-				JsonSchemaValidatorSupplier supplier = p.get();
-				return Stream.ofNullable(supplier);
-			}
-			catch (Exception e) {
+				supplier = iterator.next();
+			} catch (Exception e) {
 				addException(ex, e);
-				return Stream.empty();
+				continue;
 			}
-		}).flatMap(jsonMapperSupplier -> {
-			try {
-				return Stream.of(jsonMapperSupplier.get());
+
+			if (supplier != null) {
+				try {
+					JsonSchemaValidator validator = supplier.get();
+					if (validator != null) {
+						validators.add(validator);
+						// 找到第一个有效的就返回
+						return validator;
+					}
+				} catch (Exception e) {
+					addException(ex, e);
+				}
 			}
-			catch (Exception e) {
-				addException(ex, e);
-				return Stream.empty();
-			}
-		}).findFirst().orElseThrow(() -> {
-			if (ex.get() != null) {
-				return ex.get();
-			}
-			else {
-				return new IllegalStateException("No default JsonSchemaValidatorSupplier implementation found");
-			}
-		});
+		}
+
+		if (!validators.isEmpty()) {
+			return validators.get(0);
+		}
+
+		if (ex.get() != null) {
+			throw ex.get();
+		} else {
+			throw new IllegalStateException("No default JsonSchemaValidatorSupplier implementation found");
+		}
 	}
 
 	private static void addException(AtomicReference<IllegalStateException> ref, Exception toAdd) {
-		ref.updateAndGet(existing -> {
-			if (existing == null) {
-				return new IllegalStateException("Failed to initialize default JsonSchemaValidatorSupplier", toAdd);
-			}
-			else {
-				existing.addSuppressed(toAdd);
-				return existing;
-			}
-		});
+		IllegalStateException existing = ref.get();
+		if (existing == null) {
+			ref.set(new IllegalStateException("Failed to initialize default JsonSchemaValidatorSupplier", toAdd));
+		} else {
+			existing.addSuppressed(toAdd);
+		}
 	}
 
 }

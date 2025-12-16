@@ -4,9 +4,9 @@
 
 package io.modelcontextprotocol.json;
 
+import java.util.Iterator;
 import java.util.ServiceLoader;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Stream;
 
 /**
  * Utility class for creating a default {@link McpJsonMapper} instance. This class
@@ -15,7 +15,7 @@ import java.util.stream.Stream;
  */
 final class McpJsonInternal {
 
-	private static McpJsonMapper defaultJsonMapper = null;
+	private static volatile McpJsonMapper defaultJsonMapper = null;
 
 	/**
 	 * Returns the cached default {@link McpJsonMapper} instance. If the default mapper
@@ -27,7 +27,11 @@ final class McpJsonInternal {
 	 */
 	static McpJsonMapper getDefaultMapper() {
 		if (defaultJsonMapper == null) {
-			defaultJsonMapper = McpJsonInternal.createDefaultMapper();
+			synchronized (McpJsonInternal.class) {
+				if (defaultJsonMapper == null) {
+					defaultJsonMapper = McpJsonInternal.createDefaultMapper();
+				}
+			}
 		}
 		return defaultJsonMapper;
 	}
@@ -42,43 +46,44 @@ final class McpJsonInternal {
 	 */
 	static McpJsonMapper createDefaultMapper() {
 		AtomicReference<IllegalStateException> ex = new AtomicReference<>();
-		return ServiceLoader.load(McpJsonMapperSupplier.class).stream().flatMap(p -> {
+		ServiceLoader<McpJsonMapperSupplier> loader = ServiceLoader.load(McpJsonMapperSupplier.class);
+		Iterator<McpJsonMapperSupplier> iterator = loader.iterator();
+
+		while (iterator.hasNext()) {
+			McpJsonMapperSupplier supplier = null;
 			try {
-				McpJsonMapperSupplier supplier = p.get();
-				return Stream.ofNullable(supplier);
-			}
-			catch (Exception e) {
+				supplier = iterator.next();
+			} catch (Exception e) {
 				addException(ex, e);
-				return Stream.empty();
+				continue;
 			}
-		}).flatMap(jsonMapperSupplier -> {
-			try {
-				return Stream.ofNullable(jsonMapperSupplier.get());
+
+			if (supplier != null) {
+				try {
+					McpJsonMapper mapper = supplier.get();
+					if (mapper != null) {
+						return mapper;
+					}
+				} catch (Exception e) {
+					addException(ex, e);
+				}
 			}
-			catch (Exception e) {
-				addException(ex, e);
-				return Stream.empty();
-			}
-		}).findFirst().orElseThrow(() -> {
-			if (ex.get() != null) {
-				return ex.get();
-			}
-			else {
-				return new IllegalStateException("No default McpJsonMapper implementation found");
-			}
-		});
+		}
+
+		if (ex.get() != null) {
+			throw ex.get();
+		} else {
+			throw new IllegalStateException("No default McpJsonMapper implementation found");
+		}
 	}
 
 	private static void addException(AtomicReference<IllegalStateException> ref, Exception toAdd) {
-		ref.updateAndGet(existing -> {
-			if (existing == null) {
-				return new IllegalStateException("Failed to initialize default McpJsonMapper", toAdd);
-			}
-			else {
-				existing.addSuppressed(toAdd);
-				return existing;
-			}
-		});
+		IllegalStateException existing = ref.get();
+		if (existing == null) {
+			ref.set(new IllegalStateException("Failed to initialize default McpJsonMapper", toAdd));
+		} else {
+			existing.addSuppressed(toAdd);
+		}
 	}
 
 }
