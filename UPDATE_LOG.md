@@ -13,6 +13,8 @@
 ### v3.8.0
 
 * 添加 solon-ai-dialect-openai ClaudeChatDialect 方言
+* 添加 solon-ai-core ChatMessage:toNdjson,fromNdjson 方法（替代 ChatSession:toNdjson, loadNdjson），新方法机制上更自由
+* 优化 solon-ai-mcp mcp StreamableHttp 模式下 服务端正常返回时 客户端异常日志打印的情况
 
 ### v3.7.4
 
