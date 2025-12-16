@@ -18,7 +18,7 @@ public class McpServerApp {
 
         Solon.start(McpServerApp.class, args, app -> {
             app.onEvent(HttpServerConfigure.class, e -> {
-                e.enableDebug(true);
+                //e.enableDebug(true);
             });
         });
     }
