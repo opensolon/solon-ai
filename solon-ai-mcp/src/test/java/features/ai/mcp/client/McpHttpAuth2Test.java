@@ -19,11 +19,11 @@ public class McpHttpAuth2Test {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
                 .apiUrl("http://localhost:8081/auth2/sse")
-                .header("role","1")
+                .header("role", "1")
                 .cacheSeconds(30)
                 .build();
 
-        System.out.println(mcpClient.callToolAsText("getWeather", Utils.asMap("location","杭州")));
+        System.out.println(mcpClient.callToolAsText("getWeather", Utils.asMap("location", "杭州")));
         mcpClient.close();
     }
 
@@ -32,21 +32,13 @@ public class McpHttpAuth2Test {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
                 .apiUrl("http://localhost:8081/auth2/sse")
-                .header("role","2")
+                .header("role", "2")
                 .cacheSeconds(30)
                 .build();
 
-        Throwable error = null;
-        try {
-            System.out.println(mcpClient.callToolAsText("getWeather", Utils.asMap("location","杭州")));
-        } catch (Throwable e) {
-            error = e;
-            e.printStackTrace();
-        }
-        mcpClient.close();
+        String rst = mcpClient.callToolAsText("getWeather", Utils.asMap("location", "杭州"))
+                .getContent();
 
-        assert error != null;
-        //error = error.getCause();
-        //assert error.getMessage().contains("401");
+        assert rst.startsWith("Error:");
     }
 }
