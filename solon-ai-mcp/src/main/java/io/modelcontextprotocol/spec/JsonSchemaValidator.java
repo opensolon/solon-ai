@@ -17,12 +17,35 @@ public interface JsonSchemaValidator {
 	/**
 	 * Represents the result of a validation operation.
 	 *
-	 * @param valid Indicates whether the validation was successful.
-	 * @param errorMessage An error message if the validation failed, otherwise null.
-	 * @param jsonStructuredOutput The text structured content in JSON format if the
 	 * validation was successful, otherwise null.
 	 */
-	public record ValidationResponse(boolean valid, String errorMessage, String jsonStructuredOutput) {
+	public static class ValidationResponse {
+		private boolean valid;
+		private String errorMessage;
+		private String jsonStructuredOutput;
+
+		/**
+		 * @param valid Indicates whether the validation was successful.
+		 * @param errorMessage An error message if the validation failed, otherwise null.
+		 * @param jsonStructuredOutput The text structured content in JSON format if the
+		 * */
+		public ValidationResponse(boolean valid, String errorMessage, String jsonStructuredOutput) {
+			this.valid = valid;
+			this.errorMessage = errorMessage;
+			this.jsonStructuredOutput = jsonStructuredOutput;
+		}
+
+		public boolean valid() {
+			return valid;
+		}
+
+		public String errorMessage() {
+			return errorMessage;
+		}
+
+		public String jsonStructuredOutput() {
+			return jsonStructuredOutput;
+		}
 
 		public static ValidationResponse asValid(String jsonStructuredOutput) {
 			return new ValidationResponse(true, null, jsonStructuredOutput);

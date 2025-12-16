@@ -30,7 +30,7 @@ public final class Utils {
 	 * @see Character#isWhitespace
 	 */
 	public static boolean hasText(@Nullable String str) {
-		return (str != null && !str.isBlank());
+		return (str != null && str.length() > 0);
 	}
 
 	/**
