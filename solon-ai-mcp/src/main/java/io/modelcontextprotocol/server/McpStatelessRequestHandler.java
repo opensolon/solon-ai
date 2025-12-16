@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import reactor.core.publisher.Mono;
 
 /**
@@ -14,12 +15,12 @@ import reactor.core.publisher.Mono;
  */
 public interface McpStatelessRequestHandler<R> {
 
-    /**
-     * Handle the request and complete with a result.
-     * @param transportContext {@link McpTransportContext} associated with the transport
-     * @param params the payload of the MCP request
-     * @return Mono which completes with the response object
-     */
-    Mono<R> handle(McpTransportContext transportContext, Object params);
+	/**
+	 * Handle the request and complete with a result.
+	 * @param transportContext {@link McpTransportContext} associated with the transport
+	 * @param params the payload of the MCP request
+	 * @return Mono which completes with the response object
+	 */
+	Mono<R> handle(McpTransportContext transportContext, Object params);
 
 }

@@ -19,13 +19,14 @@ import java.util.stream.Collectors;
  */
 @JsonInclude(JsonInclude.Include.NON_ABSENT)
 public class ServerParameters {
+
 	// Environment variables to inherit by default
 	private static final List<String> DEFAULT_INHERITED_ENV_VARS = System.getProperty("os.name")
-			.toLowerCase()
-			.contains("win")
-			? Arrays.asList("APPDATA", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PROCESSOR_ARCHITECTURE",
-			"SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "USERNAME", "USERPROFILE")
-			: Arrays.asList("HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER");
+		.toLowerCase()
+		.contains("win")
+				? Arrays.asList("APPDATA", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH", "PROCESSOR_ARCHITECTURE",
+						"SYSTEMDRIVE", "SYSTEMROOT", "TEMP", "USERNAME", "USERPROFILE")
+				: Arrays.asList("HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER");
 
 	@JsonProperty("command")
 	private String command;
@@ -35,13 +36,6 @@ public class ServerParameters {
 
 	@JsonProperty("env")
 	private Map<String, String> env;
-
-	public ServerParameters() {
-		//用于序列化
-
-		//初始化
-		this.env = new HashMap<>(getDefaultEnvironment());
-	}
 
 	private ServerParameters(String command, List<String> args, Map<String, String> env) {
 		Assert.notNull(command, "The command can not be null");
@@ -128,11 +122,12 @@ public class ServerParameters {
 	 */
 	private static Map<String, String> getDefaultEnvironment() {
 		return System.getenv()
-				.entrySet()
-				.stream()
-				.filter(entry -> DEFAULT_INHERITED_ENV_VARS.contains(entry.getKey()))
-				.filter(entry -> entry.getValue() != null)
-				.filter(entry -> !entry.getValue().startsWith("()"))
-				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+			.entrySet()
+			.stream()
+			.filter(entry -> DEFAULT_INHERITED_ENV_VARS.contains(entry.getKey()))
+			.filter(entry -> entry.getValue() != null)
+			.filter(entry -> !entry.getValue().startsWith("()"))
+			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 	}
+
 }

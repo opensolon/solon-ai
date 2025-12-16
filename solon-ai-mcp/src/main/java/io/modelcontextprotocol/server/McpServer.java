@@ -4,31 +4,23 @@
 
 package io.modelcontextprotocol.server;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.modelcontextprotocol.spec.DefaultJsonSchemaValidator;
-import io.modelcontextprotocol.spec.JsonSchemaValidator;
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.ResourceTemplate;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.DeafaultMcpUriTemplateManagerFactory;
+import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
-import io.modelcontextprotocol.util.Utils;
-import lombok.var;
 import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 
 /**
  * Factory class for creating Model Context Protocol (MCP) servers. MCP servers expose
@@ -68,17 +60,23 @@ import reactor.core.publisher.Mono;
  * Example of creating a basic synchronous server: <pre>{@code
  * McpServer.sync(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
- *     .tool(new Tool("calculator", "Performs calculations", schema),
- *           (exchange, args) -> new CallToolResult("Result: " + calculate(args)))
+ *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
+ *           (exchange, args) -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(args))))
+ *                   .isError(false)
+ *                   .build())
  *     .build();
  * }</pre>
  *
  * Example of creating a basic asynchronous server: <pre>{@code
  * McpServer.async(transportProvider)
  *     .serverInfo("my-server", "1.0.0")
- *     .tool(new Tool("calculator", "Performs calculations", schema),
+ *     .tool(Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
  *           (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
- *               .map(result -> new CallToolResult("Result: " + result)))
+ *               .map(result -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+ *                   .isError(false)
+ *                   .build()))
  *     .build();
  * }</pre>
  *
@@ -92,12 +90,18 @@ import reactor.core.publisher.Mono;
  *         McpServerFeatures.AsyncToolSpecification.builder()
  * 			.tool(calculatorTool)
  *   	    .callTool((exchange, args) -> Mono.fromSupplier(() -> calculate(args.arguments()))
- *                 .map(result -> new CallToolResult("Result: " + result))))
+ *                 .map(result -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+ *                   .isError(false)
+ *                   .build()))
  *.         .build(),
  *         McpServerFeatures.AsyncToolSpecification.builder()
  * 	        .tool((weatherTool)
  *          .callTool((exchange, args) -> Mono.fromSupplier(() -> getWeather(args.arguments()))
- *                 .map(result -> new CallToolResult("Weather: " + result))))
+ *                 .map(result -> CallToolResult.builder()
+ *                   .content(List.of(new McpSchema.TextContent("Weather: " + result)))
+ *                   .isError(false)
+ *                   .build()))
  *          .build()
  *     )
  *     // Register resources
@@ -135,7 +139,7 @@ import reactor.core.publisher.Mono;
  */
 public interface McpServer {
 
-	McpSchema.Implementation DEFAULT_SERVER_INFO = new McpSchema.Implementation("mcp-server", "1.0.0");
+	McpSchema.Implementation DEFAULT_SERVER_INFO = new McpSchema.Implementation("Java SDK MCP Server", "0.15.0");
 
 	/**
 	 * Starts building a synchronous MCP server that provides blocking operations.
@@ -228,11 +232,12 @@ public interface McpServer {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
 					this.instructions);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			JsonSchemaValidator jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
-			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+
+			var jsonSchemaValidator = (this.jsonSchemaValidator != null) ? this.jsonSchemaValidator
+					: JsonSchemaValidator.getDefault();
+
+			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
 		}
 
 	}
@@ -255,11 +260,10 @@ public interface McpServer {
 			var features = new McpServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.rootsChangeHandlers,
 					this.instructions);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			JsonSchemaValidator jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
-			return new McpAsyncServer(this.transportProvider, mapper, features, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: JsonSchemaValidator.getDefault();
+			return new McpAsyncServer(transportProvider, jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					features, requestTimeout, uriTemplateManagerFactory, jsonSchemaValidator);
 		}
 
 	}
@@ -269,9 +273,9 @@ public interface McpServer {
 	 */
 	abstract class AsyncSpecification<S extends AsyncSpecification<S>> {
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
-		ObjectMapper objectMapper;
+		McpJsonMapper jsonMapper;
 
 		McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -299,7 +303,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpServerFeatures.AsyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -418,9 +429,12 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .tool(
-		 *     new Tool("calculator", "Performs calculations", schema),
+		 *     Tool.builder().name("calculator").title("Performs calculations").inputSchema(schema).build(),
 		 *     (exchange, args) -> Mono.fromSupplier(() -> calculate(args))
-		 *         .map(result -> new CallToolResult("Result: " + result))
+		 *         .map(result -> CallToolResult.builder()
+		 *                   .content(List.of(new McpSchema.TextContent("Result: " + result)))
+		 *                   .isError(false)
+		 *                   .build()))
 		 * )
 		 * }</pre>
 		 * @param tool The tool definition including name, description, and schema. Must
@@ -436,10 +450,10 @@ public interface McpServer {
 		 */
 		@Deprecated
 		public AsyncSpecification<S> tool(McpSchema.Tool tool,
-										  BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
+				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
-			assertNoDuplicateTool(tool.getName());
+			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.AsyncToolSpecification(tool, handler));
 
@@ -460,14 +474,14 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public AsyncSpecification<S> toolCall(McpSchema.Tool tool,
-											  BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
+				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
-			assertNoDuplicateTool(tool.getName());
+			assertNoDuplicateTool(tool.name());
 
 			this.tools
-					.add(McpServerFeatures.AsyncToolSpecification.builder().tool(tool).callHandler(callHandler).build());
+				.add(McpServerFeatures.AsyncToolSpecification.builder().tool(tool).callHandler(callHandler).build());
 
 			return this;
 		}
@@ -486,7 +500,7 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
-				assertNoDuplicateTool(tool.getTool().getName());
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 
@@ -513,14 +527,14 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (McpServerFeatures.AsyncToolSpecification tool : toolSpecifications) {
-				assertNoDuplicateTool(tool.getTool().getName());
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
-			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.getTool().getName().equals(toolName))) {
+			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
 				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
 			}
 		}
@@ -555,7 +569,7 @@ public interface McpServer {
 				List<McpServerFeatures.AsyncResourceSpecification> resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
 			for (McpServerFeatures.AsyncResourceSpecification resource : resourceSpecifications) {
-				this.resources.put(resource.getResource().getUri(), resource);
+				this.resources.put(resource.resource().uri(), resource);
 			}
 			return this;
 		}
@@ -580,46 +594,44 @@ public interface McpServer {
 		public AsyncSpecification<S> resources(McpServerFeatures.AsyncResourceSpecification... resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
 			for (McpServerFeatures.AsyncResourceSpecification resource : resourceSpecifications) {
-				this.resources.put(resource.getResource().getUri(), resource);
+				this.resources.put(resource.resource().uri(), resource);
 			}
 			return this;
 		}
 
 		/**
-		 * Sets the resource templates that define patterns for dynamic resource access.
-		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
-		 * @param resourceTemplates List of resource templates. If null, clears existing
-		 * templates.
+		 * Registers multiple resource templates with their specifications using a List.
+		 * This method is useful when resource templates need to be added in bulk from a
+		 * collection.
+		 * @param resourceTemplates Map of template URI to specification. Must not be
+		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public AsyncSpecification<S> resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+		public AsyncSpecification<S> resourceTemplates(
+				List<McpServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+			for (var resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
+			}
 			return this;
 		}
 
 		/**
-		 * Sets the resource templates using varargs for convenience. This is an
-		 * alternative to {@link #resourceTemplates(List)}.
-		 * @param resourceTemplates The resource templates to set.
+		 * Registers multiple resource templates with their specifications using a List.
+		 * This method is useful when resource templates need to be added in bulk from a
+		 * collection.
+		 * @param resourceTemplates List of template URI to specification. Must not be
+		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
-		public AsyncSpecification<S> resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public AsyncSpecification<S> resourceTemplates(
+				McpServerFeatures.AsyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpServerFeatures.AsyncResourceTemplateSpecification resource : resourceTemplates) {
+				this.resourceTemplates.put(resource.resourceTemplate().uriTemplate(), resource);
 			}
 			return this;
 		}
@@ -658,7 +670,7 @@ public interface McpServer {
 		public AsyncSpecification<S> prompts(List<McpServerFeatures.AsyncPromptSpecification> prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
 			for (McpServerFeatures.AsyncPromptSpecification prompt : prompts) {
-				this.prompts.put(prompt.getPrompt().getName(), prompt);
+				this.prompts.put(prompt.prompt().name(), prompt);
 			}
 			return this;
 		}
@@ -682,7 +694,7 @@ public interface McpServer {
 		public AsyncSpecification<S> prompts(McpServerFeatures.AsyncPromptSpecification... prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
 			for (McpServerFeatures.AsyncPromptSpecification prompt : prompts) {
-				this.prompts.put(prompt.getPrompt().getName(), prompt);
+				this.prompts.put(prompt.prompt().name(), prompt);
 			}
 			return this;
 		}
@@ -697,7 +709,7 @@ public interface McpServer {
 		public AsyncSpecification<S> completions(List<McpServerFeatures.AsyncCompletionSpecification> completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (McpServerFeatures.AsyncCompletionSpecification completion : completions) {
-				this.completions.put(completion.getReferenceKey(), completion);
+				this.completions.put(completion.referenceKey(), completion);
 			}
 			return this;
 		}
@@ -712,7 +724,7 @@ public interface McpServer {
 		public AsyncSpecification<S> completions(McpServerFeatures.AsyncCompletionSpecification... completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (McpServerFeatures.AsyncCompletionSpecification completion : completions) {
-				this.completions.put(completion.getReferenceKey(), completion);
+				this.completions.put(completion.referenceKey(), completion);
 			}
 			return this;
 		}
@@ -766,14 +778,14 @@ public interface McpServer {
 		}
 
 		/**
-		 * Sets the object mapper to use for serializing and deserializing JSON messages.
-		 * @param objectMapper the instance to use. Must not be null.
+		 * Sets the JsonMapper to use for serializing and deserializing JSON messages.
+		 * @param jsonMapper the mapper to use. Must not be null.
 		 * @return This builder instance for method chaining.
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public AsyncSpecification<S> objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public AsyncSpecification<S> jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -814,13 +826,11 @@ public interface McpServer {
 					this.rootsChangeHandlers, this.instructions);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			JsonSchemaValidator jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
 
-			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
-
+			var asyncServer = new McpAsyncServer(transportProvider,
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, asyncFeatures, requestTimeout,
+					uriTemplateManagerFactory,
+					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault());
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -847,13 +857,11 @@ public interface McpServer {
 					this.rootsChangeHandlers, this.instructions);
 			McpServerFeatures.Async asyncFeatures = McpServerFeatures.Async.fromSync(syncFeatures,
 					this.immediateExecution);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			JsonSchemaValidator jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
-
-			var asyncServer = new McpAsyncServer(this.transportProvider, mapper, asyncFeatures, this.requestTimeout,
+			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
+					: JsonSchemaValidator.getDefault();
+			var asyncServer = new McpAsyncServer(transportProvider,
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, asyncFeatures, this.requestTimeout,
 					this.uriTemplateManagerFactory, jsonSchemaValidator);
-
 			return new McpSyncServer(asyncServer, this.immediateExecution);
 		}
 
@@ -864,9 +872,9 @@ public interface McpServer {
 	 */
 	abstract class SyncSpecification<S extends SyncSpecification<S>> {
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
-		ObjectMapper objectMapper;
+		McpJsonMapper jsonMapper;
 
 		McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -892,7 +900,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpServerFeatures.SyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		JsonSchemaValidator jsonSchemaValidator;
 
@@ -1015,8 +1030,11 @@ public interface McpServer {
 		 * <p>
 		 * Example usage: <pre>{@code
 		 * .tool(
-		 *     new Tool("calculator", "Performs calculations", schema),
-		 *     (exchange, args) -> new CallToolResult("Result: " + calculate(args))
+		 *     Tool.builder().name("calculator").title("Performs calculations".inputSchema(schema).build(),
+		 *     (exchange, args) -> CallToolResult.builder()
+		 *                   .content(List.of(new McpSchema.TextContent("Result: " + calculate(args))))
+		 *                   .isError(false)
+		 *                   .build())
 		 * )
 		 * }</pre>
 		 * @param tool The tool definition including name, description, and schema. Must
@@ -1032,10 +1050,10 @@ public interface McpServer {
 		 */
 		@Deprecated
 		public SyncSpecification<S> tool(McpSchema.Tool tool,
-										 BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> handler) {
+				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
-			assertNoDuplicateTool(tool.getName());
+			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, handler));
 
@@ -1056,10 +1074,10 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public SyncSpecification<S> toolCall(McpSchema.Tool tool,
-											 BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> handler) {
+				BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
-			assertNoDuplicateTool(tool.getName());
+			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpServerFeatures.SyncToolSpecification(tool, null, handler));
 
@@ -1080,7 +1098,7 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
-				String toolName = tool.getTool().getName();
+				String toolName = tool.tool().name();
 				assertNoDuplicateTool(toolName); // Check against existing tools
 				this.tools.add(tool);
 			}
@@ -1109,14 +1127,14 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (McpServerFeatures.SyncToolSpecification tool : toolSpecifications) {
-				assertNoDuplicateTool(tool.getTool().getName());
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
-			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.getTool().getName().equals(toolName))) {
+			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
 				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
 			}
 		}
@@ -1151,7 +1169,7 @@ public interface McpServer {
 				List<McpServerFeatures.SyncResourceSpecification> resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
 			for (McpServerFeatures.SyncResourceSpecification resource : resourceSpecifications) {
-				this.resources.put(resource.getResource().getUri(), resource);
+				this.resources.put(resource.resource().uri(), resource);
 			}
 			return this;
 		}
@@ -1176,7 +1194,7 @@ public interface McpServer {
 		public SyncSpecification<S> resources(McpServerFeatures.SyncResourceSpecification... resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
 			for (McpServerFeatures.SyncResourceSpecification resource : resourceSpecifications) {
-				this.resources.put(resource.getResource().getUri(), resource);
+				this.resources.put(resource.resource().uri(), resource);
 			}
 			return this;
 		}
@@ -1184,23 +1202,17 @@ public interface McpServer {
 		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
-		 * @param resourceTemplates List of resource templates. If null, clears existing
-		 * templates.
+		 * @param resourceTemplates List of resource template specifications. Must not be
+		 * null.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public SyncSpecification<S> resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+		public SyncSpecification<S> resourceTemplates(
+				List<McpServerFeatures.SyncResourceTemplateSpecification> resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+			for (McpServerFeatures.SyncResourceTemplateSpecification resource : resourceTemplates) {
+				this.resourceTemplates.put(resource.resourceTemplate().uriTemplate(), resource);
+			}
 			return this;
 		}
 
@@ -1212,10 +1224,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null
 		 * @see #resourceTemplates(List)
 		 */
-		public SyncSpecification<S> resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public SyncSpecification<S> resourceTemplates(
+				McpServerFeatures.SyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpServerFeatures.SyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}
@@ -1255,7 +1268,7 @@ public interface McpServer {
 		public SyncSpecification<S> prompts(List<McpServerFeatures.SyncPromptSpecification> prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
 			for (McpServerFeatures.SyncPromptSpecification prompt : prompts) {
-				this.prompts.put(prompt.getPrompt().getName(), prompt);
+				this.prompts.put(prompt.prompt().name(), prompt);
 			}
 			return this;
 		}
@@ -1279,7 +1292,7 @@ public interface McpServer {
 		public SyncSpecification<S> prompts(McpServerFeatures.SyncPromptSpecification... prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
 			for (McpServerFeatures.SyncPromptSpecification prompt : prompts) {
-				this.prompts.put(prompt.getPrompt().getName(), prompt);
+				this.prompts.put(prompt.prompt().name(), prompt);
 			}
 			return this;
 		}
@@ -1295,7 +1308,7 @@ public interface McpServer {
 		public SyncSpecification<S> completions(List<McpServerFeatures.SyncCompletionSpecification> completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (McpServerFeatures.SyncCompletionSpecification completion : completions) {
-				this.completions.put(completion.getReferenceKey(), completion);
+				this.completions.put(completion.referenceKey(), completion);
 			}
 			return this;
 		}
@@ -1310,7 +1323,7 @@ public interface McpServer {
 		public SyncSpecification<S> completions(McpServerFeatures.SyncCompletionSpecification... completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (McpServerFeatures.SyncCompletionSpecification completion : completions) {
-				this.completions.put(completion.getReferenceKey(), completion);
+				this.completions.put(completion.referenceKey(), completion);
 			}
 			return this;
 		}
@@ -1360,18 +1373,18 @@ public interface McpServer {
 		public SyncSpecification<S> rootsChangeHandlers(
 				BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>... handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");
-			return this.rootsChangeHandlers(Utils.asList(handlers));
+			return this.rootsChangeHandlers(List.of(handlers));
 		}
 
 		/**
-		 * Sets the object mapper to use for serializing and deserializing JSON messages.
-		 * @param objectMapper the instance to use. Must not be null.
+		 * Sets the JsonMapper to use for serializing and deserializing JSON messages.
+		 * @param jsonMapper the mapper to use. Must not be null.
 		 * @return This builder instance for method chaining.
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public SyncSpecification<S> objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public SyncSpecification<S> jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -1403,9 +1416,9 @@ public interface McpServer {
 
 		private final McpStatelessServerTransport transport;
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
-		ObjectMapper objectMapper;
+		McpJsonMapper jsonMapper;
 
 		McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -1433,7 +1446,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpStatelessServerFeatures.AsyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -1559,11 +1579,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public StatelessAsyncSpecification toolCall(McpSchema.Tool tool,
-													BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
+				BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
-			assertNoDuplicateTool(tool.getName());
+			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpStatelessServerFeatures.AsyncToolSpecification(tool, callHandler));
 
@@ -1585,7 +1605,7 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
-				assertNoDuplicateTool(tool.getTool().getName());
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 
@@ -1613,14 +1633,14 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
-				assertNoDuplicateTool(tool.getTool().getName());
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
-			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.getTool().getName().equals(toolName))) {
+			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
 				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
 			}
 		}
@@ -1655,7 +1675,7 @@ public interface McpServer {
 				List<McpStatelessServerFeatures.AsyncResourceSpecification> resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
 			for (var resource : resourceSpecifications) {
-				this.resources.put(resource.getResource().getUri(), resource);
+				this.resources.put(resource.resource().uri(), resource);
 			}
 			return this;
 		}
@@ -1681,7 +1701,7 @@ public interface McpServer {
 				McpStatelessServerFeatures.AsyncResourceSpecification... resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
 			for (var resource : resourceSpecifications) {
-				this.resources.put(resource.getResource().getUri(), resource);
+				this.resources.put(resource.resource().uri(), resource);
 			}
 			return this;
 		}
@@ -1689,23 +1709,17 @@ public interface McpServer {
 		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
 		 * @param resourceTemplates List of resource templates. If null, clears existing
 		 * templates.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public StatelessAsyncSpecification resourceTemplates(List<ResourceTemplate> resourceTemplates) {
+		public StatelessAsyncSpecification resourceTemplates(
+				List<McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+			for (var resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
+			}
 			return this;
 		}
 
@@ -1717,10 +1731,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
-		public StatelessAsyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public StatelessAsyncSpecification resourceTemplates(
+				McpStatelessServerFeatures.AsyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpStatelessServerFeatures.AsyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}
@@ -1760,7 +1775,7 @@ public interface McpServer {
 		public StatelessAsyncSpecification prompts(List<McpStatelessServerFeatures.AsyncPromptSpecification> prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
 			for (var prompt : prompts) {
-				this.prompts.put(prompt.getPrompt().getName(), prompt);
+				this.prompts.put(prompt.prompt().name(), prompt);
 			}
 			return this;
 		}
@@ -1784,7 +1799,7 @@ public interface McpServer {
 		public StatelessAsyncSpecification prompts(McpStatelessServerFeatures.AsyncPromptSpecification... prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
 			for (var prompt : prompts) {
-				this.prompts.put(prompt.getPrompt().getName(), prompt);
+				this.prompts.put(prompt.prompt().name(), prompt);
 			}
 			return this;
 		}
@@ -1800,7 +1815,7 @@ public interface McpServer {
 				List<McpStatelessServerFeatures.AsyncCompletionSpecification> completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (var completion : completions) {
-				this.completions.put(completion.getReferenceKey(), completion);
+				this.completions.put(completion.referenceKey(), completion);
 			}
 			return this;
 		}
@@ -1816,20 +1831,20 @@ public interface McpServer {
 				McpStatelessServerFeatures.AsyncCompletionSpecification... completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (var completion : completions) {
-				this.completions.put(completion.getReferenceKey(), completion);
+				this.completions.put(completion.referenceKey(), completion);
 			}
 			return this;
 		}
 
 		/**
-		 * Sets the object mapper to use for serializing and deserializing JSON messages.
-		 * @param objectMapper the instance to use. Must not be null.
+		 * Sets the JsonMapper to use for serializing and deserializing JSON messages.
+		 * @param jsonMapper the mapper to use. Must not be null.
 		 * @return This builder instance for method chaining.
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public StatelessAsyncSpecification objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public StatelessAsyncSpecification jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -1850,11 +1865,9 @@ public interface McpServer {
 		public McpStatelessAsyncServer build() {
 			var features = new McpStatelessServerFeatures.Async(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
-			return new McpStatelessAsyncServer(this.transport, mapper, features, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+			return new McpStatelessAsyncServer(transport, jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper,
+					features, requestTimeout, uriTemplateManagerFactory,
+					jsonSchemaValidator != null ? jsonSchemaValidator : JsonSchemaValidator.getDefault());
 		}
 
 	}
@@ -1865,9 +1878,9 @@ public interface McpServer {
 
 		boolean immediateExecution = false;
 
-		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DeafaultMcpUriTemplateManagerFactory();
+		McpUriTemplateManagerFactory uriTemplateManagerFactory = new DefaultMcpUriTemplateManagerFactory();
 
-		ObjectMapper objectMapper;
+		McpJsonMapper jsonMapper;
 
 		McpSchema.Implementation serverInfo = DEFAULT_SERVER_INFO;
 
@@ -1895,7 +1908,14 @@ public interface McpServer {
 		 */
 		final Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources = new HashMap<>();
 
-		final List<ResourceTemplate> resourceTemplates = new ArrayList<>();
+		/**
+		 * The Model Context Protocol (MCP) provides a standardized way for servers to
+		 * expose resource templates to clients. Resource templates allow servers to
+		 * define parameterized URIs that clients can use to access dynamic resources.
+		 * Each resource template includes variables that clients can fill in to form
+		 * concrete resource URIs.
+		 */
+		final Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates = new HashMap<>();
 
 		/**
 		 * The Model Context Protocol (MCP) provides a standardized way for servers to
@@ -2021,11 +2041,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public StatelessSyncSpecification toolCall(McpSchema.Tool tool,
-												   BiFunction<McpTransportContext, McpSchema.CallToolRequest, CallToolResult> callHandler) {
+				BiFunction<McpTransportContext, McpSchema.CallToolRequest, CallToolResult> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
-			assertNoDuplicateTool(tool.getName());
+			assertNoDuplicateTool(tool.name());
 
 			this.tools.add(new McpStatelessServerFeatures.SyncToolSpecification(tool, callHandler));
 
@@ -2047,7 +2067,7 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
-				assertNoDuplicateTool(tool.getTool().getName());
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 
@@ -2075,14 +2095,14 @@ public interface McpServer {
 			Assert.notNull(toolSpecifications, "Tool handlers list must not be null");
 
 			for (var tool : toolSpecifications) {
-				assertNoDuplicateTool(tool.getTool().getName());
+				assertNoDuplicateTool(tool.tool().name());
 				this.tools.add(tool);
 			}
 			return this;
 		}
 
 		private void assertNoDuplicateTool(String toolName) {
-			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.getTool().getName().equals(toolName))) {
+			if (this.tools.stream().anyMatch(toolSpec -> toolSpec.tool().name().equals(toolName))) {
 				throw new IllegalArgumentException("Tool with name '" + toolName + "' is already registered.");
 			}
 		}
@@ -2117,7 +2137,7 @@ public interface McpServer {
 				List<McpStatelessServerFeatures.SyncResourceSpecification> resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
 			for (var resource : resourceSpecifications) {
-				this.resources.put(resource.getResource().getUri(), resource);
+				this.resources.put(resource.resource().uri(), resource);
 			}
 			return this;
 		}
@@ -2143,7 +2163,7 @@ public interface McpServer {
 				McpStatelessServerFeatures.SyncResourceSpecification... resourceSpecifications) {
 			Assert.notNull(resourceSpecifications, "Resource handlers list must not be null");
 			for (var resource : resourceSpecifications) {
-				this.resources.put(resource.getResource().getUri(), resource);
+				this.resources.put(resource.resource().uri(), resource);
 			}
 			return this;
 		}
@@ -2151,23 +2171,17 @@ public interface McpServer {
 		/**
 		 * Sets the resource templates that define patterns for dynamic resource access.
 		 * Templates use URI patterns with placeholders that can be filled at runtime.
-		 *
-		 * <p>
-		 * Example usage: <pre>{@code
-		 * .resourceTemplates(
-		 *     new ResourceTemplate("file://{path}", "Access files by path"),
-		 *     new ResourceTemplate("db://{table}/{id}", "Access database records")
-		 * )
-		 * }</pre>
-		 * @param resourceTemplates List of resource templates. If null, clears existing
-		 * templates.
+		 * @param resourceTemplatesSpec List of resource templates. If null, clears
+		 * existing templates.
 		 * @return This builder instance for method chaining
 		 * @throws IllegalArgumentException if resourceTemplates is null.
-		 * @see #resourceTemplates(ResourceTemplate...)
 		 */
-		public StatelessSyncSpecification resourceTemplates(List<ResourceTemplate> resourceTemplates) {
-			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			this.resourceTemplates.addAll(resourceTemplates);
+		public StatelessSyncSpecification resourceTemplates(
+				List<McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplatesSpec) {
+			Assert.notNull(resourceTemplatesSpec, "Resource templates must not be null");
+			for (var resourceTemplate : resourceTemplatesSpec) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
+			}
 			return this;
 		}
 
@@ -2179,10 +2193,11 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if resourceTemplates is null.
 		 * @see #resourceTemplates(List)
 		 */
-		public StatelessSyncSpecification resourceTemplates(ResourceTemplate... resourceTemplates) {
+		public StatelessSyncSpecification resourceTemplates(
+				McpStatelessServerFeatures.SyncResourceTemplateSpecification... resourceTemplates) {
 			Assert.notNull(resourceTemplates, "Resource templates must not be null");
-			for (ResourceTemplate resourceTemplate : resourceTemplates) {
-				this.resourceTemplates.add(resourceTemplate);
+			for (McpStatelessServerFeatures.SyncResourceTemplateSpecification resourceTemplate : resourceTemplates) {
+				this.resourceTemplates.put(resourceTemplate.resourceTemplate().uriTemplate(), resourceTemplate);
 			}
 			return this;
 		}
@@ -2222,7 +2237,7 @@ public interface McpServer {
 		public StatelessSyncSpecification prompts(List<McpStatelessServerFeatures.SyncPromptSpecification> prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
 			for (var prompt : prompts) {
-				this.prompts.put(prompt.getPrompt().getName(), prompt);
+				this.prompts.put(prompt.prompt().name(), prompt);
 			}
 			return this;
 		}
@@ -2246,7 +2261,7 @@ public interface McpServer {
 		public StatelessSyncSpecification prompts(McpStatelessServerFeatures.SyncPromptSpecification... prompts) {
 			Assert.notNull(prompts, "Prompts list must not be null");
 			for (var prompt : prompts) {
-				this.prompts.put(prompt.getPrompt().getName(), prompt);
+				this.prompts.put(prompt.prompt().name(), prompt);
 			}
 			return this;
 		}
@@ -2262,7 +2277,7 @@ public interface McpServer {
 				List<McpStatelessServerFeatures.SyncCompletionSpecification> completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (var completion : completions) {
-				this.completions.put(completion.getReferenceKey(), completion);
+				this.completions.put(completion.referenceKey(), completion);
 			}
 			return this;
 		}
@@ -2278,20 +2293,20 @@ public interface McpServer {
 				McpStatelessServerFeatures.SyncCompletionSpecification... completions) {
 			Assert.notNull(completions, "Completions list must not be null");
 			for (var completion : completions) {
-				this.completions.put(completion.getReferenceKey(), completion);
+				this.completions.put(completion.referenceKey(), completion);
 			}
 			return this;
 		}
 
 		/**
-		 * Sets the object mapper to use for serializing and deserializing JSON messages.
-		 * @param objectMapper the instance to use. Must not be null.
+		 * Sets the JsonMapper to use for serializing and deserializing JSON messages.
+		 * @param jsonMapper the mapper to use. Must not be null.
 		 * @return This builder instance for method chaining.
-		 * @throws IllegalArgumentException if objectMapper is null
+		 * @throws IllegalArgumentException if jsonMapper is null
 		 */
-		public StatelessSyncSpecification objectMapper(ObjectMapper objectMapper) {
-			Assert.notNull(objectMapper, "ObjectMapper must not be null");
-			this.objectMapper = objectMapper;
+		public StatelessSyncSpecification jsonMapper(McpJsonMapper jsonMapper) {
+			Assert.notNull(jsonMapper, "JsonMapper must not be null");
+			this.jsonMapper = jsonMapper;
 			return this;
 		}
 
@@ -2326,31 +2341,13 @@ public interface McpServer {
 		}
 
 		public McpStatelessSyncServer build() {
-			/*
-			 * McpServerFeatures.Sync syncFeatures = new
-			 * McpServerFeatures.Sync(this.serverInfo, this.serverCapabilities,
-			 * this.tools, this.resources, this.resourceTemplates, this.prompts,
-			 * this.completions, this.rootsChangeHandlers, this.instructions);
-			 * McpServerFeatures.Async asyncFeatures =
-			 * McpServerFeatures.Async.fromSync(syncFeatures, this.immediateExecution);
-			 * var mapper = this.objectMapper != null ? this.objectMapper : new
-			 * ObjectMapper(); var jsonSchemaValidator = this.jsonSchemaValidator != null
-			 * ? this.jsonSchemaValidator : new DefaultJsonSchemaValidator(mapper);
-			 *
-			 * var asyncServer = new McpAsyncServer(this.transportProvider, mapper,
-			 * asyncFeatures, this.requestTimeout, this.uriTemplateManagerFactory,
-			 * jsonSchemaValidator);
-			 *
-			 * return new McpSyncServer(asyncServer, this.immediateExecution);
-			 */
 			var syncFeatures = new McpStatelessServerFeatures.Sync(this.serverInfo, this.serverCapabilities, this.tools,
 					this.resources, this.resourceTemplates, this.prompts, this.completions, this.instructions);
 			var asyncFeatures = McpStatelessServerFeatures.Async.fromSync(syncFeatures, this.immediateExecution);
-			var mapper = this.objectMapper != null ? this.objectMapper : new ObjectMapper();
-			var jsonSchemaValidator = this.jsonSchemaValidator != null ? this.jsonSchemaValidator
-					: new DefaultJsonSchemaValidator(mapper);
-			var asyncServer = new McpStatelessAsyncServer(this.transport, mapper, asyncFeatures, this.requestTimeout,
-					this.uriTemplateManagerFactory, jsonSchemaValidator);
+			var asyncServer = new McpStatelessAsyncServer(transport,
+					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, asyncFeatures, requestTimeout,
+					uriTemplateManagerFactory,
+					this.jsonSchemaValidator != null ? this.jsonSchemaValidator : JsonSchemaValidator.getDefault());
 			return new McpStatelessSyncServer(asyncServer, this.immediateExecution);
 		}
 

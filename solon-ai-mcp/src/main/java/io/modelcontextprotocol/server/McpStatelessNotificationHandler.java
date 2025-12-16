@@ -4,6 +4,7 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import reactor.core.publisher.Mono;
 
 /**
@@ -13,12 +14,12 @@ import reactor.core.publisher.Mono;
  */
 public interface McpStatelessNotificationHandler {
 
-    /**
-     * Handle to notification and complete once done.
-     * @param transportContext {@link McpTransportContext} associated with the transport
-     * @param params the payload of the MCP notification
-     * @return Mono which completes once the processing is done
-     */
-    Mono<Void> handle(McpTransportContext transportContext, Object params);
+	/**
+	 * Handle to notification and complete once done.
+	 * @param transportContext {@link McpTransportContext} associated with the transport
+	 * @param params the payload of the MCP notification
+	 * @return Mono which completes once the processing is done
+	 */
+	Mono<Void> handle(McpTransportContext transportContext, Object params);
 
 }

@@ -8,6 +8,8 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.util.Assert;
 
+import java.util.List;
+
 /**
  * A synchronous implementation of the Model Context Protocol (MCP) server that wraps
  * {@link McpAsyncServer} to provide blocking operations. This class delegates all
@@ -83,8 +85,16 @@ public class McpSyncServer {
 	 */
 	public void addTool(McpServerFeatures.SyncToolSpecification toolHandler) {
 		this.asyncServer
-				.addTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler, this.immediateExecution))
-				.block();
+			.addTool(McpServerFeatures.AsyncToolSpecification.fromSync(toolHandler, this.immediateExecution))
+			.block();
+	}
+
+	/**
+	 * List all registered tools.
+	 * @return A list of all registered tools
+	 */
+	public List<McpSchema.Tool> listTools() {
+		return this.asyncServer.listTools().collectList().block();
 	}
 
 	/**
@@ -97,13 +107,21 @@ public class McpSyncServer {
 
 	/**
 	 * Add a new resource handler.
-	 * @param resourceHandler The resource handler to add
+	 * @param resourceSpecification The resource specification to add
 	 */
-	public void addResource(McpServerFeatures.SyncResourceSpecification resourceHandler) {
+	public void addResource(McpServerFeatures.SyncResourceSpecification resourceSpecification) {
 		this.asyncServer
-				.addResource(
-						McpServerFeatures.AsyncResourceSpecification.fromSync(resourceHandler, this.immediateExecution))
-				.block();
+			.addResource(McpServerFeatures.AsyncResourceSpecification.fromSync(resourceSpecification,
+					this.immediateExecution))
+			.block();
+	}
+
+	/**
+	 * List all registered resources.
+	 * @return A list of all registered resources
+	 */
+	public List<McpSchema.Resource> listResources() {
+		return this.asyncServer.listResources().collectList().block();
 	}
 
 	/**
@@ -115,14 +133,49 @@ public class McpSyncServer {
 	}
 
 	/**
+	 * Add a new resource template.
+	 * @param resourceTemplateSpecification The resource template specification to add
+	 */
+	public void addResourceTemplate(McpServerFeatures.SyncResourceTemplateSpecification resourceTemplateSpecification) {
+		this.asyncServer
+			.addResourceTemplate(McpServerFeatures.AsyncResourceTemplateSpecification
+				.fromSync(resourceTemplateSpecification, this.immediateExecution))
+			.block();
+	}
+
+	/**
+	 * List all registered resource templates.
+	 * @return A list of all registered resource templates
+	 */
+	public List<McpSchema.ResourceTemplate> listResourceTemplates() {
+		return this.asyncServer.listResourceTemplates().collectList().block();
+	}
+
+	/**
+	 * Remove a resource template.
+	 * @param uriTemplate The URI template of the resource template to remove
+	 */
+	public void removeResourceTemplate(String uriTemplate) {
+		this.asyncServer.removeResourceTemplate(uriTemplate).block();
+	}
+
+	/**
 	 * Add a new prompt handler.
 	 * @param promptSpecification The prompt specification to add
 	 */
 	public void addPrompt(McpServerFeatures.SyncPromptSpecification promptSpecification) {
 		this.asyncServer
-				.addPrompt(
-						McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification, this.immediateExecution))
-				.block();
+			.addPrompt(
+					McpServerFeatures.AsyncPromptSpecification.fromSync(promptSpecification, this.immediateExecution))
+			.block();
+	}
+
+	/**
+	 * List all registered prompts.
+	 * @return A list of all registered prompts
+	 */
+	public List<McpSchema.Prompt> listPrompts() {
+		return this.asyncServer.listPrompts().collectList().block();
 	}
 
 	/**

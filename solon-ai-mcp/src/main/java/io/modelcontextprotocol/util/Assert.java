@@ -4,9 +4,9 @@
 
 package io.modelcontextprotocol.util;
 
-import java.util.Collection;
-
 import reactor.util.annotation.Nullable;
+
+import java.util.Collection;
 
 /**
  * Assertion utility class that assists in validating arguments.
@@ -73,7 +73,7 @@ public final class Assert {
 	 * @see Character#isWhitespace
 	 */
 	public static boolean hasText(@Nullable String str) {
-		return Utils.hasText(str);
+		return (str != null && !str.isBlank());
 	}
 
 	/**

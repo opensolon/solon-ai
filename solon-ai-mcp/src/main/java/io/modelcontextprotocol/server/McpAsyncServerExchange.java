@@ -4,10 +4,8 @@
 
 package io.modelcontextprotocol.server;
 
-import java.util.ArrayList;
-import java.util.Collections;
-
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpLoggableSession;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -16,6 +14,9 @@ import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
 import io.modelcontextprotocol.spec.McpSession;
 import io.modelcontextprotocol.util.Assert;
 import reactor.core.publisher.Mono;
+
+import java.util.ArrayList;
+import java.util.Collections;
 
 /**
  * Represents an asynchronous exchange with a Model Context Protocol (MCP) client. The
@@ -36,15 +37,16 @@ public class McpAsyncServerExchange {
 
 	private final McpTransportContext transportContext;
 
-	private static final TypeReference<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeReference<McpSchema.CreateMessageResult>(){};
-
-	private static final TypeReference<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeReference<McpSchema.ListRootsResult>() {
+	private static final TypeRef<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
-	private static final TypeReference<McpSchema.ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeReference<McpSchema.ElicitResult>() {
+	private static final TypeRef<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeRef<>() {
 	};
 
-	public static final TypeReference<Object> OBJECT_TYPE_REF = new TypeReference<Object>() {
+	private static final TypeRef<McpSchema.ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeRef<>() {
+	};
+
+	public static final TypeRef<Object> OBJECT_TYPE_REF = new TypeRef<>() {
 	};
 
 	/**
@@ -58,7 +60,7 @@ public class McpAsyncServerExchange {
 	 */
 	@Deprecated
 	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
-								  McpSchema.Implementation clientInfo) {
+			McpSchema.Implementation clientInfo) {
 		this.sessionId = null;
 		if (!(session instanceof McpLoggableSession)) {
 			throw new IllegalArgumentException("Expecting session to be a McpLoggableSession instance");
@@ -79,8 +81,8 @@ public class McpAsyncServerExchange {
 	 * transport
 	 */
 	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
-								  McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
-								  McpTransportContext transportContext) {
+			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+			McpTransportContext transportContext) {
 		this.sessionId = sessionId;
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
@@ -142,7 +144,7 @@ public class McpAsyncServerExchange {
 		if (this.clientCapabilities == null) {
 			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
 		}
-		if (this.clientCapabilities.getSampling() == null) {
+		if (this.clientCapabilities.sampling() == null) {
 			return Mono.error(new McpError("Client must be configured with sampling capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_SAMPLING_CREATE_MESSAGE, createMessageRequest,
@@ -167,7 +169,7 @@ public class McpAsyncServerExchange {
 		if (this.clientCapabilities == null) {
 			return Mono.error(new McpError("Client must be initialized. Call the initialize method first!"));
 		}
-		if (this.clientCapabilities.getElicitation() == null) {
+		if (this.clientCapabilities.elicitation() == null) {
 			return Mono.error(new McpError("Client must be configured with elicitation capabilities"));
 		}
 		return this.session.sendRequest(McpSchema.METHOD_ELICITATION_CREATE, elicitRequest,
@@ -182,15 +184,15 @@ public class McpAsyncServerExchange {
 
 		// @formatter:off
 		return this.listRoots(McpSchema.FIRST_PAGE)
-				.expand(result -> (result.getNextCursor() != null) ?
-						this.listRoots(result.getNextCursor()) : Mono.empty())
-				.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null),
-						(allRootsResult, result) -> {
-							allRootsResult.getRoots().addAll(result.getRoots());
-							return allRootsResult;
-						})
-				.map(result -> new McpSchema.ListRootsResult(Collections.unmodifiableList(result.getRoots()),
-						result.getNextCursor()));
+			.expand(result -> (result.nextCursor() != null) ?
+					this.listRoots(result.nextCursor()) : Mono.empty())
+			.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null),
+				(allRootsResult, result) -> {
+					allRootsResult.roots().addAll(result.roots());
+					return allRootsResult;
+				})
+			.map(result -> new McpSchema.ListRootsResult(Collections.unmodifiableList(result.roots()),
+					result.nextCursor()));
 		// @formatter:on
 	}
 
@@ -217,7 +219,7 @@ public class McpAsyncServerExchange {
 		}
 
 		return Mono.defer(() -> {
-			if (this.session.isNotificationForLevelAllowed(loggingMessageNotification.getLevel())) {
+			if (this.session.isNotificationForLevelAllowed(loggingMessageNotification.level())) {
 				return this.session.sendNotification(McpSchema.METHOD_NOTIFICATION_MESSAGE, loggingMessageNotification);
 			}
 			return Mono.empty();

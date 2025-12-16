@@ -4,9 +4,9 @@
 
 package io.modelcontextprotocol.server;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.LoggingMessageNotification;
-import io.modelcontextprotocol.spec.McpSession;
 
 /**
  * Represents a synchronous exchange with a Model Context Protocol (MCP) client. The

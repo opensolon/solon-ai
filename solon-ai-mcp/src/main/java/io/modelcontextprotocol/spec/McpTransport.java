@@ -4,12 +4,11 @@
 
 package io.modelcontextprotocol.spec;
 
-import java.util.List;
-
-import com.fasterxml.jackson.core.type.TypeReference;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
-import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 /**
  * Defines the asynchronous transport layer for the Model Context Protocol (MCP).
@@ -78,10 +77,10 @@ public interface McpTransport {
 	 * @param typeRef the type reference for the object to unmarshal
 	 * @return the unmarshalled object
 	 */
-	<T> T unmarshalFrom(Object data, TypeReference<T> typeRef);
+	<T> T unmarshalFrom(Object data, TypeRef<T> typeRef);
 
 	default List<String> protocolVersions() {
-		return Utils.asList(ProtocolVersions.MCP_2024_11_05);
+		return List.of(ProtocolVersions.MCP_2024_11_05);
 	}
 
 }

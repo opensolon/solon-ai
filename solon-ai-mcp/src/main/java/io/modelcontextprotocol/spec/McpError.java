@@ -1,64 +1,116 @@
 /*
- * Copyright 2024 - 2024 the original author or authors.
- */
+* Copyright 2024 - 2024 the original author or authors.
+*/
 
 package io.modelcontextprotocol.spec;
 
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCResponse.JSONRPCError;
 import io.modelcontextprotocol.util.Assert;
 
+import java.util.Map;
+import java.util.function.Function;
+
 public class McpError extends RuntimeException {
 
-    private JSONRPCError jsonRpcError;
+	/**
+	 * <a href=
+	 * "https://modelcontextprotocol.io/specification/2025-06-18/server/resources#error-handling">Resource
+	 * Error Handling</a>
+	 */
+	public static final Function<String, McpError> RESOURCE_NOT_FOUND = resourceUri -> new McpError(new JSONRPCError(
+			McpSchema.ErrorCodes.RESOURCE_NOT_FOUND, "Resource not found", Map.of("uri", resourceUri)));
 
-    public McpError(JSONRPCError jsonRpcError) {
-        super(jsonRpcError.getMessage());
-        this.jsonRpcError = jsonRpcError;
-    }
+	private JSONRPCError jsonRpcError;
 
-    @Deprecated
-    public McpError(Object error) {
-        super(error.toString());
-    }
+	public McpError(JSONRPCError jsonRpcError) {
+		super(jsonRpcError.message());
+		this.jsonRpcError = jsonRpcError;
+	}
 
-    public McpError(Object error, Throwable cause) {
-        super(error.toString(), cause);
-    }
+	@Deprecated
+	public McpError(Object error) {
+		super(error.toString());
+	}
 
-    public JSONRPCError getJsonRpcError() {
-        return jsonRpcError;
-    }
+	public JSONRPCError getJsonRpcError() {
+		return jsonRpcError;
+	}
 
-    public static Builder builder(int errorCode) {
-        return new Builder(errorCode);
-    }
+	@Override
+	public String toString() {
+		var builder = new StringBuilder(super.toString());
+		if (jsonRpcError != null) {
+			builder.append("\n");
+			builder.append(jsonRpcError.toString());
+		}
+		return builder.toString();
+	}
 
-    public static class Builder {
+	public static Builder builder(int errorCode) {
+		return new Builder(errorCode);
+	}
 
-        private final int code;
+	public static class Builder {
 
-        private String message;
+		private final int code;
 
-        private Object data;
+		private String message;
 
-        private Builder(int code) {
-            this.code = code;
-        }
+		private Object data;
 
-        public Builder message(String message) {
-            this.message = message;
-            return this;
-        }
+		private Builder(int code) {
+			this.code = code;
+		}
 
-        public Builder data(Object data) {
-            this.data = data;
-            return this;
-        }
+		public Builder message(String message) {
+			this.message = message;
+			return this;
+		}
 
-        public McpError build() {
-            Assert.hasText(message, "message must not be empty");
-            return new McpError(new JSONRPCError(code, message, data));
-        }
+		public Builder data(Object data) {
+			this.data = data;
+			return this;
+		}
 
-    }
+		public McpError build() {
+			Assert.hasText(message, "message must not be empty");
+			return new McpError(new JSONRPCError(code, message, data));
+		}
+
+	}
+
+	public static Throwable findRootCause(Throwable throwable) {
+		Assert.notNull(throwable, "throwable must not be null");
+		Throwable rootCause = throwable;
+		while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+			rootCause = rootCause.getCause();
+		}
+		return rootCause;
+	}
+
+	public static String aggregateExceptionMessages(Throwable throwable) {
+		Assert.notNull(throwable, "throwable must not be null");
+
+		StringBuilder messages = new StringBuilder();
+		Throwable current = throwable;
+
+		while (current != null) {
+			if (messages.length() > 0) {
+				messages.append("\n  Caused by: ");
+			}
+
+			messages.append(current.getClass().getSimpleName());
+			if (current.getMessage() != null) {
+				messages.append(": ").append(current.getMessage());
+			}
+
+			if (current.getCause() == current) {
+				break;
+			}
+			current = current.getCause();
+		}
+
+		return messages.toString();
+	}
+
 }

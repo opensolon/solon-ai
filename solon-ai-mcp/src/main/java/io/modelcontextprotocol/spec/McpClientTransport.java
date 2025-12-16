@@ -1,13 +1,13 @@
 /*
- * Copyright 2024 - 2024 the original author or authors.
- */
+* Copyright 2024 - 2024 the original author or authors.
+*/
 
 package io.modelcontextprotocol.spec;
 
+import reactor.core.publisher.Mono;
+
 import java.util.function.Consumer;
 import java.util.function.Function;
-
-import reactor.core.publisher.Mono;
 
 /**
  * Interface for the client side of the {@link McpTransport}. It allows setting handlers

@@ -20,45 +20,45 @@ import java.util.Optional;
  */
 public interface McpTransportSession<CONNECTION> {
 
-    /**
-     * In case of stateful MCP servers, the value is present and contains the String
-     * identifier for the transport-level session.
-     * @return optional session id
-     */
-    Optional<String> sessionId();
+	/**
+	 * In case of stateful MCP servers, the value is present and contains the String
+	 * identifier for the transport-level session.
+	 * @return optional session id
+	 */
+	Optional<String> sessionId();
 
-    /**
-     * Stateful operation that flips the un-initialized state to initialized if this is
-     * the first call. If the transport provides a session id for the communication,
-     * argument should not be null to record the current identifier.
-     * @param sessionId session identifier as provided by the server
-     * @return if successful, this method returns {@code true} and means that a
-     * post-initialization step can be performed
-     */
-    boolean markInitialized(String sessionId);
+	/**
+	 * Stateful operation that flips the un-initialized state to initialized if this is
+	 * the first call. If the transport provides a session id for the communication,
+	 * argument should not be null to record the current identifier.
+	 * @param sessionId session identifier as provided by the server
+	 * @return if successful, this method returns {@code true} and means that a
+	 * post-initialization step can be performed
+	 */
+	boolean markInitialized(String sessionId);
 
-    /**
-     * Adds a resource that this transport session can monitor and dismiss when needed.
-     * @param connection the managed resource
-     */
-    void addConnection(CONNECTION connection);
+	/**
+	 * Adds a resource that this transport session can monitor and dismiss when needed.
+	 * @param connection the managed resource
+	 */
+	void addConnection(CONNECTION connection);
 
-    /**
-     * Called when the resource is terminating by itself and the transport session does
-     * not need to track it anymore.
-     * @param connection the resource to remove from the monitored collection
-     */
-    void removeConnection(CONNECTION connection);
+	/**
+	 * Called when the resource is terminating by itself and the transport session does
+	 * not need to track it anymore.
+	 * @param connection the resource to remove from the monitored collection
+	 */
+	void removeConnection(CONNECTION connection);
 
-    /**
-     * Close and clear the monitored resources. Potentially asynchronous.
-     */
-    void close();
+	/**
+	 * Close and clear the monitored resources. Potentially asynchronous.
+	 */
+	void close();
 
-    /**
-     * Close and clear the monitored resources in a graceful manner.
-     * @return completes once all resources have been dismissed
-     */
-    Publisher<Void> closeGracefully();
+	/**
+	 * Close and clear the monitored resources in a graceful manner.
+	 * @return completes once all resources have been dismissed
+	 */
+	Publisher<Void> closeGracefully();
 
 }

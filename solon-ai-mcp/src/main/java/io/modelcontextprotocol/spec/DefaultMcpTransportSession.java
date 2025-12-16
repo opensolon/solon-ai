@@ -25,60 +25,60 @@ import java.util.function.Function;
  */
 public class DefaultMcpTransportSession implements McpTransportSession<Disposable> {
 
-    private static final Logger logger = LoggerFactory.getLogger(DefaultMcpTransportSession.class);
+	private static final Logger logger = LoggerFactory.getLogger(DefaultMcpTransportSession.class);
 
-    private final Disposable.Composite openConnections = Disposables.composite();
+	private final Disposable.Composite openConnections = Disposables.composite();
 
-    private final AtomicBoolean initialized = new AtomicBoolean(false);
+	private final AtomicBoolean initialized = new AtomicBoolean(false);
 
-    private final AtomicReference<String> sessionId = new AtomicReference<>();
+	private final AtomicReference<String> sessionId = new AtomicReference<>();
 
-    private final Function<String, Publisher<Void>> onClose;
+	private final Function<String, Publisher<Void>> onClose;
 
-    public DefaultMcpTransportSession(Function<String, Publisher<Void>> onClose) {
-        this.onClose = onClose;
-    }
+	public DefaultMcpTransportSession(Function<String, Publisher<Void>> onClose) {
+		this.onClose = onClose;
+	}
 
-    @Override
-    public Optional<String> sessionId() {
-        return Optional.ofNullable(this.sessionId.get());
-    }
+	@Override
+	public Optional<String> sessionId() {
+		return Optional.ofNullable(this.sessionId.get());
+	}
 
-    @Override
-    public boolean markInitialized(String sessionId) {
-        boolean flipped = this.initialized.compareAndSet(false, true);
-        if (flipped) {
-            this.sessionId.set(sessionId);
-            logger.debug("Established session with id {}", sessionId);
-        }
-        else {
-            if (sessionId != null && !sessionId.equals(this.sessionId.get())) {
-                logger.warn("Different session id provided in response. Expecting {} but server returned {}",
-                        this.sessionId.get(), sessionId);
-            }
-        }
-        return flipped;
-    }
+	@Override
+	public boolean markInitialized(String sessionId) {
+		boolean flipped = this.initialized.compareAndSet(false, true);
+		if (flipped) {
+			this.sessionId.set(sessionId);
+			logger.debug("Established session with id {}", sessionId);
+		}
+		else {
+			if (sessionId != null && !sessionId.equals(this.sessionId.get())) {
+				logger.warn("Different session id provided in response. Expecting {} but server returned {}",
+						this.sessionId.get(), sessionId);
+			}
+		}
+		return flipped;
+	}
 
-    @Override
-    public void addConnection(Disposable connection) {
-        this.openConnections.add(connection);
-    }
+	@Override
+	public void addConnection(Disposable connection) {
+		this.openConnections.add(connection);
+	}
 
-    @Override
-    public void removeConnection(Disposable connection) {
-        this.openConnections.remove(connection);
-    }
+	@Override
+	public void removeConnection(Disposable connection) {
+		this.openConnections.remove(connection);
+	}
 
-    @Override
-    public void close() {
-        this.closeGracefully().subscribe();
-    }
+	@Override
+	public void close() {
+		this.closeGracefully().subscribe();
+	}
 
-    @Override
-    public Mono<Void> closeGracefully() {
-        return Mono.from(this.onClose.apply(this.sessionId.get()))
-                .then(Mono.fromRunnable(this.openConnections::dispose));
-    }
+	@Override
+	public Mono<Void> closeGracefully() {
+		return Mono.from(this.onClose.apply(this.sessionId.get()))
+			.then(Mono.fromRunnable(this.openConnections::dispose));
+	}
 
 }
