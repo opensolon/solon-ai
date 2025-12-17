@@ -10,13 +10,14 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
@@ -25,7 +26,6 @@ import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
 import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
-import io.modelcontextprotocol.util.Utils;
 import lombok.var;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +46,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 	private static final Logger logger = LoggerFactory.getLogger(StdioServerTransportProvider.class);
 
-	private final ObjectMapper objectMapper;
+	private final McpJsonMapper jsonMapper;
 
 	private final InputStream inputStream;
 
@@ -58,43 +58,38 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 
 	private final Sinks.One<Void> inboundReady = Sinks.one();
 
-	/**
-	 * Creates a new StdioServerTransportProvider with a default ObjectMapper and System
-	 * streams.
-	 */
-	public StdioServerTransportProvider() {
-		this(new ObjectMapper());
-	}
 
 	/**
 	 * Creates a new StdioServerTransportProvider with the specified ObjectMapper and
 	 * System streams.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
+	 *
+	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
-	public StdioServerTransportProvider(ObjectMapper objectMapper) {
-		this(objectMapper, System.in, System.out);
+	public StdioServerTransportProvider(McpJsonMapper jsonMapper) {
+		this(jsonMapper, System.in, System.out);
 	}
 
 	/**
 	 * Creates a new StdioServerTransportProvider with the specified ObjectMapper and
 	 * streams.
-	 * @param objectMapper The ObjectMapper to use for JSON serialization/deserialization
-	 * @param inputStream The input stream to read from
+	 *
+	 * @param jsonMapper   The JsonMapper to use for JSON serialization/deserialization
+	 * @param inputStream  The input stream to read from
 	 * @param outputStream The output stream to write to
 	 */
-	public StdioServerTransportProvider(ObjectMapper objectMapper, InputStream inputStream, OutputStream outputStream) {
-		Assert.notNull(objectMapper, "The ObjectMapper can not be null");
+	public StdioServerTransportProvider(McpJsonMapper jsonMapper, InputStream inputStream, OutputStream outputStream) {
+		Assert.notNull(jsonMapper, "The JsonMapper can not be null");
 		Assert.notNull(inputStream, "The InputStream can not be null");
 		Assert.notNull(outputStream, "The OutputStream can not be null");
 
-		this.objectMapper = objectMapper;
+		this.jsonMapper = jsonMapper;
 		this.inputStream = inputStream;
 		this.outputStream = outputStream;
 	}
 
 	@Override
 	public List<String> protocolVersions() {
-		return Utils.asList(ProtocolVersions.MCP_2024_11_05);
+		return Arrays.asList(ProtocolVersions.MCP_2024_11_05);
 	}
 
 	@Override
@@ -159,16 +154,15 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 			return Mono.zip(inboundReady.asMono(), outboundReady.asMono()).then(Mono.defer(() -> {
 				if (outboundSink.tryEmitNext(message).isSuccess()) {
 					return Mono.empty();
-				}
-				else {
+				} else {
 					return Mono.error(new RuntimeException("Failed to enqueue message"));
 				}
 			}));
 		}
 
 		@Override
-		public <T> T unmarshalFrom(Object data, TypeReference<T> typeRef) {
-			return objectMapper.convertValue(data, typeRef);
+		public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+			return jsonMapper.convertValue(data, typeRef);
 		}
 
 		@Override
@@ -221,29 +215,25 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 								logger.debug("Received JSON message: {}", line);
 
 								try {
-									McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(objectMapper,
+									McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
 											line);
 									if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
 										// logIfNotClosing("Failed to enqueue message");
 										break;
 									}
 
-								}
-								catch (Exception e) {
+								} catch (Exception e) {
 									logIfNotClosing("Error processing inbound message", e);
 									break;
 								}
-							}
-							catch (IOException e) {
+							} catch (IOException e) {
 								logIfNotClosing("Error reading from stdin", e);
 								break;
 							}
 						}
-					}
-					catch (Exception e) {
+					} catch (Exception e) {
 						logIfNotClosing("Error in inbound processing", e);
-					}
-					finally {
+					} finally {
 						isClosing.set(true);
 						if (session != null) {
 							session.close();
@@ -265,7 +255,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 					.handle((message, sink) -> {
 						if (message != null && !isClosing.get()) {
 							try {
-								String jsonMessage = objectMapper.writeValueAsString(message);
+								String jsonMessage = jsonMapper.writeValueAsString(message);
 								// Escape any embedded newlines in the JSON message as per spec
 								jsonMessage = jsonMessage.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n");
 
@@ -313,5 +303,4 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		}
 
 	}
-
 }
