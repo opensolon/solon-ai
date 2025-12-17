@@ -52,7 +52,7 @@ public class StatelessMcpServerHolder implements McpServerHolder {
     private final McpServer.StatelessAsyncSpecification mcpServerSpec;
     private McpStatelessAsyncServer server;
 
-    public StatelessMcpServerHolder(McpServerProperties serverProps) {
+    public StatelessMcpServerHolder( McpSchema.ServerCapabilities serverCapabilities, McpServerProperties serverProps) {
         this.serverProperties = serverProps;
 
         //streamable
@@ -64,14 +64,6 @@ public class StatelessMcpServerHolder implements McpServerHolder {
 
         //断言
         Assert.notEmpty(this.mcpEndpoint, "MCP endpoint is empty");
-
-
-        McpSchema.ServerCapabilities serverCapabilities = McpSchema.ServerCapabilities.builder()
-                .tools(true)
-                .resources(true, true)
-                .prompts(true)
-                .logging()
-                .build();
 
         this.mcpTransportProvider = WebRxStatelessServerTransport.builder()
                 .messageEndpoint(this.mcpEndpoint)

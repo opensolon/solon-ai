@@ -59,7 +59,7 @@ public class StatefulMcpServerHolder implements McpServerHolder {
     private final McpServer.AsyncSpecification mcpServerSpec;
     private McpAsyncServer server;
 
-    public StatefulMcpServerHolder(McpServerProperties serverProps) {
+    public StatefulMcpServerHolder( McpSchema.ServerCapabilities serverCapabilities, McpServerProperties serverProps) {
         this.serverProperties = serverProps;
 
         if (McpChannel.SSE.equals(serverProps.getChannel())) {
@@ -94,14 +94,6 @@ public class StatefulMcpServerHolder implements McpServerHolder {
             this.mcpEndpoint = null;
             this.messageEndpoint = null;
         }
-
-
-        McpSchema.ServerCapabilities serverCapabilities = McpSchema.ServerCapabilities.builder()
-                .tools(true)
-                .resources(true, true)
-                .prompts(true)
-                .logging()
-                .build();
 
         if (McpChannel.STDIO.equalsIgnoreCase(serverProps.getChannel())) {
             //stdio 通道

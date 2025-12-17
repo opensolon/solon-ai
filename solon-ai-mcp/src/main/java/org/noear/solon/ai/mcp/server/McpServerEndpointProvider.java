@@ -70,14 +70,21 @@ public class McpServerEndpointProvider implements LifecycleBean {
             }
         }
 
+        McpSchema.ServerCapabilities serverCapabilities = McpSchema.ServerCapabilities.builder()
+                .tools(true)
+                .resources(true, true)
+                .prompts(true)
+                .logging()
+                .build();
+
         this.serverProperties = serverProps;
 
         if (McpChannel.STREAMABLE_STATELESS.equals(serverProps.getChannel())) {
             //无状态
-            this.serverHolder = new StatelessMcpServerHolder(serverProps);
+            this.serverHolder = new StatelessMcpServerHolder(serverCapabilities, serverProps);
         } else {
             //有状态
-            this.serverHolder = new StatefulMcpServerHolder(serverProps);
+            this.serverHolder = new StatefulMcpServerHolder(serverCapabilities, serverProps);
         }
 
         this.promptManager = serverHolder.getPromptManager();
@@ -88,8 +95,8 @@ public class McpServerEndpointProvider implements LifecycleBean {
     /**
      * 获取服务端（postStart 后有效）
      */
-    public @Nullable McpAsyncServer getServer() {
-        return null;
+    public @Nullable McpServerHolder getServer() {
+        return serverHolder;
     }
 
     /**
