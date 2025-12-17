@@ -37,16 +37,16 @@ public class McpAsyncServerExchange {
 
 	private final McpTransportContext transportContext;
 
-	private static final TypeRef<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<>() {
+	private static final TypeRef<McpSchema.CreateMessageResult> CREATE_MESSAGE_RESULT_TYPE_REF = new TypeRef<McpSchema.CreateMessageResult>() {
 	};
 
-	private static final TypeRef<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeRef<>() {
+	private static final TypeRef<McpSchema.ListRootsResult> LIST_ROOTS_RESULT_TYPE_REF = new TypeRef<McpSchema.ListRootsResult>() {
 	};
 
-	private static final TypeRef<McpSchema.ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeRef<>() {
+	private static final TypeRef<McpSchema.ElicitResult> ELICITATION_RESULT_TYPE_REF = new TypeRef<McpSchema.ElicitResult>() {
 	};
 
-	public static final TypeRef<Object> OBJECT_TYPE_REF = new TypeRef<>() {
+	public static final TypeRef<Object> OBJECT_TYPE_REF = new TypeRef<Object>() {
 	};
 
 	/**

@@ -22,36 +22,41 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 	Map<String, McpStatelessNotificationHandler> notificationHandlers;
 
 	public DefaultMcpStatelessServerHandler(Map<String, McpStatelessRequestHandler<?>> requestHandlers,
-			Map<String, McpStatelessNotificationHandler> notificationHandlers) {
+											Map<String, McpStatelessNotificationHandler> notificationHandlers) {
 		this.requestHandlers = requestHandlers;
 		this.notificationHandlers = notificationHandlers;
 	}
 
 	@Override
 	public Mono<McpSchema.JSONRPCResponse> handleRequest(McpTransportContext transportContext,
-			McpSchema.JSONRPCRequest request) {
+														 McpSchema.JSONRPCRequest request) {
 		McpStatelessRequestHandler<?> requestHandler = this.requestHandlers.get(request.method());
 		if (requestHandler == null) {
 			return Mono.error(new McpError("Missing handler for request type: " + request.method()));
 		}
 		return requestHandler.handle(transportContext, request.params())
-			.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
-			.onErrorResume(t -> {
-				McpSchema.JSONRPCResponse.JSONRPCError error;
-				if (t instanceof McpError mcpError && mcpError.getJsonRpcError() != null) {
-					error = mcpError.getJsonRpcError();
-				}
-				else {
-					error = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-							t.getMessage(), null);
-				}
-				return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, error));
-			});
+				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
+				.onErrorResume(t -> {
+					McpSchema.JSONRPCResponse.JSONRPCError error = null;
+					if (t instanceof McpError) {
+						McpError mcpError = (McpError) t;
+						if (mcpError.getJsonRpcError() != null) {
+							error = mcpError.getJsonRpcError();
+						}
+					}
+
+					if (error == null) {
+						error = new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+								t.getMessage(), null);
+					}
+
+					return Mono.just(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, error));
+				});
 	}
 
 	@Override
 	public Mono<Void> handleNotification(McpTransportContext transportContext,
-			McpSchema.JSONRPCNotification notification) {
+										 McpSchema.JSONRPCNotification notification) {
 		McpStatelessNotificationHandler notificationHandler = this.notificationHandlers.get(notification.method());
 		if (notificationHandler == null) {
 			logger.warn("Missing handler for notification type: {}", notification.method());
@@ -59,5 +64,4 @@ class DefaultMcpStatelessServerHandler implements McpStatelessServerHandler {
 		}
 		return notificationHandler.handle(transportContext, notification.params());
 	}
-
 }
