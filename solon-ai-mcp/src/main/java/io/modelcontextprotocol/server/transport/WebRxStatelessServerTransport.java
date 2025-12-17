@@ -106,7 +106,8 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 			try {
 				McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
 
-				if (message instanceof McpSchema.JSONRPCRequest jsonrpcRequest) {
+				if (message instanceof McpSchema.JSONRPCRequest) {
+					McpSchema.JSONRPCRequest jsonrpcRequest = (McpSchema.JSONRPCRequest)message;
 					return this.mcpHandler.handleRequest(transportContext, jsonrpcRequest).flatMap(jsonrpcResponse -> {
 						try {
 							String json = jsonMapper.writeValueAsString(jsonrpcResponse);
@@ -119,7 +120,8 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 						}
 					});
 				}
-				else if (message instanceof McpSchema.JSONRPCNotification jsonrpcNotification) {
+				else if (message instanceof McpSchema.JSONRPCNotification) {
+					McpSchema.JSONRPCNotification jsonrpcNotification = (McpSchema.JSONRPCNotification)message;
 					return this.mcpHandler.handleNotification(transportContext, jsonrpcNotification)
 							.then(RxEntity.accepted().build());
 				}

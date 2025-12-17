@@ -11,6 +11,7 @@ import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
 import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
 import io.modelcontextprotocol.util.Assert;
+import lombok.var;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -19,6 +20,7 @@ import reactor.core.publisher.MonoSink;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -160,34 +162,41 @@ public class McpStreamableServerSession implements McpLoggableSession {
 
 			McpStreamableServerSessionStream stream = new McpStreamableServerSessionStream(transport);
 			McpRequestHandler<?> requestHandler = McpStreamableServerSession.this.requestHandlers
-				.get(jsonrpcRequest.method());
+					.get(jsonrpcRequest.method());
 			// TODO: delegate to stream, which upon successful response should close
 			// remove itself from the registry and also close the underlying transport
 			// (sink)
 			if (requestHandler == null) {
 				MethodNotFoundError error = getMethodNotFoundError(jsonrpcRequest.method());
 				return transport
-					.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
-							new McpSchema.JSONRPCResponse.JSONRPCError(ErrorCodes.METHOD_NOT_FOUND,
-									error.message(), error.data())));
+						.sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), null,
+								new McpSchema.JSONRPCResponse.JSONRPCError(ErrorCodes.METHOD_NOT_FOUND,
+										error.message(), error.data())));
 			}
 			return requestHandler
-				.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
-						transportContext), jsonrpcRequest.params())
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
-						null))
-				.onErrorResume(e -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (e instanceof McpError mcpError
-							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-									: new McpSchema.JSONRPCResponse.JSONRPCError(ErrorCodes.INTERNAL_ERROR,
-											e.getMessage(), McpError.aggregateExceptionMessages(e));
+					.handle(new McpAsyncServerExchange(this.id, stream, clientCapabilities.get(), clientInfo.get(),
+							transportContext), jsonrpcRequest.params())
+					.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(), result,
+							null))
+					.onErrorResume(e -> {
+						McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = Optional.of(e).map(t -> {
+							if(t instanceof McpError){
+								McpError mcpError = (McpError) t;
+								if(mcpError.getJsonRpcError() != null){
+									return mcpError.getJsonRpcError();
+								}
+							}
 
-					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
-							null, jsonRpcError);
-					return Mono.just(errorResponse);
-				})
-				.flatMap(transport::sendMessage)
-				.then(transport.closeGracefully());
+							return new McpSchema.JSONRPCResponse.JSONRPCError(ErrorCodes.INTERNAL_ERROR,
+									t.getMessage(), McpError.aggregateExceptionMessages(t));
+						}).get();
+
+						var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, jsonrpcRequest.id(),
+								null, jsonRpcError);
+						return Mono.just(errorResponse);
+					})
+					.flatMap(transport::sendMessage)
+					.then(transport.closeGracefully());
 		});
 	}
 
@@ -247,7 +256,26 @@ public class McpStreamableServerSession implements McpLoggableSession {
 		});
 	}
 
-	record MethodNotFoundError(String method, String message, Object data) {
+	public static class MethodNotFoundError {
+		private String method;
+		private String message;
+		private Object data;
+
+		public MethodNotFoundError(String method, String message, Object data) {
+			this.method = method;
+			this.message = message;
+			this.data = data;
+		}
+
+		public String method() {
+			return method;
+		}
+		public String message() {
+			return message;
+		}
+		public Object data() {
+			return data;
+		}
 	}
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {
@@ -304,11 +332,26 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 * Composite holding the {@link McpStreamableServerSession} and the initialization
 	 * result
 	 *
-	 * @param session the session instance
-	 * @param initResult the result to use to respond to the client
 	 */
-	public record McpStreamableServerSessionInit(McpStreamableServerSession session,
-			Mono<McpSchema.InitializeResult> initResult) {
+	public static class McpStreamableServerSessionInit {
+		private McpStreamableServerSession session;
+		private	Mono<McpSchema.InitializeResult> initResult;
+
+		/**
+		 * @param session the session instance
+		 * @param initResult the result to use to respond to the client
+		 * */
+		public McpStreamableServerSessionInit(McpStreamableServerSession session, Mono<McpSchema.InitializeResult> initResult) {
+			this.session = session;
+			this.initResult = initResult;
+		}
+
+		public McpStreamableServerSession session() {
+			return session;
+		}
+		public Mono<McpSchema.InitializeResult> initResult() {
+			return initResult;
+		}
 	}
 
 	/**
@@ -395,7 +438,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 				this.pendingResponses.values().forEach(s -> s.error(new RuntimeException("Stream closed")));
 				this.pendingResponses.clear();
 				// If this was the generic stream, reset it
-				McpStreamableServerSession.this.listeningStreamRef.compareAndExchange(this,
+				McpStreamableServerSession.this.listeningStreamRef.compareAndSet(this,
 						McpStreamableServerSession.this.missingMcpTransportSession);
 				McpStreamableServerSession.this.requestIdToStream.values().removeIf(this::equals);
 				return this.transport.closeGracefully();
@@ -407,7 +450,7 @@ public class McpStreamableServerSession implements McpLoggableSession {
 			this.pendingResponses.values().forEach(s -> s.error(new RuntimeException("Stream closed")));
 			this.pendingResponses.clear();
 			// If this was the generic stream, reset it
-			McpStreamableServerSession.this.listeningStreamRef.compareAndExchange(this,
+			McpStreamableServerSession.this.listeningStreamRef.compareAndSet(this,
 					McpStreamableServerSession.this.missingMcpTransportSession);
 			McpStreamableServerSession.this.requestIdToStream.values().removeIf(this::equals);
 			this.transport.close();
