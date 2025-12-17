@@ -13,6 +13,10 @@
 ### v3.8.0
 
 * 新增 solon-ai-mcp mcp-java-sdk v0.17 适配（支持 2025-06-18 版本协议）
+* 新增 solon-ai-mcp mcp-server 异步支持
+* 添加 solon-ai FunctionPrompt:handleAsync（用于 mcp-server 异步支持）
+* 添加 solon-ai FunctionResource:handleAsync（用于 mcp-server 异步支持）
+* 添加 solon-ai FunctionTool:handleAsync（用于 mcp-server 异步支持）
 * 添加 solon-ai-dialect-openai ClaudeChatDialect 方言
 * 添加 solon-ai-core ChatMessage:toNdjson,fromNdjson 方法（替代 ChatSession:toNdjson, loadNdjson），新方法机制上更自由
 * 优化 solon-ai-mcp mcp StreamableHttp 模式下 服务端正常返回时 客户端异常日志打印的情况
