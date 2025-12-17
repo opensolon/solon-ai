@@ -8,6 +8,7 @@ import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import reactor.core.publisher.Mono;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -80,7 +81,7 @@ public interface McpTransport {
 	<T> T unmarshalFrom(Object data, TypeRef<T> typeRef);
 
 	default List<String> protocolVersions() {
-		return List.of(ProtocolVersions.MCP_2024_11_05);
+		return Arrays.asList(ProtocolVersions.MCP_2024_11_05);
 	}
 
 }
