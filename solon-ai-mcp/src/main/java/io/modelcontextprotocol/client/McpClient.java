@@ -11,6 +11,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpSchema.*;
 import io.modelcontextprotocol.spec.McpTransport;
 import io.modelcontextprotocol.util.Assert;
+import lombok.var;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;

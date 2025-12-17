@@ -1830,6 +1830,14 @@ public final class McpSchema {
 			this.role = role;
 			this.content = content;
 		}
+
+		public Role role() {
+			return role;
+		}
+
+		public Content content() {
+			return content;
+		}
 	}
 
 	/**
@@ -2064,6 +2072,7 @@ public final class McpSchema {
 	 * Clients should never make tool use decisions based on ToolAnnotations received from
 	 * untrusted servers.
 	 */
+	@Builder
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
