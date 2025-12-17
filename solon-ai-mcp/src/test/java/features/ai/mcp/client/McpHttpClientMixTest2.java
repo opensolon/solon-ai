@@ -90,9 +90,9 @@ public class McpHttpClientMixTest2 {
 
         Collection<FunctionResource> list = mcpClient.getResources();
         System.out.println(list);
-        assert list.size() == 2;
+        assert list.size() == 1;
 
-        assert "config://app-version".equals(new ArrayList<>(list).get(1).uri());
+        assert "config://app-version".equals(new ArrayList<>(list).get(0).uri());
     }
 
     @Test
@@ -115,9 +115,9 @@ public class McpHttpClientMixTest2 {
     public void resource9() throws Exception {
         Collection<FunctionResource> resources = mcpClient.getResources();
         System.out.println(resources);
-        assert resources.size() == 2;
+        assert resources.size() == 1;
 
-        assert ("[FunctionResourceDesc{name='getEmail', uri='db://users/{user_id}/email', description='根据用户ID查询邮箱', mimeType=''}, FunctionResourceDesc{name='getAppVersion', uri='config://app-version', description='获取应用版本号', mimeType='text/config'}]").equals(resources.toString());
+        assert ("[FunctionResourceDesc{name='getAppVersion', uri='config://app-version', description='获取应用版本号', mimeType='text/config'}]").equals(resources.toString());
     }
 
     @Test

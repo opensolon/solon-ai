@@ -66,9 +66,17 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
 
     @Override
     public void add(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionResource functionResource) {
-        try {
-            resourcesMap.put(functionResource.uri(), functionResource);
+        resourcesMap.put(functionResource.uri(), functionResource);
 
+        if (functionResource.uri().indexOf('{') < 0) {
+            addRef(server, mcpServerSpec, mcpServerProps, functionResource);
+        } else {
+            addTml(server, mcpServerSpec, mcpServerProps, functionResource);
+        }
+    }
+
+    private void addRef(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionResource functionResource) {
+        try {
             //resourceSpec
             McpServerFeatures.AsyncResourceSpecification resourceSpec = new McpServerFeatures.AsyncResourceSpecification(
                     McpSchema.Resource.builder()
@@ -111,6 +119,53 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
             }
         } catch (Throwable ex) {
             throw new McpException("Resource add failed, resource: " + functionResource.uri(), ex);
+        }
+    }
+
+    private void addTml(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionResource functionResource) {
+        try {
+            //resourceSpec
+            McpServerFeatures.AsyncResourceTemplateSpecification resourceSpec = new McpServerFeatures.AsyncResourceTemplateSpecification(
+                    McpSchema.ResourceTemplate.builder()
+                            .uriTemplate(functionResource.uri())
+                            .name(functionResource.name()).title(functionResource.title()).description(functionResource.description())
+                            .mimeType(functionResource.mimeType()).build(),
+                    (exchange, request) -> {
+                        return Mono.create(sink -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange), () -> {
+                                functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
+
+                                    if (err != null) {
+                                        err = Utils.throwableUnwrap(err);
+                                        sink.error(new McpException(err.getMessage(), err));
+                                    } else {
+                                        final McpSchema.ReadResourceResult result;
+                                        if (res.isBase64()) {
+                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
+                                                    request.uri(),
+                                                    functionResource.mimeType(),
+                                                    res.getContent())));
+                                        } else {
+                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
+                                                    request.uri(),
+                                                    functionResource.mimeType(),
+                                                    res.getContent())));
+                                        }
+                                        sink.success(result);
+                                    }
+                                });
+
+                            });
+                        });
+                    });
+
+            if (server != null) {
+                server.addResourceTemplate(resourceSpec).block();
+            } else {
+                mcpServerSpec.resourceTemplates(resourceSpec).build();
+            }
+        } catch (Throwable ex) {
+            throw new McpException("ResourceTemplate add failed, resource: " + functionResource.uri(), ex);
         }
     }
 }

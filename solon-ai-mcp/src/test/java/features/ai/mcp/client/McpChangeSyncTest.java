@@ -122,7 +122,7 @@ public class McpChangeSyncTest {
         serverEndpointProvider.removeTool("hello2");
 
         Thread.sleep(10);
-        assert mcpClient.getTools().size() == 1;
+        Assertions.assertEquals(1, mcpClient.getTools().size());
         mcpClient.close();
     }
 }
