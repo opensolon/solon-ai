@@ -1,9 +1,9 @@
 package features.ai.mcp.client;
 
 import demo.ai.mcp.server.McpServerApp;
-import io.modelcontextprotocol.util.Utils;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.test.SolonTest;

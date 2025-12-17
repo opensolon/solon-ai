@@ -21,6 +21,7 @@ import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.client.transport.WebRxSseClientTransport;
 import io.modelcontextprotocol.client.transport.WebRxStreamableHttpTransport;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack4.ONode;
@@ -171,7 +172,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             clientTransport = new StdioClientTransport(ServerParameters.builder(clientProps.getCommand())
                     .args(clientProps.getArgs())
                     .env(clientProps.getEnv())
-                    .build());
+                    .build(), McpJsonMapper.getDefault());
         } else {
             //sse 通道
             URI url = URI.create(clientProps.getUrl());
@@ -230,10 +231,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 .clientInfo(new McpSchema.Implementation(clientProps.getName(), clientProps.getVersion()))
                 .requestTimeout(clientProps.getRequestTimeout())
                 .initializationTimeout(clientProps.getInitializationTimeout())
-                .loggingConsumer(logging -> {
-                    logging.setLevel(loggingLevel);
-                    return Mono.empty();
-                })
                 .toolsChangeConsumer(this::onToolsChange)
                 .resourcesChangeConsumer(this::onResourcesChange)
                 .resourcesUpdateConsumer(this::onResourcesUpdate)
@@ -441,14 +438,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     public Text callToolAsText(String name, Map<String, Object> args) {
         McpSchema.CallToolResult result = callTool(name, args);
 
-        if (Utils.isEmpty(result.getContent())) {
+        if (Utils.isEmpty(result.content())) {
             return null;
         } else {
-            McpSchema.Content tmp = result.getContent().get(0);
+            McpSchema.Content tmp = result.content().get(0);
 
             if (tmp instanceof McpSchema.TextContent) {
-                String textContent = ((McpSchema.TextContent) tmp).getText();
-                if (result.getIsError() != null && result.getIsError()) {
+                String textContent = ((McpSchema.TextContent) tmp).text();
+                if (result.isError() != null && result.isError()) {
                     //如果是错误信息，自动添加 Error: 开头（方便 llm 识别）
                     if (textContent.startsWith("Error:")) {
                         return Text.of(false, textContent);
@@ -473,14 +470,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     public Image callToolAsImage(String name, Map<String, Object> args) {
         McpSchema.CallToolResult result = callTool(name, args);
 
-        if (Utils.isEmpty(result.getContent())) {
+        if (Utils.isEmpty(result.content())) {
             return null;
         } else {
-            McpSchema.Content tmp = result.getContent().get(0);
+            McpSchema.Content tmp = result.content().get(0);
 
             if (tmp instanceof McpSchema.ImageContent) {
                 McpSchema.ImageContent imageContent = (McpSchema.ImageContent) tmp;
-                return Image.ofBase64(imageContent.getData(), imageContent.getMimeType());
+                return Image.ofBase64(imageContent.data(), imageContent.mimeType());
             } else {
                 throw new IllegalArgumentException("The tool result content is not a image content.");
             }
@@ -496,14 +493,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     public Audio callToolAsAudio(String name, Map<String, Object> args) {
         McpSchema.CallToolResult result = callTool(name, args);
 
-        if (Utils.isEmpty(result.getContent())) {
+        if (Utils.isEmpty(result.content())) {
             return null;
         } else {
-            McpSchema.Content tmp = result.getContent().get(0);
+            McpSchema.Content tmp = result.content().get(0);
 
             if (tmp instanceof McpSchema.AudioContent) {
                 McpSchema.AudioContent audioContent = (McpSchema.AudioContent) tmp;
-                return Audio.ofBase64(audioContent.getData(), audioContent.getMimeType());
+                return Audio.ofBase64(audioContent.data(), audioContent.mimeType());
             } else {
                 throw new IllegalArgumentException("The tool result content is not a audio content.");
             }
@@ -520,7 +517,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
         McpSchema.CallToolResult result = getClient().callTool(callToolRequest).block();
 
-        if (result.getIsError() != null && result.getIsError()) {
+        if (result.isError() != null && result.isError()) {
             log.warn("The tool result is error: {}", result);
         }
 
@@ -538,17 +535,17 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     public Text readResourceAsText(String uri) {
         McpSchema.ReadResourceResult result = readResource(uri);
 
-        if (Utils.isEmpty(result.getContents())) {
+        if (Utils.isEmpty(result.contents())) {
             return null;
         } else {
-            McpSchema.ResourceContents tmp = result.getContents().get(0);
+            McpSchema.ResourceContents tmp = result.contents().get(0);
 
             if (tmp instanceof McpSchema.TextResourceContents) {
                 McpSchema.TextResourceContents textContents = (McpSchema.TextResourceContents) tmp;
-                return Text.of(false, textContents.getText(), textContents.getMimeType());
+                return Text.of(false, textContents.text(), textContents.mimeType());
             } else {
                 McpSchema.BlobResourceContents blobContents = (McpSchema.BlobResourceContents) tmp;
-                return Text.of(true, blobContents.getBlob(), blobContents.getMimeType());
+                return Text.of(true, blobContents.blob(), blobContents.mimeType());
             }
         }
     }
@@ -579,25 +576,25 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         McpSchema.GetPromptResult result = getPrompt(name, args);
 
-        if (Utils.isNotEmpty(result.getMessages())) {
+        if (Utils.isNotEmpty(result.messages())) {
             //如果非空
-            for (McpSchema.PromptMessage pm : result.getMessages()) {
-                McpSchema.Content content = pm.getContent();
-                if (pm.getRole() == McpSchema.Role.ASSISTANT) {
+            for (McpSchema.PromptMessage pm : result.messages()) {
+                McpSchema.Content content = pm.content();
+                if (pm.role() == McpSchema.Role.ASSISTANT) {
                     if (content instanceof McpSchema.TextContent) {
-                        tmp.add(ChatMessage.ofAssistant(((McpSchema.TextContent) content).getText()));
+                        tmp.add(ChatMessage.ofAssistant(((McpSchema.TextContent) content).text()));
                     }
                 } else {
                     if (content instanceof McpSchema.TextContent) {
-                        tmp.add(ChatMessage.ofUser(((McpSchema.TextContent) content).getText()));
+                        tmp.add(ChatMessage.ofUser(((McpSchema.TextContent) content).text()));
                     } else if (content instanceof McpSchema.ImageContent) {
                         McpSchema.ImageContent imageContent = ((McpSchema.ImageContent) content);
-                        String contentData = imageContent.getData();
+                        String contentData = imageContent.data();
 
                         if (contentData.contains("://")) {
                             tmp.add(ChatMessage.ofUser(Image.ofUrl(contentData)));
                         } else {
-                            tmp.add(ChatMessage.ofUser(Image.ofBase64(contentData, imageContent.getMimeType())));
+                            tmp.add(ChatMessage.ofUser(Image.ofBase64(contentData, imageContent.mimeType())));
                         }
                     }
                 }
@@ -669,18 +666,18 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             result = getClient().listTools(cursor).block();
         }
 
-        for (McpSchema.Tool tool : result.getTools()) {
-            String name = tool.getName();
-            String title = tool.getTitle();
-            String description = tool.getDescription();
+        for (McpSchema.Tool tool : result.tools()) {
+            String name = tool.name();
+            String title = tool.title();
+            String description = tool.description();
 
-            Boolean returnDirect = (tool.getAnnotations() == null ? null : tool.getAnnotations().getReturnDirect());
+            Boolean returnDirect = (tool.annotations() == null ? null : tool.annotations().returnDirect());
             if (returnDirect == null) {
                 returnDirect = false;
             }
 
-            String inputSchema = ONode.serialize(tool.getInputSchema());
-            String outputSchema = (tool.getOutputSchema() == null ? null : ONode.serialize(tool.getOutputSchema()));
+            String inputSchema = ONode.serialize(tool.inputSchema());
+            String outputSchema = (tool.outputSchema() == null ? null : ONode.serialize(tool.outputSchema()));
 
             FunctionToolDesc functionRefer = new FunctionToolDesc(
                     name,
@@ -720,15 +717,15 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             result = getClient().listResources(cursor).block();
         }
 
-        for (McpSchema.Resource resource : result.getResources()) {
-            String name = resource.getName();
-            String uri = resource.getUri();
-            String description = resource.getDescription();
+        for (McpSchema.Resource resource : result.resources()) {
+            String name = resource.name();
+            String uri = resource.uri();
+            String description = resource.description();
 
             FunctionResourceDesc functionDesc = new FunctionResourceDesc(name);
             functionDesc.description(description);
             functionDesc.uri(uri);
-            functionDesc.mimeType(resource.getMimeType());
+            functionDesc.mimeType(resource.mimeType());
             functionDesc.doHandle((reqUri) -> readResourceAsText(reqUri));
 
 
@@ -759,15 +756,15 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             result = getClient().listResourceTemplates(cursor).block();
         }
 
-        for (McpSchema.ResourceTemplate resource : result.getResourceTemplates()) {
-            String name = resource.getName();
-            String uriTemplate = resource.getUriTemplate();
-            String description = resource.getDescription();
+        for (McpSchema.ResourceTemplate resource : result.resourceTemplates()) {
+            String name = resource.name();
+            String uriTemplate = resource.uriTemplate();
+            String description = resource.description();
 
             FunctionResourceDesc functionDesc = new FunctionResourceDesc(name);
             functionDesc.description(description);
             functionDesc.uri(uriTemplate);
-            functionDesc.mimeType(resource.getMimeType());
+            functionDesc.mimeType(resource.mimeType());
             functionDesc.doHandle((reqUri) -> readResourceAsText(reqUri));
 
 
@@ -799,14 +796,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             result = getClient().listPrompts(cursor).block();
         }
 
-        for (McpSchema.Prompt prompt : result.getPrompts()) {
-            String name = prompt.getName();
-            String description = prompt.getDescription();
+        for (McpSchema.Prompt prompt : result.prompts()) {
+            String name = prompt.name();
+            String description = prompt.description();
 
             FunctionPromptDesc functionDesc = new FunctionPromptDesc(name);
             functionDesc.description(description);
-            for (McpSchema.PromptArgument p1 : prompt.getArguments()) {
-                functionDesc.paramAdd(p1.getName(), p1.getRequired(), p1.getDescription());
+            for (McpSchema.PromptArgument p1 : prompt.arguments()) {
+                functionDesc.paramAdd(p1.name(), p1.required(), p1.description());
             }
 
             functionDesc.doHandle((args) -> getPromptAsMessages(name, args));

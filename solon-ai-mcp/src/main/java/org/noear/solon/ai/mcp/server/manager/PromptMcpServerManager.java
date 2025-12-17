@@ -83,7 +83,7 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
                     (exchange, request) -> {
                         return Mono.create(sink -> {
                             ContextHolder.currentWith(new McpServerContext(exchange), () -> {
-                                functionPrompt.handleAsync(request.getArguments()).whenComplete((prompts, err) -> {
+                                functionPrompt.handleAsync(request.arguments()).whenComplete((prompts, err) -> {
                                     if (err != null) {
                                         err = Utils.throwableUnwrap(err);
                                         sink.error(new McpException(err.getMessage(), err));

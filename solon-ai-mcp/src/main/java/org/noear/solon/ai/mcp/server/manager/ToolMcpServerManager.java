@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.manager;
 
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
@@ -75,16 +76,18 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
             // 构建 inputSchema JSON 字符串
             String inSchemaJson = buildJsonSchema(functionTool).toJson();
 
-            McpSchema.ToolAnnotations toolAnnotations = new McpSchema.ToolAnnotations();
-            toolAnnotations.setReturnDirect(functionTool.returnDirect());
+            McpSchema.ToolAnnotations toolAnnotations =McpSchema.ToolAnnotations.builder()
+                    .returnDirect(functionTool.returnDirect())
+                    .build();
+
 
             McpSchema.Tool.Builder toolBuilder = McpSchema.Tool.builder()
                     .name(functionTool.name()).title(functionTool.title()).description(functionTool.description())
                     .annotations(toolAnnotations)
-                    .inputSchema(inSchemaJson);
+                    .inputSchema(McpJsonMapper.getDefault(), inSchemaJson);
 
             if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
-                toolBuilder.outputSchema(functionTool.outputSchema());
+                toolBuilder.outputSchema(McpJsonMapper.getDefault(), functionTool.outputSchema());
             }
 
             // 注册实际调用逻辑

@@ -16,6 +16,7 @@
 package org.noear.solon.ai.mcp.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.transport.*;
@@ -129,7 +130,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
         if (McpChannel.STDIO.equalsIgnoreCase(serverProps.getChannel())) {
             //stdio 通道
-            this.mcpTransportProvider = new StdioServerTransportProvider();
+            this.mcpTransportProvider = new StdioServerTransportProvider(McpJsonMapper.getDefault());
 
             mcpServerSpec = McpServer.async((StdioServerTransportProvider) this.mcpTransportProvider)
                     .capabilities(serverCapabilities)
@@ -140,9 +141,8 @@ public class McpServerEndpointProvider implements LifecycleBean {
                 this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
                         .sseEndpoint(this.mcpEndpoint)
                         .messageEndpoint(this.messageEndpoint)
-                        .baseUrl(serverProps.getContextPath())
+                        .basePath(serverProps.getContextPath())
                         .keepAliveInterval(serverProps.getHeartbeatInterval())
-                        .objectMapper(new ObjectMapper())
                         .build();
 
                 mcpServerSpec = McpServer.async((WebRxSseServerTransportProvider) this.mcpTransportProvider)
@@ -150,9 +150,8 @@ public class McpServerEndpointProvider implements LifecycleBean {
                         .serverInfo(serverProps.getName(), serverProps.getVersion());
             } else {
                 this.mcpTransportProvider = WebRxStreamableServerTransportProvider.builder()
-                        .mcpEndpoint(this.mcpEndpoint)
+                        .messageEndpoint(this.mcpEndpoint)
                         .keepAliveInterval(serverProps.getHeartbeatInterval())
-                        .objectMapper(new ObjectMapper())
                         .build();
 
                 mcpServerSpec = McpServer.async((WebRxStreamableServerTransportProvider) this.mcpTransportProvider)

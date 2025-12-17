@@ -78,7 +78,7 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
                     (exchange, request) -> {
                         return Mono.create(sink -> {
                             ContextHolder.currentWith(new McpServerContext(exchange), () -> {
-                                functionResource.handleAsync(request.getUri()).whenComplete((res, err) -> {
+                                functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
 
                                     if (err != null) {
                                         err = Utils.throwableUnwrap(err);
@@ -87,12 +87,12 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
                                         final McpSchema.ReadResourceResult result;
                                         if (res.isBase64()) {
                                             result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                                                    request.getUri(),
+                                                    request.uri(),
                                                     functionResource.mimeType(),
                                                     res.getContent())));
                                         } else {
                                             result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                                                    request.getUri(),
+                                                    request.uri(),
                                                     functionResource.mimeType(),
                                                     res.getContent())));
                                         }
