@@ -271,7 +271,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		return RxEntity.ok()
 				.contentType(MimeType.TEXT_EVENT_STREAM_VALUE)
 				.body(Flux.<SseEvent>create(sink -> {
-					WebFluxMcpSessionTransport sessionTransport = new WebFluxMcpSessionTransport(sink);
+					WebRxSseMcpSessionTransport sessionTransport = new WebRxSseMcpSessionTransport(sink);
 
 					McpServerSession session = sessionFactory.create(sessionTransport);
 					String sessionId = session.getId();
@@ -376,11 +376,11 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
 
-	private class WebFluxMcpSessionTransport implements McpServerTransport {
+	private class WebRxSseMcpSessionTransport implements McpServerTransport {
 
 		private final FluxSink<SseEvent> sink;
 
-		public WebFluxMcpSessionTransport(FluxSink<SseEvent> sink) {
+		public WebRxSseMcpSessionTransport(FluxSink<SseEvent> sink) {
 			this.sink = sink;
 		}
 

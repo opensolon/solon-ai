@@ -241,7 +241,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 			return RxEntity.ok()
 					.contentType(MimeType.TEXT_EVENT_STREAM_VALUE)
 					.body(Flux.<SseEvent>create(sink -> {
-						WebFluxStreamableMcpSessionTransport sessionTransport = new WebFluxStreamableMcpSessionTransport(
+						WebRxStreamableMcpSessionTransport sessionTransport = new WebRxStreamableMcpSessionTransport(
 								sink);
 						McpStreamableServerSession.McpStreamableServerSessionStream listeningStream = session
 								.listeningStream(sessionTransport);
@@ -336,7 +336,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 							return RxEntity.ok()
 									.contentType(MimeType.TEXT_EVENT_STREAM_VALUE)
 									.body(Flux.<SseEvent>create(sink -> {
-												WebFluxStreamableMcpSessionTransport st = new WebFluxStreamableMcpSessionTransport(sink);
+												WebRxStreamableMcpSessionTransport st = new WebRxStreamableMcpSessionTransport(sink);
 												Mono<Void> stream = session.responseStream(jsonrpcRequest, st);
 												Disposable streamSubscription = stream.onErrorComplete(err -> {
 													sink.error(err);
@@ -394,11 +394,11 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 		}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
 
-	private class WebFluxStreamableMcpSessionTransport implements McpStreamableServerTransport {
+	private class WebRxStreamableMcpSessionTransport implements McpStreamableServerTransport {
 
 		private final FluxSink<SseEvent> sink;
 
-		public WebFluxStreamableMcpSessionTransport(FluxSink<SseEvent> sink) {
+		public WebRxStreamableMcpSessionTransport(FluxSink<SseEvent> sink) {
 			this.sink = sink;
 		}
 
