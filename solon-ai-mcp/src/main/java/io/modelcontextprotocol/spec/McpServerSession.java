@@ -4,25 +4,27 @@
 
 package io.modelcontextprotocol.spec;
 
+import java.time.Duration;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
 import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpInitRequestHandler;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
+import lombok.var;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
-
-import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Represents a Model Context Protocol (MCP) session on the server side. It manages
@@ -70,14 +72,14 @@ public class McpServerSession implements McpLoggableSession {
 	 * @param id session id
 	 * @param transport the transport to use
 	 * @param initHandler called when a
-	 * {@link McpSchema.InitializeRequest} is received by the
+	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
 	 * server
 	 * @param requestHandlers map of request handlers to use
 	 * @param notificationHandlers map of notification handlers to use
 	 */
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
-			McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
-			Map<String, McpNotificationHandler> notificationHandlers) {
+							McpInitRequestHandler initHandler, Map<String, McpRequestHandler<?>> requestHandlers,
+							Map<String, McpNotificationHandler> notificationHandlers) {
 		this.id = id;
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
@@ -91,10 +93,10 @@ public class McpServerSession implements McpLoggableSession {
 	 * @param id session id
 	 * @param transport the transport to use
 	 * @param initHandler called when a
-	 * {@link McpSchema.InitializeRequest} is received by the
+	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
 	 * server
 	 * @param initNotificationHandler called when a
-	 * {@link McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
+	 * {@link io.modelcontextprotocol.spec.McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
 	 * received.
 	 * @param requestHandlers map of request handlers to use
 	 * @param notificationHandlers map of notification handlers to use
@@ -103,9 +105,9 @@ public class McpServerSession implements McpLoggableSession {
 	 */
 	@Deprecated
 	public McpServerSession(String id, Duration requestTimeout, McpServerTransport transport,
-			McpInitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
-			Map<String, McpRequestHandler<?>> requestHandlers,
-			Map<String, McpNotificationHandler> notificationHandlers) {
+							McpInitRequestHandler initHandler, InitNotificationHandler initNotificationHandler,
+							Map<String, McpRequestHandler<?>> requestHandlers,
+							Map<String, McpNotificationHandler> notificationHandlers) {
 		this.id = id;
 		this.requestTimeout = requestTimeout;
 		this.transport = transport;
@@ -193,7 +195,7 @@ public class McpServerSession implements McpLoggableSession {
 	 * specified by the MCP server implementation
 	 * ({@link io.modelcontextprotocol.server.McpAsyncServer} or
 	 * {@link io.modelcontextprotocol.server.McpSyncServer}) via
-	 * {@link Factory} that the server creates.
+	 * {@link McpServerSession.Factory} that the server creates.
 	 * @param message the incoming JSON-RPC message
 	 * @return a Mono that completes when the message is processed
 	 */
@@ -203,7 +205,9 @@ public class McpServerSession implements McpLoggableSession {
 
 			// TODO handle errors for communication to without initialization happening
 			// first
-			if (message instanceof McpSchema.JSONRPCResponse response) {
+			if (message instanceof McpSchema.JSONRPCResponse) {
+				McpSchema.JSONRPCResponse response = (McpSchema.JSONRPCResponse) message;
+
 				logger.debug("Received response: {}", response);
 				if (response.id() != null) {
 					var sink = pendingResponses.remove(response.id());
@@ -221,26 +225,39 @@ public class McpServerSession implements McpLoggableSession {
 				}
 				return Mono.empty();
 			}
-			else if (message instanceof McpSchema.JSONRPCRequest request) {
+			else if (message instanceof McpSchema.JSONRPCRequest) {
+				McpSchema.JSONRPCRequest request = (McpSchema.JSONRPCRequest) message;
+
 				logger.debug("Received request: {}", request);
-				return handleIncomingRequest(request, transportContext).onErrorResume(error -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
-							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-											error.getMessage(), McpError.aggregateExceptionMessages(error));
+				return handleIncomingRequest(request, transportContext).onErrorResume(e -> {
+					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = Optional.of(e).map(t -> {
+						if(t instanceof McpError){
+							McpError mcpError = (McpError) t;
+							if(mcpError.getJsonRpcError() != null){
+								return mcpError.getJsonRpcError();
+							}
+						}
+
+						return new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+								e.getMessage(), McpError.aggregateExceptionMessages(e));
+					}).get();
+
+
 					var errorResponse = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null,
 							jsonRpcError);
 					// TODO: Should the error go to SSE or back as POST return?
 					return this.transport.sendMessage(errorResponse).then(Mono.empty());
 				}).flatMap(this.transport::sendMessage);
 			}
-			else if (message instanceof McpSchema.JSONRPCNotification notification) {
+			else if (message instanceof McpSchema.JSONRPCNotification) {
+				McpSchema.JSONRPCNotification notification = (McpSchema.JSONRPCNotification) message;
+
 				// TODO handle errors for communication to without initialization
 				// happening first
 				logger.debug("Received notification: {}", notification);
 				// TODO: in case of error, should the POST request be signalled?
 				return handleIncomingNotification(notification, transportContext)
-					.doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()));
+						.doOnError(error -> logger.error("Error handling notification: {}", error.getMessage()));
 			}
 			else {
 				logger.warn("Received unknown message type: {}", message);
@@ -256,7 +273,7 @@ public class McpServerSession implements McpLoggableSession {
 	 * @return A Mono containing the JSON-RPC response
 	 */
 	private Mono<McpSchema.JSONRPCResponse> handleIncomingRequest(McpSchema.JSONRPCRequest request,
-			McpTransportContext transportContext) {
+																  McpTransportContext transportContext) {
 		return Mono.defer(() -> {
 			Mono<?> resultMono;
 			if (McpSchema.METHOD_INITIALIZE.equals(request.method())) {
@@ -281,19 +298,27 @@ public class McpServerSession implements McpLoggableSession {
 				}
 
 				resultMono = this.exchangeSink.asMono()
-					.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), request.params()));
+						.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), request.params()));
 			}
 			return resultMono
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
-				.onErrorResume(error -> {
-					McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = (error instanceof McpError mcpError
-							&& mcpError.getJsonRpcError() != null) ? mcpError.getJsonRpcError()
-									// TODO: add error message through the data field
-									: new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
-											error.getMessage(), McpError.aggregateExceptionMessages(error));
-					return Mono.just(
-							new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, jsonRpcError));
-				});
+					.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null))
+					.onErrorResume(e -> {
+						McpSchema.JSONRPCResponse.JSONRPCError jsonRpcError = Optional.of(e).map(t -> {
+							if(t instanceof McpError){
+								McpError mcpError = (McpError) t;
+								if(mcpError.getJsonRpcError() != null){
+									return mcpError.getJsonRpcError();
+								}
+							}
+
+							// TODO: add error message through the data field
+							return new McpSchema.JSONRPCResponse.JSONRPCError(McpSchema.ErrorCodes.INTERNAL_ERROR,
+									t.getMessage(), McpError.aggregateExceptionMessages(t));
+						}).get();
+
+						return Mono.just(
+								new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), null, jsonRpcError));
+					});
 		});
 	}
 
@@ -304,7 +329,7 @@ public class McpServerSession implements McpLoggableSession {
 	 * @return A Mono that completes when the notification is processed
 	 */
 	private Mono<Void> handleIncomingNotification(McpSchema.JSONRPCNotification notification,
-			McpTransportContext transportContext) {
+												  McpTransportContext transportContext) {
 		return Mono.defer(() -> {
 			if (McpSchema.METHOD_NOTIFICATION_INITIALIZED.equals(notification.method())) {
 				this.state.lazySet(STATE_INITIALIZED);
@@ -320,7 +345,7 @@ public class McpServerSession implements McpLoggableSession {
 				return Mono.empty();
 			}
 			return this.exchangeSink.asMono()
-				.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), notification.params()));
+					.flatMap(exchange -> handler.handle(copyExchange(exchange, transportContext), notification.params()));
 		});
 	}
 
@@ -336,7 +361,26 @@ public class McpServerSession implements McpLoggableSession {
 				exchange.getClientInfo(), transportContext);
 	}
 
-	record MethodNotFoundError(String method, String message, Object data) {
+	public static class MethodNotFoundError {
+		private String method;
+		private String message;
+		private Object data;
+
+		public MethodNotFoundError(String method, String message, Object data) {
+			this.method = method;
+			this.message = message;
+			this.data = data;
+		}
+
+		public String method() {
+			return method;
+		}
+		public String message() {
+			return message;
+		}
+		public Object data() {
+			return data;
+		}
 	}
 
 	private MethodNotFoundError getMethodNotFoundError(String method) {
