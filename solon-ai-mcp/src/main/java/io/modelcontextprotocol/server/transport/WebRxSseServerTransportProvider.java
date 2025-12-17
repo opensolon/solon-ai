@@ -28,7 +28,9 @@ import reactor.core.publisher.Mono;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -110,6 +112,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * Map of active client sessions, keyed by session ID.
 	 */
 	private final ConcurrentHashMap<String, McpServerSession> sessions = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, Context> sessionRequests = new ConcurrentHashMap<>();
 
     private McpTransportContextExtractor<Context> contextExtractor;
 
@@ -275,6 +278,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 					logger.debug("Created new SSE connection for session: {}", sessionId);
 					sessions.put(sessionId, session);
+					sessionRequests.put(sessionId, request);
 
 					// Send initial endpoint event
 					logger.debug("Sending initial endpoint event to session: {}", sessionId);
@@ -282,6 +286,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 					sink.onCancel(() -> {
 						logger.debug("Session {} cancelled", sessionId);
 						sessions.remove(sessionId);
+						sessionRequests.remove(sessionId);
 					});
 				}).contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext)));
 	}
@@ -340,14 +345,16 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 			return RxEntity.badRequest().body(new McpError("Session ID missing in message endpoint"));
 		}
 
-		McpServerSession session = sessions.get(request.param("sessionId"));
+		String sessionId = request.param("sessionId");
+		McpServerSession session = sessions.get(sessionId);
+		Context sessionRequest = sessionRequests.get(sessionId);
 
 		if (session == null) {
 			return RxEntity.status(StatusCodes.CODE_NOT_FOUND)
-					.body(new McpError("Session not found: " + request.param("sessionId")));
+					.body(new McpError("Session not found: " + sessionId));
 		}
 
-		McpTransportContext transportContext = this.contextExtractor.extract(request);
+		McpTransportContext transportContext = this.contextExtractor.extract(sessionRequest);
 
 
 		return Mono.just(request.body()).flatMap(body -> {
@@ -437,8 +444,11 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 
 		private Duration keepAliveInterval;
 
-		private McpTransportContextExtractor<Context> contextExtractor = (
-				serverRequest) -> McpTransportContext.EMPTY;
+		private McpTransportContextExtractor<Context> contextExtractor = (serverRequest) -> {
+			Map<String,Object> context = new HashMap<>();
+			context.put(Context.class.getName(), serverRequest);
+			return McpTransportContext.create(context);
+		};
 
 		/**
 		 * Sets the McpJsonMapper to use for JSON serialization/deserialization of MCP

@@ -30,7 +30,9 @@ import reactor.core.publisher.Mono;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -460,8 +462,11 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 
 		private String mcpEndpoint = "/mcp";
 
-		private McpTransportContextExtractor<Context> contextExtractor = (
-				serverRequest) -> McpTransportContext.EMPTY;
+		private McpTransportContextExtractor<Context> contextExtractor = (serverRequest) -> {
+			Map<String,Object> context = new HashMap<>();
+			context.put(Context.class.getName(), serverRequest);
+			return McpTransportContext.create(context);
+		};
 
 		private boolean disallowDelete;
 
