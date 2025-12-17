@@ -15,6 +15,7 @@ import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
 import io.modelcontextprotocol.util.McpUriTemplateManagerFactory;
+import lombok.var;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -1373,7 +1374,7 @@ public interface McpServer {
 		public SyncSpecification<S> rootsChangeHandlers(
 				BiConsumer<McpSyncServerExchange, List<McpSchema.Root>>... handlers) {
 			Assert.notNull(handlers, "Handlers list must not be null");
-			return this.rootsChangeHandlers(List.of(handlers));
+			return this.rootsChangeHandlers(Arrays.asList(handlers));
 		}
 
 		/**
