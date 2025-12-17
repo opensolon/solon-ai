@@ -273,7 +273,15 @@ class LifecycleInitializer {
 	public <T> Mono<T> withInitialization(String actionName, Function<Initialization, Mono<T>> operation) {
 		return Mono.deferContextual(ctx -> {
 			DefaultInitialization newInit = new DefaultInitialization();
-			DefaultInitialization previous = this.initializationRef.compareAndExchange(null, newInit);
+			DefaultInitialization previous = initializationRef.get();
+
+			if (previous == null) {
+				if (initializationRef.compareAndSet(null, newInit)) {
+					previous = null;
+				} else {
+					previous = initializationRef.get();
+				}
+			}
 
 			boolean needsToInitialize = previous == null;
 			logger.debug(needsToInitialize ? "Initialization process started" : "Joining previous initialization");

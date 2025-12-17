@@ -10,10 +10,7 @@ import io.modelcontextprotocol.util.Utils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -52,31 +49,25 @@ class McpClientFeatures {
 	 * Asynchronous client features specification providing the capabilities and request
 	 * and notification handlers.
 	 *
-	 * @param clientInfo the client implementation information.
-	 * @param clientCapabilities the client capabilities.
-	 * @param roots the roots.
-	 * @param toolsChangeConsumers the tools change consumers.
-	 * @param resourcesChangeConsumers the resources change consumers.
-	 * @param promptsChangeConsumers the prompts change consumers.
-	 * @param loggingConsumers the logging consumers.
-	 * @param progressConsumers the progress consumers.
-	 * @param samplingHandler the sampling handler.
-	 * @param elicitationHandler the elicitation handler.
-	 * @param enableCallToolSchemaCaching whether to enable call tool schema caching.
 	 */
-	record Async(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
-			Map<String, McpSchema.Root> roots, List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers,
-			List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers,
-			List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers,
-			List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers,
-			List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers,
-			List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers,
-			Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
-			Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler,
-			boolean enableCallToolSchemaCaching) {
+	 public static class Async {
+		private McpSchema.Implementation clientInfo;
+		private McpSchema.ClientCapabilities clientCapabilities;
+		private Map<String, McpSchema.Root> roots;
+		private List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers;
+		private List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers;
+		private List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers;
+		private List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers;
+		private List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers;
+		private List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers;
+		private Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler;
+		private Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler;
+		private boolean enableCallToolSchemaCaching;
 
 		/**
 		 * Create an instance and validate the arguments.
+
+		 * @param clientInfo the client implementation information.
 		 * @param clientCapabilities the client capabilities.
 		 * @param roots the roots.
 		 * @param toolsChangeConsumers the tools change consumers.
@@ -109,15 +100,63 @@ class McpClientFeatures {
 							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null);
 			this.roots = roots != null ? new ConcurrentHashMap<>(roots) : new ConcurrentHashMap<>();
 
-			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
-			this.resourcesChangeConsumers = resourcesChangeConsumers != null ? resourcesChangeConsumers : List.of();
-			this.resourcesUpdateConsumers = resourcesUpdateConsumers != null ? resourcesUpdateConsumers : List.of();
-			this.promptsChangeConsumers = promptsChangeConsumers != null ? promptsChangeConsumers : List.of();
-			this.loggingConsumers = loggingConsumers != null ? loggingConsumers : List.of();
-			this.progressConsumers = progressConsumers != null ? progressConsumers : List.of();
+			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : new ArrayList<>();
+			this.resourcesChangeConsumers = resourcesChangeConsumers != null ? resourcesChangeConsumers : new ArrayList<>();
+			this.resourcesUpdateConsumers = resourcesUpdateConsumers != null ? resourcesUpdateConsumers : new ArrayList<>();
+			this.promptsChangeConsumers = promptsChangeConsumers != null ? promptsChangeConsumers : new ArrayList<>();
+			this.loggingConsumers = loggingConsumers != null ? loggingConsumers : new ArrayList<>();
+			this.progressConsumers = progressConsumers != null ? progressConsumers : new ArrayList<>();
 			this.samplingHandler = samplingHandler;
 			this.elicitationHandler = elicitationHandler;
 			this.enableCallToolSchemaCaching = enableCallToolSchemaCaching;
+		}
+
+		public McpSchema.Implementation clientInfo() {
+			return clientInfo;
+		}
+
+		public McpSchema.ClientCapabilities clientCapabilities() {
+			return clientCapabilities;
+		}
+
+		public Map<String, McpSchema.Root> roots() {
+			return roots;
+		}
+
+		public List<Function<List<McpSchema.Tool>, Mono<Void>>> toolsChangeConsumers() {
+			return toolsChangeConsumers;
+		}
+
+		public List<Function<List<McpSchema.Resource>, Mono<Void>>> resourcesChangeConsumers() {
+			return resourcesChangeConsumers;
+		}
+
+		public List<Function<List<McpSchema.ResourceContents>, Mono<Void>>> resourcesUpdateConsumers() {
+			return resourcesUpdateConsumers;
+		}
+
+		public List<Function<List<McpSchema.Prompt>, Mono<Void>>> promptsChangeConsumers() {
+			return promptsChangeConsumers;
+		}
+
+		public List<Function<McpSchema.LoggingMessageNotification, Mono<Void>>> loggingConsumers() {
+			return loggingConsumers;
+		}
+
+		public List<Function<McpSchema.ProgressNotification, Mono<Void>>> progressConsumers() {
+			return progressConsumers;
+		}
+
+		public Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler() {
+			return samplingHandler;
+		}
+
+		public Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler() {
+			return elicitationHandler;
+		}
+
+		public boolean enableCallToolSchemaCaching() {
+			return enableCallToolSchemaCaching;
 		}
 
 		/**
@@ -133,7 +172,7 @@ class McpClientFeatures {
 				Function<McpSchema.CreateMessageRequest, Mono<McpSchema.CreateMessageResult>> samplingHandler,
 				Function<McpSchema.ElicitRequest, Mono<McpSchema.ElicitResult>> elicitationHandler) {
 			this(clientInfo, clientCapabilities, roots, toolsChangeConsumers, resourcesChangeConsumers,
-					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, List.of(), samplingHandler,
+					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, Arrays.asList(), samplingHandler,
 					elicitationHandler, false);
 		}
 
@@ -201,37 +240,29 @@ class McpClientFeatures {
 	 * Synchronous client features specification providing the capabilities and request
 	 * and notification handlers.
 	 *
-	 * @param clientInfo the client implementation information.
-	 * @param clientCapabilities the client capabilities.
-	 * @param roots the roots.
-	 * @param toolsChangeConsumers the tools change consumers.
-	 * @param resourcesChangeConsumers the resources change consumers.
-	 * @param promptsChangeConsumers the prompts change consumers.
-	 * @param loggingConsumers the logging consumers.
-	 * @param progressConsumers the progress consumers.
-	 * @param samplingHandler the sampling handler.
-	 * @param elicitationHandler the elicitation handler.
-	 * @param enableCallToolSchemaCaching whether to enable call tool schema caching.
 	 */
-	public record Sync(McpSchema.Implementation clientInfo, McpSchema.ClientCapabilities clientCapabilities,
-			Map<String, McpSchema.Root> roots, List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers,
-			List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers,
-			List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers,
-			List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers,
-			List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers,
-			List<Consumer<McpSchema.ProgressNotification>> progressConsumers,
-			Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
-			Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler,
-			boolean enableCallToolSchemaCaching) {
+	public static class Sync {
+		private McpSchema.Implementation clientInfo;
+		private McpSchema.ClientCapabilities clientCapabilities;
+		private Map<String, McpSchema.Root> roots;
+		private List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers;
+		private List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers;
+		private List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers;
+		private List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers;
+		private List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers;
+		private List<Consumer<McpSchema.ProgressNotification>> progressConsumers;
+		private Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler;
+		private Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler;
+		private boolean enableCallToolSchemaCaching;
 
 		/**
 		 * Create an instance and validate the arguments.
+		 *
 		 * @param clientInfo the client implementation information.
 		 * @param clientCapabilities the client capabilities.
 		 * @param roots the roots.
 		 * @param toolsChangeConsumers the tools change consumers.
 		 * @param resourcesChangeConsumers the resources change consumers.
-		 * @param resourcesUpdateConsumers the resource update consumers.
 		 * @param promptsChangeConsumers the prompts change consumers.
 		 * @param loggingConsumers the logging consumers.
 		 * @param progressConsumers the progress consumers.
@@ -259,15 +290,63 @@ class McpClientFeatures {
 							elicitationHandler != null ? new McpSchema.ClientCapabilities.Elicitation() : null);
 			this.roots = roots != null ? new HashMap<>(roots) : new HashMap<>();
 
-			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : List.of();
-			this.resourcesChangeConsumers = resourcesChangeConsumers != null ? resourcesChangeConsumers : List.of();
-			this.resourcesUpdateConsumers = resourcesUpdateConsumers != null ? resourcesUpdateConsumers : List.of();
-			this.promptsChangeConsumers = promptsChangeConsumers != null ? promptsChangeConsumers : List.of();
-			this.loggingConsumers = loggingConsumers != null ? loggingConsumers : List.of();
-			this.progressConsumers = progressConsumers != null ? progressConsumers : List.of();
+			this.toolsChangeConsumers = toolsChangeConsumers != null ? toolsChangeConsumers : new ArrayList<>();
+			this.resourcesChangeConsumers = resourcesChangeConsumers != null ? resourcesChangeConsumers : new ArrayList<>();
+			this.resourcesUpdateConsumers = resourcesUpdateConsumers != null ? resourcesUpdateConsumers : new ArrayList<>();
+			this.promptsChangeConsumers = promptsChangeConsumers != null ? promptsChangeConsumers : new ArrayList<>();
+			this.loggingConsumers = loggingConsumers != null ? loggingConsumers : new ArrayList<>();
+			this.progressConsumers = progressConsumers != null ? progressConsumers : new ArrayList<>();
 			this.samplingHandler = samplingHandler;
 			this.elicitationHandler = elicitationHandler;
 			this.enableCallToolSchemaCaching = enableCallToolSchemaCaching;
+		}
+
+		public McpSchema.Implementation clientInfo(){
+			return clientInfo;
+		}
+
+		public McpSchema.ClientCapabilities clientCapabilities(){
+			return clientCapabilities;
+		}
+
+		public Map<String, McpSchema.Root> roots(){
+			return roots;
+		}
+
+		public List<Consumer<List<McpSchema.Tool>>> toolsChangeConsumers(){
+			return toolsChangeConsumers;
+		}
+
+		public List<Consumer<List<McpSchema.Resource>>> resourcesChangeConsumers(){
+			return resourcesChangeConsumers;
+		}
+
+		public List<Consumer<List<McpSchema.ResourceContents>>> resourcesUpdateConsumers(){
+			return resourcesUpdateConsumers;
+		}
+
+		public List<Consumer<List<McpSchema.Prompt>>> promptsChangeConsumers(){
+			return promptsChangeConsumers;
+		}
+
+		public List<Consumer<McpSchema.LoggingMessageNotification>> loggingConsumers(){
+			return loggingConsumers;
+		}
+
+		public List<Consumer<McpSchema.ProgressNotification>> progressConsumers(){
+			return progressConsumers;
+		}
+
+		public Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler(){
+			return samplingHandler;
+		}
+
+		public Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler(){
+			return elicitationHandler;
+		}
+
+		public boolean enableCallToolSchemaCaching(){
+			return enableCallToolSchemaCaching;
 		}
 
 		/**
@@ -282,7 +361,7 @@ class McpClientFeatures {
 				Function<McpSchema.CreateMessageRequest, McpSchema.CreateMessageResult> samplingHandler,
 				Function<McpSchema.ElicitRequest, McpSchema.ElicitResult> elicitationHandler) {
 			this(clientInfo, clientCapabilities, roots, toolsChangeConsumers, resourcesChangeConsumers,
-					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, List.of(), samplingHandler,
+					resourcesUpdateConsumers, promptsChangeConsumers, loggingConsumers, new ArrayList<>(), samplingHandler,
 					elicitationHandler, false);
 		}
 	}
