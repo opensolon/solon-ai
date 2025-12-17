@@ -31,6 +31,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /**
  * 资源服务端管理
@@ -40,6 +41,14 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ResourceMcpServerManager implements McpServerManager<FunctionResource> {
     private final Map<String, FunctionResource> resourcesMap = new ConcurrentHashMap<>();
+
+    private final Supplier<McpAsyncServer> serverSupplier;
+    private final McpServer.AsyncSpecification mcpServerSpec;
+
+    public ResourceMcpServerManager(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
+        this.serverSupplier = serverSupplier;
+        this.mcpServerSpec = mcpServerSpec;
+    }
 
     @Override
     public int count() {
@@ -57,25 +66,30 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
     }
 
     @Override
-    public void remove(McpAsyncServer server, String resourceUri) {
-        if (server != null) {
-            server.removeResource(resourceUri).block();
+    public void remove(String resourceUri) {
+        if (serverSupplier.get() != null) {
+            if (resourceUri.indexOf('{') < 0) {
+                serverSupplier.get().removeResource(resourceUri).block();
+            } else {
+                serverSupplier.get().removeResourceTemplate(resourceUri).block();
+            }
+
             resourcesMap.remove(resourceUri);
         }
     }
 
     @Override
-    public void add(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionResource functionResource) {
+    public void add(McpServerProperties mcpServerProps, FunctionResource functionResource) {
         resourcesMap.put(functionResource.uri(), functionResource);
 
         if (functionResource.uri().indexOf('{') < 0) {
-            addRef(server, mcpServerSpec, mcpServerProps, functionResource);
+            addRef(mcpServerProps, functionResource);
         } else {
-            addTml(server, mcpServerSpec, mcpServerProps, functionResource);
+            addTml(mcpServerProps, functionResource);
         }
     }
 
-    private void addRef(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionResource functionResource) {
+    private void addRef(McpServerProperties mcpServerProps, FunctionResource functionResource) {
         try {
             //resourceSpec
             McpServerFeatures.AsyncResourceSpecification resourceSpec = new McpServerFeatures.AsyncResourceSpecification(
@@ -112,8 +126,8 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
                         });
                     });
 
-            if (server != null) {
-                server.addResource(resourceSpec).block();
+            if (serverSupplier.get() != null) {
+                serverSupplier.get().addResource(resourceSpec).block();
             } else {
                 mcpServerSpec.resources(resourceSpec).build();
             }
@@ -122,7 +136,7 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
         }
     }
 
-    private void addTml(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionResource functionResource) {
+    private void addTml(McpServerProperties mcpServerProps, FunctionResource functionResource) {
         try {
             //resourceSpec
             McpServerFeatures.AsyncResourceTemplateSpecification resourceSpec = new McpServerFeatures.AsyncResourceTemplateSpecification(
@@ -159,8 +173,8 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
                         });
                     });
 
-            if (server != null) {
-                server.addResourceTemplate(resourceSpec).block();
+            if (serverSupplier.get() != null) {
+                serverSupplier.get().addResourceTemplate(resourceSpec).block();
             } else {
                 mcpServerSpec.resourceTemplates(resourceSpec).build();
             }

@@ -46,10 +46,10 @@ public interface McpServerManager<T> {
     /**
      * 移除
      */
-    void remove(McpAsyncServer server, String key);
+    void remove(String key);
 
     /**
      * 添加
      */
-    void add(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, T item);
+    void add(McpServerProperties mcpServerProps, T item);
 }

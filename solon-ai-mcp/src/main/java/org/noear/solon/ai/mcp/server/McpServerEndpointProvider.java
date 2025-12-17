@@ -59,9 +59,9 @@ public class McpServerEndpointProvider implements LifecycleBean {
     private final McpServer.AsyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
 
-    private final PromptMcpServerManager promptManager = new PromptMcpServerManager();
-    private final ResourceMcpServerManager resourceManager = new ResourceMcpServerManager();
-    private final ToolMcpServerManager toolManager = new ToolMcpServerManager();
+    private final PromptMcpServerManager promptManager;
+    private final ResourceMcpServerManager resourceManager;
+    private final ToolMcpServerManager toolManager;
 
     private final String mcpEndpoint;
     private final String messageEndpoint;
@@ -159,6 +159,10 @@ public class McpServerEndpointProvider implements LifecycleBean {
                         .serverInfo(serverProps.getName(), serverProps.getVersion());
             }
         }
+
+        this.promptManager = new PromptMcpServerManager(this::getServer, mcpServerSpec);
+        this.resourceManager = new ResourceMcpServerManager(this::getServer, mcpServerSpec);
+        this.toolManager = new ToolMcpServerManager(this::getServer, mcpServerSpec);
     }
 
     /**
@@ -219,7 +223,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记资源
      */
     public void addResource(FunctionResource functionResource) {
-        resourceManager.add(server, mcpServerSpec, serverProperties, functionResource);
+        resourceManager.add(serverProperties, functionResource);
     }
 
     /**
@@ -242,7 +246,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 移除资源
      */
     public void removeResource(String resourceUri) {
-        resourceManager.remove(server, resourceUri);
+        resourceManager.remove(resourceUri);
     }
 
     /**
@@ -266,7 +270,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记提示语
      */
     public void addPrompt(FunctionPrompt functionPrompt) {
-        promptManager.add(server, mcpServerSpec, serverProperties, functionPrompt);
+        promptManager.add(serverProperties, functionPrompt);
     }
 
     /**
@@ -289,7 +293,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 移除提示语
      */
     public void removePrompt(String promptName) {
-        promptManager.remove(server, promptName);
+        promptManager.remove(promptName);
     }
 
     /**
@@ -313,7 +317,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记工具
      */
     public void addTool(FunctionTool functionTool) {
-        toolManager.add(server, mcpServerSpec, serverProperties, functionTool);
+        toolManager.add(serverProperties, functionTool);
     }
 
     /**
@@ -336,7 +340,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 移除工具
      */
     public void removeTool(String toolName) {
-        toolManager.remove(server, toolName);
+        toolManager.remove(toolName);
     }
 
     /**

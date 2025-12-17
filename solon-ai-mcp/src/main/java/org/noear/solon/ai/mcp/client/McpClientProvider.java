@@ -221,6 +221,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                         .sseEndpoint(endpoint)
                         .build();
             } else {
+                //streamable || streamable_stateless
                 clientTransport = WebRxStreamableHttpTransport.builder(webBuilder)
                         .endpoint(endpoint)
                         .build();

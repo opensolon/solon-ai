@@ -35,6 +35,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /**
  * 提示词服务端管理
@@ -44,6 +45,15 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> {
     private final Map<String, FunctionPrompt> promptsMap = new ConcurrentHashMap<>();
+
+    private final Supplier<McpAsyncServer> serverSupplier;
+    private final McpServer.AsyncSpecification mcpServerSpec;
+
+    public PromptMcpServerManager(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
+        this.serverSupplier = serverSupplier;
+        this.mcpServerSpec = mcpServerSpec;
+    }
+
 
     @Override
     public int count() {
@@ -61,15 +71,15 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
     }
 
     @Override
-    public void remove(McpAsyncServer server, String promptName) {
-        if (server != null) {
-            server.removePrompt(promptName).block();
+    public void remove(String promptName) {
+        if (serverSupplier.get() != null) {
+            serverSupplier.get().removePrompt(promptName).block();
             promptsMap.remove(promptName);
         }
     }
 
     @Override
-    public void add(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionPrompt functionPrompt) {
+    public void add(McpServerProperties mcpServerProps, FunctionPrompt functionPrompt) {
         try {
             promptsMap.put(functionPrompt.name(), functionPrompt);
 
@@ -136,8 +146,8 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
                         });
                     });
 
-            if (server != null) {
-                server.addPrompt(promptSpec).block();
+            if (serverSupplier.get() != null) {
+                serverSupplier.get().addPrompt(promptSpec).block();
             } else {
                 mcpServerSpec.prompts(promptSpec).build();
             }

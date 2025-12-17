@@ -34,6 +34,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /**
  * 工具服务端管理
@@ -43,6 +44,14 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
     private final Map<String, FunctionTool> toolsMap = new ConcurrentHashMap<>();
+
+    private final Supplier<McpAsyncServer> serverSupplier;
+    private final McpServer.AsyncSpecification mcpServerSpec;
+
+    public ToolMcpServerManager(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
+        this.serverSupplier = serverSupplier;
+        this.mcpServerSpec = mcpServerSpec;
+    }
 
     @Override
     public int count() {
@@ -60,15 +69,15 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
     }
 
     @Override
-    public void remove(McpAsyncServer server, String toolName) {
-        if (server != null) {
-            server.removeTool(toolName).block();
+    public void remove(String toolName) {
+        if (serverSupplier.get() != null) {
+            serverSupplier.get().removeTool(toolName).block();
             toolsMap.remove(toolName);
         }
     }
 
     @Override
-    public void add(McpAsyncServer server, McpServer.AsyncSpecification mcpServerSpec, McpServerProperties mcpServerProps, FunctionTool functionTool) {
+    public void add(McpServerProperties mcpServerProps, FunctionTool functionTool) {
         try {
             //内部登记
             toolsMap.put(functionTool.name(), functionTool);
@@ -76,7 +85,7 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
             // 构建 inputSchema JSON 字符串
             String inSchemaJson = buildJsonSchema(functionTool).toJson();
 
-            McpSchema.ToolAnnotations toolAnnotations =McpSchema.ToolAnnotations.builder()
+            McpSchema.ToolAnnotations toolAnnotations = McpSchema.ToolAnnotations.builder()
                     .returnDirect(functionTool.returnDirect())
                     .build();
 
@@ -118,8 +127,8 @@ public class ToolMcpServerManager implements McpServerManager<FunctionTool> {
                         });
                     });
 
-            if (server != null) {
-                server.addTool(toolSpec).block();
+            if (serverSupplier.get() != null) {
+                serverSupplier.get().addTool(toolSpec).block();
             } else {
                 mcpServerSpec.tools(toolSpec).build();
             }

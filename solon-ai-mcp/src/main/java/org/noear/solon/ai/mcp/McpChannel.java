@@ -25,5 +25,5 @@ public interface McpChannel {
     String STDIO = "stdio";
     String SSE = "sse";
     String STREAMABLE = "streamable";
-//  String STATELESS = "Stateless";
+    String STREAMABLE_STATELESS = "streamable_stateless";
 }
