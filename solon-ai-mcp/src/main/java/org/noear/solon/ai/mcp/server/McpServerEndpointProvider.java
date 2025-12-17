@@ -15,31 +15,23 @@
  */
 package org.noear.solon.ai.mcp.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpAsyncServer;
-import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.transport.*;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
-import org.noear.solon.ai.mcp.server.manager.PromptMcpServerManager;
-import org.noear.solon.ai.mcp.server.manager.ResourceMcpServerManager;
-import org.noear.solon.ai.mcp.server.manager.ToolMcpServerManager;
+import org.noear.solon.ai.mcp.server.manager.*;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 import org.noear.solon.ai.mcp.server.prompt.PromptProvider;
 import org.noear.solon.ai.mcp.server.resource.ResourceProvider;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
-import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ConvertUtil;
-import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,19 +47,13 @@ import java.util.*;
  */
 public class McpServerEndpointProvider implements LifecycleBean {
     private static Logger log = LoggerFactory.getLogger(McpServerEndpointProvider.class);
-    private final McpServerTransportProviderBase mcpTransportProvider;
-    private final McpServer.AsyncSpecification mcpServerSpec;
     private final McpServerProperties serverProperties;
 
-    private final PromptMcpServerManager promptManager;
-    private final ResourceMcpServerManager resourceManager;
-    private final ToolMcpServerManager toolManager;
+    private final McpServerManager<FunctionPrompt> promptManager;
+    private final McpServerManager<FunctionResource> resourceManager;
+    private final McpServerManager<FunctionTool> toolManager;
 
-    private final String mcpEndpoint;
-    private final String messageEndpoint;
-
-    private McpSchema.LoggingLevel loggingLevel = McpSchema.LoggingLevel.INFO;
-    private McpAsyncServer server;
+    private final McpServerHolder serverHolder;
 
     public McpServerEndpointProvider(Properties properties) {
         this(Props.from(properties).bindTo(new McpServerProperties()));
@@ -84,92 +70,26 @@ public class McpServerEndpointProvider implements LifecycleBean {
             }
         }
 
-
         this.serverProperties = serverProps;
 
-        if (McpChannel.SSE.equals(serverProps.getChannel())) {
-            //sse
-            if (Utils.isEmpty(serverProps.getSseEndpoint())) {
-                this.mcpEndpoint = serverProps.getMcpEndpoint();
-            } else {
-                this.mcpEndpoint = serverProps.getSseEndpoint();
-            }
-
-            //断言
-            Assert.notEmpty(this.mcpEndpoint, "MCP sse endpoint is empty");
-
-            if (Utils.isEmpty(serverProps.getMessageEndpoint())) {
-                this.messageEndpoint = PathUtil.joinUri(this.mcpEndpoint, "/message"); //兼容 2024 版协议风格
-            } else {
-                this.messageEndpoint = serverProps.getMessageEndpoint();
-            }
-        } else if (McpChannel.STREAMABLE.equals(serverProps.getChannel())) {
-            //streamable
-            if (Utils.isEmpty(serverProps.getMcpEndpoint())) {
-                this.mcpEndpoint = serverProps.getSseEndpoint();
-            } else {
-                this.mcpEndpoint = serverProps.getMcpEndpoint();
-            }
-
-            //断言
-            Assert.notEmpty(this.mcpEndpoint, "MCP endpoint is empty");
-
-            this.messageEndpoint = this.mcpEndpoint;
+        if (McpChannel.STREAMABLE_STATELESS.equals(serverProps.getChannel())) {
+            //无状态
+            this.serverHolder = new StatelessMcpServerHolder(serverProps);
         } else {
-            this.mcpEndpoint = null;
-            this.messageEndpoint = null;
+            //有状态
+            this.serverHolder = new StatefulMcpServerHolder(serverProps);
         }
 
-
-        McpSchema.ServerCapabilities serverCapabilities = McpSchema.ServerCapabilities.builder()
-                .tools(true)
-                .resources(true, true)
-                .prompts(true)
-                .logging()
-                .build();
-
-        if (McpChannel.STDIO.equalsIgnoreCase(serverProps.getChannel())) {
-            //stdio 通道
-            this.mcpTransportProvider = new StdioServerTransportProvider(McpJsonMapper.getDefault());
-
-            mcpServerSpec = McpServer.async((StdioServerTransportProvider) this.mcpTransportProvider)
-                    .capabilities(serverCapabilities)
-                    .serverInfo(serverProps.getName(), serverProps.getVersion());
-        } else {
-            //sse 通道
-            if (McpChannel.SSE.equals(serverProps.getChannel())) {
-                this.mcpTransportProvider = WebRxSseServerTransportProvider.builder()
-                        .sseEndpoint(this.mcpEndpoint)
-                        .messageEndpoint(this.messageEndpoint)
-                        .basePath(serverProps.getContextPath())
-                        .keepAliveInterval(serverProps.getHeartbeatInterval())
-                        .build();
-
-                mcpServerSpec = McpServer.async((WebRxSseServerTransportProvider) this.mcpTransportProvider)
-                        .capabilities(serverCapabilities)
-                        .serverInfo(serverProps.getName(), serverProps.getVersion());
-            } else {
-                this.mcpTransportProvider = WebRxStreamableServerTransportProvider.builder()
-                        .messageEndpoint(this.mcpEndpoint)
-                        .keepAliveInterval(serverProps.getHeartbeatInterval())
-                        .build();
-
-                mcpServerSpec = McpServer.async((WebRxStreamableServerTransportProvider) this.mcpTransportProvider)
-                        .capabilities(serverCapabilities)
-                        .serverInfo(serverProps.getName(), serverProps.getVersion());
-            }
-        }
-
-        this.promptManager = new PromptMcpServerManager(this::getServer, mcpServerSpec);
-        this.resourceManager = new ResourceMcpServerManager(this::getServer, mcpServerSpec);
-        this.toolManager = new ToolMcpServerManager(this::getServer, mcpServerSpec);
+        this.promptManager = serverHolder.getPromptManager();
+        this.resourceManager = serverHolder.getResourceManager();
+        this.toolManager = serverHolder.getToolManager();
     }
 
     /**
      * 获取服务端（postStart 后有效）
      */
     public @Nullable McpAsyncServer getServer() {
-        return server;
+        return null;
     }
 
     /**
@@ -197,7 +117,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * MCP 端点
      */
     public String getMcpEndpoint() {
-        return mcpEndpoint;
+        return serverHolder.getMcpEndpoint();
     }
 
     /**
@@ -207,16 +127,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
      */
     @Deprecated
     public String getMessageEndpoint() {
-        return messageEndpoint;
+        return serverHolder.getMessageEndpoint();
     }
 
     /**
      * 设置日志级别
      */
     public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
-        if (loggingLevel != null) {
-            this.loggingLevel = loggingLevel;
-        }
+        serverHolder.setLoggingLevel(loggingLevel);
     }
 
     /**
@@ -253,10 +171,8 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 移除资源
      */
     public void removeResource(ResourceProvider resourceProvider) {
-        if (server != null) {
-            for (FunctionResource functionResource : resourceProvider.getResources()) {
-                removeResource(functionResource.uri());
-            }
+        for (FunctionResource functionResource : resourceProvider.getResources()) {
+            removeResource(functionResource.uri());
         }
     }
 
@@ -300,10 +216,8 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 移除提示语
      */
     public void removePrompt(PromptProvider promptProvider) {
-        if (server != null) {
-            for (FunctionPrompt functionPrompt : promptProvider.getPrompts()) {
-                removePrompt(functionPrompt.name());
-            }
+        for (FunctionPrompt functionPrompt : promptProvider.getPrompts()) {
+            removePrompt(functionPrompt.name());
         }
     }
 
@@ -347,10 +261,8 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 移除工具
      */
     public void removeTool(ToolProvider toolProvider) {
-        if (server != null) {
-            for (FunctionTool functionTool : toolProvider.getTools()) {
-                removeTool(functionTool.name());
-            }
+        for (FunctionTool functionTool : toolProvider.getTools()) {
+            removeTool(functionTool.name());
         }
     }
 
@@ -371,84 +283,26 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     @Override
     public void postStart() {
-        server = mcpServerSpec.build();
-        server.loggingNotification(McpSchema.LoggingMessageNotification.builder().level(loggingLevel).build());
-
-        if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
-            log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
-                    serverProperties.getName(),
-                    serverProperties.getVersion(),
-                    serverProperties.getChannel(),
-                    toolManager.count(),
-                    resourceManager.count(),
-                    promptManager.count());
-        } else if (McpChannel.SSE.equalsIgnoreCase(serverProperties.getChannel())) {
-            log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
-                    serverProperties.getName(),
-                    serverProperties.getVersion(),
-                    serverProperties.getChannel(),
-                    this.mcpEndpoint,
-                    this.messageEndpoint,
-                    toolManager.count(),
-                    resourceManager.count(),
-                    promptManager.count());
-        } else {
-            log.info("Mcp-Server started, name={}, version={}, channel={}, mcpEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
-                    serverProperties.getName(),
-                    serverProperties.getVersion(),
-                    serverProperties.getChannel(),
-                    this.mcpEndpoint,
-                    toolManager.count(),
-                    resourceManager.count(),
-                    promptManager.count());
-        }
-
-        //如果是 web 类的
-        if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
-            IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
-            tmp.toHttpHandler(Solon.app());
-        }
+        serverHolder.start();
     }
 
     /**
      * 暂停（主要用于测试）
      */
     public boolean pause() {
-        if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
-            IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
-
-            //如果有注册
-            if (Utils.isNotEmpty(Solon.app().router().getBy(tmp.getMcpEndpoint()))) {
-                Solon.app().router().remove(tmp.getMcpEndpoint());
-                return true;
-            }
-        }
-
-        return false;
+        return serverHolder.pause();
     }
 
     /**
      * 恢复（主要用于测试）
      */
     public boolean resume() {
-        if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
-            IMcpHttpServerTransport tmp = (IMcpHttpServerTransport) mcpTransportProvider;
-
-            //如果没有注册
-            if (Utils.isEmpty(Solon.app().router().getBy(tmp.getMcpEndpoint()))) {
-                tmp.toHttpHandler(Solon.app());
-                return true;
-            }
-        }
-
-        return false;
+        return serverHolder.resume();
     }
 
     @Override
     public void stop() {
-        if (server != null) {
-            server.close();
-        }
+        serverHolder.start();
     }
 
     /// //////////////////////////////////////////////

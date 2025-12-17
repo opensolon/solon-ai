@@ -15,39 +15,34 @@
  */
 package org.noear.solon.ai.mcp.server.manager;
 
-import org.noear.solon.ai.mcp.server.McpServerProperties;
-
-import java.util.Collection;
+import io.modelcontextprotocol.spec.McpSchema;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
+import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 
 /**
- * 服务端管理器
  *
  * @author noear
- * @since 3.2
+ * @since 3.8.0
  */
-public interface McpServerManager<T> {
-    /**
-     * 数量
-     */
-    int count();
+public interface McpServerHolder {
+    void setLoggingLevel(McpSchema.LoggingLevel loggingLevel);
 
-    /**
-     * 全部
-     */
-    Collection<T> all();
+    String getMcpEndpoint();
 
-    /**
-     * 是否包含
-     */
-    boolean contains(String key);
+    String getMessageEndpoint();
 
-    /**
-     * 移除
-     */
-    void remove(String key);
+    McpServerManager<FunctionPrompt> getPromptManager();
 
-    /**
-     * 添加
-     */
-    void add(McpServerProperties mcpServerProps, T item);
+    McpServerManager<FunctionResource> getResourceManager();
+
+    McpServerManager<FunctionTool> getToolManager();
+
+    void start();
+
+    void stop();
+
+    boolean pause();
+
+    boolean resume();
 }

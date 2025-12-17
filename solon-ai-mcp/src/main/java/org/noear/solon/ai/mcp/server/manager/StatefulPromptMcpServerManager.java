@@ -43,13 +43,13 @@ import java.util.function.Supplier;
  * @author noear
  * @since 3.2
  */
-public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> {
+public class StatefulPromptMcpServerManager implements McpServerManager<FunctionPrompt> {
     private final Map<String, FunctionPrompt> promptsMap = new ConcurrentHashMap<>();
 
     private final Supplier<McpAsyncServer> serverSupplier;
     private final McpServer.AsyncSpecification mcpServerSpec;
 
-    public PromptMcpServerManager(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
+    public StatefulPromptMcpServerManager(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
         this.serverSupplier = serverSupplier;
         this.mcpServerSpec = mcpServerSpec;
     }
@@ -92,7 +92,7 @@ public class PromptMcpServerManager implements McpServerManager<FunctionPrompt> 
                     new McpSchema.Prompt(functionPrompt.name(), functionPrompt.title(), functionPrompt.description(), promptArguments),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(exchange), () -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange.transportContext()), () -> {
                                 functionPrompt.handleAsync(request.arguments()).whenComplete((prompts, err) -> {
                                     if (err != null) {
                                         err = Utils.throwableUnwrap(err);

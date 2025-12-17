@@ -39,13 +39,13 @@ import java.util.function.Supplier;
  * @author noear
  * @since 3.2
  */
-public class ResourceMcpServerManager implements McpServerManager<FunctionResource> {
+public class StatefulResourceMcpServerManager implements McpServerManager<FunctionResource> {
     private final Map<String, FunctionResource> resourcesMap = new ConcurrentHashMap<>();
 
     private final Supplier<McpAsyncServer> serverSupplier;
     private final McpServer.AsyncSpecification mcpServerSpec;
 
-    public ResourceMcpServerManager(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
+    public StatefulResourceMcpServerManager(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
         this.serverSupplier = serverSupplier;
         this.mcpServerSpec = mcpServerSpec;
     }
@@ -99,7 +99,7 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
                             .mimeType(functionResource.mimeType()).build(),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(exchange), () -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange.transportContext()), () -> {
                                 functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
 
                                     if (err != null) {
@@ -146,7 +146,7 @@ public class ResourceMcpServerManager implements McpServerManager<FunctionResour
                             .mimeType(functionResource.mimeType()).build(),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(exchange), () -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange.transportContext()), () -> {
                                 functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
 
                                     if (err != null) {

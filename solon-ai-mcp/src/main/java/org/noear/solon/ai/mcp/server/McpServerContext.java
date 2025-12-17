@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import org.noear.solon.core.handle.Context;
@@ -33,16 +34,15 @@ import java.util.Collection;
  */
 public class McpServerContext extends ContextEmpty {
     /// /////////////////////////
-    private final McpAsyncServerExchange serverExchange;
     private Context context;
+    private String sessionId;
 
-    public McpServerContext(McpAsyncServerExchange serverExchange) {
-        this.serverExchange = serverExchange;
-
+    public McpServerContext(McpTransportContext transportContext) {
         //通响 transportContext 获取连接时的 context
-        this.context = (Context) serverExchange.transportContext().get(Context.class.getName());
+        this.context = (Context) transportContext.get(Context.class.getName());
 
         if (this.context != null) {
+            this.sessionId = context.sessionId();
             //如果有，则是 http
             for (KeyValues<String> kv : context.paramMap()) {
                 for (String v : kv.getValues()) {
@@ -58,6 +58,7 @@ public class McpServerContext extends ContextEmpty {
             }
         } else {
             //如果没有，则是 stdio
+            this.sessionId = "null";
             this.context = new ContextEmpty();
             this.headerMap().addAll(System.getenv());
         }
@@ -68,7 +69,7 @@ public class McpServerContext extends ContextEmpty {
      */
     @Override
     public String sessionId() {
-        return serverExchange.sessionId();
+        return sessionId;
     }
 
     /// ////////////////
