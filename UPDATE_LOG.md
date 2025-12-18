@@ -47,7 +47,7 @@ public class McpServerTool {
 | STREAMABLE_STATELESS  | STREAMABLE  | 对 server 集群很友好  |
 
 
-> STREAMABLE_STATELESS 集群，需要 ip_hash，但“原语”变化后无法通知 client
+* STREAMABLE_STATELESS 集群，不需要 ip_hash，但“原语”变化后无法通知 client
 
 
 ### v3.7.4
