@@ -24,6 +24,32 @@
 * 优化 solon-ai-mcp mcp StreamableHttp 模式下 服务端正常返回时 客户端异常日志打印的情况
 * 调整 solon-ai-mcp getResourceTemplates、getResources 不再共享注册
 
+
+新特性展示：1.MCP 无状态会话（STREAMABLE_STATELESS）和 2.CompletableFuture 异步MCP工具
+
+```java
+@McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/mcp1")
+public class McpServerTool {
+    @ToolMapping(description = "查询天气预报", returnDirect = true)
+    public CompletableFuture<String> getWeather(@Param(description = "城市位置") String location) {
+        return CompletableFuture.completedFuture("晴，14度");
+    }
+}
+```
+
+传输方式对应表：（服务端与客户端，须使用对应的传输方式才可通讯）
+
+| 服务端                   | 客户端         |  备注               |
+|-----------------------|-------------|-----------------|
+| STDIO                 | STDIO       |                 |
+| SSE                   | SSE         |                 |
+| STREAMABLE            | STREAMABLE  |                 |
+| STREAMABLE_STATELESS  | STREAMABLE  | 对 server 集群很友好  |
+
+
+> STREAMABLE_STATELESS 集群，需要 ip_hash，但“原语”变化后无法通知 client
+
+
 ### v3.7.4
 
 * 添加 solon-ai-core ChatMessage:toNdjson,fromNdjson 方法（替代 ChatSession:toNdjson, loadNdjson），新方法机制上更自由
