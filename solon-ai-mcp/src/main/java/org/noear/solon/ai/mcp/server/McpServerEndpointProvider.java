@@ -309,7 +309,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     @Override
     public void stop() {
-        serverHolder.start();
+        serverHolder.stop();
     }
 
     /// //////////////////////////////////////////////
