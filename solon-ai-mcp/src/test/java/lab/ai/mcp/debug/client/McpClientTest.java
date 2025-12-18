@@ -1,21 +1,21 @@
 package lab.ai.mcp.debug.client;
 
 import lab.ai.mcp.debug.server.McpApp;
+import lab.ai.mcp.debug.server.McpServerEndpointDemo;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 import org.noear.solon.test.SolonTest;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * @author noear 2025/5/1 created
@@ -35,10 +35,7 @@ public class McpClientTest {
 
         log.warn("{}", tools);
 
-        assert tools.size() == 1;
-
-        assert ("[FunctionToolDesc{name='getWeather', title='', description='查询天气预报', returnDirect=true, inputSchema={\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"城市位置\"}},\"required\":[\"location\"]}, outputSchema=null}]")
-                .equals(tools.toString());
+        Assertions.assertEquals(3, tools.size());
     }
 
     @Test
@@ -47,6 +44,30 @@ public class McpClientTest {
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
+    }
+
+    @Test
+    public void tool3_async() throws Exception {
+        String response = mcpClient.callToolAsText("getWeatherAsync", Collections.singletonMap("location", "杭州")).getContent();
+
+        log.warn("{}", response);
+        assert Utils.isNotEmpty(response);
+    }
+
+    @Test
+    public void tool4_jsonschame() throws Exception {
+        MethodToolProvider provider = new MethodToolProvider(new McpServerEndpointDemo());
+        Map<String, FunctionTool> toolMap = new HashMap<>();
+        for (FunctionTool t1 : provider.getTools()) {
+            toolMap.put(t1.name(), t1);
+        }
+
+        System.out.println(toolMap.get("getWeatherAsync").outputSchema());
+        System.out.println(toolMap.get("getOrderInfo").outputSchema());
+
+        assert "{\"type\":\"string\"}".equals(toolMap.get("getWeatherAsync").outputSchema());
+        assert "{\"type\":\"object\",\"properties\":{\"created\":{\"type\":\"string\",\"format\":\"date-time\"},\"id\":{\"type\":\"integer\"},\"title\":{\"type\":\"string\"}},\"required\":[]}"
+                .equals(toolMap.get("getOrderInfo").outputSchema());
     }
 
     @Test
@@ -60,9 +81,9 @@ public class McpClientTest {
 
         Collection<FunctionResource> list = mcpClient.getResources();
         System.out.println(list);
-        assert list.size() == 2;
+        assert list.size() == 1;
 
-        assert "config://app-version".equals(new ArrayList<>(list).get(1).uri());
+        assert "config://app-version".equals(new ArrayList<>(list).get(0).uri());
     }
 
     @Test
@@ -85,9 +106,9 @@ public class McpClientTest {
     public void resource9() throws Exception {
         Collection<FunctionResource> resources = mcpClient.getResources();
         System.out.println(resources);
-        assert resources.size() == 2;
+        assert resources.size() == 1;
 
-        assert ("[FunctionResourceDesc{name='getEmail', uri='db://users/{user_id}/email', description='根据用户ID查询邮箱', mimeType=''}, FunctionResourceDesc{name='getAppVersion', uri='config://app-version', description='获取应用版本号', mimeType='text/config'}]")
+        assert ("[FunctionResourceDesc{name='getAppVersion', uri='config://app-version', description='获取应用版本号', mimeType='text/config'}]")
                 .equals(resources.toString());
     }
 
