@@ -65,7 +65,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
             ChatModel.Builder chatModelBuilder = ChatModel.of(chatConfig);
 
             //toolProviders
-            List<String> toolProviders = node.getMeta(META_TOOL_PROVIDERS);
+            List<String> toolProviders = node.getMetaAs(META_TOOL_PROVIDERS);
             if (Utils.isNotEmpty(toolProviders)) {
                 for (String toolProvider : toolProviders) {
                     Object tmp = ClassUtil.tryInstance(toolProvider);

@@ -48,10 +48,10 @@ public abstract class AbsRepositoryCom extends AbsAiComponent implements AiIoCom
 
     protected void initRepository(RepositoryStorable repository, FlowContext context, Node node) throws Throwable {
         //首次加载文档源
-        List<String> documentSource = node.getMeta(META_DOCUMENT_SOURCES);
+        List<String> documentSource = node.getMetaAs(META_DOCUMENT_SOURCES);
         if (Utils.isNotEmpty(documentSource)) {
             //获取分割器
-            List<String> splitters = node.getMeta(META_SPLIT_PIPELINE);
+            List<String> splitters = node.getMetaAs(META_SPLIT_PIPELINE);
             SplitterPipeline splitterPipeline = new SplitterPipeline();
             if (Utils.isNotEmpty(splitters)) {
                 for (String splitter : splitters) {
