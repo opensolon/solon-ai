@@ -32,18 +32,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
- * 资源服务端管理
+ * 无状态资源注册表
  *
  * @author noear
  * @since 3.8.0
  */
-public class StatelessResourceMcpServerManager implements McpServerManager<FunctionResource> {
+public class StatelessResourceRegistry implements McpPrimitivesRegistry<FunctionResource> {
     private final Map<String, FunctionResource> resourcesMap = new ConcurrentHashMap<>();
 
     private final Supplier<McpStatelessAsyncServer> serverSupplier;
     private final McpServer.StatelessAsyncSpecification mcpServerSpec;
 
-    public StatelessResourceMcpServerManager(Supplier<McpStatelessAsyncServer> serverSupplier, McpServer.StatelessAsyncSpecification mcpServerSpec) {
+    public StatelessResourceRegistry(Supplier<McpStatelessAsyncServer> serverSupplier, McpServer.StatelessAsyncSpecification mcpServerSpec) {
         this.serverSupplier = serverSupplier;
         this.mcpServerSpec = mcpServerSpec;
     }

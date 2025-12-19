@@ -20,12 +20,13 @@ import org.noear.solon.ai.mcp.server.McpServerProperties;
 import java.util.Collection;
 
 /**
- * 服务端管理器
+ * MCP 原语注册表
  *
  * @author noear
  * @since 3.2
+ * @since 3.8.0
  */
-public interface McpServerManager<T> {
+public interface McpPrimitivesRegistry<T> {
     /**
      * 数量
      */

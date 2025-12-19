@@ -31,20 +31,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * 无状态服务宿主
  *
  * @author noear
  * @since 3.8.0
  */
-public class StatelessMcpServerHolder implements McpServerHolder {
-    private static Logger log = LoggerFactory.getLogger(StatelessMcpServerHolder.class);
+public class StatelessMcpServerHost implements McpServerHost {
+    private static Logger log = LoggerFactory.getLogger(StatelessMcpServerHost.class);
 
     private final String mcpEndpoint;
 
     private McpSchema.LoggingLevel loggingLevel = McpSchema.LoggingLevel.INFO;
 
-    private final McpServerManager<FunctionPrompt> promptManager;
-    private final McpServerManager<FunctionResource> resourceManager;
-    private final McpServerManager<FunctionTool> toolManager;
+    private final McpPrimitivesRegistry<FunctionPrompt> promptManager;
+    private final McpPrimitivesRegistry<FunctionResource> resourceManager;
+    private final McpPrimitivesRegistry<FunctionTool> toolManager;
 
     private final McpServerProperties serverProperties;
 
@@ -52,7 +53,7 @@ public class StatelessMcpServerHolder implements McpServerHolder {
     private final McpServer.StatelessAsyncSpecification mcpServerSpec;
     private McpStatelessAsyncServer server;
 
-    public StatelessMcpServerHolder( McpSchema.ServerCapabilities serverCapabilities, McpServerProperties serverProps) {
+    public StatelessMcpServerHost(McpSchema.ServerCapabilities serverCapabilities, McpServerProperties serverProps) {
         this.serverProperties = serverProps;
 
         //streamable
@@ -73,9 +74,9 @@ public class StatelessMcpServerHolder implements McpServerHolder {
                 .capabilities(serverCapabilities)
                 .serverInfo(serverProps.getName(), serverProps.getVersion());
 
-        this.promptManager = new StatelessPromptMcpServerManager(this::getServer, mcpServerSpec);
-        this.resourceManager = new StatelessResourceMcpServerManager(this::getServer, mcpServerSpec);
-        this.toolManager = new StatelessToolMcpServerManager(this::getServer, mcpServerSpec);
+        this.promptManager = new StatelessPromptRegistry(this::getServer, mcpServerSpec);
+        this.resourceManager = new StatelessResourceRegistry(this::getServer, mcpServerSpec);
+        this.toolManager = new StatelessToolRegistry(this::getServer, mcpServerSpec);
     }
 
     public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
@@ -94,15 +95,15 @@ public class StatelessMcpServerHolder implements McpServerHolder {
         return server;
     }
 
-    public McpServerManager<FunctionPrompt> getPromptManager() {
+    public McpPrimitivesRegistry<FunctionPrompt> getPromptRegistry() {
         return promptManager;
     }
 
-    public McpServerManager<FunctionResource> getResourceManager() {
+    public McpPrimitivesRegistry<FunctionResource> getResourceRegistry() {
         return resourceManager;
     }
 
-    public McpServerManager<FunctionTool> getToolManager() {
+    public McpPrimitivesRegistry<FunctionTool> getToolRegistry() {
         return toolManager;
     }
 

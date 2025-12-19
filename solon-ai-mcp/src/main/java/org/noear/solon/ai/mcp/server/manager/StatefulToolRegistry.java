@@ -16,7 +16,9 @@
 package org.noear.solon.ai.mcp.server.manager;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
-import io.modelcontextprotocol.server.*;
+import io.modelcontextprotocol.server.McpAsyncServer;
+import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
@@ -34,18 +36,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
- * 工具服务端管理
+ * 有状态工具注册表
  *
  * @author noear
- * @since 3.8.0
+ * @since 3.2
  */
-public class StatelessToolMcpServerManager implements McpServerManager<FunctionTool> {
+public class StatefulToolRegistry implements McpPrimitivesRegistry<FunctionTool> {
     private final Map<String, FunctionTool> toolsMap = new ConcurrentHashMap<>();
 
-    private final Supplier<McpStatelessAsyncServer> serverSupplier;
-    private final McpServer.StatelessAsyncSpecification mcpServerSpec;
+    private final Supplier<McpAsyncServer> serverSupplier;
+    private final McpServer.AsyncSpecification mcpServerSpec;
 
-    public StatelessToolMcpServerManager(Supplier<McpStatelessAsyncServer> serverSupplier, McpServer.StatelessAsyncSpecification mcpServerSpec) {
+    public StatefulToolRegistry(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
         this.serverSupplier = serverSupplier;
         this.mcpServerSpec = mcpServerSpec;
     }
@@ -97,12 +99,12 @@ public class StatelessToolMcpServerManager implements McpServerManager<FunctionT
             }
 
             // 注册实际调用逻辑
-            McpStatelessServerFeatures.AsyncToolSpecification toolSpec = new McpStatelessServerFeatures.AsyncToolSpecification(
+            McpServerFeatures.AsyncToolSpecification toolSpec = new McpServerFeatures.AsyncToolSpecification(
                     toolBuilder.build(),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(exchange), () -> {
-                                functionTool.handleAsync(request.arguments()).whenComplete((rst, err) -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange.transportContext()), () -> {
+                                functionTool.handleAsync(request).whenComplete((rst, err) -> {
                                     final McpSchema.CallToolResult result;
 
                                     if (err != null) {

@@ -21,28 +21,60 @@ import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 
 /**
+ * MCP 服务端包装器
  *
  * @author noear
  * @since 3.8.0
  */
-public interface McpServerHolder {
+public interface McpServerHost {
+    /**
+     * 设置日志级别
+     */
     void setLoggingLevel(McpSchema.LoggingLevel loggingLevel);
 
+    /**
+     * 获取 mcp 端点
+     */
     String getMcpEndpoint();
 
+    /**
+     * 获取 message 端点（有可能与 mcp 端点相关）
+     */
     String getMessageEndpoint();
 
-    McpServerManager<FunctionPrompt> getPromptManager();
+    /**
+     * 获取提示词注册表
+     */
+    McpPrimitivesRegistry<FunctionPrompt> getPromptRegistry();
 
-    McpServerManager<FunctionResource> getResourceManager();
+    /**
+     * 获取资源注册表
+     */
+    McpPrimitivesRegistry<FunctionResource> getResourceRegistry();
 
-    McpServerManager<FunctionTool> getToolManager();
+    /**
+     * 获取工具注册表
+     *
+     */
+    McpPrimitivesRegistry<FunctionTool> getToolRegistry();
 
+    /**
+     * 开始
+     */
     void start();
 
+    /**
+     * 停止
+     */
     void stop();
 
+    /**
+     * 暂停
+     */
     boolean pause();
 
+    /**
+     * 恢复
+     */
     boolean resume();
 }

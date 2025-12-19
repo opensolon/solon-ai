@@ -34,18 +34,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
- * 资源服务端管理
+ * 有状态资源注册表
  *
  * @author noear
  * @since 3.2
  */
-public class StatefulResourceMcpServerManager implements McpServerManager<FunctionResource> {
+public class StatefulResourceRegistry implements McpPrimitivesRegistry<FunctionResource> {
     private final Map<String, FunctionResource> resourcesMap = new ConcurrentHashMap<>();
 
     private final Supplier<McpAsyncServer> serverSupplier;
     private final McpServer.AsyncSpecification mcpServerSpec;
 
-    public StatefulResourceMcpServerManager(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
+    public StatefulResourceRegistry(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
         this.serverSupplier = serverSupplier;
         this.mcpServerSpec = mcpServerSpec;
     }

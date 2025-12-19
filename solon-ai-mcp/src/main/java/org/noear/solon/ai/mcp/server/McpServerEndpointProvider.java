@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.mcp.server;
 
-import io.modelcontextprotocol.server.McpAsyncServer;
-import io.modelcontextprotocol.server.transport.*;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
@@ -32,9 +30,6 @@ import org.noear.solon.ai.mcp.server.resource.ResourceProvider;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.bean.LifecycleBean;
 import org.noear.solon.core.util.ConvertUtil;
-import org.noear.solon.lang.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
@@ -46,14 +41,8 @@ import java.util.*;
  * @since 3.1
  */
 public class McpServerEndpointProvider implements LifecycleBean {
-    private static Logger log = LoggerFactory.getLogger(McpServerEndpointProvider.class);
     private final McpServerProperties serverProperties;
-
-    private final McpServerManager<FunctionPrompt> promptManager;
-    private final McpServerManager<FunctionResource> resourceManager;
-    private final McpServerManager<FunctionTool> toolManager;
-
-    private final McpServerHolder serverHolder;
+    private final McpServerHost serverHost;
 
     public McpServerEndpointProvider(Properties properties) {
         this(Props.from(properties).bindTo(new McpServerProperties()));
@@ -81,22 +70,18 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
         if (McpChannel.STREAMABLE_STATELESS.equals(serverProps.getChannel())) {
             //无状态
-            this.serverHolder = new StatelessMcpServerHolder(serverCapabilities, serverProps);
+            this.serverHost = new StatelessMcpServerHost(serverCapabilities, serverProps);
         } else {
             //有状态
-            this.serverHolder = new StatefulMcpServerHolder(serverCapabilities, serverProps);
+            this.serverHost = new StatefulMcpServerHost(serverCapabilities, serverProps);
         }
-
-        this.promptManager = serverHolder.getPromptManager();
-        this.resourceManager = serverHolder.getResourceManager();
-        this.toolManager = serverHolder.getToolManager();
     }
 
     /**
      * 获取服务端（postStart 后有效）
      */
-    public @Nullable McpServerHolder getServer() {
-        return serverHolder;
+    public McpServerHost getServer() {
+        return serverHost;
     }
 
     /**
@@ -124,7 +109,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * MCP 端点
      */
     public String getMcpEndpoint() {
-        return serverHolder.getMcpEndpoint();
+        return serverHost.getMcpEndpoint();
     }
 
     /**
@@ -134,21 +119,21 @@ public class McpServerEndpointProvider implements LifecycleBean {
      */
     @Deprecated
     public String getMessageEndpoint() {
-        return serverHolder.getMessageEndpoint();
+        return serverHost.getMessageEndpoint();
     }
 
     /**
      * 设置日志级别
      */
     public void setLoggingLevel(McpSchema.LoggingLevel loggingLevel) {
-        serverHolder.setLoggingLevel(loggingLevel);
+        serverHost.setLoggingLevel(loggingLevel);
     }
 
     /**
      * 登记资源
      */
     public void addResource(FunctionResource functionResource) {
-        resourceManager.add(serverProperties, functionResource);
+        serverHost.getResourceRegistry().add(serverProperties, functionResource);
     }
 
     /**
@@ -164,14 +149,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 是否存在资源
      */
     public boolean hasResource(String resourceUri) {
-        return resourceManager.contains(resourceUri);
+        return serverHost.getResourceRegistry().contains(resourceUri);
     }
 
     /**
      * 移除资源
      */
     public void removeResource(String resourceUri) {
-        resourceManager.remove(resourceUri);
+        serverHost.getResourceRegistry().remove(resourceUri);
     }
 
     /**
@@ -184,7 +169,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     public Collection<FunctionResource> getResources() {
-        return resourceManager.all();
+        return serverHost.getResourceRegistry().all();
     }
 
     /// ////////////////////////
@@ -193,7 +178,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记提示语
      */
     public void addPrompt(FunctionPrompt functionPrompt) {
-        promptManager.add(serverProperties, functionPrompt);
+        serverHost.getPromptRegistry().add(serverProperties, functionPrompt);
     }
 
     /**
@@ -209,14 +194,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 是否存在提示语
      */
     public boolean hasPrompt(String promptName) {
-        return promptManager.contains(promptName);
+        return serverHost.getPromptRegistry().contains(promptName);
     }
 
     /**
      * 移除提示语
      */
     public void removePrompt(String promptName) {
-        promptManager.remove(promptName);
+        serverHost.getPromptRegistry().remove(promptName);
     }
 
     /**
@@ -229,7 +214,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
     }
 
     public Collection<FunctionPrompt> getPrompts() {
-        return promptManager.all();
+        return serverHost.getPromptRegistry().all();
     }
 
     /// /////////////////////////
@@ -238,7 +223,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 登记工具
      */
     public void addTool(FunctionTool functionTool) {
-        toolManager.add(serverProperties, functionTool);
+        serverHost.getToolRegistry().add(serverProperties, functionTool);
     }
 
     /**
@@ -254,14 +239,14 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 是否存在工具
      * */
     public boolean hasTool(String toolName) {
-        return toolManager.contains(toolName);
+        return serverHost.getToolRegistry().contains(toolName);
     }
 
     /**
      * 移除工具
      */
     public void removeTool(String toolName) {
-        toolManager.remove(toolName);
+        serverHost.getToolRegistry().remove(toolName);
     }
 
     /**
@@ -277,7 +262,7 @@ public class McpServerEndpointProvider implements LifecycleBean {
      * 获取所有工具
      */
     public Collection<FunctionTool> getTools() {
-        return toolManager.all();
+        return serverHost.getToolRegistry().all();
     }
 
     /// /////////////////////
@@ -290,26 +275,26 @@ public class McpServerEndpointProvider implements LifecycleBean {
 
     @Override
     public void postStart() {
-        serverHolder.start();
+        serverHost.start();
     }
 
     /**
      * 暂停（主要用于测试）
      */
     public boolean pause() {
-        return serverHolder.pause();
+        return serverHost.pause();
     }
 
     /**
      * 恢复（主要用于测试）
      */
     public boolean resume() {
-        return serverHolder.resume();
+        return serverHost.resume();
     }
 
     @Override
     public void stop() {
-        serverHolder.stop();
+        serverHost.stop();
     }
 
     /// //////////////////////////////////////////////

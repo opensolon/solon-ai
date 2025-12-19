@@ -15,7 +15,9 @@
  */
 package org.noear.solon.ai.mcp.server.manager;
 
-import io.modelcontextprotocol.server.*;
+import io.modelcontextprotocol.server.McpAsyncServer;
+import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
@@ -31,26 +33,23 @@ import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.core.handle.ContextHolder;
 import reactor.core.publisher.Mono;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
- * 提示词服务端管理
+ * 有状态提示词注册表
  *
  * @author noear
- * @since 3.8.0
+ * @since 3.2
  */
-public class StatelessPromptMcpServerManager implements McpServerManager<FunctionPrompt> {
+public class StatefulPromptRegistry implements McpPrimitivesRegistry<FunctionPrompt> {
     private final Map<String, FunctionPrompt> promptsMap = new ConcurrentHashMap<>();
 
-    private final Supplier<McpStatelessAsyncServer> serverSupplier;
-    private final McpServer.StatelessAsyncSpecification mcpServerSpec;
+    private final Supplier<McpAsyncServer> serverSupplier;
+    private final McpServer.AsyncSpecification mcpServerSpec;
 
-    public StatelessPromptMcpServerManager(Supplier<McpStatelessAsyncServer> serverSupplier, McpServer.StatelessAsyncSpecification mcpServerSpec) {
+    public StatefulPromptRegistry(Supplier<McpAsyncServer> serverSupplier, McpServer.AsyncSpecification mcpServerSpec) {
         this.serverSupplier = serverSupplier;
         this.mcpServerSpec = mcpServerSpec;
     }
@@ -89,11 +88,11 @@ public class StatelessPromptMcpServerManager implements McpServerManager<Functio
                 promptArguments.add(new McpSchema.PromptArgument(p1.name(), p1.description(), p1.required()));
             }
 
-            McpStatelessServerFeatures.AsyncPromptSpecification promptSpec = new McpStatelessServerFeatures.AsyncPromptSpecification(
+            McpServerFeatures.AsyncPromptSpecification promptSpec = new McpServerFeatures.AsyncPromptSpecification(
                     new McpSchema.Prompt(functionPrompt.name(), functionPrompt.title(), functionPrompt.description(), promptArguments),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext( exchange), () -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange.transportContext()), () -> {
                                 functionPrompt.handleAsync(request.arguments()).whenComplete((prompts, err) -> {
                                     if (err != null) {
                                         err = Utils.throwableUnwrap(err);
