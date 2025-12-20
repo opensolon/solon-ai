@@ -40,7 +40,6 @@ import org.noear.solon.ai.media.Audio;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.media.Text;
 import org.noear.solon.ai.mcp.McpChannel;
-import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RunUtil;
@@ -67,6 +66,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -96,10 +96,12 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     private final ReentrantLock LOCKER = new ReentrantLock();
 
 
-
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
     private final AtomicBoolean isStarted = new AtomicBoolean(false);
+
     private final McpClientProperties clientProps;
+    private final Consumer<McpClient.AsyncSpec> clientCustomizer;
+
     private ScheduledExecutorService heartbeatExecutor;
     private McpAsyncClient client;
     private McpSchema.LoggingLevel loggingLevel = McpSchema.LoggingLevel.INFO;
@@ -111,7 +113,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
     private LocalCacheService cacheService = new LocalCacheService();
     private final StringMutexLock cacheLocker = new StringMutexLock();
-
 
 
     /**
@@ -129,6 +130,10 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     public McpClientProvider(McpClientProperties clientProps) {
+        this(clientProps, null);
+    }
+
+    public McpClientProvider(McpClientProperties clientProps, Consumer<McpClient.AsyncSpec> clientCustomizer) {
         if (Utils.isEmpty(clientProps.getChannel())) {
             throw new IllegalArgumentException("The channel is required");
         }
@@ -149,6 +154,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         }
 
         this.clientProps = clientProps;
+        this.clientCustomizer = clientCustomizer;
 
         //开始心跳
         this.heartbeatHandle();
@@ -228,16 +234,27 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
         }
 
-        return McpClient.async(clientTransport)
+
+        //spec
+        McpClient.AsyncSpec clientSpec = McpClient.async(clientTransport)
                 .clientInfo(new McpSchema.Implementation(clientProps.getName(), clientProps.getVersion()))
                 .requestTimeout(clientProps.getRequestTimeout())
                 .initializationTimeout(clientProps.getInitializationTimeout())
                 .toolsChangeConsumer(this::onToolsChange)
                 .resourcesChangeConsumer(this::onResourcesChange)
                 .resourcesUpdateConsumer(this::onResourcesUpdate)
-                .promptsChangeConsumer(this::onPromptsChange)
-                //.withConnectOnInit(false) //初始化放到后面（更可控）
-                .build();
+                .promptsChangeConsumer(this::onPromptsChange);
+        //.withConnectOnInit(false) //初始化放到后面（更可控）
+
+        if (clientCustomizer != null) {
+            clientCustomizer.accept(clientSpec);
+        }
+
+        //build
+        McpAsyncClient clientRaw = clientSpec.build();
+        clientRaw.setLoggingLevel(loggingLevel);
+
+        return clientRaw;
     }
 
     private Mono<Void> onToolsChange(List<McpSchema.Tool> tools) {
@@ -836,6 +853,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
     public static class Builder {
         private McpClientProperties props = new McpClientProperties();
+        private Consumer<McpClient.AsyncSpec> clientCustomizer;
 
         // for mcp
 
@@ -874,12 +892,18 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             return this;
         }
 
+        public Builder customize(Consumer<McpClient.AsyncSpec> clientCustomizer) {
+            this.clientCustomizer = clientCustomizer;
+            return this;
+        }
+
         // for http
 
         public Builder url(String url) {
             props.setApiUrl(url);
             return this;
         }
+
 
         public Builder header(String name, String value) {
             props.getHeaders().put(name, value);
@@ -1055,7 +1079,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         }
 
         public McpClientProvider build() {
-            return new McpClientProvider(props);
+            return new McpClientProvider(props, clientCustomizer);
         }
     }
 }
