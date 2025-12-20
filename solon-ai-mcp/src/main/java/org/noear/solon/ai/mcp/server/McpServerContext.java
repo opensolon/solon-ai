@@ -34,11 +34,13 @@ import java.util.Collection;
  */
 public class McpServerContext extends ContextEmpty {
     /// /////////////////////////
+    private final McpAsyncServerExchange exchange;
     private Context context;
     private String sessionId;
 
-    public McpServerContext(McpTransportContext transportContext) {
+    public McpServerContext(McpAsyncServerExchange exchange, McpTransportContext transportContext) {
         //通响 transportContext 获取连接时的 context
+        this.exchange = exchange;
         this.context = (Context) transportContext.get(Context.class.getName());
 
         if (this.context != null) {
@@ -62,6 +64,11 @@ public class McpServerContext extends ContextEmpty {
             this.context = new ContextEmpty();
             this.headerMap().addAll(System.getenv());
         }
+    }
+
+    @Override
+    public Object request() {
+        return exchange;
     }
 
     /**

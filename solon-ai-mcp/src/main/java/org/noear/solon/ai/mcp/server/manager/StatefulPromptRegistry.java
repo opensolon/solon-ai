@@ -92,7 +92,7 @@ public class StatefulPromptRegistry implements McpPrimitivesRegistry<FunctionPro
                     new McpSchema.Prompt(functionPrompt.name(), functionPrompt.title(), functionPrompt.description(), promptArguments),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(exchange.transportContext()), () -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
                                 functionPrompt.handleAsync(request.arguments()).whenComplete((prompts, err) -> {
                                     if (err != null) {
                                         err = Utils.throwableUnwrap(err);

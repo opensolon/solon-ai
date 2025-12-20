@@ -1,8 +1,13 @@
 package demo.ai.mcp.client_ssl;
 
+import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
+import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 import org.noear.solon.net.http.impl.HttpSslSupplierDefault;
 import reactor.core.publisher.Mono;
 
@@ -12,25 +17,32 @@ import reactor.core.publisher.Mono;
  *
  */
 public class SamplingDemo {
-    public void case1() {
-        //通过 queryString 传递（需要 3.2.1-M1 或之后）
+    public void client1() {
         McpClientProvider clientProvider = McpClientProvider.builder()
-                .apiUrl("http://xxx.xxx.xxx/sse?key=yyy")
-                .httpSsl(HttpSslSupplierDefault.getInstance())
+                .url("https://xxx.xxx.xxx/mcp?key=yyy")
+                .httpSsl(HttpSslSupplierAny.getInstance())
                 .customize(spec -> {
                     spec.capabilities(McpSchema.ClientCapabilities.builder().sampling().build());
-                    spec.sampling(req -> {
-                        return Mono.just(new McpSchema.CreateMessageResult());
-                    });
+                    spec.sampling(req -> Mono.just(McpSchema.CreateMessageResult.builder()
+                            .content(new McpSchema.TextContent("test"))
+                            .build()));
                 })
                 .build();
 
 
-        clientProvider.getClient()
-                .callTool(new McpSchema.CallToolRequest("demo", Utils.asMap("a", 1)))
-                .doOnNext(rest -> {
-                    System.out.println(rest);
-                })
-                .subscribe();
+        clientProvider.callToolAsText("demo", Utils.asMap("a", 1))
+                .getContent();
+    }
+
+    @McpServerEndpoint(channel = McpChannel.STREAMABLE, mcpEndpoint = "/mcp")
+    public static class Server1 {
+        @ToolMapping(description = "demo")
+        public Mono<String> demo(McpAsyncServerExchange exchange) {
+            return exchange.createMessage(McpSchema.CreateMessageRequest.builder().build())
+                    .flatMap(rust -> {
+                        McpSchema.TextContent txt = (McpSchema.TextContent) rust.content();
+                        return Mono.just(txt.text());
+                    });
+        }
     }
 }

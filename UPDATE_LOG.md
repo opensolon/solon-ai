@@ -20,9 +20,11 @@
 * 添加 solon-ai FunctionTool:handleAsync（用于 mcp-server 异步支持）
 * 添加 solon-ai-dialect-openai ClaudeChatDialect 方言
 * 添加 solon-ai-core ChatMessage:toNdjson,fromNdjson 方法（替代 ChatSession:toNdjson, loadNdjson），新方法机制上更自由
+* 添加 solon-ai-core ToolSchemaUtil.jsonSchema Publisher 泛型支持
 * 添加 solon-ai-mcp McpServerHost 服务宿主接口，用于隔离有状态与无状态服务
 * 添加 solon-ai-mcp McpChannel.STREAMABLE_STATELESS （服务端）无状态会话
 * 添加 solon-ai-mcp McpClientProvider:customize 方法（用于扩展 roots, sampling 等）
+* 
 * 优化 solon-ai-mcp mcp StreamableHttp 模式下 服务端正常返回时 客户端异常日志打印的情况
 * 调整 solon-ai-mcp getResourceTemplates、getResources 不再共享注册
 * 调整 solon-ai-mcp McpServerManager 内部接口更名为 McpPrimitivesRegistry （MCP 原语注册器）

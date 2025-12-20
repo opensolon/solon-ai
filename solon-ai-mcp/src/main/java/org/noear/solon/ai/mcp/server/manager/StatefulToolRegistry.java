@@ -103,7 +103,7 @@ public class StatefulToolRegistry implements McpPrimitivesRegistry<FunctionTool>
                     toolBuilder.build(),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(exchange.transportContext()), () -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
                                 functionTool.handleAsync(request).whenComplete((rst, err) -> {
                                     final McpSchema.CallToolResult result;
 
