@@ -100,7 +100,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     private final AtomicBoolean isStarted = new AtomicBoolean(false);
 
     private final McpClientProperties clientProps;
-    private final Consumer<McpClient.AsyncSpec> clientCustomizer;
 
     private ScheduledExecutorService heartbeatExecutor;
     private McpAsyncClient client;
@@ -130,10 +129,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     }
 
     public McpClientProvider(McpClientProperties clientProps) {
-        this(clientProps, null);
-    }
-
-    public McpClientProvider(McpClientProperties clientProps, Consumer<McpClient.AsyncSpec> clientCustomizer) {
         if (Utils.isEmpty(clientProps.getChannel())) {
             throw new IllegalArgumentException("The channel is required");
         }
@@ -154,7 +149,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         }
 
         this.clientProps = clientProps;
-        this.clientCustomizer = clientCustomizer;
 
         //开始心跳
         this.heartbeatHandle();
@@ -246,8 +240,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 .promptsChangeConsumer(this::onPromptsChange);
         //.withConnectOnInit(false) //初始化放到后面（更可控）
 
-        if (clientCustomizer != null) {
-            clientCustomizer.accept(clientSpec);
+        if (clientProps.getClientCustomizer() != null) {
+            clientProps.getClientCustomizer().accept(clientSpec);
         }
 
         //build
@@ -853,7 +847,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
     public static class Builder {
         private McpClientProperties props = new McpClientProperties();
-        private Consumer<McpClient.AsyncSpec> clientCustomizer;
 
         // for mcp
 
@@ -893,7 +886,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         }
 
         public Builder customize(Consumer<McpClient.AsyncSpec> clientCustomizer) {
-            this.clientCustomizer = clientCustomizer;
+            props.setClientCustomizer(clientCustomizer);
             return this;
         }
 
@@ -1079,7 +1072,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         }
 
         public McpClientProvider build() {
-            return new McpClientProvider(props, clientCustomizer);
+            return new McpClientProvider(props);
         }
     }
 }

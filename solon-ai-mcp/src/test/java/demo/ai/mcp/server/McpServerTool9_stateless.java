@@ -1,5 +1,6 @@
 package demo.ai.mcp.server;
 
+import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -8,6 +9,7 @@ import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.handle.Context;
+import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -27,8 +29,12 @@ public class McpServerTool9_stateless {
     }
 
     @ResourceMapping(uri = "config://app-version", description = "获取应用版本号", mimeType = "text/config")
-    public String getAppVersion() {
-        return "v3.2.0";
+    public Mono<String> getAppVersion(McpAsyncServerExchange exchange) {
+        if (exchange == null) {
+            return Mono.just("v3.2.0");
+        } else {
+            return Mono.just("v1.0");
+        }
     }
 
     @ResourceMapping(uri = "db://users/{user_id}/email", description = "根据用户ID查询邮箱")

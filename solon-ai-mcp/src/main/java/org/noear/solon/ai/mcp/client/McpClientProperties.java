@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.mcp.client;
 
+import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.ai.util.ProxyDesc;
 import org.noear.solon.net.http.HttpSslSupplier;
@@ -27,6 +28,7 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -155,6 +157,7 @@ public class McpClientProperties {
     /// ///////////////////////
 
 
+    private transient Consumer<McpClient.AsyncSpec> clientCustomizer;
     private transient Function<List<McpSchema.Tool>, Mono<Void>> toolsChangeConsumer;
     private transient Function<List<McpSchema.Resource>, Mono<Void>> resourcesChangeConsumer;
     private transient Function<List<McpSchema.ResourceContents>, Mono<Void>> resourcesUpdateConsumer;
@@ -390,6 +393,14 @@ public class McpClientProperties {
         this.serverParameters = null;
 
         this.env = env;
+    }
+
+    public void setClientCustomizer(Consumer<McpClient.AsyncSpec> clientCustomizer) {
+        this.clientCustomizer = clientCustomizer;
+    }
+
+    public Consumer<McpClient.AsyncSpec> getClientCustomizer() {
+        return clientCustomizer;
     }
 
     public void setToolsChangeConsumer(Function<List<McpSchema.Tool>, Mono<Void>> toolsChangeConsumer) {
