@@ -255,10 +255,13 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     protected ToolCall parseToolCall(ChatResponseDefault resp, ONode n1) {
-        String index = n1.get("index").getString();
         String callId = n1.get("id").getString();
 
-        //claude.index 可能都是 0
+        if (Utils.isNotEmpty(callId)) {
+            resp.lastToolCallId = callId;
+        }
+
+        String index = resp.lastToolCallId;
 
         ONode n1f = n1.get("function");
         String name = n1f.get("name").getString();
