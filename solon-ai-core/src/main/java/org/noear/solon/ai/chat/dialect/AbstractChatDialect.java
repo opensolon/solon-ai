@@ -264,7 +264,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         String index = resp.lastToolCallId;
 
         ONode n1f = n1.get("function");
-        String name = n1f.get("name").getString();
+        String name = n1f.get("name").getString(); //可能是空的
         ONode n1fArgs = n1f.get("arguments");
         String argStr = n1fArgs.getString();
 

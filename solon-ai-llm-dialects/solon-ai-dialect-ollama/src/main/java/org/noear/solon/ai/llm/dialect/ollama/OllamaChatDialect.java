@@ -144,7 +144,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
 
     @Override
     protected ToolCall parseToolCall(ChatResponseDefault resp, ONode n1) {
-        String callId = n1.get("id").getString();
+        String callId = n1.get("id").getString();//可能是空的
 
         ONode n1f = n1.get("function");
         String name = n1f.get("name").getString();
@@ -155,7 +155,9 @@ public class OllamaChatDialect extends AbstractChatDialect {
 
         if (n1fArgs.isValue()) {
             //有可能是 json string
-            n1fArgs = ONode.ofJson(argStr);
+            if (hasNestedJsonBlock(argStr)) {
+                n1fArgs = ONode.ofJson(argStr);
+            }
         }
 
         Map<String, Object> argMap = null;
