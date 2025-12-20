@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,7 +43,7 @@ public class ChatResponseDefault implements ChatResponse {
     protected AiUsage usage;
     protected String model;
     protected boolean finished;
-    protected final Map<String, ToolCallBuilder> toolCallBuilders = new ConcurrentHashMap();
+    protected final Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
 
     //取合消息内容
     protected StringBuilder aggregationMessageContent = new StringBuilder();
