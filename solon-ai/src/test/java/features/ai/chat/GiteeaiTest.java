@@ -11,7 +11,7 @@ import org.noear.solon.test.SolonTest;
 public class GiteeaiTest extends AbsChatTest{
     private static final String apiUrl = "https://ai.gitee.com/v1/chat/completions";
     private static final String apiKey = "PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18";
-    private static final String model = "Qwen2.5-72B-Instruct";//"Qwen3-32B";//"QwQ-32B";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
+    private static final String model = "gpt-oss-120b";//"GLM-4.6";//"Qwen3-32B";//"QwQ-32B";//"DeepSeek-V3"; //deepseek-reasoner//deepseek-chat
 
     protected ChatModel.Builder getChatModelBuilder() {
         return ChatModel.of(apiUrl)
