@@ -24,12 +24,14 @@ import org.noear.snack4.codec.util.EgggUtil;
 import org.noear.snack4.jsonschema.JsonSchema;
 import org.noear.snack4.jsonschema.SchemaKeyword;
 import org.noear.snack4.jsonschema.SchemaType;
+import org.noear.snack4.jsonschema.generate.TypePatternMapper;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.impl.BodyAnnoDetector;
 import org.noear.solon.ai.chat.tool.impl.ParamAnnoResolver;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Nullable;
+import org.reactivestreams.Publisher;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
@@ -70,6 +72,17 @@ public class ToolSchemaUtil {
 
         bodyDetectors.add(new BodyAnnoDetector());
         paramResolvers.add(new ParamAnnoResolver());
+        jsonSchema.addTypeMapper(new TypePatternMapper<Publisher>() {
+            @Override
+            public boolean supports(TypeEggg typeEggg) {
+                return Publisher.class.isAssignableFrom(typeEggg.getType());
+            }
+
+            @Override
+            public TypeEggg mapType(TypeEggg typeEggg) {
+                return EgggUtil.getTypeEggg(typeEggg.getActualTypeArguments()[0]);
+            }
+        });
     }
 
     /**
