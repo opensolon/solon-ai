@@ -146,7 +146,7 @@ public class StatefulResourceRegistry implements McpPrimitivesRegistry<FunctionR
                             .mimeType(functionResource.mimeType()).build(),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(exchange.transportContext()), () -> {
+                            ContextHolder.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
                                 functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
 
                                     if (err != null) {

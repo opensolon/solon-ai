@@ -28,6 +28,8 @@ import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.wrap.MethodWrap;
+import org.noear.solon.rx.SimpleSubscriber;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,18 +113,32 @@ public class MethodFunctionPrompt implements FunctionPrompt {
 
             if (handleR instanceof CompletableFuture) {
                 CompletableFuture<Object> handleF = (CompletableFuture<Object>) handleR;
-                handleF.whenComplete((rst1, ex) -> {
-                    if (ex != null) {
+                handleF.whenComplete((rst1, err) -> {
+                    if (err != null) {
                         if (log.isWarnEnabled()) {
-                            log.warn("Prompt handle error, name: '{}'", name, ex);
+                            log.warn("Prompt handle error, name: '{}'", name, err);
                         }
-                        returnFuture.completeExceptionally(ex);
+                        returnFuture.completeExceptionally(err);
                     } else {
-                        returnFuture.complete((Collection<ChatMessage>) rst1);
+                        doConvert(rst1, returnFuture);
                     }
                 });
+            } else if (handleR instanceof Publisher) {
+                Publisher<Object> handleM = (Publisher) handleR;
+                handleM.subscribe(new SimpleSubscriber<>()
+                        .doOnSubscribe(subs -> {
+                            subs.request(1);
+                        })
+                        .doOnNext(rst1 -> {
+                            doConvert(rst1, returnFuture);
+                        }).doOnError(err -> {
+                            if (log.isWarnEnabled()) {
+                                log.warn("Prompt handle error, name: '{}'", name, err);
+                            }
+                            returnFuture.completeExceptionally(err);
+                        }));
             } else {
-                returnFuture.complete((Collection<ChatMessage>) handleR);
+                doConvert(handleR, returnFuture);
             }
 
         } catch (Throwable ex) {
@@ -133,6 +149,10 @@ public class MethodFunctionPrompt implements FunctionPrompt {
         }
 
         return returnFuture;
+    }
+
+    private void doConvert(Object rst, CompletableFuture<Collection<ChatMessage>> returnFuture) {
+        returnFuture.complete((Collection<ChatMessage>) rst);
     }
 
     private Object doHandle(Map<String, Object> args) throws Throwable {
