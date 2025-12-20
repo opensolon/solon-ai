@@ -17,7 +17,7 @@ public class Context7Test {
         McpClientProvider clientProvider = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
                 .httpTimeout(HttpTimeout.of(30, 30, 0))
-                .apiUrl("https://mcp.context7.com/mcp")
+                .url("https://mcp.context7.com/mcp")
                 .header("CONTEXT7_API_KEY", "xxx")
                 .build();
 

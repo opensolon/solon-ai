@@ -22,7 +22,7 @@ import java.util.Map;
 public class OutputSchemaMcpToolTest {
     static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.STREAMABLE)
-            .apiUrl("http://localhost:8081/mcp/outputSchema/sse")
+            .url("http://localhost:8081/mcp/outputSchema/sse")
             .build();
 
     @AfterAll

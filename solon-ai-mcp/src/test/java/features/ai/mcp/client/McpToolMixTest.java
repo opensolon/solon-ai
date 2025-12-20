@@ -20,7 +20,7 @@ public class McpToolMixTest {
     public void case1() throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/mcp/WeatherTools/sse")
+                .url("http://localhost:8081/mcp/WeatherTools/sse")
                 .build();
 
         Text mediaText = mcpClient.readResourceAsText("weather://cities");

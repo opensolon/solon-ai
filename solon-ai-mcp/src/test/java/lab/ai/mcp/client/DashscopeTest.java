@@ -17,7 +17,7 @@ public class DashscopeTest {
     public void case1() {
         McpClientProvider clientProvider = McpClientProvider.builder()
                 .channel(McpChannel.SSE)
-                .apiUrl("https://dashscope.aliyuncs.com/api/v1/mcps/amap-maps/sse")
+                .url("https://dashscope.aliyuncs.com/api/v1/mcps/amap-maps/sse")
                 .apiKey("xxx")
                 .build();
 

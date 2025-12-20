@@ -25,7 +25,7 @@ public class McpChangeSyncTest {
     public void case1() throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/demo2/sse")
+                .url("http://localhost:8081/demo2/sse")
                 .build();
 
         Thread.sleep(10);
@@ -80,7 +80,7 @@ public class McpChangeSyncTest {
     public void case2() throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/demo2/sse")
+                .url("http://localhost:8081/demo2/sse")
                 .build();
 
         Thread.sleep(10);

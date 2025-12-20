@@ -18,7 +18,7 @@ public class McpHttpAuthTest {
     public void case1() {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/auth/sse?user=1")
+                .url("http://localhost:8081/auth/sse?user=1")
                 .cacheSeconds(30)
                 .build();
 
@@ -30,7 +30,7 @@ public class McpHttpAuthTest {
     public void case2() {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/auth/sse?user=2")
+                .url("http://localhost:8081/auth/sse?user=2")
                 .cacheSeconds(30)
                 .build();
 

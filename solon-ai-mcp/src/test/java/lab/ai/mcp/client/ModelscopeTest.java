@@ -17,7 +17,7 @@ public class ModelscopeTest {
         //https://modelscope.cn/mcp/servers/@antvis/mcp-server-chart
         McpClientProvider clientProvider = McpClientProvider.builder()
                 .channel(McpChannel.SSE)
-                .apiUrl("https://mcp.api-inference.modelscope.net/ec844bf2103647/sse")
+                .url("https://mcp.api-inference.modelscope.net/ec844bf2103647/sse")
                 .build();
 
         Collection<FunctionTool> tools = clientProvider.getTools();
@@ -35,7 +35,7 @@ public class ModelscopeTest {
         McpClientProvider clientProvider = McpClientProvider.builder()
                 .channel(McpChannel.SSE)
                 .httpFactory(OkHttpUtilsFactory.getInstance())
-                .apiUrl("https://mcp.api-inference.modelscope.net/ec844bf2103647/sse")
+                .url("https://mcp.api-inference.modelscope.net/ec844bf2103647/sse")
                 .build();
 
         Collection<FunctionTool> tools = clientProvider.getTools();
@@ -52,7 +52,7 @@ public class ModelscopeTest {
         //https://modelscope.cn/mcp/servers/chevalblanc/MCP-BING-CN
         McpClientProvider clientProvider = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("https://mcp.api-inference.modelscope.net/a6c83fbd332d4f/mcp")
+                .url("https://mcp.api-inference.modelscope.net/a6c83fbd332d4f/mcp")
                 .build();
 
         Collection<FunctionTool> tools = clientProvider.getTools();
@@ -70,7 +70,7 @@ public class ModelscopeTest {
         McpClientProvider clientProvider = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
                 .httpFactory(OkHttpUtilsFactory.getInstance())
-                .apiUrl("https://mcp.api-inference.modelscope.net/a6c83fbd332d4f/mcp")
+                .url("https://mcp.api-inference.modelscope.net/a6c83fbd332d4f/mcp")
                 .build();
 
         Collection<FunctionTool> tools = clientProvider.getTools();

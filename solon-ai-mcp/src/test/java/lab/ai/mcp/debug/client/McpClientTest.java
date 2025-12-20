@@ -25,7 +25,7 @@ import java.util.*;
 public class McpClientTest {
     McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.STREAMABLE)
-            .apiUrl("http://localhost:8081/mcp/")
+            .url("http://localhost:8081/mcp/")
             .cacheSeconds(30)
             .build();
 

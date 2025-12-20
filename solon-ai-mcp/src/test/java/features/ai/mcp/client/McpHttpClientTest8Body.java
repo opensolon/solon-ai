@@ -18,7 +18,7 @@ import java.util.Collections;
 public class McpHttpClientTest8Body {
     static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.STREAMABLE)
-            .apiUrl("http://localhost:8081/demo8/sse?user=1")
+            .url("http://localhost:8081/demo8/sse?user=1")
             .cacheSeconds(30)
             .build();
 

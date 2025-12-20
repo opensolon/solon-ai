@@ -15,7 +15,7 @@ import java.util.Collection;
 @McpServerEndpoint(name = "sse-to-stdio-tool", channel = McpChannel.STDIO)
 public class McpSseToStdioServerDemo implements ToolProvider {
     McpClientProvider sseToolProvider = McpClientProvider.builder()
-            .apiUrl("http://localhost:8081/sse")
+            .url("http://localhost:8081/sse")
             .build();
 
     @Override

@@ -52,7 +52,7 @@ public class McpHttpClientTest {
     public void case1_2() throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/demo2/sse")
+                .url("http://localhost:8081/demo2/sse")
                 .build();
 
         String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
@@ -67,7 +67,7 @@ public class McpHttpClientTest {
     public void case3() throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/demo2/sse")
+                .url("http://localhost:8081/demo2/sse")
                 .build();
 
         assert mcpClient.getTools().size() == 1;
@@ -87,7 +87,7 @@ public class McpHttpClientTest {
 
         McpClientProvider toolProvider2 = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/demo4/sse")
+                .url("http://localhost:8081/demo4/sse")
                 .build();
 
         ChatModel chatModel = ChatModel.of(apiUrl)
@@ -117,7 +117,7 @@ public class McpHttpClientTest {
 
         McpClientProvider toolProvider2 = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/demo4/sse")
+                .url("http://localhost:8081/demo4/sse")
                 .build();
 
         ChatModel chatModel = ChatModel.of(apiUrl)

@@ -24,7 +24,7 @@ import java.util.Map;
 public class McpHttpClientMixTest10_stateless {
     static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.STREAMABLE)
-            .apiUrl("http://localhost:8081/demo10/mcp?token=3")
+            .url("http://localhost:8081/demo10/mcp?token=3")
             .headerSet("user", "2")
             .cacheSeconds(30)
             .build();

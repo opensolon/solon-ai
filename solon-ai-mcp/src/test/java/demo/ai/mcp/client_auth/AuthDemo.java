@@ -9,14 +9,14 @@ public class AuthDemo {
     public void case1() {
         //通过 queryString 传递（需要 3.2.1-M1 或之后）
         McpClientProvider toolProvider = McpClientProvider.builder()
-                .apiUrl("http://xxx.xxx.xxx/sse?key=yyy")
+                .url("http://xxx.xxx.xxx/sse?key=yyy")
                 .build();
     }
 
     public void case2() {
         //通过 baisc auth 传递
         McpClientProvider toolProvider = McpClientProvider.builder()
-                .apiUrl("http://xxx.xxx.xxx/sse")
+                .url("http://xxx.xxx.xxx/sse")
                 .apiKey("yyy")
                 .build();
     }
@@ -24,7 +24,7 @@ public class AuthDemo {
     public void case3() {
         //通过 baisc auth 传递
         McpClientProvider toolProvider = McpClientProvider.builder()
-                .apiUrl("http://xxx.xxx.xxx/sse")
+                .url("http://xxx.xxx.xxx/sse")
                 .headerSet("tokey", "yyy")
                 .build();
     }

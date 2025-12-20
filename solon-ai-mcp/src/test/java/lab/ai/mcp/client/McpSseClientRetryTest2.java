@@ -10,7 +10,7 @@ import java.util.Collections;
 public class McpSseClientRetryTest2 {
     public static void main(String[] args) throws Exception {
         McpClientProvider toolProvider = McpClientProvider.builder()
-                .apiUrl("http://localhost:8081/sse")
+                .url("http://localhost:8081/sse")
                 .build();
 
 

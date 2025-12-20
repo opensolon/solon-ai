@@ -12,7 +12,7 @@ public class SslDemo {
     public void case1() {
         //通过 queryString 传递（需要 3.2.1-M1 或之后）
         McpClientProvider clientProvider = McpClientProvider.builder()
-                .apiUrl("http://xxx.xxx.xxx/sse?key=yyy")
+                .url("http://xxx.xxx.xxx/sse?key=yyy")
                 .httpSsl(HttpSslSupplierDefault.getInstance())
                 .build();
 

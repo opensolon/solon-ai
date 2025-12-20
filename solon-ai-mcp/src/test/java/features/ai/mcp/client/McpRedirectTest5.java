@@ -20,7 +20,7 @@ public class McpRedirectTest5 {
     public void tool1() throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/demo5/jump/sse")
+                .url("http://localhost:8081/demo5/jump/sse")
                 .build();
 
         String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();

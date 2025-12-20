@@ -16,7 +16,7 @@ public class McpClientLab {
     public static void main(String[] args) throws Exception {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/mcp/")
+                .url("http://localhost:8081/mcp/")
                 .cacheSeconds(30)
                 .build();
 

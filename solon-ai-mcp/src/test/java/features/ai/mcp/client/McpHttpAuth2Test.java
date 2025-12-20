@@ -18,7 +18,7 @@ public class McpHttpAuth2Test {
     public void case1() {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/auth2/sse")
+                .url("http://localhost:8081/auth2/sse")
                 .header("role", "1")
                 .cacheSeconds(30)
                 .build();
@@ -31,7 +31,7 @@ public class McpHttpAuth2Test {
     public void case2() {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("http://localhost:8081/auth2/sse")
+                .url("http://localhost:8081/auth2/sse")
                 .header("role", "2")
                 .cacheSeconds(30)
                 .build();

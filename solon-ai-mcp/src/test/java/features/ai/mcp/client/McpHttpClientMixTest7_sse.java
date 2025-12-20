@@ -24,7 +24,7 @@ import java.util.Map;
 public class McpHttpClientMixTest7_sse {
     static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.SSE)
-            .apiUrl("http://localhost:8081/demo7/sse?token=3")
+            .url("http://localhost:8081/demo7/sse?token=3")
             .headerSet("user", "2")
             .cacheSeconds(30)
             .build();

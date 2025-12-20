@@ -28,7 +28,7 @@ import java.util.List;
 public class McpHttpClientMixTest2 {
     static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.STREAMABLE)
-            .apiUrl("http://localhost:8081/demo2/sse?user=1")
+            .url("http://localhost:8081/demo2/sse?user=1")
             .cacheSeconds(30)
             .build();
 

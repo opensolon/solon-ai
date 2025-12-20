@@ -28,7 +28,7 @@ import java.util.List;
 public class McpContextPathTest3 {
     static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.SSE)
-            .apiUrl("http://localhost:8082/test/ctx3/sse?user=1")
+            .url("http://localhost:8082/test/ctx3/sse?user=1")
             .cacheSeconds(30)
             .build();
 

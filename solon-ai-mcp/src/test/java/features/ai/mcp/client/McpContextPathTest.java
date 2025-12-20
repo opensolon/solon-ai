@@ -28,7 +28,7 @@ import java.util.List;
 public class McpContextPathTest {
     static McpClientProvider mcpClient = McpClientProvider.builder()
             .channel(McpChannel.STREAMABLE)
-            .apiUrl("http://localhost:8082/test/ctx2/sse?user=1")
+            .url("http://localhost:8082/test/ctx2/sse?user=1")
             .cacheSeconds(30)
             .build();
 

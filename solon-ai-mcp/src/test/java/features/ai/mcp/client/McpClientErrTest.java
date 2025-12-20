@@ -12,7 +12,7 @@ public class McpClientErrTest {
     public void connTest() throws Throwable {
         McpClientProvider clientProvider = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .apiUrl("https://mcp.map.baidu.com/sse")
+                .url("https://mcp.map.baidu.com/sse")
                 .build();
 
         long start = System.currentTimeMillis();
