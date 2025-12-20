@@ -11,6 +11,7 @@ import org.noear.solon.annotation.Header;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Result;
+import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -21,12 +22,12 @@ import java.util.Collection;
 @McpServerEndpoint(channel = McpChannel.SSE, mcpEndpoint = "/demo7/sse")
 public class McpServerTool7_sse {
     @ToolMapping(description = "查询城市降雨量")
-    public String getRainfall(@Param(name = "location", description = "城市位置") String location) {
+    public Mono<String> getRainfall(@Param(name = "location", description = "城市位置") String location) {
         if (location == null) {
             throw new IllegalStateException("arguments location is null (Assistant recognition failure)");
         }
 
-        return "555毫米";
+        return Mono.just("555毫米");
     }
 
     @ToolMapping(description = "获取一个城市的特产介绍")

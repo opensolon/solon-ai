@@ -19,8 +19,7 @@ import reactor.core.publisher.Mono;
 public class SamplingDemo {
     public void client1() {
         McpClientProvider clientProvider = McpClientProvider.builder()
-                .url("https://xxx.xxx.xxx/mcp?key=yyy")
-                .httpSsl(HttpSslSupplierAny.getInstance())
+                .url("http://localhost:8080/mcp")
                 .customize(spec -> {
                     spec.capabilities(McpSchema.ClientCapabilities.builder().sampling().build());
                     spec.sampling(req -> Mono.just(McpSchema.CreateMessageResult.builder()
@@ -37,12 +36,8 @@ public class SamplingDemo {
     @McpServerEndpoint(channel = McpChannel.STREAMABLE, mcpEndpoint = "/mcp")
     public static class Server1 {
         @ToolMapping(description = "demo")
-        public Mono<String> demo(McpAsyncServerExchange exchange) {
-            return exchange.createMessage(McpSchema.CreateMessageRequest.builder().build())
-                    .flatMap(rust -> {
-                        McpSchema.TextContent txt = (McpSchema.TextContent) rust.content();
-                        return Mono.just(txt.text());
-                    });
+        public Mono<McpSchema.CreateMessageResult> demo(McpAsyncServerExchange exchange) {
+            return exchange.createMessage(McpSchema.CreateMessageRequest.builder().build());
         }
     }
 }
