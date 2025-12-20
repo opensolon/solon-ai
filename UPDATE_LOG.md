@@ -25,6 +25,7 @@
 * 优化 solon-ai-mcp mcp StreamableHttp 模式下 服务端正常返回时 客户端异常日志打印的情况
 * 调整 solon-ai-mcp getResourceTemplates、getResources 不再共享注册
 * 调整 solon-ai-mcp McpServerManager 内部接口更名为 McpPrimitivesRegistry （MCP 原语注册器）
+* 调整 solon-ai-mcp McpClientProvider 默认不启用心跳机制（随着 mcp-sdk 的成熟，server 都有心跳机制了）
 
 
 新特性展示：1.MCP 无状态会话（STREAMABLE_STATELESS）和 2.CompletableFuture 异步MCP工具
