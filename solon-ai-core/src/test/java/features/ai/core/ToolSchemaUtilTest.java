@@ -12,10 +12,13 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.annotation.Param;
+import reactor.core.publisher.Mono;
 
+import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * @author noear 2025/4/29 created
@@ -85,7 +88,7 @@ public class ToolSchemaUtilTest {
     }
 
     @Test
-    public void ignoreOutputSchemaTest() {
+    public void ignoreOutputSchemaTest() throws Exception {
         assert ToolSchemaUtil.isIgnoreOutputSchema(String.class);
         assert ToolSchemaUtil.isIgnoreOutputSchema(Integer.class);
         assert ToolSchemaUtil.isIgnoreOutputSchema(int.class);
@@ -93,6 +96,21 @@ public class ToolSchemaUtilTest {
         assert ToolSchemaUtil.isIgnoreOutputSchema(Boolean.class);
         assert ToolSchemaUtil.isIgnoreOutputSchema(boolean.class);
         assert ToolSchemaUtil.isIgnoreOutputSchema(BigDecimal.class);
+
+
+        Type t1 = this.getClass().getMethod("m1").getGenericReturnType();
+        Type t2 = this.getClass().getMethod("m2").getGenericReturnType();
+
+        assert ToolSchemaUtil.isIgnoreOutputSchema(t1);
+        assert ToolSchemaUtil.isIgnoreOutputSchema(t2);
+    }
+
+    public static Mono<String> m1() {
+        return null;
+    }
+
+    public static CompletableFuture<String> m2() {
+        return null;
     }
 
     public static class User {

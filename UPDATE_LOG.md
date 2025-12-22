@@ -25,6 +25,7 @@
 * 添加 solon-ai FunctionTool:handleAsync（用于 mcp-server 异步支持）
 * 添加 solon-ai-core ChatMessage:toNdjson,fromNdjson 方法（替代 ChatSession:toNdjson, loadNdjson），新方法机制上更自由
 * 添加 solon-ai-core ToolSchemaUtil.jsonSchema Publisher 泛型支持
+* 添加 solon-ai-core ToolSchemaUtil.isIgnoreOutputSchema Publisher 泛型支持
 * 添加 solon-ai-mcp mcp-java-sdk v0.17 适配（支持 2025-06-18 版本协议）
 * 添加 solon-ai-mcp mcp-server 异步支持
 * 添加 solon-ai-mcp mcp-server streamable_stateless 支持

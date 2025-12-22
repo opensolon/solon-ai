@@ -62,7 +62,7 @@ public class MethodFunctionTool implements FunctionTool {
     public MethodFunctionTool(BeanWrap beanWrap, MethodEggg methodEggg) {
         this.beanWrap = beanWrap;
         this.methodWrap = new MethodWrap(beanWrap.context(), beanWrap.clz(), methodEggg);
-        this.returnType = methodEggg.getMethod().getGenericReturnType();
+        this.returnType = methodEggg.getGenericReturnType();
 
         ToolMapping mapping = methodEggg.getMethod().getAnnotation(ToolMapping.class);
 
@@ -99,7 +99,7 @@ public class MethodFunctionTool implements FunctionTool {
 
         // 输出参数 outputSchema
         {
-            Type returnType = methodEggg.getReturnTypeEggg().getGenericType();
+
             if (ToolSchemaUtil.isIgnoreOutputSchema(returnType) == false) {
                 outputSchema = ToolSchemaUtil.buildOutputSchema(returnType);
             } else {

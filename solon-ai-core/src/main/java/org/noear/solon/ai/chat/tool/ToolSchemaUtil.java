@@ -24,6 +24,7 @@ import org.noear.snack4.codec.util.EgggUtil;
 import org.noear.snack4.jsonschema.JsonSchema;
 import org.noear.snack4.jsonschema.SchemaKeyword;
 import org.noear.snack4.jsonschema.SchemaType;
+import org.noear.snack4.jsonschema.generate.TypeMapper;
 import org.noear.snack4.jsonschema.generate.TypePatternMapper;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.impl.BodyAnnoDetector;
@@ -219,6 +220,16 @@ public class ToolSchemaUtil {
      * 乎略输出架构
      */
     public static boolean isIgnoreOutputSchema(Type type) {
+        if (type instanceof ParameterizedType) {
+            TypeEggg typeEggg = EgggUtil.getTypeEggg(type);
+            TypeMapper typeMapper = jsonSchema.getTypeMapper(typeEggg);
+
+            if (typeMapper != null) {
+                typeEggg = typeMapper.mapType(typeEggg);
+                type = typeEggg.getGenericType();
+            }
+        }
+
         if (type == void.class) {
             return true;
         } else if (type == String.class) {
