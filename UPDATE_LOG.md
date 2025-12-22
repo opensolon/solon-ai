@@ -12,6 +12,14 @@
 
 ### v3.8.0
 
+重要变化：
+
+* mcp-java-sdk 升为 v0.17 （支持 2025-06-18 版本协议）
+* 添加 mcp-server McpChannel.STREAMABLE_STATELESS 通道支持（集群友好）
+* 添加 mcp-server 异步支持
+
+具体更新：
+
 * 添加 solon-ai FunctionPrompt:handleAsync（用于 mcp-server 异步支持）
 * 添加 solon-ai FunctionResource:handleAsync（用于 mcp-server 异步支持）
 * 添加 solon-ai FunctionTool:handleAsync（用于 mcp-server 异步支持）
