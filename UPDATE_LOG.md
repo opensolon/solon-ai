@@ -12,15 +12,15 @@
 
 ### v3.8.0
 
-* 新增 solon-ai-mcp mcp-java-sdk v0.17 适配（支持 2025-06-18 版本协议）
-* 添加 solon-ai-mcp mcp-server 异步支持
-* 添加 solon-ai-mcp mcp-server streamable_stateless 支持
 * 添加 solon-ai FunctionPrompt:handleAsync（用于 mcp-server 异步支持）
 * 添加 solon-ai FunctionResource:handleAsync（用于 mcp-server 异步支持）
 * 添加 solon-ai FunctionTool:handleAsync（用于 mcp-server 异步支持）
-* 添加 solon-ai-mcp Tool,Resource,Prompt 对 org.reactivestreams.Publisher<X> 异步返回支持
 * 添加 solon-ai-core ChatMessage:toNdjson,fromNdjson 方法（替代 ChatSession:toNdjson, loadNdjson），新方法机制上更自由
 * 添加 solon-ai-core ToolSchemaUtil.jsonSchema Publisher 泛型支持
+* 添加 solon-ai-mcp mcp-java-sdk v0.17 适配（支持 2025-06-18 版本协议）
+* 添加 solon-ai-mcp mcp-server 异步支持
+* 添加 solon-ai-mcp mcp-server streamable_stateless 支持
+* 添加 solon-ai-mcp Tool,Resource,Prompt 对 org.reactivestreams.Publisher<X> 异步返回支持
 * 添加 solon-ai-mcp McpServerHost 服务宿主接口，用于隔离有状态与无状态服务
 * 添加 solon-ai-mcp McpChannel.STREAMABLE_STATELESS （服务端）无状态会话
 * 添加 solon-ai-mcp McpClientProvider:customize 方法（用于扩展 roots, sampling 等）
