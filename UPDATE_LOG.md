@@ -13,8 +13,8 @@
 ### v3.8.0
 
 * 新增 solon-ai-mcp mcp-java-sdk v0.17 适配（支持 2025-06-18 版本协议）
-* 新增 solon-ai-mcp mcp-server 异步支持
-* 新增 solon-ai-mcp mcp-server streamable_stateless 支持
+* 添加 solon-ai-mcp mcp-server 异步支持
+* 添加 solon-ai-mcp mcp-server streamable_stateless 支持
 * 添加 solon-ai FunctionPrompt:handleAsync（用于 mcp-server 异步支持）
 * 添加 solon-ai FunctionResource:handleAsync（用于 mcp-server 异步支持）
 * 添加 solon-ai FunctionTool:handleAsync（用于 mcp-server 异步支持）
