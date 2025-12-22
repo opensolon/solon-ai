@@ -123,7 +123,7 @@ public class McpClientProperties {
     /**
      * mcp 心跳间隔（辅助自动重连）
      */
-    private Duration heartbeatInterval = Duration.ofSeconds(30); //Duration.ofSeconds(15);
+    private Duration heartbeatInterval = Duration.ofSeconds(15);
 
     /**
      * mcp 缓存秒数
