@@ -41,7 +41,7 @@ public class McpClientProperties {
     /**
      * 客户端名称
      */
-    private String name = "Solon-Ai-Mcp-Client";
+    private String name = "Solon-Mcp-Client";
 
     /**
      * 客户端版本号
