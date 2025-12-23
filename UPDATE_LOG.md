@@ -12,6 +12,10 @@
 
 
 
+### v3.7.4
+
+* 添加 solon-ai-core ChatMessage:toNdjson,fromNdjson 方法（替代 ChatSession:toNdjson, loadNdjson），新方法机制上更自由
+
 ### v3.7.3
 
 * 优化 solon-ai-core ToolSchemaUtil 扩展能力，支持注解处理定制（方便第三方集成）
