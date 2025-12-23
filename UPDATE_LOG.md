@@ -13,6 +13,7 @@
 
 ### 3.5.10
 
+* 添加 solon-ai-core ChatMessage:toNdjson,fromNdjson 方法（替代 ChatSession:toNdjson, loadNdjson），新方法机制上更自由
 * 优化 solon-ai-mcp MCP 客户端与服务端异常链接状态 立即返回
 
 ### 3.5.9
