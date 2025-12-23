@@ -34,4 +34,15 @@ public class McpStdioClientTest {
 
         mcpClient.close();
     }
+
+    @Test
+    public void csae2() {
+        McpClientProvider mcpClient = McpClientProvider.builder()
+                .channel(McpChannel.STDIO) //表示使用 stdio
+                .command("npx")
+                .args("-y", "@mcp-get-community/server-curl")
+                .build();
+
+        mcpClient.getTools();
+    }
 }

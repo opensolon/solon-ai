@@ -822,6 +822,7 @@ public final class McpSchema {
 		 */
 		@NoArgsConstructor @EqualsAndHashCode @ToString
 		@JsonInclude(JsonInclude.Include.NON_ABSENT)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public static class ToolCapabilities {
 			@JsonProperty("listChanged") private Boolean listChanged;
 
