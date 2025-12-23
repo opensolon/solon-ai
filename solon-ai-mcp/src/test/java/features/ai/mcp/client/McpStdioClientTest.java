@@ -15,7 +15,7 @@ import java.util.Collections;
 @SolonTest(scanning = false)
 public class McpStdioClientTest {
     @Test
-    public void case1() throws Exception {
+    public void csae1_stdio_jar() throws Exception {
         //服务端不能开启控制台的日志，不然会污染协议流
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STDIO) //表示使用 stdio
@@ -36,7 +36,7 @@ public class McpStdioClientTest {
     }
 
     @Test
-    public void csae2() {
+    public void csae2_stdio_npx() {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STDIO) //表示使用 stdio
                 .command("npx")
