@@ -10,6 +10,13 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+
+
+### 3.6.7
+
+* 添加 solon-ai-core ChatMessage:toNdjson,fromNdjson 方法（替代 ChatSession:toNdjson, loadNdjson），新方法机制上更自由
+
+
 ### 3.6.6
 
 * 优化 solon-ai-mcp MCP 客户端与服务端异常链接状态 立即返回
