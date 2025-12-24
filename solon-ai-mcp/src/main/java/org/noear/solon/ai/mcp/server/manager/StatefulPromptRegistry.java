@@ -30,7 +30,7 @@ import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.util.ParamDesc;
-import org.noear.solon.core.handle.ContextHolder;
+import org.noear.solon.core.handle.Context;
 import reactor.core.publisher.Mono;
 
 import java.util.*;
@@ -92,7 +92,7 @@ public class StatefulPromptRegistry implements McpPrimitivesRegistry<FunctionPro
                     new McpSchema.Prompt(functionPrompt.name(), functionPrompt.title(), functionPrompt.description(), promptArguments),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
+                            Context.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
                                 functionPrompt.handleAsync(request.arguments()).whenComplete((prompts, err) -> {
                                     if (err != null) {
                                         err = Utils.throwableUnwrap(err);

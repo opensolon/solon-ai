@@ -24,7 +24,7 @@ import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
-import org.noear.solon.core.handle.ContextHolder;
+import org.noear.solon.core.handle.Context;
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
@@ -99,7 +99,7 @@ public class StatefulResourceRegistry implements McpPrimitivesRegistry<FunctionR
                             .mimeType(functionResource.mimeType()).build(),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
+                            Context.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
                                 functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
 
                                     if (err != null) {
@@ -146,7 +146,7 @@ public class StatefulResourceRegistry implements McpPrimitivesRegistry<FunctionR
                             .mimeType(functionResource.mimeType()).build(),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
+                            Context.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
                                 functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
 
                                     if (err != null) {

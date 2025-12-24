@@ -24,7 +24,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
-import org.noear.solon.core.handle.ContextHolder;
+import org.noear.solon.core.handle.Context;
 import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
@@ -101,7 +101,7 @@ public class StatelessToolRegistry implements McpPrimitivesRegistry<FunctionTool
                     toolBuilder.build(),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(null, exchange), () -> {
+                            Context.currentWith(new McpServerContext(null, exchange), () -> {
                                 functionTool.handleAsync(request.arguments()).whenComplete((rst, err) -> {
                                     final McpSchema.CallToolResult result;
 

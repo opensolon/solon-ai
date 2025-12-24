@@ -28,6 +28,7 @@ import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.util.ParamDesc;
+import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextHolder;
 import reactor.core.publisher.Mono;
 
@@ -93,7 +94,7 @@ public class StatelessPromptRegistry implements McpPrimitivesRegistry<FunctionPr
                     new McpSchema.Prompt(functionPrompt.name(), functionPrompt.title(), functionPrompt.description(), promptArguments),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
-                            ContextHolder.currentWith(new McpServerContext(null,  exchange), () -> {
+                            Context.currentWith(new McpServerContext(null,  exchange), () -> {
                                 functionPrompt.handleAsync(request.arguments()).whenComplete((prompts, err) -> {
                                     if (err != null) {
                                         err = Utils.throwableUnwrap(err);
