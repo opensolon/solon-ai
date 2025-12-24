@@ -29,7 +29,6 @@ import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.media.Image;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.core.handle.Context;
-import org.noear.solon.core.handle.ContextHolder;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
