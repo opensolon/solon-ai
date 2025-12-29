@@ -7,6 +7,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.flow.FlowContext;
 
 /**
  * 复杂的业务场景测试：电商售后智能决策
@@ -36,8 +37,9 @@ public class ReActAgentComplexTest {
         // 2. 发现物流状态是 "lost" (丢件)
         // 3. 发现订单金额 > 100，触发 "refund" (全额退款) 而不是发优惠券
         String prompt = "我的订单号是 ORD_20251229，到现在还没收到货，帮我查查怎么回事并给出处理方案。";
+        FlowContext context = FlowContext.of("demo1");
 
-        String result = agent.run(prompt);
+        String result = agent.run(context, prompt);
 
         // 科学验证：
         Assertions.assertNotNull(result);

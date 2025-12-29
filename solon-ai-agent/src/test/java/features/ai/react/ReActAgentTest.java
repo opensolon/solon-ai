@@ -7,6 +7,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.flow.FlowContext;
 
 /**
  * 一个简单的计算器场景
@@ -28,7 +29,8 @@ public class ReActAgentTest {
                 .build();
 
         // 测试点：多步计算逻辑
-        String result = agent.run("先计算 12 加 34 的和，再把结果乘以 2 等于多少？");
+        FlowContext context = FlowContext.of("demo1");
+        String result = agent.run(context, "先计算 12 加 34 的和，再把结果乘以 2 等于多少？");
 
         Assertions.assertNotNull(result);
         // 结果应该是 (12+34)*2 = 92

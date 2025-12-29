@@ -18,12 +18,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class ReActAgent implements Agent {
     private final ReActConfig config;
-    private final String sessionId;
     private final Graph graph;
 
     public ReActAgent(ReActConfig config) {
         this.config = config;
-        this.sessionId = config.getSessionId();
         this.graph = initGraph();
     }
 
@@ -52,20 +50,24 @@ public class ReActAgent implements Agent {
     }
 
     @Override
-    public String run(String prompt) throws Throwable {
+    public String run(FlowContext context, String prompt) throws Throwable {
         if (config.isEnableLogging()) {
             LogUtil.global().info("Starting ReActAgent: " + prompt);
         }
 
         // 初始化流程上下文，携带对话历史与迭代计数
-        FlowContext context = FlowContext.of()
-                .put("prompt", prompt)
-                .put("current_iteration", new AtomicInteger(0))
-                .put("conversation_history", config.getSessionFactory().getSession(sessionId))
-                .put("status", "");
+        if (context.model().containsKey("prompt") == false) {
+            context.put("prompt", prompt)
+                    .put("current_iteration", new AtomicInteger(0))
+                    .put("conversation_history", config.getSessionFactory().getSession(context.getInstanceId()))
+                    .put("status", "");
+        }
 
         // 执行图引擎
-        config.getFlowEngine().eval(graph, context);
+        FlowContext.SCOPE.with(context, () -> {
+            //允许工具代码，可获取 FlowContext
+            config.getFlowEngine().eval(graph, context);
+        });
 
         // 获取最终答案
         String result = context.getOrDefault("final_answer", "").toString();
@@ -114,11 +116,6 @@ public class ReActAgent implements Agent {
 
         public Builder maxIterations(int val) {
             config.maxIterations(val);
-            return this;
-        }
-
-        public Builder sessionId(String val) {
-            config.sessionId(val);
             return this;
         }
 

@@ -16,7 +16,7 @@ public interface Agent extends TaskComponent {
      *
      * @param prompt 提示语
      */
-    String run(String prompt) throws Throwable;
+    String run(FlowContext context, String prompt) throws Throwable;
 
     /**
      * 作为 solon-flow TaskComponent 运行（方便 solon-flow 整合）
@@ -26,7 +26,7 @@ public interface Agent extends TaskComponent {
      */
     default void run(FlowContext context, Node node) throws Throwable {
         String prompt = context.getAs("prompt");
-        String result = run(prompt);
+        String result = run(context, prompt);
         context.put("result", result);
     }
 }

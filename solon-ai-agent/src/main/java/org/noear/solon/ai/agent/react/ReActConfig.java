@@ -22,7 +22,6 @@ public class ReActConfig {
     private float temperature = 0.7F;
     private int maxResponseTokens = 2048;
     private String finishMarker = "[FINISH]";
-    private String sessionId;
     private ChatSessionFactory sessionFactory = InMemoryChatSession::new;
     private FlowEngine flowEngine;
     private ReActSystemPromptProvider systemPromptProvider = new ReActSystemPromptProviderEn();
@@ -71,11 +70,6 @@ public class ReActConfig {
         return this;
     }
 
-    public ReActConfig sessionId(String val) {
-        this.sessionId = val;
-        return this;
-    }
-
     public ReActConfig sessionFactory(ChatSessionFactory val) {
         this.sessionFactory = val;
         return this;
@@ -119,10 +113,6 @@ public class ReActConfig {
 
     public boolean isEnableLogging() {
         return enableLogging;
-    }
-
-    public String getSessionId() {
-        return sessionId;
     }
 
     public ChatSessionFactory getSessionFactory() {
