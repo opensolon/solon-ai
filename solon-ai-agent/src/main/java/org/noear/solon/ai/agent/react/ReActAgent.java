@@ -225,7 +225,7 @@ public class ReActAgent implements Agent {
                 ONode argumentsNode = actionNode.get("arguments");
                 
                 // 查找并执行对应的工具
-                Object result = executeTool(toolName, argumentsNode);
+                String result = executeTool(toolName, argumentsNode);
                 
                 // 添加观察结果到对话历史
                 String observation = "Observation: " + result.toString();
@@ -244,13 +244,15 @@ public class ReActAgent implements Agent {
         /**
          * 执行工具调用
          */
-        private Object executeTool(String toolName, ONode arguments) throws Throwable {
+        private String executeTool(String toolName, ONode arguments) throws Throwable {
             // 在工具列表中查找匹配的工具
             for (FunctionTool tool : tools) {
                 if (tool.name().equals(toolName)) {
                     // 解析参数并执行工具
                     Map<String, Object> argsMap = arguments.toBean(Map.class);
-                    return tool.handle(argsMap);
+                    String result = tool.handle(argsMap);
+                    // 确保返回字符串形式的结果
+                    return result != null ? result.toString() : "Tool execution returned null";
                 }
             }
             

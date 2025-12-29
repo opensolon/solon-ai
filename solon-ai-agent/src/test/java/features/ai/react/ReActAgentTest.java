@@ -6,7 +6,6 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -38,19 +37,19 @@ public class ReActAgentTest {
             @Override
             public String handle(Map<String, Object> arguments) {
                 String operation = (String) arguments.get("operation");
-                Double a = (Double) arguments.get("a");
-                Double b = (Double) arguments.get("b");
+                Number a = (Number) arguments.get("a");
+                Number b = (Number) arguments.get("b");
 
                 switch (operation) {
                     case "add":
-                        return String.valueOf(a + b);
+                        return String.valueOf(a.doubleValue() + b.doubleValue());
                     case "subtract":
-                        return String.valueOf(a - b);
+                        return String.valueOf(a.doubleValue() - b.doubleValue());
                     case "multiply":
-                        return String.valueOf(a * b);
+                        return String.valueOf(a.doubleValue() * b.doubleValue());
                     case "divide":
-                        if (b != 0) {
-                            return String.valueOf(a / b);
+                        if (b.doubleValue() != 0) {
+                            return String.valueOf(a.doubleValue() / b.doubleValue());
                         } else {
                             return "Error: Division by zero";
                         }
@@ -70,6 +69,11 @@ public class ReActAgentTest {
                        "  },\n" +
                        "  \"required\": [\"operation\", \"a\", \"b\"]\n" +
                        "}";
+            }
+            
+            @Override
+            public boolean returnDirect() {
+                return false;
             }
         };
 
@@ -100,6 +104,11 @@ public class ReActAgentTest {
                        "  },\n" +
                        "  \"required\": [\"query\"]\n" +
                        "}";
+            }
+            
+            @Override
+            public boolean returnDirect() {
+                return false;
             }
         };
 

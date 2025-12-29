@@ -30,7 +30,7 @@ public class ReActDemo {
 
         // 演示基本功能
         demonstrateBasicFunctionality(chatModel, tools);
-
+        
         // 演示自定义系统提示功能
         demonstrateCustomSystemPrompt(chatModel, tools);
     }
@@ -40,7 +40,7 @@ public class ReActDemo {
      */
     private static void demonstrateBasicFunctionality(ChatModel chatModel, List<FunctionTool> tools) throws Throwable {
         System.out.println("=== 基本功能演示 ===");
-
+        
         // 创建 ReActAgent
         ReActAgent agent = new ReActAgent(chatModel, tools, 10);
 
@@ -55,7 +55,7 @@ public class ReActDemo {
      */
     private static void demonstrateCustomSystemPrompt(ChatModel chatModel, List<FunctionTool> tools) throws Throwable {
         System.out.println("=== 自定义系统提示演示 ===");
-
+        
         String customSystemPrompt = "你是一个专业的数学助手，专门帮助用户解决数学问题。" +
                 "使用 ReAct 模式（思考-行动-观察）来解决问题。" +
                 "格式要求：" +
@@ -91,19 +91,19 @@ public class ReActDemo {
             @Override
             public String handle(Map<String, Object> arguments) {
                 String operation = (String) arguments.get("operation");
-                Double a = Double.valueOf(arguments.get("a").toString());
-                Double b = Double.valueOf(arguments.get("b").toString());
+                Number a = (Number) arguments.get("a");
+                Number b = (Number) arguments.get("b");
 
                 switch (operation.toLowerCase()) {
                     case "add":
-                        return String.valueOf(a + b);
+                        return String.valueOf(a.doubleValue() + b.doubleValue());
                     case "subtract":
-                        return String.valueOf(a - b);
+                        return String.valueOf(a.doubleValue() - b.doubleValue());
                     case "multiply":
-                        return String.valueOf(a * b);
+                        return String.valueOf(a.doubleValue() * b.doubleValue());
                     case "divide":
-                        if (b != 0) {
-                            return String.valueOf(a / b);
+                        if (b.doubleValue() != 0) {
+                            return String.valueOf(a.doubleValue() / b.doubleValue());
                         } else {
                             return "Error: Division by zero";
                         }
@@ -111,18 +111,23 @@ public class ReActDemo {
                         return "Error: Unknown operation " + operation;
                 }
             }
-
+            
             @Override
             public String inputSchema() {
                 return "{\n" +
-                        "  \"type\": \"object\",\n" +
-                        "  \"properties\": {\n" +
-                        "    \"operation\": { \"type\": \"string\", \"enum\": [\"add\", \"subtract\", \"multiply\", \"divide\"] },\n" +
-                        "    \"a\": { \"type\": \"number\" },\n" +
-                        "    \"b\": { \"type\": \"number\" }\n" +
-                        "  },\n" +
-                        "  \"required\": [\"operation\", \"a\", \"b\"]\n" +
-                        "}";
+                       "  \"type\": \"object\",\n" +
+                       "  \"properties\": {\n" +
+                       "    \"operation\": { \"type\": \"string\", \"enum\": [\"add\", \"subtract\", \"multiply\", \"divide\"] },\n" +
+                       "    \"a\": { \"type\": \"number\" },\n" +
+                       "    \"b\": { \"type\": \"number\" }\n" +
+                       "  },\n" +
+                       "  \"required\": [\"operation\", \"a\", \"b\"]\n" +
+                       "}";
+            }
+            
+            @Override
+            public boolean returnDirect() {
+                return false;
             }
         };
     }
@@ -138,11 +143,6 @@ public class ReActDemo {
             }
 
             @Override
-            public String title() {
-                return this.name();
-            }
-
-            @Override
             public String description() {
                 return "A search tool for finding information";
             }
@@ -153,16 +153,21 @@ public class ReActDemo {
                 // 模拟搜索结果
                 return "Search result for: " + query + " - This is a mock search result.";
             }
-
+            
             @Override
             public String inputSchema() {
                 return "{\n" +
-                        "  \"type\": \"object\",\n" +
-                        "  \"properties\": {\n" +
-                        "    \"query\": { \"type\": \"string\" }\n" +
-                        "  },\n" +
-                        "  \"required\": [\"query\"]\n" +
-                        "}";
+                       "  \"type\": \"object\",\n" +
+                       "  \"properties\": {\n" +
+                       "    \"query\": { \"type\": \"string\" }\n" +
+                       "  },\n" +
+                       "  \"required\": [\"query\"]\n" +
+                       "}";
+            }
+            
+            @Override
+            public boolean returnDirect() {
+                return false;
             }
         };
     }
@@ -186,13 +191,18 @@ public class ReActDemo {
             public String handle(Map<String, Object> arguments) {
                 return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
             }
-
+            
             @Override
             public String inputSchema() {
                 return "{\n" +
-                        "  \"type\": \"object\",\n" +
-                        "  \"properties\": {}\n" +
-                        "}";
+                       "  \"type\": \"object\",\n" +
+                       "  \"properties\": {}\n" +
+                       "}";
+            }
+            
+            @Override
+            public boolean returnDirect() {
+                return false;
             }
         };
     }
@@ -218,16 +228,21 @@ public class ReActDemo {
                 // 模拟天气数据
                 return "Weather in " + location + ": Sunny, 22°C, Humidity 65%";
             }
-
+            
             @Override
             public String inputSchema() {
                 return "{\n" +
-                        "  \"type\": \"object\",\n" +
-                        "  \"properties\": {\n" +
-                        "    \"location\": { \"type\": \"string\" }\n" +
-                        "  },\n" +
-                        "  \"required\": [\"location\"]\n" +
-                        "}";
+                       "  \"type\": \"object\",\n" +
+                       "  \"properties\": {\n" +
+                       "    \"location\": { \"type\": \"string\" }\n" +
+                       "  },\n" +
+                       "  \"required\": [\"location\"]\n" +
+                       "}";
+            }
+            
+            @Override
+            public boolean returnDirect() {
+                return false;
             }
         };
     }
