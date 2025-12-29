@@ -23,7 +23,7 @@ public class ReActAgentDemo {
         // 模拟天气工具
         config.addTool(new MethodToolProvider(new Tools()));
 
-        ReActAgent agent = new ReActAgent(config);
+        ReActAgent agent = config.create();
 
         // 3. 运行
         System.out.println("--- Agent 开始工作 ---");

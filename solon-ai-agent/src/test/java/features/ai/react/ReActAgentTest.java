@@ -27,7 +27,7 @@ public class ReActAgentTest {
                 .temperature(0.0F) // 测试场景建议 0，保证结果稳定
                 .enableLogging(true);
 
-        ReActAgent agent = new ReActAgent(config);
+        ReActAgent agent = config.create();
 
         // 4. 执行
         String result = agent.run("请问 123 加上 456 等于多少？");

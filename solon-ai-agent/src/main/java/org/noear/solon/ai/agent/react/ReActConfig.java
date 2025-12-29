@@ -21,6 +21,10 @@ public class ReActConfig {
         this.chatModel = chatModel;
     }
 
+    public ReActAgent create() {
+        return new ReActAgent(this);
+    }
+
     public String getSystemPromptTemplate() {
         if (systemPromptTemplate != null) return systemPromptTemplate;
 
