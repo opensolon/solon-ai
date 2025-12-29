@@ -51,6 +51,11 @@ public class RedisChatSession implements ChatSession {
     }
 
     @Override
+    public boolean isEmpty() {
+        return memSession.isEmpty();
+    }
+
+    @Override
     public void clear() {
         memSession.clear();
         redisList.clear();
