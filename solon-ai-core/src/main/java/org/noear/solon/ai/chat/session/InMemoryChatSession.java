@@ -109,7 +109,7 @@ public class InMemoryChatSession implements ChatSession {
      * 当删除调用 ToolCall 的 AssistantMessage 时，需要删除后续对应的 ToolMessage，可能会导致实际删除的 size 大于传入的 size.
      */
     private void removeNonSystemMessages(int size) {
-        Iterator<ChatMessage> iterator = this.messages.iterator();
+        Iterator<ChatMessage> iterator = messages.iterator();
         int removeNums = 0;
 
         while (iterator.hasNext() && removeNums < size) {
@@ -131,12 +131,17 @@ public class InMemoryChatSession implements ChatSession {
         }
     }
 
+    @Override
+    public boolean isEmpty() {
+        return messages.isEmpty();
+    }
+
     /**
      * 清空消息
      */
     @Override
     public void clear() {
-        this.messages.clear();
+        messages.clear();
     }
 
     public static Builder builder() {

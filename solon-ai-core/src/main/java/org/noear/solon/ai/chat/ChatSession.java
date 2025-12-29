@@ -69,6 +69,11 @@ public interface ChatSession extends ChatPrompt {
     void addMessage(Collection<? extends ChatMessage> messages);
 
     /**
+     * 是否为空
+     */
+    boolean isEmpty();
+
+    /**
      * 清空消息
      */
     void clear();
