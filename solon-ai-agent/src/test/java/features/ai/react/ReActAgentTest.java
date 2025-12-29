@@ -9,6 +9,9 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 
+/**
+ * 一个简单的计算器场景
+ * */
 public class ReActAgentTest {
 
     @Test

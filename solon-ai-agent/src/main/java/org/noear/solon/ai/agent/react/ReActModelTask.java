@@ -56,17 +56,26 @@ public class ReActModelTask implements TaskComponent {
         });
 
         ChatResponse response = request.call();
-        String content = (response.getContent() == null) ? "" : response.getContent();
+        final String content;
+        final String resultContent;
+
+        if(response.hasContent()){
+            content = response.getMessage().getContent();
+            resultContent = response.getMessage().getResultContent();
+        } else  {
+            content = "";
+            resultContent = "";
+        }
 
         // 5. 将回复存入历史与上下文
         history.add(ChatMessage.ofAssistant(content));
-        context.put("last_content", content);
+        context.put("last_content", resultContent);
 
         // 6. 决策路由逻辑
         if (content.contains(config.getFinishMarker()) || !content.contains("Action:")) {
             // 包含结束符或不包含 Action 标识时，判定为任务完成
             context.put("status", "finish");
-            context.put("final_answer", parseFinal(content));
+            context.put("final_answer", parseFinal(resultContent));
         } else {
             // 引导至 node_tools 执行 Action
             context.put("status", "call_tool");
@@ -77,9 +86,19 @@ public class ReActModelTask implements TaskComponent {
      * 解析并清理最终回复内容
      */
     private String parseFinal(String content) {
+        if (content == null) return "";
+
+        // 1. 优先提取结束标记 [FINISH] 之后的内容
         if (content.contains(config.getFinishMarker())) {
-            return content.substring(content.indexOf(config.getFinishMarker()) + config.getFinishMarker().length()).trim();
+            content = content.substring(content.indexOf(config.getFinishMarker()) + config.getFinishMarker().length());
         }
-        return content.replaceFirst("(?i)^Thought:\\s*", "").trim();
+
+        // 2. 剔除 <think>...</think> 标签及其内部内容（针对深度思考模型）
+        content = content.replaceAll("(?s)<think>.*?</think>", "");
+
+        // 3. 清理掉可能存在的 Thought: 标签
+        content = content.replaceFirst("(?i)^Thought:\\s*", "");
+
+        return content.trim();
     }
 }
