@@ -205,37 +205,78 @@ public class ReActAgent implements Agent {
             Pattern actionPattern2 = Pattern.compile("```json\\s*(\\{.*?\\})\\s*```", Pattern.DOTALL);
             Pattern actionPattern3 = Pattern.compile("\\{\\s*\"name\"\\s*:\\s*\".*?\"\\s*,\\s*\"arguments\"\\s*:\\s*\\{.*?\\}\\s*\\}", Pattern.DOTALL);
             
+            // 首先尝试匹配 Action 格式
             Matcher matcher = actionPattern1.matcher(response);
-            if (!matcher.find()) {
+            String actionJson = null;
+            
+            if (matcher.find()) {
+                actionJson = matcher.group(1).trim();
+            } else {
+                // 尝试匹配其他格式
                 matcher = actionPattern2.matcher(response);
-                if (!matcher.find()) {
+                if (matcher.find()) {
+                    actionJson = matcher.group(1).trim();
+                } else {
                     matcher = actionPattern3.matcher(response);
-                    if (!matcher.find()) {
-                        return false; // 没有找到工具调用
+                    if (matcher.find()) {
+                        actionJson = matcher.group(0).trim(); // 使用整个匹配项
+                    } else {
+                        // 尝试从响应中查找 JSON 格式的工具调用
+                        Pattern jsonPattern = Pattern.compile("\\{\\s*\"name\"\\s*:\\s*\"[^\"]+\"\\s*,\\s*\"arguments\"\\s*:\\s*\\{[^}]*\\}\\s*\\}");
+                        matcher = jsonPattern.matcher(response);
+                        if (matcher.find()) {
+                            actionJson = matcher.group(0).trim();
+                        }
                     }
                 }
             }
             
-            String actionJson = matcher.group(1).trim();
-            
-            try {
-                // 解析工具调用 JSON
-                ONode actionNode = ONode.ofJson(actionJson);
-                String toolName = actionNode.get("name").getString();
-                ONode argumentsNode = actionNode.get("arguments");
+            if (actionJson != null) {
+                try {
+                    // 解析工具调用 JSON
+                    ONode actionNode = ONode.ofJson(actionJson);
+                    String toolName = actionNode.get("name").getString();
+                    ONode argumentsNode = actionNode.get("arguments");
+                    
+                    // 查找并执行对应的工具
+                    String result = executeTool(toolName, argumentsNode);
+                    
+                    // 添加观察结果到对话历史
+                    String observation = "Observation: " + result.toString();
+                    conversationHistory.add(ChatMessage.ofUser(observation));
+                    hasToolCall = true;
+                    
+                } catch (Throwable e) {
+                    // 如果解析失败，添加错误信息到对话历史
+                    String error = "Observation: Error parsing or executing tool call: " + e.getMessage();
+                    conversationHistory.add(ChatMessage.ofUser(error));
+                }
+            } else {
+                // 检查是否包含工具调用的 JSON 格式（例如在响应中直接包含工具调用）
+                Pattern toolCallPattern = Pattern.compile("\\{\\s*\"name\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"arguments\"\\s*:\\s*\\{[^}]*\\}\\s*\\}");
+                matcher = toolCallPattern.matcher(response);
                 
-                // 查找并执行对应的工具
-                String result = executeTool(toolName, argumentsNode);
-                
-                // 添加观察结果到对话历史
-                String observation = "Observation: " + result.toString();
-                conversationHistory.add(ChatMessage.ofUser(observation));
-                hasToolCall = true;
-                
-            } catch (Throwable e) {
-                // 如果解析失败，添加错误信息到对话历史
-                String error = "Observation: Error parsing or executing tool call: " + e.getMessage();
-                conversationHistory.add(ChatMessage.ofUser(error));
+                while (matcher.find()) {
+                    String toolCallJson = matcher.group(0).trim();
+                    try {
+                        ONode actionNode = ONode.ofJson(toolCallJson);
+                        String toolName = actionNode.get("name").getString();
+                        ONode argumentsNode = actionNode.get("arguments");
+                        
+                        // 查找并执行对应的工具
+                        String result = executeTool(toolName, argumentsNode);
+                        
+                        // 添加观察结果到对话历史
+                        String observation = "Observation: " + result.toString();
+                        conversationHistory.add(ChatMessage.ofUser(observation));
+                        hasToolCall = true;
+                        
+                    } catch (Throwable e) {
+                        // 如果解析失败，添加错误信息到对话历史
+                        String error = "Observation: Error parsing or executing tool call: " + e.getMessage();
+                        conversationHistory.add(ChatMessage.ofUser(error));
+                    }
+                }
             }
             
             return hasToolCall;

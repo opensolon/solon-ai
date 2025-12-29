@@ -17,7 +17,7 @@ public class ReActDemo {
         // 创建一个模拟的 ChatModel（实际使用时需要配置真实的 LLM）
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama")
-                .model("qwen2.5:1.5b")
+                .model("qwen3:4b")
                 .build();
 
         // 创建演示工具
@@ -93,6 +93,19 @@ public class ReActDemo {
                 String operation = (String) arguments.get("operation");
                 Number a = (Number) arguments.get("a");
                 Number b = (Number) arguments.get("b");
+
+                // 检查是否有 result 参数（可能来自之前的步骤）
+                Number result = (Number) arguments.get("result");
+                if (result != null && a == null && b == null) {
+                    // 如果只有一个 result 参数，可能是在执行第二步操作
+                    // 需要从上下文或其他地方获取第二个操作数
+                    System.err.println("Warning: Only result parameter provided. This might be an error in tool call.");
+                    return "Error: Invalid parameters. Expected 'a' and 'b' numbers with 'operation'.";
+                }
+
+                if (a == null || b == null || operation == null) {
+                    return "Error: Missing required parameters. Need 'a', 'b' numbers and 'operation' string.";
+                }
 
                 switch (operation.toLowerCase()) {
                     case "add":

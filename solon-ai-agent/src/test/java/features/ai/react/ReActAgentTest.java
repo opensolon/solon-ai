@@ -19,7 +19,7 @@ public class ReActAgentTest {
         // 创建一个模拟的 ChatModel（实际使用时需要配置真实的 LLM）
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama")
-                .model("qwen2.5:1.5b")
+                .model("qwen3:4b")
                 .build();
 
         // 创建一些测试工具
