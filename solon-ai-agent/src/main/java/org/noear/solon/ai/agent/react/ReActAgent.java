@@ -10,8 +10,6 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.flow.Graph;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
 /**
  * 优化后的 ReActAgent
  * 基于 Solon Flow 流引擎实现 Thought -> Action -> Observation 循环
@@ -37,7 +35,7 @@ public class ReActAgent implements Agent {
             // 模型推理节点：决定是执行工具还是结束
             spec.addExclusive("node_model")
                     .task(new ReActModelTask(config))
-                    .linkAdd("node_tools", l -> l.when(ctx -> "call_tool".equals(ctx.get("status"))))
+                    .linkAdd("node_tools", l -> l.when(ctx -> "call_tool".equals(ctx.<ReActState>getAs("state").getStatus())))
                     .linkAdd("end"); // 默认跳转至结束
 
             // 工具执行节点：执行具体的函数调用
@@ -56,11 +54,10 @@ public class ReActAgent implements Agent {
         }
 
         // 初始化流程上下文，携带对话历史与迭代计数
-        if (context.model().containsKey("prompt") == false) {
-            context.put("prompt", prompt)
-                    .put("current_iteration", new AtomicInteger(0))
-                    .put("conversation_history", config.getSessionFactory().getSession(context.getInstanceId()))
-                    .put("status", "");
+        ReActState state = context.getAs("state");
+        if (state == null) {
+            state = new ReActState(prompt, config.getSessionFactory().getSession(context.getInstanceId()));
+            context.put("state", state);
         }
 
         // 执行图引擎
@@ -70,7 +67,7 @@ public class ReActAgent implements Agent {
         });
 
         // 获取最终答案
-        String result = context.getOrDefault("final_answer", "").toString();
+        String result = state.getFinalAnswer();
         if (config.isEnableLogging()) {
             LogUtil.global().info("Final Answer: " + result);
         }

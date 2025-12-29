@@ -9,7 +9,6 @@ import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;
 
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -31,8 +30,10 @@ public class ReActToolTask implements TaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        String lastContent = context.getAs("last_content");
-        ChatSession history = context.getAs("conversation_history");
+        ReActState state = context.getAs("state");
+
+        String lastContent = state.getLastContent();
+        ChatSession history = state.getConversationHistory();
 
         Matcher matcher = ACTION_PATTERN.matcher(lastContent);
         StringBuilder allObservations = new StringBuilder();

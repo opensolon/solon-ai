@@ -4,7 +4,6 @@ import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;
@@ -25,19 +24,21 @@ public class ReActModelTask implements TaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        AtomicInteger iter = context.getAs("current_iteration");
-        ChatSession history = context.getAs("conversation_history");
+        ReActState state = context.getAs("state");
+
+        AtomicInteger iter = state.getCurrentIteration();
+        ChatSession history = state.getConversationHistory();
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
         if (iter.incrementAndGet() > config.getMaxIterations()) {
-            context.put("status", "finish");
-            context.put("final_answer", "Agent error: Maximum iterations reached.");
+            state.setStatus("finish");
+            state.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
         }
 
         // 2. 初始化对话：首轮将 prompt 转为 User Message
         if (history.isEmpty()) {
-            String prompt = context.getAs("prompt");
+            String prompt = state.getPrompt();
             history.addMessage(ChatMessage.ofUser(prompt));
         }
 
@@ -70,18 +71,18 @@ public class ReActModelTask implements TaskComponent {
 
         // 5. 将回复存入历史与上下文
         history.addMessage(ChatMessage.ofAssistant(rawContent));
-        context.put("last_content", clearContent);
+        state.setLastContent(clearContent);
 
         // 6. 决策路由逻辑。只要有 Action 且没被判定为 Finish，就去执行工具
         if (rawContent.contains(config.getFinishMarker())) {
-            context.put("status", "finish");
-            context.put("final_answer", parseFinal(clearContent));
+            state.setStatus("finish");
+            state.setFinalAnswer(parseFinal(clearContent));
         } else if (rawContent.contains("Action:")) {
-            context.put("status", "call_tool");
+            state.setStatus("call_tool");
         } else {
             // 兜底逻辑：如果不含 Action 格式，则视为回答结束
-            context.put("status", "finish");
-            context.put("final_answer", parseFinal(clearContent));
+            state.setStatus("finish");
+            state.setFinalAnswer(parseFinal(clearContent));
         }
     }
 
