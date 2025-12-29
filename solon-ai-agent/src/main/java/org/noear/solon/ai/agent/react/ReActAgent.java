@@ -40,7 +40,6 @@ public class ReActAgent implements Agent {
             spec.addExclusive("node_model")
                     .task(new ReActModelTask(config))
                     .linkAdd("node_tools", l -> l.when(ctx -> "call_tool".equals(ctx.get("status"))))
-                    .linkAdd("end", l -> l.when(ctx -> "finish".equals(ctx.get("status"))))
                     .linkAdd("end"); // 默认回退：结束
 
             // 工具节点：执行副作用并返回观察结果
