@@ -40,7 +40,9 @@ public interface FunctionTool extends ChatTool {
     /**
      * 标题
      */
-    String title();
+    default String title() {
+        return name();
+    }
 
     /**
      * 描述
@@ -50,7 +52,9 @@ public interface FunctionTool extends ChatTool {
     /**
      * 是否直接返回给调用者
      */
-    boolean returnDirect();
+    default boolean returnDirect(){
+        return false;
+    }
 
     /**
      * 输入架构
