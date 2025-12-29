@@ -72,14 +72,16 @@ public class ReActModelTask implements TaskComponent {
         history.addMessage(ChatMessage.ofAssistant(rawContent));
         context.put("last_content", clearContent);
 
-        // 6. 决策路由逻辑
-        if (rawContent.contains(config.getFinishMarker()) || !rawContent.contains("Action:")) {
-            // 包含结束符或不包含 Action 标识时，判定为任务完成
+        // 6. 决策路由逻辑。只要有 Action 且没被判定为 Finish，就去执行工具
+        if (rawContent.contains(config.getFinishMarker())) {
             context.put("status", "finish");
             context.put("final_answer", parseFinal(clearContent));
-        } else {
-            // 引导至 node_tools 执行 Action
+        } else if (rawContent.contains("Action:")) {
             context.put("status", "call_tool");
+        } else {
+            // 兜底逻辑：如果不含 Action 格式，则视为回答结束
+            context.put("status", "finish");
+            context.put("final_answer", parseFinal(clearContent));
         }
     }
 

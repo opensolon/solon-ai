@@ -18,12 +18,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class ReActAgent implements Agent {
     private final ReActConfig config;
-    private final String sessoinId;
+    private final String sessionId;
     private final Graph graph;
 
     public ReActAgent(ReActConfig config) {
         this.config = config;
-        this.sessoinId = config.getSessoinId();
+        this.sessionId = config.getSessionId();
         this.graph = initGraph();
     }
 
@@ -61,8 +61,8 @@ public class ReActAgent implements Agent {
         FlowContext context = FlowContext.of()
                 .put("prompt", prompt)
                 .put("current_iteration", new AtomicInteger(0))
-                .put("conversation_history", config.getSessionFactory().getSession(sessoinId))
-                .put("status", "continue");
+                .put("conversation_history", config.getSessionFactory().getSession(sessionId))
+                .put("status", "");
 
         // 执行图引擎
         config.getFlowEngine().eval(graph, context);
@@ -129,6 +129,11 @@ public class ReActAgent implements Agent {
 
         public Builder flowEngine(FlowEngine val) {
             config.flowEngine(val);
+            return this;
+        }
+
+        public Builder systemPromptProvider(ReActSystemPromptProvider val) {
+            config.systemPromptProvider(val);
             return this;
         }
 
