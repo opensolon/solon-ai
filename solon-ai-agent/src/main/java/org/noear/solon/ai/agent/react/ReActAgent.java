@@ -54,10 +54,10 @@ public class ReActAgent implements Agent {
         }
 
         // 初始化流程上下文，携带对话历史与迭代计数
-        ReActState state = context.getAs("state");
+        ReActState state = context.getAs(ReActState.TAG);
         if (state == null) {
             state = new ReActState(prompt, config.getSessionFactory().getSession(context.getInstanceId()));
-            context.put("state", state);
+            context.put(ReActState.TAG, state);
         }
 
         // 执行图引擎

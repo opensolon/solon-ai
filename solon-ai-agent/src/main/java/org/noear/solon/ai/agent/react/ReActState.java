@@ -10,6 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  */
 public class ReActState {
+    public static final String TAG = "_state";
+
     private String prompt;
     private AtomicInteger currentIteration;
     private ChatSession conversationHistory;

@@ -24,7 +24,7 @@ public class ReActModelTask implements TaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        ReActState state = context.getAs("state");
+        ReActState state = context.getAs(ReActState.TAG);
 
         AtomicInteger iter = state.getCurrentIteration();
         ChatSession history = state.getConversationHistory();

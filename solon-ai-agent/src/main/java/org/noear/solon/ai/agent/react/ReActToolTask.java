@@ -30,7 +30,7 @@ public class ReActToolTask implements TaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        ReActState state = context.getAs("state");
+        ReActState state = context.getAs(ReActState.TAG);
 
         String lastContent = state.getLastContent();
         ChatSession history = state.getConversationHistory();
