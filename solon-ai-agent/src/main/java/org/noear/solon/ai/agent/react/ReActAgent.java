@@ -3,6 +3,8 @@ package org.noear.solon.ai.agent.react;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.LogUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
@@ -80,5 +82,50 @@ public class ReActAgent implements Agent {
             LogUtil.global().info("Final Answer: " + result);
         }
         return result;
+    }
+
+    public static Builder builder(ChatModel chatModel) {
+        return new Builder(new ReActConfig(chatModel));
+    }
+
+    public static Builder builder(ReActConfig config) {
+        return new Builder(config);
+    }
+
+    public static class Builder {
+        private ReActConfig config;
+
+        public Builder(ReActConfig config) {
+            this.config = config;
+        }
+
+        public Builder addTool(FunctionTool tool) {
+            config.addTool(tool);
+            return this;
+        }
+
+        public Builder addTool(ToolProvider toolProvider) {
+            config.addTool(toolProvider);
+            return this;
+        }
+
+        public Builder enableLogging(boolean val) {
+            config.enableLogging(val);
+            return this;
+        }
+
+        public Builder temperature(float val) {
+            config.temperature(val);
+            return this;
+        }
+
+        public Builder maxIterations(int val) {
+            config.maxIterations(val);
+            return this;
+        }
+
+        public ReActAgent build() {
+            return new ReActAgent(config);
+        }
     }
 }

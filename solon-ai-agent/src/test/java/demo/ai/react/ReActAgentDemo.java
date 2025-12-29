@@ -14,13 +14,11 @@ public class ReActAgentDemo {
                 .model("Qwen3-32B")
                 .build();
 
-        ReActConfig config = new ReActConfig(chatModel)
+        ReActAgent agent = ReActAgent.builder(chatModel)
                 .enableLogging(true)
-                .temperature(0.1F); // 低温度保证推理逻辑严密
-
-        config.addTool(new MethodToolProvider(new WeatherTools()));
-
-        ReActAgent agent = config.create();
+                .temperature(0.1F) // 低温度保证推理逻辑严密
+                .addTool(new MethodToolProvider(new WeatherTools()))
+                .build();
 
         System.out.println("--- Agent 开始工作 ---");
         // 这个问题会触发：1.调用工具获取天气 2.根据天气推理穿衣建议

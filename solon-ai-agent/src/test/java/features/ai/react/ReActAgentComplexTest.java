@@ -23,15 +23,14 @@ public class ReActAgentComplexTest {
                 .model("Qwen3-32B")
                 .build();
 
-        ReActConfig config = new ReActConfig(chatModel)
+        ReActAgent agent = ReActAgent.builder(chatModel)
                 .addTool(new MethodToolProvider(new OrderTools()))
                 .addTool(new MethodToolProvider(new LogisticTools()))
                 .addTool(new MethodToolProvider(new MarketingTools()))
                 .temperature(0.0F) // 严格遵循逻辑
                 .enableLogging(true)
-                .maxIterations(10);
-
-        ReActAgent agent = config.create();
+                .maxIterations(10)
+                .build();
 
         // 测试目标：
         // 1. 模型应发现需要先调 get_order 获取物流单号(track_123)
