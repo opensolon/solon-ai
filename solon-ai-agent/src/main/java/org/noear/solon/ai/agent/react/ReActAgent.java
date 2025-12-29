@@ -18,12 +18,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class ReActAgent implements Agent {
     private final ReActConfig config;
-    private final FlowEngine flowEngine;
-    private Graph graph;
+    private final String sessoinId;
+    private final Graph graph;
 
     public ReActAgent(ReActConfig config) {
         this.config = config;
-        this.flowEngine = FlowEngine.newInstance();
+        this.sessoinId = config.getSessoinId();
         this.graph = initGraph();
     }
 
@@ -61,11 +61,11 @@ public class ReActAgent implements Agent {
         FlowContext context = FlowContext.of()
                 .put("prompt", prompt)
                 .put("current_iteration", new AtomicInteger(0))
-                .put("conversation_history", config.getSession())
+                .put("conversation_history", config.getSessionFactory().getSession(sessoinId))
                 .put("status", "continue");
 
         // 执行图引擎
-        flowEngine.eval(graph, context);
+        config.getFlowEngine().eval(graph, context);
 
         // 获取最终答案
         String result = context.getOrDefault("final_answer", "").toString();
@@ -124,6 +124,11 @@ public class ReActAgent implements Agent {
 
         public Builder sessionFactory(ChatSessionFactory val) {
             config.sessionFactory(val);
+            return this;
+        }
+
+        public Builder flowEngine(FlowEngine val) {
+            config.flowEngine(val);
             return this;
         }
 

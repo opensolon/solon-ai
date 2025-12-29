@@ -6,6 +6,7 @@ import org.noear.solon.ai.chat.ChatSessionFactory;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.flow.FlowEngine;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +26,7 @@ public class ReActConfig {
     private String finishMarker = "[FINISH]";
     private String sessoinId;
     private ChatSessionFactory sessionFactory = InMemoryChatSession::new;
+    private FlowEngine flowEngine;
 
     public ReActConfig(ChatModel chatModel) {
         Objects.requireNonNull(chatModel, "chatModel");
@@ -59,6 +61,7 @@ public class ReActConfig {
     public ReActConfig maxIterations(int val) { this.maxIterations = val; return this; }
     public ReActConfig sessionId(String val) { this.sessoinId = val; return this; }
     public ReActConfig sessionFactory(ChatSessionFactory val) { this.sessionFactory = val; return this; }
+    public ReActConfig flowEngine(FlowEngine val) { this.flowEngine = val; return this; }
 
 
     // --- Getters ---
@@ -71,5 +74,5 @@ public class ReActConfig {
     public boolean isEnableLogging() { return enableLogging; }
     public String getSessoinId(){return sessoinId;}
     public ChatSessionFactory getSessionFactory() {  return sessionFactory;  }
-    public ChatSession getSession() {  return sessionFactory.getSession(sessoinId);  }
+    public FlowEngine getFlowEngine() { return flowEngine; }
 }
