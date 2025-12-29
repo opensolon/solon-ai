@@ -104,11 +104,15 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             if (content == null) {
                 resultContent = "";
             } else {
-                int thinkIndex = content.indexOf("</think>");
-                if (thinkIndex > -1) {
-                    resultContent = content.substring(thinkIndex + 8).trim();
+                int thinkEndIndex = content.indexOf("</think>");
+                if (thinkEndIndex > -1) {
+                    resultContent = content.substring(thinkEndIndex + 8).trim();
                 } else {
-                    resultContent = content;
+                    if (content.contains("<think>")) {
+                        resultContent = "";
+                    } else {
+                        resultContent = content.trim();
+                    }
                 }
             }
         }
