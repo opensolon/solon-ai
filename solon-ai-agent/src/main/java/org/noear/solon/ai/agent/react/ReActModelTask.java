@@ -43,7 +43,7 @@ public class ReActModelTask implements TaskComponent {
 
         // 3. 构建全量消息上下文（System + History）
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(new SystemMessage(config.getSystemPromptTemplate()));
+        messages.add(ChatMessage.ofSystem(config.getSystemPromptTemplate()));
         messages.addAll(history.getMessages());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
@@ -57,26 +57,26 @@ public class ReActModelTask implements TaskComponent {
         });
 
         ChatResponse response = request.call();
-        final String content;
-        final String resultContent;
+        final String rawContent; //原始内容，可能有思考
+        final String clearContent; //干净内容，没有思考
 
         if(response.hasContent()){
-            content = response.getMessage().getContent(); //可能有思考
-            resultContent = response.getMessage().getResultContent(); //没有思考（干净的内容）
+            rawContent = response.getMessage().getContent();
+            clearContent = response.getMessage().getResultContent();
         } else  {
-            content = "";
-            resultContent = "";
+            rawContent = "";
+            clearContent = "";
         }
 
         // 5. 将回复存入历史与上下文
-        history.addMessage(ChatMessage.ofAssistant(content));
-        context.put("last_content", resultContent);
+        history.addMessage(ChatMessage.ofAssistant(rawContent));
+        context.put("last_content", clearContent);
 
         // 6. 决策路由逻辑
-        if (content.contains(config.getFinishMarker()) || !content.contains("Action:")) {
+        if (rawContent.contains(config.getFinishMarker()) || !rawContent.contains("Action:")) {
             // 包含结束符或不包含 Action 标识时，判定为任务完成
             context.put("status", "finish");
-            context.put("final_answer", parseFinal(resultContent));
+            context.put("final_answer", parseFinal(clearContent));
         } else {
             // 引导至 node_tools 执行 Action
             context.put("status", "call_tool");
