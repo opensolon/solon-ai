@@ -25,10 +25,8 @@ public class ReActModelTask implements TaskComponent {
     public void run(FlowContext context, Node node) throws Throwable {
         ReActState state = context.getAs(ReActState.TAG);
 
-        AtomicInteger iter = state.getCurrentIteration();
-
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
-        if (iter.incrementAndGet() > config.getMaxIterations()) {
+        if (state.getIteration().incrementAndGet() > config.getMaxIterations()) {
             state.setStatus("finish");
             state.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
