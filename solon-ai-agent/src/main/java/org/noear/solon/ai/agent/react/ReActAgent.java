@@ -2,7 +2,6 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatSessionFactory;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.LogUtil;
@@ -56,7 +55,7 @@ public class ReActAgent implements Agent {
         // 初始化流程上下文，携带对话历史与迭代计数
         ReActState state = context.getAs(ReActState.TAG);
         if (state == null) {
-            state = new ReActState(prompt, config.getSessionFactory().getSession(context.getInstanceId()));
+            state = new ReActState(prompt);
             context.put(ReActState.TAG, state);
         }
 
@@ -113,11 +112,6 @@ public class ReActAgent implements Agent {
 
         public Builder maxIterations(int val) {
             config.maxIterations(val);
-            return this;
-        }
-
-        public Builder sessionFactory(ChatSessionFactory val) {
-            config.sessionFactory(val);
             return this;
         }
 

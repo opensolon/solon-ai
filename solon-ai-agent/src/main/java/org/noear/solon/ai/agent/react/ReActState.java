@@ -1,8 +1,10 @@
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.message.ChatMessage;
 
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.List;
 
 /**
  *
@@ -14,7 +16,7 @@ public class ReActState {
 
     private String prompt;
     private AtomicInteger currentIteration;
-    private ChatSession conversationHistory;
+    private List<ChatMessage> history;
     private String status;
     private String finalAnswer;
     private String lastContent;
@@ -23,9 +25,9 @@ public class ReActState {
         //用于反序列化
     }
 
-    public ReActState(String prompt, ChatSession conversation_history) {
+    public ReActState(String prompt) {
         this.prompt = prompt;
-        this.conversationHistory = conversation_history;
+        this.history = new ArrayList<>();
         this.currentIteration = new AtomicInteger(0);
         this.status = "";
         this.finalAnswer = "";
@@ -39,8 +41,12 @@ public class ReActState {
         return currentIteration;
     }
 
-    public ChatSession getConversationHistory() {
-        return conversationHistory;
+    public List<ChatMessage> getHistory() {
+        return history;
+    }
+
+    public void addMessage(ChatMessage message) {
+        history.add(message);
     }
 
     public String getStatus() {

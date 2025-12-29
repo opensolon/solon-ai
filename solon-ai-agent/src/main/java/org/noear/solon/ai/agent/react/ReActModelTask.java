@@ -2,7 +2,6 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -27,7 +26,6 @@ public class ReActModelTask implements TaskComponent {
         ReActState state = context.getAs(ReActState.TAG);
 
         AtomicInteger iter = state.getCurrentIteration();
-        ChatSession history = state.getConversationHistory();
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
         if (iter.incrementAndGet() > config.getMaxIterations()) {
@@ -37,15 +35,15 @@ public class ReActModelTask implements TaskComponent {
         }
 
         // 2. 初始化对话：首轮将 prompt 转为 User Message
-        if (history.isEmpty()) {
+        if (state.getHistory().isEmpty()) {
             String prompt = state.getPrompt();
-            history.addMessage(ChatMessage.ofUser(prompt));
+            state.addMessage(ChatMessage.ofUser(prompt));
         }
 
         // 3. 构建全量消息上下文（System + History）
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(config.getSystemPromptTemplate()));
-        messages.addAll(history.getMessages());
+        messages.addAll(state.getHistory());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
         ChatRequestDesc request = config.getChatModel().prompt(messages);
@@ -70,7 +68,7 @@ public class ReActModelTask implements TaskComponent {
         }
 
         // 5. 将回复存入历史与上下文
-        history.addMessage(ChatMessage.ofAssistant(rawContent));
+        state.addMessage(ChatMessage.ofAssistant(rawContent));
         state.setLastContent(clearContent);
 
         // 6. 决策路由逻辑。只要有 Action 且没被判定为 Finish，就去执行工具
