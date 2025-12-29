@@ -1,6 +1,7 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.flow.FlowContext;
@@ -28,7 +29,7 @@ public class ReActToolTask implements TaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         String lastContent = context.getAs("last_content");
-        List<ChatMessage> history = context.getAs("conversation_history");
+        ChatSession history = context.getAs("conversation_history");
 
         Matcher matcher = ACTION_PATTERN.matcher(lastContent);
         StringBuilder allObservations = new StringBuilder();
@@ -62,10 +63,10 @@ public class ReActToolTask implements TaskComponent {
 
         if (foundAny) {
             // 将工具执行结果以 User 身份反馈给对话历史
-            history.add(ChatMessage.ofUser(allObservations.toString().trim()));
+            history.addMessage(ChatMessage.ofUser(allObservations.toString().trim()));
         } else {
             // 引导提示：如果模型进入此节点却没写 Action，提示其正确格式
-            history.add(ChatMessage.ofUser("Observation: No valid Action format found. Please check if you need to call a tool or provide the Final Answer."));
+            history.addMessage(ChatMessage.ofUser("Observation: No valid Action format found. Please check if you need to call a tool or provide the Final Answer."));
         }
     }
 }

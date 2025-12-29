@@ -1,6 +1,9 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.ChatSessionFactory;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 
@@ -20,6 +23,8 @@ public class ReActConfig {
     private float temperature = 0.7F;
     private int maxResponseTokens = 2048;
     private String finishMarker = "[FINISH]";
+    private String sessoinId;
+    private ChatSessionFactory sessionFactory = InMemoryChatSession::new;
 
     public ReActConfig(ChatModel chatModel) {
         Objects.requireNonNull(chatModel, "chatModel");
@@ -52,6 +57,8 @@ public class ReActConfig {
     public ReActConfig enableLogging(boolean val) { this.enableLogging = val; return this; }
     public ReActConfig temperature(float val) { this.temperature = val; return this; }
     public ReActConfig maxIterations(int val) { this.maxIterations = val; return this; }
+    public ReActConfig sessionId(String val) { this.sessoinId = val; return this; }
+    public ReActConfig sessionFactory(ChatSessionFactory val) { this.sessionFactory = val; return this; }
 
 
     // --- Getters ---
@@ -62,4 +69,7 @@ public class ReActConfig {
     public int getMaxResponseTokens() { return maxResponseTokens; }
     public String getFinishMarker() { return finishMarker; }
     public boolean isEnableLogging() { return enableLogging; }
+    public String getSessoinId(){return sessoinId;}
+    public ChatSessionFactory getSessionFactory() {  return sessionFactory;  }
+    public ChatSession getSession() {  return sessionFactory.getSession(sessoinId);  }
 }

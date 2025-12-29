@@ -2,7 +2,7 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.ChatSessionFactory;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.LogUtil;
@@ -10,7 +10,6 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.flow.Graph;
 
-import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -62,7 +61,7 @@ public class ReActAgent implements Agent {
         FlowContext context = FlowContext.of()
                 .put("prompt", prompt)
                 .put("current_iteration", new AtomicInteger(0))
-                .put("conversation_history", new ArrayList<ChatMessage>())
+                .put("conversation_history", config.getSession())
                 .put("status", "continue");
 
         // 执行图引擎
@@ -115,6 +114,16 @@ public class ReActAgent implements Agent {
 
         public Builder maxIterations(int val) {
             config.maxIterations(val);
+            return this;
+        }
+
+        public Builder sessionId(String val) {
+            config.sessionId(val);
+            return this;
+        }
+
+        public Builder sessionFactory(ChatSessionFactory val) {
+            config.sessionFactory(val);
             return this;
         }
 

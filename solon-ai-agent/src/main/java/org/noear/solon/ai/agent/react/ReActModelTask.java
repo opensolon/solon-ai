@@ -2,6 +2,7 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.flow.FlowContext;
@@ -25,7 +26,7 @@ public class ReActModelTask implements TaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         AtomicInteger iter = context.getAs("current_iteration");
-        List<ChatMessage> history = context.getAs("conversation_history");
+        ChatSession history = context.getAs("conversation_history");
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
         if (iter.incrementAndGet() > config.getMaxIterations()) {
@@ -37,13 +38,13 @@ public class ReActModelTask implements TaskComponent {
         // 2. 初始化对话：首轮将 prompt 转为 User Message
         if (history.isEmpty()) {
             String prompt = context.getAs("prompt");
-            history.add(ChatMessage.ofUser(prompt));
+            history.addMessage(ChatMessage.ofUser(prompt));
         }
 
         // 3. 构建全量消息上下文（System + History）
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(new SystemMessage(config.getSystemPromptTemplate()));
-        messages.addAll(history);
+        messages.addAll(history.getMessages());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
         ChatRequestDesc request = config.getChatModel().prompt(messages);
@@ -68,7 +69,7 @@ public class ReActModelTask implements TaskComponent {
         }
 
         // 5. 将回复存入历史与上下文
-        history.add(ChatMessage.ofAssistant(content));
+        history.addMessage(ChatMessage.ofAssistant(content));
         context.put("last_content", resultContent);
 
         // 6. 决策路由逻辑
