@@ -1,144 +1,46 @@
 package features.ai.react;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActConfig;
+import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
+import org.noear.solon.annotation.Param;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-
-/**
- * ReActAgent 测试类
- */
 public class ReActAgentTest {
 
     @Test
-    public void testReActAgent() throws Throwable {
-        // 创建一个模拟的 ChatModel（实际使用时需要配置真实的 LLM）
+    public void testAdd() throws Throwable {
+        // 1. 初始化模型 (Ollama)
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama")
-                .model("qwen3:4b")
+                .model("qwen3:4b") // 建议使用 7b 以上模型，4b 对复杂 ReAct 遵循度有限
                 .build();
 
-        // 创建一些测试工具
-        FunctionTool calculatorTool = new FunctionTool() {
-            @Override
-            public String name() {
-                return "calculator";
-            }
+        // 2. 定义一个简单的加法工具
 
-            @Override
-            public String description() {
-                return "A simple calculator for basic arithmetic operations";
-            }
+        // 3. 配置 Agent
+        ReActConfig config = new ReActConfig(chatModel)
+                .addTool(new MethodToolProvider(new Tools()))
+                .temperature(0.0F) // 测试场景建议 0，保证结果稳定
+                .enableLogging(true);
 
-            @Override
-            public String handle(Map<String, Object> arguments) {
-                String operation = (String) arguments.get("operation");
-                Number a = (Number) arguments.get("a");
-                Number b = (Number) arguments.get("b");
+        ReActAgent agent = new ReActAgent(config);
 
-                switch (operation) {
-                    case "add":
-                        return String.valueOf(a.doubleValue() + b.doubleValue());
-                    case "subtract":
-                        return String.valueOf(a.doubleValue() - b.doubleValue());
-                    case "multiply":
-                        return String.valueOf(a.doubleValue() * b.doubleValue());
-                    case "divide":
-                        if (b.doubleValue() != 0) {
-                            return String.valueOf(a.doubleValue() / b.doubleValue());
-                        } else {
-                            return "Error: Division by zero";
-                        }
-                    default:
-                        return "Error: Unknown operation";
-                }
-            }
-            
-            @Override
-            public String inputSchema() {
-                return "{\n" +
-                       "  \"type\": \"object\",\n" +
-                       "  \"properties\": {\n" +
-                       "    \"operation\": { \"type\": \"string\", \"enum\": [\"add\", \"subtract\", \"multiply\", \"divide\"] },\n" +
-                       "    \"a\": { \"type\": \"number\" },\n" +
-                       "    \"b\": { \"type\": \"number\" }\n" +
-                       "  },\n" +
-                       "  \"required\": [\"operation\", \"a\", \"b\"]\n" +
-                       "}";
-            }
-            
-            @Override
-            public boolean returnDirect() {
-                return false;
-            }
-        };
+        // 4. 执行
+        String result = agent.run("请问 123 加上 456 等于多少？");
 
-        FunctionTool searchTool = new FunctionTool() {
-            @Override
-            public String name() {
-                return "search";
-            }
-
-            @Override
-            public String description() {
-                return "A search tool for finding information";
-            }
-
-            @Override
-            public String handle(Map<String, Object> arguments) {
-                String query = (String) arguments.get("query");
-                // 模拟搜索结果
-                return "Search result for: " + query + " - This is a mock search result.";
-            }
-            
-            @Override
-            public String inputSchema() {
-                return "{\n" +
-                       "  \"type\": \"object\",\n" +
-                       "  \"properties\": {\n" +
-                       "    \"query\": { \"type\": \"string\" }\n" +
-                       "  },\n" +
-                       "  \"required\": [\"query\"]\n" +
-                       "}";
-            }
-            
-            @Override
-            public boolean returnDirect() {
-                return false;
-            }
-        };
-
-        List<FunctionTool> tools = Arrays.asList(calculatorTool, searchTool);
-
-        // 创建 ReActAgent - 使用新构造函数，启用日志
-        ReActAgent agent = new ReActAgent(chatModel, tools, 5, null, true, 0.7F, 2048, 0.9F);
-
-        // 运行代理
-        String prompt = "What is 15 plus 25? Then search for information about the result.";
-        String result = agent.run(prompt);
-
-        System.out.println("Final result: " + result);
+        // 5. 断言
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.contains("579"), "结果应包含正确的数学计算值");
     }
 
-    @Test
-    public void testReActAgentWithoutTools() throws Throwable {
-        // 创建一个模拟的 ChatModel
-        ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
-                .provider("ollama")
-                .model("qwen2.5:1.5b")
-                .build();
-
-        // 创建不带工具的 ReActAgent
-        ReActAgent agent = new ReActAgent(chatModel, null, 5, null, true, 0.5F, 2048, 0.9F);
-
-        // 运行代理
-        String prompt = "Explain the concept of ReAct pattern in AI agents.";
-        String result = agent.run(prompt);
-
-        System.out.println("Result without tools: " + result);
+    public static class Tools {
+        @ToolMapping(description = "计算两个数字的和")
+        public double adder(@Param double a, @Param double b) {
+            return a + b;
+        }
     }
 }

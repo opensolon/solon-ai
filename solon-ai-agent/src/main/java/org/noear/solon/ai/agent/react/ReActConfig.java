@@ -2,6 +2,8 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,8 +21,6 @@ public class ReActConfig {
         this.chatModel = chatModel;
     }
 
-    // ... Getters and Setters (省略重复的 Boilerplate) ...
-
     public String getSystemPromptTemplate() {
         if (systemPromptTemplate != null) return systemPromptTemplate;
 
@@ -35,9 +35,15 @@ public class ReActConfig {
         return sb.toString();
     }
 
-    // 各种 Builder 方法...
+    // Builder 链式调用
     public ReActConfig tools(List<FunctionTool> tools) { this.tools = tools; return this; }
+    public ReActConfig addTool(FunctionTool tool) { this.tools.add(tool); return this; }
+    public ReActConfig addTool(ToolProvider toolProvider) { this.tools.addAll(toolProvider.getTools()); return this; }
     public ReActConfig enableLogging(boolean val) { this.enableLogging = val; return this; }
+    public ReActConfig temperature(float val) { this.temperature = val; return this; }
+    public ReActConfig maxIterations(int val) { this.maxIterations = val; return this; }
+
+    // Getters
     public List<FunctionTool> getTools() { return tools; }
     public ChatModel getChatModel() { return chatModel; }
     public int getMaxIterations() { return maxIterations; }
