@@ -9,9 +9,9 @@ import org.noear.solon.annotation.Param;
 
 public class ReActAgentDemo {
     public static void main(String[] args) throws Throwable {
-        ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
-                .provider("ollama")
-                .model("llama3.2")
+        ChatModel chatModel = ChatModel.of("https://ai.gitee.com/v1/chat/completions")
+                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
+                .model("Qwen3-32B")
                 .build();
 
         ReActConfig config = new ReActConfig(chatModel)
