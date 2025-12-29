@@ -12,6 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * 模型推理任务
+ */
 public class ReActModelTask implements TaskComponent {
     private final ReActConfig config;
 
@@ -24,7 +27,7 @@ public class ReActModelTask implements TaskComponent {
         AtomicInteger iter = context.getAs("current_iteration");
         List<ChatMessage> history = context.getAs("conversation_history");
 
-        // 1. 迭代限制：防止死循环
+        // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
         if (iter.incrementAndGet() > config.getMaxIterations()) {
             context.put("status", "finish");
             context.put("final_answer", "Agent error: Maximum iterations reached.");
@@ -42,12 +45,11 @@ public class ReActModelTask implements TaskComponent {
         messages.add(new SystemMessage(config.getSystemPromptTemplate()));
         messages.addAll(history);
 
-        // 4. 发起模型请求
+        // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
         ChatRequestDesc request = config.getChatModel().prompt(messages);
         request.options(o -> {
-            o.temperature((float) config.getTemperature());
-            // 使用 optionAdd 增加 stop 序列，兼容性更好
-            o.optionAdd("stop", "Observation:");
+            o.temperature(config.getTemperature());
+            o.optionAdd("stop", "Observation:"); // 关键：模型遇到此词立即停止，交还控制权
             if (config.getTools() != null && !config.getTools().isEmpty()) {
                 o.toolsAdd(config.getTools());
             }
@@ -56,27 +58,28 @@ public class ReActModelTask implements TaskComponent {
         ChatResponse response = request.call();
         String content = (response.getContent() == null) ? "" : response.getContent();
 
-        // 5. 更新状态
+        // 5. 将回复存入历史与上下文
         history.add(ChatMessage.ofAssistant(content));
         context.put("last_content", content);
 
-        // 6. 决策路由 (LangGraph: should_continue)
+        // 6. 决策路由逻辑
         if (content.contains(config.getFinishMarker()) || !content.contains("Action:")) {
+            // 包含结束符或不包含 Action 标识时，判定为任务完成
             context.put("status", "finish");
             context.put("final_answer", parseFinal(content));
         } else {
-            // 模型输出了 Action: 且未结束，引导至工具节点
+            // 引导至 node_tools 执行 Action
             context.put("status", "call_tool");
         }
     }
 
+    /**
+     * 解析并清理最终回复内容
+     */
     private String parseFinal(String content) {
-        // 优先提取结束标记后的内容
         if (content.contains(config.getFinishMarker())) {
             return content.substring(content.indexOf(config.getFinishMarker()) + config.getFinishMarker().length()).trim();
         }
-
-        // 容错处理：如果模型直接输出了内容而没带标记，清理一下常见的标识符
         return content.replaceFirst("(?i)^Thought:\\s*", "").trim();
     }
 }
