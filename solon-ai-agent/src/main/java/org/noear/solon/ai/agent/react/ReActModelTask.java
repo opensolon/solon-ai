@@ -24,46 +24,59 @@ public class ReActModelTask implements TaskComponent {
         AtomicInteger iter = context.getAs("current_iteration");
         List<ChatMessage> history = context.getAs("conversation_history");
 
-        // 检查迭代次数上限
+        // 1. 迭代限制：防止死循环
         if (iter.incrementAndGet() > config.getMaxIterations()) {
             context.put("status", "finish");
-            context.put("final_answer", "Reached maximum iterations.");
+            context.put("final_answer", "Agent error: Maximum iterations reached.");
             return;
         }
 
+        // 2. 初始化对话：首轮将 prompt 转为 User Message
         if (history.isEmpty()) {
-            history.add(ChatMessage.ofUser(context.<String>getAs("prompt")));
+            String prompt = context.getAs("prompt");
+            history.add(ChatMessage.ofUser(prompt));
         }
 
-        // 准备请求
+        // 3. 构建全量消息上下文（System + History）
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(new SystemMessage(config.getSystemPromptTemplate()));
         messages.addAll(history);
 
+        // 4. 发起模型请求
         ChatRequestDesc request = config.getChatModel().prompt(messages);
         request.options(o -> {
             o.temperature((float) config.getTemperature());
-            if (!config.getTools().isEmpty()) o.toolsAdd(config.getTools());
+            // 使用 optionAdd 增加 stop 序列，兼容性更好
+            o.optionAdd("stop", "Observation:");
+            if (config.getTools() != null && !config.getTools().isEmpty()) {
+                o.toolsAdd(config.getTools());
+            }
         });
 
         ChatResponse response = request.call();
-        String content = response.getContent() == null ? "" : response.getContent();
+        String content = (response.getContent() == null) ? "" : response.getContent();
+
+        // 5. 更新状态
         history.add(ChatMessage.ofAssistant(content));
         context.put("last_content", content);
 
-        // 决策逻辑
+        // 6. 决策路由 (LangGraph: should_continue)
         if (content.contains(config.getFinishMarker()) || !content.contains("Action:")) {
             context.put("status", "finish");
-            context.put("final_answer", extractFinalAnswer(content));
+            context.put("final_answer", parseFinal(content));
         } else {
+            // 模型输出了 Action: 且未结束，引导至工具节点
             context.put("status", "call_tool");
         }
     }
 
-    private String extractFinalAnswer(String content) {
+    private String parseFinal(String content) {
+        // 优先提取结束标记后的内容
         if (content.contains(config.getFinishMarker())) {
             return content.substring(content.indexOf(config.getFinishMarker()) + config.getFinishMarker().length()).trim();
         }
-        return content.trim();
+
+        // 容错处理：如果模型直接输出了内容而没带标记，清理一下常见的标识符
+        return content.replaceFirst("(?i)^Thought:\\s*", "").trim();
     }
 }

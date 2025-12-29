@@ -11,7 +11,7 @@ public class ReActConfig {
     private int maxIterations = 10;
     private String systemPromptTemplate;
     private boolean enableLogging = false;
-    private double temperature = 0.7;
+    private float temperature = 0.7F;
     private int maxResponseTokens = 2048;
     private String finishMarker = "[FINISH]";
 
@@ -41,7 +41,7 @@ public class ReActConfig {
     public List<FunctionTool> getTools() { return tools; }
     public ChatModel getChatModel() { return chatModel; }
     public int getMaxIterations() { return maxIterations; }
-    public double getTemperature() { return temperature; }
+    public float getTemperature() { return temperature; }
     public int getMaxResponseTokens() { return maxResponseTokens; }
     public String getFinishMarker() { return finishMarker; }
     public boolean isEnableLogging() { return enableLogging; }
