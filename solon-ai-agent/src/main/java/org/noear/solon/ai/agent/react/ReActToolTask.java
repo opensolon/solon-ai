@@ -20,7 +20,10 @@ import java.util.regex.Pattern;
 public class ReActToolTask implements TaskComponent {
     private final ReActConfig config;
     // 正则提取 Action: 后面的 JSON 对象
-    private static final Pattern ACTION_PATTERN = Pattern.compile("Action:\\s*(\\{.*?\\})", Pattern.DOTALL);
+    private static final Pattern ACTION_PATTERN = Pattern.compile(
+            "Action:\\s*(?:```json)?\\s*(\\{.*?\\})\\s*(?:```)?",
+            Pattern.DOTALL
+    );
 
     public ReActToolTask(ReActConfig config) {
         this.config = config;
