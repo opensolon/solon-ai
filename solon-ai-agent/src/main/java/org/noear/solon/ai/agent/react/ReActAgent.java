@@ -268,10 +268,29 @@ public class ReActAgent implements Agent {
             // 查找 [FINISH] 或 <|FINISH|> 标记后的答案
             if (response.contains("[FINISH]")) {
                 int finishIndex = response.indexOf("[FINISH]");
-                return response.substring(finishIndex + 9).trim(); // 9 是 "[FINISH]" 的长度
+                if (finishIndex + 9 < response.length()) {
+                    return response.substring(finishIndex + 9).trim(); // 9 是 "[FINISH]" 的长度
+                } else {
+                    // 如果 [FINISH] 是最后的内容，返回空字符串或前面的内容
+                    int lastThoughtIndex = response.lastIndexOf("Thought:");
+                    if (lastThoughtIndex > -1) {
+                        return response.substring(lastThoughtIndex).trim();
+                    } else {
+                        return response.substring(0, finishIndex).trim();
+                    }
+                }
             } else if (response.contains("<|FINISH|>")) {
                 int finishIndex = response.indexOf("<|FINISH|>");
-                return response.substring(finishIndex + 10).trim(); // 10 是 "<|FINISH|>" 的长度
+                if (finishIndex + 10 < response.length()) {
+                    return response.substring(finishIndex + 10).trim(); // 10 是 "<|FINISH|>" 的长度
+                } else {
+                    int lastThoughtIndex = response.lastIndexOf("Thought:");
+                    if (lastThoughtIndex > -1) {
+                        return response.substring(lastThoughtIndex).trim();
+                    } else {
+                        return response.substring(0, finishIndex).trim();
+                    }
+                }
             }
             
             // 如果没有找到结束标记，返回整个响应
