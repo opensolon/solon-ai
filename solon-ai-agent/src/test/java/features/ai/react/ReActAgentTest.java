@@ -114,8 +114,8 @@ public class ReActAgentTest {
 
         List<FunctionTool> tools = Arrays.asList(calculatorTool, searchTool);
 
-        // 创建 ReActAgent
-        ReActAgent agent = new ReActAgent(chatModel, tools, 5);
+        // 创建 ReActAgent - 使用新构造函数，启用日志
+        ReActAgent agent = new ReActAgent(chatModel, tools, 5, null, true, 0.7F, 2048, 0.9F);
 
         // 运行代理
         String prompt = "What is 15 plus 25? Then search for information about the result.";
@@ -133,7 +133,7 @@ public class ReActAgentTest {
                 .build();
 
         // 创建不带工具的 ReActAgent
-        ReActAgent agent = new ReActAgent(chatModel);
+        ReActAgent agent = new ReActAgent(chatModel, null, 5, null, true, 0.5F, 2048, 0.9F);
 
         // 运行代理
         String prompt = "Explain the concept of ReAct pattern in AI agents.";
