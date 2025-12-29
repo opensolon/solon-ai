@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.chat;
 
-import org.noear.solon.Solon;
-import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.lang.Preview;

@@ -38,7 +38,15 @@ public class InMemoryChatSession implements ChatSession {
     protected final List<ChatMessage> messages = new ArrayList<>();
     protected final int maxMessages;
 
-    protected InMemoryChatSession(String sessionId, List<SystemMessage> systemMessages, List<ChatMessage> messages, int maxMessages) {
+    public InMemoryChatSession(String sessionId){
+        this(sessionId, null, null, 0);
+    }
+
+    public InMemoryChatSession(String sessionId, int maxMessages){
+        this(sessionId, null, null, maxMessages);
+    }
+
+    public InMemoryChatSession(String sessionId, List<SystemMessage> systemMessages, List<ChatMessage> messages, int maxMessages) {
         if (sessionId == null) {
             this.sessionId = Utils.guid();
         } else {
