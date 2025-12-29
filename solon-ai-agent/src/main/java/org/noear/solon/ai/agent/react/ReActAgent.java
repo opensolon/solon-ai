@@ -22,27 +22,19 @@ public class ReActAgent implements Agent {
     private final FlowEngine flowEngine;
     private Graph graph;
 
-    public ReActAgent(ChatModel chatModel) {
-        this(new ReActConfig(chatModel));
-    }
-
     public ReActAgent(ReActConfig config) {
         this.config = config;
         this.flowEngine = FlowEngine.newInstance();
-        this.initGraph();
+        this.graph = initGraph();
     }
 
     /**
-     * 初始化图结构（线程安全）
-     * 定义节点跳转逻辑：
+     * 初始化图结构。定义节点跳转逻辑：
      * 1. node_model -> node_tools (当 status 为 call_tool)
      * 2. node_model -> end (当 status 为 finish)
      */
-    private synchronized void initGraph() {
-        if (graph != null) return;
-
-        // 构建符合 LangGraph 逻辑的状态转移图
-        graph = Graph.create("react_agent", "ReAct 流程", spec -> {
+    private Graph initGraph() {
+        return Graph.create("react_agent", "ReAct 流程", spec -> {
             spec.addStart("start").linkAdd("node_model");
 
             // 模型推理节点：决定是执行工具还是结束
@@ -83,6 +75,8 @@ public class ReActAgent implements Agent {
         }
         return result;
     }
+
+    /// ////////////
 
     public static Builder builder(ChatModel chatModel) {
         return new Builder(new ReActConfig(chatModel));

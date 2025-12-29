@@ -6,6 +6,7 @@ import org.noear.solon.ai.chat.tool.ToolProvider;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * ReAct Agent 配置类
@@ -21,6 +22,7 @@ public class ReActConfig {
     private String finishMarker = "[FINISH]";
 
     public ReActConfig(ChatModel chatModel) {
+        Objects.requireNonNull(chatModel, "chatModel");
         this.chatModel = chatModel;
     }
 
@@ -50,6 +52,7 @@ public class ReActConfig {
     public ReActConfig enableLogging(boolean val) { this.enableLogging = val; return this; }
     public ReActConfig temperature(float val) { this.temperature = val; return this; }
     public ReActConfig maxIterations(int val) { this.maxIterations = val; return this; }
+
 
     // --- Getters ---
     public List<FunctionTool> getTools() { return tools; }

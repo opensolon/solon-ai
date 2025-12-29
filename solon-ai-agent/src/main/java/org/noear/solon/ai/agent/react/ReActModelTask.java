@@ -60,8 +60,8 @@ public class ReActModelTask implements TaskComponent {
         final String resultContent;
 
         if(response.hasContent()){
-            content = response.getMessage().getContent();
-            resultContent = response.getMessage().getResultContent();
+            content = response.getMessage().getContent(); //可能有思考
+            resultContent = response.getMessage().getResultContent(); //没有思考（干净的内容）
         } else  {
             content = "";
             resultContent = "";
