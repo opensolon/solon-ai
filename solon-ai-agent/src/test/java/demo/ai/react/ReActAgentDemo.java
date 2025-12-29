@@ -9,36 +9,34 @@ import org.noear.solon.annotation.Param;
 
 public class ReActAgentDemo {
     public static void main(String[] args) throws Throwable {
-        // 1. 构建基础模型
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama")
-                .model("qwen3:4b")
+                .model("llama3.2")
                 .build();
 
-        // 2. 构建 Agent 配置与工具
         ReActConfig config = new ReActConfig(chatModel)
                 .enableLogging(true)
-                .temperature(0.1F);
+                .temperature(0.1F); // 低温度保证推理逻辑严密
 
-        // 模拟天气工具
-        config.addTool(new MethodToolProvider(new Tools()));
+        config.addTool(new MethodToolProvider(new WeatherTools()));
 
         ReActAgent agent = config.create();
 
-        // 3. 运行
         System.out.println("--- Agent 开始工作 ---");
+        // 这个问题会触发：1.调用工具获取天气 2.根据天气推理穿衣建议
         String response = agent.run("北京天气怎么样？我该穿什么衣服？");
+
         System.out.println("--- 最终答复 ---");
         System.out.println(response);
     }
 
-    public static class Tools {
-        @ToolMapping(name = "get_weather", title = "查询天气", description = "查询指定城市的天气")
-        public String get_weather(@Param(description = "城市名称", defaultValue = "未知") String city) {
+    public static class WeatherTools {
+        @ToolMapping(name = "get_weather", description = "查询指定城市的天气状况")
+        public String get_weather(@Param(description = "城市名称") String city) {
             if (city.contains("北京")) {
-                return "晴朗，25度";
+                return "北京现在晴朗，气温 10 摄氏度，风力 4 级。";
             } else {
-                return "小雨，18度";
+                return city + "小雨，18 度。";
             }
         }
     }

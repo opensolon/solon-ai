@@ -12,35 +12,36 @@ import org.noear.solon.annotation.Param;
 public class ReActAgentTest {
 
     @Test
-    public void testAdd() throws Throwable {
-        // 1. 初始化模型 (Ollama)
+    public void testMathAndLogic() throws Throwable {
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama")
-                .model("qwen3:4b") // 建议使用 7b 以上模型，4b 对复杂 ReAct 遵循度有限
+                .model("llama3.2")
                 .build();
 
-        // 2. 定义一个简单的加法工具
-
-        // 3. 配置 Agent
         ReActConfig config = new ReActConfig(chatModel)
-                .addTool(new MethodToolProvider(new Tools()))
-                .temperature(0.0F) // 测试场景建议 0，保证结果稳定
+                .addTool(new MethodToolProvider(new MathTools()))
+                .temperature(0.0F)
                 .enableLogging(true);
 
         ReActAgent agent = config.create();
 
-        // 4. 执行
-        String result = agent.run("请问 123 加上 456 等于多少？");
+        // 测试点：多步计算逻辑
+        String result = agent.run("先计算 12 加 34 的和，再把结果乘以 2 等于多少？");
 
-        // 5. 断言
         Assertions.assertNotNull(result);
-        Assertions.assertTrue(result.contains("579"), "结果应包含正确的数学计算值");
+        // 结果应该是 (12+34)*2 = 92
+        Assertions.assertTrue(result.contains("92"), "计算结果应为 92，实际返回: " + result);
     }
 
-    public static class Tools {
+    public static class MathTools {
         @ToolMapping(description = "计算两个数字的和")
         public double adder(@Param double a, @Param double b) {
             return a + b;
+        }
+
+        @ToolMapping(description = "计算两个数字的乘积")
+        public double multiplier(@Param double a, @Param double b) {
+            return a * b;
         }
     }
 }
