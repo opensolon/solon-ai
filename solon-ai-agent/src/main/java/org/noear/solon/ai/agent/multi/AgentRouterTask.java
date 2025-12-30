@@ -1,18 +1,3 @@
-/*
- * Copyright 2017-2025 noear.org and authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package org.noear.solon.ai.agent.multi;
 
 import org.noear.solon.ai.agent.Agent;
@@ -28,17 +13,17 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * 智能体路由任务
+ * 智能体路由任务（基于 TeamTrace 决策）
  *
  * @author noear
  * @since 3.8.1
- * */
+ */
 @Preview("3.8")
 public class AgentRouterTask implements TaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(AgentRouterTask.class);
     private final ChatModel chatModel;
     private final List<String> agentNames;
-    private final int maxTotalIterations = 15; // 团队协作上限
+    private int maxTotalIterations = 15;
     private AgentRouterPromptProvider promptProvider = AgentRouterPromptProviderEn.getInstance();
 
     public AgentRouterTask(ChatModel chatModel, String... agentNames) {
@@ -51,29 +36,36 @@ public class AgentRouterTask implements TaskComponent {
         return this;
     }
 
+    public AgentRouterTask maxTotalIterations(int maxTotalIterations) {
+        this.maxTotalIterations = maxTotalIterations;
+        return this;
+    }
+
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         String prompt = context.getAs(Agent.KEY_PROMPT);
-        // 1. 获取团队协作简报
-        String teamHistory = context.getOrDefault(Agent.KEY_HISTORY, "No progress yet.");
+        String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
+        TeamTrace trace = context.getAs(traceKey);
+
+        // 1. 获取团队协作历史（从 Trace 获取）
+        String teamHistory = (trace != null) ? trace.getFormattedHistory() : "No progress yet.";
         int iters = context.getOrDefault(Agent.KEY_ITERATIONS, 0);
 
-        // 2. 熔断检查
-        if (iters >= maxTotalIterations) {
-            LOG.warn("MultiAgent team reached max iterations. Forcing exit.");
+        // 2. 熔断与循环检测
+        if (iters >= maxTotalIterations || (trace != null && trace.isLooping())) {
+            LOG.warn("MultiAgent team reached limit or detected loop. Forcing exit.");
             context.put(Agent.KEY_NEXT_AGENT, "end");
             return;
         }
 
-        // 3. 构建 Supervisor 提示词
+        // 3. 构建决策请求
         String systemPrompt = promptProvider.getSystemPrompt(prompt, agentNames);
-
-        // 4. 获取决策并严格解析
         String decision = chatModel.prompt(Arrays.asList(
                 ChatMessage.ofSystem(systemPrompt),
-                ChatMessage.ofUser("Collaboration Progress (Iter " + iters + "):\n" + teamHistory)
+                ChatMessage.ofUser("Collaboration Progress (Iteration " + iters + "):\n" + teamHistory)
         )).call().getResultContent().toUpperCase();
 
+        // 4. 解析决策
         String nextAgent = "end";
         if (!decision.contains("FINISH")) {
             for (String name : agentNames) {
@@ -85,7 +77,7 @@ public class AgentRouterTask implements TaskComponent {
         }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Supervisor decision: {} -> Next: {}", decision, nextAgent);
+            LOG.debug("Supervisor decision: {} -> Next Agent: {}", decision, nextAgent);
         }
 
         context.put(Agent.KEY_NEXT_AGENT, nextAgent);
