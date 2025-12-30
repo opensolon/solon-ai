@@ -37,16 +37,16 @@ public class SimpleReActInterceptor implements ReActInterceptor {
     private final Consumer<FlowInvocation> doIntercept;
     private final BiConsumer<FlowContext, Node> onNodeStart;
     private final BiConsumer<FlowContext, Node> onNodeEnd;
-    private final BiConsumer<ReActRecord, String> onThought;
-    private final TrConsumer<ReActRecord, String, Map<String, Object>> onAction;
-    private final BiConsumer<ReActRecord, String> onObservation;
+    private final BiConsumer<ReActTrace, String> onThought;
+    private final TrConsumer<ReActTrace, String, Map<String, Object>> onAction;
+    private final BiConsumer<ReActTrace, String> onObservation;
 
     public SimpleReActInterceptor(Consumer<FlowInvocation> doIntercept,
                                   BiConsumer<FlowContext, Node> onNodeStart,
                                   BiConsumer<FlowContext, Node> onNodeEnd,
-                                  BiConsumer<ReActRecord, String> onThought,
-                                  TrConsumer<ReActRecord, String, Map<String, Object>> onAction,
-                                  BiConsumer<ReActRecord, String> onObservation) {
+                                  BiConsumer<ReActTrace, String> onThought,
+                                  TrConsumer<ReActTrace, String, Map<String, Object>> onAction,
+                                  BiConsumer<ReActTrace, String> onObservation) {
         this.doIntercept = doIntercept;
         this.onNodeStart = onNodeStart;
         this.onNodeEnd = onNodeEnd;
@@ -80,21 +80,21 @@ public class SimpleReActInterceptor implements ReActInterceptor {
 
 
     @Override
-    public void onThought(ReActRecord record, String thought) {
+    public void onThought(ReActTrace record, String thought) {
         if (onThought != null) {
             onThought.accept(record, thought);
         }
     }
 
     @Override
-    public void onAction(ReActRecord record, String toolName, Map<String, Object> args) {
+    public void onAction(ReActTrace record, String toolName, Map<String, Object> args) {
         if (onAction != null) {
             onAction.accept(record, toolName, args);
         }
     }
 
     @Override
-    public void onObservation(ReActRecord record, String result) {
+    public void onObservation(ReActTrace record, String result) {
         if (onObservation != null) {
             onObservation.accept(record, result);
         }
@@ -111,9 +111,9 @@ public class SimpleReActInterceptor implements ReActInterceptor {
         private Consumer<FlowInvocation> doIntercept;
         private BiConsumer<FlowContext, Node> onNodeStart;
         private BiConsumer<FlowContext, Node> onNodeEnd;
-        private BiConsumer<ReActRecord, String> onThought;
-        private TrConsumer<ReActRecord, String, Map<String, Object>> onAction;
-        private BiConsumer<ReActRecord, String> onObservation;
+        private BiConsumer<ReActTrace, String> onThought;
+        private TrConsumer<ReActTrace, String, Map<String, Object>> onAction;
+        private BiConsumer<ReActTrace, String> onObservation;
 
         public Builder doIntercept(Consumer<FlowInvocation> doIntercept) {
             this.doIntercept = doIntercept;
@@ -130,17 +130,17 @@ public class SimpleReActInterceptor implements ReActInterceptor {
             return this;
         }
 
-        public Builder onThought(BiConsumer<ReActRecord, String> onThought) {
+        public Builder onThought(BiConsumer<ReActTrace, String> onThought) {
             this.onThought = onThought;
             return this;
         }
 
-        public Builder onAction(TrConsumer<ReActRecord, String, Map<String, Object>> onAction) {
+        public Builder onAction(TrConsumer<ReActTrace, String, Map<String, Object>> onAction) {
             this.onAction = onAction;
             return this;
         }
 
-        public Builder onObservation(BiConsumer<ReActRecord, String> onObservation) {
+        public Builder onObservation(BiConsumer<ReActTrace, String> onObservation) {
             this.onObservation = onObservation;
             return this;
         }

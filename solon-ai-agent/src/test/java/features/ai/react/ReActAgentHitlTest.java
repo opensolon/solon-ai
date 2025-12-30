@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
-import org.noear.solon.ai.agent.react.ReActRecord;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -28,7 +28,7 @@ public class ReActAgentHitlTest {
         ReActInterceptor hitlInterceptor = ReActInterceptor.builder()
                 .onNodeStart((ctx, node) -> {
                     // 如果进入工具执行节点，且尚未获得人工批准
-                    if (ReActRecord.ROUTE_ACTION.equals(node.getId())) {
+                    if (ReActTrace.ROUTE_ACTION.equals(node.getId())) {
                         Boolean approved = ctx.getAs("is_approved");
                         if (approved == null) {
                             System.out.println("[拦截器] 检测到敏感工具调用，等待人工审批...");
@@ -54,9 +54,9 @@ public class ReActAgentHitlTest {
 
         // 验证：结果应为空（或中间态），且 context 处于 stopped 状态
         Assertions.assertTrue(context.lastNode().getType() != NodeType.END, "流程应该被拦截并停止");
-        Assertions.assertEquals(ReActRecord.ROUTE_ACTION, context.lastNodeId(), "最后停留在工具节点");
+        Assertions.assertEquals(ReActTrace.ROUTE_ACTION, context.lastNodeId(), "最后停留在工具节点");
 
-        ReActRecord state = context.getAs("__" + agent.name());
+        ReActTrace state = context.getAs("__" + agent.name());
         Assertions.assertTrue(state.getIteration().get() > 0);
         System.out.println("当前状态：" + state.getRoute());
 

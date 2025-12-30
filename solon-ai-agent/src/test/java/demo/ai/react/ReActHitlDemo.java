@@ -3,7 +3,7 @@ package demo.ai.react;
 import demo.ai.agent.LlmUtil;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
-import org.noear.solon.ai.agent.react.ReActRecord;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -18,7 +18,7 @@ public class ReActHitlDemo {
         // 1. 定义拦截器：如果是 node_tools 节点且没审批，就拦住它
         ReActInterceptor hitlInterceptor = ReActInterceptor.builder()
                 .onNodeStart((ctx, node) -> {
-                    if (ReActRecord.ROUTE_ACTION.equals(node.getId())) {
+                    if (ReActTrace.ROUTE_ACTION.equals(node.getId())) {
                         if (ctx.get("approved") == null) {
                             System.out.println("[拦截器] 发现敏感操作，需要人工审批...");
                             ctx.stop(); // 挂起流程

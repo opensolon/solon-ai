@@ -44,11 +44,11 @@ public class ReActReasonTask implements TaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         String recordKey = context.getAs(ReActAgent.KEY_CURRENT_RECORD_KEY);
-        ReActRecord record = context.getAs(recordKey);
+        ReActTrace record = context.getAs(recordKey);
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
         if (record.nextIteration() > config.getMaxIterations()) {
-            record.setRoute(ReActRecord.ROUTE_END);
+            record.setRoute(ReActTrace.ROUTE_END);
             record.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
         }
@@ -80,14 +80,14 @@ public class ReActReasonTask implements TaskComponent {
         // --- 处理模型空回复 (防止流程卡死) ---
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
             record.addMessage(ChatMessage.ofUser("Your last response was empty. If you need more info, use a tool. Otherwise, provide Final Answer."));
-            record.setRoute(ReActRecord.ROUTE_REASON);
+            record.setRoute(ReActTrace.ROUTE_REASON);
             return;
         }
 
         // --- 处理 Native Tool Calls ---
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
             record.addMessage(response.getMessage());
-            record.setRoute(ReActRecord.ROUTE_ACTION);
+            record.setRoute(ReActTrace.ROUTE_ACTION);
             return;
         }
 
@@ -110,14 +110,14 @@ public class ReActReasonTask implements TaskComponent {
         //决策路由
         if (rawContent.contains(config.getFinishMarker())) {
             // 结束
-            record.setRoute(ReActRecord.ROUTE_END);
+            record.setRoute(ReActTrace.ROUTE_END);
             record.setFinalAnswer(extractFinalAnswer(clearContent));
         } else if (rawContent.contains("Action:")) {
             // 动作
-            record.setRoute(ReActRecord.ROUTE_ACTION);
+            record.setRoute(ReActTrace.ROUTE_ACTION);
         } else {
             // 兜底（结束）
-            record.setRoute(ReActRecord.ROUTE_END);
+            record.setRoute(ReActTrace.ROUTE_END);
             record.setFinalAnswer(extractFinalAnswer(clearContent));
         }
     }

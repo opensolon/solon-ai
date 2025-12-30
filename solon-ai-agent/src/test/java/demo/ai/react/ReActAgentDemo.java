@@ -3,7 +3,7 @@ package demo.ai.react;
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActRecord;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -35,10 +35,10 @@ public class ReActAgentDemo {
         String json = context.toJson();
 
         System.out.println(json);
-        ReActRecord record1 = context.getAs("__" + agent.name());
+        ReActTrace record1 = context.getAs("__" + agent.name());
 
         FlowContext context2 = FlowContext.fromJson(json);
-        ReActRecord record2 = context2.getAs("__" + agent.name());
+        ReActTrace record2 = context2.getAs("__" + agent.name());
 
         Assertions.assertEquals(
                 record1.getHistory().size(),

@@ -34,7 +34,7 @@ import java.util.List;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class ReActRecord {
+public class ReActTrace {
     public static final String ROUTE_REASON = "reason";
     public static final String ROUTE_ACTION = "action";
     public static final String ROUTE_END = "end";
@@ -47,13 +47,13 @@ public class ReActRecord {
     private String lastResponse;
     private NodeTrace lastNode;
 
-    public ReActRecord() {
+    public ReActTrace() {
         this.iteration = new AtomicInteger(0);
         this.history = new ArrayList<>();
         this.route = "";
     }
 
-    public ReActRecord(String prompt) {
+    public ReActTrace(String prompt) {
         this();
         this.prompt = prompt;
     }

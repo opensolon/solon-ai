@@ -61,18 +61,18 @@ public class ReActAgent implements Agent {
      */
     private Graph initGraph() {
         return Graph.create("react_agent", spec -> {
-            spec.addStart("start").linkAdd(ReActRecord.ROUTE_REASON);
+            spec.addStart("start").linkAdd(ReActTrace.ROUTE_REASON);
 
-            spec.addExclusive(ReActRecord.ROUTE_REASON)
+            spec.addExclusive(ReActTrace.ROUTE_REASON)
                     .task(new ReActReasonTask(config))
-                    .linkAdd(ReActRecord.ROUTE_ACTION, l -> l.when(ctx -> ReActRecord.ROUTE_ACTION.equals(ctx.<ReActRecord>getAs(recordKey).getRoute())))
-                    .linkAdd(ReActRecord.ROUTE_END);
+                    .linkAdd(ReActTrace.ROUTE_ACTION, l -> l.when(ctx -> ReActTrace.ROUTE_ACTION.equals(ctx.<ReActTrace>getAs(recordKey).getRoute())))
+                    .linkAdd(ReActTrace.ROUTE_END);
 
-            spec.addActivity(ReActRecord.ROUTE_ACTION)
+            spec.addActivity(ReActTrace.ROUTE_ACTION)
                     .task(new ReActActionTask(config))
-                    .linkAdd(ReActRecord.ROUTE_REASON);
+                    .linkAdd(ReActTrace.ROUTE_REASON);
 
-            spec.addEnd(ReActRecord.ROUTE_END);
+            spec.addEnd(ReActTrace.ROUTE_END);
         });
     }
 
@@ -89,12 +89,12 @@ public class ReActAgent implements Agent {
 
         context.put("_current_record_key", recordKey);
 
-        ReActRecord record = context.getAs(recordKey);
+        ReActTrace record = context.getAs(recordKey);
         if (record == null) {
-            record = new ReActRecord(prompt);
+            record = new ReActTrace(prompt);
             context.put(recordKey, record);
         } else if (prompt != null) {
-            record = new ReActRecord(prompt);
+            record = new ReActTrace(prompt);
             context.put(recordKey, record);
         }
 

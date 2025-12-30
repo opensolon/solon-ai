@@ -31,19 +31,19 @@ public interface ReActInterceptor extends FlowInterceptor {
     /**
      * 思考时触发
      */
-    default void onThought(ReActRecord record, String thought) {
+    default void onThought(ReActTrace record, String thought) {
     }
 
     /**
      * 调用工具前触发
      */
-    default void onAction(ReActRecord record, String toolName, Map<String, Object> args) {
+    default void onAction(ReActTrace record, String toolName, Map<String, Object> args) {
     }
 
     /**
      * 工具返回结果后触发
      */
-    default void onObservation(ReActRecord record, String result) {
+    default void onObservation(ReActTrace record, String result) {
     }
 
 
