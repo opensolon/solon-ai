@@ -22,6 +22,7 @@ import java.io.PrintStream;
  *
  */
 public class MultiAgentTest {
+
     @Test
     public void testMultiAgent() throws Throwable {
         ChatModel chatModel = ChatModel.of("https://ai.gitee.com/v1/chat/completions")
@@ -31,10 +32,13 @@ public class MultiAgentTest {
 
         // 1. 定义子 Agent
         Agent coder = ReActAgent.builder(chatModel)
+                .nameAs("coder")
                 .addTool(new MethodToolProvider(new CodeExecutorTool()))
                 .build();
 
-        Agent writer = ReActAgent.builder(chatModel).build();
+        Agent writer = ReActAgent.builder(chatModel)
+                .nameAs("writer")
+                .build();
 
         // 2. 定义图结构
         Graph multiGraph = Graph.create("software_team", spec -> {

@@ -37,10 +37,10 @@ public class ReActAgentDemo {
         String json = context.toJson();
 
         System.out.println(json);
-        ReActRecord state1 = context.getAs(ReActRecord.TAG);
+        ReActRecord state1 = context.getAs("__" + agent.name());
 
         FlowContext context2 = FlowContext.fromJson(json);
-        ReActRecord state2 = context2.getAs(ReActRecord.TAG);
+        ReActRecord state2 = context2.getAs("__" + agent.name());
 
         Assertions.assertEquals(
                 state1.getHistory().size(),

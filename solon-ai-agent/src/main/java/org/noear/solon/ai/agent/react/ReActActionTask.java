@@ -33,7 +33,8 @@ public class ReActActionTask implements TaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        ReActRecord record = context.getAs(ReActRecord.TAG);
+        String recordKey = context.getAs(ReActAgent.KEY_CURRENT_RECORD_KEY);
+        ReActRecord record = context.getAs(recordKey);
         ChatMessage lastMessage = record.getHistory().get(record.getHistory().size() - 1);
 
         // --- 1. 处理 Native Tool Calls (遵循 OpenAI/Solon AI 消息对齐协议) ---

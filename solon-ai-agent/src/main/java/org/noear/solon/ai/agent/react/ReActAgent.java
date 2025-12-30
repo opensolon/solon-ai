@@ -14,14 +14,18 @@ import org.noear.solon.flow.Graph;
  * 基于 Solon Flow 流引擎实现 Thought -> Action -> Observation 循环
  */
 public class ReActAgent implements Agent {
+    private final String name;
     private final ReActConfig config;
     private final Graph graph;
     private final FlowEngine flowEngine;
+    private final String recordKey;
 
     public ReActAgent(ReActConfig config) {
+        this.name = config.getName() == null ? "react_agent" : config.getName();
         this.config = config;
         this.flowEngine = FlowEngine.newInstance();
         this.graph = initGraph();
+        this.recordKey = "__" + name;
 
         //附加流拦截器
         if (config.getInterceptor() != null) {
@@ -41,7 +45,7 @@ public class ReActAgent implements Agent {
             // 模型推理节点：决定是执行工具还是结束
             spec.addExclusive(ReActRecord.ROUTE_REASON)
                     .task(new ReActReasonTask(config))
-                    .linkAdd(ReActRecord.ROUTE_ACTION, l -> l.when(ctx -> ReActRecord.ROUTE_ACTION.equals(ctx.<ReActRecord>getAs(ReActRecord.TAG).getRoute())))
+                    .linkAdd(ReActRecord.ROUTE_ACTION, l -> l.when(ctx -> ReActRecord.ROUTE_ACTION.equals(ctx.<ReActRecord>getAs(recordKey).getRoute())))
                     .linkAdd(ReActRecord.ROUTE_END); // 默认跳转至结束
 
             // 工具执行节点：执行具体的函数调用
@@ -54,19 +58,26 @@ public class ReActAgent implements Agent {
     }
 
     @Override
+    public String name() {
+        return name;
+    }
+
+    @Override
     public String ask(FlowContext context, String prompt) throws Throwable {
         if (config.isEnableLogging()) {
             LogUtil.global().info("Starting ReActAgent: " + prompt);
         }
 
+        context.put("_current_record_key", recordKey);
+
         // 初始化流程上下文，携带对话历史与迭代计数
-        ReActRecord record = context.getAs(ReActRecord.TAG);
+        ReActRecord record = context.getAs(recordKey);
         if (record == null) {
             record = new ReActRecord(prompt);
-            context.put(ReActRecord.TAG, record);
+            context.put(recordKey, record);
         } else if (prompt != null) {
             record = new ReActRecord(prompt);
-            context.put(ReActRecord.TAG, record);
+            context.put(recordKey, record);
         }
 
         // 执行图引擎
@@ -95,6 +106,11 @@ public class ReActAgent implements Agent {
 
         public Builder(ReActConfig config) {
             this.config = config;
+        }
+
+        public Builder nameAs(String val) {
+            config.name(val);
+            return this;
         }
 
         public Builder addTool(FunctionTool tool) {

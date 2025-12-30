@@ -5,50 +5,40 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.flow.Graph;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Objects;
 
 /**
  * MultiAgent 实现
  * 基于图结构的智能体编排
  */
 public class MultiAgent implements Agent {
-    private final Map<String, Agent> agents = new HashMap<>();
+    private String name = "multi_agent";
     private final FlowEngine flowEngine;
     private final Graph graph;
-    private final String startNode;
 
     public MultiAgent(Graph graph) {
+        Objects.requireNonNull(graph, "graph");
+
         this.flowEngine = FlowEngine.newInstance();
         this.graph = graph;
-        this.startNode = "start"; // 默认起始点
+    }
+
+    public MultiAgent nameAs(String name) {
+        Objects.requireNonNull(name, "name");
+
+        this.name = name;
+        return this;
+    }
+
+    @Override
+    public String name() {
+        return name;
     }
 
     @Override
     public String ask(FlowContext context, String prompt) throws Throwable {
-        // 1. 将初始 prompt 放入上下文
-        context.put("prompt", prompt);
-
-        // 2. 执行流引擎（会触发各个节点上的 Agent）
-        flowEngine.eval(graph, startNode, context);
-
-        // 3. 从上下文中获取最终结果（通常由最后一个节点产生）
-        return context.getAs("answer");
-    }
-
-    /**
-     * 辅助构建器类
-     */
-    public static class Builder {
-        private Graph graph;
-
-        public Builder graph(Graph graph) {
-            this.graph = graph;
-            return this;
-        }
-
-        public MultiAgent build() {
-            return new MultiAgent(graph);
-        }
+        context.put(Agent.KEY_PROMPT, prompt);
+        flowEngine.eval(graph, context.lastNodeId(), context);
+        return context.getAs(Agent.KEY_ANSWER);
     }
 }

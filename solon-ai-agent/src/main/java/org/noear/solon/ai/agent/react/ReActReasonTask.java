@@ -22,7 +22,8 @@ public class ReActReasonTask implements TaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        ReActRecord record = context.getAs(ReActRecord.TAG);
+        String recordKey = context.getAs(ReActAgent.KEY_CURRENT_RECORD_KEY);
+        ReActRecord record = context.getAs(recordKey);
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
         if (record.nextIteration() > config.getMaxIterations()) {

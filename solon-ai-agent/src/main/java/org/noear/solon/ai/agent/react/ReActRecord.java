@@ -17,8 +17,6 @@ import java.util.List;
  * @since 3.8.1
  */
 public class ReActRecord {
-    public static final String TAG = "_record";
-
     public static final String ROUTE_REASON = "reason";
     public static final String ROUTE_ACTION = "action";
     public static final String ROUTE_END = "end";

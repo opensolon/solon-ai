@@ -58,7 +58,7 @@ public class ReActAgentHitlTest {
         Assertions.assertTrue(context.lastNode().getType() != NodeType.END, "流程应该被拦截并停止");
         Assertions.assertEquals(ReActRecord.ROUTE_ACTION, context.lastNodeId(), "最后停留在工具节点");
 
-        ReActRecord state = context.getAs(ReActRecord.TAG);
+        ReActRecord state = context.getAs("__" + agent.name());
         Assertions.assertTrue(state.getIteration().get() > 0);
         System.out.println("当前状态：" + state.getRoute());
 

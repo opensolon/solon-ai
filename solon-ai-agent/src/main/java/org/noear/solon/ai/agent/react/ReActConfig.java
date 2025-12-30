@@ -13,6 +13,7 @@ import java.util.Objects;
  * ReAct Agent 配置类
  */
 public class ReActConfig {
+    private String name;
     private ChatModel chatModel;
     private List<FunctionTool> tools = new ArrayList<>();
     private int maxIterations = 10;
@@ -25,6 +26,7 @@ public class ReActConfig {
 
     public ReActConfig(ChatModel chatModel) {
         Objects.requireNonNull(chatModel, "chatModel");
+
         this.chatModel = chatModel;
     }
 
@@ -37,6 +39,12 @@ public class ReActConfig {
     }
 
     // --- Builder 链式调用方法 ---
+
+    public ReActConfig name(String name) {
+        this.name = name;
+        return this;
+    }
+
     public ReActConfig tools(List<FunctionTool> tools) {
         this.tools = tools;
         return this;
@@ -84,6 +92,12 @@ public class ReActConfig {
 
 
     // --- Getters ---
+
+
+    public String getName() {
+        return name;
+    }
+
     public List<FunctionTool> getTools() {
         return tools;
     }
@@ -119,5 +133,4 @@ public class ReActConfig {
     public ReActPromptProvider getPromptProvider() {
         return promptProvider;
     }
-
 }
