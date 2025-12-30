@@ -148,12 +148,24 @@ public class ChatResponseDefault implements ChatResponse {
     }
 
     /**
-     * 获取消息内容
+     * 获取消息原始内容
      */
     @Override
     public String getContent() {
         if (hasChoices()) {
             return lastChoice().getMessage().getContent();
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * 获取消息结果内容（清理过思考）
+     */
+    @Override
+    public String getResultContent() {
+        if (hasChoices()) {
+            return lastChoice().getMessage().getResultContent();
         } else {
             return null;
         }

@@ -82,9 +82,14 @@ public interface ChatResponse {
     boolean hasContent();
 
     /**
-     * 获取消息内容
+     * 获取消息原始内容
      */
     String getContent();
+
+    /**
+     * 获取消息结果内容（清理过思考）
+     */
+    String getResultContent();
 
     /**
      * 获取使用情况（完成时，才会有使用情况）
