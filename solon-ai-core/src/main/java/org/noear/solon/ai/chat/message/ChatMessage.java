@@ -184,6 +184,10 @@ public interface ChatMessage extends Serializable {
      */
     static ChatMessage fromJson(String json) {
         ONode oNode = ONode.ofJson(json);
+        return fromJson(oNode);
+    }
+
+    static ChatMessage fromJson(ONode oNode) {
         ChatRole role = ChatRole.valueOf(oNode.get("role").getString());
 
         if (role == ChatRole.TOOL) {
