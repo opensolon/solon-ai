@@ -13,6 +13,8 @@ import java.util.List;
  */
 public class ReActState {
     public static final String TAG = "_state";
+    public static final String STATUS_ACT = "act";
+    public static final String STATUS_FINISH = "finish";
 
     private String prompt;
     private AtomicInteger iteration;

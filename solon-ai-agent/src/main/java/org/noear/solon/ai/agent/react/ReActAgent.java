@@ -40,12 +40,12 @@ public class ReActAgent implements Agent {
             // 模型推理节点：决定是执行工具还是结束
             spec.addExclusive("think")
                     .task(new ReActThinkTask(config))
-                    .linkAdd("act", l -> l.when(ctx -> "call_tool".equals(ctx.<ReActState>getAs(ReActState.TAG).getStatus())))
+                    .linkAdd("act", l -> l.when(ctx -> ReActState.STATUS_ACT.equals(ctx.<ReActState>getAs(ReActState.TAG).getStatus())))
                     .linkAdd("end"); // 默认跳转至结束
 
             // 工具执行节点：执行具体的函数调用
             spec.addActivity("act")
-                    .task(new ReActToolTask(config))
+                    .task(new ReActActTask(config))
                     .linkAdd("think"); // 执行完工具后返回模型节点进行下一轮思考
 
             spec.addEnd("end");

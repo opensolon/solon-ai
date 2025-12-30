@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 /**
  * 工具执行任务
  */
-public class ReActToolTask implements TaskComponent {
+public class ReActActTask implements TaskComponent {
     private final ReActConfig config;
     // 正则提取 Action: 后面的 JSON 对象
     private static final Pattern ACTION_PATTERN = Pattern.compile(
@@ -25,7 +25,7 @@ public class ReActToolTask implements TaskComponent {
             Pattern.DOTALL
     );
 
-    public ReActToolTask(ReActConfig config) {
+    public ReActActTask(ReActConfig config) {
         this.config = config;
     }
 

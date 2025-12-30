@@ -27,7 +27,7 @@ public class ReActThinkTask implements TaskComponent {
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
         if (state.nextIteration() > config.getMaxIterations()) {
-            state.setStatus("finish");
+            state.setStatus(ReActState.STATUS_FINISH);
             state.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
         }
@@ -48,6 +48,7 @@ public class ReActThinkTask implements TaskComponent {
                 .prompt(messages)
                 .options(o -> {
                     o.autoToolCall(false);
+                    o.max_tokens(config.getMaxTokens());
                     o.temperature(config.getTemperature());
                     o.optionAdd("stop", "Observation:"); // 关键：模型遇到此词立即停止，交还控制权
                     if (config.getTools() != null && !config.getTools().isEmpty()) {
@@ -58,7 +59,7 @@ public class ReActThinkTask implements TaskComponent {
         // --- 核心优化：处理 Native Tool Calls ---
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
             state.addMessage(response.getMessage()); // 存入包含 tool_calls 的消息
-            state.setStatus("call_tool");
+            state.setStatus(ReActState.STATUS_ACT);
             return;
         }
 
@@ -71,13 +72,13 @@ public class ReActThinkTask implements TaskComponent {
 
         // 6. 决策路由逻辑。只要有 Action 且没被判定为 Finish，就去执行工具
         if (rawContent.contains(config.getFinishMarker())) {
-            state.setStatus("finish");
+            state.setStatus(ReActState.STATUS_FINISH);
             state.setFinalAnswer(parseFinal(clearContent));
         } else if (rawContent.contains("Action:")) {
-            state.setStatus("call_tool");
+            state.setStatus(ReActState.STATUS_ACT);
         } else {
             // 兜底逻辑：如果不含 Action 格式，则视为回答结束
-            state.setStatus("finish");
+            state.setStatus(ReActState.STATUS_FINISH);
             state.setFinalAnswer(parseFinal(clearContent));
         }
     }
