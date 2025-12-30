@@ -64,10 +64,10 @@ public class ReActAgent implements Agent {
         if (record == null) {
             record = new ReActRecord(prompt);
             context.put(ReActRecord.TAG, record);
+        } else if (prompt != null) {
+            record = new ReActRecord(prompt);
+            context.put(ReActRecord.TAG, record);
         }
-
-        // 运行前清空路由，确保由本次推理决定去向
-        record.setRoute("");
 
         // 执行图引擎
         flowEngine.eval(graph, context.lastNodeId(), context);

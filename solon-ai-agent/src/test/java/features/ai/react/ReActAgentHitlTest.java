@@ -11,7 +11,6 @@ import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NodeType;
-import org.noear.solon.flow.intercept.SimpleFlowInterceptor;
 
 /**
  * 人工介入（HITL）场景测试
