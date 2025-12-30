@@ -19,19 +19,16 @@ public class ReActAgentTest {
     public void testMathAndLogic() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-
         ReActAgent agent = ReActAgent.builder(chatModel)
                 .addTool(new MethodToolProvider(new MathTools()))
                 .temperature(0.0F)
                 .enableLogging(true)
                 .build();
 
-        // 测试点：多步计算逻辑
         FlowContext context = FlowContext.of("demo1");
         String result = agent.ask(context, "先计算 12 加 34 的和，再把结果乘以 2 等于多少？");
 
         Assertions.assertNotNull(result);
-        // 结果应该是 (12+34)*2 = 92
         Assertions.assertTrue(result.contains("92"), "计算结果应为 92，实际返回: " + result);
     }
 

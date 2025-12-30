@@ -1,20 +1,39 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.multi.AgentRouterTask;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.flow.Graph;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 优化后的 ReActAgent
+ * ReActAgent
  * 基于 Solon Flow 流引擎实现 Thought -> Action -> Observation 循环
+ *
+ * @author noear
+ * @since 3.8.1
  */
+@Preview("3.8")
 public class ReActAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
@@ -39,8 +58,6 @@ public class ReActAgent implements Agent {
 
     /**
      * 初始化图结构。定义节点跳转逻辑：
-     * 1. node_model -> node_tools (当 status 为 call_tool)
-     * 2. node_model -> end (当 status 为 finish)
      */
     private Graph initGraph() {
         return Graph.create("react_agent", spec -> {
