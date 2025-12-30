@@ -34,7 +34,7 @@ public class ReActAgent implements Agent {
             // 模型推理节点：决定是执行工具还是结束
             spec.addExclusive("node_model")
                     .task(new ReActModelTask(config))
-                    .linkAdd("node_tools", l -> l.when(ctx -> "call_tool".equals(ctx.<ReActState>getAs("state").getStatus())))
+                    .linkAdd("node_tools", l -> l.when(ctx -> "call_tool".equals(ctx.<ReActState>getAs(ReActState.TAG).getStatus())))
                     .linkAdd("end"); // 默认跳转至结束
 
             // 工具执行节点：执行具体的函数调用

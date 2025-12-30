@@ -43,14 +43,16 @@ public class ReActModelTask implements TaskComponent {
         messages.addAll(state.getHistory());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
-        ChatResponse response = config.getChatModel().prompt(messages).options(o -> {
-            o.autoToolCall(false);
-            o.temperature(config.getTemperature());
-            o.optionAdd("stop", "Observation:"); // 关键：模型遇到此词立即停止，交还控制权
-            if (config.getTools() != null && !config.getTools().isEmpty()) {
-                o.toolsAdd(config.getTools());
-            }
-        }).call();
+        ChatResponse response = config.getChatModel()
+                .prompt(messages)
+                .options(o -> {
+                    o.autoToolCall(false);
+                    o.temperature(config.getTemperature());
+                    o.optionAdd("stop", "Observation:"); // 关键：模型遇到此词立即停止，交还控制权
+                    if (config.getTools() != null && !config.getTools().isEmpty()) {
+                        o.toolsAdd(config.getTools());
+                    }
+                }).call();
 
         // --- 核心优化：处理 Native Tool Calls ---
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {

@@ -33,72 +33,51 @@ public class ReActToolTask implements TaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         ReActState state = context.getAs(ReActState.TAG);
-        ChatMessage lastMessage = state.getLastMesage();
+        ChatMessage lastMessage = state.getHistory().get(state.getHistory().size() - 1);
 
-        StringBuilder observationBuilder = new StringBuilder();
-
-
+        // --- 1. 处理 Native Tool Calls (遵循 OpenAI/Solon AI 消息对齐协议) ---
         if (lastMessage instanceof AssistantMessage) {
-            // 1. 优先处理 Native Tool Calls
-            //
             AssistantMessage lastAssistant = (AssistantMessage) lastMessage;
             if (Assert.isNotEmpty(lastAssistant.getToolCalls())) {
                 for (ToolCall call : lastAssistant.getToolCalls()) {
                     String result = executeTool(call.name(), call.arguments());
-                    observationBuilder.append("\nObservation (").append(call.name()).append("): ").append(result);
-                }
 
-                String finalObs = observationBuilder.toString().trim();
-                if (finalObs.isEmpty()) {
-                    finalObs = "Observation: No action was detected. Please provide a Final Answer or a valid Action.";
+                    // 【关键点】Native 模式下必须使用 ofTool，并携带 callId。
+                    // 这样模型下一轮收到的消息链是：Assistant(ToolCalls) -> Tool(Result)
+                    state.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
                 }
-
-                state.addMessage(ChatMessage.ofUser(finalObs));
-                return;
+                return; // 处理完 Native 调用直接返回，不再走正则逻辑
             }
         }
 
-
-        // 2. 兜底处理正则文本 Action
-        //
+        // --- 2. 处理文本 ReAct 模式 (Observation 模拟) ---
         String lastContent = state.getLastContent();
+        if (lastContent == null) return;
 
         Matcher matcher = ACTION_PATTERN.matcher(lastContent);
         StringBuilder allObservations = new StringBuilder();
         boolean foundAny = false;
 
-        // 循环处理，支持单次回复中调用多个工具（并行调用思想）
         while (matcher.find()) {
             foundAny = true;
-            String json = matcher.group(1).trim();
             try {
-                ONode action = ONode.ofJson(json);
+                ONode action = ONode.ofJson(matcher.group(1).trim());
                 String toolName = action.get("name").getString();
-
-                // 参数容错处理：确保 arguments 是对象格式
                 ONode argsNode = action.get("arguments");
                 Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
 
-                String result = "Tool not found: " + toolName;
-                for (FunctionTool tool : config.getTools()) {
-                    if (tool.name().equals(toolName)) {
-                        result = tool.handle(args);
-                        break;
-                    }
-                }
+                String result = executeTool(toolName, args);
                 allObservations.append("\nObservation: ").append(result);
             } catch (Exception e) {
-                // 异常反馈：让模型知道 JSON 格式错误并尝试在下一轮修正
                 allObservations.append("\nObservation: Error parsing Action JSON: ").append(e.getMessage());
             }
         }
 
         if (foundAny) {
-            // 将工具执行结果以 User 身份反馈给对话历史
+            // 文本模式通过 User 角色模拟系统反馈
             state.addMessage(ChatMessage.ofUser(allObservations.toString().trim()));
         } else {
-            // 引导提示：如果模型进入此节点却没写 Action，提示其正确格式
-            state.addMessage(ChatMessage.ofUser("Observation: No valid Action format found. Please check if you need to call a tool or provide the Final Answer."));
+            state.addMessage(ChatMessage.ofUser("Observation: No valid Action detected. If you have enough info, please provide Final Answer."));
         }
     }
 
