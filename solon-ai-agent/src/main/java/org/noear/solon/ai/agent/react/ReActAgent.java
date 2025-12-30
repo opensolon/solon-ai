@@ -98,7 +98,13 @@ public class ReActAgent implements Agent {
             context.put(recordKey, record);
         }
 
-        flowEngine.eval(graph, context.lastNodeId(), context);
+        try {
+            flowEngine.eval(graph, record.getLastNodeId(), context);
+        } finally {
+            //同步节点状态
+            record.setLastNode(context.lastNode());
+        }
+
 
         String result = record.getFinalAnswer();
         if (config.isEnableLogging()) {

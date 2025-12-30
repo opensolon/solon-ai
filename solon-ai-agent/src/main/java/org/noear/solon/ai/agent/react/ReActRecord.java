@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.flow.NodeTrace;
 import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
@@ -44,6 +45,7 @@ public class ReActRecord {
     private volatile String route;
     private String finalAnswer;
     private String lastResponse;
+    private NodeTrace lastNode;
 
     public ReActRecord() {
         this.iteration = new AtomicInteger(0);
@@ -93,6 +95,22 @@ public class ReActRecord {
 
     public void setLastResponse(String lastResponse) {
         this.lastResponse = lastResponse;
+    }
+
+    public NodeTrace getLastNode() {
+        return lastNode;
+    }
+
+    public String getLastNodeId() {
+        if (lastNode == null) {
+            return null;
+        }
+
+        return lastNode.getId();
+    }
+
+    public void setLastNode(NodeTrace lastNode) {
+        this.lastNode = lastNode;
     }
 
     public synchronized List<ChatMessage> getHistory() {

@@ -35,22 +35,22 @@ public class ReActAgentDemo {
         String json = context.toJson();
 
         System.out.println(json);
-        ReActRecord state1 = context.getAs("__" + agent.name());
+        ReActRecord record1 = context.getAs("__" + agent.name());
 
         FlowContext context2 = FlowContext.fromJson(json);
-        ReActRecord state2 = context2.getAs("__" + agent.name());
+        ReActRecord record2 = context2.getAs("__" + agent.name());
 
         Assertions.assertEquals(
-                state1.getHistory().size(),
-                state2.getHistory().size(), "序列化失败");
+                record1.getHistory().size(),
+                record2.getHistory().size(), "序列化失败");
 
         Assertions.assertEquals(
-                context.lastNodeId(),
-                context2.lastNodeId(), "序列化失败");
+                record1.getLastNodeId(),
+                record2.getLastNodeId(), "序列化失败");
 
         Assertions.assertEquals(
-                state1.getIteration().get(),
-                state2.getIteration().get(), "序列化失败");
+                record1.getIteration().get(),
+                record2.getIteration().get(), "序列化失败");
 
         String json2 = context2.toJson();
         Assertions.assertEquals(json, json2);
