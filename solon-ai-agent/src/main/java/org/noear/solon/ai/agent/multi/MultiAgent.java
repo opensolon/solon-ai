@@ -56,7 +56,7 @@ public class MultiAgent implements Agent {
             context.put(Agent.KEY_PROMPT, prompt);
         }
 
-        // 支持从上次的 lastNodeId 继续运行（回溯支持）
+        // 支持从上次的 lastNodeId 继续运行（回溯与断点恢复支持）
         flowEngine.eval(graph, context.lastNodeId(), context);
 
         return context.getAs(Agent.KEY_ANSWER);

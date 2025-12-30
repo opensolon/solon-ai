@@ -48,16 +48,18 @@ public class AgentRouterTask implements TaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         String prompt = context.getAs(Agent.KEY_PROMPT);
+        // 1. 获取团队协作简报
         String teamHistory = context.getOrDefault(Agent.KEY_HISTORY, "No progress yet.");
         int iters = context.getOrDefault(Agent.KEY_ITERATIONS, 0);
 
+        // 2. 熔断检查
         if (iters >= maxTotalIterations) {
             LOG.warn("MultiAgent team reached max iterations. Forcing exit.");
             context.put(Agent.KEY_NEXT_AGENT, "end");
             return;
         }
 
-        // 2. 构建 Supervisor 提示词
+        // 3. 构建 Supervisor 提示词
         String systemPrompt = "You are a team supervisor. \n" +
                 "Global Task: " + prompt + "\n" +
                 "Specialists: " + agentNames + ".\n" +
@@ -65,12 +67,11 @@ public class AgentRouterTask implements TaskComponent {
                 "- If the task is finished, respond ONLY with 'FINISH'. \n" +
                 "- Otherwise, respond ONLY with the specialist's name.";
 
-        // 3. 获取决策
+        // 4. 获取决策并严格解析
         String decision = chatModel.prompt(Arrays.asList(
                 ChatMessage.ofSystem(systemPrompt),
                 ChatMessage.ofUser("Collaboration Progress (Iter " + iters + "):\n" + teamHistory)
         )).call().getResultContent().toUpperCase();
-
 
         String nextAgent = "end";
         if (!decision.contains("FINISH")) {
