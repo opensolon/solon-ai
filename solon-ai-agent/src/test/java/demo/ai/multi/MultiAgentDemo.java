@@ -1,4 +1,4 @@
-package features.ai.multi;
+package demo.ai.multi;
 
 import org.junit.jupiter.api.Test;
 import org.noear.liquor.eval.Scripts;
@@ -21,7 +21,7 @@ import java.io.PrintStream;
  * @author noear 2025/12/30 created
  *
  */
-public class MultiAgentTest {
+public class MultiAgentDemo {
 
     @Test
     public void testMultiAgent() throws Throwable {

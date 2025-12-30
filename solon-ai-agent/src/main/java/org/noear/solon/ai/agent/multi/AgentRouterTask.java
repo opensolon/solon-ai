@@ -6,10 +6,15 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Arrays;
 import java.util.List;
 
 public class AgentRouterTask implements TaskComponent {
+    private static final Logger LOG = LoggerFactory.getLogger(AgentRouterTask.class);
+
     private final ChatModel chatModel;
     private final List<String> agentNames;
 
@@ -22,6 +27,11 @@ public class AgentRouterTask implements TaskComponent {
     public void run(FlowContext context, Node node) throws Throwable {
         String prompt = context.getAs(Agent.KEY_PROMPT);
         String history = context.getOrDefault(Agent.KEY_HISTORY, "No progress yet.");
+
+        if(LOG.isDebugEnabled()) {
+            LOG.debug("prompt: {}", prompt);
+            LOG.debug("history: {}", history);
+        }
 
         String systemPrompt = "You are a team supervisor. Task: " + prompt + "\n" +
                 "Available specialists: " + agentNames + ".\n" +
