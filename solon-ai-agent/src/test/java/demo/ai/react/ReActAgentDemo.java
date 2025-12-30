@@ -1,6 +1,8 @@
 package demo.ai.react;
 
+import org.junit.jupiter.api.Assertions;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActState;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -25,13 +27,35 @@ public class ReActAgentDemo {
         FlowContext context = FlowContext.of("demo1");
         String response = agent.run(context, "北京天气怎么样？我该穿什么衣服？");
 
-        //可持久化
-        String json = context.toJson();
-        context = FlowContext.fromJson(json);
-
-
         System.out.println("--- 最终答复 ---");
         System.out.println(response);
+
+        System.out.println("--- 持久化 ---");
+
+
+        //可持久化（序列化验证）
+        String json = context.toJson();
+
+        System.out.println(json);
+        ReActState state1 = context.getAs(ReActState.TAG);
+
+        FlowContext context2 = FlowContext.fromJson(json);
+        ReActState state2 = context2.getAs(ReActState.TAG);
+
+        Assertions.assertEquals(
+                state1.getHistory().size(),
+                state2.getHistory().size(), "序列化失败");
+
+        Assertions.assertEquals(
+                context.lastNodeId(),
+                context2.lastNodeId(), "序列化失败");
+
+        Assertions.assertEquals(
+                state1.getIteration().get(),
+                state2.getIteration().get(), "序列化失败");
+
+        String json2 = context2.toJson();
+        Assertions.assertEquals(json, json2);
     }
 
     public static class WeatherTools {
