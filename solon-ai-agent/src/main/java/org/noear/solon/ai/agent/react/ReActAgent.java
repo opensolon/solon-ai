@@ -41,14 +41,14 @@ public class ReActAgent implements Agent {
     private final ReActConfig config;
     private final Graph graph;
     private final FlowEngine flowEngine;
-    private final String recordKey;
+    private final String traceKey;
 
     public ReActAgent(ReActConfig config) {
         this.name = config.getName() == null ? "react_agent" : config.getName();
         this.config = config;
         this.flowEngine = FlowEngine.newInstance();
         this.graph = initGraph();
-        this.recordKey = "__" + name;
+        this.traceKey = "__" + name;
 
         //附加流拦截器
         if (config.getInterceptor() != null) {
@@ -65,7 +65,7 @@ public class ReActAgent implements Agent {
 
             spec.addExclusive(ReActTrace.ROUTE_REASON)
                     .task(new ReActReasonTask(config))
-                    .linkAdd(ReActTrace.ROUTE_ACTION, l -> l.when(ctx -> ReActTrace.ROUTE_ACTION.equals(ctx.<ReActTrace>getAs(recordKey).getRoute())))
+                    .linkAdd(ReActTrace.ROUTE_ACTION, l -> l.when(ctx -> ReActTrace.ROUTE_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
                     .linkAdd(ReActTrace.ROUTE_END);
 
             spec.addActivity(ReActTrace.ROUTE_ACTION)
@@ -87,26 +87,24 @@ public class ReActAgent implements Agent {
             LOG.info("Starting ReActAgent: {}", prompt);
         }
 
-        context.put("_current_record_key", recordKey);
+        context.put(Agent.KEY_CURRENT_TRACE_KEY, traceKey);
 
-        ReActTrace record = context.getAs(recordKey);
-        if (record == null) {
-            record = new ReActTrace(prompt);
-            context.put(recordKey, record);
-        } else if (prompt != null) {
-            record = new ReActTrace(prompt);
-            context.put(recordKey, record);
+        ReActTrace trace = context.getAs(traceKey);
+        if (trace == null || prompt != null) {
+            trace = new ReActTrace(prompt);
+            context.put(traceKey, trace);
+            context.lastNode(null);
         }
 
         try {
-            flowEngine.eval(graph, record.getLastNodeId(), context);
+            flowEngine.eval(graph, trace.getLastNodeId(), context);
         } finally {
             //同步节点状态
-            record.setLastNode(context.lastNode());
+            trace.setLastNode(context.lastNode());
         }
 
 
-        String result = record.getFinalAnswer();
+        String result = trace.getFinalAnswer();
         if (config.isEnableLogging()) {
             LOG.info("Final Answer: {}", result);
         }
@@ -156,8 +154,8 @@ public class ReActAgent implements Agent {
             return this;
         }
 
-        public Builder maxIterations(int val) {
-            config.maxIterations(val);
+        public Builder maxSteps(int val) {
+            config.maxSteps(val);
             return this;
         }
 

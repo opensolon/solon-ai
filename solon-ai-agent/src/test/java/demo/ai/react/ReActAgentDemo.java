@@ -41,16 +41,16 @@ public class ReActAgentDemo {
         ReActTrace record2 = context2.getAs("__" + agent.name());
 
         Assertions.assertEquals(
-                record1.getHistory().size(),
-                record2.getHistory().size(), "序列化失败");
+                record1.getMessages().size(),
+                record2.getMessages().size(), "序列化失败");
 
         Assertions.assertEquals(
                 record1.getLastNodeId(),
                 record2.getLastNodeId(), "序列化失败");
 
         Assertions.assertEquals(
-                record1.getIteration().get(),
-                record2.getIteration().get(), "序列化失败");
+                record1.getStepCount(),
+                record2.getStepCount(), "序列化失败");
 
         String json2 = context2.toJson();
         Assertions.assertEquals(json, json2);

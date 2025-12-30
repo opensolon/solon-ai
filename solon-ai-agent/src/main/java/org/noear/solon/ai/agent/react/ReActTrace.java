@@ -40,17 +40,18 @@ public class ReActTrace {
     public static final String ROUTE_END = "end";
 
     private String prompt;
-    private AtomicInteger iteration;
-    private List<ChatMessage> history;
+    private AtomicInteger stepCounter;
+    private List<ChatMessage> messages;
+
     private volatile String route;
     private String finalAnswer;
     private String lastResponse;
     private NodeTrace lastNode;
 
     public ReActTrace() {
-        this.iteration = new AtomicInteger(0);
-        this.history = new ArrayList<>();
-        this.route = "";
+        this.stepCounter = new AtomicInteger(0);
+        this.messages = new ArrayList<>();
+        this.route = ROUTE_REASON;
     }
 
     public ReActTrace(String prompt) {
@@ -65,12 +66,12 @@ public class ReActTrace {
         return prompt;
     }
 
-    public AtomicInteger getIteration() {
-        return iteration;
+    public int getStepCount() {
+        return stepCounter.get();
     }
 
-    public int nextIteration() {
-        return iteration.incrementAndGet();
+    public int nextStep() {
+        return stepCounter.incrementAndGet();
     }
 
     public String getRoute() {
@@ -113,79 +114,73 @@ public class ReActTrace {
         this.lastNode = lastNode;
     }
 
-    public synchronized List<ChatMessage> getHistory() {
-        return new ArrayList<>(history); // 返回副本保证安全
+    public synchronized List<ChatMessage> getMessages() {
+        return new ArrayList<>(messages); // 返回副本保证安全
     }
 
     public synchronized ChatMessage getLastMessage() {
-        if (history.isEmpty()) {
+        if (messages.isEmpty()) {
             return null;
         }
 
-        return history.get(history.size() - 1);
+        return messages.get(messages.size() - 1);
     }
 
 
-    public synchronized void addMessage(ChatMessage message) {
+    public synchronized void appendMessage(ChatMessage message) {
         if (message == null) return;
-        history.add(message);
+        messages.add(message);
 
-        if (history.size() > 20) {
-            compressHistory();
+        if (messages.size() > 20) {
+            compact();
         }
     }
 
     /**
      * 压缩历史消息
-     * */
-    private void compressHistory() {
-        if (history.size() <= 10) return;
+     *
+     */
+    private void compact() {
+        if (messages.size() <= 10) return;
 
-        // 1. 尝试提取原始问题
-        ChatMessage rootUserMessage = history.stream()
+        // 1. 寻找起点（初始问题）
+        ChatMessage startPoint = messages.stream()
                 .filter(m -> m instanceof UserMessage)
                 .findFirst()
                 .orElse(null);
 
-        // 2. 确定截断点（保留最近的 8 条记录）
-        int keepCount = 8;
-        int cutIndex = history.size() - keepCount;
+        // 2. 确定滑动窗口起点（保留最近 8 条）
+        int windowSize = 8;
+        int startIndex = messages.size() - windowSize;
 
-        // 3. 安全回溯：如果截断点正好在 ToolMessage 上，必须向前挪动
-        // 理由：ToolMessage 必须紧跟在拥有 ToolCalls 的 AssistantMessage 之后
-        while (cutIndex > 0 && isDanglingToolMessage(cutIndex)) {
-            cutIndex--;
+        // 3. 完整性校验：如果当前位置是孤立的工具结果，则必须向前回溯到其调用者
+        while (startIndex > 0 && isDanglingPath(startIndex)) {
+            startIndex--;
         }
 
-        // 4. 获取活跃上下文
-        List<ChatMessage> activeContext = new ArrayList<>(history.subList(cutIndex, history.size()));
+        List<ChatMessage> activeTrace = new ArrayList<>(messages.subList(startIndex, messages.size()));
 
-        // 5. 重建历史
-        history.clear();
-
-        // 5a. 重新放入初始问题
-        if (rootUserMessage != null) {
-            history.add(rootUserMessage);
+        // 4. 重建轨迹消息链
+        messages.clear();
+        if (startPoint != null) {
+            messages.add(startPoint);
         }
 
-        // 5b. 放入压缩提示（让模型知道中间有断层）
-        history.add(ChatMessage.ofSystem("[System Note: Earlier reasoning steps summarized to save context window.]"));
-
-        // 5c. 还原活跃推理链
-        history.addAll(activeContext);
+        messages.add(ChatMessage.ofSystem("[System: Earlier trace steps compacted to optimize context.]"));
+        messages.addAll(activeTrace);
     }
 
 
     /**
      * 判断是否是一个“孤立”的工具消息（即切断了它与前置 Assistant Call 的联系）
      */
-    private boolean isDanglingToolMessage(int index) {
-        ChatMessage current = history.get(index);
-        if (current instanceof ToolMessage) {
-            return true;
-        }
+    private boolean isDanglingPath(int index) {
+        ChatMessage current = messages.get(index);
 
-        // 如果当前是 Assistant 且包含 ToolCalls，通常建议把它和后面的结果一起保留
+        // 如果当前是 ToolMessage，它不能作为足迹的开头
+        if (current instanceof ToolMessage) return true;
+
+        // 如果助手消息包含工具调用，通常建议把它和后面的结果一起保留
         if (current instanceof AssistantMessage) {
             AssistantMessage am = (AssistantMessage) current;
             return Assert.isNotEmpty(am.getToolCalls());

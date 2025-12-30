@@ -52,7 +52,7 @@ public class MultiAgent implements Agent {
 
     @Override
     public String ask(FlowContext context, String prompt) throws Throwable {
-        if (context.get(Agent.KEY_PROMPT) == null) {
+        if (prompt != null) {
             context.put(Agent.KEY_PROMPT, prompt);
         }
 

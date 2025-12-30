@@ -35,7 +35,7 @@ public class ReActConfig {
     private String name;
     private ChatModel chatModel;
     private List<FunctionTool> tools = new ArrayList<>();
-    private int maxIterations = 10;
+    private int maxSteps = 10;
     private boolean enableLogging = false;
     private float temperature = 0.7F;
     private int maxTokens = 2048;
@@ -94,8 +94,8 @@ public class ReActConfig {
         return this;
     }
 
-    public ReActConfig maxIterations(int val) {
-        this.maxIterations = val;
+    public ReActConfig maxSteps(int val) {
+        this.maxSteps = val;
         return this;
     }
 
@@ -125,8 +125,8 @@ public class ReActConfig {
         return chatModel;
     }
 
-    public int getMaxIterations() {
-        return maxIterations;
+    public int getMaxSteps() {
+        return maxSteps;
     }
 
     public float getTemperature() {

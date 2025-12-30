@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,7 @@ import org.noear.solon.lang.Preview;
 
 /**
  * ReAct 系统提示词提供者（中文版）
- * 强化了对模型逻辑严密性的约束，适用于国内主流大模型。
+ * 强化了对推理轨迹 (Trace) 的感知，并严格约束 JSON 输出。
  *
  * @author noear
  * @since 3.8.1
@@ -29,13 +29,13 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
     @Override
     public String getSystemPrompt(ReActConfig config) {
         StringBuilder sb = new StringBuilder();
-        sb.append("你是一个具备自主思考能力的助手，正在使用 ReAct 模式解决问题。\n");
-        sb.append("你需要按照以下格式进行回复（请严格遵守）：\n\n");
+        sb.append("你是一个具备自主思考能力的助手，正在通过维护一段**推理轨迹 (Trace)** 来解决问题。\n");
+        sb.append("你需要按照以下 ReAct 规范逐步推进轨迹（请严格遵守）：\n\n");
 
-        sb.append("Thought: 思考你当前需要做什么，以及为什么这样做。\n");
+        sb.append("Thought: 思考你当前在轨迹中所处的位置，以及下一步需要做什么，并解释原因。\n");
         sb.append("Action: 如果需要调用工具，请输出唯一的 JSON 对象：{\"name\": \"工具名\", \"arguments\": {...}}\n");
         sb.append("   - 示例: {\"name\": \"get_order\", \"arguments\": {\"id\": \"123\"}}\n");
-        sb.append("Observation: 这是工具执行后的结果，你将基于此结果进行下一步思考。\n\n");
+        sb.append("Observation: 这是工具执行后的系统反馈。你将基于此轨迹点进行下一步思考。\n\n");
 
         sb.append("当你得到最终结论时，请务必使用：").append(config.getFinishMarker())
                 .append(" 紧接着输出你的最终答案。\n\n");
@@ -46,10 +46,11 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
         }
 
         sb.append("\n## 重要注意事项（必须遵守）：\n");
-        sb.append("1. **单步执行**：每次回复只能输出一个 Action。严禁一次调用多个工具。\n");
-        sb.append("2. **立即停止**：在输出 Action 的 JSON 后，必须立即结束当前回复，等待 Observation。\n");
-        sb.append("3. **严禁幻觉**：永远不要自行编写 Observation 的内容，那是系统反馈给你的。\n");
-        sb.append("4. **最终回复**：如果无需工具即可回答，或已获得足够信息，请直接使用 ").append(config.getFinishMarker()).append(" 给出结论。");
+        sb.append("1. **轨迹连贯性**：每一次 Thought 必须基于之前的轨迹记录（Trace）进行严密的逻辑推理。\n");
+        sb.append("2. **单步执行**：每次回复只能输出一个 Action。严禁一次调用多个工具。\n");
+        sb.append("3. **立即停止**：在输出 Action 的 JSON 后，必须立即结束当前回复，等待系统给出 Observation。\n");
+        sb.append("4. **严禁幻觉**：永远不要自行编写 Observation 的内容，那是系统反馈给你的。\n");
+        sb.append("5. **最终回复**：如果无需工具即可回答，或已获得足够轨迹信息，请直接使用 ").append(config.getFinishMarker()).append(" 给出结论。");
 
         return sb.toString();
     }

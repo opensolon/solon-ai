@@ -57,7 +57,7 @@ public class ReActAgentHitlTest {
         Assertions.assertEquals(ReActTrace.ROUTE_ACTION, context.lastNodeId(), "最后停留在工具节点");
 
         ReActTrace state = context.getAs("__" + agent.name());
-        Assertions.assertTrue(state.getIteration().get() > 0);
+        Assertions.assertTrue(state.getStepCount() > 0);
         System.out.println("当前状态：" + state.getRoute());
 
         // --- 第二步：人工介入，注入批准信号 ---

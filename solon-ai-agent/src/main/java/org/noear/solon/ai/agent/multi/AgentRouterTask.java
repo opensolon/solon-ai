@@ -48,10 +48,9 @@ public class AgentRouterTask implements TaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         String prompt = context.getAs(Agent.KEY_PROMPT);
-        String history = context.getOrDefault(Agent.KEY_HISTORY, "No progress yet.");
+        String teamHistory = context.getOrDefault(Agent.KEY_HISTORY, "No progress yet.");
         int iters = context.getOrDefault(Agent.KEY_ITERATIONS, 0);
 
-        // 1. 熔断检查
         if (iters >= maxTotalIterations) {
             LOG.warn("MultiAgent team reached max iterations. Forcing exit.");
             context.put(Agent.KEY_NEXT_AGENT, "end");
@@ -59,17 +58,19 @@ public class AgentRouterTask implements TaskComponent {
         }
 
         // 2. 构建 Supervisor 提示词
-        String systemPrompt = "You are a team supervisor. Task: " + prompt + "\n" +
-                "Available specialists: " + agentNames + ".\n" +
-                "Instruction: Review the history and decide who works next. \n" +
-                "If the task is complete, return 'FINISH'. \n" +
-                "Respond ONLY with the name or 'FINISH'.";
+        String systemPrompt = "You are a team supervisor. \n" +
+                "Global Task: " + prompt + "\n" +
+                "Specialists: " + agentNames + ".\n" +
+                "Instruction: Review the collaboration history and decide who should act next. \n" +
+                "- If the task is finished, respond ONLY with 'FINISH'. \n" +
+                "- Otherwise, respond ONLY with the specialist's name.";
 
-        // 3. 获取决策并严格解析
+        // 3. 获取决策
         String decision = chatModel.prompt(Arrays.asList(
                 ChatMessage.ofSystem(systemPrompt),
-                ChatMessage.ofUser("Current Team History (Iter " + iters + "):\n" + history)
+                ChatMessage.ofUser("Collaboration Progress (Iter " + iters + "):\n" + teamHistory)
         )).call().getResultContent().toUpperCase();
+
 
         String nextAgent = "end";
         if (!decision.contains("FINISH")) {

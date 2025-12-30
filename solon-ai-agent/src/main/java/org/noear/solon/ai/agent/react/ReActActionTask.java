@@ -52,9 +52,9 @@ public class ReActActionTask implements TaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        String recordKey = context.getAs(ReActAgent.KEY_CURRENT_RECORD_KEY);
-        ReActTrace record = context.getAs(recordKey);
-        ChatMessage lastMessage = record.getHistory().get(record.getHistory().size() - 1);
+        String traceKey = context.getAs(ReActAgent.KEY_CURRENT_TRACE_KEY);
+        ReActTrace trace = context.getAs(traceKey);
+        ChatMessage lastMessage = trace.getLastMessage();
 
         // --- 1. 处理 Native Tool Calls (遵循 OpenAI/Solon AI 消息对齐协议) ---
         if (lastMessage instanceof AssistantMessage) {
@@ -62,7 +62,7 @@ public class ReActActionTask implements TaskComponent {
             if (Assert.isNotEmpty(lastAssistant.getToolCalls())) {
                 for (ToolCall call : lastAssistant.getToolCalls()) {
                     if (config.getInterceptor() != null) {
-                        config.getInterceptor().onAction(record, call.name(), call.arguments());
+                        config.getInterceptor().onAction(trace, call.name(), call.arguments());
                     }
 
                     Map<String, Object> args = call.arguments();
@@ -71,10 +71,10 @@ public class ReActActionTask implements TaskComponent {
                     String result = executeTool(call.name(), args);
 
                     if (config.getInterceptor() != null) {
-                        config.getInterceptor().onObservation(record, result);
+                        config.getInterceptor().onObservation(trace, result);
                     }
 
-                    record.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
+                    trace.appendMessage(ChatMessage.ofTool(result, call.name(), call.id()));
                 }
 
                 return;
@@ -82,7 +82,7 @@ public class ReActActionTask implements TaskComponent {
         }
 
         // --- 2. 处理文本 ReAct 模式 (Observation 模拟) ---
-        String lastContent = record.getLastResponse();
+        String lastContent = trace.getLastResponse();
         if (lastContent == null) return;
 
         Matcher matcher = ACTION_PATTERN.matcher(lastContent);
@@ -98,13 +98,13 @@ public class ReActActionTask implements TaskComponent {
                 Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
 
                 if (config.getInterceptor() != null) {
-                    config.getInterceptor().onAction(record, toolName, args);
+                    config.getInterceptor().onAction(trace, toolName, args);
                 }
 
                 String result = executeTool(toolName, args);
 
                 if (config.getInterceptor() != null) {
-                    config.getInterceptor().onObservation(record, result);
+                    config.getInterceptor().onObservation(trace, result);
                 }
 
                 allObservations.append("\nObservation: ").append(result);
@@ -115,9 +115,9 @@ public class ReActActionTask implements TaskComponent {
 
         if (foundAny) {
             // 文本模式通过 User 角色模拟系统反馈
-            record.addMessage(ChatMessage.ofUser(allObservations.toString().trim()));
+            trace.appendMessage(ChatMessage.ofUser(allObservations.toString().trim()));
         } else {
-            record.addMessage(ChatMessage.ofUser("Observation: No valid Action detected. If you have enough info, please provide Final Answer."));
+            trace.appendMessage(ChatMessage.ofUser("Observation: No valid Action detected. If you have enough info, please provide Final Answer."));
         }
     }
 

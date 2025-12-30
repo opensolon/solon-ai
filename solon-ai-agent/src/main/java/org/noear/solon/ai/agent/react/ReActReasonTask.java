@@ -43,26 +43,26 @@ public class ReActReasonTask implements TaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        String recordKey = context.getAs(ReActAgent.KEY_CURRENT_RECORD_KEY);
-        ReActTrace record = context.getAs(recordKey);
+        String traceKey = context.getAs(ReActAgent.KEY_CURRENT_TRACE_KEY);
+        ReActTrace trace = context.getAs(traceKey);
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
-        if (record.nextIteration() > config.getMaxIterations()) {
-            record.setRoute(ReActTrace.ROUTE_END);
-            record.setFinalAnswer("Agent error: Maximum iterations reached.");
+        if (trace.nextStep() > config.getMaxSteps()) {
+            trace.setRoute(ReActTrace.ROUTE_END);
+            trace.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
         }
 
         // 2. 初始化对话：首轮将 prompt 转为 User Message
-        if (record.getHistory().isEmpty()) {
-            String prompt = record.getPrompt();
-            record.addMessage(ChatMessage.ofUser(prompt));
+        if (trace.getMessages().isEmpty()) {
+            String prompt = trace.getPrompt();
+            trace.appendMessage(ChatMessage.ofUser(prompt));
         }
 
         // 3. 构建全量消息（System + History）
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(config.getSystemPrompt()));
-        messages.addAll(record.getHistory());
+        messages.addAll(trace.getMessages());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
         ChatResponse response = config.getChatModel()
@@ -79,15 +79,15 @@ public class ReActReasonTask implements TaskComponent {
 
         // --- 处理模型空回复 (防止流程卡死) ---
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
-            record.addMessage(ChatMessage.ofUser("Your last response was empty. If you need more info, use a tool. Otherwise, provide Final Answer."));
-            record.setRoute(ReActTrace.ROUTE_REASON);
+            trace.appendMessage(ChatMessage.ofUser("Your last response was empty. If you need more info, use a tool. Otherwise, provide Final Answer."));
+            trace.setRoute(ReActTrace.ROUTE_REASON);
             return;
         }
 
         // --- 处理 Native Tool Calls ---
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
-            record.addMessage(response.getMessage());
-            record.setRoute(ReActTrace.ROUTE_ACTION);
+            trace.appendMessage(response.getMessage());
+            trace.setRoute(ReActTrace.ROUTE_ACTION);
             return;
         }
 
@@ -100,25 +100,25 @@ public class ReActReasonTask implements TaskComponent {
             rawContent = rawContent.split("Observation:")[0];
         }
 
-        record.addMessage(ChatMessage.ofAssistant(rawContent));
-        record.setLastResponse(clearContent);
+        trace.appendMessage(ChatMessage.ofAssistant(rawContent));
+        trace.setLastResponse(clearContent);
 
         if (config.getInterceptor() != null) {
-            config.getInterceptor().onThought(record, clearContent);
+            config.getInterceptor().onThought(trace, clearContent);
         }
 
         //决策路由
         if (rawContent.contains(config.getFinishMarker())) {
             // 结束
-            record.setRoute(ReActTrace.ROUTE_END);
-            record.setFinalAnswer(extractFinalAnswer(clearContent));
+            trace.setRoute(ReActTrace.ROUTE_END);
+            trace.setFinalAnswer(extractFinalAnswer(clearContent));
         } else if (rawContent.contains("Action:")) {
             // 动作
-            record.setRoute(ReActTrace.ROUTE_ACTION);
+            trace.setRoute(ReActTrace.ROUTE_ACTION);
         } else {
             // 兜底（结束）
-            record.setRoute(ReActTrace.ROUTE_END);
-            record.setFinalAnswer(extractFinalAnswer(clearContent));
+            trace.setRoute(ReActTrace.ROUTE_END);
+            trace.setFinalAnswer(extractFinalAnswer(clearContent));
         }
     }
 

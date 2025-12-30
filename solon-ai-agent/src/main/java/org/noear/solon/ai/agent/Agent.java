@@ -33,7 +33,7 @@ public interface Agent extends TaskComponent {
     static String KEY_HISTORY = "history";
     static String KEY_NEXT_AGENT = "next_agent";
     static String KEY_ITERATIONS = "_total_iterations";
-    static String KEY_CURRENT_RECORD_KEY = "_current_record_key";
+    static String KEY_CURRENT_TRACE_KEY = "_current_trace_key";
 
     /**
      * 名字
