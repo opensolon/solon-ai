@@ -47,6 +47,20 @@ public class ReActState {
 
     public void addMessage(ChatMessage message) {
         history.add(message);
+
+        // 自动修剪：保留最新的 20 条记录，防止 Context 爆炸
+        if (history.size() > 20) {
+            // 保留第 0 条（通常是首个 User Prompt）和最近的 19 条
+            ChatMessage first = history.get(0);
+            List<ChatMessage> latest = new ArrayList<>(history.subList(history.size() - 19, history.size()));
+            history.clear();
+            history.add(first);
+            history.addAll(latest);
+        }
+    }
+
+    public ChatMessage getLastMesage() {
+        return history.get(history.size() - 1);
     }
 
     public String getStatus() {

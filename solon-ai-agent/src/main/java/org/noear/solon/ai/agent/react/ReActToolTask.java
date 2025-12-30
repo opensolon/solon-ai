@@ -1,8 +1,11 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;
@@ -30,7 +33,34 @@ public class ReActToolTask implements TaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         ReActState state = context.getAs(ReActState.TAG);
+        ChatMessage lastMessage = state.getLastMesage();
 
+        StringBuilder observationBuilder = new StringBuilder();
+
+
+        if (lastMessage instanceof AssistantMessage) {
+            // 1. 优先处理 Native Tool Calls
+            //
+            AssistantMessage lastAssistant = (AssistantMessage) lastMessage;
+            if (Assert.isNotEmpty(lastAssistant.getToolCalls())) {
+                for (ToolCall call : lastAssistant.getToolCalls()) {
+                    String result = executeTool(call.name(), call.arguments());
+                    observationBuilder.append("\nObservation (").append(call.name()).append("): ").append(result);
+                }
+
+                String finalObs = observationBuilder.toString().trim();
+                if (finalObs.isEmpty()) {
+                    finalObs = "Observation: No action was detected. Please provide a Final Answer or a valid Action.";
+                }
+
+                state.addMessage(ChatMessage.ofUser(finalObs));
+                return;
+            }
+        }
+
+
+        // 2. 兜底处理正则文本 Action
+        //
         String lastContent = state.getLastContent();
 
         Matcher matcher = ACTION_PATTERN.matcher(lastContent);
@@ -70,5 +100,18 @@ public class ReActToolTask implements TaskComponent {
             // 引导提示：如果模型进入此节点却没写 Action，提示其正确格式
             state.addMessage(ChatMessage.ofUser("Observation: No valid Action format found. Please check if you need to call a tool or provide the Final Answer."));
         }
+    }
+
+    private String executeTool(String name, Map<String, Object> args) {
+        for (FunctionTool tool : config.getTools()) {
+            if (tool.name().equals(name)) {
+                try {
+                    return tool.handle(args);
+                } catch (Throwable e) {
+                    return "Error executing tool [" + name + "]: " + e.getMessage();
+                }
+            }
+        }
+        return "Tool [" + name + "] not found.";
     }
 }

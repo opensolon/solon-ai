@@ -60,10 +60,7 @@ public class ReActAgent implements Agent {
         }
 
         // 执行图引擎
-        FlowContext.SCOPE.with(context, () -> {
-            //允许工具代码，可获取 FlowContext
-            config.getFlowEngine().eval(graph, context);
-        });
+        config.getFlowEngine().eval(graph, context);
 
         // 获取最终答案
         String result = state.getFinalAnswer();
