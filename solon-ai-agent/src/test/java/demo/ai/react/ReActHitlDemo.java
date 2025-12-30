@@ -37,7 +37,7 @@ public class ReActHitlDemo {
 
         // --- 第一次执行：会触发拦截 ---
         System.out.println("第一次运行...");
-        String response1 = agent.call(context, "帮我查询北京天气并转账100元");
+        String response1 = agent.ask(context, "帮我查询北京天气并转账100元");
         System.out.println("response1: " + response1);
 
         if (context.lastNode().getType() != NodeType.END) {
@@ -50,7 +50,7 @@ public class ReActHitlDemo {
 
         // --- 第二次执行：恢复运行 ---
         System.out.println("恢复运行...");
-        String response2 = agent.call(context, null); // 恢复时 prompt 传 null 即可，状态在 context 里
+        String response2 = agent.ask(context, null); // 恢复时 prompt 传 null 即可，状态在 context 里
 
         System.out.println("最终回复：" + response2);
     }

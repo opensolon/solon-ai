@@ -35,25 +35,25 @@ public class ReActAgent implements Agent {
      */
     private Graph initGraph() {
         return Graph.create("react_agent", "ReAct 流程", spec -> {
-            spec.addStart("start").linkAdd("node_model");
+            spec.addStart("start").linkAdd("think");
 
             // 模型推理节点：决定是执行工具还是结束
-            spec.addExclusive("node_model")
-                    .task(new ReActModelTask(config))
-                    .linkAdd("node_tools", l -> l.when(ctx -> "call_tool".equals(ctx.<ReActState>getAs(ReActState.TAG).getStatus())))
+            spec.addExclusive("think")
+                    .task(new ReActThinkTask(config))
+                    .linkAdd("act", l -> l.when(ctx -> "call_tool".equals(ctx.<ReActState>getAs(ReActState.TAG).getStatus())))
                     .linkAdd("end"); // 默认跳转至结束
 
             // 工具执行节点：执行具体的函数调用
-            spec.addActivity("node_tools")
+            spec.addActivity("act")
                     .task(new ReActToolTask(config))
-                    .linkAdd("node_model"); // 执行完工具后返回模型节点进行下一轮思考
+                    .linkAdd("think"); // 执行完工具后返回模型节点进行下一轮思考
 
             spec.addEnd("end");
         });
     }
 
     @Override
-    public String call(FlowContext context, String prompt) throws Throwable {
+    public String ask(FlowContext context, String prompt) throws Throwable {
         if (config.isEnableLogging()) {
             LogUtil.global().info("Starting ReActAgent: " + prompt);
         }
@@ -115,6 +115,11 @@ public class ReActAgent implements Agent {
 
         public Builder maxIterations(int val) {
             config.maxIterations(val);
+            return this;
+        }
+
+        public Builder maxTokens(int val) {
+            config.maxTokens(val);
             return this;
         }
 

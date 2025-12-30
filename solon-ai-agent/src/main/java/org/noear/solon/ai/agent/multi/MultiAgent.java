@@ -10,7 +10,7 @@ import org.noear.solon.flow.FlowContext;
  */
 public class MultiAgent implements Agent {
     @Override
-    public String call(FlowContext context, String prompt) throws Throwable {
+    public String ask(FlowContext context, String prompt) throws Throwable {
         return "";
     }
 }

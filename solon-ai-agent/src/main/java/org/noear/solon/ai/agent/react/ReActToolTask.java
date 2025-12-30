@@ -4,7 +4,6 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -54,7 +53,7 @@ public class ReActToolTask implements TaskComponent {
         }
 
         // --- 2. 处理文本 ReAct 模式 (Observation 模拟) ---
-        String lastContent = state.getLastContent();
+        String lastContent = state.getLastResponse();
         if (lastContent == null) return;
 
         Matcher matcher = ACTION_PATTERN.matcher(lastContent);

@@ -19,7 +19,7 @@ public class ReActConfig {
     private int maxIterations = 10;
     private boolean enableLogging = false;
     private float temperature = 0.7F;
-    private int maxResponseTokens = 2048;
+    private int maxTokens = 2048;
     private String finishMarker = "[FINISH]";
     private FlowEngine flowEngine;
     private List<FlowInterceptor> flowInterceptors = new ArrayList<>();
@@ -64,6 +64,11 @@ public class ReActConfig {
         return this;
     }
 
+    public ReActConfig maxTokens(int val) {
+        this.maxTokens = val;
+        return this;
+    }
+
     public ReActConfig maxIterations(int val) {
         this.maxIterations = val;
         return this;
@@ -102,8 +107,8 @@ public class ReActConfig {
         return temperature;
     }
 
-    public int getMaxResponseTokens() {
-        return maxResponseTokens;
+    public int getMaxTokens() {
+        return maxTokens;
     }
 
     public String getFinishMarker() {

@@ -19,7 +19,7 @@ public class ReActState {
     private List<ChatMessage> history;
     private volatile String status; // 增加 volatile，保证 link 判定时的可见性
     private String finalAnswer;
-    private String lastContent;
+    private String lastResponse;
     private String historySummary = "";
 
     public ReActState() {
@@ -45,6 +45,10 @@ public class ReActState {
         return iteration;
     }
 
+    public int nextIteration(){
+        return iteration.incrementAndGet();
+    }
+
 
     public String getStatus() {
         return status;
@@ -62,12 +66,12 @@ public class ReActState {
         this.finalAnswer = finalAnswer;
     }
 
-    public String getLastContent() {
-        return lastContent;
+    public String getLastResponse() {
+        return lastResponse;
     }
 
-    public void setLastContent(String lastContent) {
-        this.lastContent = lastContent;
+    public void setLastResponse(String lastResponse) {
+        this.lastResponse = lastResponse;
     }
 
 
@@ -75,7 +79,7 @@ public class ReActState {
         return history;
     }
 
-    public ChatMessage getLastMesage() {
+    public ChatMessage getLastMessage() {
         if (history.isEmpty()) return null;
         return history.get(history.size() - 1);
     }

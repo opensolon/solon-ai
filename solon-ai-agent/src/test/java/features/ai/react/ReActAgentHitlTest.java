@@ -30,7 +30,7 @@ public class ReActAgentHitlTest {
         SimpleFlowInterceptor hitlInterceptor = SimpleFlowInterceptor.builder()
                 .onNodeStart((ctx, node) -> {
                     // 如果进入工具执行节点，且尚未获得人工批准
-                    if ("node_tools".equals(node.getId())) {
+                    if ("act".equals(node.getId())) {
                         Boolean approved = ctx.getAs("is_approved");
                         if (approved == null) {
                             System.out.println("[拦截器] 检测到敏感工具调用，等待人工审批...");
@@ -52,7 +52,7 @@ public class ReActAgentHitlTest {
 
         // --- 第一步：发起请求，预期会被拦截 ---
         System.out.println("--- 第一次调用 (预期拦截) ---");
-        String result1 = agent.call(context, prompt);
+        String result1 = agent.ask(context, prompt);
 
         // 验证：结果应为空（或中间态），且 context 处于 stopped 状态
         Assertions.assertTrue(context.lastNode().getType() != NodeType.END, "流程应该被拦截并停止");
@@ -69,7 +69,7 @@ public class ReActAgentHitlTest {
         // --- 第三步：恢复执行 ---
         System.out.println("--- 第二次调用 (恢复执行) ---");
         // 恢复时传入原 context，prompt 会从 state 中自动获取
-        String result2 = agent.call(context, null);
+        String result2 = agent.ask(context, null);
 
         // 验证：最终结果应包含退款成功的关键字
         Assertions.assertNotNull(result2);

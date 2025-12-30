@@ -13,10 +13,10 @@ import java.util.List;
  * 模型推理任务
  * 优化点：支持原生 ToolCall + 文本 ReAct 混合模式
  */
-public class ReActModelTask implements TaskComponent {
+public class ReActThinkTask implements TaskComponent {
     private final ReActConfig config;
 
-    public ReActModelTask(ReActConfig config) {
+    public ReActThinkTask(ReActConfig config) {
         this.config = config;
     }
 
@@ -26,7 +26,7 @@ public class ReActModelTask implements TaskComponent {
         state.setStatus(""); // 运行前清空状态，确保由本次推理决定去向
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
-        if (state.getIteration().incrementAndGet() > config.getMaxIterations()) {
+        if (state.nextIteration() > config.getMaxIterations()) {
             state.setStatus("finish");
             state.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
@@ -67,7 +67,7 @@ public class ReActModelTask implements TaskComponent {
         String clearContent = response.hasContent() ? response.getResultContent() : "";
 
         state.addMessage(ChatMessage.ofAssistant(rawContent));
-        state.setLastContent(clearContent);
+        state.setLastResponse(clearContent);
 
         // 6. 决策路由逻辑。只要有 Action 且没被判定为 Finish，就去执行工具
         if (rawContent.contains(config.getFinishMarker())) {
