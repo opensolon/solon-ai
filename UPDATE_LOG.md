@@ -13,7 +13,9 @@
 
 ### v3.8.1
 
-* 添加 solon-ai-core autoToolCall 聊天模型选项（默认为 true）
+* 新增 `solon-ai-agent` 插件
+* 添加 `solon-ai-core` autoToolCall 聊天模型选项（默认为 true）
+* 添加 `solon-ai-core` ChatResponse:getResultContent
 
 
 ### v3.8.0
