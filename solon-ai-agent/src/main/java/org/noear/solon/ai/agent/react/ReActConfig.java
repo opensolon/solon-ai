@@ -4,6 +4,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.flow.FlowEngine;
+import org.noear.solon.flow.intercept.FlowInterceptor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,7 @@ public class ReActConfig {
     private int maxResponseTokens = 2048;
     private String finishMarker = "[FINISH]";
     private FlowEngine flowEngine;
+    private List<FlowInterceptor> flowInterceptors = new ArrayList<>();
     private ReActSystemPromptProvider systemPromptProvider = new ReActSystemPromptProviderEn();
 
     public ReActConfig(ChatModel chatModel) {
@@ -72,6 +74,11 @@ public class ReActConfig {
         return this;
     }
 
+    public ReActConfig addFlowInterceptor(FlowInterceptor val) {
+        this.flowInterceptors.add(val);
+        return this;
+    }
+
     public ReActConfig systemPromptProvider(ReActSystemPromptProvider val) {
         this.systemPromptProvider = val;
         return this;
@@ -112,6 +119,10 @@ public class ReActConfig {
             flowEngine = FlowEngine.newInstance();
         }
         return flowEngine;
+    }
+
+    public List<FlowInterceptor> getFlowInterceptors() {
+        return flowInterceptors;
     }
 
     public ReActSystemPromptProvider getSystemPromptProvider() {

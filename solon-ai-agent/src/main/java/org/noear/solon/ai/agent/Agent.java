@@ -12,11 +12,11 @@ import org.noear.solon.flow.TaskComponent;
  */
 public interface Agent extends TaskComponent {
     /**
-     * 运行
+     * 执行
      *
      * @param prompt 提示语
      */
-    String run(FlowContext context, String prompt) throws Throwable;
+    String call(FlowContext context, String prompt) throws Throwable;
 
     /**
      * 作为 solon-flow TaskComponent 运行（方便 solon-flow 整合）
@@ -26,7 +26,7 @@ public interface Agent extends TaskComponent {
      */
     default void run(FlowContext context, Node node) throws Throwable {
         String prompt = context.getAs("prompt");
-        String result = run(context, prompt);
+        String result = call(context, prompt);
         context.put("result", result);
     }
 }

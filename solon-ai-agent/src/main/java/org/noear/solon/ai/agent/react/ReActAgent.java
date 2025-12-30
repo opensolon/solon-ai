@@ -8,6 +8,7 @@ import org.noear.solon.core.util.LogUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.flow.Graph;
+import org.noear.solon.flow.intercept.FlowInterceptor;
 
 /**
  * 优化后的 ReActAgent
@@ -20,6 +21,11 @@ public class ReActAgent implements Agent {
     public ReActAgent(ReActConfig config) {
         this.config = config;
         this.graph = initGraph();
+
+        //附加流拦截器
+        for (FlowInterceptor interceptor : config.getFlowInterceptors()) {
+            config.getFlowEngine().addInterceptor(interceptor);
+        }
     }
 
     /**
@@ -47,7 +53,7 @@ public class ReActAgent implements Agent {
     }
 
     @Override
-    public String run(FlowContext context, String prompt) throws Throwable {
+    public String call(FlowContext context, String prompt) throws Throwable {
         if (config.isEnableLogging()) {
             LogUtil.global().info("Starting ReActAgent: " + prompt);
         }
@@ -114,6 +120,11 @@ public class ReActAgent implements Agent {
 
         public Builder flowEngine(FlowEngine val) {
             config.flowEngine(val);
+            return this;
+        }
+
+        public Builder addFlowInterceptor(FlowInterceptor val) {
+            config.addFlowInterceptor(val);
             return this;
         }
 

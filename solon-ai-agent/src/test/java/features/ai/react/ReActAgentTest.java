@@ -30,7 +30,7 @@ public class ReActAgentTest {
 
         // 测试点：多步计算逻辑
         FlowContext context = FlowContext.of("demo1");
-        String result = agent.run(context, "先计算 12 加 34 的和，再把结果乘以 2 等于多少？");
+        String result = agent.call(context, "先计算 12 加 34 的和，再把结果乘以 2 等于多少？");
 
         Assertions.assertNotNull(result);
         // 结果应该是 (12+34)*2 = 92

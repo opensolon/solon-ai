@@ -39,7 +39,7 @@ public class ReActAgentComplexTest {
         String prompt = "我的订单号是 ORD_20251229，到现在还没收到货，帮我查查怎么回事并给出处理方案。";
         FlowContext context = FlowContext.of("demo1");
 
-        String result = agent.run(context, prompt);
+        String result = agent.call(context, prompt);
 
         // 科学验证：
         Assertions.assertNotNull(result);
