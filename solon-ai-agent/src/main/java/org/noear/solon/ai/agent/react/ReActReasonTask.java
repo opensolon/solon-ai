@@ -13,10 +13,10 @@ import java.util.List;
  * 模型推理任务
  * 优化点：支持原生 ToolCall + 文本 ReAct 混合模式
  */
-public class ReActThinkTask implements TaskComponent {
+public class ReActReasonTask implements TaskComponent {
     private final ReActConfig config;
 
-    public ReActThinkTask(ReActConfig config) {
+    public ReActReasonTask(ReActConfig config) {
         this.config = config;
     }
 
@@ -59,7 +59,7 @@ public class ReActThinkTask implements TaskComponent {
         // --- 核心优化：处理 Native Tool Calls ---
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
             state.addMessage(response.getMessage()); // 存入包含 tool_calls 的消息
-            state.setStatus(ReActState.STATUS_ACT);
+            state.setStatus(ReActState.STATUS_ACTION);
             return;
         }
 
@@ -75,7 +75,7 @@ public class ReActThinkTask implements TaskComponent {
             state.setStatus(ReActState.STATUS_FINISH);
             state.setFinalAnswer(parseFinal(clearContent));
         } else if (rawContent.contains("Action:")) {
-            state.setStatus(ReActState.STATUS_ACT);
+            state.setStatus(ReActState.STATUS_ACTION);
         } else {
             // 兜底逻辑：如果不含 Action 格式，则视为回答结束
             state.setStatus(ReActState.STATUS_FINISH);
