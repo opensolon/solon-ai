@@ -3,7 +3,6 @@ package org.noear.solon.ai.agent.react;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
-import org.noear.solon.flow.intercept.FlowInterceptor;
 
 import java.util.ArrayList;
 import java.util.List;

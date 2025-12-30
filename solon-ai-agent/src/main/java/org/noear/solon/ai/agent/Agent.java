@@ -15,6 +15,7 @@ public interface Agent extends TaskComponent {
     static String KEY_ANSWER = "answer";
     static String KEY_HISTORY = "history";
     static String KEY_NEXT_AGENT = "next_agent";
+    static String KEY_ITERATIONS = "_total_iterations";
     static String KEY_CURRENT_RECORD_KEY = "_current_record_key";
 
     /**
@@ -38,14 +39,25 @@ public interface Agent extends TaskComponent {
     default void run(FlowContext context, Node node) throws Throwable {
         context.lastNode(null);
 
+        // 1. 计数器自增（安全熔断）
+        int iters = context.getOrDefault(KEY_ITERATIONS, 0);
+        context.put(KEY_ITERATIONS, iters + 1);
+
+        // 2. 获取输入
         String prompt = context.getAs(KEY_PROMPT);
+
+        // 3. 执行
+        long start = System.currentTimeMillis();
         String result = ask(context, prompt);
+        long duration = System.currentTimeMillis() - start;
+
+        // 4. 更新状态
         context.put(KEY_ANSWER, result);
 
+        // 5. 协议化历史记录（包含角色和耗时元数据）
         StringBuilder history = new StringBuilder(context.getOrDefault(KEY_HISTORY, ""));
-        history.append("\n\n## ")
-                .append(name())
-                .append(" Role Output:\n")
+        history.append("\n[Agent: ").append(name())
+                .append(" (").append(duration).append("ms)]: ")
                 .append(result);
 
         context.put(KEY_HISTORY, history.toString());

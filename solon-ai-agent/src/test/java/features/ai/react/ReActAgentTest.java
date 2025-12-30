@@ -1,5 +1,6 @@
 package features.ai.react;
 
+import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -16,10 +17,7 @@ public class ReActAgentTest {
 
     @Test
     public void testMathAndLogic() throws Throwable {
-        ChatModel chatModel = ChatModel.of("https://ai.gitee.com/v1/chat/completions")
-                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
-                .model("Qwen3-32B")
-                .build();
+        ChatModel chatModel = LlmUtil.getChatModel();
 
 
         ReActAgent agent = ReActAgent.builder(chatModel)

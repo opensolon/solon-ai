@@ -1,5 +1,6 @@
 package features.ai.react;
 
+import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -18,10 +19,7 @@ public class ReActAgentComplexTest {
     @Test
     public void testCustomerServiceLogic() throws Throwable {
         // 使用高性能模型（如 Qwen2.5-32B 以上）处理复杂逻辑
-        ChatModel chatModel = ChatModel.of("https://ai.gitee.com/v1/chat/completions")
-                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
-                .model("Qwen3-32B")
-                .build();
+        ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.builder(chatModel)
                 .addTool(new MethodToolProvider(new OrderTools()))

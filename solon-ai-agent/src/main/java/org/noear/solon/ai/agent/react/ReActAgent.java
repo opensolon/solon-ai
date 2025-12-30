@@ -1,19 +1,23 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.multi.AgentRouterTask;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
-import org.noear.solon.core.util.LogUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.flow.Graph;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 优化后的 ReActAgent
  * 基于 Solon Flow 流引擎实现 Thought -> Action -> Observation 循环
  */
 public class ReActAgent implements Agent {
+    private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
+
     private final String name;
     private final ReActConfig config;
     private final Graph graph;
@@ -65,7 +69,7 @@ public class ReActAgent implements Agent {
     @Override
     public String ask(FlowContext context, String prompt) throws Throwable {
         if (config.isEnableLogging()) {
-            LogUtil.global().info("Starting ReActAgent: " + prompt);
+            LOG.info("Starting ReActAgent: {}", prompt);
         }
 
         context.put("_current_record_key", recordKey);
@@ -86,7 +90,7 @@ public class ReActAgent implements Agent {
         // 获取最终答案
         String result = record.getFinalAnswer();
         if (config.isEnableLogging()) {
-            LogUtil.global().info("Final Answer: " + result);
+            LOG.info("Final Answer: {}", result);
         }
         return result;
     }

@@ -1,5 +1,6 @@
 package demo.ai.react;
 
+import demo.ai.agent.LlmUtil;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActRecord;
@@ -9,14 +10,10 @@ import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NodeType;
-import org.noear.solon.flow.intercept.SimpleFlowInterceptor;
 
 public class ReActHitlDemo {
     public static void main(String[] args) throws Throwable {
-        ChatModel chatModel = ChatModel.of("https://ai.gitee.com/v1/chat/completions")
-                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
-                .model("Qwen3-32B")
-                .build();
+        ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 定义拦截器：如果是 node_tools 节点且没审批，就拦住它
         ReActInterceptor hitlInterceptor = ReActInterceptor.builder()

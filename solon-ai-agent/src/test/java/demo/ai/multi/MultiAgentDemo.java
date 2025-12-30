@@ -1,5 +1,6 @@
 package demo.ai.multi;
 
+import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.liquor.eval.Scripts;
 import org.noear.solon.ai.agent.Agent;
@@ -25,10 +26,7 @@ public class MultiAgentDemo {
 
     @Test
     public void testMultiAgent() throws Throwable {
-        ChatModel chatModel = ChatModel.of("https://ai.gitee.com/v1/chat/completions")
-                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
-                .model("Qwen3-32B")
-                .build();
+        ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 定义子 Agent
         Agent coder = ReActAgent.builder(chatModel)

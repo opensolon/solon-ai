@@ -1,5 +1,6 @@
 package features.ai.multi;
 
+import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.multi.AgentRouterTask;
@@ -16,10 +17,7 @@ public class MultiAgentTravelTest {
 
     @Test
     public void testTravelTeam() throws Throwable {
-        ChatModel chatModel = ChatModel.of("https://ai.gitee.com/v1/chat/completions")
-                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
-                .model("Qwen3-32B")
-                .build();
+        ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 定义子 Agent
         // searcher: 拥有天气查询工具，负责获取客观事实

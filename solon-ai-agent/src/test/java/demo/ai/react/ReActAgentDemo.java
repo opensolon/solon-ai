@@ -1,5 +1,6 @@
 package demo.ai.react;
 
+import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActRecord;
@@ -11,10 +12,7 @@ import org.noear.solon.flow.FlowContext;
 
 public class ReActAgentDemo {
     public static void main(String[] args) throws Throwable {
-        ChatModel chatModel = ChatModel.of("https://ai.gitee.com/v1/chat/completions")
-                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
-                .model("Qwen3-32B")
-                .build();
+        ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.builder(chatModel)
                 .enableLogging(true)
