@@ -26,7 +26,7 @@ public interface Agent extends TaskComponent {
      */
     default void run(FlowContext context, Node node) throws Throwable {
         String prompt = context.getAs("prompt");
-        String result = ask(context, prompt);
-        context.put("result", result);
+        String answer = ask(context, prompt);
+        context.put("answer", answer);
     }
 }

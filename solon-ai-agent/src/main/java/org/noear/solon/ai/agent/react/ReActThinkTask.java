@@ -94,12 +94,9 @@ public class ReActThinkTask implements TaskComponent {
             content = content.substring(content.indexOf(config.getFinishMarker()) + config.getFinishMarker().length());
         }
 
-        // 2. 剔除 <think>...</think> 标签及其内部内容（针对深度思考模型）
-        content = content.replaceAll("(?s)<think>.*?</think>", "");
-
-        // 3. 清理掉可能存在的 Thought: 标签
-        content = content.replaceFirst("(?i)^Thought:\\s*", "");
-
-        return content.trim();
+        // 2. 深度清理
+        return content.replaceAll("(?s)<think>.*?</think>", "") // 清理思考过程
+                .replaceAll("(?m)^(Thought|Action|Observation):\\s*", "") // 清理所有 ReAct 标签
+                .trim();
     }
 }
