@@ -117,6 +117,9 @@ public class ReActRecord {
         }
     }
 
+    /**
+     * 压缩历史消息
+     * */
     private void compressHistory() {
         if (history.size() <= 10) return;
 
@@ -163,11 +166,13 @@ public class ReActRecord {
         if (current instanceof ToolMessage) {
             return true;
         }
+
         // 如果当前是 Assistant 且包含 ToolCalls，通常建议把它和后面的结果一起保留
         if (current instanceof AssistantMessage) {
             AssistantMessage am = (AssistantMessage) current;
             return Assert.isNotEmpty(am.getToolCalls());
         }
+
         return false;
     }
 }

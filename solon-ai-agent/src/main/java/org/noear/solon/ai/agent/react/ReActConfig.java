@@ -53,7 +53,7 @@ public class ReActConfig {
      * 生成标准 ReAct 提示词
      * 强制模型遵循 Thought/Action/Observation 的链式思考格式
      */
-    public String getSystemPromptTemplate() {
+    public String getSystemPrompt() {
         return promptProvider.getSystemPrompt(this);
     }
 

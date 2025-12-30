@@ -77,7 +77,7 @@ public class ReActActionTask implements TaskComponent {
                     record.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
                 }
 
-                return; // 处理完 Native 调用直接返回，不再走正则逻辑
+                return;
             }
         }
 

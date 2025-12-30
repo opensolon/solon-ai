@@ -59,9 +59,9 @@ public class ReActReasonTask implements TaskComponent {
             record.addMessage(ChatMessage.ofUser(prompt));
         }
 
-        // 3. 构建全量消息上下文（System + History）
+        // 3. 构建全量消息（System + History）
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.ofSystem(config.getSystemPromptTemplate()));
+        messages.add(ChatMessage.ofSystem(config.getSystemPrompt()));
         messages.addAll(record.getHistory());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
@@ -84,14 +84,14 @@ public class ReActReasonTask implements TaskComponent {
             return;
         }
 
-        // --- 核心优化：处理 Native Tool Calls ---
+        // --- 处理 Native Tool Calls ---
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
-            record.addMessage(response.getMessage()); // 存入包含 tool_calls 的消息
+            record.addMessage(response.getMessage());
             record.setRoute(ReActRecord.ROUTE_ACTION);
             return;
         }
 
-        // --- 兜底：处理文本 ReAct 模式 ---
+        // --- 处理文本 ReAct 模式 ---
         String rawContent = response.hasContent() ? response.getContent() : "";
         String clearContent = response.hasContent() ? response.getResultContent() : "";
 
@@ -107,14 +107,16 @@ public class ReActReasonTask implements TaskComponent {
             config.getInterceptor().onThought(record, clearContent);
         }
 
-        // 6. 决策路由逻辑。只要有 Action 且没被判定为 Finish，就去执行工具
+        //决策路由
         if (rawContent.contains(config.getFinishMarker())) {
+            // 结束
             record.setRoute(ReActRecord.ROUTE_END);
             record.setFinalAnswer(extractFinalAnswer(clearContent));
         } else if (rawContent.contains("Action:")) {
+            // 动作
             record.setRoute(ReActRecord.ROUTE_ACTION);
         } else {
-            // 兜底逻辑：如果不含 Action 格式，则视为回答结束
+            // 兜底（结束）
             record.setRoute(ReActRecord.ROUTE_END);
             record.setFinalAnswer(extractFinalAnswer(clearContent));
         }

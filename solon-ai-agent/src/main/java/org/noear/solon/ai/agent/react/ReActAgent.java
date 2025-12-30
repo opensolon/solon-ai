@@ -63,16 +63,14 @@ public class ReActAgent implements Agent {
         return Graph.create("react_agent", spec -> {
             spec.addStart("start").linkAdd(ReActRecord.ROUTE_REASON);
 
-            // 模型推理节点：决定是执行工具还是结束
             spec.addExclusive(ReActRecord.ROUTE_REASON)
                     .task(new ReActReasonTask(config))
                     .linkAdd(ReActRecord.ROUTE_ACTION, l -> l.when(ctx -> ReActRecord.ROUTE_ACTION.equals(ctx.<ReActRecord>getAs(recordKey).getRoute())))
-                    .linkAdd(ReActRecord.ROUTE_END); // 默认跳转至结束
+                    .linkAdd(ReActRecord.ROUTE_END);
 
-            // 工具执行节点：执行具体的函数调用
             spec.addActivity(ReActRecord.ROUTE_ACTION)
                     .task(new ReActActionTask(config))
-                    .linkAdd(ReActRecord.ROUTE_REASON); // 执行完工具后返回模型节点进行下一轮思考
+                    .linkAdd(ReActRecord.ROUTE_REASON);
 
             spec.addEnd(ReActRecord.ROUTE_END);
         });
@@ -91,7 +89,6 @@ public class ReActAgent implements Agent {
 
         context.put("_current_record_key", recordKey);
 
-        // 初始化流程上下文，携带对话历史与迭代计数
         ReActRecord record = context.getAs(recordKey);
         if (record == null) {
             record = new ReActRecord(prompt);
@@ -101,14 +98,13 @@ public class ReActAgent implements Agent {
             context.put(recordKey, record);
         }
 
-        // 执行图引擎
         flowEngine.eval(graph, context.lastNodeId(), context);
 
-        // 获取最终答案
         String result = record.getFinalAnswer();
         if (config.isEnableLogging()) {
             LOG.info("Final Answer: {}", result);
         }
+
         return result;
     }
 

@@ -52,12 +52,11 @@ public class MultiAgent implements Agent {
 
     @Override
     public String ask(FlowContext context, String prompt) throws Throwable {
-        // 如果是首次运行，初始化 prompt
-        if (context.getAs(Agent.KEY_PROMPT) == null) {
+        if (context.get(Agent.KEY_PROMPT) == null) {
             context.put(Agent.KEY_PROMPT, prompt);
         }
 
-        // 核心：利用 flowEngine 的 eval，支持从上次的 nodeId 继续运行（回溯支持）
+        // 支持从上次的 lastNodeId 继续运行（回溯支持）
         flowEngine.eval(graph, context.lastNodeId(), context);
 
         return context.getAs(Agent.KEY_ANSWER);
