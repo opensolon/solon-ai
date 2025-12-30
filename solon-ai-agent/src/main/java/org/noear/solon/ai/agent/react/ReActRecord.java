@@ -11,31 +11,33 @@ import java.util.List;
  * @author noear
  * @since 3.8.1
  */
-public class ReActState {
-    public static final String TAG = "_state";
-    public static final String STATUS_ACTION = "action";
-    public static final String STATUS_FINISH = "finish";
+public class ReActRecord {
+    public static final String TAG = "_record";
+
+    public static final String ROUTE_REASON = "reason";
+    public static final String ROUTE_ACTION = "action";
+    public static final String ROUTE_END = "end";
 
     private String prompt;
     private AtomicInteger iteration;
     private List<ChatMessage> history;
-    private volatile String status; // 增加 volatile，保证 link 判定时的可见性
+    private volatile String route; // 增加 volatile，保证 link 判定时的可见性
     private String finalAnswer;
     private String lastResponse;
     private String historySummary = "";
 
-    public ReActState() {
+    public ReActRecord() {
         //用于反序列化
         this.iteration = new AtomicInteger(0);
         this.history = new ArrayList<>();
     }
 
-    public ReActState(String prompt) {
+    public ReActRecord(String prompt) {
         this.prompt = prompt;
 
         this.iteration = new AtomicInteger(0);
         this.history = new ArrayList<>();
-        this.status = "";
+        this.route = "";
         this.finalAnswer = "";
     }
 
@@ -52,12 +54,12 @@ public class ReActState {
     }
 
 
-    public String getStatus() {
-        return status;
+    public String getRoute() {
+        return route;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    public void setRoute(String route) {
+        this.route = route;
     }
 
     public String getFinalAnswer() {

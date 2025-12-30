@@ -31,8 +31,8 @@ public class ReActActionTask implements TaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        ReActState state = context.getAs(ReActState.TAG);
-        ChatMessage lastMessage = state.getHistory().get(state.getHistory().size() - 1);
+        ReActRecord record = context.getAs(ReActRecord.TAG);
+        ChatMessage lastMessage = record.getHistory().get(record.getHistory().size() - 1);
 
         // --- 1. 处理 Native Tool Calls (遵循 OpenAI/Solon AI 消息对齐协议) ---
         if (lastMessage instanceof AssistantMessage) {
@@ -44,8 +44,8 @@ public class ReActActionTask implements TaskComponent {
 
                     String result = executeTool(call.name(), args);
                     // 注意：ChatMessage 加入 history 需要考虑线程安全或最后统一汇总
-                    synchronized (state) {
-                        state.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
+                    synchronized (record) {
+                        record.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
                     }
                 });
                 return; // 处理完 Native 调用直接返回，不再走正则逻辑
@@ -53,7 +53,7 @@ public class ReActActionTask implements TaskComponent {
         }
 
         // --- 2. 处理文本 ReAct 模式 (Observation 模拟) ---
-        String lastContent = state.getLastResponse();
+        String lastContent = record.getLastResponse();
         if (lastContent == null) return;
 
         Matcher matcher = ACTION_PATTERN.matcher(lastContent);
@@ -77,9 +77,9 @@ public class ReActActionTask implements TaskComponent {
 
         if (foundAny) {
             // 文本模式通过 User 角色模拟系统反馈
-            state.addMessage(ChatMessage.ofUser(allObservations.toString().trim()));
+            record.addMessage(ChatMessage.ofUser(allObservations.toString().trim()));
         } else {
-            state.addMessage(ChatMessage.ofUser("Observation: No valid Action detected. If you have enough info, please provide Final Answer."));
+            record.addMessage(ChatMessage.ofUser("Observation: No valid Action detected. If you have enough info, please provide Final Answer."));
         }
     }
 

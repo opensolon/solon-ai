@@ -35,20 +35,20 @@ public class ReActAgent implements Agent {
      */
     private Graph initGraph() {
         return Graph.create("react_agent", spec -> {
-            spec.addStart("start").linkAdd("reason");
+            spec.addStart("start").linkAdd(ReActRecord.ROUTE_REASON);
 
             // 模型推理节点：决定是执行工具还是结束
-            spec.addExclusive("reason")
+            spec.addExclusive(ReActRecord.ROUTE_REASON)
                     .task(new ReActReasonTask(config))
-                    .linkAdd("action", l -> l.when(ctx -> ReActState.STATUS_ACTION.equals(ctx.<ReActState>getAs(ReActState.TAG).getStatus())))
-                    .linkAdd("end"); // 默认跳转至结束
+                    .linkAdd(ReActRecord.ROUTE_ACTION, l -> l.when(ctx -> ReActRecord.ROUTE_ACTION.equals(ctx.<ReActRecord>getAs(ReActRecord.TAG).getRoute())))
+                    .linkAdd(ReActRecord.ROUTE_END); // 默认跳转至结束
 
             // 工具执行节点：执行具体的函数调用
-            spec.addActivity("action")
+            spec.addActivity(ReActRecord.ROUTE_ACTION)
                     .task(new ReActActionTask(config))
-                    .linkAdd("reason"); // 执行完工具后返回模型节点进行下一轮思考
+                    .linkAdd(ReActRecord.ROUTE_REASON); // 执行完工具后返回模型节点进行下一轮思考
 
-            spec.addEnd("end");
+            spec.addEnd(ReActRecord.ROUTE_END);
         });
     }
 
@@ -59,11 +59,14 @@ public class ReActAgent implements Agent {
         }
 
         // 初始化流程上下文，携带对话历史与迭代计数
-        ReActState state = context.getAs(ReActState.TAG);
+        ReActRecord state = context.getAs(ReActRecord.TAG);
         if (state == null) {
-            state = new ReActState(prompt);
-            context.put(ReActState.TAG, state);
+            state = new ReActRecord(prompt);
+            context.put(ReActRecord.TAG, state);
         }
+
+        // 运行前清空路由，确保由本次推理决定去向
+        state.setRoute("");
 
         // 执行图引擎
         config.getFlowEngine().eval(graph, context.lastNodeId(), context);

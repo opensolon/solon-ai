@@ -3,7 +3,7 @@ package features.ai.react;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActState;
+import org.noear.solon.ai.agent.react.ReActRecord;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -58,9 +58,9 @@ public class ReActAgentHitlTest {
         Assertions.assertTrue(context.lastNode().getType() != NodeType.END, "流程应该被拦截并停止");
         Assertions.assertEquals("node_tools", context.lastNodeId(), "最后停留在工具节点");
 
-        ReActState state = context.getAs(ReActState.TAG);
+        ReActRecord state = context.getAs(ReActRecord.TAG);
         Assertions.assertTrue(state.getIteration().get() > 0);
-        System.out.println("当前状态：" + state.getStatus());
+        System.out.println("当前状态：" + state.getRoute());
 
         // --- 第二步：人工介入，注入批准信号 ---
         System.out.println("\n--- 人工介入：批准退款 ---");

@@ -22,26 +22,25 @@ public class ReActReasonTask implements TaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        ReActState state = context.getAs(ReActState.TAG);
-        state.setStatus(""); // 运行前清空状态，确保由本次推理决定去向
+        ReActRecord record = context.getAs(ReActRecord.TAG);
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
-        if (state.nextIteration() > config.getMaxIterations()) {
-            state.setStatus(ReActState.STATUS_FINISH);
-            state.setFinalAnswer("Agent error: Maximum iterations reached.");
+        if (record.nextIteration() > config.getMaxIterations()) {
+            record.setRoute(ReActRecord.ROUTE_END);
+            record.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
         }
 
         // 2. 初始化对话：首轮将 prompt 转为 User Message
-        if (state.getHistory().isEmpty()) {
-            String prompt = state.getPrompt();
-            state.addMessage(ChatMessage.ofUser(prompt));
+        if (record.getHistory().isEmpty()) {
+            String prompt = record.getPrompt();
+            record.addMessage(ChatMessage.ofUser(prompt));
         }
 
         // 3. 构建全量消息上下文（System + History）
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(config.getSystemPromptTemplate()));
-        messages.addAll(state.getHistory());
+        messages.addAll(record.getHistory());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
         ChatResponse response = config.getChatModel()
@@ -58,8 +57,8 @@ public class ReActReasonTask implements TaskComponent {
 
         // --- 核心优化：处理 Native Tool Calls ---
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
-            state.addMessage(response.getMessage()); // 存入包含 tool_calls 的消息
-            state.setStatus(ReActState.STATUS_ACTION);
+            record.addMessage(response.getMessage()); // 存入包含 tool_calls 的消息
+            record.setRoute(ReActRecord.ROUTE_ACTION);
             return;
         }
 
@@ -67,19 +66,19 @@ public class ReActReasonTask implements TaskComponent {
         String rawContent = response.hasContent() ? response.getContent() : "";
         String clearContent = response.hasContent() ? response.getResultContent() : "";
 
-        state.addMessage(ChatMessage.ofAssistant(rawContent));
-        state.setLastResponse(clearContent);
+        record.addMessage(ChatMessage.ofAssistant(rawContent));
+        record.setLastResponse(clearContent);
 
         // 6. 决策路由逻辑。只要有 Action 且没被判定为 Finish，就去执行工具
         if (rawContent.contains(config.getFinishMarker())) {
-            state.setStatus(ReActState.STATUS_FINISH);
-            state.setFinalAnswer(extractFinalAnswer(clearContent));
+            record.setRoute(ReActRecord.ROUTE_END);
+            record.setFinalAnswer(extractFinalAnswer(clearContent));
         } else if (rawContent.contains("Action:")) {
-            state.setStatus(ReActState.STATUS_ACTION);
+            record.setRoute(ReActRecord.ROUTE_ACTION);
         } else {
             // 兜底逻辑：如果不含 Action 格式，则视为回答结束
-            state.setStatus(ReActState.STATUS_FINISH);
-            state.setFinalAnswer(extractFinalAnswer(clearContent));
+            record.setRoute(ReActRecord.ROUTE_END);
+            record.setFinalAnswer(extractFinalAnswer(clearContent));
         }
     }
 
