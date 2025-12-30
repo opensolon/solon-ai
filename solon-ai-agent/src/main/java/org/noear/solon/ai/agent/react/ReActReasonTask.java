@@ -73,20 +73,20 @@ public class ReActReasonTask implements TaskComponent {
         // 6. 决策路由逻辑。只要有 Action 且没被判定为 Finish，就去执行工具
         if (rawContent.contains(config.getFinishMarker())) {
             state.setStatus(ReActState.STATUS_FINISH);
-            state.setFinalAnswer(parseFinal(clearContent));
+            state.setFinalAnswer(extractFinalAnswer(clearContent));
         } else if (rawContent.contains("Action:")) {
             state.setStatus(ReActState.STATUS_ACTION);
         } else {
             // 兜底逻辑：如果不含 Action 格式，则视为回答结束
             state.setStatus(ReActState.STATUS_FINISH);
-            state.setFinalAnswer(parseFinal(clearContent));
+            state.setFinalAnswer(extractFinalAnswer(clearContent));
         }
     }
 
     /**
      * 解析并清理最终回复内容
      */
-    private String parseFinal(String content) {
+    private String extractFinalAnswer(String content) {
         if (content == null) return "";
 
         // 1. 优先提取结束标记 [FINISH] 之后的内容

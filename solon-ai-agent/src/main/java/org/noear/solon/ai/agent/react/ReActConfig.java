@@ -23,7 +23,7 @@ public class ReActConfig {
     private String finishMarker = "[FINISH]";
     private FlowEngine flowEngine;
     private List<FlowInterceptor> flowInterceptors = new ArrayList<>();
-    private ReActSystemPromptProvider systemPromptProvider = new ReActSystemPromptProviderEn();
+    private ReActPromptProvider promptProvider = new ReActPromptProviderEn();
 
     public ReActConfig(ChatModel chatModel) {
         Objects.requireNonNull(chatModel, "chatModel");
@@ -35,7 +35,7 @@ public class ReActConfig {
      * 强制模型遵循 Thought/Action/Observation 的链式思考格式
      */
     public String getSystemPromptTemplate() {
-        return systemPromptProvider.getSystemPrompt(this);
+        return promptProvider.getSystemPrompt(this);
     }
 
     // --- Builder 链式调用方法 ---
@@ -84,8 +84,8 @@ public class ReActConfig {
         return this;
     }
 
-    public ReActConfig systemPromptProvider(ReActSystemPromptProvider val) {
-        this.systemPromptProvider = val;
+    public ReActConfig promptProvider(ReActPromptProvider val) {
+        this.promptProvider = val;
         return this;
     }
 
@@ -130,7 +130,7 @@ public class ReActConfig {
         return flowInterceptors;
     }
 
-    public ReActSystemPromptProvider getSystemPromptProvider() {
-        return systemPromptProvider;
+    public ReActPromptProvider getPromptProvider() {
+        return promptProvider;
     }
 }

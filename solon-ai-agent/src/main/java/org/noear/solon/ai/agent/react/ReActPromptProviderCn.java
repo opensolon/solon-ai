@@ -6,7 +6,7 @@ package org.noear.solon.ai.agent.react;
  *
  * @author noear 2025/12/29 created
  */
-public class ReActSystemPromptProviderCn implements ReActSystemPromptProvider {
+public class ReActPromptProviderCn implements ReActPromptProvider {
     @Override
     public String getSystemPrompt(ReActConfig config) {
         StringBuilder sb = new StringBuilder();

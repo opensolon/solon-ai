@@ -133,8 +133,8 @@ public class ReActAgent implements Agent {
             return this;
         }
 
-        public Builder systemPromptProvider(ReActSystemPromptProvider val) {
-            config.systemPromptProvider(val);
+        public Builder systemPromptProvider(ReActPromptProvider val) {
+            config.promptProvider(val);
             return this;
         }
 
