@@ -40,8 +40,8 @@ public class MultiAgentTravelTest {
             // 路由决策：由 Supervisor 决定下一步
             spec.addExclusive("router")
                     .task(new AgentRouterTask(chatModel, "searcher", "planner"))
-                    .linkAdd("searcher", l -> l.when(ctx -> "searcher".equals(ctx.get("next_agent"))))
-                    .linkAdd("planner", l -> l.when(ctx -> "planner".equals(ctx.get("next_agent"))))
+                    .linkAdd("searcher", l -> l.when(ctx -> "searcher".equals(ctx.get(Agent.KEY_NEXT_AGENT))))
+                    .linkAdd("planner", l -> l.when(ctx -> "planner".equals(ctx.get(Agent.KEY_NEXT_AGENT))))
                     .linkAdd("end");
 
             // 具体的 Agent 节点 (利用 Agent.run 自动同步 history)

@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.flow.Node;
 import org.noear.solon.flow.NodeTrace;
 import org.noear.solon.lang.Preview;
 
@@ -112,6 +113,10 @@ public class ReActTrace {
 
     public void setLastNode(NodeTrace lastNode) {
         this.lastNode = lastNode;
+    }
+
+    public void setLastNode(Node lastNode) {
+        this.lastNode = new NodeTrace(lastNode);
     }
 
     public synchronized List<ChatMessage> getMessages() {

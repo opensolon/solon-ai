@@ -1,5 +1,6 @@
 package org.noear.solon.ai.agent.multi;
 
+import org.noear.solon.flow.Node;
 import org.noear.solon.flow.NodeTrace;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,10 @@ public class TeamTrace {
 
     public void setLastNode(NodeTrace lastNode) {
         this.lastNode = lastNode;
+    }
+
+    public void setLastNode(Node lastNode) {
+        this.lastNode = new NodeTrace(lastNode);
     }
 
     /**
