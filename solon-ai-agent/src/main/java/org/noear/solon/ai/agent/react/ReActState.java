@@ -1,15 +1,15 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
 
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
 
 /**
- *
- * @author noear 2025/12/30 created
- *
+ * @author noear
+ * @since 3.8.1
  */
 public class ReActState {
     public static final String TAG = "_state";
@@ -17,10 +17,10 @@ public class ReActState {
     private String prompt;
     private AtomicInteger iteration;
     private List<ChatMessage> history;
-    private String status;
+    private volatile String status; // 增加 volatile，保证 link 判定时的可见性
     private String finalAnswer;
     private String lastContent;
-    private String historySummary = ""; // 存储历史摘要
+    private String historySummary = "";
 
     public ReActState() {
         //用于反序列化
@@ -73,33 +73,34 @@ public class ReActState {
     }
 
     public ChatMessage getLastMesage() {
+        if (history.isEmpty()) return null;
         return history.get(history.size() - 1);
     }
 
-    public void addMessage(ChatMessage message) {
+    public synchronized void addMessage(ChatMessage message) {
         history.add(message);
 
-        // 当消息超过阈值（如15条），触发摘要压缩
-        if (history.size() > 15) {
-            // 提取需要压缩的中间部分（保留首条 Prompt 和最后 5 条即时上下文）
-            // 注意：在实际工程中，这里可以异步调用一个简易模型生成 summary
-            // 此处演示逻辑：保留结构化关键点
+        if (history.size() > 20) {
             compressHistory();
         }
     }
 
     private void compressHistory() {
-        // 保留第 0 条（User 最初指令）
+        // 保留第 0 条
         ChatMessage rootPrompt = history.get(0);
-        // 获取最后 5 条作为活跃上下文
-        List<ChatMessage> activeContext = new ArrayList<>(history.subList(history.size() - 5, history.size()));
 
-        // 更新摘要标识（实际应用中建议调用 chatModel.prompt("请简要总结以下对话...").call()）
-        this.historySummary = "[System Note: Earlier interactions summarized to save context window...]";
+        // 策略优化：向前回溯，确保不切断 Tool 消息（Tool 消息必须紧跟在 Assistant Call 后面）
+        int cutIndex = history.size() - 5;
+        while (cutIndex > 1 && history.get(cutIndex) instanceof ToolMessage) {
+            cutIndex--;
+        }
+
+        List<ChatMessage> activeContext = new ArrayList<>(history.subList(cutIndex, history.size()));
+
+        this.historySummary = "[System Note: Earlier interactions summarized...]";
 
         history.clear();
         history.add(rootPrompt);
-        // 插入摘要说明
         history.add(ChatMessage.ofSystem("Summary of previous steps: " + historySummary));
         history.addAll(activeContext);
     }
