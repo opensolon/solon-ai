@@ -20,6 +20,7 @@ public class ReActState {
     private String status;
     private String finalAnswer;
     private String lastContent;
+    private String historySummary = ""; // 存储历史摘要
 
     public ReActState() {
         //用于反序列化
@@ -41,27 +42,6 @@ public class ReActState {
         return iteration;
     }
 
-    public List<ChatMessage> getHistory() {
-        return history;
-    }
-
-    public void addMessage(ChatMessage message) {
-        history.add(message);
-
-        // 自动修剪：保留最新的 20 条记录，防止 Context 爆炸
-        if (history.size() > 20) {
-            // 保留第 0 条（通常是首个 User Prompt）和最近的 19 条
-            ChatMessage first = history.get(0);
-            List<ChatMessage> latest = new ArrayList<>(history.subList(history.size() - 19, history.size()));
-            history.clear();
-            history.add(first);
-            history.addAll(latest);
-        }
-    }
-
-    public ChatMessage getLastMesage() {
-        return history.get(history.size() - 1);
-    }
 
     public String getStatus() {
         return status;
@@ -85,5 +65,42 @@ public class ReActState {
 
     public void setLastContent(String lastContent) {
         this.lastContent = lastContent;
+    }
+
+
+    public List<ChatMessage> getHistory() {
+        return history;
+    }
+
+    public ChatMessage getLastMesage() {
+        return history.get(history.size() - 1);
+    }
+
+    public void addMessage(ChatMessage message) {
+        history.add(message);
+
+        // 当消息超过阈值（如15条），触发摘要压缩
+        if (history.size() > 15) {
+            // 提取需要压缩的中间部分（保留首条 Prompt 和最后 5 条即时上下文）
+            // 注意：在实际工程中，这里可以异步调用一个简易模型生成 summary
+            // 此处演示逻辑：保留结构化关键点
+            compressHistory();
+        }
+    }
+
+    private void compressHistory() {
+        // 保留第 0 条（User 最初指令）
+        ChatMessage rootPrompt = history.get(0);
+        // 获取最后 5 条作为活跃上下文
+        List<ChatMessage> activeContext = new ArrayList<>(history.subList(history.size() - 5, history.size()));
+
+        // 更新摘要标识（实际应用中建议调用 chatModel.prompt("请简要总结以下对话...").call()）
+        this.historySummary = "[System Note: Earlier interactions summarized to save context window...]";
+
+        history.clear();
+        history.add(rootPrompt);
+        // 插入摘要说明
+        history.add(ChatMessage.ofSystem("Summary of previous steps: " + historySummary));
+        history.addAll(activeContext);
     }
 }

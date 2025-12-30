@@ -39,13 +39,13 @@ public class ReActToolTask implements TaskComponent {
         if (lastMessage instanceof AssistantMessage) {
             AssistantMessage lastAssistant = (AssistantMessage) lastMessage;
             if (Assert.isNotEmpty(lastAssistant.getToolCalls())) {
-                for (ToolCall call : lastAssistant.getToolCalls()) {
+                lastAssistant.getToolCalls().parallelStream().forEach(call -> {
                     String result = executeTool(call.name(), call.arguments());
-
-                    // 【关键点】Native 模式下必须使用 ofTool，并携带 callId。
-                    // 这样模型下一轮收到的消息链是：Assistant(ToolCalls) -> Tool(Result)
-                    state.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
-                }
+                    // 注意：ChatMessage 加入 history 需要考虑线程安全或最后统一汇总
+                    synchronized (state) {
+                        state.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
+                    }
+                });
                 return; // 处理完 Native 调用直接返回，不再走正则逻辑
             }
         }

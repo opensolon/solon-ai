@@ -60,7 +60,7 @@ public class ReActAgent implements Agent {
         }
 
         // 执行图引擎
-        config.getFlowEngine().eval(graph, context);
+        config.getFlowEngine().eval(graph, context.lastNodeId(), context);
 
         // 获取最终答案
         String result = state.getFinalAnswer();
