@@ -24,12 +24,15 @@ public class ReActState {
 
     public ReActState() {
         //用于反序列化
+        this.iteration = new AtomicInteger(0);
+        this.history = new ArrayList<>();
     }
 
     public ReActState(String prompt) {
         this.prompt = prompt;
-        this.history = new ArrayList<>();
+
         this.iteration = new AtomicInteger(0);
+        this.history = new ArrayList<>();
         this.status = "";
         this.finalAnswer = "";
     }

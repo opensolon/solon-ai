@@ -40,7 +40,10 @@ public class ReActToolTask implements TaskComponent {
             AssistantMessage lastAssistant = (AssistantMessage) lastMessage;
             if (Assert.isNotEmpty(lastAssistant.getToolCalls())) {
                 lastAssistant.getToolCalls().parallelStream().forEach(call -> {
-                    String result = executeTool(call.name(), call.arguments());
+                    Map<String, Object> args = call.arguments();
+                    if (args == null) args = Collections.emptyMap();
+
+                    String result = executeTool(call.name(), args);
                     // 注意：ChatMessage 加入 history 需要考虑线程安全或最后统一汇总
                     synchronized (state) {
                         state.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));

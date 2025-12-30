@@ -23,6 +23,7 @@ public class ReActModelTask implements TaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         ReActState state = context.getAs(ReActState.TAG);
+        state.setStatus(""); // 运行前清空状态，确保由本次推理决定去向
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
         if (state.getIteration().incrementAndGet() > config.getMaxIterations()) {
