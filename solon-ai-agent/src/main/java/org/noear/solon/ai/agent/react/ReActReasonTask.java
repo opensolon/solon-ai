@@ -81,8 +81,8 @@ public class ReActReasonTask implements TaskComponent {
         record.addMessage(ChatMessage.ofAssistant(rawContent));
         record.setLastResponse(clearContent);
 
-        if (config.getListener() != null) {
-            config.getListener().onThought(context, record, clearContent);
+        if (config.getInterceptor() != null) {
+            config.getInterceptor().onThought(record, clearContent);
         }
 
         // 6. 决策路由逻辑。只要有 Action 且没被判定为 Finish，就去执行工具

@@ -3,7 +3,6 @@ package org.noear.solon.ai.agent.react;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
-import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.flow.intercept.FlowInterceptor;
 
 import java.util.ArrayList;
@@ -21,9 +20,8 @@ public class ReActConfig {
     private float temperature = 0.7F;
     private int maxTokens = 2048;
     private String finishMarker = "[FINISH]";
-    private List<FlowInterceptor> flowInterceptors = new ArrayList<>();
+    private ReActInterceptor interceptor;
     private ReActPromptProvider promptProvider = new ReActPromptProviderEn();
-    private ReActListener listener; // 新增：过程监听
 
     public ReActConfig(ChatModel chatModel) {
         Objects.requireNonNull(chatModel, "chatModel");
@@ -74,18 +72,13 @@ public class ReActConfig {
         return this;
     }
 
-    public ReActConfig addFlowInterceptor(FlowInterceptor val) {
-        this.flowInterceptors.add(val);
+    public ReActConfig interceptor(ReActInterceptor val) {
+        this.interceptor = val;
         return this;
     }
 
     public ReActConfig promptProvider(ReActPromptProvider val) {
         this.promptProvider = val;
-        return this;
-    }
-
-    public ReActConfig listener(ReActListener val) {
-        this.listener = val;
         return this;
     }
 
@@ -119,15 +112,12 @@ public class ReActConfig {
         return enableLogging;
     }
 
-    public List<FlowInterceptor> getFlowInterceptors() {
-        return flowInterceptors;
+    public ReActInterceptor getInterceptor() {
+        return interceptor;
     }
 
     public ReActPromptProvider getPromptProvider() {
         return promptProvider;
     }
 
-    public ReActListener getListener() {
-        return listener;
-    }
 }

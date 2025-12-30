@@ -1,6 +1,8 @@
 package demo.ai.react;
 
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.ReActRecord;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -17,9 +19,9 @@ public class ReActHitlDemo {
                 .build();
 
         // 1. 定义拦截器：如果是 node_tools 节点且没审批，就拦住它
-        SimpleFlowInterceptor hitlInterceptor = SimpleFlowInterceptor.builder()
+        ReActInterceptor hitlInterceptor = ReActInterceptor.builder()
                 .onNodeStart((ctx, node) -> {
-                    if ("node_tools".equals(node.getId())) {
+                    if (ReActRecord.ROUTE_ACTION.equals(node.getId())) {
                         if (ctx.get("approved") == null) {
                             System.out.println("[拦截器] 发现敏感操作，需要人工审批...");
                             ctx.stop(); // 挂起流程
@@ -29,7 +31,7 @@ public class ReActHitlDemo {
                 .build();
 
         ReActAgent agent = ReActAgent.builder(chatModel)
-                .addFlowInterceptor(hitlInterceptor) // 注入拦截器
+                .interceptor(hitlInterceptor) // 注入拦截器
                 .addTool(new MethodToolProvider(new WeatherTools()))
                 .build();
 

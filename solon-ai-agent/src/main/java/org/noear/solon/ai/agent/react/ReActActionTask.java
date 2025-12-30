@@ -41,8 +41,8 @@ public class ReActActionTask implements TaskComponent {
             AssistantMessage lastAssistant = (AssistantMessage) lastMessage;
             if (Assert.isNotEmpty(lastAssistant.getToolCalls())) {
                 for (ToolCall call : lastAssistant.getToolCalls()) {
-                    if (config.getListener() != null) {
-                        config.getListener().onAction(context, record, call.name(), call.arguments());
+                    if (config.getInterceptor() != null) {
+                        config.getInterceptor().onAction(record, call.name(), call.arguments());
                     }
 
                     Map<String, Object> args = call.arguments();
@@ -50,8 +50,8 @@ public class ReActActionTask implements TaskComponent {
 
                     String result = executeTool(call.name(), args);
 
-                    if (config.getListener() != null) {
-                        config.getListener().onObservation(context, record, result);
+                    if (config.getInterceptor() != null) {
+                        config.getInterceptor().onObservation(record, result);
                     }
 
                     record.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
@@ -77,14 +77,14 @@ public class ReActActionTask implements TaskComponent {
                 ONode argsNode = action.get("arguments");
                 Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
 
-                if (config.getListener() != null) {
-                    config.getListener().onAction(context, record, toolName, args);
+                if (config.getInterceptor() != null) {
+                    config.getInterceptor().onAction(record, toolName, args);
                 }
 
                 String result = executeTool(toolName, args);
 
-                if (config.getListener() != null) {
-                    config.getListener().onObservation(context, record, result);
+                if (config.getInterceptor() != null) {
+                    config.getInterceptor().onObservation(record, result);
                 }
 
                 allObservations.append("\nObservation: ").append(result);

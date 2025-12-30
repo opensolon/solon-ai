@@ -25,8 +25,8 @@ public class ReActAgent implements Agent {
         this.graph = initGraph();
 
         //附加流拦截器
-        for (FlowInterceptor interceptor : config.getFlowInterceptors()) {
-            flowEngine.addInterceptor(interceptor);
+        if (config.getInterceptor() != null) {
+            flowEngine.addInterceptor(config.getInterceptor());
         }
     }
 
@@ -128,18 +128,13 @@ public class ReActAgent implements Agent {
             return this;
         }
 
-        public Builder addFlowInterceptor(FlowInterceptor val) {
-            config.addFlowInterceptor(val);
-            return this;
-        }
-
         public Builder systemPromptProvider(ReActPromptProvider val) {
             config.promptProvider(val);
             return this;
         }
 
-        public Builder listener(ReActListener val) {
-            config.listener(val);
+        public Builder interceptor(ReActInterceptor val) {
+            config.interceptor(val);
             return this;
         }
 
