@@ -39,10 +39,16 @@ public class AgentRouterTask implements TaskComponent {
     private final ChatModel chatModel;
     private final List<String> agentNames;
     private final int maxTotalIterations = 15; // 团队协作上限
+    private AgentRouterPromptProvider promptProvider = AgentRouterPromptProviderEn.getInstance();
 
     public AgentRouterTask(ChatModel chatModel, String... agentNames) {
         this.chatModel = chatModel;
         this.agentNames = Arrays.asList(agentNames);
+    }
+
+    public AgentRouterTask promptProvider(AgentRouterPromptProvider promptProvider) {
+        this.promptProvider = promptProvider;
+        return this;
     }
 
     @Override
@@ -60,12 +66,7 @@ public class AgentRouterTask implements TaskComponent {
         }
 
         // 3. 构建 Supervisor 提示词
-        String systemPrompt = "You are a team supervisor. \n" +
-                "Global Task: " + prompt + "\n" +
-                "Specialists: " + agentNames + ".\n" +
-                "Instruction: Review the collaboration history and decide who should act next. \n" +
-                "- If the task is finished, respond ONLY with 'FINISH'. \n" +
-                "- Otherwise, respond ONLY with the specialist's name.";
+        String systemPrompt = promptProvider.getSystemPrompt(prompt, agentNames);
 
         // 4. 获取决策并严格解析
         String decision = chatModel.prompt(Arrays.asList(

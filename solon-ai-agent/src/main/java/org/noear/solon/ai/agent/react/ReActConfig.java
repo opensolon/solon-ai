@@ -41,7 +41,7 @@ public class ReActConfig {
     private int maxTokens = 2048;
     private String finishMarker = "[FINISH]";
     private ReActInterceptor interceptor;
-    private ReActPromptProvider promptProvider = new ReActPromptProviderEn();
+    private ReActPromptProvider promptProvider = ReActPromptProviderEn.getInstance();
 
     public ReActConfig(ChatModel chatModel) {
         Objects.requireNonNull(chatModel, "chatModel");

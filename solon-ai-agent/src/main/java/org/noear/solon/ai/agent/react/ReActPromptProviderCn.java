@@ -26,6 +26,12 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.8")
 public class ReActPromptProviderCn implements ReActPromptProvider {
+    private static final ReActPromptProvider instance = new ReActPromptProviderCn();
+
+    public static ReActPromptProvider getInstance() {
+        return instance;
+    }
+
     @Override
     public String getSystemPrompt(ReActConfig config) {
         StringBuilder sb = new StringBuilder();
