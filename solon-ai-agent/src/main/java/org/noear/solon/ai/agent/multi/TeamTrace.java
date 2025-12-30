@@ -1,7 +1,6 @@
 package org.noear.solon.ai.agent.multi;
 
 import org.noear.solon.flow.NodeTrace;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -22,21 +21,15 @@ public class TeamTrace {
     }
 
     public String getLastNodeId() {
-        if (lastNode == null) {
-            return null;
-        }
-
-        return lastNode.getId();
+        return (lastNode == null) ? null : lastNode.getId();
     }
 
     public void setLastNode(NodeTrace lastNode) {
         this.lastNode = lastNode;
     }
 
-
     /**
      * 获取步骤总数
-     *
      */
     public int getStepCount() {
         return steps.size();
@@ -67,6 +60,7 @@ public class TeamTrace {
     public boolean isLooping() {
         if (steps.size() < 4) return false;
         int n = steps.size();
+        // 检测最近四步是否呈现 ABAB 结构
         return steps.get(n - 1).getAgentName().equals(steps.get(n - 3).getAgentName()) &&
                 steps.get(n - 2).getAgentName().equals(steps.get(n - 4).getAgentName());
     }
@@ -97,16 +91,8 @@ public class TeamTrace {
             this.duration = duration;
         }
 
-        public String getAgentName() {
-            return agentName;
-        }
-
-        public String getContent() {
-            return content;
-        }
-
-        public long getDuration() {
-            return duration;
-        }
+        public String getAgentName() { return agentName; }
+        public String getContent() { return content; }
+        public long getDuration() { return duration; }
     }
 }
