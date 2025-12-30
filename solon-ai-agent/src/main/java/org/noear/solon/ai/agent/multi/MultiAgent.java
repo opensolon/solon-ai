@@ -39,24 +39,26 @@ public class MultiAgent implements Agent {
         String traceKey = "__" + name();
         context.put(Agent.KEY_CURRENT_TRACE_KEY, traceKey);
 
-        // 初始化 TeamTrace
         TeamTrace trace = context.getAs(traceKey);
         if (trace == null || prompt != null) {
             trace = new TeamTrace();
             context.put(traceKey, trace);
             if (prompt != null) {
                 context.put(Agent.KEY_PROMPT, prompt);
+                context.put(Agent.KEY_ITERATIONS, 0);
+                context.remove(Agent.KEY_HISTORY);
             }
         }
 
         try {
-            // 驱动图运行
+            // 使用 trace 记录的节点 ID 恢复运行
             flowEngine.eval(graph, trace.getLastNodeId(), context);
         } finally {
+            // 即使 eval 抛出异常（如模型连接超时），也能记录当前执行到的节点
             trace.setLastNode(context.lastNode());
         }
 
-        // 记录并返回最终结果
+        // 获取并同步结果
         String answer = context.getAs(Agent.KEY_ANSWER);
         trace.setFinalAnswer(answer);
         return answer;
