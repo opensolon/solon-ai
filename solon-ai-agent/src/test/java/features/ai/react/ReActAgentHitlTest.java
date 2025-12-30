@@ -30,7 +30,7 @@ public class ReActAgentHitlTest {
         SimpleFlowInterceptor hitlInterceptor = SimpleFlowInterceptor.builder()
                 .onNodeStart((ctx, node) -> {
                     // 如果进入工具执行节点，且尚未获得人工批准
-                    if ("act".equals(node.getId())) {
+                    if ("action".equals(node.getId())) {
                         Boolean approved = ctx.getAs("is_approved");
                         if (approved == null) {
                             System.out.println("[拦截器] 检测到敏感工具调用，等待人工审批...");

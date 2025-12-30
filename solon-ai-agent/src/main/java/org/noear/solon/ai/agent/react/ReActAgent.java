@@ -34,19 +34,19 @@ public class ReActAgent implements Agent {
      * 2. node_model -> end (当 status 为 finish)
      */
     private Graph initGraph() {
-        return Graph.create("react_agent", "ReAct 流程", spec -> {
-            spec.addStart("start").linkAdd("think");
+        return Graph.create("react_agent", spec -> {
+            spec.addStart("start").linkAdd("reason");
 
             // 模型推理节点：决定是执行工具还是结束
-            spec.addExclusive("think")
+            spec.addExclusive("reason")
                     .task(new ReActReasonTask(config))
-                    .linkAdd("act", l -> l.when(ctx -> ReActState.STATUS_ACTION.equals(ctx.<ReActState>getAs(ReActState.TAG).getStatus())))
+                    .linkAdd("action", l -> l.when(ctx -> ReActState.STATUS_ACTION.equals(ctx.<ReActState>getAs(ReActState.TAG).getStatus())))
                     .linkAdd("end"); // 默认跳转至结束
 
             // 工具执行节点：执行具体的函数调用
-            spec.addActivity("act")
+            spec.addActivity("action")
                     .task(new ReActActionTask(config))
-                    .linkAdd("think"); // 执行完工具后返回模型节点进行下一轮思考
+                    .linkAdd("reason"); // 执行完工具后返回模型节点进行下一轮思考
 
             spec.addEnd("end");
         });
