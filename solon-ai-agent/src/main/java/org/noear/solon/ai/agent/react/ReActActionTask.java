@@ -4,11 +4,13 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;
 
+import javax.tools.Tool;
 import java.util.Collections;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -38,16 +40,23 @@ public class ReActActionTask implements TaskComponent {
         if (lastMessage instanceof AssistantMessage) {
             AssistantMessage lastAssistant = (AssistantMessage) lastMessage;
             if (Assert.isNotEmpty(lastAssistant.getToolCalls())) {
-                lastAssistant.getToolCalls().parallelStream().forEach(call -> {
+                for (ToolCall call : lastAssistant.getToolCalls()) {
+                    if (config.getListener() != null) {
+                        config.getListener().onAction(context, record, call.name(), call.arguments());
+                    }
+
                     Map<String, Object> args = call.arguments();
                     if (args == null) args = Collections.emptyMap();
 
                     String result = executeTool(call.name(), args);
-                    // 注意：ChatMessage 加入 history 需要考虑线程安全或最后统一汇总
-                    synchronized (record) {
-                        record.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
+
+                    if (config.getListener() != null) {
+                        config.getListener().onObservation(context, record, result);
                     }
-                });
+
+                    record.addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
+                }
+
                 return; // 处理完 Native 调用直接返回，不再走正则逻辑
             }
         }
@@ -68,7 +77,16 @@ public class ReActActionTask implements TaskComponent {
                 ONode argsNode = action.get("arguments");
                 Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
 
+                if (config.getListener() != null) {
+                    config.getListener().onAction(context, record, toolName, args);
+                }
+
                 String result = executeTool(toolName, args);
+
+                if (config.getListener() != null) {
+                    config.getListener().onObservation(context, record, result);
+                }
+
                 allObservations.append("\nObservation: ").append(result);
             } catch (Exception e) {
                 allObservations.append("\nObservation: Error parsing Action JSON: ").append(e.getMessage());

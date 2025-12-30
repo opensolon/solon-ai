@@ -1,13 +1,18 @@
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.ai.chat.message.UserMessage;
+import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
 
 /**
+ * ReAct 运行记录（承载记忆、状态与推理轨迹）
+ *
  * @author noear
  * @since 3.8.1
  */
@@ -21,25 +26,23 @@ public class ReActRecord {
     private String prompt;
     private AtomicInteger iteration;
     private List<ChatMessage> history;
-    private volatile String route; // 增加 volatile，保证 link 判定时的可见性
+    private volatile String route;
     private String finalAnswer;
     private String lastResponse;
-    private String historySummary = "";
 
     public ReActRecord() {
-        //用于反序列化
-        this.iteration = new AtomicInteger(0);
-        this.history = new ArrayList<>();
-    }
-
-    public ReActRecord(String prompt) {
-        this.prompt = prompt;
-
         this.iteration = new AtomicInteger(0);
         this.history = new ArrayList<>();
         this.route = "";
-        this.finalAnswer = "";
     }
+
+    public ReActRecord(String prompt) {
+        this();
+        this.prompt = prompt;
+    }
+
+
+    // --- Getters & Setters ---
 
     public String getPrompt() {
         return prompt;
@@ -49,10 +52,9 @@ public class ReActRecord {
         return iteration;
     }
 
-    public int nextIteration(){
+    public int nextIteration() {
         return iteration.incrementAndGet();
     }
-
 
     public String getRoute() {
         return route;
@@ -78,17 +80,21 @@ public class ReActRecord {
         this.lastResponse = lastResponse;
     }
 
-
-    public List<ChatMessage> getHistory() {
-        return history;
+    public synchronized List<ChatMessage> getHistory() {
+        return new ArrayList<>(history); // 返回副本保证安全
     }
 
-    public ChatMessage getLastMessage() {
-        if (history.isEmpty()) return null;
+    public synchronized ChatMessage getLastMessage() {
+        if (history.isEmpty()) {
+            return null;
+        }
+
         return history.get(history.size() - 1);
     }
 
+
     public synchronized void addMessage(ChatMessage message) {
+        if (message == null) return;
         history.add(message);
 
         if (history.size() > 20) {
@@ -97,22 +103,56 @@ public class ReActRecord {
     }
 
     private void compressHistory() {
-        // 保留第 0 条
-        ChatMessage rootPrompt = history.get(0);
+        if (history.size() <= 10) return;
 
-        // 策略优化：向前回溯，确保不切断 Tool 消息（Tool 消息必须紧跟在 Assistant Call 后面）
-        int cutIndex = history.size() - 5;
-        while (cutIndex > 1 && history.get(cutIndex) instanceof ToolMessage) {
+        // 1. 尝试提取原始问题
+        ChatMessage rootUserMessage = history.stream()
+                .filter(m -> m instanceof UserMessage)
+                .findFirst()
+                .orElse(null);
+
+        // 2. 确定截断点（保留最近的 8 条记录）
+        int keepCount = 8;
+        int cutIndex = history.size() - keepCount;
+
+        // 3. 安全回溯：如果截断点正好在 ToolMessage 上，必须向前挪动
+        // 理由：ToolMessage 必须紧跟在拥有 ToolCalls 的 AssistantMessage 之后
+        while (cutIndex > 0 && isDanglingToolMessage(cutIndex)) {
             cutIndex--;
         }
 
+        // 4. 获取活跃上下文
         List<ChatMessage> activeContext = new ArrayList<>(history.subList(cutIndex, history.size()));
 
-        this.historySummary = "[System Note: Earlier interactions summarized...]";
-
+        // 5. 重建历史
         history.clear();
-        history.add(rootPrompt);
-        history.add(ChatMessage.ofSystem("Summary of previous steps: " + historySummary));
+
+        // 5a. 重新放入初始问题
+        if (rootUserMessage != null) {
+            history.add(rootUserMessage);
+        }
+
+        // 5b. 放入压缩提示（让模型知道中间有断层）
+        history.add(ChatMessage.ofSystem("[System Note: Earlier reasoning steps summarized to save context window.]"));
+
+        // 5c. 还原活跃推理链
         history.addAll(activeContext);
+    }
+
+
+    /**
+     * 判断是否是一个“孤立”的工具消息（即切断了它与前置 Assistant Call 的联系）
+     */
+    private boolean isDanglingToolMessage(int index) {
+        ChatMessage current = history.get(index);
+        if (current instanceof ToolMessage) {
+            return true;
+        }
+        // 如果当前是 Assistant 且包含 ToolCalls，通常建议把它和后面的结果一起保留
+        if (current instanceof AssistantMessage) {
+            AssistantMessage am = (AssistantMessage) current;
+            return Assert.isNotEmpty(am.getToolCalls());
+        }
+        return false;
     }
 }

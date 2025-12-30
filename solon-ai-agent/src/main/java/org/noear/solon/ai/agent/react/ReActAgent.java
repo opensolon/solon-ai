@@ -17,14 +17,16 @@ import org.noear.solon.flow.intercept.FlowInterceptor;
 public class ReActAgent implements Agent {
     private final ReActConfig config;
     private final Graph graph;
+    private final FlowEngine flowEngine;
 
     public ReActAgent(ReActConfig config) {
         this.config = config;
+        this.flowEngine = FlowEngine.newInstance();
         this.graph = initGraph();
 
         //附加流拦截器
         for (FlowInterceptor interceptor : config.getFlowInterceptors()) {
-            config.getFlowEngine().addInterceptor(interceptor);
+            flowEngine.addInterceptor(interceptor);
         }
     }
 
@@ -59,20 +61,20 @@ public class ReActAgent implements Agent {
         }
 
         // 初始化流程上下文，携带对话历史与迭代计数
-        ReActRecord state = context.getAs(ReActRecord.TAG);
-        if (state == null) {
-            state = new ReActRecord(prompt);
-            context.put(ReActRecord.TAG, state);
+        ReActRecord record = context.getAs(ReActRecord.TAG);
+        if (record == null) {
+            record = new ReActRecord(prompt);
+            context.put(ReActRecord.TAG, record);
         }
 
         // 运行前清空路由，确保由本次推理决定去向
-        state.setRoute("");
+        record.setRoute("");
 
         // 执行图引擎
-        config.getFlowEngine().eval(graph, context.lastNodeId(), context);
+        flowEngine.eval(graph, context.lastNodeId(), context);
 
         // 获取最终答案
-        String result = state.getFinalAnswer();
+        String result = record.getFinalAnswer();
         if (config.isEnableLogging()) {
             LogUtil.global().info("Final Answer: " + result);
         }
@@ -126,11 +128,6 @@ public class ReActAgent implements Agent {
             return this;
         }
 
-        public Builder flowEngine(FlowEngine val) {
-            config.flowEngine(val);
-            return this;
-        }
-
         public Builder addFlowInterceptor(FlowInterceptor val) {
             config.addFlowInterceptor(val);
             return this;
@@ -138,6 +135,11 @@ public class ReActAgent implements Agent {
 
         public Builder systemPromptProvider(ReActPromptProvider val) {
             config.promptProvider(val);
+            return this;
+        }
+
+        public Builder listener(ReActListener val) {
+            config.listener(val);
             return this;
         }
 
