@@ -47,11 +47,14 @@ public class MultiAgent implements Agent {
             if (prompt != null) {
                 context.put(Agent.KEY_PROMPT, prompt);
             }
-            context.lastNode(null);
         }
 
-        // 驱动图运行
-        flowEngine.eval(graph, context.lastNodeId(), context);
+        try {
+            // 驱动图运行
+            flowEngine.eval(graph, trace.getLastNodeId(), context);
+        } finally {
+            trace.setLastNode(context.lastNode());
+        }
 
         // 记录并返回最终结果
         String answer = context.getAs(Agent.KEY_ANSWER);

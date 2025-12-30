@@ -1,5 +1,7 @@
 package org.noear.solon.ai.agent.multi;
 
+import org.noear.solon.flow.NodeTrace;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -13,6 +15,24 @@ import java.util.stream.Collectors;
 public class TeamTrace {
     private final List<TeamStep> steps = new ArrayList<>();
     private String finalAnswer;
+    private NodeTrace lastNode;
+
+    public NodeTrace getLastNode() {
+        return lastNode;
+    }
+
+    public String getLastNodeId() {
+        if (lastNode == null) {
+            return null;
+        }
+
+        return lastNode.getId();
+    }
+
+    public void setLastNode(NodeTrace lastNode) {
+        this.lastNode = lastNode;
+    }
+
 
     /**
      * 获取步骤总数
