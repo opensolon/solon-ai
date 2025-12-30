@@ -29,10 +29,23 @@ import java.util.*;
  * @since 3.1
  */
 public class ChatConfig extends AiConfig {
+    private boolean defaultAutoToolCall = true;
     private final Map<String, FunctionTool> defaultTools = new LinkedHashMap<>();
     private final Map<String, Object> defaultToolsContext = new LinkedHashMap<>();
     private final List<RankEntity<ChatInterceptor>> defaultInterceptors = new ArrayList<>();
     private final Map<String, Object> defaultOptions = new LinkedHashMap<>();
+
+
+    public void setDefaultAutoToolCall(boolean defaultAutoToolCall) {
+        this.defaultAutoToolCall = defaultAutoToolCall;
+    }
+
+    /**
+     * 是否自动扩行工具调用（默认为 true）
+     * */
+    public boolean isDefaultAutoToolCall() {
+        return defaultAutoToolCall;
+    }
 
     /**
      * 设置默认工具（用于属性提示）

@@ -64,10 +64,15 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         this.session = session;
         this.options = new ChatOptions();
 
+        //是否自动高用工具执行
+        options.autoToolCall(config.isDefaultAutoToolCall());
+
+        //默认工具上下文
         if (Utils.isNotEmpty(config.getDefaultToolsContext())) {
             this.options.toolsContext().putAll(config.getDefaultToolsContext());
         }
 
+        //黑认工具选项
         if (Utils.isNotEmpty(config.getDefaultOptions())) {
             this.options.options().putAll(config.getDefaultOptions());
         }
@@ -150,7 +155,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         if (resp.hasChoices()) {
             AssistantMessage choiceMessage = resp.getMessage();
             session.addMessage(choiceMessage); //添加到记忆
-            if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
+
+            if (options.isAutoToolCall() && Utils.isNotEmpty(choiceMessage.getToolCalls())) {
                 List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
                 if (Utils.isEmpty(returnDirectMessages)) {
@@ -338,21 +344,26 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             session.addMessage(assistantMessages);
 
-            List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
+            if (options.isAutoToolCall()) {
+                List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
 
-            if (Utils.isEmpty(returnDirectMessages)) {
-                //没有要求直接返回
-                stream().subscribe(subscriber);
-                return false; //不触发外层的完成事件
+                if (Utils.isEmpty(returnDirectMessages)) {
+                    //没有要求直接返回
+                    stream().subscribe(subscriber);
+                    return false; //不触发外层的完成事件
+                } else {
+                    //要求直接返回（转为新的响应消息）
+                    AssistantMessage message = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
+                    resp.reset();
+                    resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
+                    resp.aggregationMessageContent.setLength(0);
+                    publishResponse(subscriber, resp, resp.lastChoice());
+                    return true; //触发外层的完成事件
+                }
             } else {
-                //要求直接返回（转为新的响应消息）
-                AssistantMessage message = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
-                resp.reset();
-                resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
-                resp.aggregationMessageContent.setLength(0);
-                publishResponse(subscriber, resp, resp.lastChoice());
                 return true; //触发外层的完成事件
             }
+
         } finally {
             //用完清掉
             resp.toolCallBuilders.clear();

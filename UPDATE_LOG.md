@@ -10,6 +10,12 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+
+### v3.8.1
+
+* 添加 solon-ai-core autoToolCall 聊天模型选项（默认为 true）
+
+
 ### v3.8.0
 
 重要变化：

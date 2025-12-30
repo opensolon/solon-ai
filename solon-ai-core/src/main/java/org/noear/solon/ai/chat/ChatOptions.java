@@ -48,12 +48,25 @@ public class ChatOptions {
     }
 
 
+    private boolean autoToolCall = true;
     private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     private final Map<String, Object> toolsContext = new LinkedHashMap<>();
     private final List<RankEntity<ChatInterceptor>> interceptors = new ArrayList<>();
     private final Map<String, Object> options = new LinkedHashMap<>();
 
     /// ////////////
+
+    public ChatOptions autoToolCall(boolean autoToolCall) {
+        this.autoToolCall = autoToolCall;
+        return this;
+    }
+
+    /**
+     * 是否自动执行工具调用
+     * */
+    public boolean isAutoToolCall() {
+        return autoToolCall;
+    }
 
     /**
      * 工具上下文（附加参数）
