@@ -25,6 +25,7 @@ import org.noear.solon.flow.Graph;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.List;
 
 /**
  * 自省反思自能体
@@ -150,6 +151,11 @@ public class ReActAgent implements Agent {
 
         public Builder addTool(FunctionTool tool) {
             config.addTool(tool);
+            return this;
+        }
+
+        public Builder addTool(List<FunctionTool> tools) {
+            config.addTool(tools);
             return this;
         }
 

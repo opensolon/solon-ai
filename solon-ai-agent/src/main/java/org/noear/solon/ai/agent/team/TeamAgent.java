@@ -136,7 +136,7 @@ public class TeamAgent implements Agent {
         private final ChatModel chatModel;
         private final Map<String, Agent> agentMap = new LinkedHashMap<>();
         private Consumer<GraphSpec> graphBuilder;
-        private int maxTotalIterations = 15;
+        private int maxTotalIterations = 8;
         private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
 
         public Builder(ChatModel chatModel) {
@@ -157,7 +157,7 @@ public class TeamAgent implements Agent {
         }
 
         public Builder maxTotalIterations(int maxTotalIterations) {
-            this.maxTotalIterations = maxTotalIterations;
+            this.maxTotalIterations = Math.max(1, maxTotalIterations);
             return this;
         }
 

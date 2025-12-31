@@ -80,6 +80,11 @@ public class ReActConfig {
         return this;
     }
 
+    public ReActConfig addTool(List<FunctionTool> tools) {
+        this.tools.addAll(tools);
+        return this;
+    }
+
     public ReActConfig addTool(ToolProvider toolProvider) {
         this.tools.addAll(toolProvider.getTools());
         return this;
