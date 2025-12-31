@@ -64,15 +64,19 @@ public interface Agent extends NamedTaskComponent {
     default void run(FlowContext context, Node node) throws Throwable {
         context.lastNode(null);
 
-        // 1. 获取原始 Prompt
+        // 1. 获取原始 Prompt 和 TeamTrace
         Prompt originalPrompt = context.getAs(KEY_PROMPT);
-        String history = context.getAs(KEY_HISTORY);
+        String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
+        TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
 
-        // 2. 核心优化：如果存在协作历史，将其注入给当前的 Agent
+        // 2. 构建增强的 Prompt：包含所有历史步骤
         Prompt effectivePrompt = originalPrompt;
-        if (history != null && !history.isEmpty()) {
+        if (trace != null && trace.getStepCount() > 0) {
+            // 获取完整的协作历史
+            String fullHistory = trace.getFormattedHistory();
+
             String newContent = "Current Task: " + originalPrompt.getUserContent() +
-                    "\n\nCollaboration Progress so far:\n" + history +
+                    "\n\nCollaboration Progress so far:\n" + fullHistory +
                     "\n\nPlease continue based on the progress above.";
             effectivePrompt = Prompt.of(newContent);
         }
@@ -82,16 +86,24 @@ public interface Agent extends NamedTaskComponent {
         String result = call(context, effectivePrompt);
         long duration = System.currentTimeMillis() - start;
 
+        // 关键修复：确保 result 不是 null
+        if (result == null) {
+            result = "";
+        }
+
         context.put(KEY_ANSWER, result);
 
-        // 3. 记录轨迹 (保持不变...)
-        String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
-        if (traceKey != null) {
-            Object traceObj = context.get(traceKey);
-            if (traceObj instanceof TeamTrace) {
-                ((TeamTrace) traceObj).addStep(name(), result, duration);
-                context.put(KEY_HISTORY, ((TeamTrace) traceObj).getFormattedHistory());
+        // 3. 记录轨迹
+        if (trace != null) {
+            // 关键：如果 result 是空的或无效，记录一个默认值
+            String stepContent = result;
+            if (stepContent.trim().isEmpty()) {
+                stepContent = "No valid output is produced";
             }
+
+            trace.addStep(name(), stepContent, duration);
+            // 更新全局历史
+            context.put(KEY_HISTORY, trace.getFormattedHistory());
         }
     }
 

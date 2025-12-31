@@ -79,7 +79,7 @@ public class TeamTrace {
      */
     public boolean isLooping() {
         int n = steps.size();
-        if (n < 3) return false;
+        if (n < 4) return false; // 放宽到至少4步才可能形成循环
 
         String lastAgent = steps.get(n - 1).getAgentName();
         String lastContent = steps.get(n - 1).getContent();
@@ -88,13 +88,13 @@ public class TeamTrace {
         for (int i = 0; i < n - 1; i++) {
             TeamStep prev = steps.get(i);
             if (prev.getAgentName().equals(lastAgent) && prev.getContent().equals(lastContent)) {
-                // 如果同一个 Agent 输出了跟之前一模一样的内容（通常是 Tool Call 重复），则判定为死循环
+                // 如果同一个 Agent 输出了跟之前一模一样的内容，则判定为死循环
                 return true;
             }
         }
 
-        // 原有的 A-B-A-B 逻辑可以保留，但建议增加 n 的阈值
-        if (n >= 6) { // 稍微放宽到 6 步，给 Agent 纠错机会
+        // A-B-A-B 模式检测，放宽条件
+        if (n >= 8) { // 需要更多步才检测 A-B-A-B
             return steps.get(n - 1).getAgentName().equals(steps.get(n - 3).getAgentName()) &&
                     steps.get(n - 2).getAgentName().equals(steps.get(n - 4).getAgentName());
         }

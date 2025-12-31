@@ -23,9 +23,13 @@ public class TeamAgentParallelAgentTest {
         String teamId = "parallel_translator";
 
         // 1. 定义翻译专家（ReAct 模式）
-        Agent enTranslator = ReActAgent.builder(chatModel).name("en_translator")
+        Agent enTranslator = ReActAgent.builder(chatModel)
+                .name("en_translator")
+                .promptProvider(p-> "你是负责英语翻译的专家")
                 .description("负责英语翻译的专家").build();
-        Agent frTranslator = ReActAgent.builder(chatModel).name("fr_translator")
+        Agent frTranslator = ReActAgent.builder(chatModel)
+                .name("fr_translator")
+                .promptProvider(p-> "你是负责法语翻译的专家")
                 .description("负责法语翻译的专家").build();
 
         // 2. 自定义并行图：实现分发与汇聚
@@ -53,7 +57,7 @@ public class TeamAgentParallelAgentTest {
         });
 
         // 3. 执行任务
-        TeamAgent team = new TeamAgent(parallelGraph);
+        TeamAgent team = new TeamAgent(parallelGraph, teamId);
         FlowContext context = FlowContext.of("sn_2025_para_01");
         String result = team.call(context, "你好，世界");
 
