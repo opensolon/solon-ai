@@ -17,8 +17,8 @@ package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
-import org.noear.solon.flow.TaskComponent;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -28,7 +28,7 @@ import org.noear.solon.lang.Preview;
  * @since 3.8.1
  */
 @Preview("3.8")
-public interface Agent extends TaskComponent {
+public interface Agent extends NamedTaskComponent {
     static String KEY_PROMPT = "prompt";
     static String KEY_ANSWER = "answer";
     static String KEY_HISTORY = "history";

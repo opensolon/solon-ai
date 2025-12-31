@@ -37,15 +37,13 @@ public class TeamAgentTravelTest {
         Graph travelGraph = Graph.create(teamName, spec -> {
             spec.addStart("start").linkAdd("router");
 
-            spec.addExclusive("router")
-                    .task(new TeamSupervisorTask(chatModel, "searcher", "planner"))
-                    // 使用常量 Agent.KEY_NEXT_AGENT，并忽略大小写匹配
-                    .linkAdd("searcher", l -> l.when(ctx -> "searcher".equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
-                    .linkAdd("planner", l -> l.when(ctx -> "planner".equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
+            spec.addExclusive(new TeamSupervisorTask(chatModel, searcher.name(),planner.name()).nameAs("router"))
+                    .linkAdd(searcher.name(), l -> l.when(ctx -> searcher.name().equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
+                    .linkAdd(planner.name(), l -> l.when(ctx -> planner.name().equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
                     .linkAdd("end");
 
-            spec.addActivity("searcher").task(searcher).linkAdd("router");
-            spec.addActivity("planner").task(planner).linkAdd("router");
+            spec.addActivity(searcher).linkAdd("router");
+            spec.addActivity(planner).linkAdd("router");
 
             spec.addEnd("end");
         });

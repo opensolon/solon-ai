@@ -30,17 +30,14 @@ public class TeamAgentPersistenceAndResumeTest {
         Graph graph = Graph.create(teamName, spec -> {
             spec.addStart("start").linkAdd("searcher");
 
-            spec.addActivity("searcher")
-                    .task(ReActAgent.builder(chatModel).nameAs("searcher").build())
+            spec.addActivity(ReActAgent.builder(chatModel).nameAs("searcher").build())
                     .linkAdd("router");
 
-            spec.addExclusive("router")
-                    .task(new TeamSupervisorTask(chatModel, "planner"))
+            spec.addExclusive(new TeamSupervisorTask(chatModel, "planner").nameAs("router"))
                     .linkAdd("planner", l -> l.when(ctx -> "planner".equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
                     .linkAdd("end");
 
-            spec.addActivity("planner")
-                    .task(ReActAgent.builder(chatModel).nameAs("planner").build())
+            spec.addActivity(ReActAgent.builder(chatModel).nameAs("planner").build())
                     .linkAdd("end");
 
             spec.addEnd("end");

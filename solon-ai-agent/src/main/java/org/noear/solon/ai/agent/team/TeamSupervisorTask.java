@@ -4,6 +4,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;
 import org.noear.solon.lang.Preview;
@@ -21,8 +22,9 @@ import java.util.stream.Collectors;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class TeamSupervisorTask implements TaskComponent {
+public class TeamSupervisorTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(TeamSupervisorTask.class);
+    private String name;
     private final ChatModel chatModel;
     private final List<String> agentNames;
     private int maxTotalIterations = 15;
@@ -41,6 +43,16 @@ public class TeamSupervisorTask implements TaskComponent {
     public TeamSupervisorTask maxTotalIterations(int maxTotalIterations) {
         this.maxTotalIterations = maxTotalIterations;
         return this;
+    }
+
+    public TeamSupervisorTask nameAs(String name) {
+        this.name = name;
+        return this;
+    }
+
+    @Override
+    public String name() {
+        return name;
     }
 
     @Override

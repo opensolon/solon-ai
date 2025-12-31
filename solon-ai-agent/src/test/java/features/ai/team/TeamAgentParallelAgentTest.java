@@ -29,11 +29,11 @@ public class TeamAgentParallelAgentTest {
 
             // 并行分发
             spec.addParallel("parallel_gate")
-                    .linkAdd("en_translator")
-                    .linkAdd("fr_translator");
+                    .linkAdd(enTranslator.name())
+                    .linkAdd(frTranslator.name());
 
-            spec.addActivity("en_translator").task(enTranslator).linkAdd("join_node");
-            spec.addActivity("fr_translator").task(frTranslator).linkAdd("join_node");
+            spec.addActivity(enTranslator).linkAdd("join_node");
+            spec.addActivity(frTranslator).linkAdd("join_node");
 
             // 汇聚节点：直接从 TeamTrace 提取各并行分支的结果
             spec.addParallel("join_node").task((ctx, n) -> {
