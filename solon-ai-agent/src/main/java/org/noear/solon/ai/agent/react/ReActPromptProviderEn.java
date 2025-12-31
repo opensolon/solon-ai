@@ -39,8 +39,16 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
         sb.append("Strictly follow the ReAct protocol to update the trace step by step:\n\n");
 
         sb.append("Thought: Briefly explain your reasoning based on the current status of the trace.\n");
-        sb.append("Action: To use a tool, output a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}\n");
-        sb.append("   - Example: {\"name\": \"get_order\", \"arguments\": {\"id\": \"123\"}}\n");
+
+        if (!config.getTools().isEmpty()) {
+            sb.append("Action: To use a tool, output a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}\n");
+            sb.append("   - Example: {\"name\": \"get_order\", \"arguments\": {\"id\": \"123\"}}\n");
+        } else {
+            sb.append("Action: 【IMPORTANT】No tools are currently available. DO NOT attempt to call any tools.\n");
+            sb.append("   If the user requests tool usage, directly use ").append(config.getFinishMarker())
+                    .append(" to inform them that this service is currently unavailable.\n");
+        }
+
         sb.append("Observation: System feedback will be provided here. Do NOT write this yourself.\n\n");
 
         sb.append("Once you have the final answer, you MUST use: ").append(config.getFinishMarker())
@@ -49,14 +57,19 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
         if (!config.getTools().isEmpty()) {
             sb.append("## Available Tools (ONLY these tools are allowed):\n");
             config.getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ").append(t.description()).append("\n"));
+            sb.append("\n## Critical Constraints:\n");
+            sb.append("1. **Trace Consistency**: Every step must logically follow from the previous footprints in the trace.\n");
+            sb.append("2. **One Action Only**: Never issue multiple tool calls in a single response.\n");
+            sb.append("3. **Stop Sequences**: Stop immediately after the Action JSON. Wait for the Observation.\n");
+            sb.append("4. **No Hallucination**: Never hallucinate or manufacture the 'Observation:' content.\n");
+            sb.append("5. **Final Answer**: If the goal is reached or no tools are needed, provide the answer using ").append(config.getFinishMarker()).append(".");
+        } else {
+            sb.append("## Important Notes:\n");
+            sb.append("1. **No tools available**: DO NOT attempt to call any tools.\n");
+            sb.append("2. **Direct answering**: Answer user questions directly based on your knowledge and reasoning.\n");
+            sb.append("3. **No hallucination**: If you don't know the answer, honestly tell the user.\n");
+            sb.append("4. **Use finish marker**: When completing your answer, start with ").append(config.getFinishMarker()).append(".");
         }
-
-        sb.append("\n## Critical Constraints:\n");
-        sb.append("1. **Trace Consistency**: Every step must logically follow from the previous footprints in the trace.\n");
-        sb.append("2. **One Action Only**: Never issue multiple tool calls in a single response.\n");
-        sb.append("3. **Stop Sequences**: Stop immediately after the Action JSON. Wait for the Observation.\n");
-        sb.append("4. **No Hallucination**: Never hallucinate or manufacture the 'Observation:' content.\n");
-        sb.append("5. **Final Answer**: If the goal is reached or no tools are needed, provide the answer using ").append(config.getFinishMarker()).append(".");
 
         return sb.toString();
     }

@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.*;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.LinkedHashMap;
@@ -62,6 +63,10 @@ public class TeamAgent implements Agent {
 
     public Graph getGraph() {
         return graph;
+    }
+
+    public @Nullable TeamTrace getTrace(FlowContext context) {
+        return context.getAs("__" + name);
     }
 
     @Override

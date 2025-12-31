@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -23,6 +24,7 @@ import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.flow.Graph;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,6 +74,14 @@ public class ReActAgent implements Agent {
 
             spec.addEnd(Agent.ID_END);
         });
+    }
+
+    public Graph getGraph() {
+        return graph;
+    }
+
+    public @Nullable ReActTrace getTrace(FlowContext context) {
+        return context.getAs("__" + name);
     }
 
     @Override
