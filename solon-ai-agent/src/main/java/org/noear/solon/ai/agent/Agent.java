@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent;
 
-import org.noear.solon.ai.agent.multi.TeamTrace;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;

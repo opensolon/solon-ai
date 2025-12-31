@@ -1,4 +1,4 @@
-package org.noear.solon.ai.agent.multi;
+package org.noear.solon.ai.agent.team;
 
 import java.util.List;
 
@@ -7,10 +7,10 @@ import java.util.List;
  * @author noear 2025/12/31 created
  *
  */
-public class AgentRouterPromptProviderEn implements AgentRouterPromptProvider {
-    private static final AgentRouterPromptProvider instance = new AgentRouterPromptProviderEn();
+public class TeamPromptProviderEn implements TeamPromptProvider {
+    private static final TeamPromptProvider instance = new TeamPromptProviderEn();
 
-    public static AgentRouterPromptProvider getInstance() {
+    public static TeamPromptProvider getInstance() {
         return instance;
     }
 

@@ -1,12 +1,12 @@
-package features.ai.multi;
+package features.ai.team;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.multi.AgentRouterTask;
-import org.noear.solon.ai.agent.multi.MultiAgent;
-import org.noear.solon.ai.agent.multi.TeamTrace;
+import org.noear.solon.ai.agent.team.TeamSupervisorTask;
+import org.noear.solon.ai.agent.team.TeamAgent;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
@@ -19,7 +19,7 @@ import org.noear.solon.flow.Graph;
  * @author noear
  * @since 3.8.1
  */
-public class MultiAgentPersistenceAndResumeTest {
+public class TeamAgentPersistenceAndResumeTest {
 
     @Test
     public void testPersistenceAndResume() throws Throwable {
@@ -35,7 +35,7 @@ public class MultiAgentPersistenceAndResumeTest {
                     .linkAdd("router");
 
             spec.addExclusive("router")
-                    .task(new AgentRouterTask(chatModel, "planner"))
+                    .task(new TeamSupervisorTask(chatModel, "planner"))
                     .linkAdd("planner", l -> l.when(ctx -> "planner".equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
                     .linkAdd("end");
 
@@ -68,7 +68,7 @@ public class MultiAgentPersistenceAndResumeTest {
 
         // 4. 从持久化状态中恢复
         FlowContext context2 = FlowContext.fromJson(jsonState);
-        MultiAgent teamResumed = new MultiAgent(graph).nameAs(teamName);
+        TeamAgent teamResumed = new TeamAgent(graph).nameAs(teamName);
 
         // 5. 继续执行
         // 传入 prompt 为 null，MultiAgent 内部会判断并从 trace.getLastNodeId() 恢复运行

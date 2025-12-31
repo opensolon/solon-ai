@@ -1,17 +1,17 @@
-package features.ai.multi;
+package features.ai.team;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.multi.MultiAgent;
-import org.noear.solon.ai.agent.multi.TeamTrace;
+import org.noear.solon.ai.agent.team.TeamAgent;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Graph;
 import java.util.stream.Collectors;
 
-public class MultiAgentParallelAgentTest {
+public class TeamAgentParallelAgentTest {
     @Test
     public void testParallelAgents() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
@@ -50,7 +50,7 @@ public class MultiAgentParallelAgentTest {
         });
 
         // 3. 运行
-        MultiAgent team = new MultiAgent(parallelGraph).nameAs(teamName);
+        TeamAgent team = new TeamAgent(parallelGraph).nameAs(teamName);
         FlowContext context = FlowContext.of("parallel_1");
 
         long start = System.currentTimeMillis();

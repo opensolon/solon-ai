@@ -1,11 +1,11 @@
-package demo.ai.multi;
+package demo.ai.team;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.liquor.eval.Scripts;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.multi.AgentRouterTask;
-import org.noear.solon.ai.agent.multi.MultiAgent;
+import org.noear.solon.ai.agent.team.TeamSupervisorTask;
+import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
@@ -22,7 +22,7 @@ import java.io.PrintStream;
  * @author noear 2025/12/30 created
  *
  */
-public class MultiAgentDemo {
+public class TeamAgentDemo {
 
     @Test
     public void testMultiAgent() throws Throwable {
@@ -44,7 +44,7 @@ public class MultiAgentDemo {
 
             // 决策节点
             spec.addExclusive("router")
-                    .task(new AgentRouterTask(chatModel, "coder", "writer"))
+                    .task(new TeamSupervisorTask(chatModel, "coder", "writer"))
                     .linkAdd("coder", l -> l.when(ctx -> "coder".equals(ctx.get("next_agent"))))
                     .linkAdd("writer", l -> l.when(ctx -> "writer".equals(ctx.get("next_agent"))))
                     .linkAdd("end");
@@ -57,7 +57,7 @@ public class MultiAgentDemo {
         });
 
         // 3. 运行
-        MultiAgent team = new MultiAgent(multiGraph);
+        TeamAgent team = new TeamAgent(multiGraph);
         String result = team.ask(FlowContext.of("demo1"), "写一个 Java 的单例模式并解释它");
         System.out.println(result);
     }

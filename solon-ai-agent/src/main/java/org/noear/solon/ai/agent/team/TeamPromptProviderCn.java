@@ -1,12 +1,12 @@
-package org.noear.solon.ai.agent.multi;
+package org.noear.solon.ai.agent.team;
 
 
 import java.util.List;
 
-public class AgentRouterPromptProviderCn implements AgentRouterPromptProvider {
-    private static final AgentRouterPromptProvider instance = new AgentRouterPromptProviderCn();
+public class TeamPromptProviderCn implements TeamPromptProvider {
+    private static final TeamPromptProvider instance = new TeamPromptProviderCn();
 
-    public static AgentRouterPromptProvider getInstance() {
+    public static TeamPromptProvider getInstance() {
         return instance;
     }
 

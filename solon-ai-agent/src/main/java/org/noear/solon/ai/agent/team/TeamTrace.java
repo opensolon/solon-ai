@@ -1,4 +1,4 @@
-package org.noear.solon.ai.agent.multi;
+package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.NodeTrace;

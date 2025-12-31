@@ -1,4 +1,4 @@
-package org.noear.solon.ai.agent.multi;
+package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
@@ -20,24 +20,24 @@ import java.util.List;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class AgentRouterTask implements TaskComponent {
-    private static final Logger LOG = LoggerFactory.getLogger(AgentRouterTask.class);
+public class TeamSupervisorTask implements TaskComponent {
+    private static final Logger LOG = LoggerFactory.getLogger(TeamSupervisorTask.class);
     private final ChatModel chatModel;
     private final List<String> agentNames;
     private int maxTotalIterations = 15;
-    private AgentRouterPromptProvider promptProvider = AgentRouterPromptProviderEn.getInstance();
+    private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
 
-    public AgentRouterTask(ChatModel chatModel, String... agentNames) {
+    public TeamSupervisorTask(ChatModel chatModel, String... agentNames) {
         this.chatModel = chatModel;
         this.agentNames = Arrays.asList(agentNames);
     }
 
-    public AgentRouterTask promptProvider(AgentRouterPromptProvider promptProvider) {
+    public TeamSupervisorTask promptProvider(TeamPromptProvider promptProvider) {
         this.promptProvider = promptProvider;
         return this;
     }
 
-    public AgentRouterTask maxTotalIterations(int maxTotalIterations) {
+    public TeamSupervisorTask maxTotalIterations(int maxTotalIterations) {
         this.maxTotalIterations = maxTotalIterations;
         return this;
     }

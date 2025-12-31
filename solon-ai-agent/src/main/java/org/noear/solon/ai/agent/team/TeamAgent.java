@@ -1,4 +1,4 @@
-package org.noear.solon.ai.agent.multi;
+package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.flow.FlowContext;
@@ -14,17 +14,17 @@ import java.util.Objects;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class MultiAgent implements Agent {
+public class TeamAgent implements Agent {
     private String name = "multi_agent";
     private final FlowEngine flowEngine;
     private final Graph graph;
 
-    public MultiAgent(Graph graph) {
+    public TeamAgent(Graph graph) {
         this.flowEngine = FlowEngine.newInstance();
         this.graph = Objects.requireNonNull(graph);
     }
 
-    public MultiAgent nameAs(String name) {
+    public TeamAgent nameAs(String name) {
         this.name = name;
         return this;
     }

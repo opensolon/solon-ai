@@ -1,11 +1,11 @@
-package features.ai.multi;
+package features.ai.team;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.multi.AgentRouterTask;
-import org.noear.solon.ai.agent.multi.MultiAgent;
-import org.noear.solon.ai.agent.multi.TeamTrace;
+import org.noear.solon.ai.agent.team.TeamSupervisorTask;
+import org.noear.solon.ai.agent.team.TeamAgent;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
@@ -14,7 +14,7 @@ import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Graph;
 
-public class MultiAgentTravelTest {
+public class TeamAgentTravelTest {
 
     @Test
     public void testTravelTeam() throws Throwable {
@@ -38,7 +38,7 @@ public class MultiAgentTravelTest {
             spec.addStart("start").linkAdd("router");
 
             spec.addExclusive("router")
-                    .task(new AgentRouterTask(chatModel, "searcher", "planner"))
+                    .task(new TeamSupervisorTask(chatModel, "searcher", "planner"))
                     // 使用常量 Agent.KEY_NEXT_AGENT，并忽略大小写匹配
                     .linkAdd("searcher", l -> l.when(ctx -> "searcher".equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
                     .linkAdd("planner", l -> l.when(ctx -> "planner".equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
@@ -51,7 +51,7 @@ public class MultiAgentTravelTest {
         });
 
         // 3. 运行
-        MultiAgent travelAgency = new MultiAgent(travelGraph).nameAs(teamName);
+        TeamAgent travelAgency = new TeamAgent(travelGraph).nameAs(teamName);
         FlowContext context = FlowContext.of("travel_101");
 
         String result = travelAgency.ask(context, "我想去东京玩一天，请帮我规划");
