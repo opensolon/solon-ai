@@ -66,7 +66,7 @@ public class TeamAgent implements Agent {
 
 
     @Override
-    public String ask(FlowContext context, String prompt) throws Throwable {
+    public String call(FlowContext context, String prompt) throws Throwable {
         // 1. 统一 TraceKey 规范
         String traceKey = "__" + name();
 

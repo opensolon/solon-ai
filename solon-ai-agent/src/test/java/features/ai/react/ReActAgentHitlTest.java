@@ -50,7 +50,7 @@ public class ReActAgentHitlTest {
 
         // --- 第一步：发起请求，预期会被拦截 ---
         System.out.println("--- 第一次调用 (预期拦截) ---");
-        String result1 = agent.ask(context, prompt);
+        String result1 = agent.call(context, prompt);
 
         // 验证：结果应为空（或中间态），且 context 处于 stopped 状态
         Assertions.assertTrue(context.lastNode().getType() != NodeType.END, "流程应该被拦截并停止");
@@ -67,7 +67,7 @@ public class ReActAgentHitlTest {
         // --- 第三步：恢复执行 ---
         System.out.println("--- 第二次调用 (恢复执行) ---");
         // 恢复时传入原 context，prompt 会从 state 中自动获取
-        String result2 = agent.ask(context, null);
+        String result2 = agent.call(context, null);
 
         // 验证：最终结果应包含退款成功的关键字
         Assertions.assertNotNull(result2);

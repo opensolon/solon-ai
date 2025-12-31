@@ -42,7 +42,7 @@ public class TeamAgentHumanInTheLoopTest {
         context.lastNode(auditTeam.getGraph().getNode("human_audit"));
 
         System.out.println(">>> [系统]：AI 开始规划方案...");
-        auditTeam.ask(context, "帮我策划一个去拉萨的行程");
+        auditTeam.call(context, "帮我策划一个去拉萨的行程");
 
         // 检测：确认流程是否在人工节点停住
         Assertions.assertEquals("human_audit", context.lastNodeId(), "流程未能在人工审计节点按预期挂起");
@@ -53,7 +53,7 @@ public class TeamAgentHumanInTheLoopTest {
         System.out.println(">>> [人工审批]：审核通过！准予执行。");
 
         // 继续执行：传入 null，从 human_audit 的下一个节点（confirmer）开始
-        String finalOutput = auditTeam.ask(context, null);
+        String finalOutput = auditTeam.call(context, null);
 
         // 3. 单测检测
         System.out.println(">>> [最终输出]：\n" + finalOutput);

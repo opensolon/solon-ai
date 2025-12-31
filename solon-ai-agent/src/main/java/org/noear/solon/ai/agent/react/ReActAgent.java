@@ -89,7 +89,7 @@ public class ReActAgent implements Agent {
     }
 
     @Override
-    public String ask(FlowContext context, String prompt) throws Throwable {
+    public String call(FlowContext context, String prompt) throws Throwable {
         if (config.isEnableLogging()) {
             LOG.info("Starting ReActAgent: {}", prompt);
         }

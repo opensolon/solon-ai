@@ -46,7 +46,7 @@ public class TeamAgentTravelTest {
         FlowContext context = FlowContext.of("sn_travel_888");
 
         // 增加背景：强调当前时间，促使 Agent 关注实时性
-        String result = travelTeam.ask(context, "我现在在东京，请帮我规划一天的行程。");
+        String result = travelTeam.call(context, "我现在在东京，请帮我规划一天的行程。");
 
         System.out.println("--- 最终方案 ---\n" + result);
 

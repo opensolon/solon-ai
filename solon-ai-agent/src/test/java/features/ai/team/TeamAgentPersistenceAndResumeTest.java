@@ -47,7 +47,7 @@ public class TeamAgentPersistenceAndResumeTest {
         FlowContext contextStep2 = FlowContext.fromJson(jsonState);
         System.out.println(">>> 阶段2启动：正在从断点 [" + contextStep2.lastNodeId() + "] 恢复任务...");
 
-        String finalResult = tripTeam.ask(contextStep2, null); // 传入 null 触发自动恢复
+        String finalResult = tripTeam.call(contextStep2, null); // 传入 null 触发自动恢复
 
         // 3. 单测检测
         System.out.println(">>> 恢复后的最终输出：\n" + finalResult);

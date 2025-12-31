@@ -55,7 +55,7 @@ public class TeamAgentParallelAgentTest {
         // 3. 执行任务
         TeamAgent team = new TeamAgent(parallelGraph);
         FlowContext context = FlowContext.of("sn_2025_para_01");
-        String result = team.ask(context, "你好，世界");
+        String result = team.call(context, "你好，世界");
 
         // 4. 单测检测
         System.out.println(result);

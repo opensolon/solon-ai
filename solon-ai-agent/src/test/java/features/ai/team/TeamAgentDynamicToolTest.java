@@ -46,7 +46,7 @@ public class TeamAgentDynamicToolTest {
 
         // 4. 执行测试
         FlowContext context = FlowContext.of("user_vip_001");
-        String result = vipTeam.ask(context, "我是尊贵的 VIP，请查一下我在上海机场能用哪个私密休息室？");
+        String result = vipTeam.call(context, "我是尊贵的 VIP，请查一下我在上海机场能用哪个私密休息室？");
 
         // 5. 单测检测
         System.out.println(">>> [AI 回复]：\n" + result);

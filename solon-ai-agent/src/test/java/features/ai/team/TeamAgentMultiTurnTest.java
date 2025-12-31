@@ -41,7 +41,7 @@ public class TeamAgentMultiTurnTest {
         // --- 第一轮：基础调研 ---
         FlowContext context = FlowContext.of("session_001");
         System.out.println(">>> [Round 1] 用户：我想去杭州玩。");
-        String out1 = conciergeTeam.ask(context, "我想去杭州玩。");
+        String out1 = conciergeTeam.call(context, "我想去杭州玩。");
         System.out.println("<<< [助手]：" + out1);
 
         TeamTrace trace1 = context.getAs("__" + teamId);
@@ -51,7 +51,7 @@ public class TeamAgentMultiTurnTest {
         // --- 第二轮：预算约束注入 ---
         // 注意：这里必须沿用同一个 context 对象，它承载了 KEY_HISTORY 和上一次的 TeamTrace
         System.out.println("\n>>> [Round 2] 用户：预算只有 500 元，请重新规划。");
-        String out2 = conciergeTeam.ask(context, "预算只有 500 元，请重新规划。");
+        String out2 = conciergeTeam.call(context, "预算只有 500 元，请重新规划。");
         System.out.println("<<< [助手]：" + out2);
 
         // --- 核心检测逻辑 ---

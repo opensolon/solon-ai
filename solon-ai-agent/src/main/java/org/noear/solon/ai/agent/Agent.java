@@ -40,11 +40,11 @@ public interface Agent extends NamedTaskComponent {
     String description();
 
     /**
-     * 询问
+     * 调用
      *
      * @param prompt 提示语
      */
-    String ask(FlowContext context, String prompt) throws Throwable;
+    String call(FlowContext context, String prompt) throws Throwable;
 
     /**
      * 作为 solon-flow TaskComponent 运行（方便 solon-flow 整合）
@@ -59,7 +59,7 @@ public interface Agent extends NamedTaskComponent {
         // 2. 执行任务
         String prompt = context.getAs(KEY_PROMPT);
         long start = System.currentTimeMillis();
-        String result = ask(context, prompt);
+        String result = call(context, prompt);
         long duration = System.currentTimeMillis() - start;
 
         // 3. 更新结果
