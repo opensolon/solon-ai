@@ -59,8 +59,9 @@ public class TeamAgent implements Agent {
         TeamTrace trace = tmpTrace;
 
         try {
-            // 3. 驱动图运行（支持断点续运行）
+            //采用变量域的思想传递 KEY_CURRENT_TRACE_KEY
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
+                // 3. 驱动图运行（支持断点续运行）
                 flowEngine.eval(graph, trace.getLastNodeId(), context);
             });
         } finally {

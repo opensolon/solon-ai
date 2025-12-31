@@ -97,6 +97,7 @@ public class ReActAgent implements Agent {
         final ReActTrace trace = tmpTrace;
 
         try {
+            //采用变量域的思想传递 KEY_CURRENT_TRACE_KEY
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
                 flowEngine.eval(graph, trace.getLastNodeId(), context);
             });
