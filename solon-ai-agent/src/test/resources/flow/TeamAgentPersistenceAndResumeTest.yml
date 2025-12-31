@@ -1,0 +1,14 @@
+
+
+id: persistence_team
+layout:
+  - {id: 'start', type: 'start', link: 'searcher'}
+  - {id: 'searcher', type: 'activity', task: '@searcher', link: 'router'}
+  - {id: 'router', type: 'exclusive', task: '@router',
+     meta: {agentNames: ['planner']},
+     link: [{nextId: 'planner', when: '"planner".equals(next_agent)'},
+            {nextId: 'end'}
+     ]
+  }
+  - {id: 'planner', type: 'activity', task: '@planner', link: 'end'}
+  - {id: 'end',  type: 'end'}
