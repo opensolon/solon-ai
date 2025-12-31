@@ -62,27 +62,35 @@ public interface Agent extends NamedTaskComponent {
      * @param node    当前节点
      */
     default void run(FlowContext context, Node node) throws Throwable {
-        // 1. 状态清理（不建议在 run 里全局累加 ITERATIONS，因为这会导致并行分支计数混乱）
         context.lastNode(null);
 
-        // 2. 执行任务
-        Prompt prompt = context.getAs(KEY_PROMPT);
+        // 1. 获取原始 Prompt
+        Prompt originalPrompt = context.getAs(KEY_PROMPT);
+        String history = context.getAs(KEY_HISTORY);
+
+        // 2. 核心优化：如果存在协作历史，将其注入给当前的 Agent
+        Prompt effectivePrompt = originalPrompt;
+        if (history != null && !history.isEmpty()) {
+            String newContent = "Current Task: " + originalPrompt.getUserContent() +
+                    "\n\nCollaboration Progress so far:\n" + history +
+                    "\n\nPlease continue based on the progress above.";
+            effectivePrompt = Prompt.of(newContent);
+        }
+
         long start = System.currentTimeMillis();
-        String result = call(context, prompt);
+        // 使用增强后的 effectivePrompt 调用
+        String result = call(context, effectivePrompt);
         long duration = System.currentTimeMillis() - start;
 
-        // 3. 更新结果
         context.put(KEY_ANSWER, result);
 
-        // 4. 记录轨迹
+        // 3. 记录轨迹 (保持不变...)
         String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
         if (traceKey != null) {
             Object traceObj = context.get(traceKey);
             if (traceObj instanceof TeamTrace) {
                 ((TeamTrace) traceObj).addStep(name(), result, duration);
-
-                String history = ((TeamTrace) traceObj).getFormattedHistory();
-                context.put(KEY_HISTORY, history);
+                context.put(KEY_HISTORY, ((TeamTrace) traceObj).getFormattedHistory());
             }
         }
     }

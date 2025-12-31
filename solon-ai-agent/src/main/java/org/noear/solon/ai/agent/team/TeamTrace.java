@@ -79,20 +79,22 @@ public class TeamTrace {
      */
     public boolean isLooping() {
         int n = steps.size();
-        if (n < 2) return false;
+        if (n < 3) return false;
 
-        // 如果同一个 Agent 连续 3 次被分配任务且内容高度相似（这里简化为连续 3 次分配给同一人）
-        if (n >= 3) {
-            String last1 = steps.get(n - 1).getAgentName();
-            String last2 = steps.get(n - 2).getAgentName();
-            String last3 = steps.get(n - 3).getAgentName();
-            if (last1.equals(last2) && last2.equals(last3)) {
-                return true; // 陷入原地踏步循环
+        String lastAgent = steps.get(n - 1).getAgentName();
+        String lastContent = steps.get(n - 1).getContent();
+
+        // 检查是否有同一个 Agent 连续产出完全相同的内容
+        for (int i = 0; i < n - 1; i++) {
+            TeamStep prev = steps.get(i);
+            if (prev.getAgentName().equals(lastAgent) && prev.getContent().equals(lastContent)) {
+                // 如果同一个 Agent 输出了跟之前一模一样的内容（通常是 Tool Call 重复），则判定为死循环
+                return true;
             }
         }
 
-        // 然后 A-B-A-B 逻辑
-        if (n >= 4) {
+        // 原有的 A-B-A-B 逻辑可以保留，但建议增加 n 的阈值
+        if (n >= 6) { // 稍微放宽到 6 步，给 Agent 纠错机会
             return steps.get(n - 1).getAgentName().equals(steps.get(n - 3).getAgentName()) &&
                     steps.get(n - 2).getAgentName().equals(steps.get(n - 4).getAgentName());
         }

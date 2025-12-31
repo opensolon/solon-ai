@@ -24,18 +24,26 @@ public class TeamAgentPersistenceAndResumeTest {
 
         TeamAgent tripTeam = TeamAgent.builder(chatModel)
                 .name(teamId)
-                .addAgent(ReActAgent.builder(chatModel).name("planner").description("资深行程规划专家").build())
+                .addAgent(ReActAgent.builder(chatModel)
+                        .name("planner")
+                        .description("资深行程规划专家")
+                        .build())
                 .graph(spec -> {
                     spec.addStart(Agent.ID_START).linkAdd("searcher");
-                    spec.addActivity(ReActAgent.builder(chatModel).name("searcher").description("天气搜索员").build())
+                    spec.addActivity(ReActAgent.builder(chatModel)
+                                    .name("searcher")
+                                    .description("天气搜索员")
+                                    .build())
                             .linkAdd(Agent.ID_ROUTER);
                 }).build();
 
         // 1. 【模拟第一阶段：挂起】执行了搜索，状态存入 DB
         FlowContext contextStep1 = FlowContext.of("order_sn_998");
+        contextStep1.lastNode(tripTeam.getGraph().getNodeOrThrow(Agent.ID_ROUTER));
+
         TeamTrace snapshot = new TeamTrace();
         snapshot.addStep("searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
-        snapshot.setLastNode(tripTeam.getGraph().getNodeOrThrow(Agent.ID_ROUTER));
+        snapshot.setLastNode(contextStep1.lastNode());
 
         contextStep1.put(Agent.KEY_PROMPT, Prompt.of("帮我规划上海行程并给穿衣建议"));
         contextStep1.put(Agent.KEY_HISTORY, "[searcher]: 上海明日天气：大雨转雷阵雨。");
