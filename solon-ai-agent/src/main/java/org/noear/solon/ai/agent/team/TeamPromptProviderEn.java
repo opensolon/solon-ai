@@ -41,7 +41,7 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
                 .collect(Collectors.joining("\n"));
 
         return "You are a team supervisor. \n" +
-                "Global Task: " + prompt.getSystemContent() + "\n" +
+                "Global Task: " + prompt.getUserContent() + "\n" +
                 "Team Members and their Responsibilities:\n" + specialists + "\n" +
                 "Instruction: Review the collaboration history and decide who should act next. \n" +
                 "- If the task is finished, respond ONLY with 'FINISH'. \n" +
