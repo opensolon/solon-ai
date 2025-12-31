@@ -60,7 +60,7 @@ public class ReActAgent implements Agent {
      * 初始化图结构。定义节点跳转逻辑：
      */
     private Graph initGraph() {
-        return Graph.create("react_agent", spec -> {
+        return Graph.create(this.name, spec -> {
             spec.addStart("start").linkAdd(ReActTrace.ROUTE_REASON);
 
             spec.addExclusive(ReActTrace.ROUTE_REASON)
@@ -87,17 +87,19 @@ public class ReActAgent implements Agent {
             LOG.info("Starting ReActAgent: {}", prompt);
         }
 
-        context.put(Agent.KEY_CURRENT_TRACE_KEY, traceKey);
-
-        ReActTrace trace = context.getAs(traceKey);
-        if (trace == null || prompt != null) {
-            trace = new ReActTrace(prompt);
-            context.put(traceKey, trace);
+        ReActTrace tmpTrace = context.getAs(traceKey);
+        if (tmpTrace == null || prompt != null) {
+            tmpTrace = new ReActTrace(prompt);
+            context.put(traceKey, tmpTrace);
             context.lastNode(null);
         }
 
+        final ReActTrace trace = tmpTrace;
+
         try {
-            flowEngine.eval(graph, trace.getLastNodeId(), context);
+            context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
+                flowEngine.eval(graph, trace.getLastNodeId(), context);
+            });
         } finally {
             //同步节点状态
             trace.setLastNode(context.lastNode());

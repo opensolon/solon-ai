@@ -38,13 +38,12 @@ public class TeamAgent implements Agent {
     public String ask(FlowContext context, String prompt) throws Throwable {
         // 1. 统一 TraceKey 规范
         String traceKey = "__" + name();
-        context.put(Agent.KEY_CURRENT_TRACE_KEY, traceKey);
 
         // 2. 初始化或恢复 TeamTrace
-        TeamTrace trace = context.getAs(traceKey);
-        if (trace == null || prompt != null) {
-            trace = new TeamTrace();
-            context.put(traceKey, trace);
+        TeamTrace tmpTrace = context.getAs(traceKey);
+        if (tmpTrace == null || prompt != null) {
+            tmpTrace = new TeamTrace();
+            context.put(traceKey, tmpTrace);
 
             if (prompt != null) {
                 // 开启新任务时，清理上下文残留的迭代状态
@@ -57,9 +56,13 @@ public class TeamAgent implements Agent {
             }
         }
 
+        TeamTrace trace = tmpTrace;
+
         try {
             // 3. 驱动图运行（支持断点续运行）
-            flowEngine.eval(graph, trace.getLastNodeId(), context);
+            context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
+                flowEngine.eval(graph, trace.getLastNodeId(), context);
+            });
         } finally {
             // 4. 无论成功与否，持久化最后执行的节点快照
             trace.setLastNode(context.lastNode());
