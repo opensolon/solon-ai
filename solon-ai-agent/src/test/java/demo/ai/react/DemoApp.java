@@ -10,7 +10,7 @@ import org.noear.solon.flow.FlowContext;
 
 import java.time.LocalDateTime;
 
-public class ReActHelloWorld {
+public class DemoApp {
     public static void main(String[] args) throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
