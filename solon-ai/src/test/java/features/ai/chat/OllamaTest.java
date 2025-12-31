@@ -14,7 +14,7 @@ public class OllamaTest extends AbsChatTest{
 
     protected ChatModel.Builder getChatModelBuilder() {
         return ChatModel.of("http://127.0.0.1:11434/api/chat")
-                .provider("ollama") //需要指定供应商，用于识别接口风格（也称为方言）
-                .model("qwen2.5:1.5b");
+                .provider("ollama")
+                .model("qwen2.5:1.5b"); //"llama3.2";
     }
 }

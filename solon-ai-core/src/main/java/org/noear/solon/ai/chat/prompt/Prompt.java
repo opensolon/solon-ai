@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.prompt;
 
+import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
 
 import java.util.ArrayList;
@@ -35,6 +36,13 @@ public class Prompt implements ChatPrompt {
         return messageList;
     }
 
+    public Prompt addMessage(String... messages) {
+        for (String m : messages) {
+            messageList.add(ChatMessage.ofUser(m));
+        }
+        return this;
+    }
+
     public Prompt addMessage(ChatMessage... messages) {
         for (ChatMessage m : messages) {
             messageList.add(m);
@@ -45,5 +53,33 @@ public class Prompt implements ChatPrompt {
     public Prompt addMessage(Collection<ChatMessage> messages) {
         messageList.addAll(messages);
         return this;
+    }
+
+    public String getUserContent() {
+        for (ChatMessage m : messageList) {
+            if (m.getRole() == ChatRole.USER) {
+                return m.getContent();
+            }
+        }
+
+        return null;
+    }
+
+    public String getSystemContent() {
+        for (ChatMessage m : messageList) {
+            if (m.getRole() == ChatRole.SYSTEM) {
+                return m.getContent();
+            }
+        }
+
+        return null;
+    }
+
+    public static Prompt of(String... messages) {
+        return new Prompt().addMessage(messages);
+    }
+
+    public static Prompt of(ChatMessage... messages) {
+        return new Prompt().addMessage(messages);
     }
 }
