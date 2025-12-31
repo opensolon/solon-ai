@@ -38,7 +38,6 @@ public class TeamAgent implements Agent {
     private String name;
     private String description;
     private final Graph graph;
-    private final boolean resetOnNewPrompt;
     private final FlowEngine flowEngine;
 
     public TeamAgent(Graph graph) {
@@ -46,10 +45,10 @@ public class TeamAgent implements Agent {
     }
 
     public TeamAgent(Graph graph, String name) {
-        this(graph, name, null, false);
+        this(graph, name, null);
     }
 
-    public TeamAgent(Graph graph, String name, String description, boolean resetOnNewPrompt) {
+    public TeamAgent(Graph graph, String name, String description) {
         if(graph == null || graph.getNodes().isEmpty()){
             throw new IllegalStateException("Missing graph definition");
         }
@@ -58,7 +57,6 @@ public class TeamAgent implements Agent {
         this.graph = Objects.requireNonNull(graph);
         this.name = (name == null ? "team_agent" : name);
         this.description = description;
-        this.resetOnNewPrompt = resetOnNewPrompt;
     }
 
     public Graph getGraph() {
@@ -126,101 +124,91 @@ public class TeamAgent implements Agent {
 
     public static class Builder {
 
-        private String name;
-        private String description;
-        private boolean resetOnNewPrompt;
-        private final ChatModel chatModel;
-        private final Map<String, Agent> agentMap = new LinkedHashMap<>();
-        private Consumer<GraphSpec> graphBuilder;
-        private int maxTotalIterations = 8;
-        private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
+       private final TeamConfig config;
 
         public Builder(ChatModel chatModel) {
-            this.chatModel = chatModel;
+            this.config = new TeamConfig(chatModel);
         }
 
         public Builder addAgent(Agent agent) {
-            Objects.requireNonNull(agent.name(), "agent.name");
-            Objects.requireNonNull(agent.description(), "agent.description");
-
-            agentMap.put(agent.name(), agent);
-            return this;
-        }
-
-        public Builder resetOnNewPrompt(boolean resetOnNewPrompt) {
-            this.resetOnNewPrompt = resetOnNewPrompt;
+            config.addAgent(agent);
             return this;
         }
 
         public Builder promptProvider(TeamPromptProvider promptProvider) {
-            this.promptProvider = promptProvider;
+            config.setPromptProvider(promptProvider);
+            return this;
+        }
+
+        public Builder finishMarker(String finishMarker) {
+            config.setFinishMarker(finishMarker);
             return this;
         }
 
         public Builder maxTotalIterations(int maxTotalIterations) {
-            this.maxTotalIterations = Math.max(1, maxTotalIterations);
+            config.setMaxTotalIterations(maxTotalIterations);
             return this;
         }
 
         public Builder name(String name) {
-            this.name = name;
+            config.setName( name);
             return this;
         }
 
         public Builder description(String description) {
-            this.description = description;
+            config.setDescription(description);
             return this;
         }
 
         public Builder graph(Consumer<GraphSpec> graphBuilder) {
-            this.graphBuilder = graphBuilder;
+            config.setGraphBuilder(graphBuilder);
             return this;
         }
 
         public TeamAgent build() {
-            if(name == null){
-                name = "team_agent";
+            if(config.getName() == null){
+                config.setName("team_agent");
             }
 
             Graph graph = initGraph();
 
-            TeamAgent agent = new TeamAgent(graph, name, description, resetOnNewPrompt);
+            TeamAgent agent = new TeamAgent(graph, config.getName(), config.getDescription());
 
             return agent;
         }
 
         private Graph initGraph() {
-            if (agentMap.isEmpty()) {
+            if (config.getAgentMap().isEmpty()) {
                 //需要自己构图
-                return Graph.create(this.name, spec -> {
-                    if (graphBuilder != null) {
-                        graphBuilder.accept(spec);
+                return Graph.create(config.getName(), spec -> {
+                    if (config.getGraphBuilder() != null) {
+                        config.getGraphBuilder().accept(spec);
                     }
                 });
             } else {
-                String traceKey = "__" + name;
-                TeamSupervisorTask task = new TeamSupervisorTask(this.name, chatModel, agentMap, maxTotalIterations, promptProvider);
+                String traceKey = "__" + config.getName();
+                TeamSupervisorTask task = new TeamSupervisorTask(config);
 
                 //自动管家模式
-                return Graph.create(this.name, spec -> {
+                return Graph.create(config.getName(), spec -> {
                     spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
 
                     spec.addExclusive(Agent.ID_ROUTER).task(task).then(ns -> {
-                        for (Agent agent : agentMap.values()) {
+                        for (Agent agent : config.getAgentMap().values()) {
                             ns.linkAdd(agent.name(), l -> l.when(
                                     ctx -> agent.name().equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
                         }
                     }).linkAdd(Agent.ID_END);
 
 
-                    for (Agent agent : agentMap.values()) {
+                    for (Agent agent : config.getAgentMap().values()) {
                         spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
                     }
 
                     spec.addEnd(Agent.ID_END);
 
-                    if (graphBuilder != null) {
-                        graphBuilder.accept(spec);
+                    if (config.getGraphBuilder() != null) {
+                        config.getGraphBuilder().accept(spec);
                     }
                 });
             }

@@ -68,7 +68,7 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
             sb.append("1. **No tools available**: DO NOT attempt to call any tools.\n");
             sb.append("2. **Direct answering**: Answer user questions directly based on your knowledge and reasoning.\n");
             sb.append("3. **No hallucination**: If you don't know the answer, honestly tell the user.\n");
-            sb.append("4. **Use finish marker**: When completing your answer, start with ").append(config.getFinishMarker()).append(".");
+            sb.append("4. **Use finish marker**: When completing your answer, start with '").append(config.getFinishMarker()).append("'.");
         }
 
         return sb.toString();

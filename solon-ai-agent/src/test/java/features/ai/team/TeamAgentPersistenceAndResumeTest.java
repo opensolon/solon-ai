@@ -78,7 +78,6 @@ public class TeamAgentPersistenceAndResumeTest {
                         .name("agent")
                         .description("测试Agent")
                         .build())
-                .resetOnNewPrompt(true) // 开启 reset 模式
                 .build();
 
         FlowContext context = FlowContext.of("test_reset");

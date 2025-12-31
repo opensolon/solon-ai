@@ -59,11 +59,11 @@ public class TeamAgentSupervisorTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 自定义提示词提供者
-        TeamPromptProvider customProvider = (prompt, agentMap) -> {
+        TeamPromptProvider customProvider = (config, prompt) -> {
             return "你是团队监督员。当前任务: " + prompt.getUserContent() +
-                    "\n团队成员: " + String.join(", ", agentMap.keySet()) +
+                    "\n团队成员: " + String.join(", ", config.getAgentMap().keySet()) +
                     "\n指令：根据协作历史决定下一步由谁执行。\n" +
-                    "- 如果任务已圆满完成，请仅回复 'FINISH'。\n" +
+                    "- 如果任务已圆满完成，请仅回复 '" + config.getFinishMarker() + "'。\n" +
                     "- 否则，请仅回复成员的名字（例如：'worker'）。";
         };
 

@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;

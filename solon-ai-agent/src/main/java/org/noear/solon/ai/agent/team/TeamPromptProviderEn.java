@@ -35,8 +35,8 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
     }
 
     @Override
-    public String getSystemPrompt(Prompt prompt, Map<String, Agent> agentMap) {
-        String specialists = agentMap.values().stream()
+    public String getSystemPrompt(TeamConfig config, Prompt prompt) {
+        String specialists = config.getAgentMap().values().stream()
                 .map(a -> String.format("- %s: %s", a.name(), a.description()))
                 .collect(Collectors.joining("\n"));
 
@@ -44,7 +44,7 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
                 "Global Task: " + prompt.getUserContent() + "\n" +
                 "Team Members and their Responsibilities:\n" + specialists + "\n" +
                 "Instruction: Review the collaboration history and decide who should act next. \n" +
-                "- If the task is finished, respond ONLY with 'FINISH'. \n" +
+                "- If the task is finished, respond ONLY with '" + config.getFinishMarker() + "'. \n" +
                 "- Otherwise, respond ONLY with the specialist's name.";
     }
 }

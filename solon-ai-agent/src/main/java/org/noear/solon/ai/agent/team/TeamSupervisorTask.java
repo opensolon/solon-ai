@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
@@ -27,7 +26,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -38,18 +36,12 @@ import java.util.stream.Collectors;
  */
  class TeamSupervisorTask implements TaskComponent {
     static final Logger LOG = LoggerFactory.getLogger(TeamSupervisorTask.class);
+    private final TeamConfig config;
     private final String teamName;
-    private final ChatModel chatModel;
-    private final Map<String, Agent> agentMap;
-    private final int maxTotalIterations;
-    private final TeamPromptProvider promptProvider;
 
-    public TeamSupervisorTask(String teamName, ChatModel chatModel, Map<String, Agent> agentMap, int maxTotalIterations, TeamPromptProvider promptProvider) {
-        this.teamName = teamName;
-        this.chatModel = chatModel;
-        this.agentMap = agentMap;
-        this.maxTotalIterations = maxTotalIterations;
-        this.promptProvider = promptProvider;
+    public TeamSupervisorTask(TeamConfig config) {
+        this.teamName = config.getName();
+        this.config = config;
     }
 
     @Override
@@ -63,8 +55,8 @@ import java.util.stream.Collectors;
         int iters = trace.iterationsCount();
 
         // 2. 熔断与循环检测
-        if (iters >= maxTotalIterations || (trace != null && trace.isLooping())) {
-            String reason = iters >= maxTotalIterations ? "Maximum iterations reached" : "Loop detected";
+        if (iters >= config.getMaxTotalIterations() || (trace != null && trace.isLooping())) {
+            String reason = iters >= config.getMaxTotalIterations() ? "Maximum iterations reached" : "Loop detected";
             LOG.warn("Team Agent [{}] forced exit: {}", teamName, reason);
             if (trace != null) {
                 trace.addStep("system", "Execution halted: " + reason, 0);
@@ -74,8 +66,8 @@ import java.util.stream.Collectors;
         }
 
         // 3. 构建决策请求
-        String systemPrompt = promptProvider.getSystemPrompt(prompt, agentMap);
-        String decision = chatModel.prompt(Arrays.asList(
+        String systemPrompt = config.getSystemPrompt(prompt);
+        String decision = config.getChatModel().prompt(Arrays.asList(
                 ChatMessage.ofSystem(systemPrompt),
                 ChatMessage.ofUser("Collaboration Progress (Iteration " + iters + "):\n" + teamHistory)
         )).call().getResultContent().trim(); // 去除首尾空格
@@ -84,8 +76,8 @@ import java.util.stream.Collectors;
         String nextAgent = Agent.ID_END;
         String cleanDecision = " " + decision.toUpperCase() + " "; //不要去掉符号（会失真）
 
-        if (!cleanDecision.contains(" FINISH ")) {
-            List<String> sortedNames = agentMap.keySet().stream()
+        if (!cleanDecision.contains(config.getFinishMarker())) {
+            List<String> sortedNames = config.getAgentMap().keySet().stream()
                     .sorted((a, b) -> Integer.compare(b.length(), a.length()))
                     .collect(Collectors.toList());
 

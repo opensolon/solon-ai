@@ -68,7 +68,7 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
             sb.append("1. **当前没有可用工具**：请不要尝试调用任何工具。\n");
             sb.append("2. **直接回答问题**：基于你的知识和推理能力直接回答用户的问题。\n");
             sb.append("3. **严禁幻觉**：如果不知道答案，请诚实地告知用户。\n");
-            sb.append("4. **使用结束标记**：当完成回答时，请使用 ").append(config.getFinishMarker()).append(" 开始你的最终答案。");
+            sb.append("4. **使用结束标记**：当完成回答时，请使用 '").append(config.getFinishMarker()).append("' 开始你的最终答案。");
         }
 
         return sb.toString();

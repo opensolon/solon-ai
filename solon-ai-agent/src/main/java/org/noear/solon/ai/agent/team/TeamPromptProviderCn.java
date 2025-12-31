@@ -36,8 +36,8 @@ public class TeamPromptProviderCn implements TeamPromptProvider {
     }
 
     @Override
-    public String getSystemPrompt(Prompt prompt, Map<String, Agent> agentMap) {
-        String members = agentMap.values().stream()
+    public String getSystemPrompt(TeamConfig config, Prompt prompt) {
+        String members = config.getAgentMap().values().stream()
                 .map(a -> String.format("- %s: %s", a.name(), a.description()))
                 .collect(Collectors.joining("\n"));
 
@@ -45,7 +45,7 @@ public class TeamPromptProviderCn implements TeamPromptProvider {
                 "全局任务: " + prompt.getUserContent() + "\n" +
                 "团队成员及其职责: \n" + members + "\n" +
                 "指令：根据协作历史决定下一步由谁执行。\n" +
-                "- 如果任务已圆满完成，请仅回复 'FINISH'。\n" +
+                "- 如果任务已圆满完成，请仅回复 '" + config.getFinishMarker() + "'。\n" +
                 "- 否则，请仅回复成员的名字（例如：'Coder' 或 'Reviewer'）。";
     }
 }
