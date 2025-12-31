@@ -169,6 +169,10 @@ public class TeamAgent implements Agent {
         }
 
         public TeamAgent build() {
+            if(name == null){
+                name = "team_agent";
+            }
+
             Graph graph = initGraph();
 
             TeamAgent agent = new TeamAgent(graph, name, description, resetOnNewPrompt);
