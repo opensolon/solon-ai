@@ -1,6 +1,7 @@
 package features.ai.team;
 
 import demo.ai.agent.LlmUtil;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -11,53 +12,58 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Graph;
 import java.util.stream.Collectors;
 
+/**
+ * 并行协作测试：多语种同步翻译
+ * 验证：并行分支的独立运行与结果在 Join 节点的结构化汇聚。
+ */
 public class TeamAgentParallelAgentTest {
     @Test
     public void testParallelAgents() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-        String teamName = "parallel_translator";
+        String teamId = "parallel_translator";
 
-        // 1. 定义子 Agent
+        // 1. 定义翻译专家（ReAct 模式）
         Agent enTranslator = ReActAgent.builder(chatModel).name("en_translator")
-                .promptProvider(c -> "你负责将文本翻译为英文").build();
+                .description("负责英语翻译的专家").build();
         Agent frTranslator = ReActAgent.builder(chatModel).name("fr_translator")
-                .promptProvider(c -> "你负责将文本翻译为法文").build();
+                .description("负责法语翻译的专家").build();
 
-        // 2. 定义并行图
-        Graph parallelGraph = Graph.create(teamName, spec -> {
-            spec.addStart(Agent.ID_START).linkAdd("parallel_gate");
+        // 2. 自定义并行图：实现分发与汇聚
+        Graph parallelGraph = Graph.create(teamId, spec -> {
+            spec.addStart(Agent.ID_START).linkAdd("dispatch_gate");
 
-            // 并行分发
-            spec.addParallel("parallel_gate")
+            // 并行分发：同时激活英、法两个 Agent
+            spec.addParallel("dispatch_gate")
                     .linkAdd(enTranslator.name())
                     .linkAdd(frTranslator.name());
 
-            spec.addActivity(enTranslator).linkAdd("join_node");
-            spec.addActivity(frTranslator).linkAdd("join_node");
+            spec.addActivity(enTranslator).linkAdd("aggregate_node");
+            spec.addActivity(frTranslator).linkAdd("aggregate_node");
 
-            // 汇聚节点：直接从 TeamTrace 提取各并行分支的结果
-            spec.addParallel("join_node").task((ctx, n) -> {
-                TeamTrace trace = ctx.getAs("__" + teamName);
-                if (trace != null) {
-                    String summary = trace.getSteps().stream()
-                            .map(s -> "[" + s.getAgentName() + "]: " + s.getContent())
-                            .collect(Collectors.joining("\n\n"));
-                    ctx.put(Agent.KEY_ANSWER, "多语言翻译汇总：\n" + summary);
-                }
+            // 汇聚节点：从协作轨迹中提取各分支产出
+            spec.addParallel("aggregate_node").task((ctx, n) -> {
+                TeamTrace trace = ctx.getAs("__" + teamId);
+                String summary = trace.getSteps().stream()
+                        .map(s -> String.format("[%s]: %s", s.getAgentName(), s.getContent()))
+                        .collect(Collectors.joining("\n"));
+                ctx.put(Agent.KEY_ANSWER, "多语言处理完成：\n" + summary);
             }).linkAdd(Agent.ID_END);
 
             spec.addEnd(Agent.ID_END);
         });
 
-        // 3. 运行
+        // 3. 执行任务
         TeamAgent team = new TeamAgent(parallelGraph);
-        FlowContext context = FlowContext.of("parallel_1");
-
-        long start = System.currentTimeMillis();
+        FlowContext context = FlowContext.of("sn_2025_para_01");
         String result = team.ask(context, "你好，世界");
-        long end = System.currentTimeMillis();
 
+        // 4. 单测检测
         System.out.println(result);
-        System.out.println("并行翻译总耗时: " + (end - start) + "ms");
+        TeamTrace trace = context.getAs("__" + teamId);
+
+        Assertions.assertNotNull(trace, "轨迹对象不能为空");
+        Assertions.assertEquals(2, trace.getStepCount(), "并行链条应产生 2 个执行步骤");
+        Assertions.assertTrue(result.contains("Hello"), "结果应包含英文翻译内容");
+        Assertions.assertTrue(result.contains("Monde") || result.contains("Bonjour"), "结果应包含法语翻译内容");
     }
 }
