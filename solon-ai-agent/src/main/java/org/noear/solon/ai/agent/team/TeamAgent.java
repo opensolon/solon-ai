@@ -76,27 +76,16 @@ public class TeamAgent implements Agent {
         String traceKey = "__" + name();
         TeamTrace tmpTrace = context.getAs(traceKey);
 
-        boolean isNewPrompt = (prompt != null);
-
         if (tmpTrace == null) {
-            tmpTrace = new TeamTrace();
-            context.put(traceKey, tmpTrace);
-        } else if (isNewPrompt && resetOnNewPrompt) {
-            // 如果配置为重置，则清空轨迹重新开始
             tmpTrace = new TeamTrace();
             context.put(traceKey, tmpTrace);
         }
 
-        // 更新上下文
         if (prompt != null) {
             context.put(Agent.KEY_PROMPT, prompt);
             context.put(Agent.KEY_ITERATIONS, 0);
-
-            // 关键：如果是新任务且需要重置，清空 lastNode
-            if (resetOnNewPrompt) {
-                context.lastNode(null);
-                tmpTrace.setLastNode((NodeTrace) null);
-            }
+            context.lastNode(null);
+            tmpTrace.setLastNode((NodeTrace) null);
         } else {
             context.put(Agent.KEY_ITERATIONS, 0);
         }
