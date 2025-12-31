@@ -82,7 +82,7 @@ import java.util.stream.Collectors;
 
         // 4. 解析决策
         String nextAgent = Agent.ID_END;
-        String cleanDecision = " " + decision.toUpperCase().replaceAll("[\\p{Punct}]", " ") + " ";
+        String cleanDecision = " " + decision.toUpperCase() + " "; //不要去掉符号（会失真）
 
         if (!cleanDecision.contains(" FINISH ")) {
             List<String> sortedNames = agentMap.keySet().stream()

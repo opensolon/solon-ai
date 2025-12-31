@@ -175,6 +175,11 @@ public class ReActAgent implements Agent {
             return this;
         }
 
+        public Builder finishMarker(String val){
+            config.setFinishMarker(val);
+            return this;
+        }
+
         public Builder maxTokens(int val) {
             config.setMaxTokens(val);
             return this;

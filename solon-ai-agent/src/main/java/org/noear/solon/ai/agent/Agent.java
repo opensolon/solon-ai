@@ -48,7 +48,11 @@ public interface Agent extends NamedTaskComponent {
     String call(FlowContext context, Prompt prompt) throws Throwable;
 
     default String call(FlowContext context, String prompt) throws Throwable {
-        return call(context, Prompt.of(prompt));
+        if (prompt == null) {
+            return call(context, (Prompt) null);
+        } else {
+            return call(context, Prompt.of(prompt));
+        }
     }
 
     default String call(FlowContext context) throws Throwable {

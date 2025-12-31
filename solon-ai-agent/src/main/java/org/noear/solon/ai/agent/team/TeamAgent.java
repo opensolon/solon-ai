@@ -49,6 +49,10 @@ public class TeamAgent implements Agent {
     }
 
     public TeamAgent(Graph graph, String name, String description, boolean resetOnNewPrompt) {
+        if(graph == null || graph.getNodes().isEmpty()){
+            throw new IllegalStateException("Missing graph definition");
+        }
+
         this.flowEngine = FlowEngine.newInstance();
         this.graph = Objects.requireNonNull(graph);
         this.name = (name == null ? "team_agent" : name);

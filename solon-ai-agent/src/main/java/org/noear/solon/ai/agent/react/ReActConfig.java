@@ -85,6 +85,10 @@ public class ReActConfig {
         this.maxTokens = val;
     }
 
+    public void setFinishMarker(String val) {
+        this.finishMarker = val;
+    }
+
     public void setMaxSteps(int val) {
         this.maxSteps = val;
     }
