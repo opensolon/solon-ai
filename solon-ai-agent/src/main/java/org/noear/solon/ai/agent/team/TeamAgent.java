@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.*;
 import org.noear.solon.lang.Preview;
 
@@ -66,7 +67,7 @@ public class TeamAgent implements Agent {
 
 
     @Override
-    public String call(FlowContext context, String prompt) throws Throwable {
+    public String call(FlowContext context, Prompt prompt) throws Throwable {
         // 1. 统一 TraceKey 规范
         String traceKey = "__" + name();
 

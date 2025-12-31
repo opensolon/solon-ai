@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.flow.FlowContext;
@@ -38,7 +39,7 @@ public class ReActAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
     private final String name;
-    private String description;
+    private final String description;
     private final ReActConfig config;
     private final Graph graph;
     private final FlowEngine flowEngine;
@@ -49,21 +50,16 @@ public class ReActAgent implements Agent {
         this.description = config.getDescription();
         this.config = config;
         this.flowEngine = FlowEngine.newInstance();
-        this.graph = initGraph();
         this.traceKey = "__" + name;
 
         //附加流拦截器
         if (config.getInterceptor() != null) {
             flowEngine.addInterceptor(config.getInterceptor());
         }
-    }
 
-    /**
-     * 初始化图结构。定义节点跳转逻辑：
-     */
-    private Graph initGraph() {
-        return Graph.create(this.name, spec -> {
-            spec.addStart("start").linkAdd(ReActTrace.ROUTE_REASON);
+        //构建计算图
+        this.graph = Graph.create(this.name, spec -> {
+            spec.addStart(ReActTrace.ROUTE_START).linkAdd(ReActTrace.ROUTE_REASON);
 
             spec.addExclusive(ReActTrace.ROUTE_REASON)
                     .task(new ReActReasonTask(config))
@@ -89,7 +85,7 @@ public class ReActAgent implements Agent {
     }
 
     @Override
-    public String call(FlowContext context, String prompt) throws Throwable {
+    public String call(FlowContext context, Prompt prompt) throws Throwable {
         if (config.isEnableLogging()) {
             LOG.info("Starting ReActAgent: {}", prompt);
         }

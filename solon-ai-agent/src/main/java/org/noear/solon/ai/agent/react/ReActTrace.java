@@ -19,6 +19,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.NodeTrace;
@@ -38,9 +39,10 @@ import java.util.List;
 public class ReActTrace {
     public static final String ROUTE_REASON = "reason";
     public static final String ROUTE_ACTION = "action";
+    public static final String ROUTE_START = "start";
     public static final String ROUTE_END = "end";
 
-    private String prompt;
+    private Prompt prompt;
     private AtomicInteger stepCounter;
     private List<ChatMessage> messages;
 
@@ -55,7 +57,7 @@ public class ReActTrace {
         this.route = ROUTE_REASON;
     }
 
-    public ReActTrace(String prompt) {
+    public ReActTrace(Prompt prompt) {
         this();
         this.prompt = prompt;
     }
@@ -63,7 +65,7 @@ public class ReActTrace {
 
     // --- Getters & Setters ---
 
-    public String getPrompt() {
+    public Prompt getPrompt() {
         return prompt;
     }
 
@@ -138,6 +140,13 @@ public class ReActTrace {
 
         if (messages.size() > 20) {
             compact();
+        }
+    }
+
+    public synchronized void appendMessage(Prompt prompt) {
+        if (prompt == null) return;
+        for (ChatMessage m1 : prompt.getMessages()) {
+            appendMessage(m1);
         }
     }
 

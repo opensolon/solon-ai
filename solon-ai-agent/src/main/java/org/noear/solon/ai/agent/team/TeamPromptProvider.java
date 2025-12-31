@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.chat.prompt.Prompt;
 
 import java.util.Map;
 
@@ -26,5 +27,5 @@ import java.util.Map;
  * @since 3.8.1
  */
 public interface TeamPromptProvider {
-    String getSystemPrompt(String prompt, Map<String, Agent> agentMap);
+    String getSystemPrompt(Prompt prompt, Map<String, Agent> agentMap);
 }

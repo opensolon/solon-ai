@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
@@ -44,7 +45,15 @@ public interface Agent extends NamedTaskComponent {
      *
      * @param prompt 提示语
      */
-    String call(FlowContext context, String prompt) throws Throwable;
+    String call(FlowContext context, Prompt prompt) throws Throwable;
+
+    default String call(FlowContext context, String prompt) throws Throwable {
+        return call(context, Prompt.of(prompt));
+    }
+
+    default String call(FlowContext context) throws Throwable {
+        return call(context, (Prompt) null);
+    }
 
     /**
      * 作为 solon-flow TaskComponent 运行（方便 solon-flow 整合）
@@ -57,7 +66,7 @@ public interface Agent extends NamedTaskComponent {
         context.lastNode(null);
 
         // 2. 执行任务
-        String prompt = context.getAs(KEY_PROMPT);
+        Prompt prompt = context.getAs(KEY_PROMPT);
         long start = System.currentTimeMillis();
         String result = call(context, prompt);
         long duration = System.currentTimeMillis() - start;

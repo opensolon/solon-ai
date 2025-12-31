@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.team;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Graph;
 import org.noear.solon.flow.GraphSpec;
@@ -126,7 +127,7 @@ public class TeamAgentBuilder {
     }
 
     private void run(FlowContext context, Node node) throws Throwable {
-        String prompt = context.getAs(Agent.KEY_PROMPT);
+        Prompt prompt = context.getAs(Agent.KEY_PROMPT);
         String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = context.getAs(traceKey);
 

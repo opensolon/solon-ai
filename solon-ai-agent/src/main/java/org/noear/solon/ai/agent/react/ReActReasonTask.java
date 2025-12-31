@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -55,8 +56,8 @@ public class ReActReasonTask implements TaskComponent {
 
         // 2. 初始化对话：首轮将 prompt 转为 User Message
         if (trace.getMessages().isEmpty()) {
-            String prompt = trace.getPrompt();
-            trace.appendMessage(ChatMessage.ofUser(prompt));
+            Prompt prompt = trace.getPrompt();
+            trace.appendMessage(prompt);
         }
 
         // 3. 构建全量消息（System + History）
