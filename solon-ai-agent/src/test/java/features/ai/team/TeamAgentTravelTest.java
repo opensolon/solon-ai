@@ -3,7 +3,6 @@ package features.ai.team;
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.team.TeamSupervisorTask;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -12,7 +11,6 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.Graph;
 
 public class TeamAgentTravelTest {
 
@@ -23,33 +21,26 @@ public class TeamAgentTravelTest {
 
         // 1. 定义子 Agent
         Agent searcher = ReActAgent.builder(chatModel)
-                .nameAs("searcher")
+                .name("searcher")
+                .description("旅游信息搜索员")
                 .promptProvider(config -> "你是一个旅游信息搜索员。请查询目的地天气。")
                 .addTool(new MethodToolProvider(new WeatherTool()))
                 .build();
 
         Agent planner = ReActAgent.builder(chatModel)
-                .nameAs("planner")
+                .name("planner")
+                .description("旅游规划师")
                 .promptProvider(config -> "你是一个资深旅行规划师。根据天气信息定制行程，下雨请安排室内。")
                 .build();
 
-        // 2. 定义图结构
-        Graph travelGraph = Graph.create(teamName, spec -> {
-            spec.addStart("start").linkAdd("router");
 
-            spec.addExclusive(new TeamSupervisorTask(chatModel, searcher.name(),planner.name()).nameAs("router"))
-                    .linkAdd(searcher.name(), l -> l.when(ctx -> searcher.name().equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
-                    .linkAdd(planner.name(), l -> l.when(ctx -> planner.name().equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
-                    .linkAdd("end");
+        // 3. 构建团队智能体
+        TeamAgent travelAgency = TeamAgent.builder(chatModel)
+                .name(teamName)
+                .addAgent(searcher)
+                .addAgent(planner)
+                .build();
 
-            spec.addActivity(searcher).linkAdd("router");
-            spec.addActivity(planner).linkAdd("router");
-
-            spec.addEnd("end");
-        });
-
-        // 3. 运行
-        TeamAgent travelAgency = new TeamAgent(travelGraph).nameAs(teamName);
         FlowContext context = FlowContext.of("travel_101");
 
         String result = travelAgency.ask(context, "我想去东京玩一天，请帮我规划");

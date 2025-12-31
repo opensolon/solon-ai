@@ -4,13 +4,11 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.team.TeamSupervisorTask;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.Graph;
 
 /**
  * 多智能体持久化与恢复测试
@@ -26,22 +24,18 @@ public class TeamAgentPersistenceAndResumeTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         String teamName = "persistence_team";
 
-        // 1. 定义图结构：搜索 -> 路由 -> 规划
-        Graph graph = Graph.create(teamName, spec -> {
-            spec.addStart("start").linkAdd("searcher");
+        TeamAgent teamResumed = TeamAgent.builder(chatModel)
+                .name(teamName)
+                .addAgent(ReActAgent.builder(chatModel).name("planner").description("穿衣规划师").build())
+                .graph(spec -> {
+                    //修改开始连接
+                    spec.addStart(Agent.ID_START).linkAdd("searcher");
+                    //添加个独立的智能体
+                    spec.addActivity(ReActAgent.builder(chatModel).name("searcher").build())
+                            .linkAdd(Agent.ID_ROUTER);
+                })
+                .build();
 
-            spec.addActivity(ReActAgent.builder(chatModel).nameAs("searcher").build())
-                    .linkAdd("router");
-
-            spec.addExclusive(new TeamSupervisorTask(chatModel, "planner").nameAs("router"))
-                    .linkAdd("planner", l -> l.when(ctx -> "planner".equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))))
-                    .linkAdd("end");
-
-            spec.addActivity(ReActAgent.builder(chatModel).nameAs("planner").build())
-                    .linkAdd("end");
-
-            spec.addEnd("end");
-        });
 
         // 2. 第一次运行：模拟运行到 searcher 节点后发生“中断”
         FlowContext context1 = FlowContext.of("session_001");
@@ -50,7 +44,7 @@ public class TeamAgentPersistenceAndResumeTest {
         // 构造中断前的状态：已经有了 searcher 的结果，且停留在 router 准备决策
         TeamTrace trace1 = new TeamTrace();
         trace1.addStep("searcher", "上海明天晴，15度。", 1200L);
-        trace1.setLastNode(graph.getNodeOrThrow("router")); // 核心：记录停在路由节点
+        trace1.setLastNode(teamResumed.getGraph().getNodeOrThrow("router")); // 核心：记录停在路由节点
 
         context1.put(Agent.KEY_PROMPT, initialPrompt);
         context1.put(Agent.KEY_HISTORY, "[searcher]: 上海明天晴，15度。");
@@ -65,7 +59,7 @@ public class TeamAgentPersistenceAndResumeTest {
 
         // 4. 从持久化状态中恢复
         FlowContext context2 = FlowContext.fromJson(jsonState);
-        TeamAgent teamResumed = new TeamAgent(graph).nameAs(teamName);
+
 
         // 5. 继续执行
         // 传入 prompt 为 null，MultiAgent 内部会判断并从 trace.getLastNodeId() 恢复运行

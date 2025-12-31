@@ -15,7 +15,9 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import java.util.List;
+import org.noear.solon.ai.agent.Agent;
+
+import java.util.Map;
 
 /**
  * Team 提示词提供者
@@ -24,5 +26,5 @@ import java.util.List;
  * @since 3.8.1
  */
 public interface TeamPromptProvider {
-    String getSystemPrompt(String prompt, List<String> agentNames);
+    String getSystemPrompt(String prompt, Map<String, Agent> agentMap);
 }

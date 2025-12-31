@@ -138,12 +138,12 @@ public class ReActAgent implements Agent {
             this.config = config;
         }
 
-        public Builder nameAs(String val) {
+        public Builder name(String val) {
             config.name(val);
             return this;
         }
 
-        public Builder descriptionAs(String val) {
+        public Builder description(String val) {
             config.description(val);
             return this;
         }

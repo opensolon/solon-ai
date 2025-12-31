@@ -16,11 +16,18 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.FlowEngine;
-import org.noear.solon.flow.Graph;
+import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.flow.*;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * 团队协作智能体
@@ -30,24 +37,30 @@ import java.util.Objects;
  */
 @Preview("3.8")
 public class TeamAgent implements Agent {
-    private String name = "team_agent";
+    private static final Logger LOG = LoggerFactory.getLogger(TeamAgent.class);
+
+    private String name;
     private String description;
     private final FlowEngine flowEngine;
     private final Graph graph;
 
     public TeamAgent(Graph graph) {
+        this(graph, null, null);
+    }
+
+    public TeamAgent(Graph graph, String name) {
+        this(graph, name, null);
+    }
+
+    public TeamAgent(Graph graph, String name, String description) {
         this.flowEngine = FlowEngine.newInstance();
         this.graph = Objects.requireNonNull(graph);
-    }
-
-    public TeamAgent nameAs(String name) {
-        this.name = name;
-        return this;
-    }
-
-    public TeamAgent description(String description){
+        this.name = (name == null ? "team_agent" : name);
         this.description = description;
-        return this;
+    }
+
+    public Graph getGraph() {
+        return graph;
     }
 
     @Override
@@ -56,7 +69,7 @@ public class TeamAgent implements Agent {
     }
 
     @Override
-    public String description(){
+    public String description() {
         return description;
     }
 
@@ -106,5 +119,142 @@ public class TeamAgent implements Agent {
 
         trace.setFinalAnswer(answer);
         return answer;
+    }
+
+    /// ///////////////////////////////
+
+    public static Builder builder(ChatModel chatModel) {
+        return new Builder(chatModel);
+    }
+
+
+    public static class Builder {
+        private String name;
+        private String description;
+        private final ChatModel chatModel;
+        private final Map<String, Agent> agentMap = new LinkedHashMap<>();
+        private Consumer<GraphSpec> graphBuilder;
+        private int maxTotalIterations = 15;
+        private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
+
+        public Builder(ChatModel chatModel) {
+            this.chatModel = chatModel;
+        }
+
+        public Builder addAgent(Agent agent) {
+            agentMap.put(agent.name(), agent);
+            return this;
+        }
+
+        public Builder promptProvider(TeamPromptProvider promptProvider) {
+            this.promptProvider = promptProvider;
+            return this;
+        }
+
+        public Builder maxTotalIterations(int maxTotalIterations) {
+            this.maxTotalIterations = maxTotalIterations;
+            return this;
+        }
+
+        public Builder name(String name) {
+            this.name = name;
+            return this;
+        }
+
+        public Builder description(String description) {
+            this.description = description;
+            return this;
+        }
+
+        public Builder graph(Consumer<GraphSpec> graphBuilder) {
+            this.graphBuilder = graphBuilder;
+            return this;
+        }
+
+        public TeamAgent build() {
+            Graph graph = initGraph();
+
+            TeamAgent agent = new TeamAgent(graph, name, description);
+
+            return agent;
+        }
+
+        private Graph initGraph() {
+            if (agentMap.isEmpty()) {
+                //需要自己构图
+                return Graph.create(this.name, spec -> {
+                    if (graphBuilder != null) {
+                        graphBuilder.accept(spec);
+                    }
+                });
+            } else {
+                //自动管家模式
+                return Graph.create(this.name, spec -> {
+                    spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
+
+                    spec.addExclusive(Agent.ID_ROUTER).task(this::run).then(ns -> {
+                        for (Agent agent : agentMap.values()) {
+                            ns.linkAdd(agent.name(), l -> l.when(ctx ->
+                                    agent.name().equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))));
+                        }
+                    }).linkAdd(Agent.ID_END);
+
+
+                    for (Agent agent : agentMap.values()) {
+                        spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
+                    }
+
+                    spec.addEnd(Agent.ID_END);
+
+                    if (graphBuilder != null) {
+                        graphBuilder.accept(spec);
+                    }
+                });
+            }
+        }
+
+        private void run(FlowContext context, Node node) throws Throwable {
+            String prompt = context.getAs(Agent.KEY_PROMPT);
+            String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
+            TeamTrace trace = context.getAs(traceKey);
+
+            // 1. 获取团队协作历史（从 Trace 获取）
+            String teamHistory = (trace != null) ? trace.getFormattedHistory() : "No progress yet.";
+            int iters = context.getOrDefault(Agent.KEY_ITERATIONS, 0);
+
+            // 2. 熔断与循环检测
+            if (iters >= maxTotalIterations || (trace != null && trace.isLooping())) {
+                LOG.warn("MultiAgent team reached limit or detected loop. Forcing exit.");
+                context.put(Agent.KEY_NEXT_AGENT, "end");
+                return;
+            }
+
+            // 3. 构建决策请求
+            String systemPrompt = promptProvider.getSystemPrompt(prompt, agentMap);
+            String decision = chatModel.prompt(Arrays.asList(
+                    ChatMessage.ofSystem(systemPrompt),
+                    ChatMessage.ofUser("Collaboration Progress (Iteration " + iters + "):\n" + teamHistory)
+            )).call().getResultContent().trim(); // 去除首尾空格
+
+            // 4. 解析决策
+            String nextAgent = "end";
+            String decisionUpper = decision.toUpperCase();
+            if (!decision.contains("FINISH")) {
+                for (String name : agentMap.keySet()) {
+                    // 使用包含匹配，并忽略大小写，防止标点符号干扰
+                    if (decisionUpper.contains(name.toUpperCase())) {
+                        nextAgent = name;
+                        break;
+                    }
+                }
+            }
+
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Supervisor decision: {} -> Next Agent: {}", decision, nextAgent);
+            }
+
+            context.put(Agent.KEY_NEXT_AGENT, nextAgent);
+            context.put(Agent.KEY_ITERATIONS, iters + 1);
+        }
     }
 }

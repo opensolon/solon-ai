@@ -4,7 +4,6 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.liquor.eval.Scripts;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.team.TeamSupervisorTask;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -12,7 +11,6 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.Graph;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -30,34 +28,23 @@ public class TeamAgentDemo {
 
         // 1. 定义子 Agent
         Agent coder = ReActAgent.builder(chatModel)
-                .nameAs("coder")
+                .name("coder")
                 .addTool(new MethodToolProvider(new CodeExecutorTool()))
                 .build();
 
         Agent writer = ReActAgent.builder(chatModel)
-                .nameAs("writer")
+                .name("writer")
                 .build();
 
-        // 2. 定义图结构
-        Graph multiGraph = Graph.create("software_team", spec -> {
-            spec.addStart("start").linkAdd("router");
+        // 2. 定义团队智能体
+        TeamAgent team = TeamAgent.builder(chatModel)
+                .name("team")
+                .addAgent(coder)
+                .addAgent(writer)
+                .build();
 
-            // 决策节点
-            spec.addExclusive("router")
-                    .task(new TeamSupervisorTask(chatModel, "coder", "writer"))
-                    .linkAdd("coder", l -> l.when(ctx -> "coder".equals(ctx.get("next_agent"))))
-                    .linkAdd("writer", l -> l.when(ctx -> "writer".equals(ctx.get("next_agent"))))
-                    .linkAdd("end");
-
-            // 具体的 Agent 执行节点
-            spec.addActivity("coder").task(coder).linkAdd("router"); // 执行完回 router 检查是否还要继续
-            spec.addActivity("writer").task(writer).linkAdd("router");
-
-            spec.addEnd("end");
-        });
 
         // 3. 运行
-        TeamAgent team = new TeamAgent(multiGraph);
         String result = team.ask(FlowContext.of("demo1"), "写一个 Java 的单例模式并解释它");
         System.out.println(result);
     }

@@ -18,14 +18,14 @@ public class TeamAgentParallelAgentTest {
         String teamName = "parallel_translator";
 
         // 1. 定义子 Agent
-        Agent enTranslator = ReActAgent.builder(chatModel).nameAs("en_translator")
+        Agent enTranslator = ReActAgent.builder(chatModel).name("en_translator")
                 .promptProvider(c -> "你负责将文本翻译为英文").build();
-        Agent frTranslator = ReActAgent.builder(chatModel).nameAs("fr_translator")
+        Agent frTranslator = ReActAgent.builder(chatModel).name("fr_translator")
                 .promptProvider(c -> "你负责将文本翻译为法文").build();
 
         // 2. 定义并行图
         Graph parallelGraph = Graph.create(teamName, spec -> {
-            spec.addStart("start").linkAdd("parallel_gate");
+            spec.addStart(Agent.ID_START).linkAdd("parallel_gate");
 
             // 并行分发
             spec.addParallel("parallel_gate")
@@ -44,13 +44,13 @@ public class TeamAgentParallelAgentTest {
                             .collect(Collectors.joining("\n\n"));
                     ctx.put(Agent.KEY_ANSWER, "多语言翻译汇总：\n" + summary);
                 }
-            }).linkAdd("end");
+            }).linkAdd(Agent.ID_END);
 
-            spec.addEnd("end");
+            spec.addEnd(Agent.ID_END);
         });
 
         // 3. 运行
-        TeamAgent team = new TeamAgent(parallelGraph).nameAs(teamName);
+        TeamAgent team = new TeamAgent(parallelGraph);
         FlowContext context = FlowContext.of("parallel_1");
 
         long start = System.currentTimeMillis();
