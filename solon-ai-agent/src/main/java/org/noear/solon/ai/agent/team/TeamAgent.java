@@ -21,7 +21,10 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.*;
 import org.noear.solon.lang.Preview;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * 团队协作智能体
@@ -115,7 +118,99 @@ public class TeamAgent implements Agent {
 
     /// ///////////////////////////////
 
-    public static TeamAgentBuilder builder(ChatModel chatModel) {
-        return new TeamAgentBuilder(chatModel);
+    public static Builder builder(ChatModel chatModel) {
+        return new Builder(chatModel);
+    }
+
+    public static class Builder {
+
+        private String name;
+        private String description;
+        private final ChatModel chatModel;
+        private final Map<String, Agent> agentMap = new LinkedHashMap<>();
+        private Consumer<GraphSpec> graphBuilder;
+        private int maxTotalIterations = 8;
+        private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
+
+        public Builder(ChatModel chatModel) {
+            this.chatModel = chatModel;
+        }
+
+        public Builder addAgent(Agent agent) {
+            Objects.requireNonNull(agent.name(), "agent.name");
+            Objects.requireNonNull(agent.description(), "agent.description");
+
+            agentMap.put(agent.name(), agent);
+            return this;
+        }
+
+        public Builder promptProvider(TeamPromptProvider promptProvider) {
+            this.promptProvider = promptProvider;
+            return this;
+        }
+
+        public Builder maxTotalIterations(int maxTotalIterations) {
+            this.maxTotalIterations = Math.max(1, maxTotalIterations);
+            return this;
+        }
+
+        public Builder name(String name) {
+            this.name = name;
+            return this;
+        }
+
+        public Builder description(String description) {
+            this.description = description;
+            return this;
+        }
+
+        public Builder graph(Consumer<GraphSpec> graphBuilder) {
+            this.graphBuilder = graphBuilder;
+            return this;
+        }
+
+        public TeamAgent build() {
+            Graph graph = initGraph();
+
+            TeamAgent agent = new TeamAgent(graph, name, description);
+
+            return agent;
+        }
+
+        private Graph initGraph() {
+            if (agentMap.isEmpty()) {
+                //需要自己构图
+                return Graph.create(this.name, spec -> {
+                    if (graphBuilder != null) {
+                        graphBuilder.accept(spec);
+                    }
+                });
+            } else {
+                TeamSupervisorTask task = new TeamSupervisorTask(this.name, chatModel, agentMap, maxTotalIterations, promptProvider);
+
+                //自动管家模式
+                return Graph.create(this.name, spec -> {
+                    spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
+
+                    spec.addExclusive(Agent.ID_ROUTER).task(task).then(ns -> {
+                        for (Agent agent : agentMap.values()) {
+                            ns.linkAdd(agent.name(), l -> l.when(ctx ->
+                                    agent.name().equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))));
+                        }
+                    }).linkAdd(Agent.ID_END);
+
+
+                    for (Agent agent : agentMap.values()) {
+                        spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
+                    }
+
+                    spec.addEnd(Agent.ID_END);
+
+                    if (graphBuilder != null) {
+                        graphBuilder.accept(spec);
+                    }
+                });
+            }
+        }
     }
 }

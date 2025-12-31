@@ -20,113 +20,40 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.Graph;
-import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.flow.Node;
+import org.noear.solon.flow.TaskComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
-import java.util.function.Consumer;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 团队协作智能体构建器
+ * 团队协作管理任务
  *
  * @author noear
  * @since 3.8.1
  */
-public class TeamAgentBuilder {
-    static final Logger LOG = LoggerFactory.getLogger(TeamAgentBuilder.class);
-
-    private String name;
-    private String description;
+ class TeamSupervisorTask implements TaskComponent {
+    static final Logger LOG = LoggerFactory.getLogger(TeamSupervisorTask.class);
+    private final String teamName;
     private final ChatModel chatModel;
-    private final Map<String, Agent> agentMap = new LinkedHashMap<>();
-    private Consumer<GraphSpec> graphBuilder;
-    private int maxTotalIterations = 8;
-    private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
+    private final Map<String, Agent> agentMap;
+    private final int maxTotalIterations;
+    private final TeamPromptProvider promptProvider;
 
-    public TeamAgentBuilder(ChatModel chatModel) {
+    public TeamSupervisorTask(String teamName, ChatModel chatModel, Map<String, Agent> agentMap, int maxTotalIterations, TeamPromptProvider promptProvider) {
+        this.teamName = teamName;
         this.chatModel = chatModel;
-    }
-
-    public TeamAgentBuilder addAgent(Agent agent) {
-        Objects.requireNonNull(agent.name(), "agent.name");
-        Objects.requireNonNull(agent.description(), "agent.description");
-
-        agentMap.put(agent.name(), agent);
-        return this;
-    }
-
-    public TeamAgentBuilder promptProvider(TeamPromptProvider promptProvider) {
+        this.agentMap = agentMap;
+        this.maxTotalIterations = maxTotalIterations;
         this.promptProvider = promptProvider;
-        return this;
     }
 
-    public TeamAgentBuilder maxTotalIterations(int maxTotalIterations) {
-        this.maxTotalIterations = Math.max(1, maxTotalIterations);
-        return this;
-    }
-
-    public TeamAgentBuilder name(String name) {
-        this.name = name;
-        return this;
-    }
-
-    public TeamAgentBuilder description(String description) {
-        this.description = description;
-        return this;
-    }
-
-    public TeamAgentBuilder graph(Consumer<GraphSpec> graphBuilder) {
-        this.graphBuilder = graphBuilder;
-        return this;
-    }
-
-    public TeamAgent build() {
-        Graph graph = initGraph();
-
-        TeamAgent agent = new TeamAgent(graph, name, description);
-
-        return agent;
-    }
-
-    private Graph initGraph() {
-        if (agentMap.isEmpty()) {
-            //需要自己构图
-            return Graph.create(this.name, spec -> {
-                if (graphBuilder != null) {
-                    graphBuilder.accept(spec);
-                }
-            });
-        } else {
-            //自动管家模式
-            return Graph.create(this.name, spec -> {
-                spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
-
-                spec.addExclusive(Agent.ID_ROUTER).task(this::run).then(ns -> {
-                    for (Agent agent : agentMap.values()) {
-                        ns.linkAdd(agent.name(), l -> l.when(ctx ->
-                                agent.name().equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))));
-                    }
-                }).linkAdd(Agent.ID_END);
-
-
-                for (Agent agent : agentMap.values()) {
-                    spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
-                }
-
-                spec.addEnd(Agent.ID_END);
-
-                if (graphBuilder != null) {
-                    graphBuilder.accept(spec);
-                }
-            });
-        }
-    }
-
-    private void run(FlowContext context, Node node) throws Throwable {
+    @Override
+    public void run(FlowContext context, Node node) throws Throwable {
         Prompt prompt = context.getAs(Agent.KEY_PROMPT);
         String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = context.getAs(traceKey);
@@ -138,7 +65,7 @@ public class TeamAgentBuilder {
         // 2. 熔断与循环检测
         if (iters >= maxTotalIterations || (trace != null && trace.isLooping())) {
             String reason = iters >= maxTotalIterations ? "Maximum iterations reached" : "Loop detected";
-            LOG.warn("Team Agent [{}] forced exit: {}", name, reason);
+            LOG.warn("Team Agent [{}] forced exit: {}", teamName, reason);
             if (trace != null) {
                 trace.addStep("system", "Execution halted: " + reason, 0);
             }
