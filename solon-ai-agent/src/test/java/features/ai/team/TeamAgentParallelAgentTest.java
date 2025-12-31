@@ -19,9 +19,9 @@ public class TeamAgentParallelAgentTest {
 
         // 1. 定义子 Agent
         Agent enTranslator = ReActAgent.builder(chatModel).nameAs("en_translator")
-                .systemPromptProvider(c -> "你负责将文本翻译为英文").build();
+                .promptProvider(c -> "你负责将文本翻译为英文").build();
         Agent frTranslator = ReActAgent.builder(chatModel).nameAs("fr_translator")
-                .systemPromptProvider(c -> "你负责将文本翻译为法文").build();
+                .promptProvider(c -> "你负责将文本翻译为法文").build();
 
         // 2. 定义并行图
         Graph parallelGraph = Graph.create(teamName, spec -> {

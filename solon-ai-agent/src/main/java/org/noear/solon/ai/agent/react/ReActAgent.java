@@ -166,7 +166,7 @@ public class ReActAgent implements Agent {
             return this;
         }
 
-        public Builder systemPromptProvider(ReActPromptProvider val) {
+        public Builder promptProvider(ReActPromptProvider val) {
             config.promptProvider(val);
             return this;
         }

@@ -24,13 +24,13 @@ public class TeamAgentTravelTest {
         // 1. 定义子 Agent
         Agent searcher = ReActAgent.builder(chatModel)
                 .nameAs("searcher")
-                .systemPromptProvider(config -> "你是一个旅游信息搜索员。请查询目的地天气。")
+                .promptProvider(config -> "你是一个旅游信息搜索员。请查询目的地天气。")
                 .addTool(new MethodToolProvider(new WeatherTool()))
                 .build();
 
         Agent planner = ReActAgent.builder(chatModel)
                 .nameAs("planner")
-                .systemPromptProvider(config -> "你是一个资深旅行规划师。根据天气信息定制行程，下雨请安排室内。")
+                .promptProvider(config -> "你是一个资深旅行规划师。根据天气信息定制行程，下雨请安排室内。")
                 .build();
 
         // 2. 定义图结构
