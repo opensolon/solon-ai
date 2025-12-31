@@ -49,7 +49,7 @@ public class ReActHitlDemo {
 
         // --- 第二次执行：恢复运行 ---
         System.out.println("恢复运行...");
-        String response2 = agent.call(context, null); // 恢复时 prompt 传 null 即可，状态在 context 里
+        String response2 = agent.call(context); // 恢复时 prompt 传 null 即可，状态在 context 里
 
         System.out.println("最终回复：" + response2);
     }

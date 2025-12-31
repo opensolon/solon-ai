@@ -53,7 +53,7 @@ public class TeamAgentHumanInTheLoopTest {
         System.out.println(">>> [人工审批]：审核通过！准予执行。");
 
         // 继续执行：传入 null，从 human_audit 的下一个节点（confirmer）开始
-        String finalOutput = auditTeam.call(context, null);
+        String finalOutput = auditTeam.call(context);
 
         // 3. 单测检测
         System.out.println(">>> [最终输出]：\n" + finalOutput);

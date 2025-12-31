@@ -8,6 +8,7 @@ import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 
 /**
@@ -36,7 +37,7 @@ public class TeamAgentPersistenceAndResumeTest {
         snapshot.addStep("searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
         snapshot.setLastNode(tripTeam.getGraph().getNodeOrThrow(Agent.ID_ROUTER));
 
-        contextStep1.put(Agent.KEY_PROMPT, "帮我规划上海行程并给穿衣建议");
+        contextStep1.put(Agent.KEY_PROMPT, Prompt.of("帮我规划上海行程并给穿衣建议"));
         contextStep1.put(Agent.KEY_HISTORY, "[searcher]: 上海明日天气：大雨转雷阵雨。");
         contextStep1.put("__" + teamId, snapshot);
 
@@ -47,7 +48,7 @@ public class TeamAgentPersistenceAndResumeTest {
         FlowContext contextStep2 = FlowContext.fromJson(jsonState);
         System.out.println(">>> 阶段2启动：正在从断点 [" + contextStep2.lastNodeId() + "] 恢复任务...");
 
-        String finalResult = tripTeam.call(contextStep2, null); // 传入 null 触发自动恢复
+        String finalResult = tripTeam.call(contextStep2); // 传入 null 触发自动恢复
 
         // 3. 单测检测
         System.out.println(">>> 恢复后的最终输出：\n" + finalResult);

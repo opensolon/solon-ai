@@ -67,7 +67,7 @@ public class ReActAgentHitlTest {
         // --- 第三步：恢复执行 ---
         System.out.println("--- 第二次调用 (恢复执行) ---");
         // 恢复时传入原 context，prompt 会从 state 中自动获取
-        String result2 = agent.call(context, null);
+        String result2 = agent.call(context);
 
         // 验证：最终结果应包含退款成功的关键字
         Assertions.assertNotNull(result2);
