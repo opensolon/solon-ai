@@ -24,43 +24,53 @@ public class TeamAgentTravelTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         String teamId = "auto_travel_agent";
 
-        // 1. 定义具备能力的 Agent
+        // 1. 强化 Searcher：明确告知其必须使用工具
         Agent searcher = ReActAgent.builder(chatModel).name("searcher")
-                .description("负责查询实时天气，必须调用工具获取真实数据")
-                .addTool(new MethodToolProvider(new WeatherService())).build();
+                .description("负责查询实时天气。必须基于 query 工具的 Observation 给出结论。")
+                .addTool(new MethodToolProvider(new WeatherService()))
+                .build();
 
+        // 2. 强化 Planner：强制其必须参考协作历史，严禁忽略天气
         Agent planner = ReActAgent.builder(chatModel).name("planner")
-                .description("负责根据环境数据制定行程。如果是雨天，请务必推荐室内场馆。").build();
+                .description("行程规划专家。要求：必须优先阅读协作历史中的天气信息！如果历史显示下雨，严禁安排户外步行，必须安排室内场馆（如博物馆、室内商场）。")
+                .build();
 
-        // 2. 组建全自动团队
+        // 3. 组建团队
         TeamAgent travelTeam = TeamAgent.builder(chatModel)
-                .name(teamId).addAgent(searcher).addAgent(planner).build();
+                .name(teamId)
+                .addAgent(searcher)
+                .addAgent(planner)
+                .maxTotalIterations(5) // 限制迭代次数防止死循环
+                .build();
 
         FlowContext context = FlowContext.of("sn_travel_888");
-        String result = travelTeam.ask(context, "我想去东京玩一天，请帮我规划");
 
-        // 3. 打印协作足迹
+        // 增加背景：强调当前时间，促使 Agent 关注实时性
+        String result = travelTeam.ask(context, "我现在在东京，请帮我规划一天的行程。");
+
         System.out.println("--- 最终方案 ---\n" + result);
-        TeamTrace trace = context.getAs("__" + teamId);
-        if (trace != null) {
-            System.out.println("\n[协作流水线]");
-            trace.getSteps().forEach(s -> System.out.printf(" - %s (%dms)\n", s.getAgentName(), s.getDuration()));
-        }
 
         // 4. 单测检测
-        Assertions.assertNotNull(trace);
-        // 检测逻辑：由于模拟工具返回大雨，Planner 必须产出室内方案
-        boolean logicOk = result.contains("室内") || result.contains("博物馆") || result.contains("商场");
-        Assertions.assertTrue(logicOk, "Supervisor 或 Planner 未能根据大雨天气调整为室内行程");
+        TeamTrace trace = context.getAs("__" + teamId);
+        Assertions.assertNotNull(trace, "未生成协作轨迹");
+
+        // 核心逻辑检测
+        // 修复点：只要 Planner 的最终输出中包含了“室内”或 searcher 提到的“博物馆”，即视为逻辑通过
+        boolean hasIndoorAdvise = result.contains("室内") || result.contains("博物馆") || result.contains("商场");
+
+        // 打印调试信息
+        if(!hasIndoorAdvise) {
+            System.err.println("测试失败：Planner 忽略了暴雨警告，依然安排了户外活动！");
+        }
+
+        Assertions.assertTrue(hasIndoorAdvise, "Planner 未能根据大雨天气调整为室内行程");
     }
 
-    /**
-     * 模拟天气服务工具
-     */
     public static class WeatherService {
         @ToolMapping(description = "获取指定城市的实时天气")
         public String query(@Param(description = "城市") String city) {
-            return city + "当前气象：特大暴雨，不建议户外活动。";
+            // 返回极其恶劣的天气，强迫 Planner 必须做出反应
+            return "【警告】" + city + "当前气象：特大暴雨并伴有强风，所有户外景区已关闭，不建议任何户外步行。";
         }
     }
 }
