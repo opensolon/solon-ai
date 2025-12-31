@@ -15,7 +15,7 @@ import java.util.Objects;
  */
 @Preview("3.8")
 public class TeamAgent implements Agent {
-    private String name = "multi_agent";
+    private String name = "team_agent";
     private final FlowEngine flowEngine;
     private final Graph graph;
 
