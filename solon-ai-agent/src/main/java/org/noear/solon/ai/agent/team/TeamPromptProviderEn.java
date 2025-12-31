@@ -17,8 +17,8 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
 
-import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Team 提示词提供者（英文提示词）
@@ -35,9 +35,13 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
 
     @Override
     public String getSystemPrompt(String prompt, Map<String, Agent> agentMap) {
+        String specialists = agentMap.values().stream()
+                .map(a -> String.format("- %s: %s", a.name(), a.description()))
+                .collect(Collectors.joining("\n"));
+
         return "You are a team supervisor. \n" +
                 "Global Task: " + prompt + "\n" +
-                "Specialists: " + agentMap.keySet() + ".\n" +
+                "Team Members and their Responsibilities:\n" + specialists + "\n" +
                 "Instruction: Review the collaboration history and decide who should act next. \n" +
                 "- If the task is finished, respond ONLY with 'FINISH'. \n" +
                 "- Otherwise, respond ONLY with the specialist's name.";

@@ -26,8 +26,10 @@ import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * 团队协作智能体
@@ -142,6 +144,9 @@ public class TeamAgent implements Agent {
         }
 
         public Builder addAgent(Agent agent) {
+             Objects.requireNonNull(agent.name(), "agent.name");
+             Objects.requireNonNull(agent.description(), "agent.description");
+
             agentMap.put(agent.name(), agent);
             return this;
         }
@@ -224,8 +229,12 @@ public class TeamAgent implements Agent {
 
             // 2. 熔断与循环检测
             if (iters >= maxTotalIterations || (trace != null && trace.isLooping())) {
-                LOG.warn("MultiAgent team reached limit or detected loop. Forcing exit.");
-                context.put(Agent.KEY_NEXT_AGENT, "end");
+                String reason = iters >= maxTotalIterations ? "Maximum iterations reached" : "Loop detected";
+                LOG.warn("Team Agent [{}] forced exit: {}", name, reason);
+                if (trace != null) {
+                    trace.addStep("system", "Execution halted: " + reason, 0);
+                }
+                context.put(Agent.KEY_NEXT_AGENT, Agent.ID_END);
                 return;
             }
 
@@ -237,12 +246,16 @@ public class TeamAgent implements Agent {
             )).call().getResultContent().trim(); // 去除首尾空格
 
             // 4. 解析决策
-            String nextAgent = "end";
-            String decisionUpper = decision.toUpperCase();
-            if (!decision.contains("FINISH")) {
-                for (String name : agentMap.keySet()) {
-                    // 使用包含匹配，并忽略大小写，防止标点符号干扰
-                    if (decisionUpper.contains(name.toUpperCase())) {
+            String nextAgent = Agent.ID_END;
+            String cleanDecision = " " + decision.toUpperCase().replaceAll("[\\p{Punct}]", " ") + " ";
+
+            if (!cleanDecision.contains(" FINISH ")) {
+                List<String> sortedNames = agentMap.keySet().stream()
+                        .sorted((a, b) -> Integer.compare(b.length(), a.length()))
+                        .collect(Collectors.toList());
+
+                for (String name : sortedNames) {
+                    if (cleanDecision.contains(" " + name.toUpperCase() + " ")) {
                         nextAgent = name;
                         break;
                     }

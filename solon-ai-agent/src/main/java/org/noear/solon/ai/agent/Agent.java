@@ -53,10 +53,8 @@ public interface Agent extends NamedTaskComponent {
      * @param node    当前节点
      */
     default void run(FlowContext context, Node node) throws Throwable {
-        // 1. 状态清理与计数
+        // 1. 状态清理（不建议在 run 里全局累加 ITERATIONS，因为这会导致并行分支计数混乱）
         context.lastNode(null);
-        int iters = context.getOrDefault(KEY_ITERATIONS, 0);
-        context.put(KEY_ITERATIONS, iters + 1);
 
         // 2. 执行任务
         String prompt = context.getAs(KEY_PROMPT);
@@ -67,16 +65,16 @@ public interface Agent extends NamedTaskComponent {
         // 3. 更新结果
         context.put(KEY_ANSWER, result);
 
-        // 4. 记录宏观协作历史 (用于 Supervisor 决策)
-        StringBuilder history = new StringBuilder(context.getOrDefault(KEY_HISTORY, ""));
-        history.append("\n[").append(name()).append("]: ").append(result);
-        context.put(KEY_HISTORY, history.toString());
-
-        // 5. 【新增】记录到结构化轨迹 (TeamTrace)
+        // 4. 记录轨迹
         String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
-        Object traceObj = context.get(traceKey);
-        if (traceObj instanceof TeamTrace) {
-            ((TeamTrace) traceObj).addStep(name(), result, duration);
+        if (traceKey != null) {
+            Object traceObj = context.get(traceKey);
+            if (traceObj instanceof TeamTrace) {
+                ((TeamTrace) traceObj).addStep(name(), result, duration);
+
+                String history = ((TeamTrace) traceObj).getFormattedHistory();
+                context.put(KEY_HISTORY, history);
+            }
         }
     }
 

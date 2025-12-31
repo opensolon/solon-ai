@@ -18,8 +18,8 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
 
-import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Team 提示词提供者（中文提示词）
@@ -36,9 +36,13 @@ public class TeamPromptProviderCn implements TeamPromptProvider {
 
     @Override
     public String getSystemPrompt(String prompt, Map<String, Agent> agentMap) {
+        String members = agentMap.values().stream()
+                .map(a -> String.format("- %s: %s", a.name(), a.description()))
+                .collect(Collectors.joining("\n"));
+
         return "你是一个团队负责人（Supervisor）。\n" +
                 "全局任务: " + prompt + "\n" +
-                "团队成员: " + agentMap.keySet() + "。\n" +
+                "团队成员及其职责: \n" + members + "\n" +
                 "指令：根据协作历史决定下一步由谁执行。\n" +
                 "- 如果任务已圆满完成，请仅回复 'FINISH'。\n" +
                 "- 否则，请仅回复成员的名字（例如：'Coder' 或 'Reviewer'）。";
