@@ -9,6 +9,8 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.Node;
+import org.noear.solon.flow.TaskComponent;
 
 /**
  * 【业务场景测试】：人工介入（Human-in-the-loop）审批流
@@ -89,9 +91,9 @@ public class TeamAgentHumanInTheLoopTest {
     }
 
     // 自定义人工审核任务组件
-    static class HumanAuditTask implements org.noear.solon.flow.TaskComponent {
+    static class HumanAuditTask implements TaskComponent {
         @Override
-        public void run(org.noear.solon.flow.FlowContext context, org.noear.solon.flow.Node node) throws Throwable {
+        public void run(FlowContext context, Node node) throws Throwable {
             Boolean approved = context.getOrDefault("audit_approved", false);
 
             if (!approved) {
@@ -101,8 +103,9 @@ public class TeamAgentHumanInTheLoopTest {
                 // 暂停执行，等待下次调用
                 context.stop();
             } else {
+                String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
                 // 审核通过，继续到confirmer
-                context.put(Agent.KEY_NEXT_AGENT, "confirmer");
+                context.<TeamTrace>getAs(traceKey).setRoute("confirmer");
             }
         }
     }

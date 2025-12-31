@@ -102,8 +102,6 @@ public interface Agent extends NamedTaskComponent {
     static String KEY_PROMPT = "prompt";
     static String KEY_ANSWER = "answer";
     static String KEY_HISTORY = "history";
-    static String KEY_NEXT_AGENT = "next_agent";
-    static String KEY_ITERATIONS = "_total_iterations";
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key";
 
     static String ID_START = "start";

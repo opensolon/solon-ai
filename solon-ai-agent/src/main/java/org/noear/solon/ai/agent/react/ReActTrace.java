@@ -39,10 +39,11 @@ import java.util.List;
 @Preview("3.8")
 public class ReActTrace {
     private Prompt prompt;
-    private AtomicInteger stepCounter;
     private List<ChatMessage> messages;
 
+    private AtomicInteger stepCounter;
     private volatile String route;
+
     private String finalAnswer;
     private String lastResponse;
     private NodeTrace lastNode;
@@ -111,10 +112,6 @@ public class ReActTrace {
 
     public void setLastNode(NodeTrace lastNode) {
         this.lastNode = lastNode;
-    }
-
-    public void setLastNode(Node lastNode) {
-        this.lastNode = new NodeTrace(lastNode);
     }
 
     public synchronized List<ChatMessage> getMessages() {

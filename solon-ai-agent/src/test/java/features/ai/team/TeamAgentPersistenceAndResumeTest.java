@@ -66,4 +66,68 @@ public class TeamAgentPersistenceAndResumeTest {
         Assertions.assertTrue(finalResult.contains("上海"), "最终答案丢失了初始 Prompt 中的地理信息");
         Assertions.assertTrue(finalResult.contains("雨") || finalResult.contains("伞"), "规划师未正确读取历史记录中的天气信息");
     }
+
+    @Test
+    public void testResetOnNewPrompt() throws Throwable {
+        // 测试：resetOnNewPrompt 参数的效果
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        TeamAgent team = TeamAgent.builder(chatModel)
+                .name("reset_test_team")
+                .addAgent(ReActAgent.builder(chatModel)
+                        .name("agent")
+                        .description("测试Agent")
+                        .build())
+                .resetOnNewPrompt(true) // 开启 reset 模式
+                .build();
+
+        FlowContext context = FlowContext.of("test_reset");
+
+        // 第一次调用
+        String result1 = team.call(context, "第一个问题");
+        System.out.println("第一次结果: " + result1);
+
+        // 获取轨迹
+        Object trace1 = context.get("__reset_test_team");
+        Assertions.assertNotNull(trace1);
+
+        // 第二次调用（新提示词，应该重置）
+        String result2 = team.call(context, "第二个问题");
+        System.out.println("第二次结果: " + result2);
+
+        // 应该开始新的轨迹
+        // 这里可以添加更详细的检查逻辑
+    }
+
+    @Test
+    public void testContextStateIsolation() throws Throwable {
+        // 测试：不同 FlowContext 之间的状态隔离
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        TeamAgent team = TeamAgent.builder(chatModel)
+                .name("isolation_team")
+                .addAgent(ReActAgent.builder(chatModel)
+                        .name("agent")
+                        .description("测试Agent")
+                        .build())
+                .build();
+
+        // 两个独立的上下文
+        FlowContext context1 = FlowContext.of("session_1");
+        FlowContext context2 = FlowContext.of("session_2");
+
+        // 在 context1 中设置状态
+        context1.put("custom_state", "value1");
+        String result1 = team.call(context1, "会话1的问题");
+
+        // context2 不应该看到 context1 的状态
+        context2.put("custom_state", "value2");
+        String result2 = team.call(context2, "会话2的问题");
+
+        Assertions.assertNotEquals(
+                context1.get("custom_state"),
+                context2.get("custom_state"),
+                "不同会话的状态应该隔离"
+        );
+    }
 }

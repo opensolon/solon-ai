@@ -92,11 +92,11 @@ public class TeamAgent implements Agent {
 
         if (prompt != null) {
             context.put(Agent.KEY_PROMPT, prompt);
-            context.put(Agent.KEY_ITERATIONS, 0);
             context.lastNode(null);
+            tmpTrace.resetIterations();
             tmpTrace.setLastNode((NodeTrace) null);
         } else {
-            context.put(Agent.KEY_ITERATIONS, 0);
+            tmpTrace.resetIterations();
         }
 
         TeamTrace trace = tmpTrace;
@@ -198,6 +198,7 @@ public class TeamAgent implements Agent {
                     }
                 });
             } else {
+                String traceKey = "__" + name;
                 TeamSupervisorTask task = new TeamSupervisorTask(this.name, chatModel, agentMap, maxTotalIterations, promptProvider);
 
                 //自动管家模式
@@ -206,8 +207,8 @@ public class TeamAgent implements Agent {
 
                     spec.addExclusive(Agent.ID_ROUTER).task(task).then(ns -> {
                         for (Agent agent : agentMap.values()) {
-                            ns.linkAdd(agent.name(), l -> l.when(ctx ->
-                                    agent.name().equalsIgnoreCase(ctx.getAs(Agent.KEY_NEXT_AGENT))));
+                            ns.linkAdd(agent.name(), l -> l.when(
+                                    ctx -> agent.name().equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
                         }
                     }).linkAdd(Agent.ID_END);
 

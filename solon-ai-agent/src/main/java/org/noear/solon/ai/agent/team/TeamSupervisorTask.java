@@ -59,8 +59,8 @@ import java.util.stream.Collectors;
         TeamTrace trace = context.getAs(traceKey);
 
         // 1. 获取团队协作历史（从 Trace 获取）
-        String teamHistory = (trace != null) ? trace.getFormattedHistory() : "No progress yet.";
-        int iters = context.getOrDefault(Agent.KEY_ITERATIONS, 0);
+        String teamHistory = trace.getFormattedHistory();
+        int iters = trace.iterationsCount();
 
         // 2. 熔断与循环检测
         if (iters >= maxTotalIterations || (trace != null && trace.isLooping())) {
@@ -69,7 +69,7 @@ import java.util.stream.Collectors;
             if (trace != null) {
                 trace.addStep("system", "Execution halted: " + reason, 0);
             }
-            context.put(Agent.KEY_NEXT_AGENT, Agent.ID_END);
+            trace.setRoute(Agent.ID_END);
             return;
         }
 
@@ -101,7 +101,7 @@ import java.util.stream.Collectors;
             LOG.debug("Supervisor decision: {} -> Next Agent: {}", decision, nextAgent);
         }
 
-        context.put(Agent.KEY_NEXT_AGENT, nextAgent);
-        context.put(Agent.KEY_ITERATIONS, iters + 1);
+        trace.setRoute(nextAgent);
+        trace.nextIterations();
     }
 }

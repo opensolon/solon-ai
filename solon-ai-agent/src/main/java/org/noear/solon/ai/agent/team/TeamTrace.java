@@ -15,10 +15,10 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.flow.Node;
 import org.noear.solon.flow.NodeTrace;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -29,8 +29,36 @@ import java.util.stream.Collectors;
  */
 public class TeamTrace {
     private final List<TeamStep> steps = new ArrayList<>();
+
+    private volatile String route;
+    private AtomicInteger iterations;
+
     private String finalAnswer;
     private NodeTrace lastNode;
+
+    public TeamTrace() {
+        this.iterations = new AtomicInteger(0);
+    }
+
+    public String getRoute() {
+        return route;
+    }
+
+    public void setRoute(String route) {
+        this.route = route;
+    }
+
+    public int iterationsCount() {
+        return iterations.get();
+    }
+
+    public void resetIterations() {
+        iterations.set(0);
+    }
+
+    public int nextIterations() {
+        return iterations.incrementAndGet();
+    }
 
     public NodeTrace getLastNode() {
         return lastNode;
@@ -42,10 +70,6 @@ public class TeamTrace {
 
     public void setLastNode(NodeTrace lastNode) {
         this.lastNode = lastNode;
-    }
-
-    public void setLastNode(Node lastNode) {
-        this.lastNode = new NodeTrace(lastNode);
     }
 
     /**
@@ -128,8 +152,16 @@ public class TeamTrace {
             this.duration = duration;
         }
 
-        public String getAgentName() { return agentName; }
-        public String getContent() { return content; }
-        public long getDuration() { return duration; }
+        public String getAgentName() {
+            return agentName;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public long getDuration() {
+            return duration;
+        }
     }
 }

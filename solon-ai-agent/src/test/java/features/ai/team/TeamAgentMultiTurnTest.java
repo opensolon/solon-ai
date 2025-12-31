@@ -9,7 +9,6 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.NodeTrace;
 
 /**
  * 【修复版】多轮对话历史注入测试
@@ -58,11 +57,10 @@ public class TeamAgentMultiTurnTest {
         System.out.println("第一轮历史:\n" + trace1.getFormattedHistory());
 
         // 关键：手动重置状态，让第二轮能重新开始
-        trace1.setLastNode((NodeTrace) null);
+        trace1.setLastNode( null);
+        trace1.setRoute(null);
+        trace1.resetIterations();
         context.lastNode(null);
-        context.put(Agent.KEY_ITERATIONS, 0);
-        // 清除可能的循环检测状态
-        context.remove(Agent.KEY_NEXT_AGENT);
 
         // --- 第二轮：预算约束注入 ---
         System.out.println("\n>>> [Round 2] 用户：预算只有 500 元，请重新规划杭州行程。");
