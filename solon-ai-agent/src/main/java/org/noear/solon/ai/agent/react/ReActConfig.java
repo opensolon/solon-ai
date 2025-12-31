@@ -34,8 +34,8 @@ import java.util.Objects;
 public class ReActConfig {
     private String name;
     private String description;
-    private ChatModel chatModel;
-    private List<FunctionTool> tools = new ArrayList<>();
+    private final ChatModel chatModel;
+    private final List<FunctionTool> tools = new ArrayList<>();
     private int maxSteps = 10;
     private boolean enableLogging = false;
     private float temperature = 0.7F;
@@ -50,74 +50,51 @@ public class ReActConfig {
         this.chatModel = chatModel;
     }
 
-    /**
-     * 生成标准 ReAct 提示词
-     * 强制模型遵循 Thought/Action/Observation 的链式思考格式
-     */
-    public String getSystemPrompt() {
-        return promptProvider.getSystemPrompt(this);
-    }
 
-    // --- Builder 链式调用方法 ---
+    // --- Setter  ---
 
-    public ReActConfig name(String name) {
+    public void setName(String name) {
         this.name = name;
-        return this;
     }
 
-    public ReActConfig description(String description) {
+    public void setDescription(String description) {
         this.description = description;
-        return this;
     }
 
-    public ReActConfig tools(List<FunctionTool> tools) {
-        this.tools = tools;
-        return this;
-    }
-
-    public ReActConfig addTool(FunctionTool tool) {
+    public void addTool(FunctionTool tool) {
         this.tools.add(tool);
-        return this;
     }
 
-    public ReActConfig addTool(List<FunctionTool> tools) {
+    public void addTool(List<FunctionTool> tools) {
         this.tools.addAll(tools);
-        return this;
     }
 
-    public ReActConfig addTool(ToolProvider toolProvider) {
+    public void addTool(ToolProvider toolProvider) {
         this.tools.addAll(toolProvider.getTools());
-        return this;
     }
 
-    public ReActConfig enableLogging(boolean val) {
+    public void enableLogging(boolean val) {
         this.enableLogging = val;
-        return this;
     }
 
-    public ReActConfig temperature(float val) {
+    public void setTemperature(float val) {
         this.temperature = val;
-        return this;
     }
 
-    public ReActConfig maxTokens(int val) {
+    public void setMaxTokens(int val) {
         this.maxTokens = val;
-        return this;
     }
 
-    public ReActConfig maxSteps(int val) {
+    public void setMaxSteps(int val) {
         this.maxSteps = val;
-        return this;
     }
 
-    public ReActConfig interceptor(ReActInterceptor val) {
+    public void setInterceptor(ReActInterceptor val) {
         this.interceptor = val;
-        return this;
     }
 
-    public ReActConfig promptProvider(ReActPromptProvider val) {
+    public void setPromptProvider(ReActPromptProvider val) {
         this.promptProvider = val;
-        return this;
     }
 
 
@@ -164,7 +141,7 @@ public class ReActConfig {
         return interceptor;
     }
 
-    public ReActPromptProvider getPromptProvider() {
-        return promptProvider;
+    public String getSystemPrompt() {
+        return promptProvider.getSystemPrompt(this);
     }
 }

@@ -140,12 +140,12 @@ public class ReActAgent implements Agent {
         }
 
         public Builder name(String val) {
-            config.name(val);
+            config.setName(val);
             return this;
         }
 
         public Builder description(String val) {
-            config.description(val);
+            config.setDescription(val);
             return this;
         }
 
@@ -170,27 +170,27 @@ public class ReActAgent implements Agent {
         }
 
         public Builder temperature(float val) {
-            config.temperature(val);
+            config.setTemperature(val);
             return this;
         }
 
         public Builder maxSteps(int val) {
-            config.maxSteps(val);
+            config.setMaxSteps(val);
             return this;
         }
 
         public Builder maxTokens(int val) {
-            config.maxTokens(val);
+            config.setMaxTokens(val);
             return this;
         }
 
         public Builder promptProvider(ReActPromptProvider val) {
-            config.promptProvider(val);
+            config.setPromptProvider(val);
             return this;
         }
 
         public Builder interceptor(ReActInterceptor val) {
-            config.interceptor(val);
+            config.setInterceptor(val);
             return this;
         }
 
