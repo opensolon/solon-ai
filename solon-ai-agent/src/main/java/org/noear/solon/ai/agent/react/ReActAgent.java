@@ -27,8 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * ReActAgent
- * 基于 Solon Flow 流引擎实现 Thought -> Action -> Observation 循环
+ * 自省反思自能体
  *
  * @author noear
  * @since 3.8.1
