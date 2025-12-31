@@ -33,6 +33,7 @@ import java.util.Objects;
 @Preview("3.8")
 public class ReActConfig {
     private String name;
+    private String description;
     private ChatModel chatModel;
     private List<FunctionTool> tools = new ArrayList<>();
     private int maxSteps = 10;
@@ -61,6 +62,11 @@ public class ReActConfig {
 
     public ReActConfig name(String name) {
         this.name = name;
+        return this;
+    }
+
+    public ReActConfig description(String description) {
+        this.description = description;
         return this;
     }
 
@@ -115,6 +121,10 @@ public class ReActConfig {
 
     public String getName() {
         return name;
+    }
+
+    public String getDescription() {
+        return description;
     }
 
     public List<FunctionTool> getTools() {

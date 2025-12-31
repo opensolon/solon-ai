@@ -35,6 +35,11 @@ public interface Agent extends NamedTaskComponent {
     String name();
 
     /**
+     * 描述
+     */
+    String description();
+
+    /**
      * 询问
      *
      * @param prompt 提示语

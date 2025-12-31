@@ -37,6 +37,7 @@ public class ReActAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
     private final String name;
+    private String description;
     private final ReActConfig config;
     private final Graph graph;
     private final FlowEngine flowEngine;
@@ -44,6 +45,7 @@ public class ReActAgent implements Agent {
 
     public ReActAgent(ReActConfig config) {
         this.name = config.getName() == null ? "react_agent" : config.getName();
+        this.description = config.getDescription();
         this.config = config;
         this.flowEngine = FlowEngine.newInstance();
         this.graph = initGraph();
@@ -78,6 +80,11 @@ public class ReActAgent implements Agent {
     @Override
     public String name() {
         return name;
+    }
+
+    @Override
+    public String description() {
+        return description;
     }
 
     @Override
@@ -133,6 +140,11 @@ public class ReActAgent implements Agent {
 
         public Builder nameAs(String val) {
             config.name(val);
+            return this;
+        }
+
+        public Builder descriptionAs(String val) {
+            config.description(val);
             return this;
         }
 

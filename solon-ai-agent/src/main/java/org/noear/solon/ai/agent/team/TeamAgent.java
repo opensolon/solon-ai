@@ -31,6 +31,7 @@ import java.util.Objects;
 @Preview("3.8")
 public class TeamAgent implements Agent {
     private String name = "team_agent";
+    private String description;
     private final FlowEngine flowEngine;
     private final Graph graph;
 
@@ -44,10 +45,21 @@ public class TeamAgent implements Agent {
         return this;
     }
 
+    public TeamAgent description(String description){
+        this.description = description;
+        return this;
+    }
+
     @Override
     public String name() {
         return name;
     }
+
+    @Override
+    public String description(){
+        return description;
+    }
+
 
     @Override
     public String ask(FlowContext context, String prompt) throws Throwable {
