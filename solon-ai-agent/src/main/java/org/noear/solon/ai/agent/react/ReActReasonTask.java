@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -49,7 +50,7 @@ public class ReActReasonTask implements TaskComponent {
 
         // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
         if (trace.nextStep() > config.getMaxSteps()) {
-            trace.setRoute(ReActTrace.ROUTE_END);
+            trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
         }
@@ -81,14 +82,14 @@ public class ReActReasonTask implements TaskComponent {
         // --- 处理模型空回复 (防止流程卡死) ---
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
             trace.appendMessage(ChatMessage.ofUser("Your last response was empty. If you need more info, use a tool. Otherwise, provide Final Answer."));
-            trace.setRoute(ReActTrace.ROUTE_REASON);
+            trace.setRoute(Agent.ID_REASON);
             return;
         }
 
         // --- 处理 Native Tool Calls ---
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
             trace.appendMessage(response.getMessage());
-            trace.setRoute(ReActTrace.ROUTE_ACTION);
+            trace.setRoute(Agent.ID_ACTION);
             return;
         }
 
@@ -111,14 +112,14 @@ public class ReActReasonTask implements TaskComponent {
         //决策路由
         if (rawContent.contains(config.getFinishMarker())) {
             // 结束
-            trace.setRoute(ReActTrace.ROUTE_END);
+            trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(clearContent));
         } else if (rawContent.contains("Action:")) {
             // 动作
-            trace.setRoute(ReActTrace.ROUTE_ACTION);
+            trace.setRoute(Agent.ID_ACTION);
         } else {
             // 兜底（结束）
-            trace.setRoute(ReActTrace.ROUTE_END);
+            trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(clearContent));
         }
     }

@@ -59,18 +59,18 @@ public class ReActAgent implements Agent {
 
         //构建计算图
         this.graph = Graph.create(this.name, spec -> {
-            spec.addStart(ReActTrace.ROUTE_START).linkAdd(ReActTrace.ROUTE_REASON);
+            spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON);
 
-            spec.addExclusive(ReActTrace.ROUTE_REASON)
+            spec.addExclusive(Agent.ID_REASON)
                     .task(new ReActReasonTask(config))
-                    .linkAdd(ReActTrace.ROUTE_ACTION, l -> l.when(ctx -> ReActTrace.ROUTE_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
-                    .linkAdd(ReActTrace.ROUTE_END);
+                    .linkAdd(Agent.ID_ACTION, l -> l.when(ctx -> Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
+                    .linkAdd(Agent.ID_END);
 
-            spec.addActivity(ReActTrace.ROUTE_ACTION)
+            spec.addActivity(Agent.ID_ACTION)
                     .task(new ReActActionTask(config))
-                    .linkAdd(ReActTrace.ROUTE_REASON);
+                    .linkAdd(Agent.ID_REASON);
 
-            spec.addEnd(ReActTrace.ROUTE_END);
+            spec.addEnd(Agent.ID_END);
         });
     }
 

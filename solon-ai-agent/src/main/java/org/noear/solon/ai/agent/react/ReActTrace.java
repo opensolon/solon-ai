@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -37,11 +38,6 @@ import java.util.List;
  */
 @Preview("3.8")
 public class ReActTrace {
-    public static final String ROUTE_REASON = "reason";
-    public static final String ROUTE_ACTION = "action";
-    public static final String ROUTE_START = "start";
-    public static final String ROUTE_END = "end";
-
     private Prompt prompt;
     private AtomicInteger stepCounter;
     private List<ChatMessage> messages;
@@ -54,7 +50,7 @@ public class ReActTrace {
     public ReActTrace() {
         this.stepCounter = new AtomicInteger(0);
         this.messages = new ArrayList<>();
-        this.route = ROUTE_REASON;
+        this.route = Agent.ID_REASON;
     }
 
     public ReActTrace(Prompt prompt) {
