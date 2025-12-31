@@ -67,6 +67,12 @@ public class TeamAgent implements Agent {
 
         // 5. 记录并返回结果
         String answer = context.getAs(Agent.KEY_ANSWER);
+
+        if (answer == null && trace.getStepCount() > 0) {
+            //如果 Context 里没拿到 answer（比如开发者在 Join 节点漏写了），则从 Trace 历史中取最后一位 Agent 的内容
+            answer = trace.getSteps().get(trace.getStepCount() - 1).getContent();
+        }
+
         trace.setFinalAnswer(answer);
         return answer;
     }

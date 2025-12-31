@@ -63,11 +63,26 @@ public class TeamTrace {
      * 检查是否陷入了简单的双人循环（例如 A -> B -> A -> B）
      */
     public boolean isLooping() {
-        if (steps.size() < 4) return false;
         int n = steps.size();
-        // 检测最近四步是否呈现 ABAB 结构
-        return steps.get(n - 1).getAgentName().equals(steps.get(n - 3).getAgentName()) &&
-                steps.get(n - 2).getAgentName().equals(steps.get(n - 4).getAgentName());
+        if (n < 2) return false;
+
+        // 如果同一个 Agent 连续 3 次被分配任务且内容高度相似（这里简化为连续 3 次分配给同一人）
+        if (n >= 3) {
+            String last1 = steps.get(n - 1).getAgentName();
+            String last2 = steps.get(n - 2).getAgentName();
+            String last3 = steps.get(n - 3).getAgentName();
+            if (last1.equals(last2) && last2.equals(last3)) {
+                return true; // 陷入原地踏步循环
+            }
+        }
+
+        // 然后 A-B-A-B 逻辑
+        if (n >= 4) {
+            return steps.get(n - 1).getAgentName().equals(steps.get(n - 3).getAgentName()) &&
+                    steps.get(n - 2).getAgentName().equals(steps.get(n - 4).getAgentName());
+        }
+
+        return false;
     }
 
     public List<TeamStep> getSteps() {

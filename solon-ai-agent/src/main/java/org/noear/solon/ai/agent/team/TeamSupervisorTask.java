@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 智能体路由任务（基于 TeamTrace 决策）
@@ -64,13 +65,15 @@ public class TeamSupervisorTask implements TaskComponent {
         String decision = chatModel.prompt(Arrays.asList(
                 ChatMessage.ofSystem(systemPrompt),
                 ChatMessage.ofUser("Collaboration Progress (Iteration " + iters + "):\n" + teamHistory)
-        )).call().getResultContent().toUpperCase();
+        )).call().getResultContent().trim(); // 去除首尾空格
 
         // 4. 解析决策
         String nextAgent = "end";
+        String decisionUpper = decision.toUpperCase();
         if (!decision.contains("FINISH")) {
             for (String name : agentNames) {
-                if (decision.contains(name.toUpperCase())) {
+                // 使用包含匹配，并忽略大小写，防止标点符号干扰
+                if (decisionUpper.contains(name.toUpperCase())) {
                     nextAgent = name;
                     break;
                 }
@@ -82,5 +85,6 @@ public class TeamSupervisorTask implements TaskComponent {
         }
 
         context.put(Agent.KEY_NEXT_AGENT, nextAgent);
+        context.put(Agent.KEY_ITERATIONS, iters + 1);
     }
 }
