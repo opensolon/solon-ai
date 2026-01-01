@@ -87,7 +87,7 @@ public class TeamAgentBoundaryTest {
                 "任务应该有结果，实际结果: " + result);
 
         // 输出调试信息
-        System.out.println("实际迭代次数: " + trace.iterationsCount());
+        System.out.println("实际迭代次数: " + trace.getIterationsCount());
         System.out.println("历史记录: " + history);
     }
 
@@ -193,8 +193,8 @@ public class TeamAgentBoundaryTest {
 
         // 这种情况下更可能触发迭代限制
         System.out.println("真实循环测试结果: " + result);
-        System.out.println("迭代次数: " + trace.iterationsCount());
-        System.out.println("是否达到限制: " + (trace.iterationsCount() >= 3));
+        System.out.println("迭代次数: " + trace.getIterationsCount());
+        System.out.println("是否达到限制: " + (trace.getIterationsCount() >= 3));
     }
 
     @Test

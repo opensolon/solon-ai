@@ -48,7 +48,7 @@ public class TeamTrace {
         this.route = route;
     }
 
-    public int iterationsCount() {
+    public int getIterationsCount() {
         return iterations.get();
     }
 
@@ -84,8 +84,12 @@ public class TeamTrace {
      */
     public void addStep(String agentName, String content, long duration) {
         steps.add(new TeamStep(agentName, content, duration));
+        isUpdateHistoryCache = true;
     }
 
+
+    private String cachedFormattedHistory;
+    private boolean isUpdateHistoryCache = true;
     /**
      * 获取格式化的协作历史（用于提供给 Supervisor 决策）
      */
@@ -93,9 +97,15 @@ public class TeamTrace {
         if (steps.isEmpty()) {
             return "No progress yet.";
         }
-        return steps.stream()
-                .map(step -> String.format("[%s]: %s", step.getAgentName(), step.getContent()))
-                .collect(Collectors.joining("\n"));
+
+        if (isUpdateHistoryCache) {
+            cachedFormattedHistory = steps.stream()
+                    .map(step -> String.format("[%s]: %s", step.getAgentName(), step.getContent()))
+                    .collect(Collectors.joining("\n"));
+            isUpdateHistoryCache = false;
+        }
+
+        return cachedFormattedHistory;
     }
 
     /**

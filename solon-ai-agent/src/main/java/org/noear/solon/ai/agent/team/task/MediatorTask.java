@@ -75,7 +75,7 @@ public class MediatorTask implements TaskComponent {
                 decision = config.getChatModel().prompt(Arrays.asList(
                         ChatMessage.ofSystem(enhancedPrompt),
                         ChatMessage.ofUser("Collaboration History:\n" + history +
-                                "\n\nCurrent iteration: " + trace.iterationsCount() +
+                                "\n\nCurrent iteration: " + trace.getIterationsCount() +
                                 "\nPlease decide the next action:")
                 )).call().getResultContent().trim();
 
@@ -111,7 +111,7 @@ public class MediatorTask implements TaskComponent {
      */
     private boolean shouldTerminate(TeamTrace trace, FlowContext context) {
         // 超过最大迭代次数
-        if (trace.iterationsCount() >= config.getMaxTotalIterations()) {
+        if (trace.getIterationsCount() >= config.getMaxTotalIterations()) {
             trace.addStep("system", "Maximum iterations reached (" +
                     config.getMaxTotalIterations() + ")", 0);
             return true;
@@ -161,7 +161,7 @@ public class MediatorTask implements TaskComponent {
         } else if (strategy == TeamStrategy.MARKET_BASED) {
             sb.append("\n=== Market-based Protocol Context ===\n");
             sb.append("Consider efficiency and cost-effectiveness when selecting agents.");
-            sb.append("\nCurrent iteration cost: ").append(trace.iterationsCount());
+            sb.append("\nCurrent iteration cost: ").append(trace.getIterationsCount());
         } else if (strategy == TeamStrategy.BLACKBOARD) {
             sb.append("\n=== Blackboard Protocol Context ===\n");
             sb.append("All agents share the blackboard (history). ");

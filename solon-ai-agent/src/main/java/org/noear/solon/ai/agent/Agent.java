@@ -103,8 +103,6 @@ public interface Agent extends NamedTaskComponent {
         }
     }
 
-    static String KEY_UNDERLINE2 = "__";
-
     static String KEY_PROMPT = "prompt";
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key";
 
