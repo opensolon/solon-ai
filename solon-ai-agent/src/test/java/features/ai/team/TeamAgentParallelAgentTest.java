@@ -50,7 +50,7 @@ public class TeamAgentParallelAgentTest {
                 String summary = trace.getSteps().stream()
                         .map(s -> String.format("[%s]: %s", s.getAgentName(), s.getContent()))
                         .collect(Collectors.joining("\n"));
-                ctx.put(Agent.KEY_ANSWER, "多语言处理完成：\n" + summary);
+                trace.setFinalAnswer("多语言处理完成：\n" + summary);
             }).linkAdd(Agent.ID_END);
 
             spec.addEnd(Agent.ID_END);
