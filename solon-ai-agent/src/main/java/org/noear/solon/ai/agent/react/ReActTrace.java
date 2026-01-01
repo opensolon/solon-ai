@@ -162,22 +162,12 @@ public class ReActTrace {
                 AssistantMessage am = (AssistantMessage) msg;
                 String content = am.getContent();
                 if (Assert.isNotEmpty(content)) {
-                    // 尝试提取 Thought 部分
-                    String thought = extractThought(content);
-                    if (!thought.isEmpty()) {
-                        sb.append("[Thought] ").append(thought).append("\n");
-                    }
-                    // 剩余内容
-                    String remaining = content.replaceFirst("(?s)Thought:.*?\\n", "").trim();
-                    if (!remaining.isEmpty() && !remaining.equals(thought)) {
-                        sb.append("[Assistant] ").append(remaining).append("\n");
-                    }
+                    // 简单显示，不需要复杂提取
+                    sb.append("[Assistant] ").append(content).append("\n");
                 }
-                // 工具调用
                 if (Assert.isNotEmpty(am.getToolCalls())) {
                     for (ToolCall call : am.getToolCalls()) {
-                        sb.append("[Action] 调用工具: ").append(call.name())
-                                .append(", 参数: ").append(call.arguments()).append("\n");
+                        sb.append("[Action] ").append(call.name()).append(": ").append(call.arguments()).append("\n");
                     }
                 }
             } else if (msg instanceof ToolMessage) {

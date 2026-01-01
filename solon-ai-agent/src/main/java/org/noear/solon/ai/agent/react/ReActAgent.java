@@ -141,18 +141,14 @@ public class ReActAgent implements Agent {
     /// ////////////
 
     public static Builder builder(ChatModel chatModel) {
-        return new Builder(new ReActConfig(chatModel));
-    }
-
-    public static Builder builder(ReActConfig config) {
-        return new Builder(config);
+        return new Builder(chatModel);
     }
 
     public static class Builder {
         private ReActConfig config;
 
-        public Builder(ReActConfig config) {
-            this.config = config;
+        public Builder(ChatModel chatModel) {
+            this.config = new ReActConfig(chatModel);
         }
 
         public Builder name(String val) {

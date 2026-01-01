@@ -41,21 +41,6 @@ public class ReActReasonTask implements TaskComponent {
     private final ReActConfig config;
 
     public ReActReasonTask(ReActConfig config) {
-        Objects.requireNonNull(config, "config");
-        Objects.requireNonNull(config.getChatModel(), "config.chatModel");
-
-        if (config.getName() == null) {
-            config.setName("react_agent");
-        }
-
-        if (config.getMaxSteps() <= 0) {
-            config.setMaxSteps(10);
-        }
-
-        if (config.getMaxTokens() <= 0) {
-            config.setMaxTokens(2048);
-        }
-
         this.config = config;
     }
 
@@ -83,7 +68,7 @@ public class ReActReasonTask implements TaskComponent {
         messages.addAll(trace.getMessages());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
-        ChatResponse response = callWithRetry(messages, config.getMaxRetries());
+        ChatResponse response = callWithRetry(messages);
 
         // --- 处理模型空回复 (防止流程卡死) ---
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
@@ -133,9 +118,9 @@ public class ReActReasonTask implements TaskComponent {
     /**
      * 简单的重试调用
      */
-    private ChatResponse callWithRetry(List<ChatMessage> messages, int maxRetries) {
+    private ChatResponse callWithRetry(List<ChatMessage> messages) {
         Exception lastException = null;
-        for (int i = 0; i < maxRetries; i++) {
+        for (int i = 0; i < config.getMaxRetries(); i++) {
             try {
                 return config.getChatModel()
                         .prompt(messages)
@@ -155,9 +140,9 @@ public class ReActReasonTask implements TaskComponent {
                         }).call();
             } catch (Exception e) {
                 lastException = e;
-                if (i < maxRetries - 1) {
+                if (i < config.getMaxRetries() - 1) {
                     try {
-                        Thread.sleep(1000 * (i + 1)); // 指数退避
+                        Thread.sleep(config.getRetryDelayMs() * (i + 1)); // 指数退避
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         throw new RuntimeException("Interrupted during retry", ie);
@@ -165,7 +150,7 @@ public class ReActReasonTask implements TaskComponent {
                 }
             }
         }
-        throw new RuntimeException("Failed after " + maxRetries + " retries", lastException);
+        throw new RuntimeException("Failed after " + config.getMaxRetries() + " retries", lastException);
     }
 
     /**

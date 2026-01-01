@@ -37,6 +37,7 @@ public class ReActConfig {
     private int maxSteps = 10;
     private float temperature = 0.7F;
     private int maxRetries = 3;
+    private long retryDelayMs = 1000L;
     private int maxTokens = 2048;
     private String finishMarker = "[FINISH]";
     private ReActInterceptor interceptor;
@@ -77,8 +78,9 @@ public class ReActConfig {
         this.temperature = val;
     }
 
-    public void setMaxRetries(int maxRetries) {
+    public void setRetries(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(1000, retryDelayMs);
     }
 
     public void setMaxTokens(int val) {
@@ -113,8 +115,8 @@ public class ReActConfig {
         return description;
     }
 
-    public Map<String, FunctionTool> getTools() {
-        return toolMap;
+    public Collection<FunctionTool> getTools() {
+        return toolMap.values();
     }
 
     public FunctionTool getTool(String name) {
@@ -135,6 +137,10 @@ public class ReActConfig {
 
     public int getMaxRetries() {
         return maxRetries;
+    }
+
+    public long getRetryDelayMs() {
+        return retryDelayMs;
     }
 
     public int getMaxTokens() {

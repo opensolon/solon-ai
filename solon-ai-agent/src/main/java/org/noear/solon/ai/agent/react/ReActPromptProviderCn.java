@@ -56,7 +56,7 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
 
         if (!config.getTools().isEmpty()) {
             sb.append("## 可选工具列表（你只能调用以下工具）：\n");
-            config.getTools().forEach((k,t) -> sb.append("- ").append(t.name()).append(": ").append(t.description()).append("\n"));
+            config.getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ").append(t.description()).append("\n"));
             sb.append("\n## 重要注意事项（必须遵守）：\n");
             sb.append("1. **轨迹连贯性**：每一次 Thought 必须基于之前的轨迹记录（Trace）进行严密的逻辑推理。\n");
             sb.append("2. **单步执行**：每次回复只能输出一个 Action。严禁一次调用多个工具。\n");

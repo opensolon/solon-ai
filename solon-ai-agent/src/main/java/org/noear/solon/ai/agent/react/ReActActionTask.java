@@ -25,6 +25,8 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.Map;
@@ -39,6 +41,8 @@ import java.util.regex.Pattern;
  */
 @Preview("3.8")
 public class ReActActionTask implements TaskComponent {
+    private final static Logger LOG = LoggerFactory.getLogger(ReActActionTask.class);
+
     private final ReActConfig config;
     // 正则提取 Action: 后面的 JSON 对象
     private static final Pattern ACTION_PATTERN = Pattern.compile(
@@ -126,10 +130,22 @@ public class ReActActionTask implements TaskComponent {
 
         if (tool != null) {
             try {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Executing tool: {} with args: {}", name, args);
+                }
+
                 return tool.handle(args);
             } catch (Throwable e) {
+                if (LOG.isWarnEnabled()) {
+                    LOG.warn("Error executing tool: " + name, e);
+                }
+
                 return "Error executing tool [" + name + "]: " + e.getMessage();
             }
+        }
+
+        if (LOG.isWarnEnabled()) {
+            LOG.warn("Tool not found: {}", name);
         }
 
         return "Tool [" + name + "] not found.";
