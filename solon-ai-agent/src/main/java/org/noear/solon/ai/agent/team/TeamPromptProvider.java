@@ -24,5 +24,8 @@ import org.noear.solon.ai.chat.prompt.Prompt;
  * @since 3.8.1
  */
 public interface TeamPromptProvider {
+    /**
+     * 获取系统提示词
+     */
     String getSystemPrompt(TeamConfig config, Prompt prompt);
 }

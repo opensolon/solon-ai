@@ -66,7 +66,8 @@ public class ReActAgent implements Agent {
 
             spec.addExclusive(Agent.ID_REASON)
                     .task(new ReasonTask(config))
-                    .linkAdd(Agent.ID_ACTION, l -> l.when(ctx -> Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
+                    .linkAdd(Agent.ID_ACTION, l -> l.when(ctx ->
+                            Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
                     .linkAdd(Agent.ID_END);
 
             spec.addActivity(Agent.ID_ACTION)
@@ -77,10 +78,18 @@ public class ReActAgent implements Agent {
         });
     }
 
+    /**
+     * 获取图
+     *
+     */
     public Graph getGraph() {
         return graph;
     }
 
+    /**
+     * 获取跟踪实例
+     *
+     */
     public @Nullable ReActTrace getTrace(FlowContext context) {
         return context.getAs("__" + name);
     }
@@ -130,7 +139,6 @@ public class ReActAgent implements Agent {
                         duration, trace.getStepCount(), trace.getMetrics().getToolCallCount());
             }
         }
-
 
         String result = trace.getFinalAnswer();
         if (LOG.isDebugEnabled()) {

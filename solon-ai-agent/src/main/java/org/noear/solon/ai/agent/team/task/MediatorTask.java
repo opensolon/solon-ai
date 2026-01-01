@@ -77,7 +77,7 @@ public class MediatorTask implements TaskComponent {
 
             // 4. 构建 Prompt 并调用模型
             String basePrompt = config.getSystemPrompt(prompt);
-            String enhancedPrompt = basePrompt + protocolExt.toString() + strategyContextInfo;
+            String enhancedPrompt = basePrompt + protocolExt + strategyContextInfo;
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Mediator system prompt:\n{}", enhancedPrompt);

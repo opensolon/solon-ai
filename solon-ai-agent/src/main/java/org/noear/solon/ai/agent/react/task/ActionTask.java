@@ -73,7 +73,9 @@ public class ActionTask implements TaskComponent {
                     }
 
                     Map<String, Object> args = call.arguments();
-                    if (args == null) args = Collections.emptyMap();
+                    if (args == null) {
+                        args = Collections.emptyMap();
+                    }
 
                     String result = executeTool(call.name(), args);
 
@@ -88,9 +90,11 @@ public class ActionTask implements TaskComponent {
             }
         }
 
-        // --- 2. 处理文本 ReAct 模式 (Observation 模拟) ---
+        // --- 2. 处理文本 ReAct (Observation 模拟) ---
         String lastContent = trace.getLastResponse();
-        if (lastContent == null) return;
+        if (lastContent == null) {
+            return;
+        }
 
         Matcher matcher = ACTION_PATTERN.matcher(lastContent);
         StringBuilder allObservations = new StringBuilder();
@@ -98,6 +102,7 @@ public class ActionTask implements TaskComponent {
 
         while (matcher.find()) {
             foundAny = true;
+
             try {
                 ONode action = ONode.ofJson(matcher.group(1).trim());
                 String toolName = action.get("name").getString();

@@ -59,7 +59,7 @@ public class ReasonTask implements TaskComponent {
         }
 
         // 2. 初始化对话：首轮将 prompt 转为 User Message
-        if (trace.getMessages().isEmpty()) {
+        if (Assert.isEmpty(trace.getMessages())) {
             Prompt prompt = trace.getPrompt();
             trace.appendMessage(prompt);
         }
