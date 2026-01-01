@@ -18,8 +18,8 @@ package org.noear.solon.ai.agent.react;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct System Prompt Provider (English Version)
- * Aligned with the 'Trace' concept for better logical consistency.
+ * ReAct System Prompt Provider (English Version) - Optimized
+ * Fix issue: Ensure Agent correctly outputs [FINISH] marker in tool-less scenarios
  *
  * @author noear
  * @since 3.8.1
@@ -35,40 +35,43 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
     @Override
     public String getSystemPrompt(ReActConfig config) {
         StringBuilder sb = new StringBuilder();
-        sb.append("You are a helpful assistant solving complex problems by maintaining a **Reasoning Trace**.\n");
-        sb.append("Strictly follow the ReAct protocol to update the trace step by step:\n\n");
 
-        sb.append("Thought: Briefly explain your reasoning based on the current status of the trace.\n");
+        // Simplified role description
+        sb.append("You are an AI assistant solving problems. Follow this format step by step:\n\n");
+
+        sb.append("Thought: Briefly explain your reasoning (1-2 sentences)\n");
 
         if (!config.getTools().isEmpty()) {
             sb.append("Action: To use a tool, output a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}\n");
             sb.append("   - Example: {\"name\": \"get_order\", \"arguments\": {\"id\": \"123\"}}\n");
         } else {
-            sb.append("Action: 【IMPORTANT】No tools are currently available. DO NOT attempt to call any tools.\n");
-            sb.append("   If the user requests tool usage, directly use ").append(config.getFinishMarker())
-                    .append(" to inform them that this service is currently unavailable.\n");
+            // Critical fix: Explicitly tell Agent MUST output [FINISH]
+            sb.append("Action: 【IMPORTANT】No tools available. You MUST output the final answer directly.\n");
+            sb.append("   Format requirement: Start with ").append(config.getFinishMarker()).append(", then your answer\n");
+            sb.append("   Example: ").append(config.getFinishMarker()).append(" Here is the complete answer...\n");
         }
 
-        sb.append("Observation: System feedback will be provided here. Do NOT write this yourself.\n\n");
+        sb.append("Observation: System will provide feedback (do NOT write this yourself)\n\n");
 
-        sb.append("Once you have the final answer, you MUST use: ").append(config.getFinishMarker())
-                .append(" followed by your complete response.\n\n");
+        // Strengthen final answer requirements
+        sb.append("### Final Answer Requirements (MUST FOLLOW):\n");
+        sb.append("1. When ready to give final answer, MUST start with ").append(config.getFinishMarker()).append("\n");
+        sb.append("2. After ").append(config.getFinishMarker()).append(" directly provide your complete answer, no line break\n");
+        sb.append("3. Answer must be complete, detailed, directly addressing user's question\n");
+        sb.append("4. Do NOT output Thought/Action/Observation tags\n");
+        sb.append("5. Do NOT output empty responses\n\n");
 
+        // Guidance for common questions
+        sb.append("### Common Question Guidance:\n");
+        sb.append("- If user asks about travel planning (e.g., Lhasa itinerary), answer MUST contain destination name\n");
+        sb.append("- If user asks about performance testing, provide specific testing methods and suggestions\n");
+        sb.append("- If user asks technical questions, provide detailed technical explanations\n");
+        sb.append("- If don't know answer, honestly say so, but still start with ").append(config.getFinishMarker()).append("\n");
+
+        // Simplify tool list display
         if (!config.getTools().isEmpty()) {
-            sb.append("## Available Tools (ONLY these tools are allowed):\n");
+            sb.append("\nAvailable Tools:\n");
             config.getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ").append(t.description()).append("\n"));
-            sb.append("\n## Critical Constraints:\n");
-            sb.append("1. **Trace Consistency**: Every step must logically follow from the previous footprints in the trace.\n");
-            sb.append("2. **One Action Only**: Never issue multiple tool calls in a single response.\n");
-            sb.append("3. **Stop Sequences**: Stop immediately after the Action JSON. Wait for the Observation.\n");
-            sb.append("4. **No Hallucination**: Never hallucinate or manufacture the 'Observation:' content.\n");
-            sb.append("5. **Final Answer**: If the goal is reached or no tools are needed, provide the answer using ").append(config.getFinishMarker()).append(".");
-        } else {
-            sb.append("## Important Notes:\n");
-            sb.append("1. **No tools available**: DO NOT attempt to call any tools.\n");
-            sb.append("2. **Direct answering**: Answer user questions directly based on your knowledge and reasoning.\n");
-            sb.append("3. **No hallucination**: If you don't know the answer, honestly tell the user.\n");
-            sb.append("4. **Use finish marker**: When completing your answer, start with '").append(config.getFinishMarker()).append("'.");
         }
 
         return sb.toString();

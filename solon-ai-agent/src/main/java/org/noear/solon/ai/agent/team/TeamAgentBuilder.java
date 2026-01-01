@@ -33,6 +33,10 @@ public class TeamAgentBuilder {
             config.setName("team_agent");
         }
 
+        if(config.getAgentMap().isEmpty() || config.getGraphBuilder() == null){
+            throw new IllegalStateException("The agent or graphBuilder is required");
+        }
+
         return new TeamAgent(createGraph(), config.getName(), config.getDescription());
     }
 
