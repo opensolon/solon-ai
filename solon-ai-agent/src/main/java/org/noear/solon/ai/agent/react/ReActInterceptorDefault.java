@@ -33,7 +33,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class SimpleReActInterceptor implements ReActInterceptor {
+public class ReActInterceptorDefault implements ReActInterceptor {
     private final Consumer<FlowInvocation> doIntercept;
     private final BiConsumer<FlowContext, Node> onNodeStart;
     private final BiConsumer<FlowContext, Node> onNodeEnd;
@@ -41,12 +41,12 @@ public class SimpleReActInterceptor implements ReActInterceptor {
     private final TrConsumer<ReActTrace, String, Map<String, Object>> onAction;
     private final BiConsumer<ReActTrace, String> onObservation;
 
-    public SimpleReActInterceptor(Consumer<FlowInvocation> doIntercept,
-                                  BiConsumer<FlowContext, Node> onNodeStart,
-                                  BiConsumer<FlowContext, Node> onNodeEnd,
-                                  BiConsumer<ReActTrace, String> onThought,
-                                  TrConsumer<ReActTrace, String, Map<String, Object>> onAction,
-                                  BiConsumer<ReActTrace, String> onObservation) {
+    public ReActInterceptorDefault(Consumer<FlowInvocation> doIntercept,
+                                   BiConsumer<FlowContext, Node> onNodeStart,
+                                   BiConsumer<FlowContext, Node> onNodeEnd,
+                                   BiConsumer<ReActTrace, String> onThought,
+                                   TrConsumer<ReActTrace, String, Map<String, Object>> onAction,
+                                   BiConsumer<ReActTrace, String> onObservation) {
         this.doIntercept = doIntercept;
         this.onNodeStart = onNodeStart;
         this.onNodeEnd = onNodeEnd;
@@ -97,76 +97,6 @@ public class SimpleReActInterceptor implements ReActInterceptor {
     public void onObservation(ReActTrace record, String result) {
         if (onObservation != null) {
             onObservation.accept(record, result);
-        }
-    }
-
-
-    /// ///////////////////
-
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    public static class Builder {
-        private Consumer<FlowInvocation> doIntercept;
-        private BiConsumer<FlowContext, Node> onNodeStart;
-        private BiConsumer<FlowContext, Node> onNodeEnd;
-        private BiConsumer<ReActTrace, String> onThought;
-        private TrConsumer<ReActTrace, String, Map<String, Object>> onAction;
-        private BiConsumer<ReActTrace, String> onObservation;
-
-        public Builder doIntercept(Consumer<FlowInvocation> doIntercept) {
-            this.doIntercept = doIntercept;
-            return this;
-        }
-
-        public Builder onNodeStart(BiConsumer<FlowContext, Node> onNodeStart) {
-            this.onNodeStart = onNodeStart;
-            return this;
-        }
-
-        public Builder onNodeEnd(BiConsumer<FlowContext, Node> onNodeEnd) {
-            this.onNodeEnd = onNodeEnd;
-            return this;
-        }
-
-        public Builder onThought(BiConsumer<ReActTrace, String> onThought) {
-            this.onThought = onThought;
-            return this;
-        }
-
-        public Builder onAction(TrConsumer<ReActTrace, String, Map<String, Object>> onAction) {
-            this.onAction = onAction;
-            return this;
-        }
-
-        public Builder onObservation(BiConsumer<ReActTrace, String> onObservation) {
-            this.onObservation = onObservation;
-            return this;
-        }
-
-        public SimpleReActInterceptor build() {
-            return new SimpleReActInterceptor(doIntercept,
-                    onNodeStart,
-                    onNodeEnd,
-                    onThought,
-                    onAction,
-                    onObservation);
-        }
-    }
-
-
-    @FunctionalInterface
-    public static interface TrConsumer<T, U, X> {
-        void accept(T t, U u, X x);
-
-        default TrConsumer<T, U, X> andThen(TrConsumer<? super T, ? super U, ? super X> after) {
-            Objects.requireNonNull(after);
-
-            return (l, r, x) -> {
-                accept(l, r, x);
-                after.accept(l, r, x);
-            };
         }
     }
 }
