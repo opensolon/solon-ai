@@ -23,7 +23,6 @@ import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.Objects;
-import java.util.function.Consumer;
 
 /**
  * 团队协作智能体
@@ -124,80 +123,7 @@ public class TeamAgent implements Agent {
 
     /// ///////////////////////////////
 
-    public static Builder builder(ChatModel chatModel) {
-        return new Builder(chatModel);
-    }
-
-    public static class Builder {
-        private final TeamConfig config;
-
-        public Builder(ChatModel chatModel) {
-            this.config = new TeamConfig(chatModel);
-        }
-
-        public Builder strategy(TeamStrategy strategy) { config.setStrategy(strategy); return this; }
-        public Builder addAgent(Agent agent) { config.addAgent(agent); return this; }
-        public Builder name(String name) { config.setName(name); return this; }
-        public Builder maxTotalIterations(int max) { config.setMaxTotalIterations(max); return this; }
-        public Builder graph(Consumer<GraphSpec> graphBuilder) { config.setGraphBuilder(graphBuilder); return this; }
-
-        public TeamAgent build() {
-            return new TeamAgent(createGraph(), config.getName(), config.getDescription());
-        }
-
-        private Graph createGraph() {
-            return Graph.create(config.getName(), spec -> {
-                switch (config.getStrategy()) {
-                    case SWARM: buildSwarmGraph(spec); break;
-                    case CONTRACT_NET: buildContractNetGraph(spec); break;
-                    default: buildHierarchicalGraph(spec); break;
-                }
-                if (config.getGraphBuilder() != null) config.getGraphBuilder().accept(spec);
-            });
-        }
-
-        private void buildHierarchicalGraph(GraphSpec spec) {
-            String traceKey = "__" + config.getName();
-            spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
-            spec.addExclusive(Agent.ID_ROUTER).task(new TeamSupervisorTask(config)).then(ns -> {
-                for (Agent agent : config.getAgentMap().values()) {
-                    ns.linkAdd(agent.name(), l -> l.when(ctx -> agent.name().equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
-                }
-            }).linkAdd(Agent.ID_END);
-            for (Agent agent : config.getAgentMap().values()) {
-                spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
-            }
-            spec.addEnd(Agent.ID_END);
-        }
-
-        private void buildSwarmGraph(GraphSpec spec) {
-            String firstAgent = config.getAgentMap().keySet().iterator().next();
-            spec.addStart(Agent.ID_START).linkAdd(firstAgent);
-            for (Agent agent : config.getAgentMap().values()) {
-                spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
-            }
-            spec.addExclusive(Agent.ID_ROUTER).task(new TeamSupervisorTask(config)).then(ns -> {
-                for (Agent agent : config.getAgentMap().values()) {
-                    ns.linkAdd(agent.name(), l -> l.when(ctx -> agent.name().equalsIgnoreCase(ctx.<TeamTrace>getAs("__"+config.getName()).getRoute())));
-                }
-            }).linkAdd(Agent.ID_END);
-            spec.addEnd(Agent.ID_END);
-        }
-
-        private void buildContractNetGraph(GraphSpec spec) {
-            String traceKey = "__" + config.getName();
-            spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
-            spec.addExclusive(Agent.ID_ROUTER).task(new TeamSupervisorTask(config)).then(ns -> {
-                ns.linkAdd("bidding_process", l -> l.when(ctx -> "BIDDING".equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
-                for (Agent agent : config.getAgentMap().values()) {
-                    ns.linkAdd(agent.name(), l -> l.when(ctx -> agent.name().equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
-                }
-            }).linkAdd(Agent.ID_END);
-            spec.addActivity("bidding_process", new ContractNetBiddingTask(config)).linkAdd(Agent.ID_ROUTER);
-            for (Agent agent : config.getAgentMap().values()) {
-                spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
-            }
-            spec.addEnd(Agent.ID_END);
-        }
+    public static TeamAgentBuilder builder(ChatModel chatModel) {
+        return new TeamAgentBuilder(chatModel);
     }
 }

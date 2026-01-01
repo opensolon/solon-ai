@@ -40,6 +40,19 @@ public interface Agent extends NamedTaskComponent {
      */
     String description();
 
+    /**
+     * 针对当前任务进行初步评估或竞标（用于合同网协议等决策场景）
+     *
+     * @param context 流上下文
+     * @param prompt  当前任务提示词
+     * @return 评估结果或竞标方案（默认返回 description）
+     */
+    default String estimate(FlowContext context, Prompt prompt) throws Throwable {
+        // 默认实现：如果 Agent 不支持评估，则返回静态描述
+        return description();
+    }
+
+
     String call(FlowContext context, Prompt prompt) throws Throwable;
 
     default String call(FlowContext context, String prompt) throws Throwable {
@@ -97,6 +110,8 @@ public interface Agent extends NamedTaskComponent {
     static String ID_START = "start";
     static String ID_END = "end";
     static String ID_ROUTER = "router";
+    static String ID_BIDDING =  "bidding";
+
     static String ID_REASON = "reason";
     static String ID_ACTION = "action";
 }

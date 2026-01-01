@@ -13,9 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react;
+package org.noear.solon.ai.agent.react.task;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActConfig;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -36,10 +39,10 @@ import java.util.List;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class ReActReasonTask implements TaskComponent {
+public class ReasonTask implements TaskComponent {
     private final ReActConfig config;
 
-    public ReActReasonTask(ReActConfig config) {
+    public ReasonTask(ReActConfig config) {
         this.config = config;
     }
 

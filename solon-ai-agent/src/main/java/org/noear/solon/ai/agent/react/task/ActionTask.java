@@ -13,9 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react;
+package org.noear.solon.ai.agent.react.task;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActConfig;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -40,8 +43,8 @@ import java.util.regex.Pattern;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class ReActActionTask implements TaskComponent {
-    private final static Logger LOG = LoggerFactory.getLogger(ReActActionTask.class);
+public class ActionTask implements TaskComponent {
+    private final static Logger LOG = LoggerFactory.getLogger(ActionTask.class);
 
     private final ReActConfig config;
     // 正则提取 Action: 后面的 JSON 对象
@@ -50,7 +53,7 @@ public class ReActActionTask implements TaskComponent {
             Pattern.DOTALL
     );
 
-    public ReActActionTask(ReActConfig config) {
+    public ActionTask(ReActConfig config) {
         this.config = config;
     }
 

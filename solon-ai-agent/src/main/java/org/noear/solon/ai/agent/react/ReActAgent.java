@@ -16,6 +16,8 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.react.task.ActionTask;
+import org.noear.solon.ai.agent.react.task.ReasonTask;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -63,12 +65,12 @@ public class ReActAgent implements Agent {
             spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON);
 
             spec.addExclusive(Agent.ID_REASON)
-                    .task(new ReActReasonTask(config))
+                    .task(new ReasonTask(config))
                     .linkAdd(Agent.ID_ACTION, l -> l.when(ctx -> Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
                     .linkAdd(Agent.ID_END);
 
             spec.addActivity(Agent.ID_ACTION)
-                    .task(new ReActActionTask(config))
+                    .task(new ActionTask(config))
                     .linkAdd(Agent.ID_REASON);
 
             spec.addEnd(Agent.ID_END);

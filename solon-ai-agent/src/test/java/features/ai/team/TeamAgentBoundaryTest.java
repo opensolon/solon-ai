@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.team.TeamAgentBuilder;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
@@ -119,7 +120,7 @@ public class TeamAgentBoundaryTest {
         // 测试：大团队的创建和执行性能
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        TeamAgent.Builder builder = TeamAgent.builder(chatModel)
+        TeamAgentBuilder builder = TeamAgent.builder(chatModel)
                 .name("large_team");
 
         // 创建多个 Agent
