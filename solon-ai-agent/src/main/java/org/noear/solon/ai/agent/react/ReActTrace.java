@@ -42,7 +42,7 @@ import java.util.regex.Pattern;
 @Preview("3.8")
 public class ReActTrace {
     private Prompt prompt;
-    private List<ChatMessage> messages;
+    private volatile List<ChatMessage> messages;
 
     private AtomicInteger stepCounter;
     private volatile String route;
@@ -192,56 +192,48 @@ public class ReActTrace {
         return "";
     }
 
-    /**
-     * 压缩历史消息
-     *
-     */
     private void compact() {
-        if (messages.size() <= 10) return;
+        if (messages.size() <= 12) return; // 提高阈值
 
-        // 1. 寻找起点（初始问题）
-        ChatMessage startPoint = messages.stream()
+        List<ChatMessage> compressed = new ArrayList<>();
+
+        // 1. 保留第一条用户消息
+        ChatMessage firstUser = messages.stream()
                 .filter(m -> m instanceof UserMessage)
                 .findFirst()
                 .orElse(null);
-
-        // 2. 确定滑动窗口起点（保留最近 8 条）
-        int windowSize = 8;
-        int startIndex = messages.size() - windowSize;
-
-        // 3. 完整性校验：如果当前位置是孤立的工具结果，则必须向前回溯到其调用者
-        while (startIndex > 0 && isDanglingPath(startIndex)) {
-            startIndex--;
+        if (firstUser != null) {
+            compressed.add(firstUser);
         }
 
-        List<ChatMessage> activeTrace = new ArrayList<>(messages.subList(startIndex, messages.size()));
+        // 2. 保留最后10条消息（确保工具调用链完整）
+        int keepCount = Math.min(10, messages.size());
+        int startIdx = messages.size() - keepCount;
 
-        // 4. 重建轨迹消息链
-        messages.clear();
-        if (startPoint != null) {
-            messages.add(startPoint);
+        // 3. 确保不会切断工具调用链
+        while (startIdx > 0 && isPartOfToolChain(startIdx)) {
+            startIdx--;
         }
 
-        messages.add(ChatMessage.ofSystem("[System: Earlier trace steps compacted to optimize context.]"));
-        messages.addAll(activeTrace);
+        List<ChatMessage> recent = messages.subList(startIdx, messages.size());
+        compressed.add(ChatMessage.ofSystem("[Context trimmed: " + (messages.size() - recent.size()) + " messages compressed]"));
+        compressed.addAll(recent);
+
+        messages = compressed;
     }
 
+    private boolean isPartOfToolChain(int index) {
+        if (index >= messages.size()) return false;
 
-    /**
-     * 判断是否是一个“孤立”的工具消息（即切断了它与前置 Assistant Call 的联系）
-     */
-    private boolean isDanglingPath(int index) {
         ChatMessage current = messages.get(index);
 
-        // 如果当前是 ToolMessage，它不能作为足迹的开头
-        if (current instanceof ToolMessage) return true;
-
-        // 如果助手消息包含工具调用，通常建议把它和后面的结果一起保留
-        if (current instanceof AssistantMessage) {
-            AssistantMessage am = (AssistantMessage) current;
-            return Assert.isNotEmpty(am.getToolCalls());
+        if (current instanceof ToolMessage) {
+            return true;
         }
 
+        if (current instanceof AssistantMessage) {
+            return Assert.isNotEmpty(((AssistantMessage) current).getToolCalls());
+        }
         return false;
     }
 }
