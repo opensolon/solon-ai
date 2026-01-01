@@ -29,7 +29,6 @@ public class ReActAgentBoundaryTest {
                 .addTool(new MethodToolProvider(new LoopTools()))
                 .temperature(0.0F)
                 .maxSteps(3) // 设置很小的步数限制
-                .enableLogging(true)
                 .build();
 
         FlowContext context = FlowContext.of("test_max_steps");
@@ -55,7 +54,6 @@ public class ReActAgentBoundaryTest {
         ReActAgent agent = ReActAgent.builder(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .temperature(0.0F)
-                .enableLogging(true)
                 .build();
 
         FlowContext context = FlowContext.of("test_tool_not_found");
@@ -76,7 +74,6 @@ public class ReActAgentBoundaryTest {
         ReActAgent agent = ReActAgent.builder(chatModel)
                 .addTool(new MethodToolProvider(new ErrorTools()))
                 .temperature(0.0F)
-                .enableLogging(true)
                 .build();
 
         FlowContext context = FlowContext.of("test_tool_error");

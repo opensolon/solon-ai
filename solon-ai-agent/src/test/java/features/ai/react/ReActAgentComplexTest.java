@@ -26,7 +26,6 @@ public class ReActAgentComplexTest {
                 .addTool(new MethodToolProvider(new LogisticTools()))
                 .addTool(new MethodToolProvider(new MarketingTools()))
                 .temperature(0.0F) // 严格遵循逻辑
-                .enableLogging(true)
                 .maxSteps(10)
                 .build();
 

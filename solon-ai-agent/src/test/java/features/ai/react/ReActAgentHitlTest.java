@@ -43,7 +43,6 @@ public class ReActAgentHitlTest {
                 .addTool(new MethodToolProvider(new RefundTools()))
                 .interceptor(hitlInterceptor) // 注入拦截器
                 .temperature(0.0F)
-                .enableLogging(true)
                 .build();
 
         FlowContext context = FlowContext.of("hitl_session_123");
@@ -117,7 +116,6 @@ public class ReActAgentHitlTest {
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .interceptor(fullInterceptor)
                 .temperature(0.0F)
-                .enableLogging(false)
                 .build();
 
         FlowContext context = FlowContext.of("test_interceptor");

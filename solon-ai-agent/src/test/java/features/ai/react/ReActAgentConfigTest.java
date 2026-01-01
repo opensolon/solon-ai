@@ -89,13 +89,11 @@ public class ReActAgentConfigTest {
 
         ReActAgent loggingAgent = ReActAgent.builder(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
-                .enableLogging(true)
                 .name("with_logging")
                 .build();
 
         ReActAgent noLoggingAgent = ReActAgent.builder(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
-                .enableLogging(false)
                 .name("no_logging")
                 .build();
 

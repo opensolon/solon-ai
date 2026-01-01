@@ -73,9 +73,14 @@ public class ReActReasonTask implements TaskComponent {
                     o.autoToolCall(false);
                     o.max_tokens(config.getMaxTokens());
                     o.temperature(config.getTemperature());
-                    o.optionAdd("stop", "Observation:"); // 关键：模型遇到此词立即停止，交还控制权
-                    if (config.getTools() != null && !config.getTools().isEmpty()) {
+
+                    if (Assert.isNotEmpty(config.getTools())) {
                         o.toolsAdd(config.getTools());
+                        // 有工具时才设置stop序列
+                        o.optionAdd("stop", "Observation:");
+                    } else {
+                        // 没有工具时不需要stop序列
+                        o.optionAdd("stop", config.getFinishMarker());
                     }
                 }).call();
 

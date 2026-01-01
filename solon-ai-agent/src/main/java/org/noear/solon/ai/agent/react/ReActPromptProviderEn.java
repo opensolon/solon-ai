@@ -56,7 +56,7 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
 
         if (!config.getTools().isEmpty()) {
             sb.append("## Available Tools (ONLY these tools are allowed):\n");
-            config.getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ").append(t.description()).append("\n"));
+            config.getTools().forEach((k,t) -> sb.append("- ").append(t.name()).append(": ").append(t.description()).append("\n"));
             sb.append("\n## Critical Constraints:\n");
             sb.append("1. **Trace Consistency**: Every step must logically follow from the previous footprints in the trace.\n");
             sb.append("2. **One Action Only**: Never issue multiple tool calls in a single response.\n");

@@ -33,7 +33,6 @@ public class ReActAgentPromptProviderTest {
                 .addTool(new MethodToolProvider(new MathTools()))
                 .promptProvider(customProvider)
                 .temperature(0.0F)
-                .enableLogging(true)
                 .build();
 
         FlowContext context = FlowContext.of("test_custom_prompt");
@@ -57,7 +56,6 @@ public class ReActAgentPromptProviderTest {
                 .addTool(new MethodToolProvider(new ChineseTools()))
                 .promptProvider(org.noear.solon.ai.agent.react.ReActPromptProviderCn.getInstance())
                 .temperature(0.0F)
-                .enableLogging(true)
                 .build();
 
         FlowContext context = FlowContext.of("test_chinese_prompt");

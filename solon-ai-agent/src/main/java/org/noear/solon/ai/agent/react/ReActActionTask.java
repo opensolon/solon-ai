@@ -122,15 +122,16 @@ public class ReActActionTask implements TaskComponent {
     }
 
     private String executeTool(String name, Map<String, Object> args) {
-        for (FunctionTool tool : config.getTools()) {
-            if (tool.name().equals(name)) {
-                try {
-                    return tool.handle(args);
-                } catch (Throwable e) {
-                    return "Error executing tool [" + name + "]: " + e.getMessage();
-                }
+        FunctionTool tool = config.getTool(name);
+
+        if (tool != null) {
+            try {
+                return tool.handle(args);
+            } catch (Throwable e) {
+                return "Error executing tool [" + name + "]: " + e.getMessage();
             }
         }
+
         return "Tool [" + name + "] not found.";
     }
 }

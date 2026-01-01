@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.NodeTrace;
@@ -29,6 +30,8 @@ import org.noear.solon.lang.Preview;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * ReAct 运行记录（承载记忆、状态与推理轨迹）
@@ -141,6 +144,52 @@ public class ReActTrace {
         for (ChatMessage m1 : prompt.getMessages()) {
             appendMessage(m1);
         }
+    }
+
+    // 在 ReActTrace 类中添加
+    public String getFormattedHistory() {
+        StringBuilder sb = new StringBuilder();
+        for (ChatMessage msg : messages) {
+            if (msg instanceof UserMessage) {
+                sb.append("[User] ").append(((UserMessage) msg).getContent()).append("\n");
+            } else if (msg instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) msg;
+                String content = am.getContent();
+                if (Assert.isNotEmpty(content)) {
+                    // 尝试提取 Thought 部分
+                    String thought = extractThought(content);
+                    if (!thought.isEmpty()) {
+                        sb.append("[Thought] ").append(thought).append("\n");
+                    }
+                    // 剩余内容
+                    String remaining = content.replaceFirst("(?s)Thought:.*?\\n", "").trim();
+                    if (!remaining.isEmpty() && !remaining.equals(thought)) {
+                        sb.append("[Assistant] ").append(remaining).append("\n");
+                    }
+                }
+                // 工具调用
+                if (Assert.isNotEmpty(am.getToolCalls())) {
+                    for (ToolCall call : am.getToolCalls()) {
+                        sb.append("[Action] 调用工具: ").append(call.name())
+                                .append(", 参数: ").append(call.arguments()).append("\n");
+                    }
+                }
+            } else if (msg instanceof ToolMessage) {
+                sb.append("[Observation] ").append(((ToolMessage) msg).getContent()).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    private String extractThought(String content) {
+        if (content == null || !content.contains("Thought:")) return "";
+
+        Pattern pattern = Pattern.compile("Thought:\\s*(.*?)(?=\\n\\s*(?:Action:|\\[FINISH\\]|$))", Pattern.DOTALL);
+        Matcher matcher = pattern.matcher(content);
+        if (matcher.find()) {
+            return matcher.group(1).trim();
+        }
+        return "";
     }
 
     /**

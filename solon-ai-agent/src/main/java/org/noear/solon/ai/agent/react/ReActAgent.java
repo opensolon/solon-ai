@@ -95,8 +95,8 @@ public class ReActAgent implements Agent {
 
     @Override
     public String call(FlowContext context, Prompt prompt) throws Throwable {
-        if (config.isEnableLogging()) {
-            LOG.info("Starting ReActAgent: {}", prompt);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Starting ReActAgent: {}", prompt);
         }
 
         ReActTrace tmpTrace = context.getAs(traceKey);
@@ -120,8 +120,8 @@ public class ReActAgent implements Agent {
 
 
         String result = trace.getFinalAnswer();
-        if (config.isEnableLogging()) {
-            LOG.info("Final Answer: {}", result);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Final Answer: {}", result);
         }
 
         return result;
@@ -166,11 +166,6 @@ public class ReActAgent implements Agent {
 
         public Builder addTool(ToolProvider toolProvider) {
             config.addTool(toolProvider);
-            return this;
-        }
-
-        public Builder enableLogging(boolean val) {
-            config.enableLogging(val);
             return this;
         }
 

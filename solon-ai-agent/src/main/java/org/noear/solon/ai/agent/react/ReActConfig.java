@@ -20,9 +20,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.lang.Preview;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * ReAct 配置类
@@ -35,9 +33,8 @@ public class ReActConfig {
     private String name;
     private String description;
     private final ChatModel chatModel;
-    private final List<FunctionTool> tools = new ArrayList<>();
+    private final Map<String, FunctionTool> toolMap = new LinkedHashMap<>();
     private int maxSteps = 10;
-    private boolean enableLogging = false;
     private float temperature = 0.7F;
     private int maxTokens = 2048;
     private String finishMarker = "[FINISH]";
@@ -62,19 +59,17 @@ public class ReActConfig {
     }
 
     public void addTool(FunctionTool tool) {
-        this.tools.add(tool);
+        this.toolMap.put(tool.name(), tool);
     }
 
-    public void addTool(List<FunctionTool> tools) {
-        this.tools.addAll(tools);
+    public void addTool(Collection<FunctionTool> tools) {
+        for (FunctionTool tool : tools) {
+            addTool(tool);
+        }
     }
 
     public void addTool(ToolProvider toolProvider) {
-        this.tools.addAll(toolProvider.getTools());
-    }
-
-    public void enableLogging(boolean val) {
-        this.enableLogging = val;
+        addTool(toolProvider.getTools());
     }
 
     public void setTemperature(float val) {
@@ -113,8 +108,12 @@ public class ReActConfig {
         return description;
     }
 
-    public List<FunctionTool> getTools() {
-        return tools;
+    public Map<String, FunctionTool> getTools() {
+        return toolMap;
+    }
+
+    public FunctionTool getTool(String name){
+        return toolMap.get(name);
     }
 
     public ChatModel getChatModel() {
@@ -135,10 +134,6 @@ public class ReActConfig {
 
     public String getFinishMarker() {
         return finishMarker;
-    }
-
-    public boolean isEnableLogging() {
-        return enableLogging;
     }
 
     public ReActInterceptor getInterceptor() {
