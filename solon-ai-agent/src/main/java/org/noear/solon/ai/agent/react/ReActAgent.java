@@ -49,7 +49,7 @@ public class ReActAgent implements Agent {
     private final String traceKey;
 
     public ReActAgent(ReActConfig config) {
-        this.name = config.getName() == null ? "react_agent" : config.getName();
+        this.name = config.getName();
         this.description = config.getDescription();
         this.config = config;
         this.flowEngine = FlowEngine.newInstance();
@@ -262,6 +262,14 @@ public class ReActAgent implements Agent {
         }
 
         public ReActAgent build() {
+            if (config.getName() == null) {
+                config.setName("react_agent");
+            }
+
+            if (config.getDescription() == null) {
+                config.setDescription(config.getName());
+            }
+
             return new ReActAgent(config);
         }
     }

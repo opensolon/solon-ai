@@ -50,11 +50,15 @@ public class TeamAgentBuilder {
     public TeamAgentBuilder graphAdjuster(Consumer<GraphSpec> graphBuilder) {   config.setGraphAdjuster(graphBuilder);    return this; }
 
     public TeamAgent build() {
-        if(config.getName() == null){
+        if (config.getName() == null) {
             config.setName("team_agent");
         }
 
-        if(config.getAgentMap().isEmpty() && config.getGraphAdjuster() == null){
+        if (config.getDescription() == null) {
+            config.setDescription(config.getName());
+        }
+
+        if (config.getAgentMap().isEmpty() && config.getGraphAdjuster() == null) {
             throw new IllegalStateException("The agent or graphBuilder is required");
         }
 
