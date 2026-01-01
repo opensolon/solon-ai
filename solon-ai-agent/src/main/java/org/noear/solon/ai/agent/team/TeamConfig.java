@@ -37,7 +37,7 @@ public class TeamConfig {
     private final ChatModel chatModel;
     private final Map<String, Agent> agentMap = new LinkedHashMap<>();
     private TeamStrategy strategy = TeamStrategy.HIERARCHICAL;
-    private Consumer<GraphSpec> graphBuilder;
+    private Consumer<GraphSpec> graphAdjuster;
     private String finishMarker = "[TEAM_FINISH]";
     private int maxTotalIterations = 8;
     private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
@@ -54,8 +54,8 @@ public class TeamConfig {
         this.description = description;
     }
 
-    public void setGraphBuilder(Consumer<GraphSpec> graphBuilder) {
-        this.graphBuilder = graphBuilder;
+    public void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
+        this.graphAdjuster = graphAdjuster;
     }
 
     public void setFinishMarker(String finishMarker) {
@@ -103,8 +103,8 @@ public class TeamConfig {
         return strategy;
     }
 
-    public Consumer<GraphSpec> getGraphBuilder() {
-        return graphBuilder;
+    public Consumer<GraphSpec> getGraphAdjuster() {
+        return graphAdjuster;
     }
 
     public String getFinishMarker() {

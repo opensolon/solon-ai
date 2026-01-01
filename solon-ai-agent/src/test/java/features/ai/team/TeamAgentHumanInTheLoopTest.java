@@ -35,7 +35,7 @@ public class TeamAgentHumanInTheLoopTest {
                         .description("负责在审批通过后完成最终确认")
                         .build())
                 .maxTotalIterations(20) // 增加最大迭代次数
-                .graph(spec -> {
+                .graphAdjuster(spec -> {
                     // 使用自定义graph覆盖自动管家模式
                     spec.addStart(Agent.ID_START).linkAdd("planner");
 

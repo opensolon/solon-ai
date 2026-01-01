@@ -26,14 +26,14 @@ public class TeamAgentBuilder {
     public TeamAgentBuilder finishMarker(String finishMarker) { config.setFinishMarker(finishMarker);  return this; }
     public TeamAgentBuilder maxTotalIterations(int maxTotalIterations) { config.setMaxTotalIterations(maxTotalIterations);  return this;}
     public TeamAgentBuilder strategy(TeamStrategy strategy) { config.setStrategy(strategy); return this; }
-    public TeamAgentBuilder graph(Consumer<GraphSpec> graphBuilder) {   config.setGraphBuilder(graphBuilder);    return this; }
+    public TeamAgentBuilder graphAdjuster(Consumer<GraphSpec> graphBuilder) {   config.setGraphAdjuster(graphBuilder);    return this; }
 
     public TeamAgent build() {
         if(config.getName() == null){
             config.setName("team_agent");
         }
 
-        if(config.getAgentMap().isEmpty() && config.getGraphBuilder() == null){
+        if(config.getAgentMap().isEmpty() && config.getGraphAdjuster() == null){
             throw new IllegalStateException("The agent or graphBuilder is required");
         }
 
@@ -50,7 +50,7 @@ public class TeamAgentBuilder {
                 case HIERARCHICAL:
                 default: buildHubAndSpokeGraph(spec); break;
             }
-            if (config.getGraphBuilder() != null) config.getGraphBuilder().accept(spec);
+            if (config.getGraphAdjuster() != null) config.getGraphAdjuster().accept(spec);
         });
     }
 

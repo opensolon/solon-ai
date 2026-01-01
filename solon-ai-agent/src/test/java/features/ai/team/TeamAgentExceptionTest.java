@@ -59,7 +59,7 @@ public class TeamAgentExceptionTest {
 
         TeamAgent team = TeamAgent.builder(chatModel)
                 .name("graph_exception_team")
-                .graph(spec -> {
+                .graphAdjuster(spec -> {
                     spec.addStart(Agent.ID_START).linkAdd("problem_node");
                     spec.addActivity("problem_node")
                             .task(new TaskComponent() {
