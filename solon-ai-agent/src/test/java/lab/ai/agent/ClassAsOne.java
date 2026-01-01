@@ -1,4 +1,4 @@
-package lab.ai.react;
+package lab.ai.agent;
 
 import java.io.IOException;
 import java.nio.file.Files;
