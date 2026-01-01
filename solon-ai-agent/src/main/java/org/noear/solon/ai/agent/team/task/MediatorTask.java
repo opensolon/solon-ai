@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -212,7 +213,8 @@ public class MediatorTask implements TaskComponent {
             return;
         }
 
-        String upperDecision = decision.toUpperCase().trim();
+        String originalDecision = decision.trim();
+        String upperDecision = originalDecision.toUpperCase();
         String finishMarker = config.getFinishMarker().toUpperCase();
 
         // A. 优先判断结束标识
@@ -240,47 +242,129 @@ public class MediatorTask implements TaskComponent {
             }
         }
 
-        // C. Agent 名称匹配（采用长度降序排列，确保长名优先匹配）
+        // C. Agent 名称匹配 - 修复版本
         List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
+
+        // 策略1：精确匹配整个文本（最高优先级）
+        for (String name : agentNames) {
+            if (originalDecision.equalsIgnoreCase(name)) {
+                selectAgent(trace, name);
+                return;
+            }
+        }
+
+        // 策略2：提取第一个"单词"进行匹配
+        String firstPart = extractFirstMeaningfulPart(originalDecision);
+        if (firstPart != null) {
+            for (String name : agentNames) {
+                if (firstPart.equalsIgnoreCase(name)) {
+                    selectAgent(trace, name);
+                    return;
+                }
+            }
+        }
+
+        // 策略3：改进的单词边界匹配
+        // 按长度降序，长名优先
         List<String> sortedNames = agentNames.stream()
                 .sorted((a, b) -> Integer.compare(b.length(), a.length()))
                 .collect(Collectors.toList());
 
+        // 清理文本：移除标点，统一空格
+        String cleanText = originalDecision
+                .replaceAll("[\\p{P}\\p{S}]", " ")  // 标点符号变空格
+                .replaceAll("\\s+", " ")            // 多个空格变一个
+                .toUpperCase()
+                .trim();
+
         for (String name : sortedNames) {
             String upperName = name.toUpperCase();
-            // 更严格的匹配：确保匹配的是完整的单词
-            if (upperDecision.contains(" " + upperName + " ") ||
-                    upperDecision.startsWith(upperName + " ") ||
-                    upperDecision.endsWith(" " + upperName) ||
-                    upperDecision.equals(upperName)) {
-                trace.setRoute(name);
 
-                // 更新策略上下文
-                updateStrategyContext(name);
-
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Selected agent: {}", name);
+            // 检查是否作为独立单词出现
+            String[] words = cleanText.split(" ");
+            for (String word : words) {
+                if (word.equals(upperName)) {
+                    selectAgent(trace, name);
+                    return;
                 }
+            }
+
+            // 正则单词边界匹配（考虑中英文边界）
+            Pattern pattern = Pattern.compile(
+                    "(^|\\s|[\\p{P}\\p{S}])" +
+                            Pattern.quote(upperName) +
+                            "($|\\s|[\\p{P}\\p{S}])",
+                    Pattern.CASE_INSENSITIVE
+            );
+
+            if (pattern.matcher(" " + originalDecision + " ").find()) {
+                selectAgent(trace, name);
                 return;
             }
         }
 
-        // D. 尝试模糊匹配（去除特殊字符后匹配）
-        String cleanDecision = upperDecision.replaceAll("[^A-Z0-9]", " ");
-        for (String name : sortedNames) {
-            String upperName = name.toUpperCase();
-            if (cleanDecision.contains(upperName)) {
-                trace.setRoute(name);
-                updateStrategyContext(name);
-                LOG.debug("Fuzzy matched agent: {}", name);
-                return;
-            }
-        }
-
-        // E. 兜底方案：如果没有匹配到任何 Agent 且模型没有说结束，默认结束以防死循环
+        // D. 兜底方案
         trace.setRoute(Agent.ID_END);
-        trace.addStep("mediator", "No valid agent matched from decision: " + decision, 0);
-        LOG.warn("No agent matched from decision: {}", decision);
+        trace.addStep("mediator", "No valid agent matched from decision: " + originalDecision, 0);
+        LOG.warn("No agent matched from decision: {}", originalDecision);
+    }
+
+    /**
+     * 提取第一个有意义的片段（可能是Agent名称）
+     */
+    private String extractFirstMeaningfulPart(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return null;
+        }
+
+        // 移除常见的前缀文本
+        String[] prefixes = {
+                "分析当前进度", "分析进度", "下一步行动", "下一步",
+                "需要", "指派", "请", "应当", "建议"
+        };
+
+        String processed = text.trim();
+
+        // 移除中文冒号、逗号后的内容
+        processed = processed.replaceFirst("[:：]\\s*", " ");
+        processed = processed.replaceFirst("[，,]\\s*", " ");
+
+        // 按空格或标点分割，取第一部分
+        String[] parts = processed.split("[\\s\\p{P}\\p{S}]+", 2);
+        if (parts.length > 0) {
+            String first = parts[0].trim();
+
+            // 检查是否只是分析词汇
+            for (String prefix : prefixes) {
+                if (first.equalsIgnoreCase(prefix)) {
+                    // 如果是分析词汇，尝试取第二部分
+                    if (parts.length > 1) {
+                        String[] subParts = parts[1].split("[\\s\\p{P}\\p{S}]+", 2);
+                        if (subParts.length > 0) {
+                            return subParts[0].trim();
+                        }
+                    }
+                    return null;
+                }
+            }
+
+            // 不是分析词汇，直接返回
+            return first;
+        }
+
+        return null;
+    }
+
+    /**
+     * 选择Agent并更新上下文
+     */
+    private void selectAgent(TeamTrace trace, String agentName) {
+        trace.setRoute(agentName);
+        updateStrategyContext(agentName);
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Selected agent: {}", agentName);
+        }
     }
 
     /**
