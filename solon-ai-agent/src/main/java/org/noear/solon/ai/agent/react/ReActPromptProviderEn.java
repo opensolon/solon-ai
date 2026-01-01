@@ -19,7 +19,6 @@ import org.noear.solon.lang.Preview;
 
 /**
  * ReAct System Prompt Provider (English Version) - Optimized
- * Fix issue: Ensure Agent correctly outputs [FINISH] marker in tool-less scenarios
  *
  * @author noear
  * @since 3.8.1
@@ -45,7 +44,7 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
             sb.append("Action: To use a tool, output a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}\n");
             sb.append("   - Example: {\"name\": \"get_order\", \"arguments\": {\"id\": \"123\"}}\n");
         } else {
-            // Critical fix: Explicitly tell Agent MUST output [FINISH]
+            // Critical fix: Explicitly tell Agent MUST output finish marker
             sb.append("Action: 【IMPORTANT】No tools available. You MUST output the final answer directly.\n");
             sb.append("   Format requirement: Start with ").append(config.getFinishMarker()).append(", then your answer\n");
             sb.append("   Example: ").append(config.getFinishMarker()).append(" Here is the complete answer...\n");

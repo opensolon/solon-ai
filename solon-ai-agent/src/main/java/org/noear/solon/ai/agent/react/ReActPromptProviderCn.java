@@ -19,7 +19,6 @@ import org.noear.solon.lang.Preview;
 
 /**
  * ReAct 系统提示词提供者（中文版）- 优化版
- * 修复问题：确保Agent在无工具场景下正确输出[FINISH]标记
  *
  * @author noear
  * @since 3.8.1
@@ -45,7 +44,7 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
             sb.append("Action: 如果需要调用工具，请输出唯一的 JSON 对象：{\"name\": \"工具名\", \"arguments\": {...}}\n");
             sb.append("   - 示例: {\"name\": \"get_order\", \"arguments\": {\"id\": \"123\"}}\n");
         } else {
-            // 关键修复：明确告诉Agent必须输出[FINISH]
+            // 关键修复：明确告诉Agent必须输出完成标记
             sb.append("Action: 【重要】没有可用工具。你必须直接输出最终答案。\n");
             sb.append("   格式要求：首先输出 ").append(config.getFinishMarker()).append("，然后是你的答案\n");
             sb.append("   示例：").append(config.getFinishMarker()).append(" 这里是完整的答案内容...\n");

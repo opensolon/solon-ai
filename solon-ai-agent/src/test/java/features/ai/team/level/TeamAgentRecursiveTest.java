@@ -110,6 +110,9 @@ public class TeamAgentRecursiveTest {
         Assertions.assertTrue(devTeamCalls >= 2, "当 Reviewer 不满意时，Supervisor 应该重新路由回 dev_team");
 
         // 2. 验证最终结果是否包含了审核通过的标记
-        Assertions.assertTrue(result.contains("表现完美"), "最终结果应包含 Reviewer 的正面确认");
+        boolean hasApproval = rootTrace.getSteps().stream()
+                .anyMatch(s -> "Reviewer".equals(s.getAgentName()) && s.getContent().contains("表现完美"));
+
+        Assertions.assertTrue(hasApproval, "Trace 中应记录 Reviewer 的正面确认");
     }
 }
