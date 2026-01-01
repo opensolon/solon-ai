@@ -22,8 +22,6 @@ import org.noear.solon.flow.*;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -59,10 +57,16 @@ public class TeamAgent implements Agent {
         this.description = description;
     }
 
+    /**
+     * 获取图
+     * */
     public Graph getGraph() {
         return graph;
     }
 
+    /**
+     * 获取实例跟踪
+     * */
     public @Nullable TeamTrace getTrace(FlowContext context) {
         return context.getAs("__" + name);
     }
@@ -92,7 +96,7 @@ public class TeamAgent implements Agent {
             context.put(Agent.KEY_PROMPT, prompt);
             context.lastNode(null);
             tmpTrace.resetIterations();
-            tmpTrace.setLastNode((NodeTrace) null);
+            tmpTrace.setLastNode(null);
         } else {
             tmpTrace.resetIterations();
         }
@@ -107,13 +111,13 @@ public class TeamAgent implements Agent {
             trace.setLastNode(context.lastNode());
         }
 
-        String answer = context.getAs(Agent.KEY_ANSWER);
-        if (answer == null && trace.getStepCount() > 0) {
-            answer = trace.getSteps().get(trace.getStepCount() - 1).getContent();
+        String result = trace.getFinalAnswer(); //context.getAs(Agent.KEY_RESULT);
+        if (result == null && trace.getStepCount() > 0) {
+            result = trace.getSteps().get(trace.getStepCount() - 1).getContent();
         }
 
-        trace.setFinalAnswer(answer);
-        return answer;
+        trace.setFinalAnswer(result);
+        return result;
     }
 
     /// ///////////////////////////////
@@ -170,16 +174,16 @@ public class TeamAgent implements Agent {
                 config.setName("team_agent");
             }
 
-            Graph graph = initGraph();
+            Graph graph = createGraph();
 
             TeamAgent agent = new TeamAgent(graph, config.getName(), config.getDescription());
 
             return agent;
         }
 
-        private Graph initGraph() {
+        private Graph createGraph() {
             if (config.getAgentMap().isEmpty()) {
-                //需要自己构图
+                //自由图模式
                 return Graph.create(config.getName(), spec -> {
                     if (config.getGraphBuilder() != null) {
                         config.getGraphBuilder().accept(spec);
@@ -189,7 +193,7 @@ public class TeamAgent implements Agent {
                 String traceKey = "__" + config.getName();
                 TeamSupervisorTask task = new TeamSupervisorTask(config);
 
-                //自动管家模式
+                //管家图模式
                 return Graph.create(config.getName(), spec -> {
                     spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
 

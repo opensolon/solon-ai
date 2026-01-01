@@ -40,11 +40,6 @@ public interface Agent extends NamedTaskComponent {
      */
     String description();
 
-    /**
-     * 调用
-     *
-     * @param prompt 提示语
-     */
     String call(FlowContext context, Prompt prompt) throws Throwable;
 
     default String call(FlowContext context, String prompt) throws Throwable {
@@ -89,19 +84,14 @@ public interface Agent extends NamedTaskComponent {
             result = "";
         }
 
-        context.put(KEY_ANSWER, result);
-
         if (trace != null) {
             String stepContent = result.trim().isEmpty() ?
                     "No valid output is produced" : result;
             trace.addStep(name(), stepContent, duration);
-            context.put(KEY_HISTORY, trace.getFormattedHistory());
         }
     }
 
     static String KEY_PROMPT = "prompt";
-    static String KEY_ANSWER = "answer";
-    static String KEY_HISTORY = "history";
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key";
 
     static String ID_START = "start";

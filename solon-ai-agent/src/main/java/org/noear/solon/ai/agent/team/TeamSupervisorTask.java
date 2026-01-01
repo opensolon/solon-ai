@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
  * @since 3.8.1
  */
  class TeamSupervisorTask implements TaskComponent {
-    static final Logger LOG = LoggerFactory.getLogger(TeamSupervisorTask.class);
+    private static final Logger LOG = LoggerFactory.getLogger(TeamSupervisorTask.class);
     private final TeamConfig config;
     private final String teamName;
 
@@ -50,17 +50,22 @@ import java.util.stream.Collectors;
         String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = context.getAs(traceKey);
 
-        // 1. 获取团队协作历史（从 Trace 获取）
+        // 1. 获取团队协作历史
         String teamHistory = trace.getFormattedHistory();
         int iters = trace.iterationsCount();
 
         // 2. 熔断与循环检测
         if (iters >= config.getMaxTotalIterations() || (trace != null && trace.isLooping())) {
             String reason = iters >= config.getMaxTotalIterations() ? "Maximum iterations reached" : "Loop detected";
-            LOG.warn("Team Agent [{}] forced exit: {}", teamName, reason);
+
+            if(LOG.isWarnEnabled()) {
+                LOG.warn("Team Agent [{}] forced exit: {}", teamName, reason);
+            }
+
             if (trace != null) {
                 trace.addStep("system", "Execution halted: " + reason, 0);
             }
+
             trace.setRoute(Agent.ID_END);
             return;
         }
@@ -77,6 +82,7 @@ import java.util.stream.Collectors;
         String cleanDecision = " " + decision.toUpperCase() + " "; //不要去掉符号（会失真）
 
         if (!cleanDecision.contains(config.getFinishMarker())) {
+            //按长度排序（先短再长）
             List<String> sortedNames = config.getAgentMap().keySet().stream()
                     .sorted((a, b) -> Integer.compare(b.length(), a.length()))
                     .collect(Collectors.toList());
