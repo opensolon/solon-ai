@@ -38,7 +38,7 @@ public class TeamConfig {
     private final Map<String, Agent> agentMap = new LinkedHashMap<>();
     private TeamStrategy strategy = TeamStrategy.HIERARCHICAL;
     private Consumer<GraphSpec> graphAdjuster;
-    private String finishMarker = "[TEAM_FINISH]";
+    private String finishMarker;
     private int maxTotalIterations = 8;
     private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
 
@@ -108,6 +108,10 @@ public class TeamConfig {
     }
 
     public String getFinishMarker() {
+        if (finishMarker == null) {
+            finishMarker = "[" + name.toUpperCase() + "_FINISH]";
+        }
+
         return finishMarker;
     }
 

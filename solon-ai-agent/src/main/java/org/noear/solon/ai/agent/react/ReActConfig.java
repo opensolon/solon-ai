@@ -39,7 +39,7 @@ public class ReActConfig {
     private int maxRetries = 3;
     private long retryDelayMs = 1000L;
     private int maxTokens = 2048;
-    private String finishMarker = "[REACT_FINISH]";
+    private String finishMarker;
     private ReActInterceptor interceptor;
     private ReActPromptProvider promptProvider = ReActPromptProviderEn.getInstance();
 
@@ -148,6 +148,10 @@ public class ReActConfig {
     }
 
     public String getFinishMarker() {
+        if (finishMarker == null) {
+            finishMarker = "[" + name.toUpperCase() + "_FINISH]";
+        }
+
         return finishMarker;
     }
 
