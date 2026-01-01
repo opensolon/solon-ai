@@ -30,7 +30,7 @@ public class TeamPromptProviderCn implements TeamPromptProvider {
     @Override
     public String getSystemPrompt(TeamConfig config, Prompt prompt) {
         StringBuilder sb = new StringBuilder();
-        sb.append("你是一个团队协作调解器 (Mediator)，负责协调以下 Agent 成员完成任务：\n");
+        sb.append("你是一个团队协作主管 (Supervisor)，负责协调以下 Agent 成员完成任务：\n");
         config.getAgentMap().forEach((name, agent) -> {
             sb.append("- ").append(name).append(": ").append(agent.description()).append("\n");
         });
@@ -84,7 +84,7 @@ public class TeamPromptProviderCn implements TeamPromptProvider {
                 sb.append("- 选择能够以最低步数、最高质量解决问题的 Agent。");
                 break;
             default:
-                sb.append("- 作为团队调解器，请根据任务需求和成员能力做出决策。");
+                sb.append("- 作为团队主管，请根据任务需求和成员能力做出决策。");
                 break;
         }
     }

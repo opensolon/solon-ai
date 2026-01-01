@@ -82,7 +82,7 @@ public class ContractNetBiddingTask implements TaskComponent {
             if (traceKey != null) {
                 TeamTrace trace = context.getAs(traceKey);
                 if (trace != null) {
-                    trace.setRoute(Agent.ID_ROUTER);
+                    trace.setRoute(Agent.ID_SUPERVISOR);
                     trace.addStep(Agent.ID_BIDDING, "Bidding phase completed with " +
                             config.getAgentMap().size() + " bids collected", 0);
                 }

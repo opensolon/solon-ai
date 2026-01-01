@@ -30,7 +30,7 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
     @Override
     public String getSystemPrompt(TeamConfig config, Prompt prompt) {
         StringBuilder sb = new StringBuilder();
-        sb.append("You are the Team Mediator, responsible for coordinating the following agents to complete the task:\n");
+        sb.append("You are the Team Supervisor, responsible for coordinating the following agents to complete the task:\n");
         config.getAgentMap().forEach((name, agent) -> {
             sb.append("- ").append(name).append(": ").append(agent.description()).append("\n");
         });
@@ -84,7 +84,7 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
                 sb.append("- Select the Agent who can resolve the issue with fewest steps and highest quality.");
                 break;
             default:
-                sb.append("- As team mediator, make decisions based on task requirements and member capabilities.");
+                sb.append("- As team supervisor, make decisions based on task requirements and member capabilities.");
                 break;
         }
     }

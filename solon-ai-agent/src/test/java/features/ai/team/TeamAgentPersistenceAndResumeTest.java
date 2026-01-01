@@ -34,12 +34,12 @@ public class TeamAgentPersistenceAndResumeTest {
                                     .name("searcher")
                                     .description("天气搜索员")
                                     .build())
-                            .linkAdd(Agent.ID_ROUTER);
+                            .linkAdd(Agent.ID_SUPERVISOR);
                 }).build();
 
         // 1. 【模拟第一阶段：挂起】执行了搜索，状态存入 DB
         FlowContext contextStep1 = FlowContext.of("order_sn_998");
-        contextStep1.lastNode(tripAgent.getGraph().getNodeOrThrow(Agent.ID_ROUTER));
+        contextStep1.lastNode(tripAgent.getGraph().getNodeOrThrow(Agent.ID_SUPERVISOR));
 
         TeamTrace snapshot = new TeamTrace();
         snapshot.addStep("searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);

@@ -17,7 +17,7 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.task.ContractNetBiddingTask;
-import org.noear.solon.ai.agent.team.task.MediatorTask;
+import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.Graph;
 import org.noear.solon.flow.GraphSpec;
@@ -89,13 +89,13 @@ public class TeamAgentBuilder {
      */
     private void buildHubAndSpokeGraph(GraphSpec spec) {
         String traceKey = "__" + config.getName();
-        spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
+        spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
 
-        spec.addExclusive(Agent.ID_ROUTER).task(new MediatorTask(config)).then(ns -> {
+        spec.addExclusive(Agent.ID_SUPERVISOR).task(new SupervisorTask(config)).then(ns -> {
             linkAgents(ns, traceKey);
         }).linkAdd(Agent.ID_END);
 
-        config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_ROUTER));
+        config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
         spec.addEnd(Agent.ID_END);
     }
 
@@ -104,9 +104,9 @@ public class TeamAgentBuilder {
         String firstAgent = config.getAgentMap().keySet().iterator().next();
         spec.addStart(Agent.ID_START).linkAdd(firstAgent); // 调整点：直接切入第一个 Agent
 
-        config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_ROUTER));
+        config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
 
-        spec.addExclusive(Agent.ID_ROUTER).task(new MediatorTask(config)).then(ns -> {
+        spec.addExclusive(Agent.ID_SUPERVISOR).task(new SupervisorTask(config)).then(ns -> {
             linkAgents(ns, traceKey);
         }).linkAdd(Agent.ID_END);
         spec.addEnd(Agent.ID_END);
@@ -114,14 +114,14 @@ public class TeamAgentBuilder {
 
     private void buildContractNetGraph(GraphSpec spec) {
         String traceKey = "__" + config.getName();
-        spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
-        spec.addExclusive(Agent.ID_ROUTER).task(new MediatorTask(config)).then(ns -> {
+        spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
+        spec.addExclusive(Agent.ID_SUPERVISOR).task(new SupervisorTask(config)).then(ns -> {
             ns.linkAdd(Agent.ID_BIDDING, l -> l.when(ctx -> Agent.ID_BIDDING.equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
             linkAgents(ns, traceKey);
         }).linkAdd(Agent.ID_END);
 
-        spec.addActivity(Agent.ID_BIDDING).task(new ContractNetBiddingTask(config)).linkAdd(Agent.ID_ROUTER);
-        config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_ROUTER));
+        spec.addActivity(Agent.ID_BIDDING).task(new ContractNetBiddingTask(config)).linkAdd(Agent.ID_SUPERVISOR);
+        config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
         spec.addEnd(Agent.ID_END);
     }
 }

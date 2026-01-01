@@ -38,14 +38,14 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.8.1
  */
-public class MediatorTask implements TaskComponent {
-    private static final Logger LOG = LoggerFactory.getLogger(MediatorTask.class);
+public class SupervisorTask implements TaskComponent {
+    private static final Logger LOG = LoggerFactory.getLogger(SupervisorTask.class);
     private final TeamConfig config;
 
     // 策略特定的上下文信息
     private final Map<String, Object> strategyContext = new HashMap<>();
 
-    public MediatorTask(TeamConfig config) {
+    public SupervisorTask(TeamConfig config) {
         this.config = config;
     }
 
@@ -64,7 +64,7 @@ public class MediatorTask implements TaskComponent {
             // 1. 检查终止条件（增强版）
             if (shouldTerminate(trace, context)) {
                 trace.setRoute(Agent.ID_END);
-                trace.addStep(Agent.ID_MEDIATOR, "Task terminated by mediator", 0);
+                trace.addStep(Agent.ID_SUPERVISOR, "Task terminated by supervisor", 0);
                 return;
             }
 
@@ -76,11 +76,11 @@ public class MediatorTask implements TaskComponent {
                 if (nextIndex < agentNames.size()) {
                     String nextAgent = agentNames.get(nextIndex);
                     selectAgent(trace, nextAgent);
-                    trace.addStep(Agent.ID_MEDIATOR, "Sequential routing to: " + nextAgent, 0);
+                    trace.addStep(Agent.ID_SUPERVISOR, "Sequential routing to: " + nextAgent, 0);
                 } else {
                     trace.setRoute(Agent.ID_END);
                     trace.setFinalAnswer("Sequential task completed.");
-                    trace.addStep(Agent.ID_MEDIATOR, "All sequential steps finished.", 0);
+                    trace.addStep(Agent.ID_SUPERVISOR, "All sequential steps finished.", 0);
                 }
                 trace.nextIterations();
             } else {
@@ -96,7 +96,7 @@ public class MediatorTask implements TaskComponent {
                 String enhancedPrompt = basePrompt + protocolExt + strategyContextInfo;
 
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Mediator system prompt:\n{}", enhancedPrompt);
+                    LOG.debug("Supervisor system prompt:\n{}", enhancedPrompt);
                 }
 
                 // 获取模型决策
@@ -104,7 +104,7 @@ public class MediatorTask implements TaskComponent {
                 try {
                     String history = trace.getFormattedHistory();
                     if (LOG.isDebugEnabled()) {
-                        LOG.debug("Providing history to mediator:\n{}", history);
+                        LOG.debug("Providing history to supervisor:\n{}", history);
                     }
 
                     decision = config.getChatModel().prompt(Arrays.asList(
@@ -115,7 +115,7 @@ public class MediatorTask implements TaskComponent {
                     )).call().getResultContent().trim();
 
                     if (LOG.isDebugEnabled()) {
-                        LOG.debug("Mediator decision: {}", decision);
+                        LOG.debug("Supervisor decision: {}", decision);
                     }
                 } catch (Exception e) {
                     LOG.error("Failed to get decision from LLM", e);
@@ -130,13 +130,13 @@ public class MediatorTask implements TaskComponent {
             }
 
         } catch (Exception e) {
-            LOG.error("Mediator task failed", e);
+            LOG.error("Supervisor task failed", e);
             String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
             if (traceKey != null) {
                 TeamTrace trace = context.getAs(traceKey);
                 if (trace != null) {
                     trace.setRoute(Agent.ID_END);
-                    trace.addStep(Agent.ID_MEDIATOR, "Mediator failed: " + e.getMessage(), 0);
+                    trace.addStep(Agent.ID_SUPERVISOR, "Supervisor failed: " + e.getMessage(), 0);
                 }
             }
         }
@@ -244,7 +244,7 @@ public class MediatorTask implements TaskComponent {
     private void parseAndRoute(TeamTrace trace, String decision, FlowContext context) {
         if (decision == null || decision.trim().isEmpty()) {
             trace.setRoute(Agent.ID_END);
-            trace.addStep(Agent.ID_MEDIATOR, "Empty decision received, terminating", 0);
+            trace.addStep(Agent.ID_SUPERVISOR, "Empty decision received, terminating", 0);
             return;
         }
 
@@ -272,7 +272,7 @@ public class MediatorTask implements TaskComponent {
             String biddingMarker = Agent.ID_BIDDING.toUpperCase();
             if (upperDecision.contains(biddingMarker)) {
                 trace.setRoute(Agent.ID_BIDDING);
-                trace.addStep(Agent.ID_MEDIATOR, "Initiating bidding process", 0);
+                trace.addStep(Agent.ID_SUPERVISOR, "Initiating bidding process", 0);
                 return;
             }
         }
@@ -340,7 +340,7 @@ public class MediatorTask implements TaskComponent {
 
         // D. 兜底方案
         trace.setRoute(Agent.ID_END);
-        trace.addStep(Agent.ID_MEDIATOR, "No valid agent matched from decision: " + originalDecision, 0);
+        trace.addStep(Agent.ID_SUPERVISOR, "No valid agent matched from decision: " + originalDecision, 0);
         LOG.warn("No agent matched from decision: {}", originalDecision);
     }
 
