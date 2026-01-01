@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +32,7 @@ import org.slf4j.LoggerFactory;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8")
 public class ContractNetBiddingTask implements TaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(ContractNetBiddingTask.class);
     private final TeamConfig config;

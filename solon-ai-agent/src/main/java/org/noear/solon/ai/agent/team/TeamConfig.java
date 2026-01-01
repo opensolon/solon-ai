@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.GraphSpec;
+import org.noear.solon.lang.Preview;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -31,6 +32,7 @@ import java.util.function.Consumer;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8")
 public class TeamConfig {
     private String name;
     private String description;

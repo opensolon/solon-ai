@@ -15,12 +15,15 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.lang.Preview;
+
 /**
  * 团队协作策略
  *
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8")
 public enum TeamStrategy {
     /**
      * 顺序流转

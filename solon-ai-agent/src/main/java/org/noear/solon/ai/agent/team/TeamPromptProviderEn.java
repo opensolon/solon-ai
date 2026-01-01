@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.lang.Preview;
 
 /**
  * English Prompt Provider (Supports all TeamStrategy protocols) - Test Stable Version
@@ -23,6 +24,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8")
 public class TeamPromptProviderEn implements TeamPromptProvider {
     private static final TeamPromptProviderEn INSTANCE = new TeamPromptProviderEn();
     public static TeamPromptProviderEn getInstance() { return INSTANCE; }

@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.lang.Preview;
 
 /**
  * 中文提示词提供者（支持全策略协议引导）- 测试稳定版
@@ -23,6 +24,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8")
 public class TeamPromptProviderCn implements TeamPromptProvider {
     private static final TeamPromptProviderCn INSTANCE = new TeamPromptProviderCn();
     public static TeamPromptProviderCn getInstance() { return INSTANCE; }

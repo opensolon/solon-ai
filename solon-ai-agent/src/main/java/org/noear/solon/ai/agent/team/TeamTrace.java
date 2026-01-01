@@ -16,6 +16,8 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.flow.NodeTrace;
+import org.noear.solon.lang.Preview;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -27,6 +29,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8")
 public class TeamTrace {
     private final List<TeamStep> steps = new ArrayList<>();
 

@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.lang.Preview;
 
 /**
  * Team 提示词提供者
@@ -23,6 +24,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8")
 public interface TeamPromptProvider {
     /**
      * 获取系统提示词

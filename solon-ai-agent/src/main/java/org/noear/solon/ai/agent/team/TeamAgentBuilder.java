@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.Graph;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.flow.NodeSpec;
+import org.noear.solon.lang.Preview;
 
 import java.util.function.Consumer;
 
@@ -31,6 +32,7 @@ import java.util.function.Consumer;
  * @author noear
  * @since 3.8.1
  * */
+@Preview("3.8")
 public class TeamAgentBuilder {
     private final TeamConfig config;
 
