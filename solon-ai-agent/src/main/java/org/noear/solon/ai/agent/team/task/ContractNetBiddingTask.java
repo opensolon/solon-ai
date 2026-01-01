@@ -7,32 +7,79 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 合同网协议中的招标阶段任务（负责收集所有候选者的背景信息）
  */
 public class ContractNetBiddingTask implements TaskComponent {
+    private static final Logger LOG = LoggerFactory.getLogger(ContractNetBiddingTask.class);
     private final TeamConfig config;
 
-    public ContractNetBiddingTask(TeamConfig config) { this.config = config; }
+    public ContractNetBiddingTask(TeamConfig config) {
+        this.config = config;
+    }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        Prompt prompt = context.getAs(Agent.KEY_PROMPT);
-        StringBuilder bids = new StringBuilder();
-        // 汇总所有 Agent 的能力描述，形成“标书集”
-        for (Agent agent : config.getAgentMap().values()) {
-            // 调用新方法：获取 Agent 的“实时竞标方案”
-            String bidProposal = agent.estimate(context, prompt);
+        try {
+            Prompt prompt = context.getAs(Agent.KEY_PROMPT);
+            StringBuilder bids = new StringBuilder();
+            bids.append("=== Contract Net Bidding Results ===\n\n");
 
-            bids.append("- Candidate [").append(agent.name()).append("]:\n")
-                    .append("  Proposal: ").append(bidProposal).append("\n");
+            // 汇总所有 Agent 的能力描述，形成"标书集"
+            for (Agent agent : config.getAgentMap().values()) {
+                try {
+                    // 调用新方法：获取 Agent 的"实时竞标方案"
+                    String bidProposal = agent.estimate(context, prompt);
+
+                    bids.append("Candidate: ").append(agent.name()).append("\n");
+                    bids.append("Capability: ").append(agent.description()).append("\n");
+                    bids.append("Proposal: ").append(bidProposal).append("\n");
+                    bids.append("---\n");
+
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Collected bid from agent {}: {}", agent.name(), bidProposal);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Failed to collect bid from agent {}: {}", agent.name(), e.getMessage());
+                    bids.append("Candidate: ").append(agent.name()).append("\n");
+                    bids.append("Status: Failed to provide bid - ").append(e.getMessage()).append("\n");
+                    bids.append("---\n");
+                }
+            }
+
+            bids.append("\n=== End of Bids ===");
+
+            String bidsContent = bids.toString();
+            context.put("active_bids", bidsContent);
+
+            if (LOG.isInfoEnabled()) {
+                LOG.info("Collected {} bids for contract net protocol", config.getAgentMap().size());
+            }
+
+            // 竞标信息收集完毕，跳回 Router 让调解器做出 AWARD（定标）决策
+            String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
+            if (traceKey != null) {
+                TeamTrace trace = context.getAs(traceKey);
+                if (trace != null) {
+                    trace.setRoute(Agent.ID_ROUTER);
+                    trace.addStep("bidding_system", "Bidding phase completed with " +
+                            config.getAgentMap().size() + " bids collected", 0);
+                }
+            }
+        } catch (Exception e) {
+            LOG.error("Contract net bidding task failed", e);
+            // 设置错误状态，避免死循环
+            String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
+            if (traceKey != null) {
+                TeamTrace trace = context.getAs(traceKey);
+                if (trace != null) {
+                    trace.setRoute(Agent.ID_END);
+                    trace.addStep("system", "Bidding failed: " + e.getMessage(), 0);
+                }
+            }
         }
-
-        context.put("active_bids", bids.toString());
-
-        // 竞标信息收集完毕，跳回 Router 让调解器做出 AWARD（定标）决策
-        TeamTrace trace = context.getAs(context.getAs(Agent.KEY_CURRENT_TRACE_KEY));
-        trace.setRoute(Agent.ID_ROUTER);
     }
 }

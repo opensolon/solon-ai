@@ -13,7 +13,9 @@ public class ClassAsOne {
     public static void main(String[] args) throws IOException {
         //print("/solon-ai-agent/src/main/java/");
 
-        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/team");
+        print("/solon-ai-agent/src/test/java/features/ai/team");
+
+        //print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/team");
 
 //        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/react");
     }

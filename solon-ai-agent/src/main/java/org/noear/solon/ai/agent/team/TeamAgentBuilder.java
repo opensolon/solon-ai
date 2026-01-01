@@ -19,16 +19,20 @@ public class TeamAgentBuilder {
         this.config.setPromptProvider(TeamPromptProviderCn.getInstance());
     }
 
-    public TeamAgentBuilder name(String name) { config.setName(name); return this; }
-    public TeamAgentBuilder description(String description) { config.setDescription(description); return this; }
-    public TeamAgentBuilder strategy(TeamStrategy strategy) { config.setStrategy(strategy); return this; }
+    public TeamAgentBuilder name(String name) {  config.setName( name);  return this;  }
+    public TeamAgentBuilder description(String description) {   config.setDescription(description);   return this;  }
     public TeamAgentBuilder addAgent(Agent agent) { config.addAgent(agent); return this; }
-    public TeamAgentBuilder maxTotalIterations(int max) { config.setMaxTotalIterations(max); return this; }
-    public TeamAgentBuilder graph(Consumer<GraphSpec> graphBuilder) { config.setGraphBuilder(graphBuilder); return this; }
-    public TeamAgentBuilder finishMarker(String finishMarker) { config.setFinishMarker(finishMarker); return this; }
-    public TeamAgentBuilder promptProvider(TeamPromptProvider promptProvider) { config.setPromptProvider(promptProvider); return this; }
+    public TeamAgentBuilder promptProvider(TeamPromptProvider promptProvider) {  config.setPromptProvider(promptProvider); return this; }
+    public TeamAgentBuilder finishMarker(String finishMarker) { config.setFinishMarker(finishMarker);  return this; }
+    public TeamAgentBuilder maxTotalIterations(int maxTotalIterations) { config.setMaxTotalIterations(maxTotalIterations);  return this;}
+    public TeamAgentBuilder strategy(TeamStrategy strategy) { config.setStrategy(strategy); return this; }
+    public TeamAgentBuilder graph(Consumer<GraphSpec> graphBuilder) {   config.setGraphBuilder(graphBuilder);    return this; }
 
     public TeamAgent build() {
+        if(config.getName() == null){
+            config.setName("team_agent");
+        }
+
         return new TeamAgent(createGraph(), config.getName(), config.getDescription());
     }
 
