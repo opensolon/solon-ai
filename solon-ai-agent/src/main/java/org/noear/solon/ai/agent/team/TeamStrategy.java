@@ -23,6 +23,10 @@ package org.noear.solon.ai.agent.team;
  */
 public enum TeamStrategy {
     /**
+     * 顺序流转
+     */
+    SEQUENTIAL,
+    /**
      * 层级协调
      */
     HIERARCHICAL,

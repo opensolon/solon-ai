@@ -59,6 +59,10 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
 
     private void injectStrategyInstruction(StringBuilder sb, TeamStrategy strategy, String finishMarker) {
         switch (strategy) {
+            case SEQUENTIAL:
+                sb.append("- Collaboration Protocol: Sequential Pipeline Mode.\n");
+                sb.append("- Tasks are assigned in the predefined order. Ends after all experts have executed.");
+                break;
             case HIERARCHICAL:
                 sb.append("- You are the Lead Supervisor. Decompose the task into steps and assign suitable Agents.\n");
                 sb.append("- Review each member's output to ensure it meets requirements.");

@@ -59,6 +59,10 @@ public class TeamPromptProviderCn implements TeamPromptProvider {
 
     private void injectStrategyInstruction(StringBuilder sb, TeamStrategy strategy, String finishMarker) {
         switch (strategy) {
+            case SEQUENTIAL:
+                sb.append("- 协作协议：顺序流水线模式。\n");
+                sb.append("- 系统将按照成员定义的先后顺序依次指派任务。执行完所有专家后即结束。");
+                break;
             case HIERARCHICAL:
                 sb.append("- 你是最高指挥官。将任务拆解为步骤，并按顺序指派最合适的 Agent。\n");
                 sb.append("- 监督每个成员的产出是否符合预期。");

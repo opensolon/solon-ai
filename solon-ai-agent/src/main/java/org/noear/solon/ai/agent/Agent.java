@@ -112,4 +112,6 @@ public interface Agent extends NamedTaskComponent {
     static String ID_BIDDING = "bidding";
     static String ID_REASON = "reason";
     static String ID_ACTION = "action";
+    static String ID_MEDIATOR = "mediator";
+    static String ID_SYSTEM = "system";
 }

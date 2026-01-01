@@ -66,6 +66,7 @@ public class TeamAgentBuilder {
             switch (config.getStrategy()) {
                 case SWARM: buildSwarmGraph(spec); break;
                 case CONTRACT_NET: buildContractNetGraph(spec); break;
+                case SEQUENTIAL:
                 case BLACKBOARD:
                 case MARKET_BASED:
                 case HIERARCHICAL:

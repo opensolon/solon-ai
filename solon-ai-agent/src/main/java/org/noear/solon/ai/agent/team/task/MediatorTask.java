@@ -64,53 +64,70 @@ public class MediatorTask implements TaskComponent {
             // 1. 检查终止条件（增强版）
             if (shouldTerminate(trace, context)) {
                 trace.setRoute(Agent.ID_END);
-                trace.addStep("mediator", "Task terminated by mediator", 0);
+                trace.addStep(Agent.ID_MEDIATOR, "Task terminated by mediator", 0);
                 return;
             }
 
-            // 2. 准备协议补充信息
-            StringBuilder protocolExt = new StringBuilder();
-            prepareProtocolInfo(context, trace, protocolExt);
+            // 2. 如果是顺序执行（不走 llm）
+            if (config.getStrategy() == TeamStrategy.SEQUENTIAL) {
+                List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
+                int nextIndex = trace.getIterationsCount();
 
-            // 3. 构建策略特定的上下文
-            String strategyContextInfo = prepareStrategyContext(context, trace);
-
-            // 4. 构建 Prompt 并调用模型
-            String basePrompt = config.getSystemPrompt(prompt);
-            String enhancedPrompt = basePrompt + protocolExt + strategyContextInfo;
-
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Mediator system prompt:\n{}", enhancedPrompt);
-            }
-
-            // 获取模型决策
-            String decision;
-            try {
-                String history = trace.getFormattedHistory();
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Providing history to mediator:\n{}", history);
+                if (nextIndex < agentNames.size()) {
+                    String nextAgent = agentNames.get(nextIndex);
+                    selectAgent(trace, nextAgent);
+                    trace.addStep(Agent.ID_MEDIATOR, "Sequential routing to: " + nextAgent, 0);
+                } else {
+                    trace.setRoute(Agent.ID_END);
+                    trace.setFinalAnswer("Sequential task completed.");
+                    trace.addStep(Agent.ID_MEDIATOR, "All sequential steps finished.", 0);
                 }
+                trace.nextIterations();
+            } else {
+                // 3. 准备协议补充信息
+                StringBuilder protocolExt = new StringBuilder();
+                prepareProtocolInfo(context, trace, protocolExt);
 
-                decision = config.getChatModel().prompt(Arrays.asList(
-                        ChatMessage.ofSystem(enhancedPrompt),
-                        ChatMessage.ofUser("Collaboration History:\n" + history +
-                                "\n\nCurrent iteration: " + trace.getIterationsCount() +
-                                "\nPlease decide the next action:")
-                )).call().getResultContent().trim();
+                // 4. 构建策略特定的上下文
+                String strategyContextInfo = prepareStrategyContext(context, trace);
+
+                // 5. 构建 Prompt 并调用模型
+                String basePrompt = config.getSystemPrompt(prompt);
+                String enhancedPrompt = basePrompt + protocolExt + strategyContextInfo;
 
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Mediator decision: {}", decision);
+                    LOG.debug("Mediator system prompt:\n{}", enhancedPrompt);
                 }
-            } catch (Exception e) {
-                LOG.error("Failed to get decision from LLM", e);
-                decision = config.getFinishMarker(); // 出错时直接结束
+
+                // 获取模型决策
+                String decision;
+                try {
+                    String history = trace.getFormattedHistory();
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Providing history to mediator:\n{}", history);
+                    }
+
+                    decision = config.getChatModel().prompt(Arrays.asList(
+                            ChatMessage.ofSystem(enhancedPrompt),
+                            ChatMessage.ofUser("Collaboration History:\n" + history +
+                                    "\n\nCurrent iteration: " + trace.getIterationsCount() +
+                                    "\nPlease decide the next action:")
+                    )).call().getResultContent().trim();
+
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Mediator decision: {}", decision);
+                    }
+                } catch (Exception e) {
+                    LOG.error("Failed to get decision from LLM", e);
+                    decision = config.getFinishMarker(); // 出错时直接结束
+                }
+
+                // 6. 解析决策并设置路由
+                parseAndRoute(trace, decision, context);
+
+                // 7. 迭代计数
+                trace.nextIterations();
             }
-
-            // 5. 解析决策并设置路由
-            parseAndRoute(trace, decision, context);
-
-            // 6. 迭代计数
-            trace.nextIterations();
 
         } catch (Exception e) {
             LOG.error("Mediator task failed", e);
@@ -119,7 +136,7 @@ public class MediatorTask implements TaskComponent {
                 TeamTrace trace = context.getAs(traceKey);
                 if (trace != null) {
                     trace.setRoute(Agent.ID_END);
-                    trace.addStep("mediator", "Mediator failed: " + e.getMessage(), 0);
+                    trace.addStep(Agent.ID_MEDIATOR, "Mediator failed: " + e.getMessage(), 0);
                 }
             }
         }
@@ -131,14 +148,14 @@ public class MediatorTask implements TaskComponent {
     private boolean shouldTerminate(TeamTrace trace, FlowContext context) {
         // 超过最大迭代次数
         if (trace.getIterationsCount() >= config.getMaxTotalIterations()) {
-            trace.addStep("system", "Maximum iterations reached (" +
+            trace.addStep(Agent.ID_SYSTEM, "Maximum iterations reached (" +
                     config.getMaxTotalIterations() + ")", 0);
             return true;
         }
 
         // 检测死循环
         if (trace.isLooping()) {
-            trace.addStep("system", "Loop detected in team collaboration", 0);
+            trace.addStep(Agent.ID_SYSTEM, "Loop detected in team collaboration", 0);
             return true;
         }
 
@@ -227,7 +244,7 @@ public class MediatorTask implements TaskComponent {
     private void parseAndRoute(TeamTrace trace, String decision, FlowContext context) {
         if (decision == null || decision.trim().isEmpty()) {
             trace.setRoute(Agent.ID_END);
-            trace.addStep("mediator", "Empty decision received, terminating", 0);
+            trace.addStep(Agent.ID_MEDIATOR, "Empty decision received, terminating", 0);
             return;
         }
 
@@ -255,7 +272,7 @@ public class MediatorTask implements TaskComponent {
             String biddingMarker = Agent.ID_BIDDING.toUpperCase();
             if (upperDecision.contains(biddingMarker)) {
                 trace.setRoute(Agent.ID_BIDDING);
-                trace.addStep("mediator", "Initiating bidding process", 0);
+                trace.addStep(Agent.ID_MEDIATOR, "Initiating bidding process", 0);
                 return;
             }
         }
@@ -323,7 +340,7 @@ public class MediatorTask implements TaskComponent {
 
         // D. 兜底方案
         trace.setRoute(Agent.ID_END);
-        trace.addStep("mediator", "No valid agent matched from decision: " + originalDecision, 0);
+        trace.addStep(Agent.ID_MEDIATOR, "No valid agent matched from decision: " + originalDecision, 0);
         LOG.warn("No agent matched from decision: {}", originalDecision);
     }
 
