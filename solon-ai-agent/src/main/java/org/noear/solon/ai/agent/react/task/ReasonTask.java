@@ -135,7 +135,8 @@ public class ReasonTask implements TaskComponent {
                                 o.toolsAdd(config.getTools());
                                 o.optionAdd("stop", "Observation:");
                             } else {
-                                o.optionAdd("stop", config.getFinishMarker());
+                                //不能有
+                                //o.optionAdd("stop", config.getFinishMarker());
                             }
                         }).call();
             } catch (Exception e) {
