@@ -50,6 +50,7 @@ public class ReActTrace {
     private String finalAnswer;
     private String lastResponse;
     private NodeTrace lastNode;
+    private final ReActMetrics metrics = new ReActMetrics();
 
     public ReActTrace() {
         this.stepCounter = new AtomicInteger(0);
@@ -64,6 +65,11 @@ public class ReActTrace {
 
 
     // --- Getters & Setters ---
+
+
+    public ReActMetrics getMetrics() {
+        return metrics;
+    }
 
     public Prompt getPrompt() {
         return prompt;
@@ -179,6 +185,19 @@ public class ReActTrace {
             }
         }
         return sb.toString();
+    }
+
+    public int getToolCallCount(){
+        int count = 0;
+        for (ChatMessage msg : messages) {
+            if (msg instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) msg;
+                if (Assert.isNotEmpty(am.getToolCalls())) {
+                    count += am.getToolCalls().size();
+                }
+            }
+        }
+        return count;
     }
 
     private String extractThought(String content) {

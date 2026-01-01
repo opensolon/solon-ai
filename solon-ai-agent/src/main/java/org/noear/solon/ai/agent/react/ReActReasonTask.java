@@ -27,6 +27,7 @@ import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * ReAct 推理任务
@@ -40,6 +41,21 @@ public class ReActReasonTask implements TaskComponent {
     private final ReActConfig config;
 
     public ReActReasonTask(ReActConfig config) {
+        Objects.requireNonNull(config, "config");
+        Objects.requireNonNull(config.getChatModel(), "config.chatModel");
+
+        if (config.getName() == null) {
+            config.setName("react_agent");
+        }
+
+        if (config.getMaxSteps() <= 0) {
+            config.setMaxSteps(10);
+        }
+
+        if (config.getMaxTokens() <= 0) {
+            config.setMaxTokens(2048);
+        }
+
         this.config = config;
     }
 
@@ -67,22 +83,7 @@ public class ReActReasonTask implements TaskComponent {
         messages.addAll(trace.getMessages());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
-        ChatResponse response = config.getChatModel()
-                .prompt(messages)
-                .options(o -> {
-                    o.autoToolCall(false);
-                    o.max_tokens(config.getMaxTokens());
-                    o.temperature(config.getTemperature());
-
-                    if (Assert.isNotEmpty(config.getTools())) {
-                        o.toolsAdd(config.getTools());
-                        // 有工具时才设置stop序列
-                        o.optionAdd("stop", "Observation:");
-                    } else {
-                        // 没有工具时不需要stop序列
-                        o.optionAdd("stop", config.getFinishMarker());
-                    }
-                }).call();
+        ChatResponse response = callWithRetry(messages, config.getMaxRetries());
 
         // --- 处理模型空回复 (防止流程卡死) ---
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
@@ -127,6 +128,44 @@ public class ReActReasonTask implements TaskComponent {
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(clearContent));
         }
+    }
+
+    /**
+     * 简单的重试调用
+     */
+    private ChatResponse callWithRetry(List<ChatMessage> messages, int maxRetries) {
+        Exception lastException = null;
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                return config.getChatModel()
+                        .prompt(messages)
+                        .options(o -> {
+                            o.autoToolCall(false);
+                            o.max_tokens(config.getMaxTokens());
+                            o.temperature(config.getTemperature());
+
+                            if (Assert.isNotEmpty(config.getTools())) {
+                                o.toolsAdd(config.getTools());
+                                // 有工具时才设置stop序列
+                                o.optionAdd("stop", "Observation:");
+                            } else {
+                                // 没有工具时不需要stop序列
+                                o.optionAdd("stop", config.getFinishMarker());
+                            }
+                        }).call();
+            } catch (Exception e) {
+                lastException = e;
+                if (i < maxRetries - 1) {
+                    try {
+                        Thread.sleep(1000 * (i + 1)); // 指数退避
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Interrupted during retry", ie);
+                    }
+                }
+            }
+        }
+        throw new RuntimeException("Failed after " + maxRetries + " retries", lastException);
     }
 
     /**

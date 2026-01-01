@@ -36,6 +36,7 @@ public class ReActConfig {
     private final Map<String, FunctionTool> toolMap = new LinkedHashMap<>();
     private int maxSteps = 10;
     private float temperature = 0.7F;
+    private int maxRetries = 3;
     private int maxTokens = 2048;
     private String finishMarker = "[FINISH]";
     private ReActInterceptor interceptor;
@@ -76,6 +77,10 @@ public class ReActConfig {
         this.temperature = val;
     }
 
+    public void setMaxRetries(int maxRetries) {
+        this.maxRetries = Math.max(1, maxRetries);
+    }
+
     public void setMaxTokens(int val) {
         this.maxTokens = val;
     }
@@ -112,7 +117,7 @@ public class ReActConfig {
         return toolMap;
     }
 
-    public FunctionTool getTool(String name){
+    public FunctionTool getTool(String name) {
         return toolMap.get(name);
     }
 
@@ -126,6 +131,10 @@ public class ReActConfig {
 
     public float getTemperature() {
         return temperature;
+    }
+
+    public int getMaxRetries() {
+        return maxRetries;
     }
 
     public int getMaxTokens() {

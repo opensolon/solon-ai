@@ -107,6 +107,7 @@ public class ReActAgent implements Agent {
         }
 
         final ReActTrace trace = tmpTrace;
+        long startTime = System.currentTimeMillis();
 
         try {
             //采用变量域的思想传递 KEY_CURRENT_TRACE_KEY
@@ -116,6 +117,16 @@ public class ReActAgent implements Agent {
         } finally {
             //同步节点状态
             trace.setLastNode(context.lastNode());
+
+            long duration = System.currentTimeMillis() - startTime;
+            trace.getMetrics().setTotalDuration(duration);
+            trace.getMetrics().setStepCount(trace.getStepCount());
+            trace.getMetrics().setToolCallCount(trace.getToolCallCount());
+
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("ReActAgent completed in {}ms, {} steps, {} tool calls",
+                        duration, trace.getStepCount(), trace.getMetrics().getToolCallCount());
+            }
         }
 
 
