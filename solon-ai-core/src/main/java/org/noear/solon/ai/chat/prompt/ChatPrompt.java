@@ -39,4 +39,11 @@ public interface ChatPrompt {
     static ChatPrompt of(ChatMessage... messages) {
         return new Prompt().addMessage(messages);
     }
+
+    /**
+     * 构建
+     */
+    static ChatPrompt of(String... messages) {
+        return new Prompt().addMessage(messages);
+    }
 }

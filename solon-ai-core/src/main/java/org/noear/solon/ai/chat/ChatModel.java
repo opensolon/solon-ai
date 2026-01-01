@@ -65,12 +65,15 @@ public class ChatModel implements AiModel {
     /**
      * 提示语
      */
+    public ChatRequestDesc prompt(ChatSession prompt) {
+        return new ChatRequestDescDefault(config, dialect, prompt);
+    }
+
+    /**
+     * 提示语
+     */
     public ChatRequestDesc prompt(ChatPrompt prompt) {
-        if (prompt instanceof ChatSession) {
-            return new ChatRequestDescDefault(config, dialect, (ChatSession) prompt);
-        } else {
-            return new ChatRequestDescDefault(config, dialect, InMemoryChatSession.builder().messages(prompt.getMessages()).build());
-        }
+        return prompt(prompt.getMessages());
     }
 
     /**

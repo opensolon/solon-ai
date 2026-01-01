@@ -18,6 +18,7 @@ package org.noear.solon.ai.chat.prompt;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -28,7 +29,7 @@ import java.util.List;
  * @author noear
  * @since 3.2
  */
-public class Prompt implements ChatPrompt {
+public class Prompt implements ChatPrompt, Serializable {
     private final List<ChatMessage> messageList = new ArrayList<>();
 
     @Override
@@ -75,11 +76,17 @@ public class Prompt implements ChatPrompt {
         return null;
     }
 
-    public static Prompt of(String... messages) {
+    /**
+     * 构建
+     */
+    public static Prompt of(ChatMessage... messages) {
         return new Prompt().addMessage(messages);
     }
 
-    public static Prompt of(ChatMessage... messages) {
+    /**
+     * 构建
+     */
+    public static Prompt of(String... messages) {
         return new Prompt().addMessage(messages);
     }
 }

@@ -31,7 +31,7 @@ import java.util.List;
  * @since 3.1
  */
 @Preview("3.1")
-public interface ChatSession extends ChatPrompt {
+public interface ChatSession {
     /**
      * 获取会话id
      */
