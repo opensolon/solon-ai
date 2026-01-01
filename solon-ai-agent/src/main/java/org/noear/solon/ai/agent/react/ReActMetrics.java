@@ -18,17 +18,33 @@ package org.noear.solon.ai.agent.react;
 import java.io.Serializable;
 
 /**
- * ReAct 执行度量
+ * ReAct 智能体执行指标
  *
  * @author noear
  * @since 3.8.1
  */
 public class ReActMetrics implements Serializable {
+    /**
+     * 总执行时间（毫秒）
+     */
     private long totalDuration;
+
+    /**
+     * 工具调用次数
+     */
     private int toolCallCount;
+
+    /**
+     * 执行步数（思考迭代次数）
+     */
     private int stepCount;
+
+    /**
+     * 使用的令牌总数
+     */
     private long tokenUsage;
 
+    // Setter 方法
     public void setTotalDuration(long totalDuration) {
         this.totalDuration = totalDuration;
     }
@@ -45,6 +61,7 @@ public class ReActMetrics implements Serializable {
         this.tokenUsage = tokenUsage;
     }
 
+    // Getter 方法
     public long getTotalDuration() {
         return totalDuration;
     }

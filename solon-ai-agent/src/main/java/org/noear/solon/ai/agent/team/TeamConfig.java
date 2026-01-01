@@ -26,7 +26,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * 团队配置
+ * Team 配置
  *
  * @author noear
  * @since 3.8.1

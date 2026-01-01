@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 
 /**
- * 自省反思自能体
+ * 自省反思智能体
  *
  * @author noear
  * @since 3.8.1
@@ -153,56 +153,101 @@ public class ReActAgent implements Agent {
             this.config = new ReActConfig(chatModel);
         }
 
+        /**
+         * 智能体名字
+         */
         public Builder name(String val) {
             config.setName(val);
             return this;
         }
 
+        /**
+         * 智能体描述（团队协作时需要）
+         */
         public Builder description(String val) {
             config.setDescription(val);
             return this;
         }
 
+        /**
+         * 添加工具
+         */
         public Builder addTool(FunctionTool tool) {
             config.addTool(tool);
             return this;
         }
 
+        /**
+         * 添加工具
+         */
         public Builder addTool(List<FunctionTool> tools) {
             config.addTool(tools);
             return this;
         }
 
+        /**
+         * 添加工具
+         */
         public Builder addTool(ToolProvider toolProvider) {
             config.addTool(toolProvider);
             return this;
         }
 
+        /**
+         * 温度
+         */
         public Builder temperature(float val) {
             config.setTemperature(val);
             return this;
         }
 
+        /**
+         * 重试配置
+         *
+         * @param maxRetries   最大重试次数
+         * @param retryDelayMs 重试延迟时间
+         *
+         */
+        public Builder retryConfig(int maxRetries, long retryDelayMs) {
+            config.setRetryConfig(maxRetries, retryDelayMs);
+            return this;
+        }
+
+        /**
+         * 最大步数
+         */
         public Builder maxSteps(int val) {
             config.setMaxSteps(val);
             return this;
         }
 
-        public Builder finishMarker(String val){
+        /**
+         * 完成标记
+         */
+        public Builder finishMarker(String val) {
             config.setFinishMarker(val);
             return this;
         }
 
+        /**
+         * 最大令牌数
+         */
         public Builder maxTokens(int val) {
             config.setMaxTokens(val);
             return this;
         }
 
+        /**
+         * 提示语提供者
+         */
         public Builder promptProvider(ReActPromptProvider val) {
             config.setPromptProvider(val);
             return this;
         }
 
+        /**
+         * 拦截器
+         */
         public Builder interceptor(ReActInterceptor val) {
             config.setInterceptor(val);
             return this;

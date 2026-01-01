@@ -58,15 +58,13 @@ public class TeamAgent implements Agent {
 
     /**
      * 获取图
-     *
      */
     public Graph getGraph() {
         return graph;
     }
 
     /**
-     * 获取实例跟踪
-     *
+     * 获取跟踪实例
      */
     public @Nullable TeamTrace getTrace(FlowContext context) {
         return context.getAs("__" + name);
