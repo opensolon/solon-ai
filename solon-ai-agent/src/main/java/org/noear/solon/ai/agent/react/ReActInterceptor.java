@@ -101,7 +101,7 @@ public interface ReActInterceptor extends FlowInterceptor {
         }
 
         public ReActInterceptor build() {
-            return new ReActInterceptorDefault(doIntercept,
+            return new SimpleReActInterceptor(doIntercept,
                     onNodeStart,
                     onNodeEnd,
                     onThought,

@@ -78,7 +78,7 @@ public class ReActConfig {
         this.temperature = val;
     }
 
-    public void setRetries(int maxRetries, long retryDelayMs) {
+    public void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(1000, retryDelayMs);
     }

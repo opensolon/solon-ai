@@ -32,7 +32,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class ReActInterceptorDefault implements ReActInterceptor {
+public class SimpleReActInterceptor implements ReActInterceptor {
     private final Consumer<FlowInvocation> doIntercept;
     private final BiConsumer<FlowContext, Node> onNodeStart;
     private final BiConsumer<FlowContext, Node> onNodeEnd;
@@ -40,12 +40,12 @@ public class ReActInterceptorDefault implements ReActInterceptor {
     private final TrConsumer<ReActTrace, String, Map<String, Object>> onAction;
     private final BiConsumer<ReActTrace, String> onObservation;
 
-    public ReActInterceptorDefault(Consumer<FlowInvocation> doIntercept,
-                                   BiConsumer<FlowContext, Node> onNodeStart,
-                                   BiConsumer<FlowContext, Node> onNodeEnd,
-                                   BiConsumer<ReActTrace, String> onThought,
-                                   TrConsumer<ReActTrace, String, Map<String, Object>> onAction,
-                                   BiConsumer<ReActTrace, String> onObservation) {
+    public SimpleReActInterceptor(Consumer<FlowInvocation> doIntercept,
+                                  BiConsumer<FlowContext, Node> onNodeStart,
+                                  BiConsumer<FlowContext, Node> onNodeEnd,
+                                  BiConsumer<ReActTrace, String> onThought,
+                                  TrConsumer<ReActTrace, String, Map<String, Object>> onAction,
+                                  BiConsumer<ReActTrace, String> onObservation) {
         this.doIntercept = doIntercept;
         this.onNodeStart = onNodeStart;
         this.onNodeEnd = onNodeEnd;

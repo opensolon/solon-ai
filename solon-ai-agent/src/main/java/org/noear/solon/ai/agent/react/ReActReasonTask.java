@@ -27,7 +27,6 @@ import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * ReAct 推理任务
@@ -119,8 +118,8 @@ public class ReActReasonTask implements TaskComponent {
      * 简单的重试调用
      */
     private ChatResponse callWithRetry(List<ChatMessage> messages) {
-        Exception lastException = null;
-        for (int i = 0; i < config.getMaxRetries(); i++) {
+        int maxRetries = config.getMaxRetries();
+        for (int i = 0; i < maxRetries; i++) {
             try {
                 return config.getChatModel()
                         .prompt(messages)
@@ -129,28 +128,27 @@ public class ReActReasonTask implements TaskComponent {
                             o.max_tokens(config.getMaxTokens());
                             o.temperature(config.getTemperature());
 
-                            if (Assert.isNotEmpty(config.getTools())) {
+                            if (!config.getTools().isEmpty()) {
                                 o.toolsAdd(config.getTools());
-                                // 有工具时才设置stop序列
                                 o.optionAdd("stop", "Observation:");
                             } else {
-                                // 没有工具时不需要stop序列
                                 o.optionAdd("stop", config.getFinishMarker());
                             }
                         }).call();
             } catch (Exception e) {
-                lastException = e;
-                if (i < config.getMaxRetries() - 1) {
-                    try {
-                        Thread.sleep(config.getRetryDelayMs() * (i + 1)); // 指数退避
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw new RuntimeException("Interrupted during retry", ie);
-                    }
+                if (i == maxRetries - 1) {
+                    throw new RuntimeException("Failed after " + maxRetries + " retries", e);
+                }
+
+                try {
+                    Thread.sleep(config.getRetryDelayMs() * (i + 1));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted during retry", ie);
                 }
             }
         }
-        throw new RuntimeException("Failed after " + config.getMaxRetries() + " retries", lastException);
+        throw new RuntimeException("Should not reach here");
     }
 
     /**

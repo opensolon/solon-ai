@@ -190,17 +190,6 @@ public class ReActTrace {
         return count;
     }
 
-    private String extractThought(String content) {
-        if (content == null || !content.contains("Thought:")) return "";
-
-        Pattern pattern = Pattern.compile("Thought:\\s*(.*?)(?=\\n\\s*(?:Action:|\\[FINISH\\]|$))", Pattern.DOTALL);
-        Matcher matcher = pattern.matcher(content);
-        if (matcher.find()) {
-            return matcher.group(1).trim();
-        }
-        return "";
-    }
-
     private void compact() {
         if (messages.size() <= 12) return; // 提高阈值
 
