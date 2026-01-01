@@ -191,30 +191,30 @@ public class ReActTrace {
     }
 
     private void compact() {
-        if (messages.size() <= 12) return; // 提高阈值
+        int totalSize = messages.size();
+        if (totalSize <= 12) return;
 
         List<ChatMessage> compressed = new ArrayList<>();
 
         // 1. 保留第一条用户消息
-        ChatMessage firstUser = messages.stream()
-                .filter(m -> m instanceof UserMessage)
-                .findFirst()
-                .orElse(null);
-        if (firstUser != null) {
-            compressed.add(firstUser);
+        for (ChatMessage msg : messages) {
+            if (msg instanceof UserMessage) {
+                compressed.add(msg);
+                break;
+            }
         }
 
         // 2. 保留最后10条消息（确保工具调用链完整）
-        int keepCount = Math.min(10, messages.size());
-        int startIdx = messages.size() - keepCount;
+        int keepCount = Math.min(10, totalSize);
+        int startIdx = totalSize - keepCount;
 
         // 3. 确保不会切断工具调用链
         while (startIdx > 0 && isPartOfToolChain(startIdx)) {
             startIdx--;
         }
 
-        List<ChatMessage> recent = messages.subList(startIdx, messages.size());
-        compressed.add(ChatMessage.ofSystem("[Context trimmed: " + (messages.size() - recent.size()) + " messages compressed]"));
+        List<ChatMessage> recent = messages.subList(startIdx, totalSize);
+        compressed.add(ChatMessage.ofSystem("[Context trimmed: " + (totalSize - recent.size()) + " messages compressed]"));
         compressed.addAll(recent);
 
         messages = compressed;
