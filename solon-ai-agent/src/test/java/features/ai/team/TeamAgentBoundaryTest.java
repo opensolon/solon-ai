@@ -160,4 +160,81 @@ public class TeamAgentBoundaryTest {
                     "至少应该执行一步，实际步数: " + trace.getStepCount());
         }
     }
+
+    @Test
+    public void testIterationLimitActuallyTriggered() throws Throwable {
+        // 测试：确实能触发迭代限制的场景
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 创建两个处理能力有限的Agent
+        Agent agentA = ReActAgent.builder(chatModel)
+                .name("agent_a")
+                .description("A: 总是说'这个问题很复杂，需要更多分析，请B继续'")
+                .build();
+
+        Agent agentB = ReActAgent.builder(chatModel)
+                .name("agent_b")
+                .description("B: 总是说'需要进一步研究，请A继续'")
+                .build();
+
+        TeamAgent team = TeamAgent.builder(chatModel)
+                .name("real_loop_team")
+                .addAgent(agentA)
+                .addAgent(agentB)
+                .maxTotalIterations(3)
+                .build();
+
+        FlowContext context = FlowContext.of("test_real_loop");
+
+        // 使用一个非常开放、难以一次性完成的问题
+        String result = team.call(context, "请详细分析人工智能对人类社会各个层面的长期影响，包括但不限于经济结构、就业市场、教育体系、伦理道德、政治体制、文化变迁等方面，要求给出具体的数据支持和预测模型");
+
+        TeamTrace trace = team.getTrace(context);
+
+        // 这种情况下更可能触发迭代限制
+        System.out.println("真实循环测试结果: " + result);
+        System.out.println("迭代次数: " + trace.iterationsCount());
+        System.out.println("是否达到限制: " + (trace.iterationsCount() >= 3));
+    }
+
+    @Test
+    public void testAllAgentsParticipateScenario() throws Throwable {
+        // 测试：所有Agent都参与的场景
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        TeamAgentBuilder builder = TeamAgent.builder(chatModel)
+                .name("all_participate_team");
+
+        // 创建有明确分工的Agent
+        String[] specialties = {
+                "技术架构分析",
+                "性能指标定义",
+                "测试工具选择",
+                "实施步骤规划",
+                "结果分析方法"
+        };
+
+        for (int i = 0; i < 5; i++) {
+            builder.addAgent(ReActAgent.builder(chatModel)
+                    .name("expert_" + i)
+                    .description("专家" + i + ": 专注于" + specialties[i])
+                    .build());
+        }
+
+        TeamAgent team = builder.build();
+
+        FlowContext context = FlowContext.of("test_all_participate");
+
+        // 使用一个需要多方面专业知识的问题
+        String result = team.call(context, "请为一个大型电商平台的黑色星期五促销活动设计完整的性能测试方案，需要涵盖架构分析、指标定义、工具选择、实施步骤和结果分析");
+
+        TeamTrace trace = team.getTrace(context);
+
+        System.out.println("全参与测试结果: " + result);
+        System.out.println("执行步数: " + trace.getStepCount());
+        System.out.println("调用Agent数: " + trace.getSteps().stream()
+                .map(step -> step.getAgentName())
+                .distinct()
+                .count());
+    }
 }
