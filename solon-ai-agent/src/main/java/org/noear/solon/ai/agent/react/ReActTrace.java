@@ -196,7 +196,7 @@ public class ReActTrace {
 
         List<ChatMessage> compressed = new ArrayList<>();
 
-        // 1. 保留第一条用户消息
+        // 1. 保留第一条用户消息（同方案a）
         for (ChatMessage msg : messages) {
             if (msg instanceof UserMessage) {
                 compressed.add(msg);
@@ -204,33 +204,42 @@ public class ReActTrace {
             }
         }
 
-        // 2. 保留最后10条消息（确保工具调用链完整）
+        // 2. 计算保留数量（缓存变量，提高性能）
         int keepCount = Math.min(10, totalSize);
         int startIdx = totalSize - keepCount;
 
-        // 3. 确保不会切断工具调用链
-        while (startIdx > 0 && isPartOfToolChain(startIdx)) {
+        // 3. 向前查找，确保不切断工具链（边界检查严谨）
+        while (startIdx > 0 && isToolMessage(messages.get(startIdx))) {
             startIdx--;
         }
 
+        // 4. 获取子列表
         List<ChatMessage> recent = messages.subList(startIdx, totalSize);
-        compressed.add(ChatMessage.ofSystem("[Context trimmed: " + (totalSize - recent.size()) + " messages compressed]"));
-        compressed.addAll(recent);
 
+        // 5. 计算实际被压缩的消息数（考虑第一条用户消息）
+        int compressedCount = startIdx;
+        // 如果第一条用户消息在保留部分中，需要调整计数
+        if (!compressed.isEmpty() && messages.indexOf(compressed.get(0)) < startIdx) {
+            compressedCount--; // 第一条用户消息不算在压缩数量中
+        }
+
+        // 6. 添加压缩提示
+        if (compressedCount > 0) {
+            compressed.add(ChatMessage.ofSystem(
+                    String.format("[Context trimmed: %d messages]", compressedCount)));
+        }
+
+        // 7. 合并
+        compressed.addAll(recent);
         messages = compressed;
     }
 
-    private boolean isPartOfToolChain(int index) {
-        if (index >= messages.size()) return false;
-
-        ChatMessage current = messages.get(index);
-
-        if (current instanceof ToolMessage) {
+    private boolean isToolMessage(ChatMessage msg) {
+        if (msg instanceof ToolMessage) {
             return true;
         }
-
-        if (current instanceof AssistantMessage) {
-            return Assert.isNotEmpty(((AssistantMessage) current).getToolCalls());
+        if (msg instanceof AssistantMessage) {
+            return Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls());
         }
         return false;
     }
