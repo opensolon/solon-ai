@@ -82,4 +82,69 @@ public class ReActAgentHitlTest {
             return "订单 " + orderId + " 已退款成功，金额将原路返回。";
         }
     }
+
+
+    @Test
+    public void testInterceptorAllCallbacks() throws Throwable {
+        // 测试：拦截器的所有回调函数
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        final StringBuilder log = new StringBuilder();
+
+        ReActInterceptor fullInterceptor = ReActInterceptor.builder()
+                .doIntercept(invocation -> {
+                    log.append("[doIntercept] ");
+                    invocation.invoke();
+                })
+                .onNodeStart((ctx, node) -> {
+                    log.append("[onNodeStart:").append(node.getId()).append("] ");
+                })
+                .onNodeEnd((ctx, node) -> {
+                    log.append("[onNodeEnd:").append(node.getId()).append("] ");
+                })
+                .onThought((trace, thought) -> {
+                    log.append("[onThought] ");
+                })
+                .onAction((trace, toolName, args) -> {
+                    log.append("[onAction:").append(toolName).append("] ");
+                })
+                .onObservation((trace, result) -> {
+                    log.append("[onObservation] ");
+                })
+                .build();
+
+        ReActAgent agent = ReActAgent.builder(chatModel)
+                .addTool(new MethodToolProvider(new BasicTools()))
+                .interceptor(fullInterceptor)
+                .temperature(0.0F)
+                .enableLogging(false)
+                .build();
+
+        FlowContext context = FlowContext.of("test_interceptor");
+        String result = agent.call(context, "调用基础工具");
+
+        System.out.println("拦截器调用日志: " + log.toString());
+        Assertions.assertFalse(log.toString().isEmpty(), "拦截器回调应该被调用");
+        Assertions.assertNotNull(result);
+
+        // 验证调用了特定的回调
+        String logStr = log.toString();
+        Assertions.assertTrue(logStr.contains("onNodeStart"), "应该调用 onNodeStart");
+        Assertions.assertTrue(logStr.contains("onNodeEnd"), "应该调用 onNodeEnd");
+        if (result.contains("Action")) {
+            Assertions.assertTrue(logStr.contains("onAction"), "工具调用时应该触发 onAction");
+        }
+    }
+
+    public static class BasicTools {
+        @ToolMapping(description = "基础工具")
+        public String basic_tool() {
+            return "基础工具调用成功";
+        }
+
+        @ToolMapping(description = "查询订单状态")
+        public String check_order(@Param(description = "订单号") String orderId) {
+            return "订单 " + orderId + " 状态：已发货";
+        }
+    }
 }
