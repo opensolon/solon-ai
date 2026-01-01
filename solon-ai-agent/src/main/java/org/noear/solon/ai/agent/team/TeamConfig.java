@@ -36,6 +36,7 @@ public class TeamConfig {
     private String description;
     private final ChatModel chatModel;
     private final Map<String, Agent> agentMap = new LinkedHashMap<>();
+    private TeamStrategy strategy;
     private Consumer<GraphSpec> graphBuilder;
     private String finishMarker = "[FINISH]";
     private int maxTotalIterations = 8;
@@ -76,6 +77,10 @@ public class TeamConfig {
         agentMap.put(agent.name(), agent);
     }
 
+    public void setStrategy(TeamStrategy strategy) {
+        this.strategy = strategy;
+    }
+
     public String getName() {
         return name;
     }
@@ -92,6 +97,10 @@ public class TeamConfig {
         return agentMap;
     }
 
+    public TeamStrategy getStrategy() {
+        return strategy;
+    }
+
     public Consumer<GraphSpec> getGraphBuilder() {
         return graphBuilder;
     }
@@ -102,10 +111,6 @@ public class TeamConfig {
 
     public int getMaxTotalIterations() {
         return maxTotalIterations;
-    }
-
-    public TeamPromptProvider getPromptProvider() {
-        return promptProvider;
     }
 
     public String getSystemPrompt(Prompt prompt) {

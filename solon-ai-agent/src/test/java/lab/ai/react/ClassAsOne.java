@@ -11,8 +11,11 @@ import java.util.stream.Stream;
  */
 public class ClassAsOne {
     public static void main(String[] args) throws IOException {
-        //print("/solon-projects/solon-expression/solon-expression/src/main/java/");
-        print("/solon-ai-agent/src/main/java/");
+        //print("/solon-ai-agent/src/main/java/");
+
+        //print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/team");
+
+        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/react");
     }
 
     public static void print(String dir) throws IOException {
