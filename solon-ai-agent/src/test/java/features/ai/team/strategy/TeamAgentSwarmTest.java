@@ -1,4 +1,4 @@
-package features.ai.team;
+package features.ai.team.strategy;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
