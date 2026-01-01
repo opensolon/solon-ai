@@ -38,7 +38,7 @@ public class TeamConfig {
     private final Map<String, Agent> agentMap = new LinkedHashMap<>();
     private TeamStrategy strategy = TeamStrategy.HIERARCHICAL;
     private Consumer<GraphSpec> graphBuilder;
-    private String finishMarker = "[FINISH]";
+    private String finishMarker = "[TEAM_FINISH]";
     private int maxTotalIterations = 8;
     private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
 
