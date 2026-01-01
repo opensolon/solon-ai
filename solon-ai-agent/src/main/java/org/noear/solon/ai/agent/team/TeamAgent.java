@@ -47,7 +47,7 @@ public class TeamAgent implements Agent {
     }
 
     public TeamAgent(Graph graph, String name, String description) {
-        if(graph == null || graph.getNodes().isEmpty()){
+        if (graph == null || graph.getNodes().isEmpty()) {
             throw new IllegalStateException("Missing graph definition");
         }
 
@@ -59,14 +59,16 @@ public class TeamAgent implements Agent {
 
     /**
      * 获取图
-     * */
+     *
+     */
     public Graph getGraph() {
         return graph;
     }
 
     /**
      * 获取实例跟踪
-     * */
+     *
+     */
     public @Nullable TeamTrace getTrace(FlowContext context) {
         return context.getAs("__" + name);
     }
@@ -127,95 +129,75 @@ public class TeamAgent implements Agent {
     }
 
     public static class Builder {
-
-       private final TeamConfig config;
+        private final TeamConfig config;
 
         public Builder(ChatModel chatModel) {
             this.config = new TeamConfig(chatModel);
         }
 
-        public Builder addAgent(Agent agent) {
-            config.addAgent(agent);
-            return this;
-        }
-
-        public Builder promptProvider(TeamPromptProvider promptProvider) {
-            config.setPromptProvider(promptProvider);
-            return this;
-        }
-
-        public Builder finishMarker(String finishMarker) {
-            config.setFinishMarker(finishMarker);
-            return this;
-        }
-
-        public Builder maxTotalIterations(int maxTotalIterations) {
-            config.setMaxTotalIterations(maxTotalIterations);
-            return this;
-        }
-
-        public Builder name(String name) {
-            config.setName( name);
-            return this;
-        }
-
-        public Builder description(String description) {
-            config.setDescription(description);
-            return this;
-        }
-
-        public Builder graph(Consumer<GraphSpec> graphBuilder) {
-            config.setGraphBuilder(graphBuilder);
-            return this;
-        }
+        public Builder strategy(TeamStrategy strategy) { config.setStrategy(strategy); return this; }
+        public Builder addAgent(Agent agent) { config.addAgent(agent); return this; }
+        public Builder name(String name) { config.setName(name); return this; }
+        public Builder maxTotalIterations(int max) { config.setMaxTotalIterations(max); return this; }
+        public Builder graph(Consumer<GraphSpec> graphBuilder) { config.setGraphBuilder(graphBuilder); return this; }
 
         public TeamAgent build() {
-            if(config.getName() == null){
-                config.setName("team_agent");
-            }
-
-            Graph graph = createGraph();
-
-            TeamAgent agent = new TeamAgent(graph, config.getName(), config.getDescription());
-
-            return agent;
+            return new TeamAgent(createGraph(), config.getName(), config.getDescription());
         }
 
         private Graph createGraph() {
-            if (config.getAgentMap().isEmpty()) {
-                //自由图模式
-                return Graph.create(config.getName(), spec -> {
-                    if (config.getGraphBuilder() != null) {
-                        config.getGraphBuilder().accept(spec);
-                    }
-                });
-            } else {
-                String traceKey = "__" + config.getName();
-                TeamSupervisorTask task = new TeamSupervisorTask(config);
+            return Graph.create(config.getName(), spec -> {
+                switch (config.getStrategy()) {
+                    case SWARM: buildSwarmGraph(spec); break;
+                    case CONTRACT_NET: buildContractNetGraph(spec); break;
+                    default: buildHierarchicalGraph(spec); break;
+                }
+                if (config.getGraphBuilder() != null) config.getGraphBuilder().accept(spec);
+            });
+        }
 
-                //管家图模式
-                return Graph.create(config.getName(), spec -> {
-                    spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
-
-                    spec.addExclusive(Agent.ID_ROUTER).task(task).then(ns -> {
-                        for (Agent agent : config.getAgentMap().values()) {
-                            ns.linkAdd(agent.name(), l -> l.when(
-                                    ctx -> agent.name().equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
-                        }
-                    }).linkAdd(Agent.ID_END);
-
-
-                    for (Agent agent : config.getAgentMap().values()) {
-                        spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
-                    }
-
-                    spec.addEnd(Agent.ID_END);
-
-                    if (config.getGraphBuilder() != null) {
-                        config.getGraphBuilder().accept(spec);
-                    }
-                });
+        private void buildHierarchicalGraph(GraphSpec spec) {
+            String traceKey = "__" + config.getName();
+            spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
+            spec.addExclusive(Agent.ID_ROUTER).task(new TeamSupervisorTask(config)).then(ns -> {
+                for (Agent agent : config.getAgentMap().values()) {
+                    ns.linkAdd(agent.name(), l -> l.when(ctx -> agent.name().equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
+                }
+            }).linkAdd(Agent.ID_END);
+            for (Agent agent : config.getAgentMap().values()) {
+                spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
             }
+            spec.addEnd(Agent.ID_END);
+        }
+
+        private void buildSwarmGraph(GraphSpec spec) {
+            String firstAgent = config.getAgentMap().keySet().iterator().next();
+            spec.addStart(Agent.ID_START).linkAdd(firstAgent);
+            for (Agent agent : config.getAgentMap().values()) {
+                spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
+            }
+            spec.addExclusive(Agent.ID_ROUTER).task(new TeamSupervisorTask(config)).then(ns -> {
+                for (Agent agent : config.getAgentMap().values()) {
+                    ns.linkAdd(agent.name(), l -> l.when(ctx -> agent.name().equalsIgnoreCase(ctx.<TeamTrace>getAs("__"+config.getName()).getRoute())));
+                }
+            }).linkAdd(Agent.ID_END);
+            spec.addEnd(Agent.ID_END);
+        }
+
+        private void buildContractNetGraph(GraphSpec spec) {
+            String traceKey = "__" + config.getName();
+            spec.addStart(Agent.ID_START).linkAdd(Agent.ID_ROUTER);
+            spec.addExclusive(Agent.ID_ROUTER).task(new TeamSupervisorTask(config)).then(ns -> {
+                ns.linkAdd("bidding_process", l -> l.when(ctx -> "BIDDING".equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
+                for (Agent agent : config.getAgentMap().values()) {
+                    ns.linkAdd(agent.name(), l -> l.when(ctx -> agent.name().equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
+                }
+            }).linkAdd(Agent.ID_END);
+            spec.addActivity("bidding_process", new ContractNetBiddingTask(config)).linkAdd(Agent.ID_ROUTER);
+            for (Agent agent : config.getAgentMap().values()) {
+                spec.addActivity(agent).linkAdd(Agent.ID_ROUTER);
+            }
+            spec.addEnd(Agent.ID_END);
         }
     }
 }

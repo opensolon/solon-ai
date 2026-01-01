@@ -36,7 +36,7 @@ public class TeamConfig {
     private String description;
     private final ChatModel chatModel;
     private final Map<String, Agent> agentMap = new LinkedHashMap<>();
-    private TeamStrategy strategy;
+    private TeamStrategy strategy = TeamStrategy.HIERARCHICAL;
     private Consumer<GraphSpec> graphBuilder;
     private String finishMarker = "[FINISH]";
     private int maxTotalIterations = 8;
@@ -78,6 +78,8 @@ public class TeamConfig {
     }
 
     public void setStrategy(TeamStrategy strategy) {
+        Objects.requireNonNull(strategy, "strategy");
+
         this.strategy = strategy;
     }
 

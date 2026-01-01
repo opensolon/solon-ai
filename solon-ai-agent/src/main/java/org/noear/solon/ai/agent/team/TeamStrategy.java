@@ -23,7 +23,7 @@ package org.noear.solon.ai.agent.team;
  */
 public enum TeamStrategy {
     /**
-     * 层级协调
+     * 层级协调（即 Supervisor 模式）
      */
     HIERARCHICAL,
     /**
