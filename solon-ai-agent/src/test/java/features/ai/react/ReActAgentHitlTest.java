@@ -113,7 +113,7 @@ public class ReActAgentHitlTest {
             }
 
             @Override
-            public void doIntercept(FlowInvocation invocation) throws FlowException {
+            public void doFlowIntercept(FlowInvocation invocation) throws FlowException {
                 log.append("[doIntercept] ");
                 invocation.invoke();
             }
