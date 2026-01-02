@@ -1037,7 +1037,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         /**
          * 工具变更消费者
-         *
          */
         public Builder toolsChangeConsumer(Function<List<McpSchema.Tool>, Mono<Void>> toolsChangeConsumer) {
             props.setToolsChangeConsumer(toolsChangeConsumer);
@@ -1046,7 +1045,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         /**
          * 资源变更消费者
-         *
          */
         public Builder resourcesChangeConsumer(Function<List<McpSchema.Resource>, Mono<Void>> resourcesChangeConsumer) {
             props.setResourcesChangeConsumer(resourcesChangeConsumer);
@@ -1055,7 +1053,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         /**
          * 资源更新消费者
-         *
          */
         public Builder resourcesUpdateConsumer(Function<List<McpSchema.ResourceContents>, Mono<Void>> resourcesUpdateConsumer) {
             props.setResourcesUpdateConsumer(resourcesUpdateConsumer);
@@ -1064,7 +1061,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         /**
          * 提示语变更消费者
-         *
          */
         public Builder promptsChangeConsumer(Function<List<McpSchema.Prompt>, Mono<Void>> promptsChangeConsumer) {
             props.setPromptsChangeConsumer(promptsChangeConsumer);
