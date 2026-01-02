@@ -14,7 +14,6 @@ import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowException;
 import org.noear.solon.flow.Node;
-import org.noear.solon.flow.NodeType;
 import org.noear.solon.flow.intercept.FlowInvocation;
 
 import java.util.Map;

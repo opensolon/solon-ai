@@ -18,7 +18,6 @@ public class ReActAgentComplexTest {
 
     @Test
     public void testCustomerServiceLogic() throws Throwable {
-        // 使用高性能模型（如 Qwen2.5-32B 以上）处理复杂逻辑
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.builder(chatModel)
