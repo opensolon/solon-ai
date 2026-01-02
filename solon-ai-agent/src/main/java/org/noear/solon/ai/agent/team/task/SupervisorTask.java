@@ -53,9 +53,9 @@ public class SupervisorTask implements TaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         try {
-            Prompt prompt = context.getAs(Agent.KEY_PROMPT);
             String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
             TeamTrace trace = context.getAs(traceKey);
+            Prompt prompt = trace.getPrompt();
 
             if (trace == null) {
                 LOG.error("TeamAgent [{}] supervisor: Team trace not found", config.getName());

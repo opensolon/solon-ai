@@ -75,9 +75,9 @@ public interface Agent extends NamedTaskComponent {
     default void run(FlowContext context, Node node) throws Throwable {
         context.lastNode(null);
 
-        Prompt originalPrompt = context.getAs(KEY_PROMPT);
         String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
+        Prompt originalPrompt = (trace != null) ? trace.getPrompt() : null;
 
         Prompt effectivePrompt = originalPrompt;
         if (trace != null && trace.getStepCount() > 0) {
@@ -103,7 +103,6 @@ public interface Agent extends NamedTaskComponent {
         }
     }
 
-    static String KEY_PROMPT = "prompt";
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key";
 
     static String ID_START = "start";

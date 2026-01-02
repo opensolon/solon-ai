@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.NodeTrace;
 import org.noear.solon.lang.Preview;
 
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
  */
 @Preview("3.8")
 public class TeamTrace {
+    private Prompt prompt;
     private final List<TeamStep> steps = new ArrayList<>();
 
     private volatile String route;
@@ -41,7 +43,21 @@ public class TeamTrace {
     private NodeTrace lastNode;
 
     public TeamTrace() {
+        //用于反序列化
         this.iterations = new AtomicInteger(0);
+    }
+
+    public TeamTrace(Prompt prompt){
+        this();
+        this.prompt = prompt;
+    }
+
+    public Prompt getPrompt() {
+        return prompt;
+    }
+
+    public void setPrompt(Prompt prompt) {
+        this.prompt = prompt;
     }
 
     public String getRoute() {

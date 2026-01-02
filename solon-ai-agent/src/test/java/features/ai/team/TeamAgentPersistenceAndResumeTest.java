@@ -44,8 +44,8 @@ public class TeamAgentPersistenceAndResumeTest {
         TeamTrace snapshot = new TeamTrace();
         snapshot.addStep("searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
         snapshot.setLastNode(contextStep1.lastNode());
+        snapshot.setPrompt(Prompt.of("帮我规划上海行程并给穿衣建议"));
 
-        contextStep1.put(Agent.KEY_PROMPT, Prompt.of("帮我规划上海行程并给穿衣建议"));
         contextStep1.put("__" + teamId, snapshot);
 
         String jsonState = contextStep1.toJson(); // 模拟落库序列化

@@ -42,12 +42,12 @@ public class TeamAgentNestedPersistenceTest {
 
         TeamTrace projectTrace = new TeamTrace();
         projectTrace.addStep("dev_team", "开发已就绪", 200);
+        projectTrace.setPrompt(Prompt.of("开发登录"));
 
         // 设置手动断点
         context1.lastNode(projectTeam.getGraph().getNodeOrThrow(Agent.ID_SUPERVISOR));
         context1.put("__dev_team", devTrace);
         context1.put("__quality_project", projectTrace);
-        context1.put(Agent.KEY_PROMPT, Prompt.of("开发登录"));
 
         String jsonState = context1.toJson();
 

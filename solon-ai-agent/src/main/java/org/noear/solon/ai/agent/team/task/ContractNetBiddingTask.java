@@ -44,7 +44,10 @@ public class ContractNetBiddingTask implements TaskComponent {
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         try {
-            Prompt prompt = context.getAs(Agent.KEY_PROMPT);
+            String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
+            TeamTrace trace = context.getAs(traceKey);
+            Prompt prompt = trace.getPrompt();
+
             StringBuilder bids = new StringBuilder();
             bids.append("=== Contract Net Bidding Results ===\n\n");
 
@@ -80,15 +83,9 @@ public class ContractNetBiddingTask implements TaskComponent {
             }
 
             // 竞标信息收集完毕，跳回 Router 让调解器做出 AWARD（定标）决策
-            String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
-            if (traceKey != null) {
-                TeamTrace trace = context.getAs(traceKey);
-                if (trace != null) {
-                    trace.setRoute(Agent.ID_SUPERVISOR);
-                    trace.addStep(Agent.ID_BIDDING, "Bidding phase completed with " +
-                            config.getAgentMap().size() + " bids collected", 0);
-                }
-            }
+            trace.setRoute(Agent.ID_SUPERVISOR);
+            trace.addStep(Agent.ID_BIDDING, "Bidding phase completed with " +
+                    config.getAgentMap().size() + " bids collected", 0);
         } catch (Exception e) {
             LOG.error("Contract net bidding task failed", e);
             // 设置错误状态，避免死循环

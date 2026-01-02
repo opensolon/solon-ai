@@ -36,6 +36,7 @@ public class TeamAgent implements Agent {
     private String description;
     private final Graph graph;
     private final FlowEngine flowEngine;
+    private final String traceKey;
     private final TeamInterceptor interceptor;
 
     public TeamAgent(Graph graph) {
@@ -58,6 +59,7 @@ public class TeamAgent implements Agent {
         this.flowEngine = FlowEngine.newInstance();
         this.graph = Objects.requireNonNull(graph);
         this.name = (name == null ? "team_agent" : name);
+        this.traceKey = "__" + name;
         this.description = description;
         this.interceptor = interceptor;
 
@@ -93,17 +95,17 @@ public class TeamAgent implements Agent {
 
     @Override
     public String call(FlowContext context, Prompt prompt) throws Throwable {
-        String traceKey = "__" + name();
         TeamTrace tmpTrace = context.getAs(traceKey);
 
         if (tmpTrace == null) {
-            tmpTrace = new TeamTrace();
+            tmpTrace = new TeamTrace(prompt);
             context.put(traceKey, tmpTrace);
         }
 
         if (prompt != null) {
-            context.put(Agent.KEY_PROMPT, prompt);
             context.lastNode(null);
+
+            tmpTrace.setPrompt(prompt);
             tmpTrace.resetIterations();
             tmpTrace.setLastNode(null);
         } else {

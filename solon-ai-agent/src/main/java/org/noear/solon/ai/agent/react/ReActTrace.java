@@ -53,6 +53,7 @@ public class ReActTrace {
     private final ReActMetrics metrics = new ReActMetrics();
 
     public ReActTrace() {
+        //用于反序列化
         this.stepCounter = new AtomicInteger(0);
         this.messages = new ArrayList<>();
         this.route = Agent.ID_REASON;
@@ -66,13 +67,16 @@ public class ReActTrace {
 
     // --- Getters & Setters ---
 
+    public Prompt getPrompt() {
+        return prompt;
+    }
+
+    public void setPrompt(Prompt prompt) {
+        this.prompt = prompt;
+    }
 
     public ReActMetrics getMetrics() {
         return metrics;
-    }
-
-    public Prompt getPrompt() {
-        return prompt;
     }
 
     public int getStepCount() {
