@@ -53,7 +53,7 @@ public class ReActAgentHitlTest {
         String result1 = agent.call(context, prompt);
 
         // 验证：结果应为空（或中间态），且 context 处于 stopped 状态
-        Assertions.assertTrue(context.lastNode().getType() != NodeType.END, "流程应该被拦截并停止");
+        Assertions.assertTrue(context.lastNode().isNotEnd(), "流程应该被拦截并停止");
         Assertions.assertEquals(Agent.ID_ACTION, context.lastNodeId(), "最后停留在工具节点");
 
         ReActTrace state = context.getAs("__" + agent.name());
