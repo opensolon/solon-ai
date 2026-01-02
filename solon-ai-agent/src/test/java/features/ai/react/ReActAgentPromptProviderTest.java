@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActPromptProvider;
+import org.noear.solon.ai.agent.react.ReActPromptProviderCn;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -54,7 +55,7 @@ public class ReActAgentPromptProviderTest {
 
         ReActAgent agent = ReActAgent.builder(chatModel)
                 .addTool(new MethodToolProvider(new ChineseTools()))
-                .promptProvider(org.noear.solon.ai.agent.react.ReActPromptProviderCn.getInstance())
+                .promptProvider(ReActPromptProviderCn.getInstance())
                 .temperature(0.0F)
                 .build();
 

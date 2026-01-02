@@ -38,8 +38,6 @@ public class TeamAgentBuilder {
 
     public TeamAgentBuilder(ChatModel chatModel) {
         this.config = new TeamConfig(chatModel);
-        // 默认使用中文支持全协议的 Provider
-        this.config.setPromptProvider(TeamPromptProviderCn.getInstance());
     }
 
     public TeamAgentBuilder name(String name) {  config.setName( name);  return this;  }
