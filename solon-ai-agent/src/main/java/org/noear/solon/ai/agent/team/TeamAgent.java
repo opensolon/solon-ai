@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.*;
+import org.noear.solon.flow.intercept.FlowInterceptor;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -46,6 +47,10 @@ public class TeamAgent implements Agent {
     }
 
     public TeamAgent(Graph graph, String name, String description) {
+        this(graph, name, description, null);
+    }
+
+    public TeamAgent(Graph graph, String name, String description, FlowInterceptor interceptor) {
         if (graph == null || graph.getNodes().isEmpty()) {
             throw new IllegalStateException("Missing graph definition");
         }
@@ -54,6 +59,10 @@ public class TeamAgent implements Agent {
         this.graph = Objects.requireNonNull(graph);
         this.name = (name == null ? "team_agent" : name);
         this.description = description;
+
+        if (interceptor != null) {
+            flowEngine.addInterceptor(interceptor);
+        }
     }
 
     /**

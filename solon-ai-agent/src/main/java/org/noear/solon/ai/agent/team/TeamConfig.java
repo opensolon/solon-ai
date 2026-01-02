@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.GraphSpec;
+import org.noear.solon.flow.intercept.FlowInterceptor;
 import org.noear.solon.lang.Preview;
 
 import java.util.LinkedHashMap;
@@ -42,6 +43,7 @@ public class TeamConfig {
     private Consumer<GraphSpec> graphAdjuster;
     private String finishMarker;
     private int maxTotalIterations = 8;
+    private FlowInterceptor interceptor;
     private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
 
     public TeamConfig(ChatModel chatModel) {
@@ -66,6 +68,10 @@ public class TeamConfig {
 
     public void setMaxTotalIterations(int maxTotalIterations) {
         this.maxTotalIterations = Math.max(1, maxTotalIterations);
+    }
+
+    public void setInterceptor(FlowInterceptor interceptor) {
+        this.interceptor = interceptor;
     }
 
     public void setPromptProvider(TeamPromptProvider promptProvider) {
@@ -119,6 +125,10 @@ public class TeamConfig {
 
     public int getMaxTotalIterations() {
         return maxTotalIterations;
+    }
+
+    public FlowInterceptor getInterceptor() {
+        return interceptor;
     }
 
     public String getSystemPrompt(Prompt prompt) {
