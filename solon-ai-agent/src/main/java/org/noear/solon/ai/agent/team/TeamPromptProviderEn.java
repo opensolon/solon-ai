@@ -44,7 +44,7 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
 
         sb.append("\n### Output Specification\n");
         sb.append("1. Analyze current progress and decide the next action\n");
-        sb.append("2. If the task is completed, output: ").append(config.getFinishMarker()).append(" Final answer\n");
+        sb.append("2. If the task is completed, output: ").append(config.getFinishMarker()).append(" And summarize the results\n");
         sb.append("3. Otherwise, output ONLY the name of the NEXT Agent to execute\n");
 
         // Simplified history analysis

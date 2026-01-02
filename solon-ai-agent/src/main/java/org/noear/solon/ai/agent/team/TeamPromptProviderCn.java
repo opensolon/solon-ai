@@ -44,7 +44,7 @@ public class TeamPromptProviderCn implements TeamPromptProvider {
 
         sb.append("\n### 输出规范\n");
         sb.append("1. 分析当前进度，决定下一步行动\n");
-        sb.append("2. 如果任务已完成，请输出: ").append(config.getFinishMarker()).append(" 最终答案\n");
+        sb.append("2. 如果任务已完成，请输出: ").append(config.getFinishMarker()).append(" 并汇总结果\n");
         sb.append("3. 否则，请仅输出下一个要执行的 Agent 名字\n");
 
         // 简化历史分析规则
