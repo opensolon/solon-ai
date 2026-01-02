@@ -69,7 +69,12 @@ public class TeamAgent implements Agent {
         this.traceKey = "__" + name;
         this.description = description;
 
+        if(config == null){
+            config = new TeamConfig(null);
+        }
+
         this.config = config;
+
         this.flowEngine = FlowEngine.newInstance();
         this.graph = Objects.requireNonNull(graph);
 
@@ -89,7 +94,7 @@ public class TeamAgent implements Agent {
      * 获取跟踪实例
      */
     public @Nullable TeamTrace getTrace(FlowContext context) {
-        return context.getAs("__" + name);
+        return context.getAs(traceKey);
     }
 
     @Override
@@ -255,10 +260,9 @@ public class TeamAgent implements Agent {
         }
 
         private void linkAgents(NodeSpec ns, String traceKey) {
-            for (String agentName : config.getAgentMap().keySet().stream()
-                    .sorted((a, b) -> Integer.compare(b.length(), a.length())) // 调整点：长名优先匹配
-                    .toArray(String[]::new)) {
-                ns.linkAdd(agentName, l -> l.when(ctx -> agentName.equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
+            for (String agentName : config.getAgentMap().keySet()) {
+                ns.linkAdd(agentName, l -> l.when(ctx ->
+                        agentName.equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
             }
         }
 
@@ -267,39 +271,50 @@ public class TeamAgent implements Agent {
          */
         private void buildHubAndSpokeGraph(GraphSpec spec) {
             String traceKey = "__" + config.getName();
+
             spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
 
-            spec.addExclusive(Agent.ID_SUPERVISOR).task(new SupervisorTask(config)).then(ns -> {
+            spec.addExclusive(new SupervisorTask(config)).then(ns -> {
                 linkAgents(ns, traceKey);
             }).linkAdd(Agent.ID_END);
 
-            config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
+            config.getAgentMap().values().forEach(a ->
+                    spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
+
             spec.addEnd(Agent.ID_END);
         }
 
         private void buildSwarmGraph(GraphSpec spec) {
             String traceKey = "__" + config.getName();
             String firstAgent = config.getAgentMap().keySet().iterator().next();
+
             spec.addStart(Agent.ID_START).linkAdd(firstAgent); // 调整点：直接切入第一个 Agent
 
-            config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
+            config.getAgentMap().values().forEach(a ->
+                    spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
 
-            spec.addExclusive(Agent.ID_SUPERVISOR).task(new SupervisorTask(config)).then(ns -> {
+            spec.addExclusive(new SupervisorTask(config)).then(ns -> {
                 linkAgents(ns, traceKey);
             }).linkAdd(Agent.ID_END);
+
             spec.addEnd(Agent.ID_END);
         }
 
         private void buildContractNetGraph(GraphSpec spec) {
             String traceKey = "__" + config.getName();
+
             spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
-            spec.addExclusive(Agent.ID_SUPERVISOR).task(new SupervisorTask(config)).then(ns -> {
+
+            spec.addExclusive(new SupervisorTask(config)).then(ns -> {
                 ns.linkAdd(Agent.ID_BIDDING, l -> l.when(ctx -> Agent.ID_BIDDING.equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
                 linkAgents(ns, traceKey);
             }).linkAdd(Agent.ID_END);
 
-            spec.addActivity(Agent.ID_BIDDING).task(new ContractNetBiddingTask(config)).linkAdd(Agent.ID_SUPERVISOR);
-            config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
+            spec.addActivity(new ContractNetBiddingTask(config)).linkAdd(Agent.ID_SUPERVISOR);
+
+            config.getAgentMap().values().forEach(a ->
+                    spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
+
             spec.addEnd(Agent.ID_END);
         }
     }

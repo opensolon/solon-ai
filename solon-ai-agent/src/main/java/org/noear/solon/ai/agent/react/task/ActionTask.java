@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react.task;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActConfig;
 import org.noear.solon.ai.agent.react.ReActTrace;
@@ -25,8 +26,8 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
-import org.noear.solon.flow.TaskComponent;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,18 +44,22 @@ import java.util.regex.Pattern;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class ActionTask implements TaskComponent {
-    private final static Logger LOG = LoggerFactory.getLogger(ActionTask.class);
-
-    private final ReActConfig config;
-    // 正则提取 Action: 后面的 JSON 对象
+public class ActionTask implements NamedTaskComponent {
+    private static final Logger LOG = LoggerFactory.getLogger(ActionTask.class);
     private static final Pattern ACTION_PATTERN = Pattern.compile(
             "Action:\\s*(?:```json)?\\s*(\\{.*?\\})\\s*(?:```)?",
             Pattern.DOTALL
     );
 
+    private final ReActConfig config;
+
     public ActionTask(ReActConfig config) {
         this.config = config;
+    }
+
+    @Override
+    public String name() {
+        return Agent.ID_ACTION;
     }
 
     @Override

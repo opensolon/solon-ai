@@ -64,14 +64,12 @@ public class ReActAgent implements Agent {
         this.graph = Graph.create(this.name, spec -> {
             spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON);
 
-            spec.addExclusive(Agent.ID_REASON)
-                    .task(new ReasonTask(config))
+            spec.addExclusive(new ReasonTask(config))
                     .linkAdd(Agent.ID_ACTION, l -> l.when(ctx ->
                             Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
                     .linkAdd(Agent.ID_END);
 
-            spec.addActivity(Agent.ID_ACTION)
-                    .task(new ActionTask(config))
+            spec.addActivity(new ActionTask(config))
                     .linkAdd(Agent.ID_REASON);
 
             spec.addEnd(Agent.ID_END);

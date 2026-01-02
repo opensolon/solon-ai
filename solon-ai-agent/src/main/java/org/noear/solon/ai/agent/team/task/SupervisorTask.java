@@ -23,8 +23,8 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
-import org.noear.solon.flow.TaskComponent;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,12 +42,17 @@ import java.util.stream.Collectors;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class SupervisorTask implements TaskComponent {
+public class SupervisorTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(SupervisorTask.class);
     private final TeamConfig config;
 
     public SupervisorTask(TeamConfig config) {
         this.config = config;
+    }
+
+    @Override
+    public String name() {
+        return Agent.ID_SUPERVISOR;
     }
 
     @Override

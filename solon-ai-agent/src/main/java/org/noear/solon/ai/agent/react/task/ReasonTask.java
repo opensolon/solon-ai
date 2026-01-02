@@ -24,8 +24,8 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
-import org.noear.solon.flow.TaskComponent;
 import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
@@ -39,11 +39,16 @@ import java.util.List;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class ReasonTask implements TaskComponent {
+public class ReasonTask implements NamedTaskComponent {
     private final ReActConfig config;
 
     public ReasonTask(ReActConfig config) {
         this.config = config;
+    }
+
+    @Override
+    public String name() {
+        return Agent.ID_REASON;
     }
 
     @Override
