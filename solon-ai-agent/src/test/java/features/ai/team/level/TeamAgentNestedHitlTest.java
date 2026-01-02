@@ -13,7 +13,6 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 
 public class TeamAgentNestedHitlTest {
-
     @Test
     public void testNestedHumanIntervention() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();

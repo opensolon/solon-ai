@@ -15,7 +15,6 @@ import org.noear.solon.flow.FlowContext;
  * Blackboard 策略测试：基于共享状态的补位协作
  */
 public class TeamAgentBlackboardTest {
-
     @Test
     public void testBlackboardLogic() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
