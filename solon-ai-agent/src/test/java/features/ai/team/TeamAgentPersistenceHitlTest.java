@@ -4,6 +4,7 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.team.TeamAgent;
+import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
@@ -22,7 +23,7 @@ public class TeamAgentPersistenceHitlTest {
                 .name(teamId)
                 .addAgent(ReActAgent.builder(chatModel).name("worker").description("初稿撰写").build())
                 .addAgent(ReActAgent.builder(chatModel).name("approver").description("修辞优化").build())
-                .interceptor(new FlowInterceptor() {
+                .interceptor(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
                         // 逻辑修改：只要检测到 worker 已经产生过至少一条记录，且没有人工信号，就强制挂起

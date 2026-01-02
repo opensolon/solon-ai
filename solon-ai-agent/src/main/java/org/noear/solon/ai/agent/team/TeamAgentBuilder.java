@@ -22,7 +22,6 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.Graph;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.flow.NodeSpec;
-import org.noear.solon.flow.intercept.FlowInterceptor;
 import org.noear.solon.lang.Preview;
 
 import java.util.function.Consumer;

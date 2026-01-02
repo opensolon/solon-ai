@@ -5,12 +5,12 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgent;
+import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
-import org.noear.solon.flow.intercept.FlowInterceptor;
 
 public class TeamAgentNestedHitlTest {
 
@@ -35,7 +35,7 @@ public class TeamAgentNestedHitlTest {
                     @Override public String description() { return "审代码"; }
                     @Override public String call(FlowContext ctx, Prompt p) { return "Perfect. [FINISH]"; }
                 })
-                .interceptor(new FlowInterceptor() {
+                .interceptor(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
                         if (Agent.ID_SUPERVISOR.equals(n.getId())) {
