@@ -65,7 +65,10 @@ public class TeamAgentBuilder {
             throw new IllegalStateException("The agent or graphBuilder is required");
         }
 
-        return new TeamAgent(createGraph(), config.getName(), config.getDescription());
+        return new TeamAgent(createGraph(),
+                config.getName(),
+                config.getDescription(),
+                config.getInterceptor());
     }
 
     private Graph createGraph() {

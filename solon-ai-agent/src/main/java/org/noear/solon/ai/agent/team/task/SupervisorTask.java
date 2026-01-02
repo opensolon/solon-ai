@@ -21,6 +21,7 @@ import org.noear.solon.ai.agent.team.TeamStrategy;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
 import org.noear.solon.flow.TaskComponent;
@@ -107,7 +108,7 @@ public class SupervisorTask implements TaskComponent {
      * 解析并路由
      */
     private void parseAndRoute(TeamTrace trace, String decision, FlowContext context) {
-        if (decision == null || decision.isEmpty()) {
+        if (Assert.isEmpty(decision)) {
             trace.setRoute(Agent.ID_END);
             return;
         }
