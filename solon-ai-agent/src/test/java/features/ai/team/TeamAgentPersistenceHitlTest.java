@@ -44,7 +44,7 @@ public class TeamAgentPersistenceHitlTest {
         teamAgent.call(context1, "请起草一份周报内容");
 
         // 验证点：此时流程应该因为至少有一次 worker 运行而被挂起
-        Assertions.assertTrue(context1.lastNode().isNotEnd(), "流程应该在 Supervisor 准备第二次分配任务前被拦截");
+        Assertions.assertTrue(context1.isStopped(), "流程应该在 Supervisor 准备第二次分配任务前被拦截");
 
         String jsonState = context1.toJson();
         System.out.println(">>> 流程已挂起并序列化。当前步骤数: " + ((TeamTrace)context1.getAs("__" + teamId)).getStepCount());

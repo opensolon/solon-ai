@@ -57,9 +57,8 @@ public class TeamAgentNestedHitlTest {
         // 第一次调用：执行完 dev_team 后在 Supervisor 处被拦截
         projectTeam.call(context, "开发支付模块");
 
-        // 使用 lastNode().isNotEnd() 判定流程中断
-        Assertions.assertNotNull(context.lastNode());
-        Assertions.assertTrue(context.lastNode().isNotEnd(), "流程应该被拦截，未到达结束节点");
+        // 使用 isStopped 判定流程停止
+        Assertions.assertTrue(context.isStopped(), "流程应该被拦截，未到达结束节点");
         Assertions.assertEquals(Agent.ID_SUPERVISOR, context.lastNodeId());
 
         // 验证 Reviewer 尚未介入

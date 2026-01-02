@@ -42,7 +42,7 @@ public class ReActHitlDemo {
         String response1 = agent.call(context, "帮我查询北京天气并转账100元");
         System.out.println("response1: " + response1);
 
-        if (context.lastNode().isNotEnd()) {
+        if (context.isStopped()) {
             System.out.println("流程已挂起，当前节点：" + context.lastNodeId());
         }
 

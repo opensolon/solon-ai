@@ -51,8 +51,7 @@ public class TeamAgentPersistenceHitlCombinedTest {
         FlowContext context1 = FlowContext.of("c_001");
         projectTeam.call(context1, "处理重要单据");
 
-        Assertions.assertNotNull(context1.lastNode());
-        Assertions.assertTrue(context1.lastNode().isNotEnd(), "流程必须停在中间节点");
+        Assertions.assertTrue(context1.isStopped(), "流程必须停在中间节点");
         String jsonState = context1.toJson(); // 持久化
         System.out.println(">>> 阶段1完成：快照已落库。");
 

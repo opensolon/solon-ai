@@ -55,7 +55,7 @@ public class ReActAgentPersistenceHitlTest {
         agent.call(context1, prompt);
 
         // 验证：是否在 Action 节点停止
-        Assertions.assertTrue(context1.lastNode().isNotEnd(), "流程应在 Action 节点被拦截");
+        Assertions.assertTrue(context1.isStopped(), "流程应在 Action 节点被拦截");
         Assertions.assertEquals(Agent.ID_ACTION, context1.lastNodeId());
 
         // 执行持久化序列化（模拟存入数据库）
