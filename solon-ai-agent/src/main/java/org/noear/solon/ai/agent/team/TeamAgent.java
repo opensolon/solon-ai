@@ -37,6 +37,7 @@ public class TeamAgent implements Agent {
     private String description;
     private final Graph graph;
     private final FlowEngine flowEngine;
+    private final TeamInterceptor interceptor;
 
     public TeamAgent(Graph graph) {
         this(graph, null);
@@ -50,7 +51,7 @@ public class TeamAgent implements Agent {
         this(graph, name, description, null);
     }
 
-    public TeamAgent(Graph graph, String name, String description, FlowInterceptor interceptor) {
+    public TeamAgent(Graph graph, String name, String description, TeamInterceptor interceptor) {
         if (graph == null || graph.getNodes().isEmpty()) {
             throw new IllegalStateException("Missing graph definition");
         }
@@ -59,6 +60,7 @@ public class TeamAgent implements Agent {
         this.graph = Objects.requireNonNull(graph);
         this.name = (name == null ? "team_agent" : name);
         this.description = description;
+        this.interceptor = interceptor;
 
         if (interceptor != null) {
             flowEngine.addInterceptor(interceptor);
@@ -119,12 +121,18 @@ public class TeamAgent implements Agent {
             trace.setLastNode(context.lastNode());
         }
 
-        String result = trace.getFinalAnswer(); //context.getAs(Agent.KEY_RESULT);
+        String result = trace.getFinalAnswer();
         if (result == null && trace.getStepCount() > 0) {
             result = trace.getSteps().get(trace.getStepCount() - 1).getContent();
         }
 
         trace.setFinalAnswer(result);
+
+
+        if(interceptor != null){
+            interceptor.onCallEnd(context, prompt);
+        }
+
         return result;
     }
 

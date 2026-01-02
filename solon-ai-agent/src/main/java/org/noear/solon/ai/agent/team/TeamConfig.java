@@ -43,7 +43,7 @@ public class TeamConfig {
     private Consumer<GraphSpec> graphAdjuster;
     private String finishMarker;
     private int maxTotalIterations = 8;
-    private FlowInterceptor interceptor;
+    private TeamInterceptor interceptor;
     private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
 
     public TeamConfig(ChatModel chatModel) {
@@ -70,7 +70,7 @@ public class TeamConfig {
         this.maxTotalIterations = Math.max(1, maxTotalIterations);
     }
 
-    public void setInterceptor(FlowInterceptor interceptor) {
+    public void setInterceptor(TeamInterceptor interceptor) {
         this.interceptor = interceptor;
     }
 
@@ -127,7 +127,7 @@ public class TeamConfig {
         return maxTotalIterations;
     }
 
-    public FlowInterceptor getInterceptor() {
+    public TeamInterceptor getInterceptor() {
         return interceptor;
     }
 

@@ -46,7 +46,7 @@ public class TeamAgentBuilder {
     public TeamAgentBuilder name(String name) {  config.setName( name);  return this;  }
     public TeamAgentBuilder description(String description) {   config.setDescription(description);   return this;  }
     public TeamAgentBuilder addAgent(Agent agent) { config.addAgent(agent); return this; }
-    public TeamAgentBuilder interceptor(FlowInterceptor interceptor){ config.setInterceptor(interceptor); return this;}
+    public TeamAgentBuilder interceptor(TeamInterceptor interceptor){ config.setInterceptor(interceptor); return this;}
     public TeamAgentBuilder promptProvider(TeamPromptProvider promptProvider) {  config.setPromptProvider(promptProvider); return this; }
     public TeamAgentBuilder finishMarker(String finishMarker) { config.setFinishMarker(finishMarker);  return this; }
     public TeamAgentBuilder maxTotalIterations(int maxTotalIterations) { config.setMaxTotalIterations(maxTotalIterations);  return this;}

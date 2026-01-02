@@ -145,6 +145,10 @@ public class ReActAgent implements Agent {
             LOG.debug("Final Answer: {}", result);
         }
 
+        if(config.getInterceptor() != null){
+            config.getInterceptor().onCallEnd(context, prompt);
+        }
+
         return result;
     }
 

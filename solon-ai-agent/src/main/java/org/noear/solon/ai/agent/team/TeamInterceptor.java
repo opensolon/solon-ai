@@ -13,41 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react;
+package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.intercept.FlowInterceptor;
-import org.noear.solon.lang.Preview;
-
-import java.util.Map;
 
 /**
- * ReAct 拦截器
+ * Team 拦截器
  *
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
-public interface ReActInterceptor extends FlowInterceptor {
-    /**
-     * 思考时触发
-     */
-    default void onThought(ReActTrace trace, String thought) {
-    }
-
-    /**
-     * 调用工具前触发
-     */
-    default void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
-    }
-
-    /**
-     * 工具返回结果后触发
-     */
-    default void onObservation(ReActTrace trace, String result) {
-    }
-
+public interface TeamInterceptor extends FlowInterceptor {
     /**
      * 调用结束时
      */
