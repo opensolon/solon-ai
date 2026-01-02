@@ -12,7 +12,12 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.FlowException;
+import org.noear.solon.flow.Node;
 import org.noear.solon.flow.NodeType;
+import org.noear.solon.flow.intercept.FlowInvocation;
+
+import java.util.Map;
 
 /**
  * 人工介入（HITL）场景测试
@@ -26,18 +31,19 @@ public class ReActAgentHitlTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 定义人工介入拦截器
-        ReActInterceptor hitlInterceptor = ReActInterceptor.builder()
-                .onNodeStart((ctx, node) -> {
-                    // 如果进入工具执行节点，且尚未获得人工批准
-                    if (Agent.ID_ACTION.equals(node.getId())) {
-                        Boolean approved = ctx.getAs("is_approved");
-                        if (approved == null) {
-                            System.out.println("[拦截器] 检测到敏感工具调用，等待人工审批...");
-                            ctx.stop(); // 关键：中断流程
-                        }
+        ReActInterceptor hitlInterceptor = new ReActInterceptor() {
+            @Override
+            public void onNodeStart(FlowContext ctx, Node node) {
+                // 如果进入工具执行节点，且尚未获得人工批准
+                if (Agent.ID_ACTION.equals(node.getId())) {
+                    Boolean approved = ctx.getAs("is_approved");
+                    if (approved == null) {
+                        System.out.println("[拦截器] 检测到敏感工具调用，等待人工审批...");
+                        ctx.stop(); // 关键：中断流程
                     }
-                })
-                .build();
+                }
+            }
+        };
 
         ReActAgent agent = ReActAgent.builder(chatModel)
                 .addTool(new MethodToolProvider(new RefundTools()))
@@ -90,27 +96,38 @@ public class ReActAgentHitlTest {
 
         final StringBuilder log = new StringBuilder();
 
-        ReActInterceptor fullInterceptor = ReActInterceptor.builder()
-                .doIntercept(invocation -> {
-                    log.append("[doIntercept] ");
-                    invocation.invoke();
-                })
-                .onNodeStart((ctx, node) -> {
-                    log.append("[onNodeStart:").append(node.getId()).append("] ");
-                })
-                .onNodeEnd((ctx, node) -> {
-                    log.append("[onNodeEnd:").append(node.getId()).append("] ");
-                })
-                .onThought((trace, thought) -> {
-                    log.append("[onThought] ");
-                })
-                .onAction((trace, toolName, args) -> {
-                    log.append("[onAction:").append(toolName).append("] ");
-                })
-                .onObservation((trace, result) -> {
-                    log.append("[onObservation] ");
-                })
-                .build();
+        ReActInterceptor fullInterceptor = new ReActInterceptor() {
+            @Override
+            public void onThought(ReActTrace trace, String thought) {
+                log.append("[onThought] ");
+            }
+
+            @Override
+            public void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
+                log.append("[onAction:").append(toolName).append("] ");
+            }
+
+            @Override
+            public void onObservation(ReActTrace trace, String result) {
+                log.append("[onObservation] ");
+            }
+
+            @Override
+            public void doIntercept(FlowInvocation invocation) throws FlowException {
+                log.append("[doIntercept] ");
+                invocation.invoke();
+            }
+
+            @Override
+            public void onNodeStart(FlowContext context, Node node) {
+                log.append("[onNodeStart:").append(node.getId()).append("] ");
+            }
+
+            @Override
+            public void onNodeEnd(FlowContext context, Node node) {
+                log.append("[onNodeEnd:").append(node.getId()).append("] ");
+            }
+        };
 
         ReActAgent agent = ReActAgent.builder(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))

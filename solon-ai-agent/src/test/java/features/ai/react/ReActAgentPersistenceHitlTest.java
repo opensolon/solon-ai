@@ -12,6 +12,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.Node;
 
 /**
  * ReActAgent 持久化与人工介入（HITL）联合场景测试
@@ -25,17 +26,18 @@ public class ReActAgentPersistenceHitlTest {
         String agentName = "secure_refund_bot";
 
         // 1. 定义带有 HITL 逻辑的拦截器
-        ReActInterceptor hitlInterceptor = ReActInterceptor.builder()
-                .onNodeStart((ctx, node) -> {
-                    // 仅对 Action（工具调用）节点进行敏感操作拦截
-                    if (Agent.ID_ACTION.equals(node.getId())) {
-                        if (!ctx.model().containsKey("is_approved")) {
-                            System.out.println("[拦截器] 发现退款申请，当前未审批。中断流程以待持久化...");
-                            ctx.stop();
-                        }
+        ReActInterceptor hitlInterceptor = new ReActInterceptor() {
+            @Override
+            public void onNodeStart(FlowContext ctx, Node node) {
+                // 仅对 Action（工具调用）节点进行敏感操作拦截
+                if (Agent.ID_ACTION.equals(node.getId())) {
+                    if (!ctx.model().containsKey("is_approved")) {
+                        System.out.println("[拦截器] 发现退款申请，当前未审批。中断流程以待持久化...");
+                        ctx.stop();
                     }
-                })
-                .build();
+                }
+            }
+        };
 
         // 2. 构建 Agent
         ReActAgent agent = ReActAgent.builder(chatModel)

@@ -10,6 +10,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.Node;
 import org.noear.solon.flow.NodeType;
 
 public class ReActHitlDemo {
@@ -17,16 +18,17 @@ public class ReActHitlDemo {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 定义拦截器：如果是 node_tools 节点且没审批，就拦住它
-        ReActInterceptor hitlInterceptor = ReActInterceptor.builder()
-                .onNodeStart((ctx, node) -> {
-                    if (Agent.ID_ACTION.equals(node.getId())) {
-                        if (ctx.get("approved") == null) {
-                            System.out.println("[拦截器] 发现敏感操作，需要人工审批...");
-                            ctx.stop(); // 挂起流程
-                        }
+        ReActInterceptor hitlInterceptor = new ReActInterceptor() {
+            @Override
+            public void onNodeStart(FlowContext ctx, Node node) {
+                if (Agent.ID_ACTION.equals(node.getId())) {
+                    if (ctx.get("approved") == null) {
+                        System.out.println("[拦截器] 发现敏感操作，需要人工审批...");
+                        ctx.stop(); // 挂起流程
                     }
-                })
-                .build();
+                }
+            }
+        };
 
         ReActAgent agent = ReActAgent.builder(chatModel)
                 .interceptor(hitlInterceptor) // 注入拦截器
