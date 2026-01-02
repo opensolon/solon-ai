@@ -44,8 +44,6 @@ import java.util.stream.Collectors;
 public class SupervisorTask implements TaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(SupervisorTask.class);
     private final TeamConfig config;
-
-    // 策略特定的上下文信息
     private final Map<String, Object> strategyContext = new HashMap<>();
 
     public SupervisorTask(TeamConfig config) {
@@ -64,9 +62,9 @@ public class SupervisorTask implements TaskComponent {
                 return;
             }
 
-            // 【调整】终止逻辑：完全由路由状态驱动
-            // 不再扫描历史步骤内容，避免子团队的 finishMarker 干扰父团队判定
-            if (Agent.ID_END.equals(trace.getRoute()) || trace.getIterationsCount() >= config.getMaxTotalIterations()) {
+            // 完全由路由状态驱动。不再扫描历史步骤内容，避免子团队的 finishMarker 干扰父团队判定
+            if (Agent.ID_END.equals(trace.getRoute()) ||
+                    trace.getIterationsCount() >= config.getMaxTotalIterations()) {
                 trace.setRoute(Agent.ID_END);
                 return;
             }
@@ -102,13 +100,12 @@ public class SupervisorTask implements TaskComponent {
             LOG.debug("Supervisor [{}] decision: {}", config.getName(), decision);
         }
 
-        // 【调整】核心解析入口
         parseAndRoute(trace, decision, context);
         trace.nextIterations();
     }
 
     /**
-     * 【调整】解析逻辑优先级重构
+     * 解析并路由
      */
     private void parseAndRoute(TeamTrace trace, String decision, FlowContext context) {
         if (decision == null || decision.isEmpty()) {
@@ -126,14 +123,12 @@ public class SupervisorTask implements TaskComponent {
 
         List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
 
-        // 【调整】优先级 1：优先匹配 Agent 名字。
-        // 只要决策中提到了 Reviewer 或 dev_team，哪怕同时也带了 finishMarker，也优先进行路由派发
+        // 优先匹配 Agent 名字。也优先进行路由派发
         if (matchAgentRoute(trace, decision, agentNames)) {
             return;
         }
 
-        // 【调整】优先级 2：识别结束标记。
-        // 使用正则提取 Marker 之后的所有内容作为最终答案
+        // 再使用正则提取 Marker 之后的所有内容作为最终答案
         String finishMarker = config.getFinishMarker();
         String finishRegex = "(?i).*?(\\Q" + finishMarker + "\\E)(.*)";
         Pattern pattern = Pattern.compile(finishRegex, Pattern.DOTALL);
@@ -150,13 +145,13 @@ public class SupervisorTask implements TaskComponent {
             return;
         }
 
-        // 【调整】优先级 3：兜底。无法识别目标时终止，防止死循环
+        // 兜底处理。无法识别目标时终止，防止死循环
         trace.setRoute(Agent.ID_END);
         LOG.warn("Supervisor [{}] could not resolve next agent: {}", config.getName(), decision);
     }
 
     /**
-     * 【调整】增强的名称匹配算法
+     * 匹配智能体并路由
      */
     private boolean matchAgentRoute(TeamTrace trace, String text, List<String> names) {
         // 按名称长度倒序排列，优先匹配 "dev_team" 而不是 "dev"
