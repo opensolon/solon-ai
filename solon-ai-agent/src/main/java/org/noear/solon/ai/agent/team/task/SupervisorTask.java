@@ -73,7 +73,7 @@ public class SupervisorTask implements TaskComponent {
 
             // 执行策略
             if (config.getStrategy() == TeamStrategy.SEQUENTIAL) {
-                runSequential(trace);
+                runSequential(context, trace, prompt);
             } else {
                 runIntelligent(context, trace, prompt);
             }
@@ -179,7 +179,7 @@ public class SupervisorTask implements TaskComponent {
         return false;
     }
 
-    private void runSequential(TeamTrace trace) {
+    private void runSequential(FlowContext context, TeamTrace trace, Prompt prompt) {
         List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
         int nextIndex = trace.getIterationsCount();
         if (nextIndex < agentNames.size()) {
