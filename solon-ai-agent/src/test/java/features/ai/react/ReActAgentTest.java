@@ -19,7 +19,7 @@ public class ReActAgentTest {
     public void testMathAndLogic() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new MathTools()))
                 .temperature(0.0F)
                 .build();

@@ -23,11 +23,11 @@ public class TeamAgentParallelAgentTest {
         String teamId = "parallel_translator";
 
         // 1. 定义翻译专家（ReAct 模式）
-        Agent enTranslator = ReActAgent.builder(chatModel)
+        Agent enTranslator = ReActAgent.of(chatModel)
                 .name("en_translator")
                 .promptProvider(p-> "你是负责英语翻译的专家")
                 .description("负责英语翻译的专家").build();
-        Agent frTranslator = ReActAgent.builder(chatModel)
+        Agent frTranslator = ReActAgent.of(chatModel)
                 .name("fr_translator")
                 .promptProvider(p-> "你是负责法语翻译的专家")
                 .description("负责法语翻译的专家").build();

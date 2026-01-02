@@ -22,17 +22,17 @@ public class TeamAgentSupervisorTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 创建两个有明显分工的 Agent
-        Agent dataCollector = ReActAgent.builder(chatModel)
+        Agent dataCollector = ReActAgent.of(chatModel)
                 .name("collector")
                 .description("数据收集员，只收集不分析")
                 .build();
 
-        Agent analyzer = ReActAgent.builder(chatModel)
+        Agent analyzer = ReActAgent.of(chatModel)
                 .name("analyzer")
                 .description("数据分析师，只分析不收集")
                 .build();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("decision_team")
                 .addAgent(dataCollector)
                 .addAgent(analyzer)
@@ -67,9 +67,9 @@ public class TeamAgentSupervisorTest {
                     "- 否则，请仅回复成员的名字（例如：'worker'）。";
         };
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("custom_prompt_team")
-                .addAgent(ReActAgent.builder(chatModel)
+                .addAgent(ReActAgent.of(chatModel)
                         .name("worker")
                         .description("工作者")
                         .build())

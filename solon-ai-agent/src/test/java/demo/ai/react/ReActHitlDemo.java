@@ -4,14 +4,12 @@ import demo.ai.agent.LlmUtil;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
-import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
-import org.noear.solon.flow.NodeType;
 
 public class ReActHitlDemo {
     public static void main(String[] args) throws Throwable {
@@ -30,7 +28,7 @@ public class ReActHitlDemo {
             }
         };
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .interceptor(hitlInterceptor) // 注入拦截器
                 .addTool(new MethodToolProvider(new WeatherTools()))
                 .build();

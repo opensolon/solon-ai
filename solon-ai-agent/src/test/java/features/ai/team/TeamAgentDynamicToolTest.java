@@ -36,13 +36,13 @@ public class TeamAgentDynamicToolTest {
         }
 
         // 3. 构建 Agent
-        Agent searcher = ReActAgent.builder(chatModel)
+        Agent searcher = ReActAgent.of(chatModel)
                 .name("searcher")
                 .description("差旅搜索专家。请根据你的工具权限为用户提供信息。")
                 .addTool(tools) // 动态注入工具列表
                 .build();
 
-        TeamAgent vipTeam = TeamAgent.builder(chatModel).addAgent(searcher).build();
+        TeamAgent vipTeam = TeamAgent.of(chatModel).addAgent(searcher).build();
 
         // 4. 执行测试
         FlowContext context = FlowContext.of("user_vip_001");

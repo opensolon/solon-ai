@@ -9,7 +9,6 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
-import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 
 import java.util.List;
@@ -25,7 +24,7 @@ public class ReActAgentBoundaryTest {
         // 测试：达到最大步数限制
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new LoopTools()))
                 .temperature(0.0F)
                 .maxSteps(3) // 设置很小的步数限制
@@ -51,7 +50,7 @@ public class ReActAgentBoundaryTest {
         // 测试：请求不存在的工具
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .temperature(0.0F)
                 .build();
@@ -71,7 +70,7 @@ public class ReActAgentBoundaryTest {
         // 测试：工具抛异常的处理
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new ErrorTools()))
                 .temperature(0.0F)
                 .build();
@@ -106,7 +105,7 @@ public class ReActAgentBoundaryTest {
         // 测试：空提示词
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .build();
 
@@ -127,7 +126,7 @@ public class ReActAgentBoundaryTest {
         // 测试：null 上下文处理
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .build();
 

@@ -163,7 +163,7 @@ public class ReActAgent implements Agent {
 
     /// ////////////
 
-    public static Builder builder(ChatModel chatModel) {
+    public static Builder of(ChatModel chatModel) {
         return new Builder(chatModel);
     }
 

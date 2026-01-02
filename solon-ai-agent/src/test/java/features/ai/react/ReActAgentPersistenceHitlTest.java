@@ -40,7 +40,7 @@ public class ReActAgentPersistenceHitlTest {
         };
 
         // 2. 构建 Agent
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .name(agentName)
                 .addTool(new MethodToolProvider(new RefundTools()))
                 .interceptor(hitlInterceptor)

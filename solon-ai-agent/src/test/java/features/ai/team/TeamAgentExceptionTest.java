@@ -33,7 +33,7 @@ public class TeamAgentExceptionTest {
             }
         };
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("exception_team")
                 .addAgent(throwingAgent)
                 .build();
@@ -57,7 +57,7 @@ public class TeamAgentExceptionTest {
         // 测试：Graph 节点抛异常
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("graph_exception_team")
                 .graphAdjuster(spec -> {
                     spec.addStart(Agent.ID_START).linkAdd("problem_node");

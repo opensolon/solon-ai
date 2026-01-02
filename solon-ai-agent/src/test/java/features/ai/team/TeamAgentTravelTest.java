@@ -24,13 +24,13 @@ public class TeamAgentTravelTest {
         String teamId = "auto_travel_agent";
 
         // 1. 组建团队
-        TeamAgent travelTeam = TeamAgent.builder(chatModel)
+        TeamAgent travelTeam = TeamAgent.of(chatModel)
                 .name(teamId)
-                .addAgent(ReActAgent.builder(chatModel).name("searcher")
+                .addAgent(ReActAgent.of(chatModel).name("searcher")
                         .description("负责查询实时天气。必须基于 query 工具的 Observation 给出结论。")
                         .addTool(new MethodToolProvider(new WeatherService()))
                         .build())
-                .addAgent(ReActAgent.builder(chatModel).name("planner")
+                .addAgent(ReActAgent.of(chatModel).name("planner")
                         .description("行程规划专家。要求：必须优先阅读协作历史中的天气信息！如果历史显示下雨，严禁安排户外步行，必须安排室内场馆（如博物馆、室内商场）。")
                         .build())
                 .maxTotalIterations(5) // 限制迭代次数防止死循环

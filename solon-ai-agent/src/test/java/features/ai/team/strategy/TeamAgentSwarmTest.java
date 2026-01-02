@@ -21,18 +21,18 @@ public class TeamAgentSwarmTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 定义翻译接力链
-        Agent chineseTranslator = ReActAgent.builder(chatModel)
+        Agent chineseTranslator = ReActAgent.of(chatModel)
                 .name("ChineseTranslator")
                 .description("负责把用户的中文输入翻译成英文。")
                 .build();
 
-        Agent polisher = ReActAgent.builder(chatModel)
+        Agent polisher = ReActAgent.of(chatModel)
                 .name("Polisher")
                 .description("负责对英文文本进行文学化润色。")
                 .build();
 
         // 2. 使用 SWARM 策略构建团队
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("swarm_team")
                 .strategy(TeamStrategy.SWARM)
                 .addAgent(chineseTranslator)
@@ -82,27 +82,27 @@ public class TeamAgentSwarmTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 创建更长的处理链
-        Agent translator = ReActAgent.builder(chatModel)
+        Agent translator = ReActAgent.of(chatModel)
                 .name("Translator")
                 .description("将中文翻译成英文。")
                 .build();
 
-        Agent grammarChecker = ReActAgent.builder(chatModel)
+        Agent grammarChecker = ReActAgent.of(chatModel)
                 .name("GrammarChecker")
                 .description("检查英文语法和拼写错误。")
                 .build();
 
-        Agent styleImprover = ReActAgent.builder(chatModel)
+        Agent styleImprover = ReActAgent.of(chatModel)
                 .name("StyleImprover")
                 .description("改进英文文本的写作风格。")
                 .build();
 
-        Agent finalReviewer = ReActAgent.builder(chatModel)
+        Agent finalReviewer = ReActAgent.of(chatModel)
                 .name("FinalReviewer")
                 .description("进行最终审阅，确保质量。")
                 .build();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("swarm_chain_team")
                 .strategy(TeamStrategy.SWARM)
                 .addAgent(translator)

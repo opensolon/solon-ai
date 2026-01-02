@@ -24,13 +24,13 @@ public class TeamAgentHumanInTheLoopTest {
         String teamId = "audit_travel_team";
 
         // 1. 定义团队：包含规划师和确认员
-        TeamAgent auditTeam = TeamAgent.builder(chatModel)
+        TeamAgent auditTeam = TeamAgent.of(chatModel)
                 .name(teamId)
-                .addAgent(ReActAgent.builder(chatModel)
+                .addAgent(ReActAgent.of(chatModel)
                         .name("planner")
                         .description("负责生成详细方案")
                         .build())
-                .addAgent(ReActAgent.builder(chatModel)
+                .addAgent(ReActAgent.of(chatModel)
                         .name("confirmer")
                         .description("负责在审批通过后完成最终确认")
                         .build())
@@ -39,7 +39,7 @@ public class TeamAgentHumanInTheLoopTest {
                     // 使用自定义graph覆盖自动管家模式
                     spec.addStart(Agent.ID_START).linkAdd("planner");
 
-                    spec.addActivity("planner").task(ReActAgent.builder(chatModel)
+                    spec.addActivity("planner").task(ReActAgent.of(chatModel)
                                     .name("planner")
                                     .description("负责生成详细方案")
                                     .build())
@@ -50,7 +50,7 @@ public class TeamAgentHumanInTheLoopTest {
                             .task(new HumanAuditTask())
                             .linkAdd("confirmer"); // 人工审核后进入confirmer
 
-                    spec.addActivity("confirmer").task(ReActAgent.builder(chatModel)
+                    spec.addActivity("confirmer").task(ReActAgent.of(chatModel)
                                     .name("confirmer")
                                     .description("负责在审批通过后完成最终确认")
                                     .build())

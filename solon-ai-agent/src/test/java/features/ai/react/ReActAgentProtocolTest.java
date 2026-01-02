@@ -26,7 +26,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase{
     public void testFullReActCycle() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new TestTools()))
                 .temperature(0.0F)
                 .maxSteps(10)
@@ -80,7 +80,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase{
         // 测试：不需要工具的直接回答
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new TestTools()))
                 .temperature(0.0F)
                 .build();
@@ -108,7 +108,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase{
         // 测试：连续调用多个工具
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new SequentialTools()))
                 .temperature(0.0F)
                 .maxSteps(5)

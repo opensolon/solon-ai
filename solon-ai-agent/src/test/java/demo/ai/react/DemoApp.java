@@ -14,7 +14,7 @@ public class DemoApp {
     public static void main(String[] args) throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent robot = ReActAgent.builder(chatModel)
+        Agent robot = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new TimeTool()))
                 .build();
 

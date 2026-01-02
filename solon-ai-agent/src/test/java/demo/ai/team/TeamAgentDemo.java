@@ -27,17 +27,17 @@ public class TeamAgentDemo {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 定义子 Agent
-        Agent coder = ReActAgent.builder(chatModel)
+        Agent coder = ReActAgent.of(chatModel)
                 .name("coder")
                 .addTool(new MethodToolProvider(new CodeExecutorTool()))
                 .build();
 
-        Agent writer = ReActAgent.builder(chatModel)
+        Agent writer = ReActAgent.of(chatModel)
                 .name("writer")
                 .build();
 
         // 2. 定义团队智能体
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("team")
                 .addAgent(coder)
                 .addAgent(writer)

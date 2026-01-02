@@ -14,7 +14,7 @@ public class ReActAgentDemo {
     public static void main(String[] args) throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .temperature(0.1F) // 低温度保证推理逻辑严密
                 .addTool(new MethodToolProvider(new WeatherTools()))
                 .build();

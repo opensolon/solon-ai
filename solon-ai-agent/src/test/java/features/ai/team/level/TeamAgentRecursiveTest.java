@@ -20,7 +20,7 @@ public class TeamAgentRecursiveTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 底层团队：强制其输出简洁，并带上完成标记
-        TeamAgent devTeam = TeamAgent.builder(chatModel)
+        TeamAgent devTeam = TeamAgent.of(chatModel)
                 .name("dev_team")
                 .description("研发小组。输入需求，直接给出代码实现。完成后必须回复：[FINISH] 研发已完成")
                 .addAgent(createSimpleAgent("Coder", "负责写代码"))
@@ -28,7 +28,7 @@ public class TeamAgentRecursiveTest {
                 .build();
 
         // 2. 顶层团队
-        TeamAgent projectTeam = TeamAgent.builder(chatModel)
+        TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name("project_team")
                 .description("项目管理。先让 Analyst 分析，然后交给 dev_team 执行。")
                 .addAgent(createSimpleAgent("Analyst", "需求分析师"))
@@ -72,13 +72,13 @@ public class TeamAgentRecursiveTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 简单的开发子团队
-        TeamAgent devTeam = TeamAgent.builder(chatModel).name("dev_team")
+        TeamAgent devTeam = TeamAgent.of(chatModel).name("dev_team")
                 .description("代码实现小组")
                 .addAgent(createSimpleAgent("Coder", "程序员"))
                 .build();
 
         // 2. 带有审核逻辑的顶层团队
-        TeamAgent projectTeam = TeamAgent.builder(chatModel).name("quality_project")
+        TeamAgent projectTeam = TeamAgent.of(chatModel).name("quality_project")
                 .description("带质检的项目组。如果结果不满意，Reviewer 会要求重写。")
                 .addAgent(devTeam)
                 .addAgent(new Agent() {

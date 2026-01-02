@@ -30,7 +30,7 @@ public class ReActAgentPromptProviderTest {
                     "最终答案请以 '答案:' 开头";
         };
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new MathTools()))
                 .promptProvider(customProvider)
                 .temperature(0.0F)
@@ -53,7 +53,7 @@ public class ReActAgentPromptProviderTest {
         // 测试：中文提示词提供者
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new ChineseTools()))
                 .promptProvider(ReActPromptProviderCn.getInstance())
                 .temperature(0.0F)
@@ -77,7 +77,7 @@ public class ReActAgentPromptProviderTest {
 
         ReActPromptProvider emptyProvider = config -> "";
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .promptProvider(emptyProvider)
                 .temperature(0.0F)

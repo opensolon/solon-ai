@@ -20,18 +20,18 @@ public class TeamAgentBlackboardTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 定义互补的 Agent
-        Agent databaseDesigner = ReActAgent.builder(chatModel)
+        Agent databaseDesigner = ReActAgent.of(chatModel)
                 .name("db_designer")
                 .description("负责数据库表结构设计，输出 SQL 代码。")
                 .build();
 
-        Agent apiDesigner = ReActAgent.builder(chatModel)
+        Agent apiDesigner = ReActAgent.of(chatModel)
                 .name("api_designer")
                 .description("负责 RESTful API 接口协议设计。")
                 .build();
 
         // 2. 使用 BLACKBOARD 策略
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("blackboard_team")
                 .strategy(TeamStrategy.BLACKBOARD)
                 .addAgent(databaseDesigner)
@@ -71,17 +71,17 @@ public class TeamAgentBlackboardTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 创建互补的 Agent
-        Agent databaseDesigner = ReActAgent.builder(chatModel)
+        Agent databaseDesigner = ReActAgent.of(chatModel)
                 .name("db_designer")
                 .description("负责数据库表结构设计，输出 SQL 代码。")
                 .build();
 
-        Agent apiDesigner = ReActAgent.builder(chatModel)
+        Agent apiDesigner = ReActAgent.of(chatModel)
                 .name("api_designer")
                 .description("负责 RESTful API 接口协议设计。")
                 .build();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("blackboard_explicit_team")
                 .strategy(TeamStrategy.BLACKBOARD)
                 .addAgent(databaseDesigner)

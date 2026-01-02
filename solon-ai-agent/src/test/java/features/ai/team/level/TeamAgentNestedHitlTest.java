@@ -18,7 +18,7 @@ public class TeamAgentNestedHitlTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 构建子团队
-        TeamAgent devTeam = TeamAgent.builder(chatModel).name("dev_team")
+        TeamAgent devTeam = TeamAgent.of(chatModel).name("dev_team")
                 .addAgent(new Agent() {
                     @Override public String name() { return "Coder"; }
                     @Override public String description() { return "写代码"; }
@@ -26,7 +26,7 @@ public class TeamAgentNestedHitlTest {
                 }).build();
 
         // 2. 构建父团队
-        TeamAgent projectTeam = TeamAgent.builder(chatModel)
+        TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name("manager")
                 .addAgent(devTeam)
                 .addAgent(new Agent() {

@@ -17,7 +17,7 @@ public class TeamAgentPersistenceHitlCombinedTest {
     public void testCombinedScenario() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        TeamAgent projectTeam = TeamAgent.builder(chatModel)
+        TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name("combined_manager")
                 .addAgent(new Agent() {
                     @Override public String name() { return "Worker"; }

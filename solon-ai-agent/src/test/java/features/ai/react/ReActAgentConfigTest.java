@@ -7,7 +7,6 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
-import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 
 /**
@@ -21,14 +20,14 @@ public class ReActAgentConfigTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 低温（确定性高）
-        ReActAgent lowTempAgent = ReActAgent.builder(chatModel)
+        ReActAgent lowTempAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new CreativeTools()))
                 .temperature(0.1F)
                 .name("low_temp")
                 .build();
 
         // 高温（创造性高）
-        ReActAgent highTempAgent = ReActAgent.builder(chatModel)
+        ReActAgent highTempAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new CreativeTools()))
                 .temperature(0.9F)
                 .name("high_temp")
@@ -54,13 +53,13 @@ public class ReActAgentConfigTest {
         // 测试：不同 maxTokens 参数
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent shortAgent = ReActAgent.builder(chatModel)
+        ReActAgent shortAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new StoryTools()))
                 .maxTokens(50) // 很短的token限制
                 .name("short")
                 .build();
 
-        ReActAgent longAgent = ReActAgent.builder(chatModel)
+        ReActAgent longAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new StoryTools()))
                 .maxTokens(500) // 较长的token限制
                 .name("long")
@@ -87,12 +86,12 @@ public class ReActAgentConfigTest {
         // 测试：日志开启/关闭
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent loggingAgent = ReActAgent.builder(chatModel)
+        ReActAgent loggingAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .name("with_logging")
                 .build();
 
-        ReActAgent noLoggingAgent = ReActAgent.builder(chatModel)
+        ReActAgent noLoggingAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .name("no_logging")
                 .build();
@@ -113,7 +112,7 @@ public class ReActAgentConfigTest {
         // 测试：自定义结束标记
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .finishMarker("[结束]") // 自定义结束标记
                 .name("custom_finish")

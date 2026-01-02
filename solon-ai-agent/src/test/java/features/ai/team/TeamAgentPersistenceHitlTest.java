@@ -18,10 +18,10 @@ public class TeamAgentPersistenceHitlTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         String teamId = "approval_team";
 
-        TeamAgent teamAgent = TeamAgent.builder(chatModel)
+        TeamAgent teamAgent = TeamAgent.of(chatModel)
                 .name(teamId)
-                .addAgent(ReActAgent.builder(chatModel).name("worker").description("初稿撰写").build())
-                .addAgent(ReActAgent.builder(chatModel).name("approver").description("修辞优化").build())
+                .addAgent(ReActAgent.of(chatModel).name("worker").description("初稿撰写").build())
+                .addAgent(ReActAgent.of(chatModel).name("approver").description("修辞优化").build())
                 .interceptor(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {

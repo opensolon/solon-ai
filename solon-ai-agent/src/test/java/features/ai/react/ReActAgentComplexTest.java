@@ -20,7 +20,7 @@ public class ReActAgentComplexTest {
     public void testCustomerServiceLogic() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActAgent agent = ReActAgent.builder(chatModel)
+        ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new OrderTools()))
                 .addTool(new MethodToolProvider(new LogisticTools()))
                 .addTool(new MethodToolProvider(new MarketingTools()))

@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.team.TeamAgentBuilder;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
@@ -22,7 +21,7 @@ public class TeamAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         Assertions.assertThrows(IllegalStateException.class, () -> {
-            TeamAgent.builder(chatModel)
+            TeamAgent.of(chatModel)
                     .name("empty_team")
                     .build(); // 没有 addAgent，应该抛异常或表现特定行为
         });
@@ -33,12 +32,12 @@ public class TeamAgentBoundaryTest {
         // 测试：只有一个 Agent 的团队（无 Supervisor 决策场景）
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent soloAgent = ReActAgent.builder(chatModel)
+        Agent soloAgent = ReActAgent.of(chatModel)
                 .name("solo")
                 .description("独行侠")
                 .build();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("solo_team")
                 .addAgent(soloAgent)
                 .build();
@@ -55,17 +54,17 @@ public class TeamAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 创建两个会互相传递的 Agent（模拟死循环）
-        Agent agentA = ReActAgent.builder(chatModel)
+        Agent agentA = ReActAgent.of(chatModel)
                 .name("agent_a")
                 .description("A: 总是传给B")
                 .build();
 
-        Agent agentB = ReActAgent.builder(chatModel)
+        Agent agentB = ReActAgent.of(chatModel)
                 .name("agent_b")
                 .description("B: 总是传给A")
                 .build();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("loop_team")
                 .addAgent(agentA)
                 .addAgent(agentB)
@@ -96,12 +95,12 @@ public class TeamAgentBoundaryTest {
         // 测试：空提示词的情况
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent agent = ReActAgent.builder(chatModel)
+        Agent agent = ReActAgent.of(chatModel)
                 .name("test_agent")
                 .description("测试代理")
                 .build();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("null_prompt_team")
                 .addAgent(agent)
                 .build();
@@ -123,12 +122,12 @@ public class TeamAgentBoundaryTest {
         // 测试：大团队的创建和执行性能
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        TeamAgentBuilder builder = TeamAgent.builder(chatModel)
+        TeamAgent.Builder builder = TeamAgent.of(chatModel)
                 .name("large_team");
 
         // 创建多个 Agent
         for (int i = 0; i < 5; i++) { // 可以调整数量
-            builder.addAgent(ReActAgent.builder(chatModel)
+            builder.addAgent(ReActAgent.of(chatModel)
                     .name("agent_" + i)
                     .description("第 " + i + " 个Agent")
                     .build());
@@ -167,17 +166,17 @@ public class TeamAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 创建两个处理能力有限的Agent
-        Agent agentA = ReActAgent.builder(chatModel)
+        Agent agentA = ReActAgent.of(chatModel)
                 .name("agent_a")
                 .description("A: 总是说'这个问题很复杂，需要更多分析，请B继续'")
                 .build();
 
-        Agent agentB = ReActAgent.builder(chatModel)
+        Agent agentB = ReActAgent.of(chatModel)
                 .name("agent_b")
                 .description("B: 总是说'需要进一步研究，请A继续'")
                 .build();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("real_loop_team")
                 .addAgent(agentA)
                 .addAgent(agentB)
@@ -202,7 +201,7 @@ public class TeamAgentBoundaryTest {
         // 测试：所有Agent都参与的场景
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        TeamAgentBuilder builder = TeamAgent.builder(chatModel)
+        TeamAgent.Builder builder = TeamAgent.of(chatModel)
                 .name("all_participate_team");
 
         // 创建有明确分工的Agent
@@ -215,7 +214,7 @@ public class TeamAgentBoundaryTest {
         };
 
         for (int i = 0; i < 5; i++) {
-            builder.addAgent(ReActAgent.builder(chatModel)
+            builder.addAgent(ReActAgent.of(chatModel)
                     .name("expert_" + i)
                     .description("专家" + i + ": 专注于" + specialties[i])
                     .build());

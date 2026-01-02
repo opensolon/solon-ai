@@ -21,18 +21,18 @@ public class TeamAgentMarketTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 提供领域细分的专家
-        Agent pythonExpert = ReActAgent.builder(chatModel)
+        Agent pythonExpert = ReActAgent.of(chatModel)
                 .name("python_coder")
                 .description("Python 专家，擅长数据处理和自动化脚本。")
                 .build();
 
-        Agent javaExpert = ReActAgent.builder(chatModel)
+        Agent javaExpert = ReActAgent.of(chatModel)
                 .name("java_coder")
                 .description("Java 专家，擅长高并发架构设计。")
                 .build();
 
         // 2. 使用 MARKET_BASED 策略
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("market_team")
                 .strategy(TeamStrategy.MARKET_BASED)
                 .addAgent(pythonExpert)
@@ -74,17 +74,17 @@ public class TeamAgentMarketTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 创建领域专家
-        Agent pythonExpert = ReActAgent.builder(chatModel)
+        Agent pythonExpert = ReActAgent.of(chatModel)
                 .name("python_data_scientist")
                 .description("Python 数据科学家，擅长数据分析和机器学习。")
                 .build();
 
-        Agent javaExpert = ReActAgent.builder(chatModel)
+        Agent javaExpert = ReActAgent.of(chatModel)
                 .name("java_backend_engineer")
                 .description("Java 后端工程师，擅长微服务和分布式系统。")
                 .build();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("market_python_team")
                 .strategy(TeamStrategy.MARKET_BASED)
                 .addAgent(pythonExpert)

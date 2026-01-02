@@ -21,18 +21,18 @@ public class TeamAgentContractNetTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 专家 A：擅长算法
-        Agent algoExpert = ReActAgent.builder(chatModel)
+        Agent algoExpert = ReActAgent.of(chatModel)
                 .name("algo_expert")
                 .description("高级算法工程师，擅长排序、搜索和图计算。")
                 .build();
 
         // 专家 B：擅长UI/UX
-        Agent uiExpert = ReActAgent.builder(chatModel)
+        Agent uiExpert = ReActAgent.of(chatModel)
                 .name("ui_expert")
                 .description("资深 UI 设计师，擅长界面布局和交互体验。")
                 .build();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("contract_team")
                 .strategy(TeamStrategy.CONTRACT_NET)
                 .addAgent(algoExpert)
@@ -85,17 +85,17 @@ public class TeamAgentContractNetTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 创建能力有重叠的Agent，使Mediator更可能触发招标
-        Agent expert1 = ReActAgent.builder(chatModel)
+        Agent expert1 = ReActAgent.of(chatModel)
                 .name("full_stack_engineer")
                 .description("全栈工程师，既能做前端UI，也能做后端算法。")
                 .build();
 
-        Agent expert2 = ReActAgent.builder(chatModel)
+        Agent expert2 = ReActAgent.of(chatModel)
                 .name("generalist_designer")
                 .description("全能设计师，既懂UI/UX，也了解算法实现。")
                 .build();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("contract_overlap_team")
                 .strategy(TeamStrategy.CONTRACT_NET)
                 .addAgent(expert1)

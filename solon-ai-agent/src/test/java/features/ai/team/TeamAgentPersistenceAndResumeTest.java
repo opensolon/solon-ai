@@ -22,15 +22,15 @@ public class TeamAgentPersistenceAndResumeTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         String teamId = "persistent_trip_manager";
 
-        TeamAgent tripAgent = TeamAgent.builder(chatModel)
+        TeamAgent tripAgent = TeamAgent.of(chatModel)
                 .name(teamId)
-                .addAgent(ReActAgent.builder(chatModel)
+                .addAgent(ReActAgent.of(chatModel)
                         .name("planner")
                         .description("资深行程规划专家")
                         .build())
                 .graphAdjuster(spec -> {
                     spec.addStart(Agent.ID_START).linkAdd("searcher");
-                    spec.addActivity(ReActAgent.builder(chatModel)
+                    spec.addActivity(ReActAgent.of(chatModel)
                                     .name("searcher")
                                     .description("天气搜索员")
                                     .build())
@@ -90,9 +90,9 @@ public class TeamAgentPersistenceAndResumeTest {
         // 测试：resetOnNewPrompt 参数的效果
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("reset_test_team")
-                .addAgent(ReActAgent.builder(chatModel)
+                .addAgent(ReActAgent.of(chatModel)
                         .name("agent")
                         .description("测试Agent")
                         .build())
@@ -121,9 +121,9 @@ public class TeamAgentPersistenceAndResumeTest {
         // 测试：不同 FlowContext 之间的状态隔离
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        TeamAgent team = TeamAgent.builder(chatModel)
+        TeamAgent team = TeamAgent.of(chatModel)
                 .name("isolation_team")
-                .addAgent(ReActAgent.builder(chatModel)
+                .addAgent(ReActAgent.of(chatModel)
                         .name("agent")
                         .description("测试Agent")
                         .build())

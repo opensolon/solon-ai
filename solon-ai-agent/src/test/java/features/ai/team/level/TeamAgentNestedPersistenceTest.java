@@ -28,9 +28,9 @@ public class TeamAgentNestedPersistenceTest {
             @Override public String call(FlowContext ctx, Prompt p) { return "OK [FINISH]"; }
         };
 
-        TeamAgent projectTeam = TeamAgent.builder(chatModel)
+        TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name("quality_project")
-                .addAgent(TeamAgent.builder(chatModel).name("dev_team").addAgent(coder).build())
+                .addAgent(TeamAgent.of(chatModel).name("dev_team").addAgent(coder).build())
                 .addAgent(reviewer)
                 .build();
 
