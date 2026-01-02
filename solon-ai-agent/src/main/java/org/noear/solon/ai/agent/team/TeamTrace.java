@@ -18,8 +18,7 @@ package org.noear.solon.ai.agent.team;
 import org.noear.solon.flow.NodeTrace;
 import org.noear.solon.lang.Preview;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -35,6 +34,8 @@ public class TeamTrace {
 
     private volatile String route;
     private AtomicInteger iterations;
+    // 策略相关上下文
+    private final Map<String, Object> strategyContext = new HashMap<>();
 
     private String finalAnswer;
     private NodeTrace lastNode;
@@ -73,6 +74,10 @@ public class TeamTrace {
 
     public void setLastNode(NodeTrace lastNode) {
         this.lastNode = lastNode;
+    }
+
+    public Map<String, Object> getStrategyContext() {
+        return strategyContext;
     }
 
     /**

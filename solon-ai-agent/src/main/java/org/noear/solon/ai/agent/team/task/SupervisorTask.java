@@ -44,7 +44,6 @@ import java.util.stream.Collectors;
 public class SupervisorTask implements TaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(SupervisorTask.class);
     private final TeamConfig config;
-    private final Map<String, Object> strategyContext = new HashMap<>();
 
     public SupervisorTask(TeamConfig config) {
         this.config = config;
@@ -121,10 +120,8 @@ public class SupervisorTask implements TaskComponent {
             }
         }
 
-        List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
-
         // 优先匹配 Agent 名字。也优先进行路由派发
-        if (matchAgentRoute(trace, decision, agentNames)) {
+        if (matchAgentRoute(trace, decision)) {
             return;
         }
 
@@ -153,9 +150,20 @@ public class SupervisorTask implements TaskComponent {
     /**
      * 匹配智能体并路由
      */
-    private boolean matchAgentRoute(TeamTrace trace, String text, List<String> names) {
-        // 按名称长度倒序排列，优先匹配 "dev_team" 而不是 "dev"
-        List<String> sortedNames = names.stream()
+    private boolean matchAgentRoute(TeamTrace trace, String text) {
+        // 1.直接查找名字
+        Agent agent = config.getAgentMap().get(text);
+        if (agent != null) {
+            trace.setRoute(agent.name());
+            updateStrategyContext(trace, agent.name());
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Routed to agent: [{}]", agent.name());
+            }
+            return true;
+        }
+
+        // 2.正则匹配（先短再长）
+        List<String> sortedNames = config.getAgentMap().keySet().stream()
                 .sorted((a, b) -> b.length() - a.length())
                 .collect(Collectors.toList());
 
@@ -164,7 +172,7 @@ public class SupervisorTask implements TaskComponent {
             Pattern p = Pattern.compile("\\b" + Pattern.quote(name) + "\\b", Pattern.CASE_INSENSITIVE);
             if (p.matcher(text).find()) {
                 trace.setRoute(name);
-                updateStrategyContext(name);
+                updateStrategyContext(trace, name);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Routed to agent: [{}]", name);
                 }
@@ -177,10 +185,11 @@ public class SupervisorTask implements TaskComponent {
     private void runSequential(FlowContext context, TeamTrace trace, Prompt prompt) {
         List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
         int nextIndex = trace.getIterationsCount();
+
         if (nextIndex < agentNames.size()) {
             String nextAgent = agentNames.get(nextIndex);
             trace.setRoute(nextAgent);
-            updateStrategyContext(nextAgent);
+            updateStrategyContext(trace, nextAgent);
         } else {
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer("Sequential task completed.");
@@ -188,9 +197,9 @@ public class SupervisorTask implements TaskComponent {
         trace.nextIterations();
     }
 
-    private void updateStrategyContext(String agentName) {
+    private void updateStrategyContext(TeamTrace trace, String agentName) {
         if (config.getStrategy() == TeamStrategy.SWARM) {
-            Map<String, Integer> usage = (Map<String, Integer>) strategyContext.computeIfAbsent("agent_usage", k -> new HashMap<>());
+            Map<String, Integer> usage = (Map<String, Integer>) trace.getStrategyContext().computeIfAbsent("agent_usage", k -> new HashMap<>());
             usage.put(agentName, usage.getOrDefault(agentName, 0) + 1);
         }
     }
