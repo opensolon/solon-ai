@@ -107,7 +107,7 @@ public class ReActAgent implements Agent {
     @Override
     public String call(FlowContext context, Prompt prompt) throws Throwable {
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Starting ReActAgent: {}", prompt);
+            LOG.debug("ReActAgent [{}] starting: {}", this.name, prompt);
         }
 
         ReActTrace tmpTrace = context.getAs(traceKey);
@@ -135,14 +135,14 @@ public class ReActAgent implements Agent {
             trace.getMetrics().setToolCallCount(trace.getToolCallCount());
 
             if (LOG.isDebugEnabled()) {
-                LOG.debug("ReActAgent completed in {}ms, {} steps, {} tool calls",
-                        duration, trace.getStepCount(), trace.getMetrics().getToolCallCount());
+                LOG.debug("ReActAgent [{}] completed in {}ms, {} steps, {} tool calls",
+                        this.name, duration, trace.getStepCount(), trace.getMetrics().getToolCallCount());
             }
         }
 
         String result = trace.getFinalAnswer();
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Final Answer: {}", result);
+            LOG.debug("ReActAgent [{}] final Answer: {}", this.name, result);
         }
 
         if(config.getInterceptor() != null){

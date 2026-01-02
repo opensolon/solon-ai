@@ -58,7 +58,7 @@ public class SupervisorTask implements TaskComponent {
             TeamTrace trace = context.getAs(traceKey);
 
             if (trace == null) {
-                LOG.error("Team trace not found");
+                LOG.error("TeamAgent [{}] supervisor: Team trace not found", config.getName());
                 return;
             }
 
@@ -97,7 +97,7 @@ public class SupervisorTask implements TaskComponent {
         )).call().getResultContent().trim();
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Supervisor [{}] decision: {}", config.getName(), decision);
+            LOG.debug("TeamAgent [{}] supervisor decision: {}", config.getName(), decision);
         }
 
         parseAndRoute(trace, decision, context);
@@ -145,7 +145,7 @@ public class SupervisorTask implements TaskComponent {
 
         // 兜底处理。无法识别目标时终止，防止死循环
         trace.setRoute(Agent.ID_END);
-        LOG.warn("Supervisor [{}] could not resolve next agent: {}", config.getName(), decision);
+        LOG.warn("TeamAgent [{}] supervisor could not resolve next agent: {}", config.getName(), decision);
     }
 
     /**
@@ -158,7 +158,7 @@ public class SupervisorTask implements TaskComponent {
             trace.setRoute(agent.name());
             updateStrategyContext(trace, agent.name());
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Routed to agent: [{}]", agent.name());
+                LOG.debug("TeamAgent [{}] supervisor routed to agent: [{}]", config.getName(), agent.name());
             }
             return true;
         }
@@ -175,7 +175,7 @@ public class SupervisorTask implements TaskComponent {
                 trace.setRoute(name);
                 updateStrategyContext(trace, name);
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Routed to agent: [{}]", name);
+                    LOG.debug("TeamAgent [{}] supervisor routed to agent: [{}]", config.getName(), name);
                 }
                 return true;
             }
@@ -223,7 +223,8 @@ public class SupervisorTask implements TaskComponent {
     }
 
     private void handleError(FlowContext context, Exception e) {
-        LOG.error("Supervisor task failed", e);
+        LOG.error("TeamAgent [{}] supervisor task failed", config.getName(), e);
+
         String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = context.getAs(traceKey);
         if (trace != null) {
