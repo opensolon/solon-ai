@@ -31,6 +31,8 @@ import java.util.stream.Collectors;
  */
 @Preview("3.8")
 public class TeamTrace {
+    private transient TeamConfig config;
+
     private Prompt prompt;
     private final List<TeamStep> steps = new ArrayList<>();
 
@@ -47,9 +49,18 @@ public class TeamTrace {
         this.iterations = new AtomicInteger(0);
     }
 
-    public TeamTrace(Prompt prompt){
+    public TeamTrace(TeamConfig config, Prompt prompt){
         this();
+        this.config = config;
         this.prompt = prompt;
+    }
+
+    public TeamConfig getConfig() {
+        return config;
+    }
+
+    protected void setConfig(TeamConfig config) {
+        this.config = config;
     }
 
     public Prompt getPrompt() {

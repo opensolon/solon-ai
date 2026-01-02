@@ -22,9 +22,9 @@ public class ReActAgentPromptProviderTest {
         // 测试：自定义提示词提供者
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActPromptProvider customProvider = config -> {
+        ReActPromptProvider customProvider = trace -> {
             return "你是专门处理数学问题的专家。\n" +
-                    "可用工具: " + config.getTools().size() + " 个\n" +
+                    "可用工具: " + trace.getConfig().getTools().size() + " 个\n" +
                     "请按照以下格式思考:\n" +
                     "分析 -> 计算 -> 验证\n" +
                     "最终答案请以 '答案:' 开头";

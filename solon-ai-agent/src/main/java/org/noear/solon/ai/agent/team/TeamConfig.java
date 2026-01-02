@@ -130,7 +130,7 @@ public class TeamConfig {
         return interceptor;
     }
 
-    public String getSystemPrompt(Prompt prompt) {
-        return promptProvider.getSystemPrompt(this, prompt);
+    public String getSystemPrompt(TeamTrace trace) {
+        return promptProvider.getSystemPrompt(trace);
     }
 }

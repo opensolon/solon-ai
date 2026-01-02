@@ -71,9 +71,9 @@ public class SupervisorTask implements TaskComponent {
 
             // 执行策略
             if (config.getStrategy() == TeamStrategy.SEQUENTIAL) {
-                runSequential(context, trace, prompt);
+                runSequential(context, trace);
             } else {
-                runIntelligent(context, trace, prompt);
+                runIntelligent(context, trace);
             }
 
         } catch (Exception e) {
@@ -81,12 +81,12 @@ public class SupervisorTask implements TaskComponent {
         }
     }
 
-    private void runIntelligent(FlowContext context, TeamTrace trace, Prompt prompt) throws Exception {
+    private void runIntelligent(FlowContext context, TeamTrace trace) throws Exception {
         StringBuilder protocolExt = new StringBuilder();
         prepareProtocolInfo(context, trace, protocolExt);
         String strategyContextInfo = prepareStrategyContext(context, trace);
 
-        String basePrompt = config.getSystemPrompt(prompt);
+        String basePrompt = config.getSystemPrompt(trace);
         String enhancedPrompt = basePrompt + protocolExt + strategyContextInfo;
 
         String decision = config.getChatModel().prompt(Arrays.asList(
@@ -183,7 +183,7 @@ public class SupervisorTask implements TaskComponent {
         return false;
     }
 
-    private void runSequential(FlowContext context, TeamTrace trace, Prompt prompt) {
+    private void runSequential(FlowContext context, TeamTrace trace) {
         List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
         int nextIndex = trace.getIterationsCount();
 

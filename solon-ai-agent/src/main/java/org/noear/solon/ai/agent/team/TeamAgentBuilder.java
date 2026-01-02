@@ -66,7 +66,7 @@ public class TeamAgentBuilder {
         return new TeamAgent(createGraph(),
                 config.getName(),
                 config.getDescription(),
-                config.getInterceptor());
+                config);
     }
 
     private Graph createGraph() {

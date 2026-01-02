@@ -66,7 +66,7 @@ public class ReasonTask implements TaskComponent {
 
         // 3. 构建全量消息（System + History）
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.ofSystem(config.getSystemPrompt()));
+        messages.add(ChatMessage.ofSystem(config.getSystemPrompt(trace)));
         messages.addAll(trace.getMessages());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）

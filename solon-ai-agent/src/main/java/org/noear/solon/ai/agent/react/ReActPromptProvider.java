@@ -28,5 +28,5 @@ public interface ReActPromptProvider {
     /**
      * 获取系统提示词
      */
-    String getSystemPrompt(ReActConfig config);
+    String getSystemPrompt(ReActTrace trace);
 }

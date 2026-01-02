@@ -41,9 +41,10 @@ import java.util.regex.Pattern;
  */
 @Preview("3.8")
 public class ReActTrace {
+    private transient ReActConfig config;
     private Prompt prompt;
-    private volatile List<ChatMessage> messages;
 
+    private volatile List<ChatMessage> messages;
     private AtomicInteger stepCounter;
     private volatile String route;
 
@@ -59,13 +60,23 @@ public class ReActTrace {
         this.route = Agent.ID_REASON;
     }
 
-    public ReActTrace(Prompt prompt) {
+    public ReActTrace(ReActConfig config, Prompt prompt) {
         this();
+        this.config = config;
         this.prompt = prompt;
     }
 
 
     // --- Getters & Setters ---
+
+
+    public ReActConfig getConfig() {
+        return config;
+    }
+
+    protected void setConfig(ReActConfig config) {
+        this.config = config;
+    }
 
     public Prompt getPrompt() {
         return prompt;

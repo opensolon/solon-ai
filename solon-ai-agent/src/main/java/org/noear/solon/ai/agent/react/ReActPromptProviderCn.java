@@ -32,7 +32,8 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
     }
 
     @Override
-    public String getSystemPrompt(ReActConfig config) {
+    public String getSystemPrompt(ReActTrace trace) {
+        ReActConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
         // 简化角色描述，减少复杂概念

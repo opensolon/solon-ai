@@ -16,11 +16,14 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.*;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 
@@ -32,12 +35,16 @@ import java.util.Objects;
  */
 @Preview("3.8")
 public class TeamAgent implements Agent {
-    private String name;
-    private String description;
+    private static final Logger LOG = LoggerFactory.getLogger(TeamAgent.class);
+
+    private final String name;
+    private final String description;
+    private final String traceKey;
+
+    private final TeamConfig config;
     private final Graph graph;
     private final FlowEngine flowEngine;
-    private final String traceKey;
-    private final TeamInterceptor interceptor;
+
 
     public TeamAgent(Graph graph) {
         this(graph, null);
@@ -51,20 +58,21 @@ public class TeamAgent implements Agent {
         this(graph, name, description, null);
     }
 
-    public TeamAgent(Graph graph, String name, String description, TeamInterceptor interceptor) {
+    public TeamAgent(Graph graph, String name, String description, TeamConfig config) {
         if (graph == null || graph.getNodes().isEmpty()) {
             throw new IllegalStateException("Missing graph definition");
         }
 
-        this.flowEngine = FlowEngine.newInstance();
-        this.graph = Objects.requireNonNull(graph);
         this.name = (name == null ? "team_agent" : name);
         this.traceKey = "__" + name;
         this.description = description;
-        this.interceptor = interceptor;
 
-        if (interceptor != null) {
-            flowEngine.addInterceptor(interceptor);
+        this.config = config;
+        this.flowEngine = FlowEngine.newInstance();
+        this.graph = Objects.requireNonNull(graph);
+
+        if (config != null && config.getInterceptor() != null) {
+            flowEngine.addInterceptor(config.getInterceptor());
         }
     }
 
@@ -95,19 +103,25 @@ public class TeamAgent implements Agent {
 
     @Override
     public String call(FlowContext context, Prompt prompt) throws Throwable {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("TeamAgent [{}] starting: {}", this.name, prompt);
+        }
+
         TeamTrace tmpTrace = context.getAs(traceKey);
 
         if (tmpTrace == null) {
-            tmpTrace = new TeamTrace(prompt);
+            tmpTrace = new TeamTrace(config, prompt);
             context.put(traceKey, tmpTrace);
+        } else  {
+            tmpTrace.setConfig(config);
         }
 
         if (prompt != null) {
             context.lastNode(null);
 
             tmpTrace.setPrompt(prompt);
-            tmpTrace.resetIterations();
             tmpTrace.setLastNode(null);
+            tmpTrace.resetIterations();
         } else {
             tmpTrace.resetIterations();
         }
@@ -130,8 +144,8 @@ public class TeamAgent implements Agent {
         trace.setFinalAnswer(result);
 
 
-        if(interceptor != null){
-            interceptor.onCallEnd(context, prompt);
+        if(config != null && config.getInterceptor() != null){
+            config.getInterceptor().onCallEnd(context, prompt);
         }
 
         return result;

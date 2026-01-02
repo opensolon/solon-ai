@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -30,14 +29,16 @@ public class TeamPromptProviderCn implements TeamPromptProvider {
     public static TeamPromptProviderCn getInstance() { return INSTANCE; }
 
     @Override
-    public String getSystemPrompt(TeamConfig config, Prompt prompt) {
+    public String getSystemPrompt(TeamTrace trace) {
+        TeamConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
+
         sb.append("你是一个团队协作主管 (Supervisor)，负责协调以下 Agent 成员完成任务：\n");
         config.getAgentMap().forEach((name, agent) -> {
             sb.append("- ").append(name).append(": ").append(agent.description()).append("\n");
         });
 
-        sb.append("\n当前任务：").append(prompt.getUserContent()).append("\n");
+        sb.append("\n当前任务：").append(trace.getPrompt().getUserContent()).append("\n");
 
         sb.append("\n协作协议：").append(config.getStrategy()).append("\n");
         injectStrategyInstruction(sb, config.getStrategy(), config.getFinishMarker());

@@ -32,7 +32,8 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
     }
 
     @Override
-    public String getSystemPrompt(ReActConfig config) {
+    public String getSystemPrompt(ReActTrace trace) {
+        ReActConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
         // Simplified role description

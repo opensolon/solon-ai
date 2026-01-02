@@ -111,10 +111,19 @@ public class ReActAgent implements Agent {
         }
 
         ReActTrace tmpTrace = context.getAs(traceKey);
-        if (tmpTrace == null || prompt != null) {
-            tmpTrace = new ReActTrace(prompt);
+
+        if (tmpTrace == null) {
+            tmpTrace = new ReActTrace(config, prompt);
             context.put(traceKey, tmpTrace);
+        } else {
+            tmpTrace.setConfig(config);
+        }
+
+        if(prompt != null){
             context.lastNode(null);
+
+            tmpTrace.setPrompt(prompt);
+            tmpTrace.setLastNode(null);
         }
 
         final ReActTrace trace = tmpTrace;

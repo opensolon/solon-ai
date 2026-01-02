@@ -159,7 +159,7 @@ public class ReActConfig {
         return interceptor;
     }
 
-    public String getSystemPrompt() {
-        return promptProvider.getSystemPrompt(this);
+    public String getSystemPrompt(ReActTrace trace) {
+        return promptProvider.getSystemPrompt(trace);
     }
 }

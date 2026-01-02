@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -29,5 +28,5 @@ public interface TeamPromptProvider {
     /**
      * 获取系统提示词
      */
-    String getSystemPrompt(TeamConfig config, Prompt prompt);
+    String getSystemPrompt(TeamTrace trace);
 }
