@@ -62,7 +62,7 @@ public class ReActTrace {
 
     public ReActTrace(ReActConfig config, Prompt prompt) {
         this();
-        this.config = config;
+        this.config = config; //测试时，可能为 null
         this.prompt = prompt;
     }
 
@@ -82,7 +82,7 @@ public class ReActTrace {
         return prompt;
     }
 
-    public void setPrompt(Prompt prompt) {
+    protected void setPrompt(Prompt prompt) {
         this.prompt = prompt;
     }
 

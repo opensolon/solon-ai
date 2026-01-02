@@ -40,9 +40,8 @@ public class TeamAgentNestedPersistenceTest {
         devTrace.addStep("Coder", "代码: login.java", 100);
         devTrace.setRoute(Agent.ID_END);
 
-        TeamTrace projectTrace = new TeamTrace();
+        TeamTrace projectTrace = new TeamTrace(null, Prompt.of("开发登录"));
         projectTrace.addStep("dev_team", "开发已就绪", 200);
-        projectTrace.setPrompt(Prompt.of("开发登录"));
 
         // 设置手动断点
         context1.lastNode(projectTeam.getGraph().getNodeOrThrow(Agent.ID_SUPERVISOR));
