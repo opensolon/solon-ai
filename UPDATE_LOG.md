@@ -16,7 +16,43 @@
 * 新增 `solon-ai-agent` 插件
 * 添加 `solon-ai-core` autoToolCall 聊天模型选项（默认为 true）
 * 添加 `solon-ai-core` ChatResponse:getResultContent
+* 优化 solon-ai-core AssistantMessage.getResultContent 处理
+* 调整 solon-ai-croe ChatSession 不再扩展 ChatPrompt（打断两者关系，后者定位偏固定数据
 
+
+新增两种模式的智能体：
+
+| 智能体        | 模式描述             |
+|------------|------------------|
+| ReActAgent | 自省模式：单兵作战，思考+行动。 | 
+| TeamAgent  | 协作模式：团队作战，分工+编排。 | 
+
+
+新特性示例：ReActAgent
+
+```java
+public class DemoApp {
+    public static void main(String[] args) throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        Agent robot = ReActAgent.builder(chatModel)
+                .addTool(new MethodToolProvider(new TimeTool()))
+                .build();
+
+        FlowContext context = FlowContext.of("session_001");
+        String answer = robot.call(context, "现在几点了？");
+
+        System.out.println("Robot 答复: " + answer);
+    }
+
+    public static class TimeTool {
+        @ToolMapping(description = "获取当前系统时间")
+        public String getTime() {
+            return LocalDateTime.now().toString();
+        }
+    }
+}
+```
 
 ### v3.8.0
 
