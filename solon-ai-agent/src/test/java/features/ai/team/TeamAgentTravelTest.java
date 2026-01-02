@@ -3,7 +3,6 @@ package features.ai.team;
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -24,22 +23,16 @@ public class TeamAgentTravelTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         String teamId = "auto_travel_agent";
 
-        // 1. 强化 Searcher：明确告知其必须使用工具
-        Agent searcher = ReActAgent.builder(chatModel).name("searcher")
-                .description("负责查询实时天气。必须基于 query 工具的 Observation 给出结论。")
-                .addTool(new MethodToolProvider(new WeatherService()))
-                .build();
-
-        // 2. 强化 Planner：强制其必须参考协作历史，严禁忽略天气
-        Agent planner = ReActAgent.builder(chatModel).name("planner")
-                .description("行程规划专家。要求：必须优先阅读协作历史中的天气信息！如果历史显示下雨，严禁安排户外步行，必须安排室内场馆（如博物馆、室内商场）。")
-                .build();
-
-        // 3. 组建团队
+        // 1. 组建团队
         TeamAgent travelTeam = TeamAgent.builder(chatModel)
                 .name(teamId)
-                .addAgent(searcher)
-                .addAgent(planner)
+                .addAgent(ReActAgent.builder(chatModel).name("searcher")
+                        .description("负责查询实时天气。必须基于 query 工具的 Observation 给出结论。")
+                        .addTool(new MethodToolProvider(new WeatherService()))
+                        .build())
+                .addAgent(ReActAgent.builder(chatModel).name("planner")
+                        .description("行程规划专家。要求：必须优先阅读协作历史中的天气信息！如果历史显示下雨，严禁安排户外步行，必须安排室内场馆（如博物馆、室内商场）。")
+                        .build())
                 .maxTotalIterations(5) // 限制迭代次数防止死循环
                 .build();
 
@@ -50,7 +43,7 @@ public class TeamAgentTravelTest {
 
         System.out.println("--- 最终方案 ---\n" + result);
 
-        // 4. 单测检测
+        // 2. 单测检测
         TeamTrace trace = context.getAs("__" + teamId);
         Assertions.assertNotNull(trace, "未生成协作轨迹");
 
