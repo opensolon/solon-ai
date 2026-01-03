@@ -115,28 +115,26 @@ public class TeamAgent implements Agent {
             LOG.debug("TeamAgent [{}] starting: {}", this.name, prompt);
         }
 
-        TeamTrace tmpTrace = context.getAs(traceKey);
+        TeamTrace trace = context.getAs(traceKey);
 
-        if (tmpTrace == null) {
-            tmpTrace = new TeamTrace(config, prompt);
-            context.put(traceKey, tmpTrace);
+        if (trace == null) {
+            trace = new TeamTrace(config, prompt);
+            context.put(traceKey, trace);
         } else {
-            tmpTrace.setConfig(config);
+            trace.setConfig(config);
         }
 
         if (prompt != null) {
             context.trace().recordNode(graph, null);
 
-            tmpTrace.setPrompt(prompt);
-            tmpTrace.resetIterations();
+            trace.setPrompt(prompt);
+            trace.resetIterations();
         } else {
-            tmpTrace.resetIterations();
+            trace.resetIterations();
         }
 
-        TeamTrace trace = tmpTrace;
-
         context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-            flowEngine.eval(graph, graph.lastNode(context), context);
+            flowEngine.eval(graph, context.lastNodeId(graph.getId()), context);
         });
 
         String result = trace.getFinalAnswer();

@@ -110,27 +110,26 @@ public class ReActAgent implements Agent {
             LOG.debug("ReActAgent [{}] starting: {}", this.name, prompt);
         }
 
-        ReActTrace tmpTrace = context.getAs(traceKey);
+        ReActTrace trace = context.getAs(traceKey);
 
-        if (tmpTrace == null) {
-            tmpTrace = new ReActTrace(config, prompt);
-            context.put(traceKey, tmpTrace);
+        if (trace == null) {
+            trace = new ReActTrace(config, prompt);
+            context.put(traceKey, trace);
         } else {
-            tmpTrace.setConfig(config);
+            trace.setConfig(config);
         }
 
         if (prompt != null) {
             context.trace().recordNode(graph, null);
-            tmpTrace.setPrompt(prompt);
+            trace.setPrompt(prompt);
         }
 
-        final ReActTrace trace = tmpTrace;
         long startTime = System.currentTimeMillis();
 
         try {
             //采用变量域的思想传递 KEY_CURRENT_TRACE_KEY
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-                flowEngine.eval(graph, graph.lastNode(context), context);
+                flowEngine.eval(graph, context.lastNodeId(graph.getId()), context);
             });
         } finally {
             long duration = System.currentTimeMillis() - startTime;
