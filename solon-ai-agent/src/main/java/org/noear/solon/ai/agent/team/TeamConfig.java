@@ -27,27 +27,45 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * Team 配置
+ * 团队协作智能体（Team Agent）配置类
+ * <p>用于定义团队的成员组成、协作协议、运行策略以及决策大脑（Supervisor）的各项参数。</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8")
 public class TeamConfig {
+    /** 团队名称 */
     private String name;
+    /** 团队职责描述 */
     private String description;
+    /** 主管（Supervisor）使用的聊天模型，负责决策和调度 */
     private final ChatModel chatModel;
+    /** 团队成员映射表，LinkedHashMap 保持成员加入顺序 */
     private final Map<String, Agent> agentMap = new LinkedHashMap<>();
+    /** 协作协议，默认为 HIERARCHICAL（层级模式/主管调度模式） */
     private TeamProtocol protocol = TeamProtocols.HIERARCHICAL;
+    /** 图结构微调器，允许在协议生成的默认执行图基础上进行自定义链路修改 */
     private Consumer<GraphSpec> graphAdjuster;
+    /** 任务完成标识符，由模型输出此内容代表团队任务整体终结 */
     private String finishMarker;
+    /** 团队协作的最大总迭代次数，防止成员间无限“踢皮球” */
     private int maxTotalIterations = 8;
+    /** 主管决策失败后的最大重试次数 */
     private int maxRetries = 3;
+    /** 重试延迟时间（毫秒） */
     private long retryDelayMs = 1000L;
+    /** 团队执行拦截器，可用于监控成员切换和消息流转 */
     private TeamInterceptor interceptor;
+    /** 团队系统提示词模板提供者 */
     private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
+    /** 主管决策时的聊天配置选项（如控制 temperature 以确保调度逻辑严谨） */
     private Consumer<ChatOptions> supervisorOptions;
 
+    /**
+     * 核心构造函数
+     * @param chatModel 决策大脑模型
+     */
     public TeamConfig(ChatModel chatModel) {
         this.chatModel = chatModel;
     }
@@ -60,10 +78,16 @@ public class TeamConfig {
         this.description = description;
     }
 
+    /**
+     * 设置图结构微调逻辑
+     */
     public void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
         this.graphAdjuster = graphAdjuster;
     }
 
+    /**
+     * 配置决策重试策略
+     */
     public void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(1000, retryDelayMs);
@@ -73,6 +97,9 @@ public class TeamConfig {
         this.finishMarker = finishMarker;
     }
 
+    /**
+     * 设置全队最大迭代限制
+     */
     public void setMaxTotalIterations(int maxTotalIterations) {
         this.maxTotalIterations = Math.max(1, maxTotalIterations);
     }
@@ -85,17 +112,27 @@ public class TeamConfig {
         this.promptProvider = promptProvider;
     }
 
+    /**
+     * 设置主管角色的 ChatOptions
+     */
     public void setSupervisorOptions(Consumer<ChatOptions> supervisorOptions) {
         this.supervisorOptions = supervisorOptions;
     }
 
+    /**
+     * 添加团队成员
+     * @param agent 具体的智能体实例（可以是简单的 Agent，也可以是嵌套的 TeamAgent）
+     */
     public void addAgent(Agent agent) {
-        Objects.requireNonNull(agent.name(), "agent.name");
-        Objects.requireNonNull(agent.description(), "agent.description");
+        Objects.requireNonNull(agent.name(), "agent.name is required");
+        Objects.requireNonNull(agent.description(), "agent.description is required for collaboration");
 
         agentMap.put(agent.name(), agent);
     }
 
+    /**
+     * 设置协作协议（决定了执行图的拓扑结构）
+     */
     public void setProtocol(TeamProtocol protocol) {
         Objects.requireNonNull(protocol, "protocol");
         this.protocol = protocol;
@@ -125,7 +162,10 @@ public class TeamConfig {
         return graphAdjuster;
     }
 
-
+    /**
+     * 获取任务完成标识
+     * <p>如果未配置，则自动生成格式如：[TEAMNAME_FINISH]</p>
+     */
     public String getFinishMarker() {
         if (finishMarker == null) {
             finishMarker = "[" + name.toUpperCase() + "_FINISH]";
@@ -150,6 +190,9 @@ public class TeamConfig {
         return interceptor;
     }
 
+    /**
+     * 获取生成的团队系统提示词
+     */
     public String getSystemPrompt(TeamTrace trace) {
         return promptProvider.getSystemPrompt(trace);
     }
