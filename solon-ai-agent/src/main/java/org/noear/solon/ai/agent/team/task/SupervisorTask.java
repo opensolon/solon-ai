@@ -122,6 +122,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 }).call().getResultContent().trim();
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
+                    LOG.error("TeamAgent [{}] supervisor failed after {} retries", config.getName(), maxRetries, e);
                     throw new RuntimeException("Failed after " + maxRetries + " retries", e);
                 }
 

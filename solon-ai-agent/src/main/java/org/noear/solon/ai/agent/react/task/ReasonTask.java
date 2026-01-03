@@ -154,6 +154,7 @@ public class ReasonTask implements NamedTaskComponent {
                         }).call();
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
+                    LOG.error("ReActAgent [{}] reason failed after {} retries", config.getName(), maxRetries, e);
                     throw new RuntimeException("Failed after " + maxRetries + " retries", e);
                 }
 
