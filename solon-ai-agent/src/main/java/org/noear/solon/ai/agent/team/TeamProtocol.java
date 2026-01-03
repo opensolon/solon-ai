@@ -22,35 +22,74 @@ import java.util.Locale;
 
 /**
  * 团队协作协议接口
+ * * <p>定义 Agent 团队的协作模式（如顺序、蜂群、层级等），负责图拓扑构建、指令注入及运行时决策干预。</p>
  *
  * @author noear
  * @since 3.8.1
  */
 public interface TeamProtocol {
-    /** 协议唯一标识 */
+    /**
+     * 获取协议唯一标识（如: SWARM, SEQUENTIAL）
+     */
     String name();
 
-    /** 1. 拓扑构建：决定图的连线 */
+    /**
+     * 构建团队协作图拓扑
+     *
+     * @param config 团队配置
+     * @param spec   图规格定义
+     */
     void buildGraph(TeamConfig config, GraphSpec spec);
 
-    /** 2. 规则注入：只需提供该协议特有的“潜规则”文本 */
+    /**
+     * 注入协议特定的系统提示词指令
+     *
+     * @param config 团队配置
+     * @param locale 语言环境
+     * @param sb     用于追加指令的字符串构建器
+     */
     void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb);
 
-    /** 3. 动态上下文：为 Supervisor 提供实时运行数据（如竞标信息） */
+    /**
+     * 更新运行上下文（在 Agent 执行转向时触发）
+     *
+     * @param context   流上下文
+     * @param trace     协作跟踪状态
+     * @param nextAgent 下一个要执行的 Agent 名称
+     */
     default void updateContext(FlowContext context, TeamTrace trace, String nextAgent) {
-
+        // 用于记录 Agent 使用频率、状态变更等
     }
 
-    default void prepareProtocolInfo(FlowContext context, TeamTrace trace, StringBuilder sb){
-
+    /**
+     * 准备运行时协议附加信息（在 Supervisor 决策前触发）
+     *
+     * @param context 流上下文
+     * @param trace   协作跟踪状态
+     * @param sb      用于追加动态信息的字符串构建器
+     */
+    default void prepareProtocolInfo(FlowContext context, TeamTrace trace, StringBuilder sb) {
+        // 用于向 Prompt 注入实时的统计数据、竞标信息等
     }
 
+    /**
+     * 拦截 Supervisor 执行逻辑
+     *
+     * @return true 表示协议已接管执行，不再走通用的智能决策流程（如顺序模式直接跳转）
+     */
     default boolean interceptExecute(FlowContext context, TeamTrace trace) throws Exception {
         return false;
     }
 
-    /** 4. 路由拦截/决策：决定是否要干预通用的路由逻辑 */
+    /**
+     * 拦截/干预路由决策结果
+     *
+     * @param context  流上下文
+     * @param trace    协作跟踪状态
+     * @param decision LLM 给出的原始决策文本
+     * @return true 表示协议已处理路由跳转，Supervisor 不需要再走通用匹配逻辑
+     */
     default boolean interceptRouting(FlowContext context, TeamTrace trace, String decision) {
-        return false; // 返回 true 表示协议已处理，不需要通用路由再介入
+        return false;
     }
 }
