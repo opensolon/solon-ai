@@ -230,7 +230,7 @@ public class ChatOptions {
     }
 
     /**
-     * 常用选项：最大提示语令牌数限制
+     * 常用选项：生成的最大token数
      */
     public ChatOptions max_tokens(long max_tokens) {
         return optionAdd(MAX_TOKENS, max_tokens);
@@ -244,35 +244,35 @@ public class ChatOptions {
     }
 
     /**
-     * 常用选项：温度（输出随机性）
+     * 常用选项：温度（控制输出的随机性，值越高越有创意）
      */
     public ChatOptions temperature(float temperature) {
         return optionAdd(TEMPERATURE, temperature);
     }
 
     /**
-     * 常用选项：top_p 采样（从累计概率超过p的最小词集中采样）
+     * 常用选项：top_p 采样（核采样，从累计概率达p的最小词集中选择。替代top_k，更智能的多样性控制）
      */
     public ChatOptions top_p(float top_p) {
         return optionAdd(TOP_P, top_p);
     }
 
     /**
-     * 常用选项：top_k 采样（只从概率最高的k个词元中采样）
+     * 常用选项：top_k 采样（仅从概率最高的k个词中采样。需要严格限制候选词时）
      */
     public ChatOptions top_k(float top_k) {
         return optionAdd(TOP_K, top_k);
     }
 
     /**
-     * 常用选项：频率惩罚
+     * 常用选项：惩罚频繁出现的词
      */
     public ChatOptions frequency_penalty(float frequency_penalty) {
         return optionAdd(FREQUENCY_PENALTY, frequency_penalty);
     }
 
     /**
-     * 常用选项：存在惩罚
+     * 常用选项：惩罚已出现过的词
      */
     public ChatOptions presence_penalty(float frequency_penalty) {
         return optionAdd(PRESENCE_PENALTY, frequency_penalty);
