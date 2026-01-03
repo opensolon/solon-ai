@@ -260,8 +260,8 @@ public class ReActAgent implements Agent {
         /**
          * 配置推理阶段的 ChatModel 选项（如温度、TopP 等）
          */
-        public Builder reasonOptions(Consumer<ChatOptions> reasonOptions) {
-            config.setReasonOptions(reasonOptions);
+        public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
+            config.setChatOptions(chatOptions);
             return this;
         }
 

@@ -276,8 +276,8 @@ public class TeamAgent implements Agent {
         /**
          * 设置主管(Supervisor)角色的聊天模型配置选项
          */
-        public Builder supervisorOptions(Consumer<ChatOptions> supervisorOptions) {
-            config.setSupervisorOptions(supervisorOptions);
+        public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
+            config.setChatOptions(chatOptions);
             return this;
         }
 

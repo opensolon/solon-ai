@@ -21,7 +21,7 @@ public class ReActAgentTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new MathTools()))
-                .reasonOptions(o -> o.temperature(0.0F))
+                .chatOptions(o -> o.temperature(0.0F))
                 .build();
 
         FlowContext context = FlowContext.of("demo1");

@@ -28,7 +28,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new TestTools()))
-                .reasonOptions(o -> o.temperature(0.0F))
+                .chatOptions(o -> o.temperature(0.0F))
                 .maxSteps(10)
                 .build();
 
@@ -82,7 +82,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new TestTools()))
-                .reasonOptions(o -> o.temperature(0.0F))
+                .chatOptions(o -> o.temperature(0.0F))
                 .build();
 
         FlowContext context = FlowContext.of("test_direct");
@@ -110,7 +110,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new SequentialTools()))
-                .reasonOptions(o -> o.temperature(0.0F))
+                .chatOptions(o -> o.temperature(0.0F))
                 .maxSteps(5)
                 .build();
 

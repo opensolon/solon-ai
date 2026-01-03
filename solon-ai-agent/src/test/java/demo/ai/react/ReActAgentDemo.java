@@ -15,7 +15,7 @@ public class ReActAgentDemo {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .reasonOptions(o -> o.temperature(0.1F)) // 低温度保证推理逻辑严密
+                .chatOptions(o -> o.temperature(0.1F)) // 低温度保证推理逻辑严密
                 .addTool(new MethodToolProvider(new WeatherTools()))
                 .build();
 

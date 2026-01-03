@@ -33,31 +33,55 @@ import java.util.function.Consumer;
  */
 @Preview("3.8")
 public class ReActConfig {
-    /** 智能体唯一标识名称 */
+    /**
+     * 智能体唯一标识名称
+     */
     private String name;
-    /** 智能体职责描述（用于团队协作场景下的角色识别） */
+    /**
+     * 智能体职责描述（用于团队协作场景下的角色识别）
+     */
     private String description;
-    /** 执行推理的基础大语言模型 */
+    /**
+     * 执行推理的基础大语言模型
+     */
     private final ChatModel chatModel;
-    /** 挂载的功能工具集，使用 LinkedHashMap 确保工具展示顺序与添加顺序一致 */
+    /**
+     * 推理阶段的特定 ChatOptions 配置（如温度、TopP 等）
+     */
+    private Consumer<ChatOptions> chatOptions;
+    /**
+     * 挂载的功能工具集，使用 LinkedHashMap 确保工具展示顺序与添加顺序一致
+     */
     private final Map<String, FunctionTool> toolMap = new LinkedHashMap<>();
-    /** 最大思考步数，超出后强制终止以防陷入逻辑死循环（默认 10 步） */
+    /**
+     * 最大思考步数，超出后强制终止以防陷入逻辑死循环（默认 10 步）
+     */
     private int maxSteps = 10;
-    /** 模型调用失败后的最大重试次数 */
+    /**
+     * 模型调用失败后的最大重试次数
+     */
     private int maxRetries = 3;
-    /** 重试延迟时间（毫秒） */
+    /**
+     * 重试延迟时间（毫秒）
+     */
     private long retryDelayMs = 1000L;
-    /** 任务完成的标识符，模型输出此字符串后 ReAct 循环将停止 */
+    /**
+     * 任务完成的标识符，模型输出此字符串后 ReAct 循环将停止
+     */
     private String finishMarker;
-    /** 生命周期拦截器，用于监控思考（Thought）、行动（Action）和观察（Observation） */
+    /**
+     * 生命周期拦截器，用于监控思考（Thought）、行动（Action）和观察（Observation）
+     */
     private ReActInterceptor interceptor;
-    /** 提示词模板提供者，默认为英文模板 */
+    /**
+     * 提示词模板提供者，默认为英文模板
+     */
     private ReActPromptProvider promptProvider = ReActPromptProviderEn.getInstance();
-    /** 推理阶段的特定 ChatOptions 配置（如温度、TopP 等） */
-    private Consumer<ChatOptions> reasonOptions;
+
 
     /**
      * 核心构造函数
+     *
      * @param chatModel 执行推理的模型，不能为空
      */
     public ReActConfig(ChatModel chatModel) {
@@ -101,7 +125,8 @@ public class ReActConfig {
 
     /**
      * 配置重试策略
-     * @param maxRetries 至少 1 次
+     *
+     * @param maxRetries   至少 1 次
      * @param retryDelayMs 至少 1000ms
      */
     public void setRetryConfig(int maxRetries, long retryDelayMs) {
@@ -126,8 +151,8 @@ public class ReActConfig {
         this.promptProvider = val;
     }
 
-    public void setReasonOptions(Consumer<ChatOptions> reasonOptions) {
-        this.reasonOptions = reasonOptions;
+    public void setChatOptions(Consumer<ChatOptions> chatOptions) {
+        this.chatOptions = chatOptions;
     }
 
     // --- Getters / 运行期参数获取 ---
@@ -151,6 +176,10 @@ public class ReActConfig {
 
     public ChatModel getChatModel() {
         return chatModel;
+    }
+
+    public Consumer<ChatOptions> getChatOptions() {
+        return chatOptions;
     }
 
     public int getMaxSteps() {
@@ -183,13 +212,11 @@ public class ReActConfig {
 
     /**
      * 获取生成的系统提示词
+     *
      * @param trace 当前执行轨迹状态
      */
     public String getSystemPrompt(ReActTrace trace) {
         return promptProvider.getSystemPrompt(trace);
     }
 
-    public Consumer<ChatOptions> getReasonOptions() {
-        return reasonOptions;
-    }
 }

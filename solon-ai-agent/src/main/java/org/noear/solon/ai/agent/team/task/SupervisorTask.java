@@ -133,8 +133,8 @@ public class SupervisorTask implements NamedTaskComponent {
         for (int i = 0; i < maxRetries; i++) {
             try {
                 return config.getChatModel().prompt(messages).options(o -> {
-                    if (config.getSupervisorOptions() != null) {
-                        config.getSupervisorOptions().accept(o);
+                    if (config.getChatOptions() != null) {
+                        config.getChatOptions().accept(o);
                     }
                 }).call().getResultContent().trim();
             } catch (Exception e) {

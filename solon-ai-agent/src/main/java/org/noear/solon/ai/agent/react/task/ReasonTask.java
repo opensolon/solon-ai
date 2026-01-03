@@ -152,8 +152,8 @@ public class ReasonTask implements NamedTaskComponent {
                 return config.getChatModel()
                         .prompt(messages)
                         .options(o -> {
-                            if (config.getReasonOptions() != null) {
-                                config.getReasonOptions().accept(o);
+                            if (config.getChatOptions() != null) {
+                                config.getChatOptions().accept(o);
                             }
 
                             // 强制关闭模型端的自动工具执行，由 ReActActionTask 统一管控

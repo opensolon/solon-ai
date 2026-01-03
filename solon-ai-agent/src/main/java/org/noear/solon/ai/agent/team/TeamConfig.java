@@ -35,35 +35,63 @@ import java.util.function.Consumer;
  */
 @Preview("3.8")
 public class TeamConfig {
-    /** 团队名称 */
+    /**
+     * 团队名称
+     */
     private String name;
-    /** 团队职责描述 */
+    /**
+     * 团队职责描述
+     */
     private String description;
-    /** 主管（Supervisor）使用的聊天模型，负责决策和调度 */
+    /**
+     * 主管（Supervisor）使用的聊天模型，负责决策和调度
+     */
     private final ChatModel chatModel;
-    /** 团队成员映射表，LinkedHashMap 保持成员加入顺序 */
+    /**
+     * 主管决策时的聊天配置选项（如控制 temperature 以确保调度逻辑严谨）
+     */
+    private Consumer<ChatOptions> chatOptions;
+    /**
+     * 团队成员映射表，LinkedHashMap 保持成员加入顺序
+     */
     private final Map<String, Agent> agentMap = new LinkedHashMap<>();
-    /** 协作协议，默认为 HIERARCHICAL（层级模式/主管调度模式） */
+    /**
+     * 协作协议，默认为 HIERARCHICAL（层级模式/主管调度模式）
+     */
     private TeamProtocol protocol = TeamProtocols.HIERARCHICAL;
-    /** 图结构微调器，允许在协议生成的默认执行图基础上进行自定义链路修改 */
+    /**
+     * 图结构微调器，允许在协议生成的默认执行图基础上进行自定义链路修改
+     */
     private Consumer<GraphSpec> graphAdjuster;
-    /** 任务完成标识符，由模型输出此内容代表团队任务整体终结 */
+    /**
+     * 任务完成标识符，由模型输出此内容代表团队任务整体终结
+     */
     private String finishMarker;
-    /** 团队协作的最大总迭代次数，防止成员间无限“踢皮球” */
+    /**
+     * 团队协作的最大总迭代次数，防止成员间无限“踢皮球”
+     */
     private int maxTotalIterations = 8;
-    /** 主管决策失败后的最大重试次数 */
+    /**
+     * 主管决策失败后的最大重试次数
+     */
     private int maxRetries = 3;
-    /** 重试延迟时间（毫秒） */
+    /**
+     * 重试延迟时间（毫秒）
+     */
     private long retryDelayMs = 1000L;
-    /** 团队执行拦截器，可用于监控成员切换和消息流转 */
+    /**
+     * 团队执行拦截器，可用于监控成员切换和消息流转
+     */
     private TeamInterceptor interceptor;
-    /** 团队系统提示词模板提供者 */
+    /**
+     * 团队系统提示词模板提供者
+     */
     private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
-    /** 主管决策时的聊天配置选项（如控制 temperature 以确保调度逻辑严谨） */
-    private Consumer<ChatOptions> supervisorOptions;
+
 
     /**
      * 核心构造函数
+     *
      * @param chatModel 决策大脑模型
      */
     public TeamConfig(ChatModel chatModel) {
@@ -115,12 +143,13 @@ public class TeamConfig {
     /**
      * 设置主管角色的 ChatOptions
      */
-    public void setSupervisorOptions(Consumer<ChatOptions> supervisorOptions) {
-        this.supervisorOptions = supervisorOptions;
+    public void setChatOptions(Consumer<ChatOptions> chatOptions) {
+        this.chatOptions = chatOptions;
     }
 
     /**
      * 添加团队成员
+     *
      * @param agent 具体的智能体实例（可以是简单的 Agent，也可以是嵌套的 TeamAgent）
      */
     public void addAgent(Agent agent) {
@@ -148,6 +177,10 @@ public class TeamConfig {
 
     public ChatModel getChatModel() {
         return chatModel;
+    }
+
+    public Consumer<ChatOptions> getChatOptions() {
+        return chatOptions;
     }
 
     public Map<String, Agent> getAgentMap() {
@@ -197,7 +230,4 @@ public class TeamConfig {
         return promptProvider.getSystemPrompt(trace);
     }
 
-    public Consumer<ChatOptions> getSupervisorOptions() {
-        return supervisorOptions;
-    }
 }

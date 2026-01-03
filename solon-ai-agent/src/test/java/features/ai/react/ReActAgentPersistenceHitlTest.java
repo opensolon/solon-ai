@@ -44,7 +44,7 @@ public class ReActAgentPersistenceHitlTest {
                 .name(agentName)
                 .addTool(new MethodToolProvider(new RefundTools()))
                 .interceptor(hitlInterceptor)
-                .reasonOptions(o -> o.temperature(0.0F))
+                .chatOptions(o -> o.temperature(0.0F))
                 .build();
 
         // --- 阶段 A：初始请求与拦截持久化 ---

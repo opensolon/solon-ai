@@ -24,7 +24,7 @@ public class ReActAgentComplexTest {
                 .addTool(new MethodToolProvider(new OrderTools()))
                 .addTool(new MethodToolProvider(new LogisticTools()))
                 .addTool(new MethodToolProvider(new MarketingTools()))
-                .reasonOptions(o -> o.temperature(0.0F)) // 严格遵循逻辑
+                .chatOptions(o -> o.temperature(0.0F)) // 严格遵循逻辑
                 .maxSteps(10)
                 .build();
 
