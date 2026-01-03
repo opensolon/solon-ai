@@ -130,7 +130,7 @@ public class ReActAgent implements Agent {
         try {
             //采用变量域的思想传递 KEY_CURRENT_TRACE_KEY
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-                flowEngine.eval(graph, graph.getNodeOrThrow(context), context);
+                flowEngine.eval(graph, graph.lastNode(context), context);
             });
         } finally {
             long duration = System.currentTimeMillis() - startTime;

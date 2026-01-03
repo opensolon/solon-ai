@@ -136,7 +136,7 @@ public class TeamAgent implements Agent {
         TeamTrace trace = tmpTrace;
 
         context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-            flowEngine.eval(graph, graph.getNodeOrThrow(context), context);
+            flowEngine.eval(graph, graph.lastNode(context), context);
         });
 
         String result = trace.getFinalAnswer();
