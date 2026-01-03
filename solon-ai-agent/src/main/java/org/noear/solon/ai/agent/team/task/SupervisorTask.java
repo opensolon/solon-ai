@@ -75,10 +75,12 @@ public class SupervisorTask implements NamedTaskComponent {
                 return;
             }
 
+            // 1. 协议是否有话要说？是否要接管？
             if (config.getProtocol().interceptExecute(context, trace)) {
                 return;
             }
 
+            // 2. 如果没被拦截，进入智能决策流程
             runIntelligent(context, trace);
 
         } catch (Exception e) {
@@ -91,7 +93,9 @@ public class SupervisorTask implements NamedTaskComponent {
         config.getProtocol().prepareInstruction(context, trace, protocolExt);
 
         String basePrompt = config.getSystemPrompt(trace);
-        String enhancedPrompt = basePrompt + protocolExt;
+        String enhancedPrompt = (protocolExt.length() > 0)
+                ? basePrompt + "\n\n=== Protocol Extensions ===\n" + protocolExt
+                : basePrompt;
 
         List<ChatMessage> messages = Arrays.asList(
                 ChatMessage.ofSystem(enhancedPrompt),
@@ -154,7 +158,7 @@ public class SupervisorTask implements NamedTaskComponent {
             return;
         }
 
-        // 策略相关的特殊信号处理（如招标）
+        // 3. LLM 决定了，协议是否要干预这个决定？
         if (config.getProtocol().interceptRouting(context, trace, decision)) { //getStrategy() == TeamStrategy.CONTRACT_NET
             return;
         }
@@ -190,35 +194,35 @@ public class SupervisorTask implements NamedTaskComponent {
      * 匹配智能体并路由
      */
     private boolean matchAgentRoute(FlowContext context, TeamTrace trace, String text) {
-        // 1.直接查找名字
+        // 1.直接查找名字 (O(1) 效率最高)
         Agent agent = config.getAgentMap().get(text);
         if (agent != null) {
-            trace.setRoute(agent.name());
-            config.getProtocol().onRouting(context, trace, agent.name());
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("TeamAgent [{}] supervisor routed to agent: [{}]", config.getName(), agent.name());
-            }
+            routeTo(context, trace, agent.name());
             return true;
         }
 
-        // 2.正则匹配（先短再长）
+        // 2.模糊匹配：名字长的 Agent 优先匹配（防止如 "SeniorCoder" 被误识别为 "Coder"）
         List<String> sortedNames = config.getAgentMap().keySet().stream()
                 .sorted((a, b) -> b.length() - a.length())
                 .collect(Collectors.toList());
 
         for (String name : sortedNames) {
-            // 使用单词边界匹配，提高在复杂句子中的提取精度
+            // 使用 \b 单词边界，防止匹配到单词中间的字符
             Pattern p = Pattern.compile("\\b" + Pattern.quote(name) + "\\b", Pattern.CASE_INSENSITIVE);
             if (p.matcher(text).find()) {
-                trace.setRoute(name);
-                config.getProtocol().onRouting(context, trace, name);
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("TeamAgent [{}] supervisor routed to agent: [{}]", config.getName(), name);
-                }
+                routeTo(context, trace, name);
                 return true;
             }
         }
         return false;
+    }
+
+    private void routeTo(FlowContext context, TeamTrace trace, String targetName) {
+        trace.setRoute(targetName);
+        config.getProtocol().onRouting(context, trace, targetName);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("TeamAgent [{}] supervisor routed to: [{}]", config.getName(), targetName);
+        }
     }
 
     private void handleError(FlowContext context, Exception e) {
