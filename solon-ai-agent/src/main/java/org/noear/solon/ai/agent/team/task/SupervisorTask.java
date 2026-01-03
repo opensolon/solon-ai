@@ -96,7 +96,18 @@ public class SupervisorTask implements NamedTaskComponent {
         String basePrompt = config.getSystemPrompt(trace);
         String enhancedPrompt = basePrompt + protocolExt + strategyContextInfo;
 
-        String decision = callWithRetry(trace, enhancedPrompt);
+        List<ChatMessage> messages = Arrays.asList(
+                ChatMessage.ofSystem(enhancedPrompt),
+                ChatMessage.ofUser("Collaboration History:\n" + trace.getFormattedHistory() +
+                        "\n\nCurrent iteration: " + trace.getIterationsCount() +
+                        "\nPlease decide the next action:")
+        );
+
+        String decision = callWithRetry(trace, messages);
+
+        if (decision.contains("Collaboration History:")) {
+            decision = decision.split("Collaboration History:")[0].trim();
+        }
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] supervisor decision: {}", config.getName(), decision);
@@ -106,16 +117,11 @@ public class SupervisorTask implements NamedTaskComponent {
         trace.nextIterations();
     }
 
-    private String callWithRetry(TeamTrace trace, String enhancedPrompt) {
+    private String callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
         int maxRetries = config.getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
-                return config.getChatModel().prompt(Arrays.asList(
-                        ChatMessage.ofSystem(enhancedPrompt),
-                        ChatMessage.ofUser("Collaboration History:\n" + trace.getFormattedHistory() +
-                                "\n\nCurrent iteration: " + trace.getIterationsCount() +
-                                "\nPlease decide the next action:")
-                )).options(o -> {
+                return config.getChatModel().prompt(messages).options(o -> {
                     if (config.getSupervisorOptions() != null) {
                         config.getSupervisorOptions().accept(o);
                     }
