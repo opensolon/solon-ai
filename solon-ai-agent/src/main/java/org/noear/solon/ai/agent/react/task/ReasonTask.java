@@ -27,6 +27,8 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +42,8 @@ import java.util.List;
  */
 @Preview("3.8")
 public class ReasonTask implements NamedTaskComponent {
+    private static final Logger LOG = LoggerFactory.getLogger(ReasonTask.class);
+
     private final ReActConfig config;
 
     public ReasonTask(ReActConfig config) {
@@ -75,7 +79,7 @@ public class ReasonTask implements NamedTaskComponent {
         messages.addAll(trace.getMessages());
 
         // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
-        ChatResponse response = callWithRetry(messages);
+        ChatResponse response = callWithRetry(trace, messages);
 
         // --- 处理模型空回复 (防止流程卡死) ---
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
@@ -125,7 +129,7 @@ public class ReasonTask implements NamedTaskComponent {
     /**
      * 简单的重试调用
      */
-    private ChatResponse callWithRetry(List<ChatMessage> messages) {
+    private ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) {
         int maxRetries = config.getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
@@ -142,14 +146,15 @@ public class ReasonTask implements NamedTaskComponent {
                             if (!config.getTools().isEmpty()) {
                                 o.toolsAdd(config.getTools());
                                 o.optionAdd("stop", "Observation:");
-                            } else {
-                                //不能有
-                                //o.optionAdd("stop", config.getFinishMarker());
                             }
                         }).call();
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
                     throw new RuntimeException("Failed after " + maxRetries + " retries", e);
+                }
+
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("ReasonTask call failed (retry: {}): {}", i, e.getMessage());
                 }
 
                 try {

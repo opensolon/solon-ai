@@ -107,7 +107,7 @@ public class ReActAgent implements Agent {
     @Override
     public String call(FlowContext context, Prompt prompt) throws Throwable {
         if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] starting: {}", this.name, prompt);
+            LOG.debug("ReActAgent [{}] starting: {}", this.name, prompt.getUserContent());
         }
 
         ReActTrace trace = context.getAs(traceKey);

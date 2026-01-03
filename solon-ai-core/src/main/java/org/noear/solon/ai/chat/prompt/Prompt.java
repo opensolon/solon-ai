@@ -56,24 +56,34 @@ public class Prompt implements ChatPrompt, Serializable {
         return this;
     }
 
+    private String userContent;
+
     public String getUserContent() {
-        for (ChatMessage m : messageList) {
-            if (m.getRole() == ChatRole.USER) {
-                return m.getContent();
+        if (userContent == null) {
+            for (ChatMessage m : messageList) {
+                if (m.getRole() == ChatRole.USER) {
+                    userContent = m.getContent();
+                    break;
+                }
             }
         }
 
-        return null;
+        return userContent;
     }
 
+    private String systemContent;
+
     public String getSystemContent() {
-        for (ChatMessage m : messageList) {
-            if (m.getRole() == ChatRole.SYSTEM) {
-                return m.getContent();
+        if (systemContent == null) {
+            for (ChatMessage m : messageList) {
+                if (m.getRole() == ChatRole.SYSTEM) {
+                    systemContent = m.getContent();
+                    break;
+                }
             }
         }
 
-        return null;
+        return systemContent;
     }
 
     /**

@@ -112,7 +112,7 @@ public class TeamAgent implements Agent {
     @Override
     public String call(FlowContext context, Prompt prompt) throws Throwable {
         if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamAgent [{}] starting: {}", this.name, prompt);
+            LOG.debug("TeamAgent [{}] starting: {}", this.name, prompt.getUserContent());
         }
 
         TeamTrace trace = context.getAs(traceKey);
