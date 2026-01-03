@@ -73,8 +73,6 @@ public interface Agent extends NamedTaskComponent {
      * @param node    当前节点
      */
     default void run(FlowContext context, Node node) throws Throwable {
-        context.lastNode(null);
-
         String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
         Prompt originalPrompt = (trace != null) ? trace.getPrompt() : null;

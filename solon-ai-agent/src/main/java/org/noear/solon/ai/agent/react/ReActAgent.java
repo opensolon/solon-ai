@@ -54,7 +54,7 @@ public class ReActAgent implements Agent {
         this.name = config.getName();
         this.description = config.getDescription();
         this.config = config;
-        this.flowEngine = FlowEngine.newInstance();
+        this.flowEngine = FlowEngine.newInstance(true);
         this.traceKey = "__" + name;
 
         //附加流拦截器
@@ -129,7 +129,7 @@ public class ReActAgent implements Agent {
         try {
             //采用变量域的思想传递 KEY_CURRENT_TRACE_KEY
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-                flowEngine.eval(graph, context.lastNodeId(graph.getId()), context);
+                flowEngine.eval(graph, context);
             });
         } finally {
             long duration = System.currentTimeMillis() - startTime;

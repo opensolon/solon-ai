@@ -58,7 +58,7 @@ public class TeamAgentPersistenceHitlTest {
         System.out.println("=== 最终结果 ===");
         System.out.println(finalResult);
 
-        Assertions.assertTrue(context2.lastNode().isEnd(), "流程最终应成功结束");
+        Assertions.assertTrue(context2.lastRecord().isEnd(), "流程最终应成功结束");
         Assertions.assertTrue(finalResult.contains("周报"), "结果应包含周报内容");
     }
 }

@@ -59,10 +59,9 @@ public class TeamAgentMultiTurnTest {
         System.out.println("第一轮历史:\n" + trace1.getFormattedHistory());
 
         // 关键：手动重置状态，让第二轮能重新开始
-        context1.trace().recordNode(conciergeTeam.getGraph(), null);
+        context1.trace().clear();
         trace1.setRoute(null);
         trace1.resetIterations();
-        context1.lastNode(null);
 
         // --- 第二轮：预算约束注入 ---
         System.out.println("\n>>> [Round 2] 用户：预算只有 500 元，请重新规划杭州行程。");

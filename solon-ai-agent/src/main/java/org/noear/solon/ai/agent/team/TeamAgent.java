@@ -76,7 +76,7 @@ public class TeamAgent implements Agent {
 
         this.config = config;
 
-        this.flowEngine = FlowEngine.newInstance();
+        this.flowEngine = FlowEngine.newInstance(true);
         this.graph = Objects.requireNonNull(graph);
 
         if (config != null && config.getInterceptor() != null) {
@@ -134,7 +134,7 @@ public class TeamAgent implements Agent {
         }
 
         context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-            flowEngine.eval(graph, context.lastNodeId(graph.getId()), context);
+            flowEngine.eval(graph, context);
         });
 
         String result = trace.getFinalAnswer();

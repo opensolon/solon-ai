@@ -70,8 +70,8 @@ public class TeamAgentHumanInTheLoopTest {
         System.out.println(">>> [系统]：方案已生成，流程已挂起，等待人工审批...");
 
         // 检查是否在human_audit节点（基于上下文状态）
-        String lastNode = context.lastNode() != null ? context.lastNode().getId() : "";
-        System.out.println(">>> [当前节点]：" + lastNode);
+        String lastNodeId = context.lastNodeId();
+        System.out.println(">>> [当前节点]：" + lastNodeId);
 
         // --- 阶段 B：人工干预（模拟后台审核通过） ---
         System.out.println(">>> [人工审批]：审核通过！准予执行。");
