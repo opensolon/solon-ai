@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.team.task.ContractNetBiddingTask;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.ChatModel;
@@ -192,6 +193,18 @@ public class TeamAgent implements Agent {
 
         public Builder finishMarker(String finishMarker) {
             config.setFinishMarker(finishMarker);
+            return this;
+        }
+
+        /**
+         * 重试配置
+         *
+         * @param maxRetries   最大重试次数
+         * @param retryDelayMs 重试延迟时间
+         *
+         */
+        public Builder retryConfig(int maxRetries, long retryDelayMs) {
+            config.setRetryConfig(maxRetries, retryDelayMs);
             return this;
         }
 

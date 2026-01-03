@@ -42,6 +42,8 @@ public class TeamConfig {
     private Consumer<GraphSpec> graphAdjuster;
     private String finishMarker;
     private int maxTotalIterations = 8;
+    private int maxRetries = 3;
+    private long retryDelayMs = 1000L;
     private TeamInterceptor interceptor;
     private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
     private Consumer<ChatOptions> supervisorOptions;
@@ -60,6 +62,11 @@ public class TeamConfig {
 
     public void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
         this.graphAdjuster = graphAdjuster;
+    }
+
+    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+        this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(1000, retryDelayMs);
     }
 
     public void setFinishMarker(String finishMarker) {
@@ -119,6 +126,7 @@ public class TeamConfig {
         return graphAdjuster;
     }
 
+
     public String getFinishMarker() {
         if (finishMarker == null) {
             finishMarker = "[" + name.toUpperCase() + "_FINISH]";
@@ -129,6 +137,14 @@ public class TeamConfig {
 
     public int getMaxTotalIterations() {
         return maxTotalIterations;
+    }
+
+    public int getMaxRetries() {
+        return maxRetries;
+    }
+
+    public long getRetryDelayMs() {
+        return retryDelayMs;
     }
 
     public TeamInterceptor getInterceptor() {

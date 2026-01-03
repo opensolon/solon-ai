@@ -20,7 +20,6 @@ import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamStrategy;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
@@ -93,16 +92,7 @@ public class SupervisorTask implements NamedTaskComponent {
         String basePrompt = config.getSystemPrompt(trace);
         String enhancedPrompt = basePrompt + protocolExt + strategyContextInfo;
 
-        String decision = config.getChatModel().prompt(Arrays.asList(
-                ChatMessage.ofSystem(enhancedPrompt),
-                ChatMessage.ofUser("Collaboration History:\n" + trace.getFormattedHistory() +
-                        "\n\nCurrent iteration: " + trace.getIterationsCount() +
-                        "\nPlease decide the next action:")
-        )).options(o -> {
-            if (config.getSupervisorOptions() != null) {
-                config.getSupervisorOptions().accept(o);
-            }
-        }).call().getResultContent().trim();
+        String decision = callWithRetry(trace, enhancedPrompt);
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] supervisor decision: {}", config.getName(), decision);
@@ -110,6 +100,41 @@ public class SupervisorTask implements NamedTaskComponent {
 
         parseAndRoute(trace, decision, context);
         trace.nextIterations();
+    }
+
+    private String callWithRetry(TeamTrace trace, String enhancedPrompt) {
+        int maxRetries = config.getMaxRetries();
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                return config.getChatModel().prompt(Arrays.asList(
+                        ChatMessage.ofSystem(enhancedPrompt),
+                        ChatMessage.ofUser("Collaboration History:\n" + trace.getFormattedHistory() +
+                                "\n\nCurrent iteration: " + trace.getIterationsCount() +
+                                "\nPlease decide the next action:")
+                )).options(o -> {
+                    if (config.getSupervisorOptions() != null) {
+                        config.getSupervisorOptions().accept(o);
+                    }
+                }).call().getResultContent().trim();
+            } catch (Exception e) {
+                if (i == maxRetries - 1) {
+                    throw new RuntimeException("Failed after " + maxRetries + " retries", e);
+                }
+
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("TeamAgent [{}] supervisor call failed (retry: {}): {}", config.getName(), i, e.getMessage());
+                }
+
+                try {
+                    Thread.sleep(config.getRetryDelayMs() * (i + 1));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted during retry", ie);
+                }
+            }
+        }
+
+        throw new RuntimeException("Should not reach here");
     }
 
     /**
