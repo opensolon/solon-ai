@@ -57,6 +57,10 @@ public class ReasonTask implements NamedTaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("ReActAgent [{}] reason starting...", config.getName());
+        }
+
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
 

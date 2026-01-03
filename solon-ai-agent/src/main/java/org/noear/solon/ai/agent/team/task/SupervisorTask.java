@@ -56,6 +56,10 @@ public class SupervisorTask implements NamedTaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("TeamAgent [{}] supervisor starting...", config.getName());
+        }
+
         try {
             String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
             TeamTrace trace = context.getAs(traceKey);

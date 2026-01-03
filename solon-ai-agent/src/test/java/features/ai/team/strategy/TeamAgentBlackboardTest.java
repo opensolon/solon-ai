@@ -22,11 +22,13 @@ public class TeamAgentBlackboardTest {
         // 1. 定义互补的 Agent
         Agent databaseDesigner = ReActAgent.of(chatModel)
                 .name("db_designer")
+                .promptProvider(c -> "你只负责数据库表结构设计，输出 SQL 代码。")
                 .description("负责数据库表结构设计，输出 SQL 代码。")
                 .build();
 
         Agent apiDesigner = ReActAgent.of(chatModel)
                 .name("api_designer")
+                .promptProvider(c -> "你只负责 RESTful API 接口协议设计。")
                 .description("负责 RESTful API 接口协议设计。")
                 .build();
 
