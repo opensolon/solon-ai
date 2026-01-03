@@ -38,7 +38,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 动作执行（工具执行）任务
+ * ReAct 动作执行任务 (Action/Acting Task)
+ * <p>
+ * 核心职责：
+ * 1. 解析上一步 ReasonTask 产生的指令（Action）。
+ * 2. 匹配并执行对应的业务工具 (FunctionTool)。
+ * 3. 收集执行结果并作为“观察到的信息 (Observation)”反馈回对话上下文。
+ * </p>
  *
  * @author noear
  * @since 3.8.1
@@ -46,6 +52,8 @@ import java.util.regex.Pattern;
 @Preview("3.8")
 public class ActionTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(ActionTask.class);
+
+    // 正则说明：匹配 Action: 后随的 JSON 内容。支持 Markdown json 块包装，支持跨行。
     private static final Pattern ACTION_PATTERN = Pattern.compile(
             "Action:\\s*(?:```json)?\\s*(\\{.*?\\})\\s*(?:```)?",
             Pattern.DOTALL
@@ -72,34 +80,36 @@ public class ActionTask implements NamedTaskComponent {
         ReActTrace trace = context.getAs(traceKey);
         ChatMessage lastMessage = trace.getLastMessage();
 
-        // --- 1. 处理 Native Tool Calls (遵循 OpenAI/Solon AI 消息对齐协议) ---
+        // --- 策略 A: 处理原生工具调用 (Native Tool Calls) ---
+        // 适用于支持 OpenAI 工具调用格式的模型（如 GPT-4, Claude 3, DeepSeek 等）
         if (lastMessage instanceof AssistantMessage) {
             AssistantMessage lastAssistant = (AssistantMessage) lastMessage;
             if (Assert.isNotEmpty(lastAssistant.getToolCalls())) {
                 for (ToolCall call : lastAssistant.getToolCalls()) {
+                    // 生命周期拦截：工具执行前
                     if (config.getInterceptor() != null) {
                         config.getInterceptor().onAction(trace, call.name(), call.arguments());
                     }
 
-                    Map<String, Object> args = call.arguments();
-                    if (args == null) {
-                        args = Collections.emptyMap();
-                    }
+                    Map<String, Object> args = (call.arguments() == null) ? Collections.emptyMap() : call.arguments();
 
+                    // 执行业务逻辑
                     String result = executeTool(call.name(), args);
 
+                    // 生命周期拦截：反馈观测结果
                     if (config.getInterceptor() != null) {
                         config.getInterceptor().onObservation(trace, result);
                     }
 
+                    // 协议对齐：追加 Tool 类型消息，必须携带 call_id 以保持对话上下文一致性
                     trace.appendMessage(ChatMessage.ofTool(result, call.name(), call.id()));
                 }
-
-                return;
+                return; // 原生模式处理完毕
             }
         }
 
-        // --- 2. 处理文本 ReAct (Observation 模拟) ---
+        // --- 策略 B: 处理文本 ReAct 格式 (ReAct Text Mode) ---
+        // 适用于不支持 ToolCall 协议但能遵循 ReAct 提示词规范的小模型或特定场景
         String lastContent = trace.getLastResponse();
         if (lastContent == null) {
             return;
@@ -111,8 +121,8 @@ public class ActionTask implements NamedTaskComponent {
 
         while (matcher.find()) {
             foundAny = true;
-
             try {
+                // 解析 JSON 格式的动作指令，例如 {"name": "get_weather", "arguments": {"city": "Shanghai"}}
                 ONode action = ONode.ofJson(matcher.group(1).trim());
                 String toolName = action.get("name").getString();
                 ONode argsNode = action.get("arguments");
@@ -122,6 +132,7 @@ public class ActionTask implements NamedTaskComponent {
                     config.getInterceptor().onAction(trace, toolName, args);
                 }
 
+                // 执行并汇总观测结果
                 String result = executeTool(toolName, args);
 
                 if (config.getInterceptor() != null) {
@@ -135,13 +146,20 @@ public class ActionTask implements NamedTaskComponent {
         }
 
         if (foundAny) {
-            // 文本模式通过 User 角色模拟系统反馈
+            // 文本模式反馈：将 Observation 作为下一轮 User 输入引导模型继续推理
             trace.appendMessage(ChatMessage.ofUser(allObservations.toString().trim()));
         } else {
+            // 容错处理：当模型声明了 Action 但未按 JSON 格式输出时提示修复
             trace.appendMessage(ChatMessage.ofUser("Observation: No valid Action detected. If you have enough info, please provide Final Answer."));
         }
     }
 
+    /**
+     * 执行具体工具
+     * @param name 工具名称（对应 FunctionTool 的 name）
+     * @param args 参数映射
+     * @return 工具执行后的字符串结果（用于反馈给模型）
+     */
     private String executeTool(String name, Map<String, Object> args) {
         FunctionTool tool = config.getTool(name);
 
@@ -150,13 +168,13 @@ public class ActionTask implements NamedTaskComponent {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Executing tool: {} with args: {}", name, args);
                 }
-
+                // 执行具体的 Handler 逻辑
                 return tool.handle(args);
             } catch (Throwable e) {
                 if (LOG.isWarnEnabled()) {
                     LOG.warn("Error executing tool: " + name, e);
                 }
-
+                // 返回异常信息给模型，模型通常能识别错误并尝试修复参数后重试
                 return "Error executing tool [" + name + "]: " + e.getMessage();
             }
         }
