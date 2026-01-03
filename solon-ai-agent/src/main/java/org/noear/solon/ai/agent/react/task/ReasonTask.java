@@ -34,8 +34,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ReAct 推理任务
- * 优化点：支持原生 ToolCall + 文本 ReAct 混合模式
+ * ReAct 推理任务（Reasoning Task）
+ * <p>
+ * 核心职责：
+ * 1. 组合系统提示词与历史记忆，向 LLM 发起推理请求。
+ * 2. 识别模型意图：是需要执行工具（Action）还是已经得到最终答案（Final Answer）。
+ * 3. 兼容混合模式：同时支持模型原生的 ToolCall 协议和文本格式的 ReAct 协议。
+ * </p>
  *
  * @author noear
  * @since 3.8.1
@@ -61,49 +66,55 @@ public class ReasonTask implements NamedTaskComponent {
             LOG.debug("ReActAgent [{}] reason starting...", config.getName());
         }
 
+        // 获取当前 Agent 的追踪状态标识
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
 
-        // 1. 迭代限制检查：防止 LLM 陷入无限逻辑循环
+        // [逻辑 1：迭代安全限制]
+        // 检查当前步数是否超过配置的最大步数，防止 LLM 在复杂问题或错误逻辑中陷入无限死循环
         if (trace.nextStep() > config.getMaxSteps()) {
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
         }
 
-        // 2. 初始化对话：首轮将 prompt 转为 User Message
+        // [逻辑 2：上下文初始化]
+        // 首轮迭代时，将 Prompt 转化为 User Message 加入历史对话序列
         if (Assert.isEmpty(trace.getMessages())) {
             Prompt prompt = trace.getPrompt();
             trace.appendMessage(prompt);
         }
 
-        // 3. 构建全量消息（System + History）
+        // [逻辑 3：构建消息全景]
+        // 拼接 System Prompt (ReAct 规范) 和 动态增长的历史对话 (Thought/Action/Observation)
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(config.getSystemPrompt(trace)));
         messages.addAll(trace.getMessages());
 
-        // 4. 发起请求并配置 stop 序列（防止模型代写 Observation）
+        // [逻辑 4：执行模型推理]
         ChatResponse response = callWithRetry(trace, messages);
 
-        // --- 处理模型空回复 (防止流程卡死) ---
+        // 处理模型空回复异常，通过 User 提示引导模型修正或结束
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
             trace.appendMessage(ChatMessage.ofUser("Your last response was empty. If you need more info, use a tool. Otherwise, provide Final Answer."));
             trace.setRoute(Agent.ID_REASON);
             return;
         }
 
-        // --- 处理 Native Tool Calls ---
+        // [逻辑 5：分支决策 - 原生工具调用 (Native Tool Calls)]
+        // 如果模型通过标准的 ToolCall 协议响应，直接转向 Action 节点执行
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
             trace.appendMessage(response.getMessage());
             trace.setRoute(Agent.ID_ACTION);
             return;
         }
 
-        // --- 处理文本 ReAct 模式 ---
+        // [逻辑 6：分支决策 - 文本格式推理 (Text ReAct Mode)]
         String rawContent = response.hasContent() ? response.getContent() : "";
         String clearContent = response.hasContent() ? response.getResultContent() : "";
 
-        // --- 物理截断模型幻觉 (防止模型伪造 Observation) ---
+        // 防御性逻辑：物理截断。LLM 偶尔会“自问自答”伪造 Observation 标签。
+        // 通过截断确保流程必须经过 ActionTask 节点注入真实观察结果。
         if (rawContent.contains("Observation:")) {
             rawContent = rawContent.split("Observation:")[0];
         }
@@ -111,27 +122,28 @@ public class ReasonTask implements NamedTaskComponent {
         trace.appendMessage(ChatMessage.ofAssistant(rawContent));
         trace.setLastResponse(clearContent);
 
+        // 触发拦截器：外部可观察到的“思考过程”
         if (config.getInterceptor() != null) {
             config.getInterceptor().onThought(trace, clearContent);
         }
 
-        //决策路由
+        // [逻辑 7：路由派发]
         if (rawContent.contains(config.getFinishMarker())) {
-            // 结束
+            // 匹配到结束标识，提取答案并标记流程结束
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(clearContent));
         } else if (rawContent.contains("Action:")) {
-            // 动作
+            // 匹配到 Action 指令，转向 Action 节点执行工具
             trace.setRoute(Agent.ID_ACTION);
         } else {
-            // 兜底（结束）
+            // 兜底策略：模型未能按规范输出时，尝试提取当前内容作为最终答案
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(clearContent));
         }
     }
 
     /**
-     * 简单的重试调用
+     * 重试调用封装
      */
     private ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) {
         int maxRetries = config.getMaxRetries();
@@ -144,11 +156,12 @@ public class ReasonTask implements NamedTaskComponent {
                                 config.getReasonOptions().accept(o);
                             }
 
-                            //这个要放在自定义之后
+                            // 强制关闭模型端的自动工具执行，由 ReActActionTask 统一管控
                             o.autoToolCall(false);
 
                             if (!config.getTools().isEmpty()) {
                                 o.toolsAdd(config.getTools());
+                                // 注入停止序列，防止模型在推理阶段直接伪造外部观察结果
                                 o.optionAdd("stop", "Observation:");
                             }
                         }).call();
@@ -163,6 +176,7 @@ public class ReasonTask implements NamedTaskComponent {
                 }
 
                 try {
+                    // 退避重试
                     Thread.sleep(config.getRetryDelayMs() * (i + 1));
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
@@ -174,17 +188,19 @@ public class ReasonTask implements NamedTaskComponent {
     }
 
     /**
-     * 解析并清理最终回复内容
+     * 解析并清理输出内容，返回纯净的 Final Answer
      */
     private String extractFinalAnswer(String content) {
         if (content == null) return "";
 
+        // 移除标识符之前的所有推理废话
         if (content.contains(config.getFinishMarker())) {
             content = content.substring(content.indexOf(config.getFinishMarker()) + config.getFinishMarker().length());
         }
 
-        return content.replaceAll("(?s)<think>.*?</think>", "") // 清理思考过程
-                .replaceAll("(?m)^(Thought|Action|Observation):\\s*", "") // 清理所有 ReAct 标签
+        return content
+                .replaceAll("(?s)<think>.*?</think>", "") // 兼容 DeepSeek 等模型的 <think> 标签清理
+                .replaceAll("(?m)^(Thought|Action|Observation):\\s*", "") // 移除 ReAct 逻辑标签头
                 .trim();
     }
 }
