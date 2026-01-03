@@ -154,7 +154,7 @@ public class ReasonTask implements NamedTaskComponent {
                 }
 
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("ReasonTask call failed (retry: {}): {}", i, e.getMessage());
+                    LOG.debug("ReActAgent [{}] reason call failed (retry: {}): {}", config.getName(), i, e.getMessage());
                 }
 
                 try {
