@@ -118,10 +118,8 @@ public class ReActAgent implements Agent {
         }
 
         if(prompt != null){
-            context.lastNode(null);
-
+            context.trace().recordNode(graph,null);
             tmpTrace.setPrompt(prompt);
-            tmpTrace.setLastNode(null);
         }
 
         final ReActTrace trace = tmpTrace;
@@ -130,12 +128,9 @@ public class ReActAgent implements Agent {
         try {
             //采用变量域的思想传递 KEY_CURRENT_TRACE_KEY
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-                flowEngine.eval(graph, trace.getLastNodeId(), context);
+                flowEngine.eval(graph, graph.getNodeOrThrow(context), context);
             });
         } finally {
-            //同步节点状态
-            trace.setLastNode(context.lastNode());
-
             long duration = System.currentTimeMillis() - startTime;
             trace.getMetrics().setTotalDuration(duration);
             trace.getMetrics().setStepCount(trace.getStepCount());

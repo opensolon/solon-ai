@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.flow.NodeTrace;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -42,7 +41,6 @@ public class TeamTrace {
     private final Map<String, Object> strategyContext = new HashMap<>();
 
     private String finalAnswer;
-    private NodeTrace lastNode;
 
     public TeamTrace() {
         //用于反序列化
@@ -89,18 +87,6 @@ public class TeamTrace {
 
     public int nextIterations() {
         return iterations.incrementAndGet();
-    }
-
-    public NodeTrace getLastNode() {
-        return lastNode;
-    }
-
-    public String getLastNodeId() {
-        return (lastNode == null) ? null : lastNode.getId();
-    }
-
-    public void setLastNode(NodeTrace lastNode) {
-        this.lastNode = lastNode;
     }
 
     public Map<String, Object> getStrategyContext() {

@@ -23,15 +23,11 @@ import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.flow.Node;
-import org.noear.solon.flow.NodeTrace;
 import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * ReAct 运行记录（承载记忆、状态与推理轨迹）
@@ -50,7 +46,6 @@ public class ReActTrace {
 
     private String finalAnswer;
     private String lastResponse;
-    private NodeTrace lastNode;
     private final ReActMetrics metrics = new ReActMetrics();
 
     public ReActTrace() {
@@ -120,22 +115,6 @@ public class ReActTrace {
 
     public void setLastResponse(String lastResponse) {
         this.lastResponse = lastResponse;
-    }
-
-    public NodeTrace getLastNode() {
-        return lastNode;
-    }
-
-    public String getLastNodeId() {
-        if (lastNode == null) {
-            return null;
-        }
-
-        return lastNode.getId();
-    }
-
-    public void setLastNode(NodeTrace lastNode) {
-        this.lastNode = lastNode;
     }
 
     public synchronized List<ChatMessage> getMessages() {

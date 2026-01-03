@@ -124,10 +124,9 @@ public class TeamAgent implements Agent {
         }
 
         if (prompt != null) {
-            context.lastNode(null);
+            context.trace().recordNode(graph,null);
 
             tmpTrace.setPrompt(prompt);
-            tmpTrace.setLastNode(null);
             tmpTrace.resetIterations();
         } else {
             tmpTrace.resetIterations();
@@ -135,13 +134,9 @@ public class TeamAgent implements Agent {
 
         TeamTrace trace = tmpTrace;
 
-        try {
-            context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-                flowEngine.eval(graph, trace.getLastNodeId(), context);
-            });
-        } finally {
-            trace.setLastNode(context.lastNode());
-        }
+        context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
+            flowEngine.eval(graph, graph.getNodeOrThrow(context), context);
+        });
 
         String result = trace.getFinalAnswer();
         if (result == null && trace.getStepCount() > 0) {

@@ -1,4 +1,4 @@
-package features.ai.team;
+package features.ai.team.def;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
@@ -39,11 +39,10 @@ public class TeamAgentPersistenceAndResumeTest {
 
         // 1. 【模拟第一阶段：挂起】执行了搜索，状态存入 DB
         FlowContext contextStep1 = FlowContext.of("order_sn_998");
-        contextStep1.lastNode(tripAgent.getGraph().getNodeOrThrow(Agent.ID_SUPERVISOR));
+        contextStep1.trace().recordNodeId(tripAgent.getGraph(), Agent.ID_SUPERVISOR);
 
         TeamTrace snapshot = new TeamTrace(null, Prompt.of("帮我规划上海行程并给穿衣建议"));
         snapshot.addStep("searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
-        snapshot.setLastNode(contextStep1.lastNode());
 
         contextStep1.put("__" + teamId, snapshot);
 

@@ -44,7 +44,7 @@ public class TeamAgentNestedPersistenceTest {
         projectTrace.addStep("dev_team", "开发已就绪", 200);
 
         // 设置手动断点
-        context1.lastNode(projectTeam.getGraph().getNodeOrThrow(Agent.ID_SUPERVISOR));
+        context1.trace().recordNodeId(projectTeam.getGraph(), Agent.ID_SUPERVISOR);
         context1.put("__dev_team", devTrace);
         context1.put("__quality_project", projectTrace);
 

@@ -21,8 +21,8 @@ public class ReActAgentDemo {
 
         System.out.println("--- Agent 开始工作 ---");
         // 这个问题会触发：1.调用工具获取天气 2.根据天气推理穿衣建议
-        FlowContext context = FlowContext.of("demo1");
-        String response = agent.call(context, "北京天气怎么样？我该穿什么衣服？");
+        FlowContext context1 = FlowContext.of("demo1");
+        String response = agent.call(context1, "北京天气怎么样？我该穿什么衣服？");
 
         System.out.println("--- 最终答复 ---");
         System.out.println(response);
@@ -31,10 +31,10 @@ public class ReActAgentDemo {
 
 
         //可持久化（序列化验证）
-        String json = context.toJson();
+        String json = context1.toJson();
 
         System.out.println(json);
-        ReActTrace record1 = context.getAs("__" + agent.name());
+        ReActTrace record1 = context1.getAs("__" + agent.name());
 
         FlowContext context2 = FlowContext.fromJson(json);
         ReActTrace record2 = context2.getAs("__" + agent.name());
@@ -44,8 +44,8 @@ public class ReActAgentDemo {
                 record2.getMessages().size(), "序列化失败");
 
         Assertions.assertEquals(
-                record1.getLastNodeId(),
-                record2.getLastNodeId(), "序列化失败");
+                context1.lastNodeId(),
+                context1.lastNodeId(), "序列化失败");
 
         Assertions.assertEquals(
                 record1.getStepCount(),

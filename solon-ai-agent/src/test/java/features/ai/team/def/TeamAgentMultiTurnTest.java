@@ -1,4 +1,4 @@
-package features.ai.team;
+package features.ai.team.def;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
@@ -41,37 +41,37 @@ public class TeamAgentMultiTurnTest {
                 .build();
 
         // --- 第一轮：基础调研 ---
-        FlowContext context = FlowContext.of("session_001");
+        FlowContext context1 = FlowContext.of("session_001");
         System.out.println(">>> [Round 1] 用户：我想去杭州玩。");
-        String out1 = conciergeTeam.call(context, "我想去杭州玩。");
+        String out1 = conciergeTeam.call(context1, "我想去杭州玩。");
 
         System.out.println("<<< [第一轮输出] 长度: " + (out1 != null ? out1.length() : 0));
         System.out.println("<<< [第一轮输出] 内容: " + (out1 != null && out1.length() > 0 ?
                 out1.substring(0, Math.min(200, out1.length())) : "null或空"));
 
-        TeamTrace trace1 = context.getAs("__" + teamId);
+        TeamTrace trace1 = context1.getAs("__" + teamId);
         Assertions.assertNotNull(trace1, "第一轮应该生成轨迹");
         int round1StepCount = trace1.getStepCount();
         System.out.println("第一轮步数: " + round1StepCount);
-        System.out.println("第一轮最后节点: " + (trace1.getLastNodeId() != null ? trace1.getLastNodeId() : "null"));
+        System.out.println("第一轮最后节点: " + context1.lastNodeId());
         System.out.println("第一轮历史:\n" + trace1.getFormattedHistory());
 
         // 关键：手动重置状态，让第二轮能重新开始
-        trace1.setLastNode( null);
+        context1.trace().recordNode(conciergeTeam.getGraph(), null);
         trace1.setRoute(null);
         trace1.resetIterations();
-        context.lastNode(null);
+        context1.lastNode(null);
 
         // --- 第二轮：预算约束注入 ---
         System.out.println("\n>>> [Round 2] 用户：预算只有 500 元，请重新规划杭州行程。");
-        String out2 = conciergeTeam.call(context, "预算只有 500 元，请重新规划杭州行程。");
+        String out2 = conciergeTeam.call(context1, "预算只有 500 元，请重新规划杭州行程。");
 
         System.out.println("<<< [第二轮输出] 长度: " + (out2 != null ? out2.length() : 0));
         System.out.println("<<< [第二轮输出] 内容: " + (out2 != null && out2.length() > 0 ?
                 out2.substring(0, Math.min(500, out2.length())) : "null或空"));
 
         // --- 核心检测逻辑 ---
-        TeamTrace trace2 = context.getAs("__" + teamId);
+        TeamTrace trace2 = context1.getAs("__" + teamId);
         Assertions.assertNotNull(trace2, "第二轮应该也有轨迹");
 
         int totalStepsAfterRound2 = trace2.getStepCount();
