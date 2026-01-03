@@ -88,7 +88,7 @@ public class SupervisorTask implements NamedTaskComponent {
 
     private void runIntelligent(FlowContext context, TeamTrace trace) throws Exception {
         StringBuilder protocolExt = new StringBuilder();
-        config.getProtocol().prepareProtocolInfo(context, trace, protocolExt);
+        config.getProtocol().prepareInstruction(context, trace, protocolExt);
 
         String basePrompt = config.getSystemPrompt(trace);
         String enhancedPrompt = basePrompt + protocolExt;
@@ -194,7 +194,7 @@ public class SupervisorTask implements NamedTaskComponent {
         Agent agent = config.getAgentMap().get(text);
         if (agent != null) {
             trace.setRoute(agent.name());
-            config.getProtocol().updateContext(context, trace, agent.name());
+            config.getProtocol().onRouting(context, trace, agent.name());
             if (LOG.isDebugEnabled()) {
                 LOG.debug("TeamAgent [{}] supervisor routed to agent: [{}]", config.getName(), agent.name());
             }
@@ -211,7 +211,7 @@ public class SupervisorTask implements NamedTaskComponent {
             Pattern p = Pattern.compile("\\b" + Pattern.quote(name) + "\\b", Pattern.CASE_INSENSITIVE);
             if (p.matcher(text).find()) {
                 trace.setRoute(name);
-                config.getProtocol().updateContext(context, trace, name);
+                config.getProtocol().onRouting(context, trace, name);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("TeamAgent [{}] supervisor routed to agent: [{}]", config.getName(), name);
                 }

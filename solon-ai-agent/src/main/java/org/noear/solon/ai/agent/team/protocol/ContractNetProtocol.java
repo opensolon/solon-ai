@@ -77,7 +77,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public void prepareProtocolInfo(FlowContext context, TeamTrace trace, StringBuilder sb) {
+    public void prepareInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         String bids = context.getAs("active_bids");
         if (bids != null) {
             sb.append("\n=== Bids Context ===\n").append(bids);

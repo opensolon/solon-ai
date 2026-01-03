@@ -22,7 +22,7 @@ import java.util.Locale;
 
 /**
  * 团队协作协议接口
- * * <p>定义 Agent 团队的协作模式（如顺序、蜂群、层级等），负责图拓扑构建、指令注入及运行时决策干预。</p>
+ * <p>定义 Agent 团队的协作模式（如顺序、蜂群、层级等），负责拓扑构建、提示词注入及路由决策干预。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -34,7 +34,7 @@ public interface TeamProtocol {
     String name();
 
     /**
-     * 构建团队协作图拓扑
+     * [生命周期：构建期] 构建团队协作图的拓扑结构
      *
      * @param config 团队配置
      * @param spec   图规格定义
@@ -42,7 +42,7 @@ public interface TeamProtocol {
     void buildGraph(TeamConfig config, GraphSpec spec);
 
     /**
-     * 注入协议特定的系统提示词指令
+     * [生命周期：初始化] 注入协议固有的静态系统提示词指令
      *
      * @param config 团队配置
      * @param locale 语言环境
@@ -51,45 +51,45 @@ public interface TeamProtocol {
     void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb);
 
     /**
-     * 更新运行上下文（在 Agent 执行转向时触发）
-     *
-     * @param context   流上下文
-     * @param trace     协作跟踪状态
-     * @param nextAgent 下一个要执行的 Agent 名称
-     */
-    default void updateContext(FlowContext context, TeamTrace trace, String nextAgent) {
-        // 用于记录 Agent 使用频率、状态变更等
-    }
-
-    /**
-     * 准备运行时协议附加信息（在 Supervisor 决策前触发）
+     * [生命周期：决策前] 准备运行时的动态指令补充信息
+     * <p>例如：在智能决策前注入当前的竞标书内容、黑板摘要或 Agent 执行次数统计。</p>
      *
      * @param context 流上下文
      * @param trace   协作跟踪状态
      * @param sb      用于追加动态信息的字符串构建器
      */
-    default void prepareProtocolInfo(FlowContext context, TeamTrace trace, StringBuilder sb) {
-        // 用于向 Prompt 注入实时的统计数据、竞标信息等
+    default void prepareInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
     }
 
     /**
-     * 拦截 Supervisor 执行逻辑
+     * [生命周期：执行拦截] 拦截主管（Supervisor）的通用执行逻辑
      *
-     * @return true 表示协议已接管执行，不再走通用的智能决策流程（如顺序模式直接跳转）
+     * @return true 表示协议已接管执行流程，不再进入智能路由决策（如顺序模式的直接跳转）
      */
     default boolean interceptExecute(FlowContext context, TeamTrace trace) throws Exception {
         return false;
     }
 
     /**
-     * 拦截/干预路由决策结果
+     * [生命周期：路由干预] 在智能决策完成后，干预路由跳转结果
      *
      * @param context  流上下文
      * @param trace    协作跟踪状态
-     * @param decision LLM 给出的原始决策文本
-     * @return true 表示协议已处理路由跳转，Supervisor 不需要再走通用匹配逻辑
+     * @param decision LLM 给出的原始决策内容
+     * @return true 表示协议已根据决策内容完成路由处理，跳过通用的 Agent 匹配逻辑
      */
     default boolean interceptRouting(FlowContext context, TeamTrace trace, String decision) {
         return false;
+    }
+
+    /**
+     * [生命周期：路由转向] 路由确定后的回调钩子
+     * <p>当下一个执行对象（Agent 或 End）被确定后触发。常用于更新执行统计、状态机流转等。</p>
+     *
+     * @param context   流上下文
+     * @param trace     协作跟踪状态
+     * @param nextAgent 即将执行的 Agent 名称（或结束标识）
+     */
+    default void onRouting(FlowContext context, TeamTrace trace, String nextAgent) {
     }
 }

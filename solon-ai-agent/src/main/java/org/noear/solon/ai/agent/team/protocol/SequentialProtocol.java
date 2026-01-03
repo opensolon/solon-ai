@@ -54,7 +54,6 @@ public class SequentialProtocol extends HierarchicalProtocol {
         if (nextIndex < agentNames.size()) {
             String nextAgent = agentNames.get(nextIndex);
             trace.setRoute(nextAgent);
-            this.updateContext(context, trace, nextAgent);
         } else {
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer("Sequential task completed.");

@@ -52,7 +52,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public void prepareProtocolInfo(FlowContext context, TeamTrace trace, StringBuilder sb){
+    public void prepareInstruction(FlowContext context, TeamTrace trace, StringBuilder sb){
         sb.append("\n=== Hierarchical Context ===\nTotal agents available: ");
         sb.append(trace.getConfig().getAgentMap().size());
     }
