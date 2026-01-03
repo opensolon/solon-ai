@@ -34,7 +34,8 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 自省反思智能体
+ * ReAct (Reason + Act) 协同推理智能体
+ * <p>通过“思考-行动-观察”的循环模式，结合外部工具调用来解决复杂问题。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -55,40 +56,40 @@ public class ReActAgent implements Agent {
         this.description = config.getDescription();
         this.config = config;
         this.flowEngine = FlowEngine.newInstance(true);
-        this.traceKey = "__" + name;
+        this.traceKey = "__" + name; // 每个 Agent 实例拥有独立的追踪键
 
-        //附加流拦截器
+        // 1. 挂载流拦截器（用于全局监控或审计）
         if (config.getInterceptor() != null) {
             flowEngine.addInterceptor(config.getInterceptor());
         }
 
-        //构建计算图
+        // 2. 构建 ReAct 执行计算图：Start -> [Reason <-> Action] -> End
         this.graph = Graph.create(this.name, spec -> {
             spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON);
 
+            // 推理任务节点（Reasoning）：决定下一步是调用工具还是直接回答
             spec.addExclusive(new ReasonTask(config))
                     .linkAdd(Agent.ID_ACTION, l -> l.when(ctx ->
                             Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
                     .linkAdd(Agent.ID_END);
 
+            // 执行任务节点（Acting）：执行具体的工具调用并返回观察结果
             spec.addActivity(new ActionTask(config))
-                    .linkAdd(Agent.ID_REASON);
+                    .linkAdd(Agent.ID_REASON); // 动作完成后再次回到推理节点
 
             spec.addEnd(Agent.ID_END);
         });
     }
 
     /**
-     * 获取图
-     *
+     * 获取当前智能体的逻辑执行图
      */
     public Graph getGraph() {
         return graph;
     }
 
     /**
-     * 获取跟踪实例
-     *
+     * 从上下文中获取当前 Agent 的执行状态追踪实例
      */
     public @Nullable ReActTrace getTrace(FlowContext context) {
         return context.getAs("__" + name);
@@ -104,14 +105,20 @@ public class ReActAgent implements Agent {
         return description;
     }
 
+    /**
+     * 智能体调用入口
+     *
+     * @param context 流程上下文，承载多智能体协作或嵌套调用的状态
+     * @param prompt  用户输入的提示词
+     */
     @Override
     public String call(FlowContext context, Prompt prompt) throws Throwable {
         if (LOG.isDebugEnabled()) {
             LOG.debug("ReActAgent [{}] starting: {}", this.name, prompt.getUserContent());
         }
 
+        // 维护执行痕迹：若上下文已存在则复用，支持多轮对话或中断恢复
         ReActTrace trace = context.getAs(traceKey);
-
         if (trace == null) {
             trace = new ReActTrace(config, prompt);
             context.put(traceKey, trace);
@@ -120,6 +127,7 @@ public class ReActAgent implements Agent {
         }
 
         if (prompt != null) {
+            // 记录流节点链路，方便追踪调试
             context.trace().recordNode(graph, null);
             trace.setPrompt(prompt);
         }
@@ -127,11 +135,13 @@ public class ReActAgent implements Agent {
         long startTime = System.currentTimeMillis();
 
         try {
-            //采用变量域的思想传递 KEY_CURRENT_TRACE_KEY
+            // [核心机制] 采用变量域思想传递 KEY_CURRENT_TRACE_KEY
+            // 确保任务组件（Task）能根据该 Key 在上下文中定位到正确的状态机（Trace）
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
                 flowEngine.eval(graph, context);
             });
         } finally {
+            // 记录性能统计指标
             long duration = System.currentTimeMillis() - startTime;
             trace.getMetrics().setTotalDuration(duration);
             trace.getMetrics().setStepCount(trace.getStepCount());
@@ -148,6 +158,7 @@ public class ReActAgent implements Agent {
             LOG.debug("ReActAgent [{}] final Answer: {}", this.name, result);
         }
 
+        // 触发调用结束回调
         if (config.getInterceptor() != null) {
             config.getInterceptor().onCallEnd(context, prompt);
         }
@@ -155,12 +166,15 @@ public class ReActAgent implements Agent {
         return result;
     }
 
-    /// ////////////
+    /// //////////// Builder 静态构造模式 ////////////
 
     public static Builder of(ChatModel chatModel) {
         return new Builder(chatModel);
     }
 
+    /**
+     * ReAct 智能体构建器
+     */
     public static class Builder {
         private ReActConfig config;
 
@@ -169,7 +183,7 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 智能体名字
+         * 智能体名称
          */
         public Builder name(String val) {
             config.setName(val);
@@ -177,7 +191,7 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 智能体描述（团队协作时需要）
+         * 智能体功能描述（在 TeamAgent 协作模式下尤为重要）
          */
         public Builder description(String val) {
             config.setDescription(val);
@@ -185,7 +199,7 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 添加工具
+         * 添加功能工具
          */
         public Builder addTool(FunctionTool tool) {
             config.addTool(tool);
@@ -193,7 +207,7 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 添加工具
+         * 批量添加功能工具
          */
         public Builder addTool(List<FunctionTool> tools) {
             config.addTool(tools);
@@ -201,7 +215,7 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 添加工具
+         * 通过提供者添加工具
          */
         public Builder addTool(ToolProvider toolProvider) {
             config.addTool(toolProvider);
@@ -209,11 +223,10 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 重试配置
+         * 配置 LLM 调用重试机制
          *
          * @param maxRetries   最大重试次数
-         * @param retryDelayMs 重试延迟时间
-         *
+         * @param retryDelayMs 重试时间间隔（毫秒）
          */
         public Builder retryConfig(int maxRetries, long retryDelayMs) {
             config.setRetryConfig(maxRetries, retryDelayMs);
@@ -221,7 +234,7 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 最大步数
+         * 限制单次任务的最大循环思考步数，防止死循环
          */
         public Builder maxSteps(int val) {
             config.setMaxSteps(val);
@@ -229,7 +242,7 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 完成标记
+         * 定义模型输出中的“完成任务”标识（尽量不要改）
          */
         public Builder finishMarker(String val) {
             config.setFinishMarker(val);
@@ -237,26 +250,32 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 提示语提供者
+         * 自定义推理提示词模板生成器
          */
         public Builder promptProvider(ReActPromptProvider val) {
             config.setPromptProvider(val);
             return this;
         }
 
+        /**
+         * 配置推理阶段的 ChatModel 选项（如温度、TopP 等）
+         */
         public Builder reasonOptions(Consumer<ChatOptions> reasonOptions) {
             config.setReasonOptions(reasonOptions);
             return this;
         }
 
         /**
-         * 拦截器
+         * 设置 ReAct 专属拦截器
          */
         public Builder interceptor(ReActInterceptor val) {
             config.setInterceptor(val);
             return this;
         }
 
+        /**
+         * 实例化 ReActAgent
+         */
         public ReActAgent build() {
             if (config.getName() == null) {
                 config.setName("react_agent");
