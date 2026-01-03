@@ -131,23 +131,30 @@ public class TeamAgent implements Agent {
             trace.resetIterations();
         }
 
-        context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-            flowEngine.eval(graph, context);
-        });
+        try {
+            context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
+                flowEngine.eval(graph, context);
+            });
 
-        String result = trace.getFinalAnswer();
-        if (result == null && trace.getStepCount() > 0) {
-            result = trace.getSteps().get(trace.getStepCount() - 1).getContent();
+            String result = trace.getFinalAnswer();
+            if (result == null && trace.getStepCount() > 0) {
+                result = trace.getSteps().get(trace.getStepCount() - 1).getContent();
+            }
+
+            trace.setFinalAnswer(result);
+            return result;
+        } finally {
+            if (config != null) {
+                try {
+                    if (config.getInterceptor() != null) {
+                        config.getInterceptor().onCallEnd(context, prompt);
+                    }
+                    config.getProtocol().onFinished(context, trace);
+                } catch (Throwable e) {
+                    LOG.warn("TeamAgent [{}] finalization failed", name, e);
+                }
+            }
         }
-
-        trace.setFinalAnswer(result);
-
-
-        if (config != null && config.getInterceptor() != null) {
-            config.getInterceptor().onCallEnd(context, prompt);
-        }
-
-        return result;
     }
 
     /// ///////////////////////////////

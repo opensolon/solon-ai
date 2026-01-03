@@ -92,4 +92,11 @@ public interface TeamProtocol {
      */
     default void onRouting(FlowContext context, TeamTrace trace, String nextAgent) {
     }
+
+    /**
+     * [生命周期：任务结束] 团队任务彻底完成或异常中断后的清理工作
+     */
+    default void onFinished(FlowContext context, TeamTrace trace) {
+        // 用于清理 context 中的临时数据，释放资源
+    }
 }

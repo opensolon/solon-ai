@@ -81,7 +81,11 @@ public class ContractNetProtocol extends TeamProtocolBase {
         String bids = context.getAs("active_bids");
         if (bids != null) {
             sb.append("\n=== Bids Context ===\n").append(bids);
-            context.remove("active_bids");
         }
+    }
+
+    @Override
+    public void onFinished(FlowContext context, TeamTrace trace) {
+        context.remove("active_bids");
     }
 }
