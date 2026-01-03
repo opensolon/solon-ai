@@ -38,7 +38,7 @@ public class TeamConfig {
     private String description;
     private final ChatModel chatModel;
     private final Map<String, Agent> agentMap = new LinkedHashMap<>();
-    private TeamStrategy strategy = TeamStrategy.HIERARCHICAL;
+    private TeamProtocol protocol = TeamProtocols.HIERARCHICAL;
     private Consumer<GraphSpec> graphAdjuster;
     private String finishMarker;
     private int maxTotalIterations = 8;
@@ -96,10 +96,9 @@ public class TeamConfig {
         agentMap.put(agent.name(), agent);
     }
 
-    public void setStrategy(TeamStrategy strategy) {
-        Objects.requireNonNull(strategy, "strategy");
-
-        this.strategy = strategy;
+    public void setProtocol(TeamProtocol protocol) {
+        Objects.requireNonNull(protocol, "protocol");
+        this.protocol = protocol;
     }
 
     public String getName() {
@@ -118,8 +117,8 @@ public class TeamConfig {
         return agentMap;
     }
 
-    public TeamStrategy getStrategy() {
-        return strategy;
+    public TeamProtocol getProtocol() {
+        return protocol;
     }
 
     public Consumer<GraphSpec> getGraphAdjuster() {

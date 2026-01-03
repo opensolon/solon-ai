@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.TeamStrategy;
+import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
@@ -34,7 +34,7 @@ public class TeamAgentContractNetTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("contract_team")
-                .strategy(TeamStrategy.CONTRACT_NET)
+                .protocol(TeamProtocols.CONTRACT_NET)
                 .addAgent(algoExpert)
                 .addAgent(uiExpert)
                 .build();
@@ -97,7 +97,7 @@ public class TeamAgentContractNetTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("contract_overlap_team")
-                .strategy(TeamStrategy.CONTRACT_NET)
+                .protocol(TeamProtocols.CONTRACT_NET)
                 .addAgent(expert1)
                 .addAgent(expert2)
                 .build();

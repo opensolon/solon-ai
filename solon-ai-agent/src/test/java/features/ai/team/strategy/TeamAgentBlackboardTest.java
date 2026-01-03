@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.TeamStrategy;
+import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
@@ -35,7 +35,7 @@ public class TeamAgentBlackboardTest {
         // 2. 使用 BLACKBOARD 策略
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("blackboard_team")
-                .strategy(TeamStrategy.BLACKBOARD)
+                .protocol(TeamProtocols.BLACKBOARD)
                 .addAgent(databaseDesigner)
                 .addAgent(apiDesigner)
                 .build();
@@ -85,7 +85,7 @@ public class TeamAgentBlackboardTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("blackboard_explicit_team")
-                .strategy(TeamStrategy.BLACKBOARD)
+                .protocol(TeamProtocols.BLACKBOARD)
                 .addAgent(databaseDesigner)
                 .addAgent(apiDesigner)
                 .build();

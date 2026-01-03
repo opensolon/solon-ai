@@ -4,7 +4,7 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.TeamStrategy;
+import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
@@ -19,7 +19,7 @@ public class CrosstalkDemo {
 
         TeamAgent crosstalkTeam = TeamAgent.of(chatModel)
                 .name("crosstalk")
-                .strategy(TeamStrategy.SWARM)
+                .protocol(TeamProtocols.SWARM)
                 .addAgent(ReActAgent.of(chatModel)
                         .name("aaa")
                         .description("阿飞")

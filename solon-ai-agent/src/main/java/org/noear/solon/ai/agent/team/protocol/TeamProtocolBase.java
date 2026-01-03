@@ -1,0 +1,46 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.noear.solon.ai.agent.team.protocol;
+
+import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.ai.agent.team.TeamProtocol;
+import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.flow.NodeSpec;
+
+import java.util.Locale;
+
+/**
+ *
+ * @author noear
+ * @since 3.8.1
+ */
+public abstract class TeamProtocolBase implements TeamProtocol {
+    protected void linkAgents(TeamConfig config, NodeSpec ns, String traceKey) {
+        for (String agentName : config.getAgentMap().keySet()) {
+            ns.linkAdd(agentName, l -> l.when(ctx ->
+                    agentName.equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
+        }
+    }
+
+    @Override
+    public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
+        if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
+            sb.append("- 作为团队主管，请根据任务需求和成员能力做出决策。");
+        } else {
+            sb.append("- As team supervisor, make decisions based on task requirements and member capabilities.");
+        }
+    }
+}

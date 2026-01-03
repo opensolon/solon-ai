@@ -15,38 +15,36 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.lang.Preview;
+import org.noear.solon.ai.agent.team.protocol.*;
 
 /**
- * 团队协作策略
  *
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
-public enum TeamStrategy {
+public interface TeamProtocols {
     /**
      * 顺序流转
      */
-    SEQUENTIAL,
+    TeamProtocol SEQUENTIAL = new SequentialProtocol();
     /**
      * 层级协调
      */
-    HIERARCHICAL,
+    TeamProtocol HIERARCHICAL = new HierarchicalProtocol();
     /**
      * 市场机制
      */
-    MARKET_BASED,
+    TeamProtocol MARKET_BASED = new MarketBasedProtocol();
     /**
      * 合同网协议
      */
-    CONTRACT_NET,
+    TeamProtocol CONTRACT_NET = new ContractNetProtocol();
     /**
      * 黑板模式
      */
-    BLACKBOARD,
+    TeamProtocol BLACKBOARD = new BlackboardProtocol();
     /**
      * 群体智能
      */
-    SWARM,
+    TeamProtocol SWARM = new SwarmProtocol();
 }

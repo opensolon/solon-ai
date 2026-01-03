@@ -17,7 +17,6 @@ package org.noear.solon.ai.agent.team.task;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamConfig;
-import org.noear.solon.ai.agent.team.TeamStrategy;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
@@ -76,12 +75,11 @@ public class SupervisorTask implements NamedTaskComponent {
                 return;
             }
 
-            // 执行策略
-            if (config.getStrategy() == TeamStrategy.SEQUENTIAL) {
-                runSequential(context, trace);
-            } else {
-                runIntelligent(context, trace);
+            if (config.getProtocol().interceptExecute(context, trace)) {
+                return;
             }
+
+            runIntelligent(context, trace);
 
         } catch (Exception e) {
             handleError(context, e);
@@ -90,11 +88,10 @@ public class SupervisorTask implements NamedTaskComponent {
 
     private void runIntelligent(FlowContext context, TeamTrace trace) throws Exception {
         StringBuilder protocolExt = new StringBuilder();
-        prepareProtocolInfo(context, trace, protocolExt);
-        String strategyContextInfo = prepareStrategyContext(context, trace);
+        config.getProtocol().prepareProtocolInfo(context, trace, protocolExt);
 
         String basePrompt = config.getSystemPrompt(trace);
-        String enhancedPrompt = basePrompt + protocolExt + strategyContextInfo;
+        String enhancedPrompt = basePrompt + protocolExt;
 
         List<ChatMessage> messages = Arrays.asList(
                 ChatMessage.ofSystem(enhancedPrompt),
@@ -158,15 +155,12 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         // 策略相关的特殊信号处理（如招标）
-        if (config.getStrategy() == TeamStrategy.CONTRACT_NET) {
-            if (decision.toUpperCase().contains(Agent.ID_BIDDING.toUpperCase())) {
-                trace.setRoute(Agent.ID_BIDDING);
-                return;
-            }
+        if (config.getProtocol().interceptRouting(context, trace, decision)) { //getStrategy() == TeamStrategy.CONTRACT_NET
+            return;
         }
 
         // 优先匹配 Agent 名字。也优先进行路由派发
-        if (matchAgentRoute(trace, decision)) {
+        if (matchAgentRoute(context, trace, decision)) {
             return;
         }
 
@@ -195,12 +189,12 @@ public class SupervisorTask implements NamedTaskComponent {
     /**
      * 匹配智能体并路由
      */
-    private boolean matchAgentRoute(TeamTrace trace, String text) {
+    private boolean matchAgentRoute(FlowContext context, TeamTrace trace, String text) {
         // 1.直接查找名字
         Agent agent = config.getAgentMap().get(text);
         if (agent != null) {
             trace.setRoute(agent.name());
-            updateStrategyContext(trace, agent.name());
+            config.getProtocol().updateContext(context, trace, agent.name());
             if (LOG.isDebugEnabled()) {
                 LOG.debug("TeamAgent [{}] supervisor routed to agent: [{}]", config.getName(), agent.name());
             }
@@ -217,7 +211,7 @@ public class SupervisorTask implements NamedTaskComponent {
             Pattern p = Pattern.compile("\\b" + Pattern.quote(name) + "\\b", Pattern.CASE_INSENSITIVE);
             if (p.matcher(text).find()) {
                 trace.setRoute(name);
-                updateStrategyContext(trace, name);
+                config.getProtocol().updateContext(context, trace, name);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("TeamAgent [{}] supervisor routed to agent: [{}]", config.getName(), name);
                 }
@@ -225,45 +219,6 @@ public class SupervisorTask implements NamedTaskComponent {
             }
         }
         return false;
-    }
-
-    private void runSequential(FlowContext context, TeamTrace trace) {
-        List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
-        int nextIndex = trace.getIterationsCount();
-
-        if (nextIndex < agentNames.size()) {
-            String nextAgent = agentNames.get(nextIndex);
-            trace.setRoute(nextAgent);
-            updateStrategyContext(trace, nextAgent);
-        } else {
-            trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer("Sequential task completed.");
-        }
-        trace.nextIterations();
-    }
-
-    private void updateStrategyContext(TeamTrace trace, String agentName) {
-        if (config.getStrategy() == TeamStrategy.SWARM) {
-            Map<String, Integer> usage = (Map<String, Integer>) trace.getStrategyContext().computeIfAbsent("agent_usage", k -> new HashMap<>());
-            usage.put(agentName, usage.getOrDefault(agentName, 0) + 1);
-        }
-    }
-
-    private void prepareProtocolInfo(FlowContext context, TeamTrace trace, StringBuilder sb) {
-        if (config.getStrategy() == TeamStrategy.CONTRACT_NET) {
-            String bids = context.getAs("active_bids");
-            if (bids != null) {
-                sb.append("\n=== Bids Context ===\n").append(bids);
-                context.remove("active_bids");
-            }
-        }
-    }
-
-    private String prepareStrategyContext(FlowContext context, TeamTrace trace) {
-        if (config.getStrategy() == TeamStrategy.HIERARCHICAL) {
-            return "\n=== Hierarchical Context ===\nTotal agents available: " + config.getAgentMap().size();
-        }
-        return "";
     }
 
     private void handleError(FlowContext context, Exception e) {

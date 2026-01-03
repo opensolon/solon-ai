@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.TeamStrategy;
+import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
@@ -34,7 +34,7 @@ public class TeamAgentMarketTest {
         // 2. 使用 MARKET_BASED 策略
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("market_team")
-                .strategy(TeamStrategy.MARKET_BASED)
+                .protocol(TeamProtocols.MARKET_BASED)
                 .addAgent(pythonExpert)
                 .addAgent(javaExpert)
                 .build();
@@ -86,7 +86,7 @@ public class TeamAgentMarketTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("market_python_team")
-                .strategy(TeamStrategy.MARKET_BASED)
+                .protocol(TeamProtocols.MARKET_BASED)
                 .addAgent(pythonExpert)
                 .addAgent(javaExpert)
                 .build();

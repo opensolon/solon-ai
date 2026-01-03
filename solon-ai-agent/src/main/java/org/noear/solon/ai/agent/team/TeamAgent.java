@@ -16,9 +16,6 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.team.task.ContractNetBiddingTask;
-import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -213,8 +210,8 @@ public class TeamAgent implements Agent {
             return this;
         }
 
-        public Builder strategy(TeamStrategy strategy) {
-            config.setStrategy(strategy);
+        public Builder protocol(TeamProtocol protocol) {
+            config.setProtocol(protocol);
             return this;
         }
 
@@ -249,85 +246,12 @@ public class TeamAgent implements Agent {
 
         private Graph createGraph() {
             return Graph.create(config.getName(), spec -> {
-                switch (config.getStrategy()) {
-                    case SWARM:
-                        buildSwarmGraph(spec);
-                        break;
-                    case CONTRACT_NET:
-                        buildContractNetGraph(spec);
-                        break;
-                    case SEQUENTIAL:
-                    case BLACKBOARD:
-                    case MARKET_BASED:
-                    case HIERARCHICAL:
-                    default:
-                        buildHubAndSpokeGraph(spec);
-                        break;
-                }
+                config.getProtocol().buildGraph(config, spec);
 
                 if (config.getGraphAdjuster() != null) {
                     config.getGraphAdjuster().accept(spec);
                 }
             });
-        }
-
-        private void linkAgents(NodeSpec ns, String traceKey) {
-            for (String agentName : config.getAgentMap().keySet()) {
-                ns.linkAdd(agentName, l -> l.when(ctx ->
-                        agentName.equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
-            }
-        }
-
-        /**
-         * 中心化拓扑（适用于 HIERARCHICAL, BLACKBOARD, MARKET_BASED）
-         */
-        private void buildHubAndSpokeGraph(GraphSpec spec) {
-            String traceKey = "__" + config.getName();
-
-            spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
-
-            spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-                linkAgents(ns, traceKey);
-            }).linkAdd(Agent.ID_END);
-
-            config.getAgentMap().values().forEach(a ->
-                    spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
-
-            spec.addEnd(Agent.ID_END);
-        }
-
-        private void buildSwarmGraph(GraphSpec spec) {
-            String traceKey = "__" + config.getName();
-            String firstAgent = config.getAgentMap().keySet().iterator().next();
-
-            spec.addStart(Agent.ID_START).linkAdd(firstAgent); // 调整点：直接切入第一个 Agent
-
-            config.getAgentMap().values().forEach(a ->
-                    spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
-
-            spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-                linkAgents(ns, traceKey);
-            }).linkAdd(Agent.ID_END);
-
-            spec.addEnd(Agent.ID_END);
-        }
-
-        private void buildContractNetGraph(GraphSpec spec) {
-            String traceKey = "__" + config.getName();
-
-            spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
-
-            spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-                ns.linkAdd(Agent.ID_BIDDING, l -> l.when(ctx -> Agent.ID_BIDDING.equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
-                linkAgents(ns, traceKey);
-            }).linkAdd(Agent.ID_END);
-
-            spec.addActivity(new ContractNetBiddingTask(config)).linkAdd(Agent.ID_SUPERVISOR);
-
-            config.getAgentMap().values().forEach(a ->
-                    spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
-
-            spec.addEnd(Agent.ID_END);
         }
     }
 }

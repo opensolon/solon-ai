@@ -17,6 +17,8 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.lang.Preview;
 
+import java.util.Locale;
+
 /**
  * Team 提示词提供者
  *

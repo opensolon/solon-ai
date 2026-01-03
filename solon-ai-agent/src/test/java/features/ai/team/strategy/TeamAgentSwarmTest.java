@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.TeamStrategy;
+import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
@@ -34,7 +34,7 @@ public class TeamAgentSwarmTest {
         // 2. 使用 SWARM 策略构建团队
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("swarm_team")
-                .strategy(TeamStrategy.SWARM)
+                .protocol(TeamProtocols.SWARM)
                 .addAgent(chineseTranslator)
                 .addAgent(polisher)
                 .build();
@@ -104,7 +104,7 @@ public class TeamAgentSwarmTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("swarm_chain_team")
-                .strategy(TeamStrategy.SWARM)
+                .protocol(TeamProtocols.SWARM)
                 .addAgent(translator)
                 .addAgent(grammarChecker)
                 .addAgent(styleImprover)
