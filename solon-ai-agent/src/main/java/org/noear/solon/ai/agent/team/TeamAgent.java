@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.task.ContractNetBiddingTask;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.*;
 import org.noear.solon.lang.Nullable;
@@ -69,7 +70,7 @@ public class TeamAgent implements Agent {
         this.traceKey = "__" + name;
         this.description = description;
 
-        if(config == null){
+        if (config == null) {
             config = new TeamConfig(null);
         }
 
@@ -124,7 +125,7 @@ public class TeamAgent implements Agent {
         }
 
         if (prompt != null) {
-            context.trace().recordNode(graph,null);
+            context.trace().recordNode(graph, null);
 
             tmpTrace.setPrompt(prompt);
             tmpTrace.resetIterations();
@@ -208,6 +209,11 @@ public class TeamAgent implements Agent {
 
         public Builder graphAdjuster(Consumer<GraphSpec> graphBuilder) {
             config.setGraphAdjuster(graphBuilder);
+            return this;
+        }
+
+        public Builder supervisorOptions(Consumer<ChatOptions> supervisorOptions) {
+            config.setSupervisorOptions(supervisorOptions);
             return this;
         }
 

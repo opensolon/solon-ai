@@ -33,7 +33,7 @@ public class ReActAgentPromptProviderTest {
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new MathTools()))
                 .promptProvider(customProvider)
-                .temperature(0.0F)
+                .reasonOptions(o -> o.temperature(0.0F))
                 .build();
 
         FlowContext context = FlowContext.of("test_custom_prompt");
@@ -56,7 +56,7 @@ public class ReActAgentPromptProviderTest {
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new ChineseTools()))
                 .promptProvider(ReActPromptProviderCn.getInstance())
-                .temperature(0.0F)
+                .reasonOptions(o -> o.temperature(0.0F))
                 .build();
 
         FlowContext context = FlowContext.of("test_chinese_prompt");
@@ -80,7 +80,7 @@ public class ReActAgentPromptProviderTest {
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .promptProvider(emptyProvider)
-                .temperature(0.0F)
+                .reasonOptions(o -> o.temperature(0.0F))
                 .build();
 
         FlowContext context = FlowContext.of("test_empty_prompt");

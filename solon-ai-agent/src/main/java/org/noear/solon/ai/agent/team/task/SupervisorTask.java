@@ -60,7 +60,6 @@ public class SupervisorTask implements NamedTaskComponent {
         try {
             String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
             TeamTrace trace = context.getAs(traceKey);
-            Prompt prompt = trace.getPrompt();
 
             if (trace == null) {
                 LOG.error("TeamAgent [{}] supervisor: Team trace not found", config.getName());
@@ -99,7 +98,11 @@ public class SupervisorTask implements NamedTaskComponent {
                 ChatMessage.ofUser("Collaboration History:\n" + trace.getFormattedHistory() +
                         "\n\nCurrent iteration: " + trace.getIterationsCount() +
                         "\nPlease decide the next action:")
-        )).call().getResultContent().trim();
+        )).options(o -> {
+            if (config.getSupervisorOptions() != null) {
+                config.getSupervisorOptions().accept(o);
+            }
+        }).call().getResultContent().trim();
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] supervisor decision: {}", config.getName(), decision);

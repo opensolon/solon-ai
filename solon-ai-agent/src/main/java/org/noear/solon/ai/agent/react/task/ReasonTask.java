@@ -132,9 +132,12 @@ public class ReasonTask implements NamedTaskComponent {
                 return config.getChatModel()
                         .prompt(messages)
                         .options(o -> {
+                            if (config.getReasonOptions() != null) {
+                                config.getReasonOptions().accept(o);
+                            }
+
+                            //这个要放在自定义之后
                             o.autoToolCall(false);
-                            o.max_tokens(config.getMaxTokens());
-                            o.temperature(config.getTemperature());
 
                             if (!config.getTools().isEmpty()) {
                                 o.toolsAdd(config.getTools());

@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.task.ActionTask;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
@@ -30,6 +31,7 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * 自省反思智能体
@@ -117,8 +119,8 @@ public class ReActAgent implements Agent {
             tmpTrace.setConfig(config);
         }
 
-        if(prompt != null){
-            context.trace().recordNode(graph,null);
+        if (prompt != null) {
+            context.trace().recordNode(graph, null);
             tmpTrace.setPrompt(prompt);
         }
 
@@ -147,7 +149,7 @@ public class ReActAgent implements Agent {
             LOG.debug("ReActAgent [{}] final Answer: {}", this.name, result);
         }
 
-        if(config.getInterceptor() != null){
+        if (config.getInterceptor() != null) {
             config.getInterceptor().onCallEnd(context, prompt);
         }
 
@@ -208,14 +210,6 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 温度
-         */
-        public Builder temperature(float val) {
-            config.setTemperature(val);
-            return this;
-        }
-
-        /**
          * 重试配置
          *
          * @param maxRetries   最大重试次数
@@ -244,18 +238,15 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 最大令牌数
-         */
-        public Builder maxTokens(int val) {
-            config.setMaxTokens(val);
-            return this;
-        }
-
-        /**
          * 提示语提供者
          */
         public Builder promptProvider(ReActPromptProvider val) {
             config.setPromptProvider(val);
+            return this;
+        }
+
+        public Builder reasonOptions(Consumer<ChatOptions> reasonOptions) {
+            config.setReasonOptions(reasonOptions);
             return this;
         }
 

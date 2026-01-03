@@ -22,14 +22,14 @@ public class ReActAgentConfigTest {
         // 低温（确定性高）
         ReActAgent lowTempAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new CreativeTools()))
-                .temperature(0.1F)
+                .reasonOptions(o -> o.temperature(0.1F))
                 .name("low_temp")
                 .build();
 
         // 高温（创造性高）
         ReActAgent highTempAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new CreativeTools()))
-                .temperature(0.9F)
+                .reasonOptions(o -> o.temperature(0.9F))
                 .name("high_temp")
                 .build();
 
@@ -55,13 +55,13 @@ public class ReActAgentConfigTest {
 
         ReActAgent shortAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new StoryTools()))
-                .maxTokens(50) // 很短的token限制
+                .reasonOptions(o -> o.max_tokens(50)) // 很短的token限制
                 .name("short")
                 .build();
 
         ReActAgent longAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new StoryTools()))
-                .maxTokens(500) // 较长的token限制
+                .reasonOptions(o -> o.max_tokens(500)) // 较长的token限制
                 .name("long")
                 .build();
 

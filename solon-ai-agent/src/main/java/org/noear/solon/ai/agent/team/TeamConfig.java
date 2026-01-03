@@ -17,7 +17,7 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
 
@@ -44,6 +44,7 @@ public class TeamConfig {
     private int maxTotalIterations = 8;
     private TeamInterceptor interceptor;
     private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
+    private Consumer<ChatOptions> supervisorOptions;
 
     public TeamConfig(ChatModel chatModel) {
         this.chatModel = chatModel;
@@ -75,6 +76,10 @@ public class TeamConfig {
 
     public void setPromptProvider(TeamPromptProvider promptProvider) {
         this.promptProvider = promptProvider;
+    }
+
+    public void setSupervisorOptions(Consumer<ChatOptions> supervisorOptions) {
+        this.supervisorOptions = supervisorOptions;
     }
 
     public void addAgent(Agent agent) {
@@ -132,5 +137,9 @@ public class TeamConfig {
 
     public String getSystemPrompt(TeamTrace trace) {
         return promptProvider.getSystemPrompt(trace);
+    }
+
+    public Consumer<ChatOptions> getSupervisorOptions() {
+        return supervisorOptions;
     }
 }

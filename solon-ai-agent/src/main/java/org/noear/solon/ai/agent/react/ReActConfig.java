@@ -16,11 +16,13 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * ReAct 配置类
@@ -35,13 +37,12 @@ public class ReActConfig {
     private final ChatModel chatModel;
     private final Map<String, FunctionTool> toolMap = new LinkedHashMap<>();
     private int maxSteps = 10;
-    private float temperature = 0.7F;
     private int maxRetries = 3;
     private long retryDelayMs = 1000L;
-    private int maxTokens = 2048;
     private String finishMarker;
     private ReActInterceptor interceptor;
     private ReActPromptProvider promptProvider = ReActPromptProviderEn.getInstance();
+    private Consumer<ChatOptions> reasonOptions;
 
     public ReActConfig(ChatModel chatModel) {
         Objects.requireNonNull(chatModel, "chatModel");
@@ -74,18 +75,11 @@ public class ReActConfig {
         addTool(toolProvider.getTools());
     }
 
-    public void setTemperature(float val) {
-        this.temperature = val;
-    }
-
     public void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(1000, retryDelayMs);
     }
 
-    public void setMaxTokens(int val) {
-        this.maxTokens = val;
-    }
 
     public void setFinishMarker(String val) {
         this.finishMarker = val;
@@ -103,6 +97,9 @@ public class ReActConfig {
         this.promptProvider = val;
     }
 
+    public void setReasonOptions(Consumer<ChatOptions> reasonOptions) {
+        this.reasonOptions = reasonOptions;
+    }
 
     // --- Getters ---
 
@@ -131,20 +128,12 @@ public class ReActConfig {
         return maxSteps;
     }
 
-    public float getTemperature() {
-        return temperature;
-    }
-
     public int getMaxRetries() {
         return maxRetries;
     }
 
     public long getRetryDelayMs() {
         return retryDelayMs;
-    }
-
-    public int getMaxTokens() {
-        return maxTokens;
     }
 
     public String getFinishMarker() {
@@ -161,5 +150,9 @@ public class ReActConfig {
 
     public String getSystemPrompt(ReActTrace trace) {
         return promptProvider.getSystemPrompt(trace);
+    }
+
+    public Consumer<ChatOptions> getReasonOptions() {
+        return reasonOptions;
     }
 }

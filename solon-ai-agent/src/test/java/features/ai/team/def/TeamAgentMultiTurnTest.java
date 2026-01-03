@@ -24,11 +24,13 @@ public class TeamAgentMultiTurnTest {
         String teamId = "multi_turn_concierge";
 
         // 定义两个 Agent
-        Agent searcher = ReActAgent.of(chatModel).name("searcher")
+        Agent searcher = ReActAgent.of(chatModel)
+                .name("searcher")
                 .promptProvider(p -> "你是一个旅游信息分析员。你的任务是直接输出目的地（如杭州）的基础常识，严禁使用任何 Action JSON 工具。")
                 .description("负责收集目的地基础信息。").build();
 
-        Agent planner = ReActAgent.of(chatModel).name("planner")
+        Agent planner = ReActAgent.of(chatModel)
+                .name("planner")
                 .promptProvider(p -> "你是一个行程规划专家。请结合历史信息和用户预算给出建议。")
                 .description("负责制定具体方案。").build();
 

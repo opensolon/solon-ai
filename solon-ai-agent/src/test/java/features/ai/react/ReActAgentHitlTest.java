@@ -47,7 +47,7 @@ public class ReActAgentHitlTest {
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new RefundTools()))
                 .interceptor(hitlInterceptor) // 注入拦截器
-                .temperature(0.0F)
+                .reasonOptions(o -> o.temperature(0.0F))
                 .build();
 
         FlowContext context = FlowContext.of("hitl_session_123");
@@ -131,7 +131,7 @@ public class ReActAgentHitlTest {
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
                 .interceptor(fullInterceptor)
-                .temperature(0.0F)
+                .reasonOptions(o -> o.temperature(0.0F))
                 .build();
 
         FlowContext context = FlowContext.of("test_interceptor");

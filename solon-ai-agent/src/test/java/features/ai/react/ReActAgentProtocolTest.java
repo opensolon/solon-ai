@@ -20,7 +20,7 @@ import java.util.List;
  * ReAct 协议完整性测试
  * 验证：Thought → Action → Observation → Thought 循环的正确性
  */
-public class ReActAgentProtocolTest extends ReActAgentTestBase{
+public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
     @Test
     public void testFullReActCycle() throws Throwable {
@@ -28,7 +28,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase{
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new TestTools()))
-                .temperature(0.0F)
+                .reasonOptions(o -> o.temperature(0.0F))
                 .maxSteps(10)
                 .build();
 
@@ -82,7 +82,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase{
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new TestTools()))
-                .temperature(0.0F)
+                .reasonOptions(o -> o.temperature(0.0F))
                 .build();
 
         FlowContext context = FlowContext.of("test_direct");
@@ -110,7 +110,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase{
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new SequentialTools()))
-                .temperature(0.0F)
+                .reasonOptions(o -> o.temperature(0.0F))
                 .maxSteps(5)
                 .build();
 

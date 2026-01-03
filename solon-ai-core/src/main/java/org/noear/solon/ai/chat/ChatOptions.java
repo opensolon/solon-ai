@@ -244,21 +244,21 @@ public class ChatOptions {
     }
 
     /**
-     * 常用选项：temperature 采样
+     * 常用选项：温度（输出随机性）
      */
     public ChatOptions temperature(float temperature) {
         return optionAdd(TEMPERATURE, temperature);
     }
 
     /**
-     * 常用选项：top_p 采样
+     * 常用选项：top_p 采样（从累计概率超过p的最小词集中采样）
      */
     public ChatOptions top_p(float top_p) {
         return optionAdd(TOP_P, top_p);
     }
 
     /**
-     * 常用选项：top_k 采样
+     * 常用选项：top_k 采样（只从概率最高的k个词元中采样）
      */
     public ChatOptions top_k(float top_k) {
         return optionAdd(TOP_K, top_k);
