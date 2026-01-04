@@ -20,8 +20,8 @@ public class TeamAgentPersistenceHitlTest {
 
         TeamAgent teamAgent = TeamAgent.of(chatModel)
                 .name(teamId)
-                .addAgent(ReActAgent.of(chatModel).name("worker").title("初稿撰写").description("初稿撰写").build())
-                .addAgent(ReActAgent.of(chatModel).name("approver").title("修辞优化").description("修辞优化").build())
+                .addAgent(ReActAgent.of(chatModel).name("worker").title("初稿撰写").build())
+                .addAgent(ReActAgent.of(chatModel).name("approver").title("修辞优化").build())
                 .interceptor(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
