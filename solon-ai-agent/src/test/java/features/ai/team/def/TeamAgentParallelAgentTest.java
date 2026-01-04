@@ -9,7 +9,6 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.Graph;
 import java.util.stream.Collectors;
 
 /**
@@ -25,39 +24,41 @@ public class TeamAgentParallelAgentTest {
         // 1. 定义翻译专家（ReAct 模式）
         Agent enTranslator = ReActAgent.of(chatModel)
                 .name("en_translator")
-                .promptProvider(p-> "你是负责英语翻译的专家")
+                .promptProvider(p -> "你是负责英语翻译的专家")
                 .description("负责英语翻译的专家").build();
         Agent frTranslator = ReActAgent.of(chatModel)
                 .name("fr_translator")
-                .promptProvider(p-> "你是负责法语翻译的专家")
+                .promptProvider(p -> "你是负责法语翻译的专家")
                 .description("负责法语翻译的专家").build();
 
         // 2. 自定义并行图：实现分发与汇聚
-        Graph parallelGraph = Graph.create(teamId, spec -> {
-            spec.addStart(Agent.ID_START).linkAdd("dispatch_gate");
+        TeamAgent team = TeamAgent.of(null)
+                .name(teamId)
+                .graphAdjuster(spec -> {
+                    spec.addStart(Agent.ID_START).linkAdd("dispatch_gate");
 
-            // 并行分发：同时激活英、法两个 Agent
-            spec.addParallel("dispatch_gate")
-                    .linkAdd(enTranslator.name())
-                    .linkAdd(frTranslator.name());
+                    // 并行分发：同时激活英、法两个 Agent
+                    spec.addParallel("dispatch_gate")
+                            .linkAdd(enTranslator.name())
+                            .linkAdd(frTranslator.name());
 
-            spec.addActivity(enTranslator).linkAdd("aggregate_node");
-            spec.addActivity(frTranslator).linkAdd("aggregate_node");
+                    spec.addActivity(enTranslator).linkAdd("aggregate_node");
+                    spec.addActivity(frTranslator).linkAdd("aggregate_node");
 
-            // 汇聚节点：从协作轨迹中提取各分支产出
-            spec.addParallel("aggregate_node").task((ctx, n) -> {
-                TeamTrace trace = ctx.getAs("__" + teamId);
-                String summary = trace.getSteps().stream()
-                        .map(s -> String.format("[%s]: %s", s.getAgentName(), s.getContent()))
-                        .collect(Collectors.joining("\n"));
-                trace.setFinalAnswer("多语言处理完成：\n" + summary);
-            }).linkAdd(Agent.ID_END);
+                    // 汇聚节点：从协作轨迹中提取各分支产出
+                    spec.addParallel("aggregate_node").task((ctx, n) -> {
+                        TeamTrace trace = ctx.getAs("__" + teamId);
+                        String summary = trace.getSteps().stream()
+                                .map(s -> String.format("[%s]: %s", s.getAgentName(), s.getContent()))
+                                .collect(Collectors.joining("\n"));
+                        trace.setFinalAnswer("多语言处理完成：\n" + summary);
+                    }).linkAdd(Agent.ID_END);
 
-            spec.addEnd(Agent.ID_END);
-        });
+                    spec.addEnd(Agent.ID_END);
+                })
+                .build();
 
-        // 3. 执行任务
-        TeamAgent team = new TeamAgent(parallelGraph, teamId);
+        // 3. 执行
         FlowContext context = FlowContext.of("sn_2025_para_01");
         String result = team.call(context, "你好，世界");
 

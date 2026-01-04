@@ -38,6 +38,10 @@ public class ReActConfig {
      */
     private String name;
     /**
+     * 智能体标题（用于可视化显示）
+     */
+    private String title;
+    /**
      * 智能体职责描述（用于团队协作场景下的角色识别）
      */
     private String description;
@@ -94,6 +98,10 @@ public class ReActConfig {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
     }
 
     public void setDescription(String description) {
@@ -160,6 +168,10 @@ public class ReActConfig {
 
     public String getName() {
         return name;
+    }
+
+    public String getTitle() {
+        return title;
     }
 
     public String getDescription() {

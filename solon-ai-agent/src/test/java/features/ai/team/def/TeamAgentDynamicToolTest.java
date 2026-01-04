@@ -28,27 +28,28 @@ public class TeamAgentDynamicToolTest {
         // 1. 模拟业务环境：判断当前用户是否为 VIP
         boolean isVip = true;
 
-        // 2. 根据权限构建差异化的工具包
-        List<FunctionTool> tools = new ArrayList<>();
-        tools.addAll(new MethodToolProvider(new BasicTravelTool()).getTools()); // 基础工具
-        if (isVip) {
-            tools.addAll(new MethodToolProvider(new VipPrivilegeTool()).getTools()); // 动态注入 VIP 专供工具
-        }
-
-        // 3. 构建 Agent
+        // 2. 构建 Agent
         Agent searcher = ReActAgent.of(chatModel)
                 .name("searcher")
                 .description("差旅搜索专家。请根据你的工具权限为用户提供信息。")
-                .addTool(tools) // 动态注入工具列表
+                .then(slf->{
+                    // 根据权限构建差异化的工具包
+                    slf.addTool(new MethodToolProvider(new BasicTravelTool())); // 基础工具
+                    if (isVip) {
+                        slf.addTool(new MethodToolProvider(new VipPrivilegeTool())); // 动态注入 VIP 专供工具
+                    }
+                })
                 .build();
 
-        TeamAgent vipTeam = TeamAgent.of(chatModel).addAgent(searcher).build();
+        TeamAgent vipTeam = TeamAgent.of(chatModel)
+                .addAgent(searcher)
+                .build();
 
-        // 4. 执行测试
+        // 3. 执行测试
         FlowContext context = FlowContext.of("user_vip_001");
         String result = vipTeam.call(context, "我是尊贵的 VIP，请查一下我在上海机场能用哪个私密休息室？");
 
-        // 5. 单测检测
+        // 4. 单测检测
         System.out.println(">>> [AI 回复]：\n" + result);
 
         if (isVip) {

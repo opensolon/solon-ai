@@ -43,7 +43,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
         spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-            ns.linkAdd(Agent.ID_BIDDING, l -> l.when(ctx -> Agent.ID_BIDDING.equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
+            ns.linkAdd(Agent.ID_BIDDING, l -> l.title("route = " + Agent.ID_BIDDING).when(ctx -> Agent.ID_BIDDING.equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
             linkAgents(config, ns, traceKey);
         }).linkAdd(Agent.ID_END);
 

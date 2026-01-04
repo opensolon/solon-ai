@@ -22,10 +22,14 @@ public class TeamAgentExceptionTest {
 
         Agent throwingAgent = new Agent() {
             @Override
-            public String name() { return "trouble_maker"; }
+            public String name() {
+                return "trouble_maker";
+            }
 
             @Override
-            public String description() { return "总是出问题的Agent"; }
+            public String description() {
+                return "总是出问题的Agent";
+            }
 
             @Override
             public String call(FlowContext context, Prompt prompt) throws Throwable {
@@ -61,14 +65,10 @@ public class TeamAgentExceptionTest {
                 .name("graph_exception_team")
                 .graphAdjuster(spec -> {
                     spec.addStart(Agent.ID_START).linkAdd("problem_node");
-                    spec.addActivity("problem_node")
-                            .task(new TaskComponent() {
-                                @Override
-                                public void run(FlowContext context, org.noear.solon.flow.Node node) throws Throwable {
-                                    throw new IllegalStateException("节点执行异常");
-                                }
-                            })
-                            .linkAdd(Agent.ID_END);
+                    spec.addActivity("problem_node").linkAdd(Agent.ID_END)
+                            .task((c, n) -> {
+                                throw new IllegalStateException("节点执行异常");
+                            });
                     spec.addEnd(Agent.ID_END);
                 })
                 .build();

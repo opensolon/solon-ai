@@ -41,6 +41,7 @@ public class TeamAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(TeamAgent.class);
 
     private final String name;
+    private final String title;
     private final String description;
     private final String traceKey;
 
@@ -48,40 +49,36 @@ public class TeamAgent implements Agent {
     private final Graph graph;
     private final FlowEngine flowEngine;
 
-    public TeamAgent(Graph graph) {
-        this(graph, null);
-    }
 
-    public TeamAgent(Graph graph, String name) {
-        this(graph, name, null);
-    }
-
-    public TeamAgent(Graph graph, String name, String description) {
-        this(graph, name, description, null);
-    }
-
-    public TeamAgent(Graph graph, String name, String description, TeamConfig config) {
-        if (graph == null || graph.getNodes().isEmpty()) {
-            throw new IllegalStateException("Missing graph definition");
-        }
-
-        this.name = (name == null ? "team_agent" : name);
-        this.traceKey = "__" + name; // 用于在 FlowContext 中存储 TeamTrace 的唯一标识
-        this.description = description;
-
-        if (config == null) {
-            config = new TeamConfig(null);
-        }
+    public TeamAgent(TeamConfig config) {
+        Objects.requireNonNull(config, "Missing config!");
 
         this.config = config;
 
-        // 初始化独立的流引擎实例，并注入全局拦截器
-        this.flowEngine = FlowEngine.newInstance(true);
-        this.graph = Objects.requireNonNull(graph);
+        this.name = config.getName();
+        this.title = config.getTitle();
+        this.description = config.getDescription();
 
+        this.traceKey = "__" + name; // 用于在 FlowContext 中存储 TeamTrace 的唯一标识
+        this.flowEngine = FlowEngine.newInstance(true);
+
+        // 1. 挂载流拦截器（用于全局监控或审计）
         if (config != null && config.getInterceptor() != null) {
             flowEngine.addInterceptor(config.getInterceptor());
         }
+
+        // 2. 构建执行计算图
+        this.graph = Graph.create(config.getName(), spec -> {
+            // 1. 根据协议构建基础骨架 (如 Swarm 的 Supervisor 节点)
+            if (config.getChatModel() != null) {
+                config.getProtocol().buildGraph(config, spec);
+            }
+
+            // 2. 应用用户自定义的微调逻辑
+            if (config.getGraphAdjuster() != null) {
+                config.getGraphAdjuster().accept(spec);
+            }
+        });
     }
 
     /**
@@ -103,6 +100,11 @@ public class TeamAgent implements Agent {
     @Override
     public String name() {
         return name;
+    }
+
+    @Override
+    public String title() {
+        return title;
     }
 
     @Override
@@ -177,9 +179,9 @@ public class TeamAgent implements Agent {
     /**
      * 创建基于指定聊天模型的构建器
      *
-     * @param chatModel 用于主管(Supervisor)决策的基础大语言模型
+     * @param chatModel 用于主管(Supervisor)决策的基础大语言模型。如果 null 则为自由模式
      */
-    public static Builder of(ChatModel chatModel) {
+    public static Builder of(@Nullable ChatModel chatModel) {
         return new Builder(chatModel);
     }
 
@@ -189,9 +191,18 @@ public class TeamAgent implements Agent {
     public static class Builder {
         private final TeamConfig config;
 
-        public Builder(ChatModel chatModel) {
+        public Builder(@Nullable ChatModel chatModel) {
             this.config = new TeamConfig(chatModel);
         }
+
+        /**
+         * 然后（构建自己）
+         */
+        public Builder then(Consumer<Builder> consumer) {
+            consumer.accept(this);
+            return this;
+        }
+
 
         /**
          * 设置团队名称
@@ -301,25 +312,7 @@ public class TeamAgent implements Agent {
                 throw new IllegalStateException("The agent or graphBuilder is required");
             }
 
-            return new TeamAgent(createGraph(),
-                    config.getName(),
-                    config.getDescription(),
-                    config);
-        }
-
-        /**
-         * 内部流程图构建逻辑：组合协议定义与用户手动微调
-         */
-        private Graph createGraph() {
-            return Graph.create(config.getName(), spec -> {
-                // 1. 根据协议构建基础骨架 (如 Swarm 的 Supervisor 节点)
-                config.getProtocol().buildGraph(config, spec);
-
-                // 2. 应用用户自定义的微调逻辑
-                if (config.getGraphAdjuster() != null) {
-                    config.getGraphAdjuster().accept(spec);
-                }
-            });
+            return new TeamAgent(config);
         }
     }
 }

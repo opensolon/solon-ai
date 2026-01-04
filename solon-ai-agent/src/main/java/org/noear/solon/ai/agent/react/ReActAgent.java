@@ -30,7 +30,8 @@ import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.List;
+
+import java.util.Collection;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -46,6 +47,7 @@ public class ReActAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
     private final String name;
+    private final String title;
     private final String description;
     private final ReActConfig config;
     private final Graph graph;
@@ -53,11 +55,16 @@ public class ReActAgent implements Agent {
     private final String traceKey;
 
     public ReActAgent(ReActConfig config) {
-        this.name = config.getName();
-        this.description = config.getDescription();
+        Objects.requireNonNull(config, "Missing config!");
+
         this.config = config;
-        this.flowEngine = FlowEngine.newInstance(true);
+
+        this.name = config.getName();
+        this.title = config.getTitle();
+        this.description = config.getDescription();
+
         this.traceKey = "__" + name; // 每个 Agent 实例拥有独立的追踪键
+        this.flowEngine = FlowEngine.newInstance(true);
 
         // 1. 挂载流拦截器（用于全局监控或审计）
         if (config.getInterceptor() != null) {
@@ -70,7 +77,7 @@ public class ReActAgent implements Agent {
 
             // 推理任务节点（Reasoning）：决定下一步是调用工具还是直接回答
             spec.addExclusive(new ReasonTask(config))
-                    .linkAdd(Agent.ID_ACTION, l -> l.when(ctx ->
+                    .linkAdd(Agent.ID_ACTION, l -> l.title("route = " + Agent.ID_ACTION).when(ctx ->
                             Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
                     .linkAdd(Agent.ID_END);
 
@@ -99,6 +106,11 @@ public class ReActAgent implements Agent {
     @Override
     public String name() {
         return name;
+    }
+
+    @Override
+    public String title() {
+        return title;
     }
 
     @Override
@@ -188,10 +200,26 @@ public class ReActAgent implements Agent {
         }
 
         /**
+         * 然后（构建自己）
+         */
+        public Builder then(Consumer<Builder> consumer) {
+            consumer.accept(this);
+            return this;
+        }
+
+        /**
          * 智能体名称
          */
         public Builder name(String val) {
             config.setName(val);
+            return this;
+        }
+
+        /**
+         * 智能体名称
+         */
+        public Builder title(String val) {
+            config.setTitle(val);
             return this;
         }
 
@@ -214,7 +242,7 @@ public class ReActAgent implements Agent {
         /**
          * 批量添加功能工具
          */
-        public Builder addTool(List<FunctionTool> tools) {
+        public Builder addTool(Collection<FunctionTool> tools) {
             config.addTool(tools);
             return this;
         }

@@ -40,7 +40,11 @@ public class TeamConfig {
      */
     private String name;
     /**
-     * 团队职责描述
+     * 团队标题（用于可视化显示）
+     */
+    private String title;
+    /**
+     * 团队职责描述（用于多层团队协作场景下的角色识别）
      */
     private String description;
     /**
@@ -100,6 +104,10 @@ public class TeamConfig {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
     }
 
     public void setDescription(String description) {
@@ -169,6 +177,10 @@ public class TeamConfig {
 
     public String getName() {
         return name;
+    }
+
+    public String getTitle() {
+        return title;
     }
 
     public String getDescription() {

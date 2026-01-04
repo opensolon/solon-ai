@@ -28,10 +28,12 @@ public class TeamAgentHumanInTheLoopTest {
                 .name(teamId)
                 .addAgent(ReActAgent.of(chatModel)
                         .name("planner")
+                        .title("规划")
                         .description("负责生成详细方案")
                         .build())
                 .addAgent(ReActAgent.of(chatModel)
                         .name("confirmer")
+                        .title("审批")
                         .description("负责在审批通过后完成最终确认")
                         .build())
                 .maxTotalIterations(20) // 增加最大迭代次数
@@ -39,19 +41,22 @@ public class TeamAgentHumanInTheLoopTest {
                     // 使用自定义graph覆盖自动管家模式
                     spec.addStart(Agent.ID_START).linkAdd("planner");
 
-                    spec.addActivity("planner").task(ReActAgent.of(chatModel)
+                    spec.addActivity(ReActAgent.of(chatModel)
                                     .name("planner")
+                                    .title("规划")
                                     .description("负责生成详细方案")
                                     .build())
                             .linkAdd("human_audit"); // 执行完 planner 后跳转到人工审核节点
 
                     // 2. 人工审核节点：使用任务组件来模拟挂起
                     spec.addActivity("human_audit")
+                            .title("人工审核")
                             .task(new HumanAuditTask())
                             .linkAdd("confirmer"); // 人工审核后进入confirmer
 
-                    spec.addActivity("confirmer").task(ReActAgent.of(chatModel)
+                    spec.addActivity(ReActAgent.of(chatModel)
                                     .name("confirmer")
+                                    .title("机器审批")
                                     .description("负责在审批通过后完成最终确认")
                                     .build())
                             .linkAdd(Agent.ID_END);
@@ -59,6 +64,14 @@ public class TeamAgentHumanInTheLoopTest {
                     spec.addEnd(Agent.ID_END);
                 })
                 .build();
+
+        String yaml = auditTeam.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
+
+
 
         // --- 阶段 A：AI 自动生成方案并挂起 ---
         FlowContext context = FlowContext.of("order_888");

@@ -30,7 +30,7 @@ import java.util.Locale;
 public abstract class TeamProtocolBase implements TeamProtocol {
     protected void linkAgents(TeamConfig config, NodeSpec ns, String traceKey) {
         for (String agentName : config.getAgentMap().keySet()) {
-            ns.linkAdd(agentName, l -> l.when(ctx ->
+            ns.linkAdd(agentName, l -> l.title("route = " + agentName).when(ctx ->
                     agentName.equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
         }
     }

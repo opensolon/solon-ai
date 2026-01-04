@@ -34,6 +34,7 @@ public class TeamAgentBoundaryTest {
 
         Agent soloAgent = ReActAgent.of(chatModel)
                 .name("solo")
+                .title("独行侠")
                 .description("独行侠")
                 .build();
 
