@@ -36,42 +36,49 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
         ReActConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
-        // 简化角色描述，减少复杂概念
-        sb.append("你是一个解决问题的AI助手。请按照以下格式逐步思考：\n\n");
+        // 1. 角色定义
+        sb.append("## 角色\n")
+                .append("你是一个专业的任务解决助手。你必须使用 ReAct 模式解决问题：")
+                .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
 
-        sb.append("Thought: 简要解释你的思考过程（1-2句话）\n");
+        // 2. 输出格式（吸收旧代码的“分步骤”描述，保留新代码的强约束）
+        sb.append("## 输出格式（必须遵守）\n")
+                .append("Thought: 简要解释你的思考过程（1-2句话）。\n")
+                .append("Action: 如果需要调用工具，请输出唯一的 JSON 对象：{\"name\": \"工具名\", \"arguments\": {...}}。不要使用代码块，不要有额外文本。\n")
+                .append("Final Answer: 任务完成后，以 ").append(config.getFinishMarker()).append(" 开头给出回答。\n\n");
 
-        if (!config.getTools().isEmpty()) {
-            sb.append("Action: 如果需要调用工具，请输出唯一的 JSON 对象：{\"name\": \"工具名\", \"arguments\": {...}}\n");
-            sb.append("   - 示例: {\"name\": \"get_order\", \"arguments\": {\"id\": \"123\"}}\n");
+
+        // 3. 最终答案要求（吸收旧代码的 5 点核心约束，这是单测通过的关键）
+        sb.append("## 最终答案要求\n")
+                .append("1. 当你获得结论或信息已足够时，必须给出最终答案。\n")
+                .append("2. 最终答案**必须**以 ").append(config.getFinishMarker()).append(" 开头。\n")
+                .append("3. 在 ").append(config.getFinishMarker()).append(" 之后直接提供完整回答，不要换行，不要输出 Thought/Action/Observation 标签。\n")
+                .append("4. 即使不知道答案，也请诚实说明并以 ").append(config.getFinishMarker()).append(" 开头。\n\n");
+
+        // 3. 核心规则 (决定生存率)
+        sb.append("## 核心规则\n")
+                .append("1. 每次仅输出一个 Action，输出后立即停止等待 Observation。\n")
+                .append("2. 严禁伪造 Observation，严禁调用‘可用工具’之外的工具。\n")
+                .append("3. 最终回答必须以 ").append(config.getFinishMarker()).append(" 开头，否则系统无法识别任务完成。\n")
+                .append("4. 如果多次尝试后信息仍不足，请提供包含 ").append(config.getFinishMarker()).append(" 的最佳回答。\n\n");
+
+
+        // 4. 示例（保留新代码的 Few-shot，微调话术）
+        sb.append("## 示例\n")
+                .append("用户: 北京天气怎么样？\n")
+                .append("Thought: 我需要查询北京当前的实时天气信息。\n")
+                .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"北京\"}}\n")
+                .append("Observation: 25°C，晴间多云。\n")
+                .append("Thought: 根据观察结果，北京天气良好。\n") // 增加这一行，引导模型在观察后继续思考
+                .append("Final Answer: ").append(config.getFinishMarker()).append("北京目前天气晴间多云，气温约 25°C。\n\n");
+
+        // 5. 工具列表
+        if (config.getTools().isEmpty()) {
+            sb.append("注意：当前没有可用工具。请直接给出 Final Answer。\n");
         } else {
-            // 关键修复：明确告诉Agent必须输出完成标记
-            sb.append("Action: 【重要】没有可用工具。你必须直接输出最终答案。\n");
-            sb.append("   格式要求：首先输出 ").append(config.getFinishMarker()).append("，然后是你的答案\n");
-            sb.append("   示例：").append(config.getFinishMarker()).append(" 这里是完整的答案内容...\n");
-        }
-
-        sb.append("Observation: 系统将提供反馈（不要自己写这个部分）\n\n");
-
-        // 强化最终答案要求
-        sb.append("### 最终答案要求（必须遵守）：\n");
-        sb.append("1. 当你准备好给出最终答案时，必须以 ").append(config.getFinishMarker()).append(" 开头\n");
-        sb.append("2. ").append(config.getFinishMarker()).append(" 后直接跟你的完整答案，不要换行\n");
-        sb.append("3. 答案要完整、详细，直接回应用户的问题\n");
-        sb.append("4. 不要输出 Thought/Action/Observation 标签\n");
-        sb.append("5. 不要输出空的回答\n\n");
-
-        // 针对常见问题的特别指导
-        sb.append("### 常见问题指导：\n");
-        sb.append("- 如果用户询问旅行规划（如拉萨行程），答案必须包含目的地名称\n");
-        sb.append("- 如果用户询问性能测试，提供具体的测试方法和建议\n");
-        sb.append("- 如果用户询问技术问题，提供详细的技术解答\n");
-        sb.append("- 如果不知道答案，诚实说明，但仍以 ").append(config.getFinishMarker()).append(" 开头\n");
-
-        // 简化工具列表显示
-        if (!config.getTools().isEmpty()) {
-            sb.append("\n可用工具：\n");
-            config.getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ").append(t.description()).append("\n"));
+            sb.append("## 可用工具\n");
+            config.getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ")
+                    .append(t.description()).append("\n"));
         }
 
         return sb.toString();

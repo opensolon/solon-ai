@@ -36,42 +36,47 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
         ReActConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
-        // Simplified role description
-        sb.append("You are an AI assistant solving problems. Follow this format step by step:\n\n");
+        // 1. Role
+        sb.append("## Role\n")
+                .append("You are a professional Task Solver. You must solve the problem using the ReAct pattern: ")
+                .append("Thought -> Action -> Observation.\n\n");
 
-        sb.append("Thought: Briefly explain your reasoning (1-2 sentences)\n");
+        // 2. Output Format
+        sb.append("## Output Format (Strictly Follow)\n")
+                .append("Thought: Briefly explain your reasoning (1-2 sentences).\n")
+                .append("Action: To use a tool, output ONLY a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown, no extra text.\n")
+                .append("Final Answer: Once the task is finished, start with ").append(config.getFinishMarker()).append(" followed by the answer.\n\n");
 
-        if (!config.getTools().isEmpty()) {
-            sb.append("Action: To use a tool, output a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}\n");
-            sb.append("   - Example: {\"name\": \"get_order\", \"arguments\": {\"id\": \"123\"}}\n");
+        // 3. Final Answer Requirements
+        sb.append("## Final Answer Requirements\n")
+                .append("1. When the task is complete, you MUST provide the final answer.\n")
+                .append("2. The final answer MUST start with ").append(config.getFinishMarker()).append(".\n")
+                .append("3. Directly provide your complete answer after ").append(config.getFinishMarker()).append(" without line breaks or tags.\n")
+                .append("4. Do not output empty responses.\n\n");
+
+        // 5. Core Rules (细节：防御性指令)
+        sb.append("## Core Rules\n")
+                .append("1. Only use tools from the 'Available Tools' list.\n")
+                .append("2. Output ONLY one Action and STOP immediately to wait for Observation.\n")
+                .append("3. Every Final Answer MUST start with ").append(config.getFinishMarker()).append(" to signal completion.\n")
+                .append("4. If information is insufficient after multiple attempts, provide the best answer starting with ").append(config.getFinishMarker()).append(".\n\n");
+
+        // 4. Few-shot Example
+        sb.append("## Example\n")
+                .append("User: What is the weather in Paris?\n")
+                .append("Thought: I need to check the current weather for Paris.\n")
+                .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"Paris\"}}\n")
+                .append("Observation: 18°C, Sunny.\n")
+                .append("Thought: I have obtained the weather information.\n") // Guides the model to conclude after observation
+                .append("Final Answer: ").append(config.getFinishMarker()).append("The weather in Paris is 18°C and sunny.\n\n");
+
+        // 5. Tools List
+        if (config.getTools().isEmpty()) {
+            sb.append("Note: No tools available. Provide the Final Answer directly.\n");
         } else {
-            // Critical fix: Explicitly tell Agent MUST output finish marker
-            sb.append("Action: 【IMPORTANT】No tools available. You MUST output the final answer directly.\n");
-            sb.append("   Format requirement: Start with ").append(config.getFinishMarker()).append(", then your answer\n");
-            sb.append("   Example: ").append(config.getFinishMarker()).append(" Here is the complete answer...\n");
-        }
-
-        sb.append("Observation: System will provide feedback (do NOT write this yourself)\n\n");
-
-        // Strengthen final answer requirements
-        sb.append("### Final Answer Requirements (MUST FOLLOW):\n");
-        sb.append("1. When ready to give final answer, MUST start with ").append(config.getFinishMarker()).append("\n");
-        sb.append("2. After ").append(config.getFinishMarker()).append(" directly provide your complete answer, no line break\n");
-        sb.append("3. Answer must be complete, detailed, directly addressing user's question\n");
-        sb.append("4. Do NOT output Thought/Action/Observation tags\n");
-        sb.append("5. Do NOT output empty responses\n\n");
-
-        // Guidance for common questions
-        sb.append("### Common Question Guidance:\n");
-        sb.append("- If user asks about travel planning (e.g., Lhasa itinerary), answer MUST contain destination name\n");
-        sb.append("- If user asks about performance testing, provide specific testing methods and suggestions\n");
-        sb.append("- If user asks technical questions, provide detailed technical explanations\n");
-        sb.append("- If don't know answer, honestly say so, but still start with ").append(config.getFinishMarker()).append("\n");
-
-        // Simplify tool list display
-        if (!config.getTools().isEmpty()) {
-            sb.append("\nAvailable Tools:\n");
-            config.getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ").append(t.description()).append("\n"));
+            sb.append("## Available Tools\n");
+            config.getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ")
+                    .append(t.description()).append("\n"));
         }
 
         return sb.toString();
