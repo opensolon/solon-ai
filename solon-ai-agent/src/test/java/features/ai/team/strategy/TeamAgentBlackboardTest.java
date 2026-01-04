@@ -40,6 +40,12 @@ public class TeamAgentBlackboardTest {
                 .addAgent(apiDesigner)
                 .build();
 
+        String yaml = team.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
+
         FlowContext context = FlowContext.of("test_blackboard");
         // 任务涵盖两个领域，观察 Mediator 如何依次分派
         String result = team.call(context, "请为我的电商系统设计用户模块的数据库和配套接口。");

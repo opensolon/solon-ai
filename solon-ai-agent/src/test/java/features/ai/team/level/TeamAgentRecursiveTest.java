@@ -36,6 +36,12 @@ public class TeamAgentRecursiveTest {
                 .maxTotalIterations(5)
                 .build();
 
+        String yaml = projectTeam.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
+
         FlowContext context = FlowContext.of("sn_2026");
 
         log.info(">>> 开始测试...");

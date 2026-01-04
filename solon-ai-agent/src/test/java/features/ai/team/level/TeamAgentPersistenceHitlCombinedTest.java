@@ -46,6 +46,13 @@ public class TeamAgentPersistenceHitlCombinedTest {
                 })
                 .build();
 
+        String yaml = projectTeam.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
+
+
         // --- 1. 第一阶段：运行并被拦截 ---
         FlowContext context1 = FlowContext.of("c_001");
         projectTeam.call(context1, "处理重要单据");

@@ -39,6 +39,12 @@ public class TeamAgentSwarmTest {
                 .addAgent(polisher)
                 .build();
 
+        String yaml = team.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
+
         FlowContext context = FlowContext.of("test_swarm");
         String result = team.call(context, "你好，很高兴认识你");
 

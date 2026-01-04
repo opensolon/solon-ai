@@ -34,6 +34,12 @@ public class TeamAgentNestedPersistenceTest {
                 .addAgent(reviewer)
                 .build();
 
+        String yaml = projectTeam.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
+
         // 阶段 1：构建快照并持久化
         FlowContext context1 = FlowContext.of("p_job_1");
         TeamTrace devTrace = new TeamTrace();

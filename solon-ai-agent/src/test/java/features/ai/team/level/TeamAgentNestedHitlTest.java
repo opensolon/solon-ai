@@ -51,6 +51,14 @@ public class TeamAgentNestedHitlTest {
                 })
                 .build();
 
+
+        String yaml = projectTeam.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
+
+
         FlowContext context = FlowContext.of("hitl_job");
 
         // 第一次调用：执行完 dev_team 后在 Supervisor 处被拦截

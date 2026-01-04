@@ -39,6 +39,12 @@ public class TeamAgentMarketTest {
                 .addAgent(javaExpert)
                 .build();
 
+        String yaml = team.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
+
         FlowContext context = FlowContext.of("test_market");
         // 发起一个明显属于 Java 领域的高并发需求
         String result = team.call(context, "我需要实现一个支持每秒万级并发的支付结算网关后端。");

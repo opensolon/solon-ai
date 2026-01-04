@@ -39,6 +39,12 @@ public class TeamAgentSupervisorTest {
                 .maxTotalIterations(10)
                 .build();
 
+        String yaml = team.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
+
         FlowContext context = FlowContext.of("test_decision");
         String result = team.call(context, "分析一下最近的市场趋势");
 
