@@ -1,0 +1,47 @@
+@startuml
+autonumber
+skinparam shadowing false
+
+actor User
+participant ReActAgent
+participant FlowEngine
+participant "ReasonTask\n(大脑)" as Reason
+database "ReActTrace\n(状态/记忆)" as Trace
+participant "ChatModel\n(LLM)" as LLM
+participant "ActionTask\n(双手)" as Action
+participant "FunctionTool\n(外部工具)" as Tool
+
+User -> ReActAgent : call(prompt)
+activate ReActAgent
+
+ReActAgent -> Trace : 初始化/获取 Trace
+ReActAgent -> FlowEngine : eval(graph, context)
+activate FlowEngine
+
+loop 当 route != "end" 且未超步数
+    FlowEngine -> Reason : run()
+    activate Reason
+    Reason -> Trace : 获取消息历史
+    Reason -> LLM : prompt(messages)
+    LLM --> Reason : 返回推理结果 (Action 或 Answer)
+    Reason -> Trace : 更新 route & 记录 Thought
+    deactivate Reason
+
+    alt 路由为 ACTION
+        FlowEngine -> Action : run()
+        activate Action
+        Action -> Tool : execute(args)
+        Tool --> Action : 返回结果 (Result)
+        Action -> Trace : 注入 Observation 消息
+        deactivate Action
+    end
+end
+
+FlowEngine --> ReActAgent : 执行流结束
+deactivate FlowEngine
+
+ReActAgent -> Trace : 提取 finalAnswer
+ReActAgent --> User : 返回最终答案
+deactivate ReActAgent
+
+@enduml

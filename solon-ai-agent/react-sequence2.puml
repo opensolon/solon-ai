@@ -1,0 +1,36 @@
+@startuml
+' IDEA 完美支持，无需 Graphviz
+skinparam shadowing false
+skinparam style strictuml
+
+actor "User" as user
+participant "ReActAgent" as agent
+participant "ReasonTask\n(决策)" as reason
+participant "ActionTask\n(执行)" as action
+database "Trace\n(记忆)" as trace
+
+user -> agent : call(prompt)
+agent -> trace : 初始化上下文
+
+loop 当 route != ID_END
+    agent -> reason : eval()
+    activate reason
+    reason -> reason : 步数检查
+    reason --> trace : 记录 Thought
+
+    alt 判定为 Action
+        reason --> agent : route = ID_ACTION
+        deactivate reason
+        agent -> action : eval()
+        activate action
+        action -> action : 执行工具
+        action --> trace : 记录 Observation
+        action --> agent : route = ID_REASON
+        deactivate action
+    else 判定为 Final Answer
+        reason --> agent : route = ID_END
+    end
+end
+
+agent --> user : 返回最终答案
+@enduml
