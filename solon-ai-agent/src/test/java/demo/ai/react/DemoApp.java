@@ -1,6 +1,5 @@
 package demo.ai.react;
 
-import demo.ai.agent.LlmUtil;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -12,7 +11,10 @@ import java.time.LocalDateTime;
 
 public class DemoApp {
     public static void main(String[] args) throws Throwable {
-        ChatModel chatModel = LlmUtil.getChatModel();
+        ChatModel chatModel = ChatModel.of("https://ai.gitee.com/v1/chat/completions")
+                .apiKey("***")
+                .model("Qwen3-32B")
+                .build();
 
         Agent robot = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new TimeTool()))
