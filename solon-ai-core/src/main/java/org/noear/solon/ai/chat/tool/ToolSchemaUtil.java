@@ -68,7 +68,7 @@ public class ToolSchemaUtil {
                 }
             }
 
-            return new ONodeAttrHolder(name, null, anno.description(), anno.required());
+            return new ONodeAttrHolder(name, null, anno.description(), anno.required(), ae);
         });
 
         bodyDetectors.add(new BodyAnnoDetector());
