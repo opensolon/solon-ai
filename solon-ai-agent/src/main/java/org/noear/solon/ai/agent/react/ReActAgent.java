@@ -315,7 +315,11 @@ public class ReActAgent implements Agent {
             }
 
             if (config.getDescription() == null) {
-                config.setDescription(config.getName());
+                if (config.getTitle() != null) {
+                    config.setDescription(config.getTitle());
+                } else {
+                    config.setDescription(config.getName());
+                }
             }
 
             return new ReActAgent(config);

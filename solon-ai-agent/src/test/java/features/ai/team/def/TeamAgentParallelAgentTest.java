@@ -24,12 +24,17 @@ public class TeamAgentParallelAgentTest {
         // 1. 定义翻译专家（ReAct 模式）
         Agent enTranslator = ReActAgent.of(chatModel)
                 .name("en_translator")
+                .title("英语翻译")
                 .promptProvider(p -> "你是负责英语翻译的专家")
-                .description("负责英语翻译的专家").build();
+                .description("负责英语翻译的专家")
+                .build();
+
         Agent frTranslator = ReActAgent.of(chatModel)
                 .name("fr_translator")
+                .title("法语翻译")
                 .promptProvider(p -> "你是负责法语翻译的专家")
-                .description("负责法语翻译的专家").build();
+                .description("负责法语翻译的专家")
+                .build();
 
         // 2. 自定义并行图：实现分发与汇聚
         TeamAgent team = TeamAgent.of(null)
@@ -38,7 +43,7 @@ public class TeamAgentParallelAgentTest {
                     spec.addStart(Agent.ID_START).linkAdd("dispatch_gate");
 
                     // 并行分发：同时激活英、法两个 Agent
-                    spec.addParallel("dispatch_gate")
+                    spec.addParallel("dispatch_gate").title("并行")
                             .linkAdd(enTranslator.name())
                             .linkAdd(frTranslator.name());
 
@@ -46,7 +51,7 @@ public class TeamAgentParallelAgentTest {
                     spec.addActivity(frTranslator).linkAdd("aggregate_node");
 
                     // 汇聚节点：从协作轨迹中提取各分支产出
-                    spec.addParallel("aggregate_node").task((ctx, n) -> {
+                    spec.addParallel("aggregate_node").title("汇聚").task((ctx, n) -> {
                         TeamTrace trace = ctx.getAs("__" + teamId);
                         String summary = trace.getSteps().stream()
                                 .map(s -> String.format("[%s]: %s", s.getAgentName(), s.getContent()))
@@ -57,6 +62,12 @@ public class TeamAgentParallelAgentTest {
                     spec.addEnd(Agent.ID_END);
                 })
                 .build();
+
+        String yaml = team.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
 
         // 3. 执行
         FlowContext context = FlowContext.of("sn_2025_para_01");

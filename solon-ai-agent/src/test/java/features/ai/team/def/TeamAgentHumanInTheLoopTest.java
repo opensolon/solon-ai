@@ -38,6 +38,9 @@ public class TeamAgentHumanInTheLoopTest {
                         .build())
                 .maxTotalIterations(20) // 增加最大迭代次数
                 .graphAdjuster(spec -> {
+                    // 移除默认的管家模式
+                    spec.removeNode(Agent.ID_SUPERVISOR);
+
                     // 使用自定义graph覆盖自动管家模式
                     spec.addStart(Agent.ID_START).linkAdd("planner");
 

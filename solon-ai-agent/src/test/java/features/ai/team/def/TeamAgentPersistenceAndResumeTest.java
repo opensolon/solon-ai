@@ -26,16 +26,25 @@ public class TeamAgentPersistenceAndResumeTest {
                 .name(teamId)
                 .addAgent(ReActAgent.of(chatModel)
                         .name("planner")
+                        .title("行程规划")
                         .description("资深行程规划专家")
                         .build())
                 .graphAdjuster(spec -> {
                     spec.addStart(Agent.ID_START).linkAdd("searcher");
                     spec.addActivity(ReActAgent.of(chatModel)
                                     .name("searcher")
+                                    .title("天气搜索")
                                     .description("天气搜索员")
                                     .build())
                             .linkAdd(Agent.ID_SUPERVISOR);
                 }).build();
+
+        String yaml = tripAgent.getGraph().toYaml();
+
+        System.out.println("------------------\n\n");
+        System.out.println(yaml);
+        System.out.println("\n\n------------------");
+
 
         // 1. 【模拟第一阶段：挂起】执行了搜索，状态存入 DB
         FlowContext contextStep1 = FlowContext.of("order_sn_998");

@@ -304,7 +304,11 @@ public class TeamAgent implements Agent {
             }
 
             if (config.getDescription() == null) {
-                config.setDescription(config.getName());
+                if (config.getTitle() != null) {
+                    config.setDescription(config.getTitle());
+                } else {
+                    config.setDescription(config.getName());
+                }
             }
 
             // 基础合法性校验：必须有成员或显式的图构建逻辑
