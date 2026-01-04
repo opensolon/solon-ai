@@ -76,11 +76,11 @@ public class SwarmProtocol extends TeamProtocolBase {
     @Override
     public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-            sb.append("- 你是动态路由器。Agent 之间是平等的接力关系。\n");
-            sb.append("- 根据上一个 Agent 的结果，判断谁最适合处理下一棒。");
+            sb.append("1. **动态路由**：Agent 之间是平等的接力关系。你负责判断“下一棒”交给谁。\n");
+            sb.append("2. **因势利导**：根据前一个 Agent 的结果，灵活选择最适合处理当前状态的专家。");
         } else {
-            sb.append("- You are a Dynamic Router. Agents operate in peer-to-peer relay fashion.\n");
-            sb.append("- Based on previous Agent's result, determine who is best for the next 'baton'.");
+            sb.append("1. **Dynamic Routing**: Agents operate in a peer-to-peer relay. You decide who holds the 'next baton'.\n");
+            sb.append("2. **Adaptive Logic**: Select the next expert based on the immediate output of the previous Agent.");
         }
     }
 }

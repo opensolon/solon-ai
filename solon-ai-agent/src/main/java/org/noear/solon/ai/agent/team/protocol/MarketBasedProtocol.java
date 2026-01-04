@@ -33,11 +33,11 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     @Override
     public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-            sb.append("- 每个人都是独立供应商。考虑效率和专业度。\n");
-            sb.append("- 选择能够以最低步数、最高质量解决问题的 Agent。");
+            sb.append("1. **竞标视角**：将所有 Agent 视为独立的服务提供商，评估其针对当前任务的专业契合度。\n");
+            sb.append("2. **效能最优**：优先指派能够以最高质量、最少轮次完成任务的“性价比”最高的专家。");
         } else {
-            sb.append("- Every agent is an independent service provider. Consider efficiency and expertise.\n");
-            sb.append("- Select the Agent who can resolve the issue with fewest steps and highest quality.");
+            sb.append("1. **Competitive Bidding**: Treat all Agents as independent service providers and assess their professional fit for the current task.\n");
+            sb.append("2. **Efficiency First**: Select the most 'cost-effective' expert who can deliver the highest quality with minimal iterations.");
         }
     }
 }

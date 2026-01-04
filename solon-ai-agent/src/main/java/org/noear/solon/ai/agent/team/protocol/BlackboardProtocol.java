@@ -33,11 +33,11 @@ public class BlackboardProtocol extends HierarchicalProtocol {
     @Override
     public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-            sb.append("- 历史记录是公共黑板。检查黑板上哪些信息缺失。\n");
-            sb.append("- 指派能填补空白或修正错误的 Agent。");
+            sb.append("1. **黑板机制**：历史记录即公共黑板，请检查哪些信息缺失或需要修正。\n");
+            sb.append("2. **按需补位**：指派能填补空白或纠正错误的 Agent 执行。");
         } else {
-            sb.append("- History is a public Blackboard. Check for missing information on the board.\n");
-            sb.append("- Assign an Agent who can fill gaps or correct errors.");
+            sb.append("1. **Blackboard Mechanism**: History is a public board; check for missing or incorrect info.\n");
+            sb.append("2. **Gap Filling**: Assign the Agent best suited to fill gaps or correct errors.");
         }
     }
 }

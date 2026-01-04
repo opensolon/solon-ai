@@ -58,11 +58,11 @@ public class ContractNetProtocol extends TeamProtocolBase {
     @Override
     public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-            sb.append("- 遵循'招标-定标'流程。如果需要多个方案，先输出 'BIDDING' 启动招标。\n");
-            sb.append("- 收到标书后，对比方案优劣，选出一人执行。");
+            sb.append("1. **流程规范**：遵循'招标-定标'流程。若需多个方案对比，请先输出 `BIDDING` 启动招标。\n");
+            sb.append("2. **择优录取**：收到标书后，对比方案优劣，选出最合适的 Agent 执行。");
         } else {
-            sb.append("- Follow 'Bidding-Awarding' protocol. If multiple approaches needed, output 'BIDDING' first.\n");
-            sb.append("- After receiving bids, compare approaches and select one winner to execute.");
+            sb.append("1. **Workflow**: Follow 'Bidding-Awarding' protocol. Output `BIDDING` first if multiple approaches are needed.\n");
+            sb.append("2. **Evaluation**: Compare bids and select the winner based on quality and expertise.");
         }
     }
 

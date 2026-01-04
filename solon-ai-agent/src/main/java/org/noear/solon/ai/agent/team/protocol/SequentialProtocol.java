@@ -38,11 +38,11 @@ public class SequentialProtocol extends HierarchicalProtocol {
     @Override
     public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-            sb.append("- 协作协议：顺序流水线模式。\n");
-            sb.append("- 系统将按照成员定义的先后顺序依次指派任务。执行完所有专家后即结束。");
+            sb.append("1. **严谨接力**：任务必须按预设的 Agent 顺序执行，严禁跳步或逆向指派。\n");
+            sb.append("2. **单向推进**：每一步只需确认当前 Agent 完成产出，并指派列表中的下一位成员。");
         } else {
-            sb.append("- Collaboration Protocol: Sequential Pipeline Mode.\n");
-            sb.append("- Tasks are assigned in the predefined order. Ends after all experts have executed.");
+            sb.append("1. **Strict Relay**: Tasks MUST follow the predefined Agent sequence. No skipping or backtracking.\n");
+            sb.append("2. **Forward Progression**: Confirm the current output and assign the NEXT member in the predefined list.");
         }
     }
 

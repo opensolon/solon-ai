@@ -60,11 +60,11 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     @Override
     public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-            sb.append("- 你是最高指挥官。将任务拆解为步骤，并按顺序指派最合适的 Agent。\n");
-            sb.append("- 监督每个成员的产出是否符合预期。");
+            sb.append("1. **指挥调度**：你是最高指挥官。请将任务拆解为具体步骤，并按序指派 Agent。\n");
+            sb.append("2. **质量把控**：监督每个成员的产出，确保其符合整体任务需求。");
         } else {
-            sb.append("- You are the Lead Supervisor. Decompose the task into steps and assign suitable Agents.\n");
-            sb.append("- Review each member's output to ensure it meets requirements.");
+            sb.append("1. **Command & Control**: You are the Lead Supervisor. Decompose the task and assign Agents sequentially.\n");
+            sb.append("2. **Quality Assurance**: Review each output to ensure it aligns with the project goal.");
         }
     }
 }
