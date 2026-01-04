@@ -53,9 +53,9 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
 
         // 4. Output Specification: Strict constraints on response format
         sb.append("\n## Output Specification\n");
-        sb.append("1. **Progress Analysis**: Evaluate current progress and determine the next logical step.\n");
+        sb.append("1. **Progress Analysis**: Evaluate current progress and decide the next step.\n");
         sb.append("2. **Termination**: If the task is finished, output: ").append(config.getFinishMarker())
-                .append(" followed by the **complete and verbatim** result from the last executive Agent. DO NOT summarize or paraphrase.\n");
+                .append(" followed by the final result (the content or approval from the last executive Agent).\n");
         sb.append("3. **Routing**: Otherwise, output **ONLY** the name of the next Agent to execute with no extra text.\n");
 
         // 5. History Analysis Logic

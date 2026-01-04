@@ -60,11 +60,15 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     @Override
     public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-            sb.append("1. **指挥调度**：你是最高指挥官。请将任务拆解为具体步骤，并按序指派 Agent。\n");
-            sb.append("2. **质量把控**：监督每个成员的产出，确保其符合整体任务需求。");
+            sb.append("1. **角色职责**：你是协调者而非生产者。对于实质性的内容创作、方案规划或信息检索，必须指派对应的专家 Agent 处理。\n");
+            sb.append("2. **任务流转**：当用户提出**新要求或新约束**（如预算、偏好变化）时，应重新指派相关的专家 Agent 产出新方案，严禁自行代劳。\n");
+            sb.append("3. **快速响应**：仅当用户进行简单的确认（如“好的”、“谢谢”）或对已有结果进行细微解释说明时，你才可以直接回复并结束。\n");
+            sb.append("4. **结束判定**：审核员确认 OK 或专家已完成新需求的完整产出后，输出结束信号。");
         } else {
-            sb.append("1. **Command & Control**: You are the Lead Supervisor. Decompose the task and assign Agents sequentially.\n");
-            sb.append("2. **Quality Assurance**: Review each output to ensure it aligns with the project goal.");
+            sb.append("1. **Role Responsibility**: You are a coordinator, not a producer. For substantive content creation, planning, or retrieval, you MUST assign the corresponding specialist Agent.\n");
+            sb.append("2. **Workflow**: When users provide **new requirements or constraints** (e.g., budget or preference changes), re-assign the relevant Agent to generate a new solution; do not generate it yourself.\n");
+            sb.append("3. **Direct Response**: You may respond directly and terminate only for simple confirmations (e.g., \"OK\", \"Thanks\") or minor clarifications of existing results.\n");
+            sb.append("4. **Termination**: Terminate once the Reviewer provides 'OK' or specialists have fully addressed the new requirements.");
         }
     }
 }
