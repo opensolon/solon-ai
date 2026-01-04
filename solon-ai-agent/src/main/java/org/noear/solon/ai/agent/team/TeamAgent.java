@@ -131,10 +131,10 @@ public class TeamAgent implements Agent {
             context.trace().recordNode(graph, null);
 
             trace.setPrompt(prompt);
-            trace.resetIterations();
+            trace.resetIterationsCount();
         } else {
             prompt = trace.getPrompt();
-            trace.resetIterations();
+            trace.resetIterationsCount();
         }
 
         Objects.requireNonNull(prompt, "Missing prompt!");

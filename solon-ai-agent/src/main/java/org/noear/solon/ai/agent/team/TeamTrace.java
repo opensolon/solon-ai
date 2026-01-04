@@ -81,7 +81,7 @@ public class TeamTrace {
         return iterations.get();
     }
 
-    public void resetIterations() {
+    public void resetIterationsCount() {
         iterations.set(0);
     }
 
