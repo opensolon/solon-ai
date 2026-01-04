@@ -131,16 +131,24 @@ public class ReActTrace {
 
 
     public synchronized void appendMessage(ChatMessage message) {
-        if (message == null) return;
+        if (message == null) {
+            return;
+        }
+
         messages.add(message);
 
-        if (messages.size() > 20) {
+        //动态压缩
+        int maxHistory = (config != null) ? config.getMaxSteps() * 3 : 20;
+        if (messages.size() > maxHistory) {
             compact();
         }
     }
 
     public synchronized void appendMessage(Prompt prompt) {
-        if (prompt == null) return;
+        if (prompt == null) {
+            return;
+        }
+
         for (ChatMessage m1 : prompt.getMessages()) {
             appendMessage(m1);
         }
@@ -220,7 +228,7 @@ public class ReActTrace {
         // 6. 添加压缩提示
         if (compressedCount > 0) {
             compressed.add(ChatMessage.ofSystem(
-                    String.format("[Context trimmed: %d messages]", compressedCount)));
+                    String.format("[Historical context trimmed: %d messages]", compressedCount)));
         }
 
         // 7. 合并
