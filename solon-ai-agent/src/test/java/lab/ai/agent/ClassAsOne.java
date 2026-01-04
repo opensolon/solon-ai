@@ -15,9 +15,9 @@ public class ClassAsOne {
 
 //        print("/solon-ai-agent/src/test/java/features/ai/team");
 
-//        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/team");
+        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/team");
 
-        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/react");
+//        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/react");
     }
 
     public static void print(String dir) throws IOException {
@@ -30,6 +30,13 @@ public class ClassAsOne {
                         try {
                             System.out.println("// file: " + path.getFileName());
                             String classCode = new String(Files.readAllBytes(path));
+
+                            if(classCode.startsWith("/*")){
+                                //去掉类头注释
+                               int idx = classCode.indexOf(" */");
+                                classCode = classCode.substring(idx + 3).trim();
+                            }
+
                             System.out.println(classCode);
                             System.out.println("\n\n");
                         } catch (IOException e) {
