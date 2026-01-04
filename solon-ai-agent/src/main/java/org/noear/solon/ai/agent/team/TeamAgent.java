@@ -116,10 +116,6 @@ public class TeamAgent implements Agent {
      */
     @Override
     public String call(FlowContext context, Prompt prompt) throws Throwable {
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamAgent [{}] starting: {}", this.name, prompt.getUserContent());
-        }
-
         // [阶段1：状态初始化] 尝试复用或创建新的执行追踪实例
         TeamTrace trace = context.getAs(traceKey);
 
@@ -137,7 +133,14 @@ public class TeamAgent implements Agent {
             trace.setPrompt(prompt);
             trace.resetIterations();
         } else {
+            prompt = trace.getPrompt();
             trace.resetIterations();
+        }
+
+        Objects.requireNonNull(prompt, "Missing prompt!");
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("TeamAgent [{}] starting: {}", this.name, prompt.getUserContent());
         }
 
         try {

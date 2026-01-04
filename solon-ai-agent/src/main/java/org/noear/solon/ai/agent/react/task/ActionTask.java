@@ -81,37 +81,50 @@ public class ActionTask implements NamedTaskComponent {
         ChatMessage lastMessage = trace.getLastMessage();
 
         // --- 策略 A: 处理原生工具调用 (Native Tool Calls) ---
-        // 适用于支持 OpenAI 工具调用格式的模型（如 GPT-4, Claude 3, DeepSeek 等）
         if (lastMessage instanceof AssistantMessage) {
             AssistantMessage lastAssistant = (AssistantMessage) lastMessage;
             if (Assert.isNotEmpty(lastAssistant.getToolCalls())) {
                 for (ToolCall call : lastAssistant.getToolCalls()) {
-                    // 生命周期拦截：工具执行前
-                    if (config.getInterceptor() != null) {
-                        config.getInterceptor().onAction(trace, call.name(), call.arguments());
-                    }
-
-                    Map<String, Object> args = (call.arguments() == null) ? Collections.emptyMap() : call.arguments();
-
-                    // 执行业务逻辑
-                    String result = executeTool(call.name(), args);
-
-                    // 生命周期拦截：反馈观测结果
-                    if (config.getInterceptor() != null) {
-                        config.getInterceptor().onObservation(trace, result);
-                    }
-
-                    // 协议对齐：追加 Tool 类型消息，必须携带 call_id 以保持对话上下文一致性
-                    trace.appendMessage(ChatMessage.ofTool(result, call.name(), call.id()));
+                    processNativeToolCall(trace, call);
                 }
                 return; // 原生模式处理完毕
             }
         }
 
         // --- 策略 B: 处理文本 ReAct 格式 (ReAct Text Mode) ---
+        processTextModeAction(trace);
+    }
+
+    /**
+     * 处理原生协议工具调用
+     */
+    private void processNativeToolCall(ReActTrace trace, ToolCall call) throws Throwable {
+        // 生命周期拦截：工具执行前
+        if (config.getInterceptor() != null) {
+            config.getInterceptor().onAction(trace, call.name(), call.arguments());
+        }
+
+        Map<String, Object> args = (call.arguments() == null) ? Collections.emptyMap() : call.arguments();
+
+        // 执行工具并捕获异常反馈
+        String result = executeTool(call.name(), args);
+
+        // 生命周期拦截：工具执行之后
+        if (config.getInterceptor() != null) {
+            config.getInterceptor().onObservation(trace, result);
+        }
+
+        // 将 Observation 反馈给模型，作为逻辑闭环
+        trace.appendMessage(ChatMessage.ofTool(result, call.name(), call.id()));
+    }
+
+    /**
+     * 处理文本模式下的 Action 解析与执行
+     */
+    private void processTextModeAction(ReActTrace trace) throws Throwable {
         // 适用于不支持 ToolCall 协议但能遵循 ReAct 提示词规范的小模型或特定场景
         String lastContent = trace.getLastResponse();
-        if (lastContent == null) {
+        if (Assert.isEmpty(lastContent)) {
             return;
         }
 
@@ -122,7 +135,6 @@ public class ActionTask implements NamedTaskComponent {
         while (matcher.find()) {
             foundAny = true;
             try {
-                // 解析 JSON 格式的动作指令，例如 {"name": "get_weather", "arguments": {"city": "Shanghai"}}
                 ONode action = ONode.ofJson(matcher.group(1).trim());
                 String toolName = action.get("name").getString();
                 ONode argsNode = action.get("arguments");
@@ -149,13 +161,14 @@ public class ActionTask implements NamedTaskComponent {
             // 文本模式反馈：将 Observation 作为下一轮 User 输入引导模型继续推理
             trace.appendMessage(ChatMessage.ofUser(allObservations.toString().trim()));
         } else {
-            // 容错处理：当模型声明了 Action 但未按 JSON 格式输出时提示修复
-            trace.appendMessage(ChatMessage.ofUser("Observation: No valid Action detected. If you have enough info, please provide Final Answer."));
+            // 模型声明了 Action 但内容非法时的防御引导
+            trace.appendMessage(ChatMessage.ofUser("Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}"));
         }
     }
 
     /**
      * 执行具体工具
+     *
      * @param name 工具名称（对应 FunctionTool 的 name）
      * @param args 参数映射
      * @return 工具执行后的字符串结果（用于反馈给模型）
@@ -170,12 +183,13 @@ public class ActionTask implements NamedTaskComponent {
                 }
                 // 执行具体的 Handler 逻辑
                 return tool.handle(args);
+            } catch (IllegalArgumentException e) {
+                //参数校验异常，喂给模型进行自愈修复
+                return "Invalid arguments for [" + name + "]: " + e.getMessage();
             } catch (Throwable e) {
-                if (LOG.isWarnEnabled()) {
-                    LOG.warn("Error executing tool: " + name, e);
-                }
+                LOG.error("Error executing tool: " + name, e);
                 // 返回异常信息给模型，模型通常能识别错误并尝试修复参数后重试
-                return "Error executing tool [" + name + "]: " + e.getMessage();
+                return "Execution error in tool [" + name + "]: " + e.getMessage();
             }
         }
 

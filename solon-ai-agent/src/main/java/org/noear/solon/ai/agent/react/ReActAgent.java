@@ -31,6 +31,7 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -113,10 +114,6 @@ public class ReActAgent implements Agent {
      */
     @Override
     public String call(FlowContext context, Prompt prompt) throws Throwable {
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] starting: {}", this.name, prompt.getUserContent());
-        }
-
         // 维护执行痕迹：若上下文已存在则复用，支持多轮对话或中断恢复
         ReActTrace trace = context.getAs(traceKey);
         if (trace == null) {
@@ -130,6 +127,14 @@ public class ReActAgent implements Agent {
             // 记录流节点链路，方便追踪调试
             context.trace().recordNode(graph, null);
             trace.setPrompt(prompt);
+        } else {
+            prompt = trace.getPrompt();
+        }
+
+        Objects.requireNonNull(prompt, "Missing prompt!");
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("ReActAgent [{}] starting: {}", this.name, prompt.getUserContent());
         }
 
         long startTime = System.currentTimeMillis();
