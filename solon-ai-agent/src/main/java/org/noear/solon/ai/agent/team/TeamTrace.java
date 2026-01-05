@@ -19,6 +19,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -37,8 +38,8 @@ public class TeamTrace {
 
     private volatile String route;
     private AtomicInteger iterations;
-    // 策略相关上下文
-    private final Map<String, Object> strategyContext = new HashMap<>();
+    // 协议相关上下文
+    private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
 
     private String finalAnswer;
 
@@ -89,8 +90,8 @@ public class TeamTrace {
         return iterations.incrementAndGet();
     }
 
-    public Map<String, Object> getStrategyContext() {
-        return strategyContext;
+    public Map<String, Object> getProtocolContext() {
+        return protocolContext;
     }
 
     /**

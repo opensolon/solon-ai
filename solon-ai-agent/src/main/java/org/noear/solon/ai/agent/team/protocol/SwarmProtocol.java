@@ -56,13 +56,13 @@ public class SwarmProtocol extends TeamProtocolBase {
 
     @Override
     public void onRouting(FlowContext context, TeamTrace trace, String nextAgent) {
-        Map<String, Integer> usage = (Map<String, Integer>) trace.getStrategyContext().computeIfAbsent("agent_usage", k -> new HashMap<>());
+        Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext().computeIfAbsent("agent_usage", k -> new HashMap<>());
         usage.put(nextAgent, usage.getOrDefault(nextAgent, 0) + 1);
     }
 
     @Override
     public void prepareInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
-        Map<String, Integer> usage = (Map<String, Integer>) trace.getStrategyContext().get("agent_usage");
+        Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext().get("agent_usage");
 
         if (usage != null && !usage.isEmpty()) {
             sb.append("\n=== Agent Usage Statistics ===\n");
