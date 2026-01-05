@@ -186,6 +186,14 @@ public class ChatOptions {
     }
 
     /**
+     * 移除选项
+     */
+    public ChatOptions optionRemove(String key) {
+        options.remove(key);
+        return this;
+    }
+
+    /**
      * 选项获取
      */
     public Object option(String key) {
