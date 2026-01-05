@@ -152,17 +152,17 @@ public class ReasonTask implements NamedTaskComponent {
                 return config.getChatModel()
                         .prompt(messages)
                         .options(o -> {
-                            if (config.getChatOptions() != null) {
-                                config.getChatOptions().accept(o);
+                            if (!config.getTools().isEmpty()) {
+                                o.toolsAdd(config.getTools());
+                                // 注入停止序列，防止模型在推理阶段直接伪造外部观察结果
+                                o.optionAdd("stop", "Observation:");
                             }
 
                             // 强制关闭模型端的自动工具执行，由 ReActActionTask 统一管控
                             o.autoToolCall(false);
 
-                            if (!config.getTools().isEmpty()) {
-                                o.toolsAdd(config.getTools());
-                                // 注入停止序列，防止模型在推理阶段直接伪造外部观察结果
-                                o.optionAdd("stop", "Observation:");
+                            if (config.getChatOptions() != null) {
+                                config.getChatOptions().accept(o);
                             }
                         }).call();
             } catch (Exception e) {
