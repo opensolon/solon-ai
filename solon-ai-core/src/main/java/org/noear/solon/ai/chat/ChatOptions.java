@@ -203,6 +203,17 @@ public class ChatOptions {
     /**
      * 选项添加
      */
+    public ChatOptions optionPut(String key, Object val) {
+        options.put(key, val);
+        return this;
+    }
+
+    /**
+     * 选项添加
+     * 
+     * @deprecated 3.8.1 {@link #optionPut(String, Object)}
+     */
+    @Deprecated
     public ChatOptions optionAdd(String key, Object val) {
         options.put(key, val);
         return this;
@@ -217,20 +228,20 @@ public class ChatOptions {
      */
     public ChatOptions tool_choice(String choiceOrName) {
         if (choiceOrName == null) {
-            optionAdd(TOOL_CHOICE, "none");
+            optionPut(TOOL_CHOICE, "none");
         } else {
             if ("none".equals(choiceOrName)) {
-                optionAdd(TOOL_CHOICE, "none");
+                optionPut(TOOL_CHOICE, "none");
             } else if ("auto".equals(choiceOrName)) {
-                optionAdd(TOOL_CHOICE, "auto");
+                optionPut(TOOL_CHOICE, "auto");
             } else if ("required".equals(choiceOrName)) {
-                optionAdd(TOOL_CHOICE, "required");
+                optionPut(TOOL_CHOICE, "required");
             } else {
                 Map<String, Object> choiceMap = new HashMap<>();
                 choiceMap.put("type", "function");
                 choiceMap.put("function", Collections.singletonMap("name", choiceOrName));
 
-                optionAdd(TOOL_CHOICE, choiceMap);
+                optionPut(TOOL_CHOICE, choiceMap);
             }
         }
 
@@ -241,49 +252,49 @@ public class ChatOptions {
      * 常用选项：生成的最大token数
      */
     public ChatOptions max_tokens(long max_tokens) {
-        return optionAdd(MAX_TOKENS, max_tokens);
+        return optionPut(MAX_TOKENS, max_tokens);
     }
 
     /**
      * 常用选项：最大完成令牌数限制
      */
     public ChatOptions max_completion_tokens(long max_completion_tokens) {
-        return optionAdd(MAX_COMPLETION_TOKENS, max_completion_tokens);
+        return optionPut(MAX_COMPLETION_TOKENS, max_completion_tokens);
     }
 
     /**
      * 常用选项：温度（控制输出的随机性，值越高越有创意）
      */
     public ChatOptions temperature(float temperature) {
-        return optionAdd(TEMPERATURE, temperature);
+        return optionPut(TEMPERATURE, temperature);
     }
 
     /**
      * 常用选项：top_p 采样（核采样，从累计概率达p的最小词集中选择。替代top_k，更智能的多样性控制）
      */
     public ChatOptions top_p(float top_p) {
-        return optionAdd(TOP_P, top_p);
+        return optionPut(TOP_P, top_p);
     }
 
     /**
      * 常用选项：top_k 采样（仅从概率最高的k个词中采样。需要严格限制候选词时）
      */
     public ChatOptions top_k(float top_k) {
-        return optionAdd(TOP_K, top_k);
+        return optionPut(TOP_K, top_k);
     }
 
     /**
      * 常用选项：惩罚频繁出现的词
      */
     public ChatOptions frequency_penalty(float frequency_penalty) {
-        return optionAdd(FREQUENCY_PENALTY, frequency_penalty);
+        return optionPut(FREQUENCY_PENALTY, frequency_penalty);
     }
 
     /**
      * 常用选项：惩罚已出现过的词
      */
     public ChatOptions presence_penalty(float frequency_penalty) {
-        return optionAdd(PRESENCE_PENALTY, frequency_penalty);
+        return optionPut(PRESENCE_PENALTY, frequency_penalty);
     }
 
     /**
@@ -297,14 +308,14 @@ public class ChatOptions {
      * }</pre>
      */
     public ChatOptions response_format(Map map) {
-        return optionAdd(RESPONSE_FORMAT, map);
+        return optionPut(RESPONSE_FORMAT, map);
     }
 
     /**
      * 用户
      */
     public ChatOptions user(String user) {
-        return optionAdd("user", user);
+        return optionPut("user", user);
     }
 
     /**
