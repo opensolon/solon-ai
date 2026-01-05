@@ -26,6 +26,7 @@ import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.flow.Graph;
+import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -72,7 +73,14 @@ public class ReActAgent implements Agent {
         }
 
         // 2. 构建 ReAct 执行计算图：Start -> [Reason <-> Action] -> End
-        this.graph = Graph.create(this.name, spec -> {
+        this.graph = buildGraph();
+    }
+
+    /**
+     * 构建计算图（可重写）
+     */
+    protected Graph buildGraph() {
+        return Graph.create(this.name(), spec -> {
             spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON);
 
             // 推理任务节点（Reasoning）：决定下一步是调用工具还是直接回答
@@ -86,6 +94,10 @@ public class ReActAgent implements Agent {
                     .linkAdd(Agent.ID_REASON); // 动作完成后再次回到推理节点
 
             spec.addEnd(Agent.ID_END);
+
+            if (config.getGraphAdjuster() != null) {
+                config.getGraphAdjuster().accept(spec);
+            }
         });
     }
 
@@ -94,6 +106,13 @@ public class ReActAgent implements Agent {
      */
     public Graph getGraph() {
         return graph;
+    }
+
+    /**
+     * 获取配置（方便重写使用）
+     */
+    protected ReActConfig getConfig() {
+        return config;
     }
 
     /**
@@ -271,6 +290,14 @@ public class ReActAgent implements Agent {
          */
         public Builder maxSteps(int val) {
             config.setMaxSteps(val);
+            return this;
+        }
+
+        /**
+         * 设置图结构微调器（允许在自动构建图后进行手动微调）
+         */
+        public Builder graphAdjuster(Consumer<GraphSpec> graphBuilder) {
+            config.setGraphAdjuster(graphBuilder);
             return this;
         }
 

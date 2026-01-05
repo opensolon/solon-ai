@@ -19,6 +19,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -57,6 +58,10 @@ public class ReActConfig {
      * 挂载的功能工具集，使用 LinkedHashMap 确保工具展示顺序与添加顺序一致
      */
     private final Map<String, FunctionTool> toolMap = new LinkedHashMap<>();
+    /**
+     * 图结构微调器，允许在生成的默认执行图基础上进行自定义链路修改
+     */
+    private Consumer<GraphSpec> graphAdjuster;
     /**
      * 最大思考步数，超出后强制终止以防陷入逻辑死循环（默认 10 步）
      */
@@ -142,6 +147,9 @@ public class ReActConfig {
         this.retryDelayMs = Math.max(1000, retryDelayMs);
     }
 
+    public void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
+        this.graphAdjuster = graphAdjuster;
+    }
 
     public void setFinishMarker(String val) {
         this.finishMarker = val;
@@ -204,6 +212,10 @@ public class ReActConfig {
 
     public long getRetryDelayMs() {
         return retryDelayMs;
+    }
+
+    public Consumer<GraphSpec> getGraphAdjuster() {
+        return graphAdjuster;
     }
 
     /**
