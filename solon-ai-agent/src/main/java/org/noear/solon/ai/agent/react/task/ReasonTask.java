@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActConfig;
@@ -155,7 +156,7 @@ public class ReasonTask implements NamedTaskComponent {
                             if (!config.getTools().isEmpty()) {
                                 o.toolsAdd(config.getTools());
                                 // 注入停止序列，防止模型在推理阶段直接伪造外部观察结果
-                                o.optionAdd("stop", "Observation:");
+                                o.optionPut("stop", Utils.asList("Observation:"));
                             }
 
                             // 强制关闭模型端的自动工具执行，由 ReActActionTask 统一管控
