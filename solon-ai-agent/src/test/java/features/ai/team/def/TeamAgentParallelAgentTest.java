@@ -36,7 +36,7 @@ public class TeamAgentParallelAgentTest {
                 .description("负责法语翻译的专家")
                 .build();
 
-        // 2. 自定义并行图：实现分发与汇聚
+        // 2. 自由定义图：实现分发与汇聚
         TeamAgent team = TeamAgent.of(null)
                 .name(teamId)
                 .graphAdjuster(spec -> {
