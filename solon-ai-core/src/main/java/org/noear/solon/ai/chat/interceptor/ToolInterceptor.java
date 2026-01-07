@@ -15,36 +15,20 @@
  */
 package org.noear.solon.ai.chat.interceptor;
 
-import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.ai.chat.ChatResponse;
-import org.reactivestreams.Publisher;
-
-import java.io.IOException;
-
 /**
- * 聊天拦截器
+ * 工具拦截器
  *
  * @author noear
- * @since 3.3
+ * @since 3.8.1
  */
-public interface ChatInterceptor extends ToolInterceptor {
+public interface ToolInterceptor {
     /**
-     * 拦截 Call 请求
+     * 拦截工具调用
      *
      * @param req   请求
      * @param chain 拦截链
      */
-    default ChatResponse interceptCall(ChatRequest req, CallChain chain) throws IOException {
-        return chain.doIntercept(req);
-    }
-
-    /**
-     * 拦截 Stream 请求
-     *
-     * @param req   请求
-     * @param chain 拦截链
-     */
-    default Publisher<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
+    default String interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
         return chain.doIntercept(req);
     }
 }
