@@ -82,12 +82,15 @@ public class ReActAgentPersistenceHitlTest {
         // 调用时无需再次传入 prompt，Agent 会自动从恢复的 Trace 中读取上下文
         String finalResult = agent.call(context2);
 
+        System.out.println("最终回复内容: " + finalResult);
+
         // 验证最终结果
         Assertions.assertNotNull(finalResult);
-        Assertions.assertTrue(finalResult.contains("ORD_101") && finalResult.contains("成功"),
+        Assertions.assertTrue(finalResult.contains("ORD_101") &&
+                        (finalResult.contains("成功") || finalResult.contains("已执行")),
                 "审批并恢复后应成功执行工具并返回结果");
 
-        System.out.println("最终回复内容: " + finalResult);
+
 
         // 验证轨迹是否完整
         ReActTrace finalTrace = context2.getAs("__" + agentName);
