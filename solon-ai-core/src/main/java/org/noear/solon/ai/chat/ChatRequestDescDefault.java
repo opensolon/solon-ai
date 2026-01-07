@@ -417,8 +417,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             if (func != null) {
                 try {
-                    String content = doToolCall(func, call.arguments());
-                    ToolMessage toolMessage = (ToolMessage) ChatMessage.ofTool(content, call.name(), call.id(), func.returnDirect());
+                    String content = doToolCall(resp, func, call.arguments());
+                    ToolMessage toolMessage = ChatMessage.ofTool(content, call.name(), call.id(), func.returnDirect());
                     session.addMessage(toolMessage);
                     toolMessages.add(toolMessage);
                 } catch (Throwable ex) {
@@ -441,7 +441,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     /**
      * 执行工具调用（支持拦截器）
      */
-    private String doToolCall(FunctionTool func, Map<String, Object> args) throws Throwable {
+    private String doToolCall(ChatResponseDefault resp, FunctionTool func, Map<String, Object> args) throws Throwable {
         //收集拦截器
         List<RankEntity<ChatInterceptor>> interceptorList = new ArrayList<>();
         interceptorList.addAll(config.getDefaultInterceptors());
@@ -450,7 +450,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             Collections.sort(interceptorList);
         }
 
-        ToolRequest req = new ToolRequest(config, options, args);
+        ToolRequest req = new ToolRequest(resp, args);
 
         //构建请求数据
         ToolChain chain = new ToolChain(interceptorList, func);

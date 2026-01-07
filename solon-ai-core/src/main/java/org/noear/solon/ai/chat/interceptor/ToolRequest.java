@@ -16,9 +16,9 @@
 package org.noear.solon.ai.chat.interceptor;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatConfigReadonly;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.ChatResponse;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -34,9 +34,10 @@ public class ToolRequest {
     private final ChatOptions options;
     private Map<String, Object> args;
 
-    public ToolRequest(ChatConfig config, ChatOptions options, Map<String, Object> args) {
-        this.configReadonly = new ChatConfigReadonly(config);
-        this.options = options;
+    public ToolRequest(ChatResponse resp, Map<String, Object> args) {
+        this.configReadonly = resp.getConfig();
+        this.options = resp.getOptions();
+
         if (Utils.isEmpty(options.toolsContext())) {
             this.args = args;
         } else {

@@ -20,6 +20,8 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActConfig;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.chat.interceptor.ToolChain;
+import org.noear.solon.ai.chat.interceptor.ToolRequest;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -107,7 +109,7 @@ public class ActionTask implements NamedTaskComponent {
         Map<String, Object> args = (call.arguments() == null) ? Collections.emptyMap() : call.arguments();
 
         // 执行工具并捕获异常反馈
-        String result = executeTool(call.name(), args);
+        String result = executeTool(trace, call.name(), args);
 
         // 生命周期拦截：工具执行之后
         if (config.getInterceptor() != null) {
@@ -123,7 +125,7 @@ public class ActionTask implements NamedTaskComponent {
      */
     private void processTextModeAction(ReActTrace trace) throws Throwable {
         // 适用于不支持 ToolCall 协议但能遵循 ReAct 提示词规范的小模型或特定场景
-        String lastContent = trace.getLastResponse();
+        String lastContent = trace.getLastAnswer();
         if (Assert.isEmpty(lastContent)) {
             return;
         }
@@ -145,7 +147,7 @@ public class ActionTask implements NamedTaskComponent {
                 }
 
                 // 执行并汇总观测结果
-                String result = executeTool(toolName, args);
+                String result = executeTool(trace, toolName, args);
 
                 if (config.getInterceptor() != null) {
                     config.getInterceptor().onObservation(trace, result);
@@ -173,7 +175,7 @@ public class ActionTask implements NamedTaskComponent {
      * @param args 参数映射
      * @return 工具执行后的字符串结果（用于反馈给模型）
      */
-    private String executeTool(String name, Map<String, Object> args) {
+    private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
         FunctionTool tool = config.getTool(name);
 
         if (tool != null) {
@@ -182,7 +184,15 @@ public class ActionTask implements NamedTaskComponent {
                     LOG.debug("Executing tool: {} with args: {}", name, args);
                 }
                 // 执行具体的 Handler 逻辑
-                return tool.handle(args);
+                if (config.getInterceptor() != null) {
+                    //有拦截器
+                    ToolRequest toolReq = new ToolRequest(trace.getLastResponse(), args);
+                    config.getInterceptor().interceptTool(toolReq, new ToolChain(config.getInterceptorList(), tool));
+                } else {
+                    //没拦截器
+                    return tool.handle(args);
+                }
+
             } catch (IllegalArgumentException e) {
                 //参数校验异常，喂给模型进行自愈修复
                 return "Invalid arguments for [" + name + "]: " + e.getMessage();

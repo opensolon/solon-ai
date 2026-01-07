@@ -26,14 +26,13 @@ import java.util.List;
  * @author noear
  * @since 3.3
  */
-public class ToolChain {
-    private final List<RankEntity<ChatInterceptor>> interceptorList;
+public class ToolChain<T extends ToolInterceptor> {
+    private final List<RankEntity<T>> interceptorList;
     private final FunctionTool lastHandler;
     private int index;
 
-    public ToolChain(List<RankEntity<ChatInterceptor>> interceptorList, FunctionTool lastHandler) {
+    public ToolChain(List<RankEntity<T>> interceptorList, FunctionTool lastHandler) {
         this.interceptorList = interceptorList;
-
         this.lastHandler = lastHandler;
         this.index = 0;
     }
