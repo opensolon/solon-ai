@@ -177,9 +177,10 @@ public class TeamAgent implements Agent {
             // [阶段4：生命周期销毁] 无论成功失败，触发拦截器和协议的清理回调
             if (config != null) {
                 try {
-                    if (config.getInterceptor() != null) {
-                        config.getInterceptor().onCallEnd(context, prompt);
-                    }
+//                    if (config.getInterceptor() != null) {
+//                        config.getInterceptor().onCallEnd(context, prompt);
+//                    }
+
                     config.getProtocol().onFinished(context, trace);
                 } catch (Throwable e) {
                     LOG.warn("TeamAgent [{}] finalization failed", name, e);

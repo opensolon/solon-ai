@@ -19,7 +19,7 @@ public class AiFlowInterceptor implements FlowInterceptor {
     private static final Logger log = LoggerFactory.getLogger(AiFlowInterceptor.class);
 
     @Override
-    public void doFlowIntercept(FlowInvocation invocation) throws FlowException {
+    public void interceptFlow(FlowInvocation invocation) throws FlowException {
         invocation.invoke();
     }
 

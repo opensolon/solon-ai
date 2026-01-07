@@ -195,9 +195,9 @@ public class ReActAgent implements Agent {
         }
 
         // 触发调用结束回调
-        if (config.getInterceptor() != null) {
-            config.getInterceptor().onCallEnd(context, prompt);
-        }
+//        if (config.getInterceptor() != null) {
+//            config.getInterceptor().onCallEnd(context, prompt);
+//        }
 
         return result;
     }

@@ -26,10 +26,5 @@ import org.noear.solon.flow.intercept.FlowInterceptor;
  * @since 3.8.1
  */
 public interface TeamInterceptor extends FlowInterceptor {
-    /**
-     * 调用结束时
-     */
-    default void onCallEnd(FlowContext context, Prompt prompt) {
 
-    }
 }

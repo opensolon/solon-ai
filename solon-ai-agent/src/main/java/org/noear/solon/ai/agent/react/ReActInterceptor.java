@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.chat.interceptor.ToolInterceptor;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.intercept.FlowInterceptor;
@@ -29,7 +30,7 @@ import java.util.Map;
  * @since 3.8.1
  */
 @Preview("3.8")
-public interface ReActInterceptor extends FlowInterceptor {
+public interface ReActInterceptor extends FlowInterceptor, ToolInterceptor {
     /**
      * 思考时触发
      */
@@ -48,10 +49,4 @@ public interface ReActInterceptor extends FlowInterceptor {
     default void onObservation(ReActTrace trace, String result) {
     }
 
-    /**
-     * 调用结束时
-     */
-    default void onCallEnd(FlowContext context, Prompt prompt) {
-
-    }
 }
