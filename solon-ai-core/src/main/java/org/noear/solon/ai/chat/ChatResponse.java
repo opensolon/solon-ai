@@ -31,6 +31,16 @@ import java.util.List;
 @Preview("3.1")
 public interface ChatResponse {
     /**
+     * 获取配置（只读）
+     */
+    ChatConfigReadonly getConfig();
+
+    /**
+     * 获取选项
+     */
+    ChatOptions getOptions();
+
+    /**
      * 获取响应数据
      */
     @Nullable

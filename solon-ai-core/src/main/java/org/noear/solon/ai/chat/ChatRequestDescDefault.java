@@ -144,7 +144,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             log.debug("ai-response: {}", respJson);
         }
 
-        ChatResponseDefault resp = new ChatResponseDefault(false);
+        ChatResponseDefault resp = new ChatResponseDefault(req,false);
         resp.setResponseData(respJson);
         dialect.parseResponseJson(config, resp, respJson);
 
@@ -216,7 +216,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                         if (err == null) {
                             try {
                                 if (resp.code() < 400) {
-                                    parseResp(resp, subscriberProxy);
+                                    parseResp(req, resp, subscriberProxy);
                                 } else {
                                     String message = resp.bodyAsString();
 
@@ -239,8 +239,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         };
     }
 
-    private void parseResp(HttpResponse httpResp, Subscriber<? super ChatResponse> subscriber) throws IOException {
-        ChatResponseDefault resp = new ChatResponseDefault(true);
+    private void parseResp(ChatRequest req, HttpResponse httpResp, Subscriber<? super ChatResponse> subscriber) throws IOException {
+        ChatResponseDefault resp = new ChatResponseDefault(req, true);
         String contentType = httpResp.header("Content-Type");
 
         try {
