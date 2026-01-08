@@ -44,21 +44,35 @@ public class ReActTrace {
     private String agentName;
     private Prompt prompt;
 
-    /** 消息历史序列（包含 Thought, Action, Observation） */
+    /**
+     * 消息历史序列（包含 Thought, Action, Observation）
+     */
     private volatile List<ChatMessage> messages;
-    /** 迭代步数计数器 */
+    /**
+     * 迭代步数计数器
+     */
     private AtomicInteger stepCounter;
-    /** 逻辑路由标识（决定下一节点是 REASON, ACTION 还是 END） */
+    /**
+     * 逻辑路由标识（决定下一节点是 REASON, ACTION 还是 END）
+     */
     private volatile String route;
 
-    /** 最终生成的回答内容 */
+    /**
+     * 最终生成的回答内容
+     */
     private String finalAnswer;
 
-    /** 模型最近一次响应 */
+    /**
+     * 模型最近一次响应
+     */
     private transient ChatResponse lastResponse;
-    /** 模型最近一次原始回答内容 */
+    /**
+     * 模型最近一次原始回答内容
+     */
     private String lastAnswer;
-    /** 性能度量指标 */
+    /**
+     * 性能度量指标
+     */
     private final ReActMetrics metrics = new ReActMetrics();
 
     public ReActTrace() {
@@ -103,12 +117,16 @@ public class ReActTrace {
         return metrics;
     }
 
-    /** 获取当前已执行的迭代步数 */
+    /**
+     * 获取当前已执行的迭代步数
+     */
     public int getStepCount() {
         return stepCounter.get();
     }
 
-    /** 递增步数并返回新值（用于循环安全控制） */
+    /**
+     * 递增步数并返回新值（用于循环安全控制）
+     */
     public int nextStep() {
         return stepCounter.incrementAndGet();
     }
@@ -134,7 +152,7 @@ public class ReActTrace {
         return lastResponse;
     }
 
-   public void setLastResponse(ChatResponse lastResponse) {
+    public void setLastResponse(ChatResponse lastResponse) {
         this.lastResponse = lastResponse;
     }
 
@@ -146,12 +164,16 @@ public class ReActTrace {
         this.lastAnswer = lastAnswer;
     }
 
-    /** 获取消息序列的快照副本，确保外部读取线程安全 */
+    /**
+     * 获取消息序列的快照副本，确保外部读取线程安全
+     */
     public synchronized List<ChatMessage> getMessages() {
         return new ArrayList<>(messages);
     }
 
-    /** 获取最后一条交互消息（通常用于 Action 阶段解析指令） */
+    /**
+     * 获取最后一条交互消息（通常用于 Action 阶段解析指令）
+     */
     public synchronized ChatMessage getLastMessage() {
         if (messages.isEmpty()) {
             return null;
@@ -177,7 +199,9 @@ public class ReActTrace {
         }
     }
 
-    /** 追加提示词中的所有消息 */
+    /**
+     * 追加提示词中的所有消息
+     */
     public synchronized void appendMessage(Prompt prompt) {
         if (prompt == null) {
             return;
@@ -186,6 +210,13 @@ public class ReActTrace {
         for (ChatMessage m1 : prompt.getMessages()) {
             appendMessage(m1);
         }
+    }
+
+    /**
+     * 替换所有消息（一般用于压缩时用）
+     */
+    public synchronized void replaceMessages(List<ChatMessage> messages) {
+        this.messages = messages;
     }
 
     /**
@@ -215,8 +246,10 @@ public class ReActTrace {
         return sb.toString();
     }
 
-    /** 统计总工具调用次数 */
-    public int getToolCallCount(){
+    /**
+     * 统计总工具调用次数
+     */
+    public int getToolCallCount() {
         int count = 0;
         for (ChatMessage msg : messages) {
             if (msg instanceof AssistantMessage) {
@@ -275,10 +308,12 @@ public class ReActTrace {
 
         // 6. 重组消息序列
         compressed.addAll(recent);
-        messages = compressed;
+        replaceMessages(compressed);
     }
 
-    /** 校验消息是否属于工具执行相关的关键链路节点 */
+    /**
+     * 校验消息是否属于工具执行相关的关键链路节点
+     */
     private boolean isToolMessage(ChatMessage msg) {
         if (msg instanceof ToolMessage) {
             return true;
