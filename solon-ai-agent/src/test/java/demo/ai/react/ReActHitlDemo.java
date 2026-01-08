@@ -2,10 +2,13 @@ package demo.ai.react;
 
 import demo.ai.agent.LlmUtil;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
@@ -33,24 +36,24 @@ public class ReActHitlDemo {
                 .addTool(new MethodToolProvider(new WeatherTools()))
                 .build();
 
-        FlowContext context = FlowContext.of("hitl_session_1");
+        AgentSession session = InMemoryAgentSession.of("hitl_session_1");
 
         // --- 第一次执行：会触发拦截 ---
         System.out.println("第一次运行...");
-        String response1 = agent.call(context, "帮我查询北京天气并转账100元").getContent();
+        String response1 = agent.call(Prompt.of("帮我查询北京天气并转账100元"), session).getContent();
         System.out.println("response1: " + response1);
 
-        if (context.isStopped()) {
-            System.out.println("流程已挂起，当前节点：" + context.lastNodeId());
+        if (session.getSnapshot().isStopped()) {
+            System.out.println("流程已挂起，当前节点：" + session.getSnapshot().lastNodeId());
         }
 
         // --- 模拟人工介入 ---
         System.out.println("\n--- 人工在 UI 界面点击了‘同意’ ---");
-        context.put("approved", true);
+        session.getSnapshot().put("approved", true);
 
         // --- 第二次执行：恢复运行 ---
         System.out.println("恢复运行...");
-        String response2 = agent.call(context).getContent(); // 恢复时 prompt 传 null 即可，状态在 context 里
+        String response2 = agent.call(session).getContent(); // 恢复时 prompt 传 null 即可，状态在 context 里
 
         System.out.println("最终回复：" + response2);
     }

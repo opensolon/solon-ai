@@ -54,21 +54,30 @@ public interface Agent extends NamedTaskComponent {
         return description();
     }
 
-
-    default AssistantMessage call(FlowContext context, Prompt prompt) throws Throwable{
-        return call(prompt, InMemoryAgentSession.of(context));
-    }
-
-    default AssistantMessage call(FlowContext context, String prompt) throws Throwable{
+    /**
+     * {@link #call(Prompt, AgentSession)}
+     *
+     */
+    @Deprecated
+    default AssistantMessage call(FlowContext context, String prompt) throws Throwable {
         return call(Prompt.of(prompt), InMemoryAgentSession.of(context));
     }
 
-    default AssistantMessage call(FlowContext context) throws Throwable{
+    /**
+     * {@link #call(AgentSession)}
+     *
+     */
+    @Deprecated
+    default AssistantMessage call(FlowContext context) throws Throwable {
         return call(null, InMemoryAgentSession.of(context));
     }
 
     default AssistantMessage call(Prompt prompt) throws Throwable {
         return call(prompt, InMemoryAgentSession.of());
+    }
+
+    default AssistantMessage call(AgentSession session) throws Throwable {
+        return call(null, session);
     }
 
     AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable;
