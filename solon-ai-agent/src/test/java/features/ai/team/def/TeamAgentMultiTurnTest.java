@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -29,12 +30,14 @@ public class TeamAgentMultiTurnTest {
                 .name("searcher")
                 .promptProvider(p -> "你是一个旅游信息分析员。你的任务是提供目的地（如杭州）的基础常识。请直接输出文本，不要调用工具。")
                 .description("负责收集目的地基础常识。")
+                .addInterceptor(new SummarizationInterceptor())
                 .build();
 
         Agent planner = ReActAgent.of(chatModel)
                 .name("planner")
                 .promptProvider(p -> "你是一个行程规划专家。请务必结合历史信息（如目的地）和用户新提出的预算约束给出建议。")
                 .description("负责制定具体行程方案。")
+                .addInterceptor(new SummarizationInterceptor())
                 .build();
 
         // 2. 构建团队

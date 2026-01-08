@@ -41,6 +41,10 @@ public class SummarizationInterceptor implements ReActInterceptor {
         this.messagesToKeep = Math.min(10, messagesToKeep);
     }
 
+    public SummarizationInterceptor() {
+        this(10);
+    }
+
     /**
      * 上下文压缩核心逻辑
      * * 策略：
