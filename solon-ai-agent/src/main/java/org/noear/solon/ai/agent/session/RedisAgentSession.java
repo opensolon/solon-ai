@@ -15,64 +15,53 @@
  */
 package org.noear.solon.ai.agent.session;
 
-import org.noear.solon.ai.agent.Agent;
+import org.noear.redisx.RedisClient;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.flow.FlowContext;
 
-import java.util.*;
+import java.util.Objects;
 
 /**
- * 内存智能体会话适配
+ * Redis 智能体会话适配
  *
  * @author noear
  * @since 3.8.1
  */
-public class InMemoryAgentSession implements AgentSession {
-    public static AgentSession of() {
-        return new InMemoryAgentSession("tmp");
-    }
-
+public class RedisAgentSession implements AgentSession {
     public static AgentSession of(String instanceId) {
         return new InMemoryAgentSession(instanceId);
     }
 
-    public static AgentSession of(FlowContext context) {
-        return new InMemoryAgentSession(context);
+    private final String instanceId;
+    private final RedisClient redisClient;
+    private final FlowContext snapshot;
+
+    public RedisAgentSession(String instanceId, RedisClient redisClient) {
+        Objects.requireNonNull(instanceId, "instanceId");
+        Objects.requireNonNull(redisClient, "redisClient");
+
+        this.instanceId = instanceId;
+        this.redisClient = redisClient;
+
+        String json = redisClient.getBucket().get(instanceId);
+        this.snapshot = FlowContext.fromJson(json);
     }
 
-
-    private final String sessionId;
-    private final Map<String, List<ChatMessage>> historyMessages = new LinkedHashMap<>();
-    private FlowContext snapshot;
-
-    public InMemoryAgentSession(String sessionId) {
-        this.sessionId = sessionId;
-        this.snapshot = FlowContext.of(sessionId);
-        this.snapshot.put(Agent.ID_SESSION, this);
-    }
-
-    public InMemoryAgentSession(FlowContext context) {
-        this.sessionId = context.getInstanceId();
-        this.snapshot = context;
-        this.snapshot.put(Agent.ID_SESSION, this);
-    }
 
     @Override
     public String getSessionId() {
-        return sessionId;
+        return instanceId;
     }
-
 
     @Override
     public void addHistoryMessage(String agentName, ChatMessage message) {
-        historyMessages.computeIfAbsent(agentName, k -> new ArrayList<>())
-                .add(message);
+        redisClient.getList(instanceId + ":" + agentName).add(ChatMessage.toJson(message));
     }
 
     @Override
     public void updateSnapshot(FlowContext snapshot) {
-        this.snapshot = snapshot;
+        redisClient.getBucket().store(instanceId, snapshot.toJson());
     }
 
     @Override
