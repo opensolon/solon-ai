@@ -35,14 +35,20 @@ public class ToolRequest {
     private Map<String, Object> args;
 
     public ToolRequest(ChatResponse resp, Map<String, Object> args) {
-        this.configReadonly = resp.getConfig();
-        this.options = resp.getOptions();
-
-        if (Utils.isEmpty(options.toolsContext())) {
+        if (resp == null) {
+             this.configReadonly = null;
+            this.options = null;
             this.args = args;
         } else {
-            this.args = new LinkedHashMap<>(args);
-            this.args.putAll(options.toolsContext());
+            this.configReadonly = resp.getConfig();
+            this.options = resp.getOptions();
+
+            if (Utils.isEmpty(options.toolsContext())) {
+                this.args = args;
+            } else {
+                this.args = new LinkedHashMap<>(args);
+                this.args.putAll(options.toolsContext());
+            }
         }
     }
 

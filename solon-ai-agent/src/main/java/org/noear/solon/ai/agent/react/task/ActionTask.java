@@ -188,7 +188,7 @@ public class ActionTask implements NamedTaskComponent {
                 }
 
                 //作为扩展上下文（让工具内可以获取 trace）
-                args = new LinkedHashMap<>();
+                args = new LinkedHashMap<>(args);
                 args.put("__" + trace.getAgentName(), trace);
 
                 // 执行具体的 Handler 逻辑
