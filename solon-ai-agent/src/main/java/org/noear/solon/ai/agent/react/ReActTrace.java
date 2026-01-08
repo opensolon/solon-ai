@@ -209,19 +209,6 @@ public class ReActTrace {
     }
 
     /**
-     * 追加提示词中的所有消息
-     */
-    public synchronized void appendMessage(Prompt prompt) {
-        if (prompt == null) {
-            return;
-        }
-
-        for (ChatMessage m1 : prompt.getMessages()) {
-            appendMessage(m1);
-        }
-    }
-
-    /**
      * 替换所有消息（一般用于压缩时用）
      */
     public synchronized void replaceMessages(List<ChatMessage> messages) {

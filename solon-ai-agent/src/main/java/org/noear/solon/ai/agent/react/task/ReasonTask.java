@@ -84,8 +84,11 @@ public class ReasonTask implements NamedTaskComponent {
         // [逻辑 2：上下文初始化]
         // 首轮迭代时，将 Prompt 转化为 User Message 加入历史对话序列
         if (Assert.isEmpty(trace.getMessages())) {
-            Prompt prompt = trace.getPrompt();
-            trace.appendMessage(prompt);
+            if (trace.getPrompt() != null) {
+                for (ChatMessage message : trace.getPrompt().getMessages()) {
+                    trace.appendMessage(message);
+                }
+            }
         }
 
         // [逻辑 3：构建消息全景]
