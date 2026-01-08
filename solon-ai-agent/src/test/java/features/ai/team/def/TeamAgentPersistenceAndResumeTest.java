@@ -4,155 +4,132 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 
 /**
  * 状态持久化与断点续跑测试
- * 验证：系统崩溃或主动挂起后，能够完整恢复上下文记忆并继续后续决策。
+ * <p>验证：当 Agent 系统发生崩溃或主动挂起后，能够通过序列化快照重建上下文记忆并继续后续决策。</p>
  */
 public class TeamAgentPersistenceAndResumeTest {
 
     @Test
     public void testPersistenceAndResume() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-        String teamId = "persistent_trip_manager";
+        String teamName = "persistent_trip_manager";
 
+        // 1. 构建一个带有自定义流程的团队
         TeamAgent tripAgent = TeamAgent.of(chatModel)
-                .name(teamId)
-                .addAgent(ReActAgent.of(chatModel)
-                        .name("planner")
-                        .title("行程规划")
-                        .description("资深行程规划专家")
-                        .build())
+                .name(teamName)
                 .graphAdjuster(spec -> {
+                    // 自定义流程：Start -> searcher -> Supervisor (决策后续)
                     spec.addStart(Agent.ID_START).linkAdd("searcher");
                     spec.addActivity(ReActAgent.of(chatModel)
                                     .name("searcher")
-                                    .title("天气搜索")
-                                    .description("天气搜索员")
+                                    .description("天气搜索员，负责提供实时气候数据")
                                     .build())
                             .linkAdd(Agent.ID_SUPERVISOR);
                 }).build();
 
-        String yaml = tripAgent.getGraph().toYaml();
-
-        System.out.println("------------------\n\n");
-        System.out.println(yaml);
-        System.out.println("\n\n------------------");
-
-
-        // 1. 【模拟第一阶段：挂起】执行了搜索，状态存入 DB
+        // --- 阶段 A：模拟第一阶段执行并手动构建持久化快照 ---
+        // 假设我们在另一台机器上运行，执行完 searcher 后，我们将状态序列化到 DB
         FlowContext contextStep1 = FlowContext.of("order_sn_998");
-        contextStep1.trace().recordNodeId(tripAgent.getGraph(), Agent.ID_SUPERVISOR);
 
+        // 手动模拟 Trace 状态：已经完成了天气搜索
         TeamTrace snapshot = new TeamTrace(Prompt.of("帮我规划上海行程并给穿衣建议"));
         snapshot.addStep("searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
+        // 设置当前路由断点为 Supervisor，准备让它恢复后进行决策
+        snapshot.setRoute(Agent.ID_SUPERVISOR);
 
-        contextStep1.put("__" + teamId, snapshot);
+        // 将轨迹存入上下文，key 遵循框架规范 "__" + teamName
+        contextStep1.put("__" + teamName, snapshot);
 
-        String jsonState = contextStep1.toJson(); // 模拟落库序列化
-        System.out.println(">>> 阶段1完成：业务快照已持久化至数据库。");
+        // 模拟落库序列化（JSON）
+        String jsonState = contextStep1.toJson();
+        System.out.println(">>> 阶段 A：初始状态已持久化至数据库。当前断点：" + snapshot.getRoute());
 
-        // 2. 【模拟第二阶段：恢复】从序列化数据中重建上下文
-        FlowContext contextStep2 = FlowContext.fromJson(jsonState);
-        System.out.println(">>> 阶段2启动：正在从断点 [" + contextStep2.lastNodeId() + "] 恢复任务...");
+        // --- 阶段 B：从持久化数据恢复并续跑 ---
+        System.out.println("\n>>> 阶段 B：正在从 JSON 快照恢复任务...");
 
-        String finalResult = tripAgent.call(contextStep2).getContent(); // 传入 null 触发自动恢复
+        // 从 JSON 重建 FlowContext，并包装成新的 AgentSession
+        FlowContext restoredContext = FlowContext.fromJson(jsonState);
+        AgentSession session = InMemoryAgentSession.of(restoredContext);
 
-        // 3. 改进的测试断言
-        TeamTrace finalTrace = contextStep2.getAs("__" + teamId);
+        // 验证恢复：调用时不传 Prompt，触发“断点续跑”模式
+        String finalResult = tripAgent.call(session).getContent();
 
-        // 核心验证点1：状态恢复是否成功
-        Assertions.assertNotNull(finalTrace, "应该能恢复轨迹");
-        Assertions.assertTrue(finalTrace.getStepCount() >= 2,
-                "轨迹应包含至少2步（searcher + planner）");
+        // --- 阶段 C：核心验证 ---
+        TeamTrace finalTrace = tripAgent.getTrace(session);
 
-        // 核心验证点2：历史信息是否被保留
-        boolean hasSearcherStep = finalTrace.getSteps().stream()
-                .anyMatch(step -> "searcher".equals(step.getAgentName()) &&
-                        step.getContent().contains("上海明日天气"));
-        Assertions.assertTrue(hasSearcherStep, "快照中的searcher步骤应该被保留");
+        // 验证 1：状态恢复完整性
+        Assertions.assertNotNull(finalTrace, "恢复后的轨迹不应为空");
+        Assertions.assertTrue(finalTrace.getStepCount() >= 2, "轨迹应包含预设的 searcher 步及后续生成步");
 
-        // 核心验证点3：任务是否完成
-        Assertions.assertNotNull(finalResult, "任务应该有结果");
-        Assertions.assertFalse(finalResult.trim().isEmpty(), "结果不应该为空");
+        // 验证 2：历史记忆持久性（Agent 是否还记得 searcher 提供的数据）
+        boolean remembersWeather = finalTrace.getFormattedHistory().contains("上海明日天气");
+        Assertions.assertTrue(remembersWeather, "恢复后的 Agent 应该记得快照中的天气信息");
 
-        // 核心验证点4：最终答案是否合理
-        // 不再检查具体内容，因为Mediator可能只输出总结
-        System.out.println(">>> 测试通过：状态恢复和任务完成验证成功");
-
-        // 输出详细调试信息
-        System.out.println("=== 恢复后轨迹详情 ===");
-        System.out.println("总步数: " + finalTrace.getStepCount());
-        System.out.println("轨迹内容: " + finalTrace.getFormattedHistory());
-        System.out.println("最终结果: " + finalResult);
+        // 验证 3：最终决策结果
+        Assertions.assertNotNull(finalResult);
+        System.out.println("恢复执行后的最终答复: " + finalResult);
     }
 
     @Test
     public void testResetOnNewPrompt() throws Throwable {
-        // 测试：resetOnNewPrompt 参数的效果
+        // 测试：在新提示词驱动下，Session 是否会自动开启新轨迹
         ChatModel chatModel = LlmUtil.getChatModel();
-
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("reset_test_team")
-                .addAgent(ReActAgent.of(chatModel)
-                        .name("agent")
-                        .description("测试Agent")
-                        .build())
+                .addAgent(ReActAgent.of(chatModel).name("agent").build())
                 .build();
 
-        FlowContext context = FlowContext.of("test_reset");
+        AgentSession session = InMemoryAgentSession.of("test_reset_id");
 
-        // 第一次调用
-        String result1 = team.call(context, "第一个问题").getContent();
-        System.out.println("第一次结果: " + result1);
-
-        // 获取轨迹
-        Object trace1 = context.get("__reset_test_team");
+        // 第一次调用：建立初始上下文
+        team.call(Prompt.of("你好"), session);
+        TeamTrace trace1 = team.getTrace(session);
         Assertions.assertNotNull(trace1);
+        int initialSteps = trace1.getStepCount();
 
-        // 第二次调用（新提示词，应该重置）
-        String result2 = team.call(context, "第二个问题").getContent();
-        System.out.println("第二次结果: " + result2);
+        // 第二次调用：传入完全不同的 Prompt
+        // 框架应识别出这是一个新任务，并根据业务需要决定是否重置或追加
+        String result2 = team.call(Prompt.of("再见"), session).getContent();
 
-        // 应该开始新的轨迹
-        // 这里可以添加更详细的检查逻辑
+        Assertions.assertNotNull(result2);
+        System.out.println("第二次调用成功完成");
     }
 
     @Test
     public void testContextStateIsolation() throws Throwable {
-        // 测试：不同 FlowContext 之间的状态隔离
+        // 测试：不同 Session 实例之间的完全状态隔离
         ChatModel chatModel = LlmUtil.getChatModel();
-
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("isolation_team")
-                .addAgent(ReActAgent.of(chatModel)
-                        .name("agent")
-                        .description("测试Agent")
-                        .build())
+                .addAgent(ReActAgent.of(chatModel).name("agent").build())
                 .build();
 
-        // 两个独立的上下文
-        FlowContext context1 = FlowContext.of("session_1");
-        FlowContext context2 = FlowContext.of("session_2");
+        // 创建两个独立的 Session
+        AgentSession session1 = InMemoryAgentSession.of("session_1");
+        AgentSession session2 = InMemoryAgentSession.of("session_2");
 
-        // 在 context1 中设置状态
-        context1.put("custom_state", "value1");
-        String result1 = team.call(context1, "会话1的问题").getContent();
+        // 分别注入私有状态
+        session1.getSnapshot().put("user_name", "张三");
+        session2.getSnapshot().put("user_name", "李四");
 
-        // context2 不应该看到 context1 的状态
-        context2.put("custom_state", "value2");
-        String result2 = team.call(context2, "会话2的问题").getContent();
+        // 执行调用
+        team.call(Prompt.of("谁在和你说话？"), session1);
+        team.call(Prompt.of("谁在和你说话？"), session2);
 
         Assertions.assertNotEquals(
-                context1.get("custom_state"),
-                context2.get("custom_state"),
-                "不同会话的状态应该隔离"
+                session1.getSnapshot().get("user_name"),
+                session2.getSnapshot().get("user_name"),
+                "不同会话的私有变量必须物理隔离"
         );
     }
 }
