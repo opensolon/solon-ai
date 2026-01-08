@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +33,21 @@ import java.util.List;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8")
 public class SummarizationInterceptor implements ReActInterceptor {
+    private final int messagesToKeep;
+
+    public SummarizationInterceptor(int messagesToKeep) {
+        this.messagesToKeep = Math.min(10, messagesToKeep);
+    }
+
+    /**
+     * 上下文压缩核心逻辑
+     * * 策略：
+     * 1. 强力保留首条 User 消息（确保原始任务目标不丢失）。
+     * 2. 滑动窗口保留最近的交互记录（默认 10 条左右）。
+     * 3. 边界对齐：确保不从 Observation 开始截断，维护 Assistant-Action-Observation 的完整逻辑链。
+     */
     @Override
     public void onObservation(ReActTrace trace, String result) {
         List<ChatMessage> messages = trace.getMessages();
@@ -50,7 +65,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
         }
 
         // 2. 确定滑动窗口边界
-        int keepCount = Math.min(10, totalSize);
+        int keepCount = Math.min(messagesToKeep, totalSize);
         int startIdx = totalSize - keepCount;
 
         // 3. 逻辑对齐：若起点是工具反馈，则需包含其对应的 Action 指令，防止模型因上下文缺失产生解析异常
