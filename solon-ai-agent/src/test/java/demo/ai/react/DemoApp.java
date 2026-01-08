@@ -16,11 +16,11 @@ public class DemoApp {
                 .model("Qwen3-32B")
                 .build();
 
-        Agent robot = ReActAgent.of(chatModel)
+        ReActAgent robot = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new TimeTool()))
                 .build();
 
-        String answer = robot.call("现在几点了？").getContent();
+        String answer = robot.prompt("现在几点了？").call().getContent();
 
         System.out.println("Robot 答复: " + answer);
     }

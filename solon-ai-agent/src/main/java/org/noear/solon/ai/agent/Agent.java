@@ -45,23 +45,18 @@ public interface Agent extends NamedTaskComponent {
     /**
      * 针对当前任务进行初步评估或竞标（用于合同网协议等决策场景）
      *
-     * @param context 流上下文
+     * @param session 会话
      * @param prompt  当前任务提示词
      * @return 评估结果或竞标方案（默认返回 description）
      */
-    default String estimate(FlowContext context, Prompt prompt) {
+    default String estimate(AgentSession session, Prompt prompt) {
         // 默认实现：如果 Agent 不支持评估，则返回静态描述
         return description();
     }
 
-    default AssistantMessage call(String prompt) throws Throwable {
-        return call(Prompt.of(prompt), InMemoryAgentSession.of());
-    }
-
-    default AssistantMessage call(Prompt prompt) throws Throwable {
-        return call(prompt, InMemoryAgentSession.of());
-    }
-
+    /**
+     * 调用
+     */
     default AssistantMessage call(AgentSession session) throws Throwable {
         return call(null, session);
     }

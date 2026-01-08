@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat.prompt;
 
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.core.util.Assert;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -39,7 +40,7 @@ public class Prompt implements ChatPrompt, Serializable {
 
     public Prompt addMessage(String... messages) {
         for (String m : messages) {
-            if (m != null) {
+            if (Assert.isNotEmpty(m)) {
                 messageList.add(ChatMessage.ofUser(m));
             }
         }
