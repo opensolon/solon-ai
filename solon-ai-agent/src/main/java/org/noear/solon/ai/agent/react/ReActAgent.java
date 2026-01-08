@@ -124,8 +124,8 @@ public class ReActAgent implements Agent {
     /**
      * 从上下文中获取当前 Agent 的执行状态追踪实例
      */
-    public @Nullable ReActTrace getTrace(FlowContext context) {
-        return context.getAs("__" + name);
+    public @Nullable ReActTrace getTrace(AgentSession session) {
+        return session.getSnapshot().getAs("__" + name);
     }
 
     @Override

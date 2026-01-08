@@ -111,10 +111,10 @@ public class TeamAgent implements Agent {
     /**
      * 从上下文中获取当前团队的执行追踪实例
      *
-     * @param context 流上下文
+     * @param session 会话
      */
-    public @Nullable TeamTrace getTrace(FlowContext context) {
-        return context.getAs(traceKey);
+    public @Nullable TeamTrace getTrace(AgentSession session) {
+        return session.getSnapshot().getAs(traceKey);
     }
 
     @Override
