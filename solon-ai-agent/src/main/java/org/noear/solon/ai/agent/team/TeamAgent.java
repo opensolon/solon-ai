@@ -84,7 +84,7 @@ public class TeamAgent implements Agent {
         return Graph.create(this.name(), spec -> {
             // 1. 根据协议构建基础骨架 (如 Swarm 的 Supervisor 节点)
             if (config.getChatModel() != null) {
-                config.getProtocol().buildGraph(config, spec);
+                config.getProtocol().buildGraph(spec);
             }
 
             // 2. 应用用户自定义的微调逻辑

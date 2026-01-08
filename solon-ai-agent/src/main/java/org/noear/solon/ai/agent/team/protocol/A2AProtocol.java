@@ -58,6 +58,11 @@ public class A2AProtocol extends TeamProtocolBase {
     }
 
     @Override
+    public void injectAgentInstruction(Locale locale, StringBuilder sb) {
+
+    }
+
+    @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
             sb.append("\n## 协作协议：").append(config.getProtocol().name()).append("\n");
