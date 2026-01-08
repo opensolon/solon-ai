@@ -342,6 +342,11 @@ public class ReActAgent implements Agent {
             return this;
         }
 
+        public Builder historyWindowSize(int val) {
+            config.setHistoryWindowSize(val);
+            return this;
+        }
+
         /**
          * 自定义推理提示词模板生成器
          */
