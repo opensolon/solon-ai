@@ -50,11 +50,11 @@ public class A2AProtocol extends TeamProtocolBase {
         // 2. 每个 Agent 执行完后，不再强行回到 Supervisor，而是进入一个“分发器”
         // 或者直接让 Agent 互相连接
         config.getAgentMap().values().forEach(a -> {
-            spec.addActivity(a).linkAdd("__A2A_DISPATCHER__");
+            spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR);
         });
 
         // 3. 增加一个轻量级的 A2A 分发逻辑，解析 Agent 返回的移交指令
-        spec.addExclusive("__A2A_DISPATCHER__").then(ns -> {
+        spec.addExclusive(Agent.ID_SUPERVISOR).then(ns -> {
             linkAgents(ns, "__" + config.getName());
         }).linkAdd(Agent.ID_END);
 
