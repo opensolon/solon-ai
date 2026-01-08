@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
@@ -202,6 +203,10 @@ public class ReActAgent implements Agent {
 //            config.getInterceptor().onCallEnd(context, prompt);
 //        }
 
+        if (Assert.isNotEmpty(config.getOutputKey())) {
+            context.put(config.getOutputKey(), result);
+        }
+
         return ChatMessage.ofAssistant(result);
     }
 
@@ -309,6 +314,11 @@ public class ReActAgent implements Agent {
          */
         public Builder finishMarker(String val) {
             config.setFinishMarker(val);
+            return this;
+        }
+
+        public Builder outputKey(String val) {
+            config.setOutputKey(val);
             return this;
         }
 

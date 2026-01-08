@@ -79,6 +79,12 @@ public class ReActConfig {
      * 任务完成的标识符，模型输出此字符串后 ReAct 循环将停止
      */
     private String finishMarker;
+
+    /**
+     * 配置输出 key
+     */
+    private String outputKey;
+
     /**
      * 生命周期拦截器，用于监控思考（Thought）、行动（Action）和观察（Observation）
      */
@@ -154,6 +160,10 @@ public class ReActConfig {
 
     public void setFinishMarker(String val) {
         this.finishMarker = val;
+    }
+
+    public void setOutputKey(String val) {
+        this.outputKey = val;
     }
 
     public void setMaxSteps(int val) {
@@ -237,6 +247,10 @@ public class ReActConfig {
         }
 
         return finishMarker;
+    }
+
+    public String getOutputKey() {
+        return outputKey;
     }
 
     public List<RankEntity<ReActInterceptor>> getInterceptorList() {

@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.*;
 import org.noear.solon.lang.Nullable;
@@ -175,6 +176,11 @@ public class TeamAgent implements Agent {
             }
 
             trace.setFinalAnswer(result);
+
+            if (Assert.isNotEmpty(config.getOutputKey())) {
+                context.put(config.getOutputKey(), result);
+            }
+
             return ChatMessage.ofAssistant(result);
         } finally {
             // [阶段4：生命周期销毁] 无论成功失败，触发拦截器和协议的清理回调
@@ -275,6 +281,11 @@ public class TeamAgent implements Agent {
          */
         public Builder finishMarker(String finishMarker) {
             config.setFinishMarker(finishMarker);
+            return this;
+        }
+
+        public Builder outputKey(String outputKey){
+            config.setOutputKey(outputKey);
             return this;
         }
 

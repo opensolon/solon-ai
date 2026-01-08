@@ -71,6 +71,10 @@ public class TeamConfig {
      */
     private String finishMarker;
     /**
+     * 配置输出 key
+     */
+    private String outputKey;
+    /**
      * 团队协作的最大总迭代次数，防止成员间无限“踢皮球”
      */
     private int maxTotalIterations = 8;
@@ -130,6 +134,10 @@ public class TeamConfig {
 
     public void setFinishMarker(String finishMarker) {
         this.finishMarker = finishMarker;
+    }
+
+    public void setOutputKey(String outputKey) {
+        this.outputKey = outputKey;
     }
 
     /**
@@ -224,6 +232,10 @@ public class TeamConfig {
         }
 
         return finishMarker;
+    }
+
+    public String getOutputKey() {
+        return outputKey;
     }
 
     public int getMaxTotalIterations() {
