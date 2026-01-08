@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.NonSerializable;
@@ -48,6 +50,10 @@ public interface TeamProtocol extends NonSerializable {
 
     default void injectAgentInstruction(Locale locale, StringBuilder sb) {
 
+    }
+
+    default Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale){
+        return originalPrompt;
     }
 
     /**

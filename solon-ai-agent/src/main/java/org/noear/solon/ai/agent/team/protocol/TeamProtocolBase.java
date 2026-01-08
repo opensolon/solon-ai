@@ -15,9 +15,11 @@
  */
 package org.noear.solon.ai.agent.team.protocol;
 
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.NodeSpec;
 
 import java.util.Locale;
@@ -43,6 +45,19 @@ public abstract class TeamProtocolBase implements TeamProtocol {
             ns.linkAdd(agentName, l -> l.title("route = " + agentName).when(ctx ->
                     agentName.equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
         }
+    }
+
+    @Override
+    public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
+        if (trace != null && trace.getStepCount() > 0) {
+            String fullHistory = trace.getFormattedHistory();
+            String newContent = "Current Task: " + originalPrompt.getUserContent() +
+                    "\n\nCollaboration Progress so far:\n" + fullHistory +
+                    "\n\nPlease continue based on the progress above.";
+            return Prompt.of(newContent);
+        }
+
+        return originalPrompt;
     }
 
     @Override

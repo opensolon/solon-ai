@@ -75,6 +75,9 @@ public class TeamTrace {
         return session;
     }
 
+    public TeamProtocol getProtocol() {
+        return config.getProtocol();
+    }
 
     public Prompt getPrompt() {
         return prompt;

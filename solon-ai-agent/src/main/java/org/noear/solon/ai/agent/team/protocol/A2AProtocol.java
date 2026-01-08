@@ -18,6 +18,9 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 
@@ -88,6 +91,32 @@ public class A2AProtocol extends TeamProtocolBase {
             sb.append("2. **Example**: '...therefore, I am handing off this task. Transfer to Analyst'.\n");
             sb.append("3. **Completion**: If the goal is fully achieved, output '").append(config.getFinishMarker()).append("'.\n");
         }
+    }
+
+    @Override
+    public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
+        if (trace == null || trace.getStepCount() == 0) {
+            return originalPrompt;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
+            sb.append("### 核心任务目标\n").append(originalPrompt.getUserContent()).append("\n\n");
+            sb.append("### 当前协作进度\n").append(trace.getFormattedHistory()).append("\n");
+
+            String lastAgent = trace.getSteps().get(trace.getStepCount() - 1).getAgentName();
+            sb.append("\n[系统状态]: 任务已由 [").append(lastAgent).append("] 移交给当前专家 [").append(agent.name()).append("]。\n");
+            sb.append("请基于上述进度继续执行。如果需要移交，请参考系统指令中的专家名录。");
+        } else {
+            sb.append("### Primary Objective\n").append(originalPrompt.getUserContent()).append("\n\n");
+            sb.append("### Collaboration History\n").append(trace.getFormattedHistory()).append("\n");
+
+            String lastAgent = trace.getSteps().get(trace.getStepCount() - 1).getAgentName();
+            sb.append("\n[System]: Task transferred from [").append(lastAgent).append("] to [").append(agent.name()).append("].\n");
+            sb.append("Please proceed based on the progress above.");
+        }
+
+        return Prompt.of(sb.toString());
     }
 
     @Override

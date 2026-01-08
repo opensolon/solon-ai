@@ -96,14 +96,11 @@ public interface Agent extends NamedTaskComponent {
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
         Prompt originalPrompt = (trace != null) ? trace.getPrompt() : null;
 
-        Prompt effectivePrompt = originalPrompt;
-        if (trace != null && trace.getStepCount() > 0) {
-            String fullHistory = trace.getFormattedHistory();
-            String newContent = "Current Task: " + originalPrompt.getUserContent() +
-                    "\n\nCollaboration Progress so far:\n" + fullHistory +
-                    "\n\nPlease continue based on the progress above.";
-            effectivePrompt = Prompt.of(newContent);
-        }
+        Prompt effectivePrompt = trace.getProtocol().prepareAgentPrompt(
+                trace,
+                this,
+                originalPrompt,
+                trace.getConfig().getPromptProvider().getLocale());
 
         long start = System.currentTimeMillis();
         AssistantMessage msg = call(effectivePrompt, session);
