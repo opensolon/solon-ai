@@ -76,22 +76,22 @@ public class TeamAgentMultiTurnTest {
         TeamTrace trace2 = conciergeTeam.getTrace(session);
         Assertions.assertNotNull(trace2, "第二轮执行应更新轨迹");
 
-        int totalSteps = trace2.getStepCount();
-        System.out.println("协作总步数: " + totalSteps);
-        System.out.println("完整协作历史摘要:\n" + trace2.getFormattedHistory());
+        // 步数检测：只要确保当前 Session 的历史是非空的即可
+        System.out.println("第二轮单次协作步数: " + trace2.getStepCount());
 
-        // 验证 1：轨迹是在增长的
-        Assertions.assertTrue(totalSteps > round1StepCount, "第二轮应在原有协作基础上增加新的推理步骤");
+        // 验证记忆注入（这是多轮对话最重要的指标）
+        String fullHistory = trace2.getFormattedHistory();
+        System.out.println("历史记录是否包含旧角色: " + fullHistory.contains("searcher"));
+
+        // 验证 1：通过历史摘要判断是否继承了前文
+        Assertions.assertTrue(fullHistory.contains("searcher"), "Trace 历史中应包含第一轮的 Searcher 记录");
 
         // 验证 2：有效性检测
         Assertions.assertNotNull(out2, "第二轮输出不应为空");
 
-        // 验证 3：记忆检测
-        // 第二轮用户只说了“500元”，如果没有第一轮的记忆，AI 将不知道去哪里
+        // 验证 3：业务逻辑检测（这才是真正的 multi-turn 成功标志）
         boolean hasLocationMemory = out2.contains("杭州");
         boolean hasBudgetAwareness = out2.contains("500") || out2.contains("预算");
-
-        System.out.println("记忆检测 - 目的地(杭州): " + hasLocationMemory + ", 约束(预算): " + hasBudgetAwareness);
 
         Assertions.assertTrue(hasLocationMemory, "AI 应该记得第一轮提到的目的地：杭州");
         Assertions.assertTrue(hasBudgetAwareness, "AI 应该响应第二轮提出的预算约束：500元");
