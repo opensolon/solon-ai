@@ -151,7 +151,7 @@ public class ReActAgent implements Agent {
         // 维护执行痕迹：若上下文已存在则复用，支持多轮对话或中断恢复
         ReActTrace trace = context.getAs(traceKey);
         if (trace == null) {
-            trace = new ReActTrace(config, prompt);
+            trace = new ReActTrace(config, prompt, name);
             context.put(traceKey, trace);
         } else {
             trace.setConfig(config);

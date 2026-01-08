@@ -41,6 +41,7 @@ import java.util.List;
 @Preview("3.8")
 public class ReActTrace {
     private transient ReActConfig config;
+    private String agentName;
     private Prompt prompt;
 
     /** 消息历史序列（包含 Thought, Action, Observation） */
@@ -67,8 +68,9 @@ public class ReActTrace {
         this.route = Agent.ID_REASON;
     }
 
-    public ReActTrace(ReActConfig config, Prompt prompt) {
+    public ReActTrace(ReActConfig config, Prompt prompt, String agentName) {
         this();
+        this.agentName = agentName;
         this.config = config; // 测试或局部调用时可能为 null
         this.prompt = prompt;
     }
@@ -83,6 +85,10 @@ public class ReActTrace {
 
     protected void setConfig(ReActConfig config) {
         this.config = config;
+    }
+
+    public String getAgentName() {
+        return agentName;
     }
 
     public Prompt getPrompt() {

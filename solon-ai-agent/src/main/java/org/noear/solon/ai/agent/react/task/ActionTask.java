@@ -37,6 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -142,7 +143,7 @@ public class ActionTask implements NamedTaskComponent {
                 ONode action = ONode.ofJson(matcher.group(1).trim());
                 String toolName = action.get("name").getString();
                 ONode argsNode = action.get("arguments");
-                Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
+                Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new LinkedHashMap<>();
 
                 for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
                     item.target.onAction(trace, toolName, args);
@@ -185,6 +186,10 @@ public class ActionTask implements NamedTaskComponent {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Executing tool: {} with args: {}", name, args);
                 }
+
+                //作为扩展上下文（让工具内可以获取 trace）
+                args.put("__" + trace.getAgentName(), trace);
+
                 // 执行具体的 Handler 逻辑
                 if (config.getInterceptorList().isEmpty()) {
                     //没拦截器
