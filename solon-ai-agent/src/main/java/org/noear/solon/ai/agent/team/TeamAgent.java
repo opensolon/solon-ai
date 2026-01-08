@@ -160,7 +160,7 @@ public class TeamAgent implements Agent {
         TeamTrace trace = context.getAs(traceKey);
 
         if (trace == null) {
-            trace = new TeamTrace(prompt);
+            trace = new TeamTrace(prompt, name);
             context.put(traceKey, trace);
         }
 
