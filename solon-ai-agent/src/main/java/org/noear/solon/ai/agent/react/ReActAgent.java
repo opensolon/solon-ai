@@ -388,8 +388,10 @@ public class ReActAgent implements Agent {
         /**
          * 设置 ReAct 生命周期拦截器
          */
-        public Builder addInterceptor(ReActInterceptor val) {
-            config.addInterceptor(val);
+        public Builder addInterceptor(ReActInterceptor... vals) {
+            for (ReActInterceptor val : vals) {
+                config.addInterceptor(val);
+            }
             return this;
         }
 

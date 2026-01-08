@@ -228,10 +228,6 @@ public class TeamAgent implements Agent {
             // [阶段4：生命周期销毁] 无论成功失败，触发拦截器和协议的清理回调
             if (config != null) {
                 try {
-//                    if (config.getInterceptor() != null) {
-//                        config.getInterceptor().onCallEnd(context, prompt);
-//                    }
-
                     config.getProtocol().onFinished(context, trace);
                 } catch (Throwable e) {
                     LOG.warn("TeamAgent [{}] finalization failed", name, e);
@@ -289,16 +285,20 @@ public class TeamAgent implements Agent {
         /**
          * 向团队中添加执行成员(Agent)
          */
-        public Builder addAgent(Agent agent) {
-            config.addAgent(agent);
+        public Builder addAgent(Agent... agents) {
+            for (Agent agent : agents) {
+                config.addAgent(agent);
+            }
             return this;
         }
 
         /**
          * 设置 Team 生命周期拦截器
          */
-        public Builder addInterceptor(TeamInterceptor interceptor) {
-            config.addInterceptor(interceptor);
+        public Builder addInterceptor(TeamInterceptor... interceptors) {
+            for (TeamInterceptor interceptor : interceptors) {
+                config.addInterceptor(interceptor);
+            }
             return this;
         }
 
