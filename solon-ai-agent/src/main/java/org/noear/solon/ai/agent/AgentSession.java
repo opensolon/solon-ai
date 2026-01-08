@@ -25,33 +25,48 @@ import java.util.Collection;
 /**
  * 智能体会话接口
  *
+ * <p>负责维护智能体的运行状态、长短期记忆（对话历史）以及底层工作流的执行快照。
+ * 该接口实现通常是非序列化的，但支持通过快照机制进行持久化。</p>
+ *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8")
 public interface AgentSession extends NonSerializable {
     /**
-     * 获取会话id
+     * 获取会话唯一标识符
      */
     String getSessionId();
 
     /**
-     * 添加历史消息
+     * 向会话中追加一条历史消息（记忆注入）
+     *
+     * @param agentName 产生消息的智能体名称
+     * @param message   对话消息内容
      */
     void addHistoryMessage(String agentName, ChatMessage message);
 
     /**
-     * 获取历史消息
+     * 获取指定智能体的最近历史消息（记忆提取）
+     *
+     * @param agentName 智能体名称
+     * @param last      提取最近的消息数量
+     * @return 历史消息集合
      */
     Collection<ChatMessage> getHistoryMessages(String agentName, int last);
 
     /**
-     * 更新快照
+     * 更新会话执行状态快照
+     *
+     * @param snapshot 包含最新状态的流上下文
      */
     void updateSnapshot(FlowContext snapshot);
 
     /**
-     * 获取快照
+     * 获取当前会话的执行状态快照
+     * <p>常用于将当前会话状态导出、持久化或传递给后续流程节点。</p>
+     *
+     * @return 底层流上下文对象
      */
     FlowContext getSnapshot();
 }

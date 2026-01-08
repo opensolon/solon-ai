@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.team;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -179,6 +180,11 @@ public class TeamAgent implements Agent {
 
         Objects.requireNonNull(prompt, "Missing prompt!");
 
+        //开始事件
+        for (RankEntity<TeamInterceptor> item : config.getInterceptorList()) {
+            item.target.onAgentStart(trace);
+        }
+
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] starting: {}", this.name, prompt.getUserContent());
         }
@@ -211,6 +217,11 @@ public class TeamAgent implements Agent {
 
             session.addHistoryMessage(this.name, assistantMessage);
             session.updateSnapshot(context);
+
+            //结束事件
+            for (RankEntity<TeamInterceptor> item : config.getInterceptorList()) {
+                item.target.onAgentEnd(trace);
+            }
 
             return assistantMessage;
         } finally {

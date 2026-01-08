@@ -16,11 +16,11 @@
 package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 
 /**
- * 智能体请求
+ * 智能体请求构建器（方便进一步扩展）
+ * <p>提供链式 API 用于配置和发起对智能体的调用请求。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -28,17 +28,18 @@ import org.noear.solon.lang.Preview;
 @Preview("3.8")
 public interface AgentRequest {
     /**
-     * 配置会话
+     * 配置当前请求所属的会话
+     *
+     * @param session 智能体会话对象
+     * @return 当前请求构建器
      */
     AgentRequest session(AgentSession session);
 
     /**
-     * 配置会话
-     */
-    AgentRequest session(FlowContext context);
-
-    /**
-     * 调用
+     * 执行并获取结果
+     *
+     * @return AI 响应的消息内容
+     * @throws Throwable 执行过程中的异常
      */
     AssistantMessage call() throws Throwable;
 }

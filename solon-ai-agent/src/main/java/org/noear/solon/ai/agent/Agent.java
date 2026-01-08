@@ -27,27 +27,32 @@ import org.noear.solon.lang.Preview;
 /**
  * 智能体接口
  *
+ * <p>定义了 AI 智能体的核心行为，包括身份标识、能力评估以及任务执行。
+ * 支持作为独立组件调用，或集成到 Solon Flow 工作流中运行。</p>
+ *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8")
 public interface Agent extends NamedTaskComponent {
     /**
-     * 名字
+     * 智能体名称
      */
     String name();
 
     /**
-     * 描述
+     * 获取智能体能力描述
+     * <p>用于在多智能体协作（如 Supervisor 模式）中作为任务分配的参考依据。</p>
      */
     String description();
 
     /**
-     * 针对当前任务进行初步评估或竞标（用于合同网协议等决策场景）
+     * 针对当前任务进行初步评估或竞标
+     * <p>用于合同网协议（CNP）或决策场景，根据任务内容返回该智能体的匹配度评估或执行方案。</p>
      *
-     * @param session 会话
-     * @param prompt  当前任务提示词
-     * @return 评估结果或竞标方案（默认返回 description）
+     * @param session 当前会话
+     * @param prompt  任务提示词
+     * @return 评估结果（默认返回 {@link #description()}）
      */
     default String estimate(AgentSession session, Prompt prompt) {
         // 默认实现：如果 Agent 不支持评估，则返回静态描述
@@ -55,19 +60,30 @@ public interface Agent extends NamedTaskComponent {
     }
 
     /**
-     * 调用
+     * 执行任务（基于已有会话状态）
+     *
+     * @param session 当前会话
+     * @return 执行后的响应消息
      */
     default AssistantMessage call(AgentSession session) throws Throwable {
         return call(null, session);
     }
 
+    /**
+     * 执行任务（显式指定提示词）
+     *
+     * @param prompt  任务提示词
+     * @param session 当前会话
+     * @return 执行后的响应消息
+     */
     AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable;
 
     /**
-     * 作为 solon-flow TaskComponent 运行（方便 solon-flow 整合）
+     * 作为 Solon Flow 任务节点运行
+     * <p>实现与 Solon Flow 的无缝整合，支持自动上下文管理、协作痕迹（Trace）记录及历史注入。</p>
      *
      * @param context 流上下文
-     * @param node    当前节点
+     * @param node    当前流程节点
      */
     default void run(FlowContext context, Node node) throws Throwable {
         AgentSession session = context.getAs(ID_SESSION);

@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.intercept.FlowInterceptor;
 
 /**
@@ -26,5 +24,17 @@ import org.noear.solon.flow.intercept.FlowInterceptor;
  * @since 3.8.1
  */
 public interface TeamInterceptor extends FlowInterceptor {
+    /**
+     * 智能体开始触发
+     */
+    default void onAgentStart(TeamTrace trace) {
 
+    }
+
+    /**
+     * 智能体结束触发
+     */
+    default void onAgentEnd(TeamTrace trace) {
+
+    }
 }
