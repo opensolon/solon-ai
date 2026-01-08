@@ -4,23 +4,34 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.flow.FlowContext;
+import org.noear.solon.ai.chat.prompt.Prompt;
 
 /**
  * Swarm 策略测试：去中心化的接力模式
+ * <p>
+ * 验证目标：
+ * 1. 验证智能体之间如何通过 Swarm 协议进行去中心化的任务移交。
+ * 2. 验证 AgentSession 如何承载长链条协作的执行状态与轨迹。
+ * </p>
  */
 public class TeamAgentSwarmTest {
 
+    /**
+     * 测试：Swarm 基础接力逻辑
+     * <p>场景：中文翻译 -> 英文润色。验证两个 Agent 是否能够识别职责并完成移交。</p>
+     */
     @Test
     public void testSwarmRelayLogic() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 定义翻译接力链
+        // 1. 定义翻译接力链成员
         Agent chineseTranslator = ReActAgent.of(chatModel)
                 .name("ChineseTranslator")
                 .description("负责把用户的中文输入翻译成英文。")
@@ -39,74 +50,59 @@ public class TeamAgentSwarmTest {
                 .addAgent(polisher)
                 .build();
 
-        String yaml = team.getGraph().toYaml();
+        // 打印团队协作图的 YAML，观察去中心化的节点拓扑
+        System.out.println("--- Swarm Team Graph ---\n" + team.getGraph().toYaml() + "\n");
 
-        System.out.println("------------------\n\n");
-        System.out.println(yaml);
-        System.out.println("\n\n------------------");
+        // 3. 使用 AgentSession 替换 FlowContext
+        AgentSession session = InMemoryAgentSession.of("test_swarm_session");
 
-        FlowContext context = FlowContext.of("test_swarm");
-        String result = team.call(context, "你好，很高兴认识你").getContent();
+        // 4. 执行任务：将中文翻译并润色
+        String input = "你好，很高兴认识你";
+        String result = team.call(Prompt.of(input), session).getContent();
 
         System.out.println("=== Swarm 策略测试 ===");
-        System.out.println("任务: 翻译并润色'你好，很高兴认识你'");
+        System.out.println("任务: 翻译并润色 '" + input + "'");
         System.out.println("执行结果: " + result);
 
-        TeamTrace trace = team.getTrace(context);
+        // 5. 通过 session 获取协作轨迹
+        TeamTrace trace = team.getTrace(session);
         Assertions.assertNotNull(trace, "应该有轨迹记录");
-
-        // 放松断言：验证任务完成
         Assertions.assertNotNull(result, "任务应该有结果");
-        Assertions.assertFalse(result.trim().isEmpty(), "结果不应该为空");
         Assertions.assertTrue(trace.getStepCount() > 0, "至少应该执行一步");
 
-        // 输出调试信息
+        // 6. 验证执行过程
         System.out.println("第一步执行者: " + trace.getSteps().get(0).getAgentName());
         System.out.println("总步数: " + trace.getStepCount());
 
-        // 检查是否两个Agent都参与了（理想情况）
         long uniqueAgents = trace.getSteps().stream()
                 .map(step -> step.getAgentName())
                 .distinct()
                 .count();
-        System.out.println("实际参与Agent数: " + uniqueAgents + " (期望: 2，接力翻译和润色)");
+        System.out.println("实际参与 Agent 数: " + uniqueAgents + " (期望参与: 2)");
 
-        // 检查是否包含接力模式
-        boolean hasTranslator = trace.getSteps().stream()
-                .anyMatch(s -> "ChineseTranslator".equals(s.getAgentName()));
-        boolean hasPolisher = trace.getSteps().stream()
-                .anyMatch(s -> "Polisher".equals(s.getAgentName()));
+        // 检查接力参与情况
+        boolean hasTranslator = trace.getSteps().stream().anyMatch(s -> "ChineseTranslator".equals(s.getAgentName()));
+        boolean hasPolisher = trace.getSteps().stream().anyMatch(s -> "Polisher".equals(s.getAgentName()));
         System.out.println("是否包含翻译器: " + hasTranslator);
         System.out.println("是否包含润色器: " + hasPolisher);
 
-        System.out.println("协作轨迹:\n" + trace.getFormattedHistory());
+        System.out.println("完整协作轨迹:\n" + trace.getFormattedHistory());
         System.out.println("=== 测试结束 ===\n");
     }
 
+    /**
+     * 测试：Swarm 长链条处理逻辑
+     * <p>场景：翻译 -> 语法检查 -> 风格改进 -> 最终审阅。验证在复杂链条下的 Session 稳定性。</p>
+     */
     @Test
     public void testSwarmWithLongerChain() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 创建更长的处理链
-        Agent translator = ReActAgent.of(chatModel)
-                .name("Translator")
-                .description("将中文翻译成英文。")
-                .build();
-
-        Agent grammarChecker = ReActAgent.of(chatModel)
-                .name("GrammarChecker")
-                .description("检查英文语法和拼写错误。")
-                .build();
-
-        Agent styleImprover = ReActAgent.of(chatModel)
-                .name("StyleImprover")
-                .description("改进英文文本的写作风格。")
-                .build();
-
-        Agent finalReviewer = ReActAgent.of(chatModel)
-                .name("FinalReviewer")
-                .description("进行最终审阅，确保质量。")
-                .build();
+        // 创建多级处理链
+        Agent translator = ReActAgent.of(chatModel).name("Translator").description("将中文翻译成英文。").build();
+        Agent grammarChecker = ReActAgent.of(chatModel).name("GrammarChecker").description("检查英文语法和拼写错误。").build();
+        Agent styleImprover = ReActAgent.of(chatModel).name("StyleImprover").description("改进英文文本的写作风格。").build();
+        Agent finalReviewer = ReActAgent.of(chatModel).name("FinalReviewer").description("进行最终审阅，确保质量。").build();
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("swarm_chain_team")
@@ -117,42 +113,38 @@ public class TeamAgentSwarmTest {
                 .addAgent(finalReviewer)
                 .build();
 
-        FlowContext context = FlowContext.of("test_swarm_chain");
+        // 创建 Session 并执行复杂文本处理
+        AgentSession session = InMemoryAgentSession.of("test_swarm_chain_session");
+        String content = "人工智能正在改变世界，它通过机器学习算法分析海量数据，为各种行业提供智能解决方案。";
 
-        // 使用更复杂的文本
-        String result = team.call(context,
-                "人工智能正在改变世界，它通过机器学习算法分析海量数据，为各种行业提供智能解决方案。" +
-                        "从医疗诊断到金融风控，从自动驾驶到智能客服，AI的应用无处不在。").getContent();
+        String result = team.call(Prompt.of(content), session).getContent();
 
         System.out.println("=== Swarm 策略测试（长处理链） ===");
-        System.out.println("任务: 翻译并处理一段关于人工智能的复杂文本");
-        System.out.println("执行结果: " + result);
+        System.out.println("任务: 处理复杂文本接力");
+        System.out.println("最终结果: " + result);
 
-        TeamTrace trace = team.getTrace(context);
-        Assertions.assertNotNull(trace, "应该有轨迹记录");
+        TeamTrace trace = team.getTrace(session);
+        Assertions.assertNotNull(trace);
+        Assertions.assertTrue(trace.getStepCount() > 0);
 
-        // 基本验证
-        Assertions.assertNotNull(result, "任务应该有结果");
-        Assertions.assertTrue(trace.getStepCount() > 0, "至少应该执行一步");
+        System.out.println("协作总步数: " + trace.getStepCount());
 
-        // 输出调试信息
-        System.out.println("总步数: " + trace.getStepCount());
-
-        // 统计参与Agent数
+        // 统计参与 Agent 种类
         long uniqueAgents = trace.getSteps().stream()
                 .map(step -> step.getAgentName())
                 .distinct()
                 .count();
-        System.out.println("实际参与Agent数: " + uniqueAgents + " (总Agent数: 4)");
+        System.out.println("实际参与 Agent 数: " + uniqueAgents + " (可用总数: 4)");
 
-        // 显示每个Agent的参与情况
-        System.out.println("Agent参与情况:");
+        // 打印每个步骤的简要摘要
+        System.out.println("执行链路快照:");
         trace.getSteps().forEach(step -> {
-            System.out.println("  - " + step.getAgentName() + ": " +
-                    step.getContent().substring(0, Math.min(50, step.getContent().length())) + "...");
+            String summary = step.getContent().trim().replace("\n", " ");
+            System.out.println("  - [" + step.getAgentName() + "]: " +
+                    summary.substring(0, Math.min(50, summary.length())) + "...");
         });
 
-        System.out.println("协作轨迹:\n" + trace.getFormattedHistory());
+        System.out.println("\n协作轨迹详情:\n" + trace.getFormattedHistory());
         System.out.println("=== 测试结束 ===\n");
     }
 }

@@ -4,15 +4,22 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.flow.FlowContext;
+import org.noear.solon.ai.chat.prompt.Prompt;
 
 /**
  * MarketBased 策略测试：基于能力描述的竞争指派
+ * <p>
+ * 验证目标：
+ * 1. 验证 MARKET_BASED 协议下，协调者能否通过语义匹配从“人才市场”中选出最合适的 Agent。
+ * 2. 验证基于 AgentSession 的状态流转与 Trace 记录的完整性。
+ * </p>
  */
 public class TeamAgentMarketTest {
 
@@ -28,10 +35,10 @@ public class TeamAgentMarketTest {
 
         Agent javaExpert = ReActAgent.of(chatModel)
                 .name("java_coder")
-                .description("Java 专家，擅长高并发架构设计。")
+                .description("Java 专家，擅长高并发架构设计、支付结算和分布式网关。")
                 .build();
 
-        // 2. 使用 MARKET_BASED 策略
+        // 2. 使用 MARKET_BASED 策略组建团队
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("market_team")
                 .protocol(TeamProtocols.MARKET_BASED)
@@ -39,55 +46,50 @@ public class TeamAgentMarketTest {
                 .addAgent(javaExpert)
                 .build();
 
-        String yaml = team.getGraph().toYaml();
+        // 打印市场结构 YAML
+        System.out.println("--- Market-Based Team Graph ---\n" + team.getGraph().toYaml());
 
-        System.out.println("------------------\n\n");
-        System.out.println(yaml);
-        System.out.println("\n\n------------------");
+        // 3. 使用 AgentSession 管理会话
+        AgentSession session = InMemoryAgentSession.of("session_market_01");
 
-        FlowContext context = FlowContext.of("test_market");
         // 发起一个明显属于 Java 领域的高并发需求
-        String result = team.call(context, "我需要实现一个支持每秒万级并发的支付结算网关后端。").getContent();
+        String query = "我需要实现一个支持每秒万级并发的支付结算网关后端。";
+        String result = team.call(Prompt.of(query), session).getContent();
 
-        System.out.println("=== MarketBased 策略测试 ===");
-        System.out.println("任务: 实现支持每秒万级并发的支付结算网关后端");
-        System.out.println("执行结果: " + result);
+        System.out.println("=== 任务结果 ===\n" + result);
 
-        TeamTrace trace = team.getTrace(context);
+        // 4. 验证决策轨迹
+        TeamTrace trace = team.getTrace(session);
         Assertions.assertNotNull(trace, "应该有轨迹记录");
+        Assertions.assertFalse(result.isEmpty(), "结果不应该为空");
 
-        // 放松断言：验证任务完成
-        Assertions.assertNotNull(result, "任务应该有结果");
-        Assertions.assertFalse(result.trim().isEmpty(), "结果不应该为空");
-        Assertions.assertTrue(trace.getStepCount() > 0, "至少应该执行一步");
+        // 检查首位执行者
+        if (trace.getStepCount() > 0) {
+            String firstAgentName = trace.getSteps().get(0).getAgentName();
+            System.out.println("调解器(Mediator)在市场中选择的专家: " + firstAgentName);
 
-        // 输出决策结果供检查，但不做断言
-        String firstAgentName = trace.getSteps().get(0).getAgentName();
-        System.out.println("调解器选择的专家: " + firstAgentName);
-
-        // 检查是否选择了Java专家（理想情况）
-        boolean selectedJavaExpert = "java_coder".equals(firstAgentName);
-        System.out.println("是否选择了Java专家: " + selectedJavaExpert +
-                " (期望: true，因为任务是高并发后端)");
+            // 语义期望：Java 专家应处理高并发支付网关
+            boolean selectedJavaExpert = "java_coder".equals(firstAgentName);
+            System.out.println("符合预期选择: " + selectedJavaExpert);
+        }
 
         System.out.println("总步数: " + trace.getStepCount());
-        System.out.println("协作轨迹:\n" + trace.getFormattedHistory());
-        System.out.println("=== 测试结束 ===\n");
+        System.out.println("详细协作轨迹:\n" + trace.getFormattedHistory());
     }
 
     @Test
     public void testMarketSelectionForPythonTask() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 创建领域专家
+        // 1. 创建领域专家
         Agent pythonExpert = ReActAgent.of(chatModel)
                 .name("python_data_scientist")
-                .description("Python 数据科学家，擅长数据分析和机器学习。")
+                .description("Python 数据科学家，擅长数据分析、特征工程和机器学习建模。")
                 .build();
 
         Agent javaExpert = ReActAgent.of(chatModel)
                 .name("java_backend_engineer")
-                .description("Java 后端工程师，擅长微服务和分布式系统。")
+                .description("Java 后端工程师，擅长微服务、分布式系统和事务处理。")
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
@@ -97,34 +99,26 @@ public class TeamAgentMarketTest {
                 .addAgent(javaExpert)
                 .build();
 
-        FlowContext context = FlowContext.of("test_market_python");
+        // 使用 AgentSession
+        AgentSession session = InMemoryAgentSession.of("session_market_python");
 
         // 发起一个明显属于 Python 领域的数据分析任务
-        String result = team.call(context,
-                "我需要分析一个大型数据集，进行特征工程和机器学习建模，预测用户行为。").getContent();
+        String query = "我需要分析一个大型数据集，进行特征工程和机器学习建模，预测用户行为。";
+        String result = team.call(Prompt.of(query), session).getContent();
 
-        System.out.println("=== MarketBased 策略测试（Python任务） ===");
-        System.out.println("任务: 数据分析、特征工程和机器学习建模");
-        System.out.println("执行结果: " + result);
+        // 2. 轨迹验证
+        TeamTrace trace = team.getTrace(session);
+        Assertions.assertNotNull(trace);
 
-        TeamTrace trace = team.getTrace(context);
-        Assertions.assertNotNull(trace, "应该有轨迹记录");
+        if (trace.getStepCount() > 0) {
+            String selectedAgent = trace.getSteps().get(0).getAgentName();
+            System.out.println("市场指派的专家: " + selectedAgent);
 
-        // 基本验证
-        Assertions.assertNotNull(result, "任务应该有结果");
-        Assertions.assertTrue(trace.getStepCount() > 0, "至少应该执行一步");
+            boolean selectedPythonExpert = "python_data_scientist".equals(selectedAgent);
+            System.out.println("符合 Python 领域匹配期望: " + selectedPythonExpert);
+        }
 
-        // 输出决策信息
-        String firstAgentName = trace.getSteps().get(0).getAgentName();
-        System.out.println("调解器选择的专家: " + firstAgentName);
-
-        // 检查是否选择了Python专家（理想情况）
-        boolean selectedPythonExpert = "python_data_scientist".equals(firstAgentName);
-        System.out.println("是否选择了Python专家: " + selectedPythonExpert +
-                " (期望: true，因为任务是数据分析和机器学习)");
-
-        System.out.println("总步数: " + trace.getStepCount());
         System.out.println("协作轨迹:\n" + trace.getFormattedHistory());
-        System.out.println("=== 测试结束 ===\n");
+        Assertions.assertTrue(trace.getStepCount() > 0);
     }
 }

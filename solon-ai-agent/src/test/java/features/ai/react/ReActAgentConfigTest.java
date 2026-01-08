@@ -3,151 +3,162 @@ package features.ai.react;
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
-import org.noear.solon.flow.FlowContext;
 
 /**
  * ReActAgent 配置参数测试
+ * <p>验证智能体在不同 LLM 参数（温度、Token 限制）及运行参数（结束标记）下的表现差异。</p>
  */
 public class ReActAgentConfigTest {
 
+    /**
+     * 测试不同温度参数对推理多样性的影响
+     */
     @Test
     public void testDifferentTemperatures() throws Throwable {
-        // 测试：不同温度参数的影响
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 低温（确定性高）
+        // 1. 低温配置：注重确定性和逻辑严谨性
         ReActAgent lowTempAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new CreativeTools()))
                 .chatOptions(o -> o.temperature(0.1F))
-                .name("low_temp")
+                .name("low_temp_agent")
                 .build();
 
-        // 高温（创造性高）
+        // 2. 高温配置：注重创造性和词汇多样性
         ReActAgent highTempAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new CreativeTools()))
                 .chatOptions(o -> o.temperature(0.9F))
-                .name("high_temp")
+                .name("high_temp_agent")
                 .build();
 
-        String prompt = "给这个产品想一个宣传口号";
+        String userPrompt = "给这个产品想一个宣传口号";
 
-        FlowContext context1 = FlowContext.of("test_temp_1");
-        String result1 = lowTempAgent.call(context1, prompt).getContent();
+        // 使用 AgentSession 替代 FlowContext
+        AgentSession session1 = InMemoryAgentSession.of("temp_job_1");
+        String result1 = lowTempAgent.call(Prompt.of(userPrompt), session1).getContent();
 
-        FlowContext context2 = FlowContext.of("test_temp_2");
-        String result2 = highTempAgent.call(context2, prompt).getContent();
+        AgentSession session2 = InMemoryAgentSession.of("temp_job_2");
+        String result2 = highTempAgent.call(Prompt.of(userPrompt), session2).getContent();
 
-        System.out.println("低温结果: " + result1);
-        System.out.println("高温结果: " + result2);
+        System.out.println("低温结果（严谨）: " + result1);
+        System.out.println("高温结果（创意）: " + result2);
 
-        Assertions.assertNotEquals(result1, result2,
-                "不同温度应该产生不同结果");
+        // 验证：不同采样参数通常会导致输出内容不一致
+        Assertions.assertNotEquals(result1, result2, "不同温度配置应产生差异化的回复内容");
     }
 
+    /**
+     * 测试 MaxTokens 限制对输出长度的约束
+     */
     @Test
     public void testDifferentMaxTokens() throws Throwable {
-        // 测试：不同 maxTokens 参数
         ChatModel chatModel = LlmUtil.getChatModel();
 
+        // 限制短输出
         ReActAgent shortAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new StoryTools()))
-                .chatOptions(o -> o.max_tokens(50)) // 很短的token限制
-                .name("short")
+                .chatOptions(o -> o.max_tokens(50))
+                .name("short_agent")
                 .build();
 
+        // 允许长输出
         ReActAgent longAgent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new StoryTools()))
-                .chatOptions(o -> o.max_tokens(500)) // 较长的token限制
-                .name("long")
+                .chatOptions(o -> o.max_tokens(500))
+                .name("long_agent")
                 .build();
 
-        String prompt = "写一个简短的故事";
+        String userPrompt = "写一个关于勇者的简短故事";
 
-        FlowContext context1 = FlowContext.of("test_tokens_1");
-        String result1 = shortAgent.call(context1, prompt).getContent();
+        AgentSession session1 = InMemoryAgentSession.of("token_job_1");
+        String result1 = shortAgent.call(Prompt.of(userPrompt), session1).getContent();
 
-        FlowContext context2 = FlowContext.of("test_tokens_2");
-        String result2 = longAgent.call(context2, prompt).getContent();
+        AgentSession session2 = InMemoryAgentSession.of("token_job_2");
+        String result2 = longAgent.call(Prompt.of(userPrompt), session2).getContent();
 
-        System.out.println("短token结果长度: " + result1.length());
-        System.out.println("长token结果长度: " + result2.length());
+        System.out.println("受限 Token 长度: " + result1.length());
+        System.out.println("宽松 Token 长度: " + result2.length());
 
-        // 长token的结果应该更长（但不是绝对的，取决于模型行为）
-        Assertions.assertTrue(result2.length() >= result1.length(),
-                "长token限制应该允许更长的输出");
+        // 验证：长 Token 配置不应比短 Token 配置截断更严重
+        Assertions.assertTrue(result2.length() >= result1.length(), "长 Token 限制应允许产生更丰富的内容");
     }
 
+    /**
+     * 测试日志与会话隔离
+     */
     @Test
-    public void testLoggingEnabled() throws Throwable {
-        // 测试：日志开启/关闭
-        ChatModel chatModel = LlmUtil.getChatModel();
-
-        ReActAgent loggingAgent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new BasicTools()))
-                .name("with_logging")
-                .build();
-
-        ReActAgent noLoggingAgent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new BasicTools()))
-                .name("no_logging")
-                .build();
-
-        // 主要验证不抛出异常
-        FlowContext context1 = FlowContext.of("test_logging_1");
-        String result1 = loggingAgent.call(context1, "测试日志").getContent();
-
-        FlowContext context2 = FlowContext.of("test_logging_2");
-        String result2 = noLoggingAgent.call(context2, "测试无日志").getContent();
-
-        Assertions.assertNotNull(result1);
-        Assertions.assertNotNull(result2);
-    }
-
-    @Test
-    public void testFinishMarker() throws Throwable {
-        // 测试：自定义结束标记
+    public void testSessionLogging() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
-                .finishMarker("[结束]") // 自定义结束标记
-                .name("custom_finish")
+                .name("diagnostic_agent")
                 .build();
 
-        FlowContext context = FlowContext.of("test_finish");
-        String result = agent.call(context, "简单问候").getContent();
+        // 验证：相同的 Agent 在不同 Session 下应互不干扰
+        AgentSession session1 = InMemoryAgentSession.of("session_a");
+        AgentSession session2 = InMemoryAgentSession.of("session_b");
 
-        System.out.println("自定义结束标记结果: " + result);
+        String res1 = agent.call(Prompt.of("测试会话 A"), session1).getContent();
+        String res2 = agent.call(Prompt.of("测试会话 B"), session2).getContent();
+
+        Assertions.assertNotNull(res1);
+        Assertions.assertNotNull(res2);
+    }
+
+    /**
+     * 测试自定义结束标记（Finish Marker）
+     * <p>结束标记用于提示 LLM 决策已完成，停止继续思考。</p>
+     */
+    @Test
+    public void testFinishMarker() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .addTool(new MethodToolProvider(new BasicTools()))
+                .finishMarker("[COMPLETED]") // 自定义推理终结符
+                .name("marker_agent")
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("marker_job");
+        String result = agent.call(Prompt.of("简单问候一下"), session).getContent();
+
+        System.out.println("带标记的结果: " + result);
         Assertions.assertNotNull(result);
 
-        // 如果使用了结束标记，应该包含它
-        if (result.contains("[结束]")) {
-            System.out.println("检测到自定义结束标记");
+        // 如果模型严格遵循提示词，结果可能会显式包含或隐含该标记的语义
+        if (result.contains("[COMPLETED]")) {
+            System.out.println("检测到自定义推理终结符，流程正常关闭。");
         }
     }
 
+    // --- 工具类定义 ---
+
     public static class CreativeTools {
-        @ToolMapping(description = "生成创意内容")
+        @ToolMapping(description = "生成产品创意口号")
         public String generate_idea() {
-            return "这是一个创意想法";
+            return "科技点亮生活";
         }
     }
 
     public static class StoryTools {
-        @ToolMapping(description = "生成故事")
+        @ToolMapping(description = "生成中长篇叙事内容")
         public String generate_story() {
-            return "从前有座山，山里有座庙...";
+            return "在遥远的塞恩大陆，有一位年轻的冒险者正准备踏入幽暗森林...";
         }
     }
 
     public static class BasicTools {
-        @ToolMapping(description = "基础工具")
+        @ToolMapping(description = "执行基础通用任务")
         public String basic_tool() {
-            return "基础工具";
+            return "执行成功";
         }
     }
 }

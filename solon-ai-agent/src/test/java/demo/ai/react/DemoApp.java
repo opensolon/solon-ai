@@ -20,8 +20,7 @@ public class DemoApp {
                 .addTool(new MethodToolProvider(new TimeTool()))
                 .build();
 
-        FlowContext context = FlowContext.of("session_001");
-        String answer = robot.call(context, "现在几点了？").getContent();
+        String answer = robot.call("现在几点了？").getContent();
 
         System.out.println("Robot 答复: " + answer);
     }

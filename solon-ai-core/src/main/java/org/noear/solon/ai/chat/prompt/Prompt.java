@@ -39,7 +39,9 @@ public class Prompt implements ChatPrompt, Serializable {
 
     public Prompt addMessage(String... messages) {
         for (String m : messages) {
-            messageList.add(ChatMessage.ofUser(m));
+            if (m != null) {
+                messageList.add(ChatMessage.ofUser(m));
+            }
         }
         return this;
     }

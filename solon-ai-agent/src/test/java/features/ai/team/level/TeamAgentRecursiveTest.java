@@ -5,77 +5,81 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * TeamAgent 递归与循环协作测试
+ * * <p>场景 1: 测试嵌套团队（Team in Team），验证 Trace 轨迹在父子团队间的正确记录。</p>
+ * <p>场景 2: 测试反馈循环（Feedback Loop），验证当审核不通过时，流程能重新回到研发节点。</p>
+ */
 public class TeamAgentRecursiveTest {
     private static final Logger log = LoggerFactory.getLogger(TeamAgentRecursiveTest.class);
 
+    /**
+     * 测试：嵌套团队协作
+     * 验证：父团队（项目组）调用子团队（研发组）时，各层级的 Trace 均能正确生成且不触发死循环。
+     */
     @Test
     public void testNestedTeam() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 底层团队：强制其输出简洁，并带上完成标记
+        // 1. 底层团队：研发小组 (dev_team)
         TeamAgent devTeam = TeamAgent.of(chatModel)
                 .name("dev_team")
                 .description("研发小组。输入需求，直接给出代码实现。完成后必须回复：[FINISH] 研发已完成")
                 .addAgent(createSimpleAgent("Coder", "负责写代码"))
-                .maxTotalIterations(2) // 严格限制子团队次数
+                .maxTotalIterations(2) // 严格限制子团队迭代次数
                 .build();
 
-        // 2. 顶层团队
+        // 2. 顶层团队：项目管理组 (project_team)
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name("project_team")
                 .description("项目管理。先让 Analyst 分析，然后交给 dev_team 执行。")
                 .addAgent(createSimpleAgent("Analyst", "需求分析师"))
-                .addAgent(devTeam)
+                .addAgent(devTeam) // 嵌套子团队
                 .maxTotalIterations(5)
                 .build();
 
-        String yaml = projectTeam.getGraph().toYaml();
+        // 可视化结构：打印图定义的 YAML
+        System.out.println("--- Project Team Graph ---\n" + projectTeam.getGraph().toYaml() + "\n---");
 
-        System.out.println("------------------\n\n");
-        System.out.println(yaml);
-        System.out.println("\n\n------------------");
+        // 3. 使用 AgentSession 替代 FlowContext
+        AgentSession session = InMemoryAgentSession.of("sn_recursive_2026");
 
-        FlowContext context = FlowContext.of("sn_2026");
+        log.info(">>> 开始嵌套团队调用测试...");
+        // 核心：在 Prompt 中明确要求一次性处理
+        String promptText = "请 Java 程序员帮我写一个 Hello World。完成后直接结束。";
+        projectTeam.call(Prompt.of(promptText), session).getContent();
 
-        log.info(">>> 开始测试...");
-        // 核心改动：在 Prompt 中明确要求一次性处理
-        String finalResult = projectTeam.call(context, "请 Java 程序员帮我写一个 Hello World。完成后直接结束。").getContent();
+        // 4. 结果验证：从 session 的快照中提取 Trace
+        // 在 3.8.x 中，TeamAgent 会将 Trace 存入 snapshot (即 FlowContext)
+        TeamTrace rootTrace = session.getSnapshot().getAs("__project_team");
+        TeamTrace subTrace = session.getSnapshot().getAs("__dev_team");
 
-        TeamTrace rootTrace = context.getAs("__project_team");
-        TeamTrace subTrace = context.getAs("__dev_team");
-
-        // 打印简化的 Trace 路径
         if (rootTrace != null) {
-            log.info("父团队路径: {}", String.join(" -> ",
+            log.info("父团队执行路径: {}", String.join(" -> ",
                     rootTrace.getSteps().stream().map(s -> s.getAgentName()).toArray(String[]::new)));
         }
 
-        Assertions.assertNotNull(rootTrace, "父团队 Trace 丢失");
-        Assertions.assertTrue(rootTrace.getIterationsCount() < 5, "触发了死循环！日志过多通常是因为这里。");
+        Assertions.assertNotNull(rootTrace, "父团队 Trace 记录丢失");
+        Assertions.assertTrue(rootTrace.getIterationsCount() < 5, "触发了非预期的高频迭代，可能存在逻辑死循环");
+
+        // 子团队轨迹也应存在（如果被 Supervisor 调度到）
+        log.info("子团队是否存在轨迹: {}", (subTrace != null));
     }
 
-    private static Agent createSimpleAgent(String name, String desc) {
-        return new Agent() {
-            @Override public String name() { return name; }
-            @Override public String description() { return desc; }
-            @Override
-            public AssistantMessage call(Prompt prompt, AgentSession session) {
-                // 模拟一个带有明确结束意图的返回
-                return ChatMessage.ofAssistant( "[Result from " + name + "]: 任务已处理。 [FINISH]");
-            }
-        };
-    }
-
+    /**
+     * 测试：反馈修正循环
+     * 验证：当 Reviewer 给出打回意见时，TeamAgent 能自动调度回 dev_team 进行修复。
+     */
     @Test
     public void testFeedbackLoop() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
@@ -94,7 +98,10 @@ public class TeamAgentRecursiveTest {
                     private int reviewCount = 0;
                     @Override public String name() { return "Reviewer"; }
                     @Override public String description() { return "代码审核员"; }
-                    @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
+
+                    @Override
+                    public AssistantMessage call(Prompt prompt, AgentSession session) {
+                        // 第一次调用打回，第二次调用通过
                         if (reviewCount++ == 0) {
                             return ChatMessage.ofAssistant("代码发现安全漏洞，请 dev_team 重新修复！");
                         }
@@ -104,24 +111,40 @@ public class TeamAgentRecursiveTest {
                 .maxTotalIterations(10)
                 .build();
 
-        FlowContext context = FlowContext.of("sn_feedback_loop");
-        String result = projectTeam.call(context, "请开发一个登录模块。").getContent();
+        // 3. 执行任务
+        AgentSession session = InMemoryAgentSession.of("sn_feedback_loop_2026");
+        projectTeam.call(Prompt.of("请开发一个登录模块。"), session);
 
-        TeamTrace rootTrace = context.getAs("__quality_project");
+        // 4. 关键检测点：验证反馈循环是否生效
+        TeamTrace rootTrace = session.getSnapshot().getAs("__quality_project");
+        Assertions.assertNotNull(rootTrace, "执行轨迹丢失");
 
-        // --- 关键检测点 ---
-
-        // 1. 验证是否出现了打回重做的路径：dev_team -> Reviewer -> dev_team -> Reviewer
+        // 验证 1：验证是否出现了打回重做的路径（dev_team 应被多次调用）
         long devTeamCalls = rootTrace.getSteps().stream()
                 .filter(s -> "dev_team".equalsIgnoreCase(s.getAgentName())).count();
 
-        log.info("dev_team 被调用次数: {}", devTeamCalls);
-        Assertions.assertTrue(devTeamCalls >= 2, "当 Reviewer 不满意时，Supervisor 应该重新路由回 dev_team");
+        log.info("反馈循环中 dev_team 被激活次数: {}", devTeamCalls);
+        Assertions.assertTrue(devTeamCalls >= 2, "当审核打回时，Supervisor 应该重新路由回 dev_team");
 
-        // 2. 验证最终结果是否包含了审核通过的标记
+        // 验证 2：验证最终 Trace 是否捕获到了审核通过的终态消息
         boolean hasApproval = rootTrace.getSteps().stream()
                 .anyMatch(s -> "Reviewer".equals(s.getAgentName()) && s.getContent().contains("表现完美"));
 
-        Assertions.assertTrue(hasApproval, "Trace 中应记录 Reviewer 的正面确认");
+        Assertions.assertTrue(hasApproval, "Trace 中应包含 Reviewer 的最终确认记录");
+    }
+
+    /**
+     * 创建一个模拟简单回复的智能体
+     */
+    private static Agent createSimpleAgent(String name, String desc) {
+        return new Agent() {
+            @Override public String name() { return name; }
+            @Override public String description() { return desc; }
+            @Override
+            public AssistantMessage call(Prompt prompt, AgentSession session) {
+                // 返回带完成标记的模拟数据
+                return ChatMessage.ofAssistant("[Result from " + name + "]: 任务处理完毕。 [FINISH]");
+            }
+        };
     }
 }
