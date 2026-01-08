@@ -27,6 +27,10 @@ import java.util.Locale;
  */
 @Preview("3.8")
 public interface TeamPromptProvider {
+    default Locale getLocale(){
+        return Locale.CHINESE;
+    }
+
     /**
      * 获取系统提示词
      */

@@ -49,13 +49,13 @@ public class InMemoryAgentSession implements AgentSession {
     public InMemoryAgentSession(String sessionId) {
         this.sessionId = sessionId;
         this.snapshot = FlowContext.of(sessionId);
-        this.snapshot.put(Agent.ID_SESSION, this);
+        this.snapshot.put(Agent.KEY_SESSION, this);
     }
 
     public InMemoryAgentSession(FlowContext context) {
         this.sessionId = context.getInstanceId();
         this.snapshot = context;
-        this.snapshot.put(Agent.ID_SESSION, this);
+        this.snapshot.put(Agent.KEY_SESSION, this);
     }
 
     @Override

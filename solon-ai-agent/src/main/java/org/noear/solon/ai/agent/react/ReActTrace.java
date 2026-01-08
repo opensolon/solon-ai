@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -42,6 +43,7 @@ import java.util.List;
 public class ReActTrace {
     private transient ReActConfig config;
     private transient AgentSession session;
+    private transient TeamProtocol protocol;
 
     private String agentName;
     private Prompt prompt;
@@ -88,10 +90,11 @@ public class ReActTrace {
     // --- 状态访问与生命周期管理 ---
 
 
-    protected void prepare(ReActConfig config, AgentSession session, String agentName) {
+    protected void prepare(ReActConfig config, AgentSession session, String agentName, TeamProtocol protocol) {
         this.config = config;
         this.session = session;
         this.agentName = agentName;
+        this.protocol = protocol;
     }
 
     public ReActConfig getConfig() {
@@ -103,6 +106,9 @@ public class ReActTrace {
         return session;
     }
 
+    public TeamProtocol getProtocol() {
+        return protocol;
+    }
 
     public String getAgentName() {
         return agentName;

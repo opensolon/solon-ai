@@ -18,7 +18,6 @@ package org.noear.solon.ai.agent.team;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -198,7 +197,9 @@ public class TeamAgent implements Agent {
 
             // [阶段2：流图执行] 在特定的上下文范围内驱动 FlowEngine 执行协作逻辑
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-                flowEngine.eval(graph, context);
+                context.with(Agent.KEY_PROTOCOL, config.getProtocol(), ()->{
+                    flowEngine.eval(graph, context);
+                });
             });
 
             // [阶段3：结果提取] 优先获取明确的最终答案，否则取最后一个执行步骤的内容
@@ -228,7 +229,7 @@ public class TeamAgent implements Agent {
             // [阶段4：生命周期销毁] 无论成功失败，触发拦截器和协议的清理回调
             if (config != null) {
                 try {
-                    config.getProtocol().onFinished(context, trace);
+                    config.getProtocol().onTeamFinished(context, trace);
                 } catch (Throwable e) {
                     LOG.warn("TeamAgent [{}] finalization failed", name, e);
                 }
@@ -353,8 +354,8 @@ public class TeamAgent implements Agent {
         /**
          * 设置协作协议（核心：决定了团队的拓扑结构和运行模式）
          */
-        public Builder protocol(TeamProtocol protocol) {
-            config.setProtocol(protocol);
+        public Builder protocol(TeamProtocolFactory protocolFactory) {
+            config.setProtocol(protocolFactory);
             return this;
         }
 

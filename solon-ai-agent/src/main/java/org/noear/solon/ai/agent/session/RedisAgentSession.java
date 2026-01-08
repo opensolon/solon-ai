@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.session;
 
 import org.noear.redisx.RedisClient;
 import org.noear.redisx.plus.RedisList;
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.flow.FlowContext;
@@ -50,6 +51,7 @@ public class RedisAgentSession implements AgentSession {
 
         String json = redisClient.getBucket().get(instanceId);
         this.snapshot = FlowContext.fromJson(json);
+        this.snapshot.put(Agent.KEY_SESSION, this);
     }
 
 

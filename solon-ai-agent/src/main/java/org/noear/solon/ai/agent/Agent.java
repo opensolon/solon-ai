@@ -86,10 +86,10 @@ public interface Agent extends NamedTaskComponent {
      * @param node    当前流程节点
      */
     default void run(FlowContext context, Node node) throws Throwable {
-        AgentSession session = context.getAs(ID_SESSION);
+        AgentSession session = context.getAs(KEY_SESSION);
         if (session == null) {
             session = new InMemoryAgentSession("tmp");
-            context.put(ID_SESSION, session);
+            context.put(KEY_SESSION, session);
         }
 
         String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
@@ -122,6 +122,8 @@ public interface Agent extends NamedTaskComponent {
     }
 
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key";
+    static String KEY_SESSION = "SESSION";
+    static String KEY_PROTOCOL = "PROTOCOL";
 
     static String ID_START = "start";
     static String ID_END = "end";
@@ -131,6 +133,4 @@ public interface Agent extends NamedTaskComponent {
     static String ID_SYSTEM = "system";
     static String ID_SUPERVISOR = "supervisor";
     static String ID_BIDDING = "bidding";
-
-    static String ID_SESSION = "SESSION";
 }

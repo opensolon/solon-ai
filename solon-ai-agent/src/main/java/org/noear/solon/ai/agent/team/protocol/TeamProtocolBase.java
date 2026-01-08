@@ -28,7 +28,17 @@ import java.util.Locale;
  * @since 3.8.1
  */
 public abstract class TeamProtocolBase implements TeamProtocol {
-    protected void linkAgents(TeamConfig config, NodeSpec ns, String traceKey) {
+    protected final TeamConfig config;
+
+    public TeamProtocolBase(TeamConfig config) {
+        this.config = config;
+    }
+
+    public TeamConfig config() {
+        return config;
+    }
+
+    protected void linkAgents(NodeSpec ns, String traceKey) {
         for (String agentName : config.getAgentMap().keySet()) {
             ns.linkAdd(agentName, l -> l.title("route = " + agentName).when(ctx ->
                     agentName.equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
@@ -36,10 +46,12 @@ public abstract class TeamProtocolBase implements TeamProtocol {
     }
 
     @Override
-    public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
+    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
+            sb.append("\n## 协作协议：").append(config.getProtocol().name()).append("\n");
             sb.append("- 作为团队主管，请根据任务需求和成员能力做出决策。");
         } else {
+            sb.append("\n## Collaboration Protocol: ").append(config.getProtocol().name()).append("\n");
             sb.append("- As team supervisor, make decisions based on task requirements and member capabilities.");
         }
     }

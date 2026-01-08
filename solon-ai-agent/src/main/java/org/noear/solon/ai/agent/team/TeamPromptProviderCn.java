@@ -47,8 +47,7 @@ public class TeamPromptProviderCn implements TeamPromptProvider {
         sb.append("\n## 当前任务\n").append(trace.getPrompt().getUserContent()).append("\n");
 
         // 3. 协作协议：由具体策略（如 Sequential, Multi-Agent）注入特定指令
-        sb.append("\n## 协作协议：").append(config.getProtocol().name()).append("\n");
-        config.getProtocol().injectInstruction(config, Locale.CHINESE, sb);
+        config.getProtocol().injectSupervisorInstruction(Locale.CHINESE, sb);
 
         // 4. 严格输出规范：确保 Supervisor 只做决策，不产生多余回复
         sb.append("\n## 输出规范\n");

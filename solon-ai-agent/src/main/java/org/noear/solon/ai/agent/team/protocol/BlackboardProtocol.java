@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.ai.agent.team.TeamProtocolFactory;
 
 import java.util.Locale;
 
@@ -25,17 +26,23 @@ import java.util.Locale;
  * @since 3.8.1
  */
 public class BlackboardProtocol extends HierarchicalProtocol {
+    public BlackboardProtocol(TeamConfig config) {
+        super(config);
+    }
+
     @Override
     public String name() {
         return "BLACKBOARD";
     }
 
     @Override
-    public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
+    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
+            sb.append("\n## 协作协议：").append(config.getProtocol().name()).append("\n");
             sb.append("1. **黑板机制**：历史记录即公共黑板，请检查哪些信息缺失或需要修正。\n");
             sb.append("2. **按需补位**：指派能填补空白或纠正错误的 Agent 执行。");
         } else {
+            sb.append("\n## Collaboration Protocol: ").append(config.getProtocol().name()).append("\n");
             sb.append("1. **Blackboard Mechanism**: History is a public board; check for missing or incorrect info.\n");
             sb.append("2. **Gap Filling**: Assign the Agent best suited to fill gaps or correct errors.");
         }

@@ -17,6 +17,8 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.lang.Preview;
 
+import java.util.Locale;
+
 /**
  * ReAct 模式系统提示词提供者（英文版）
  *
@@ -29,6 +31,11 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
 
     public static ReActPromptProvider getInstance() {
         return instance;
+    }
+
+    @Override
+    public Locale getLocale() {
+        return Locale.ENGLISH;
     }
 
     @Override

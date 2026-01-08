@@ -17,6 +17,8 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.lang.Preview;
 
+import java.util.Locale;
+
 /**
  * ReAct 提示词提供者
  *
@@ -25,6 +27,10 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.8")
 public interface ReActPromptProvider {
+    default Locale getLocale(){
+        return Locale.CHINESE;
+    }
+
     /**
      * 获取系统提示词
      */

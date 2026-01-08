@@ -30,24 +30,30 @@ import java.util.Locale;
  * @since 3.8.1
  */
 public class SequentialProtocol extends HierarchicalProtocol {
+    public SequentialProtocol(TeamConfig config) {
+        super(config);
+    }
+
     @Override
     public String name() {
         return "SEQUENTIAL";
     }
 
     @Override
-    public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
+    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
+            sb.append("\n## 协作协议：").append(config.getProtocol().name()).append("\n");
             sb.append("1. **严谨接力**：任务必须按预设的 Agent 顺序执行，严禁跳步或逆向指派。\n");
             sb.append("2. **单向推进**：每一步只需确认当前 Agent 完成产出，并指派列表中的下一位成员。");
         } else {
+            sb.append("\n## Collaboration Protocol: ").append(config.getProtocol().name()).append("\n");
             sb.append("1. **Strict Relay**: Tasks MUST follow the predefined Agent sequence. No skipping or backtracking.\n");
             sb.append("2. **Forward Progression**: Confirm the current output and assign the NEXT member in the predefined list.");
         }
     }
 
     @Override
-    public boolean interceptExecute(FlowContext context, TeamTrace trace) throws Exception {
+    public boolean interceptSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
         List<String> agentNames = new ArrayList<>(trace.getConfig().getAgentMap().keySet());
         int nextIndex = trace.getIterationsCount();
 

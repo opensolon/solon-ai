@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * ReAct 推理任务（Reasoning Task）
@@ -83,8 +84,14 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 2：构建消息全景]
         // 拼接 System Prompt (ReAct 规范) 和 动态增长的历史对话 (Thought/Action/Observation)
+        String systemPrompt = config.getPromptProvider().getSystemPrompt(trace);
+        if(trace.getProtocol() != null) {
+            StringBuilder systemPromptBuilder = new StringBuilder(systemPrompt);
+            trace.getProtocol().injectAgentInstruction(config.getPromptProvider().getLocale(), systemPromptBuilder);
+            systemPrompt = systemPromptBuilder.toString();
+        }
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.ofSystem(config.getSystemPrompt(trace)));
+        messages.add(ChatMessage.ofSystem(systemPrompt));
         messages.addAll(trace.getMessages());
 
         // [逻辑 3：执行模型推理]

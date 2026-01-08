@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
+import org.noear.solon.lang.NonSerializable;
 
 import java.util.Locale;
 
@@ -27,28 +28,37 @@ import java.util.Locale;
  * @author noear
  * @since 3.8.1
  */
-public interface TeamProtocol {
+public interface TeamProtocol extends NonSerializable {
     /**
      * 获取协议唯一标识（如: SWARM, SEQUENTIAL）
      */
     String name();
 
     /**
+     * 团队配置
+     */
+    TeamConfig config();
+
+    /**
      * [生命周期：构建期] 构建团队协作图的拓扑结构
      *
-     * @param config 团队配置
-     * @param spec   图规格定义
+     * @param spec 图规格定义
      */
-    void buildGraph(TeamConfig config, GraphSpec spec);
+    void buildGraph(GraphSpec spec);
+
+    default void injectAgentInstruction(Locale locale, StringBuilder sb) {
+
+    }
 
     /**
      * [生命周期：初始化] 注入协议固有的静态系统提示词指令
      *
-     * @param config 团队配置
      * @param locale 语言环境
      * @param sb     用于追加指令的字符串构建器
      */
-    void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb);
+    default void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
+
+    }
 
     /**
      * [生命周期：决策前] 准备运行时的动态指令补充信息
@@ -58,7 +68,7 @@ public interface TeamProtocol {
      * @param trace   协作跟踪状态
      * @param sb      用于追加动态信息的字符串构建器
      */
-    default void prepareInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
+    default void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
     }
 
     /**
@@ -66,7 +76,7 @@ public interface TeamProtocol {
      *
      * @return true 表示协议已接管执行流程，不再进入智能路由决策（如顺序模式的直接跳转）
      */
-    default boolean interceptExecute(FlowContext context, TeamTrace trace) throws Exception {
+    default boolean interceptSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
         return false;
     }
 
@@ -78,7 +88,7 @@ public interface TeamProtocol {
      * @param decision LLM 给出的原始决策内容
      * @return true 表示协议已根据决策内容完成路由处理，跳过通用的 Agent 匹配逻辑
      */
-    default boolean interceptRouting(FlowContext context, TeamTrace trace, String decision) {
+    default boolean interceptSupervisorRouting(FlowContext context, TeamTrace trace, String decision) {
         return false;
     }
 
@@ -90,13 +100,13 @@ public interface TeamProtocol {
      * @param trace     协作跟踪状态
      * @param nextAgent 即将执行的 Agent 名称（或结束标识）
      */
-    default void onRouting(FlowContext context, TeamTrace trace, String nextAgent) {
+    default void onSupervisorRouting(FlowContext context, TeamTrace trace, String nextAgent) {
     }
 
     /**
      * [生命周期：任务结束] 团队任务彻底完成或异常中断后的清理工作
      */
-    default void onFinished(FlowContext context, TeamTrace trace) {
+    default void onTeamFinished(FlowContext context, TeamTrace trace) {
         // 用于清理 context 中的临时数据，释放资源
     }
 }

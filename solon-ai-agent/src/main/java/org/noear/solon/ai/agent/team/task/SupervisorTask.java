@@ -79,7 +79,7 @@ public class SupervisorTask implements NamedTaskComponent {
             }
 
             // [协议生命周期 - 执行拦截] 询问协议是否接管执行逻辑。若返回 true，则协议已完成路由跳转，不再进行 LLM 决策。
-            if (config.getProtocol().interceptExecute(context, trace)) {
+            if (config.getProtocol().interceptSupervisorExecute(context, trace)) {
                 return;
             }
 
@@ -94,9 +94,9 @@ public class SupervisorTask implements NamedTaskComponent {
     private void runIntelligent(FlowContext context, TeamTrace trace) throws Exception {
         // [协议生命周期 - 指令准备] 获取协议提供的运行时动态补充指令（如黑板数据、招标书摘要等）
         StringBuilder protocolExt = new StringBuilder();
-        config.getProtocol().prepareInstruction(context, trace, protocolExt);
+        config.getProtocol().prepareSupervisorInstruction(context, trace, protocolExt);
 
-        String basePrompt = config.getSystemPrompt(trace);
+        String basePrompt = config.getPromptProvider().getSystemPrompt(trace);
         // 确保基础指令与协议动态指令之间有清晰的视觉隔离
         String enhancedPrompt = (protocolExt.length() > 0)
                 ? basePrompt + "\n\n=== Protocol Extensions ===\n" + protocolExt
@@ -170,7 +170,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         // [协议生命周期 - 路由拦截] 允许协议根据 LLm 决策内容先行拦截（如处理特殊信号词，或修正幻听的 Agent 名）
-        if (config.getProtocol().interceptRouting(context, trace, decision)) {
+        if (config.getProtocol().interceptSupervisorRouting(context, trace, decision)) {
             return;
         }
 
@@ -236,7 +236,7 @@ public class SupervisorTask implements NamedTaskComponent {
     private void routeTo(FlowContext context, TeamTrace trace, String targetName) {
         trace.setRoute(targetName);
         // [协议生命周期 - 路由确认通知]
-        config.getProtocol().onRouting(context, trace, targetName);
+        config.getProtocol().onSupervisorRouting(context, trace, targetName);
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] supervisor routed to: [{}]", config.getName(), targetName);
         }

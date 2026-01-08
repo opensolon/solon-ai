@@ -31,20 +31,24 @@ import java.util.Locale;
  * @since 3.8.1
  */
 public class ContractNetProtocol extends TeamProtocolBase {
+    public ContractNetProtocol(TeamConfig config) {
+        super(config);
+    }
+
     @Override
     public String name() {
         return "CONTRACT_NET";
     }
 
     @Override
-    public void buildGraph(TeamConfig config, GraphSpec spec) {
+    public void buildGraph(GraphSpec spec) {
         String traceKey = "__" + config.getName();
 
         spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
             ns.linkAdd(Agent.ID_BIDDING, l -> l.title("route = " + Agent.ID_BIDDING).when(ctx -> Agent.ID_BIDDING.equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
-            linkAgents(config, ns, traceKey);
+            linkAgents(ns, traceKey);
         }).linkAdd(Agent.ID_END);
 
         spec.addActivity(new ContractNetBiddingTask(config)).linkAdd(Agent.ID_SUPERVISOR);
@@ -56,18 +60,20 @@ public class ContractNetProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
+    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
+            sb.append("\n## 协作协议：").append(config.getProtocol().name()).append("\n");
             sb.append("1. **流程规范**：遵循'招标-定标'流程。若需多个方案对比，请先输出 `BIDDING` 启动招标。\n");
             sb.append("2. **择优录取**：收到标书后，对比方案优劣，选出最合适的 Agent 执行。");
         } else {
+            sb.append("\n## Collaboration Protocol: ").append(config.getProtocol().name()).append("\n");
             sb.append("1. **Workflow**: Follow 'Bidding-Awarding' protocol. Output `BIDDING` first if multiple approaches are needed.\n");
             sb.append("2. **Evaluation**: Compare bids and select the winner based on quality and expertise.");
         }
     }
 
     @Override
-    public boolean interceptRouting(FlowContext context, TeamTrace trace, String decision) {
+    public boolean interceptSupervisorRouting(FlowContext context, TeamTrace trace, String decision) {
         if (decision.toUpperCase().contains(Agent.ID_BIDDING.toUpperCase())) {
             trace.setRoute(Agent.ID_BIDDING);
             return true;
@@ -77,7 +83,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public void prepareInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
+    public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         String bids = context.getAs("active_bids");
         if (bids != null) {
             sb.append("\n=== Bids Context ===\n").append(bids);
@@ -85,7 +91,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public void onFinished(FlowContext context, TeamTrace trace) {
+    public void onTeamFinished(FlowContext context, TeamTrace trace) {
         context.remove("active_bids");
     }
 }

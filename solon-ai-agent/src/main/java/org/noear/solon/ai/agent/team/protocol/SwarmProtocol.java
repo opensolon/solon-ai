@@ -32,13 +32,17 @@ import java.util.Map;
  * @since 3.8.1
  */
 public class SwarmProtocol extends TeamProtocolBase {
+    public SwarmProtocol(TeamConfig config) {
+        super(config);
+    }
+
     @Override
     public String name() {
         return "SWARM";
     }
 
     @Override
-    public void buildGraph(TeamConfig config, GraphSpec spec) {
+    public void buildGraph(GraphSpec spec) {
         String traceKey = "__" + config.getName();
         String firstAgent = config.getAgentMap().keySet().iterator().next();
 
@@ -48,20 +52,20 @@ public class SwarmProtocol extends TeamProtocolBase {
                 spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-            linkAgents(config, ns, traceKey);
+            linkAgents(ns, traceKey);
         }).linkAdd(Agent.ID_END);
 
         spec.addEnd(Agent.ID_END);
     }
 
     @Override
-    public void onRouting(FlowContext context, TeamTrace trace, String nextAgent) {
+    public void onSupervisorRouting(FlowContext context, TeamTrace trace, String nextAgent) {
         Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext().computeIfAbsent("agent_usage", k -> new HashMap<>());
         usage.put(nextAgent, usage.getOrDefault(nextAgent, 0) + 1);
     }
 
     @Override
-    public void prepareInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
+    public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext().get("agent_usage");
 
         if (usage != null && !usage.isEmpty()) {
@@ -74,11 +78,13 @@ public class SwarmProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
+    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
+            sb.append("\n## 协作协议：").append(config.getProtocol().name()).append("\n");
             sb.append("1. **动态路由**：Agent 之间是平等的接力关系。你负责判断“下一棒”交给谁。\n");
             sb.append("2. **因势利导**：根据前一个 Agent 的结果，灵活选择最适合处理当前状态的专家。");
         } else {
+            sb.append("\n## Collaboration Protocol: ").append(config.getProtocol().name()).append("\n");
             sb.append("1. **Dynamic Routing**: Agents operate in a peer-to-peer relay. You decide who holds the 'next baton'.\n");
             sb.append("2. **Adaptive Logic**: Select the next expert based on the immediate output of the previous Agent.");
         }

@@ -61,7 +61,7 @@ public class TeamConfig {
     /**
      * 协作协议，默认为 HIERARCHICAL（层级模式/主管调度模式）
      */
-    private TeamProtocol protocol = TeamProtocols.HIERARCHICAL;
+    private TeamProtocol protocol = TeamProtocols.HIERARCHICAL.create(this);
     /**
      * 图结构微调器，允许在协议生成的默认执行图基础上进行自定义链路修改
      */
@@ -185,9 +185,9 @@ public class TeamConfig {
     /**
      * 设置协作协议（决定了执行图的拓扑结构）
      */
-    public void setProtocol(TeamProtocol protocol) {
-        Objects.requireNonNull(protocol, "protocol");
-        this.protocol = protocol;
+    public void setProtocol(TeamProtocolFactory protocolFactory) {
+        Objects.requireNonNull(protocolFactory, "protocolFactory");
+        this.protocol = protocolFactory.create(this);
     }
 
     public String getName() {
@@ -255,10 +255,9 @@ public class TeamConfig {
     }
 
     /**
-     * 获取生成的团队系统提示词
+     * 获取团队提示词提供者
      */
-    public String getSystemPrompt(TeamTrace trace) {
-        return promptProvider.getSystemPrompt(trace);
+    public TeamPromptProvider getPromptProvider() {
+        return promptProvider;
     }
-
 }

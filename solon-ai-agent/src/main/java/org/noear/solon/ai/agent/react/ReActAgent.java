@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.task.ActionTask;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
+import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -160,13 +161,14 @@ public class ReActAgent implements Agent {
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
         FlowContext context = session.getSnapshot();
         // 维护执行痕迹：若上下文已存在则复用，支持多轮对话或中断恢复
+        TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL);
         ReActTrace trace = context.getAs(traceKey);
         if (trace == null) {
             trace = new ReActTrace(prompt);
             context.put(traceKey, trace);
         }
 
-        trace.prepare(config, session, name);
+        trace.prepare(config, session, name, protocol);
 
         // 只有当 trace 消息为空（首轮执行）且 prompt 不为空时才加载历史
         if (trace.getMessages().isEmpty() && !Prompt.isEmpty(prompt)) {

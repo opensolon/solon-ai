@@ -33,6 +33,11 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
     public static TeamPromptProviderEn getInstance() { return INSTANCE; }
 
     @Override
+    public Locale getLocale() {
+        return Locale.ENGLISH;
+    }
+
+    @Override
     public String getSystemPrompt(TeamTrace trace) {
         TeamConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
@@ -48,8 +53,7 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
         sb.append("\n## Current Task\n").append(trace.getPrompt().getUserContent()).append("\n");
 
         // 3. Collaboration Protocol: Strategy-specific instructions
-        sb.append("\n## Collaboration Protocol: ").append(config.getProtocol().name()).append("\n");
-        config.getProtocol().injectInstruction(config, Locale.ENGLISH, sb);
+        config.getProtocol().injectSupervisorInstruction(Locale.ENGLISH, sb);
 
         // 4. Output Specification: Strict constraints on response format
         sb.append("\n## Output Specification\n");

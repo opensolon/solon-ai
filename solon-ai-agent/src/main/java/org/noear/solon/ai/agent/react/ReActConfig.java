@@ -283,12 +283,9 @@ public class ReActConfig {
     }
 
     /**
-     * 获取生成的系统提示词
-     *
-     * @param trace 当前执行轨迹状态
+     * 获取提示词提供者
      */
-    public String getSystemPrompt(ReActTrace trace) {
-        return promptProvider.getSystemPrompt(trace);
+    public ReActPromptProvider getPromptProvider() {
+        return promptProvider;
     }
-
 }

@@ -27,13 +27,17 @@ import java.util.Locale;
  * 强调 Agent 之间的直接移交，减少 Supervisor 的中心化干预
  */
 public class A2AProtocol extends TeamProtocolBase {
+    public A2AProtocol(TeamConfig config) {
+        super(config);
+    }
+
     @Override
     public String name() {
         return "A2A";
     }
 
     @Override
-    public void buildGraph(TeamConfig config, GraphSpec spec) {
+    public void buildGraph(GraphSpec spec) {
         String firstAgent = config.getAgentMap().keySet().iterator().next();
 
         // 1. 起始节点指向第一个 Agent
@@ -47,25 +51,27 @@ public class A2AProtocol extends TeamProtocolBase {
 
         // 3. 增加一个轻量级的 A2A 分发逻辑，解析 Agent 返回的移交指令
         spec.addExclusive("__A2A_DISPATCHER__").then(ns -> {
-            linkAgents(config, ns, "__" + config.getName());
+            linkAgents(ns, "__" + config.getName());
         }).linkAdd(Agent.ID_END);
 
         spec.addEnd(Agent.ID_END);
     }
 
     @Override
-    public void injectInstruction(TeamConfig config, Locale locale, StringBuilder sb) {
+    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
+            sb.append("\n## 协作协议：").append(config.getProtocol().name()).append("\n");
             sb.append("1. **直接移交**：你可以通过返回 'Transfer to [Agent Name]' 或使用移交工具来切换专家。\n");
             sb.append("2. **自主权**：当前 Agent 负责决定任务是否完成，或需要哪位专家协作。");
         } else {
+            sb.append("\n## Collaboration Protocol: ").append(config.getProtocol().name()).append("\n");
             sb.append("1. **Direct Handoff**: You can transfer control by returning 'Transfer to [Agent Name]' or using handoff tools.\n");
             sb.append("2. **Autonomy**: The current agent decides if the task is done or which expert to call next.");
         }
     }
 
     @Override
-    public boolean interceptRouting(FlowContext context, TeamTrace trace, String decision) {
+    public boolean interceptSupervisorRouting(FlowContext context, TeamTrace trace, String decision) {
         // 在这里解析 Agent 的输出内容
         // 如果识别到 "Transfer to WorkerB"，则通过 trace.setNextAgent("WorkerB") 并返回 true
         if (decision.contains("Transfer to")) {
