@@ -18,12 +18,11 @@ package org.noear.solon.ai.agent.team;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Consumer;
 
 /**
@@ -84,9 +83,9 @@ public class TeamConfig {
      */
     private long retryDelayMs = 1000L;
     /**
-     * 团队执行拦截器，可用于监控成员切换和消息流转
+     * 生命周期拦截器，可用于监控成员切换和消息流转
      */
-    private TeamInterceptor interceptor;
+    private final List<RankEntity<TeamInterceptor>> interceptorList = new ArrayList<>();
     /**
      * 团队系统提示词模板提供者
      */
@@ -140,8 +139,16 @@ public class TeamConfig {
         this.maxTotalIterations = Math.max(1, maxTotalIterations);
     }
 
-    public void setInterceptor(TeamInterceptor interceptor) {
-        this.interceptor = interceptor;
+    public void addInterceptor(TeamInterceptor interceptor) {
+        this.addInterceptor(interceptor, 0);
+    }
+
+    public void addInterceptor(TeamInterceptor interceptor, int index) {
+        this.interceptorList.add(new RankEntity<>(interceptor, index));
+
+        if (interceptorList.size() > 1) {
+            Collections.sort(interceptorList);
+        }
     }
 
     public void setPromptProvider(TeamPromptProvider promptProvider) {
@@ -231,8 +238,8 @@ public class TeamConfig {
         return retryDelayMs;
     }
 
-    public TeamInterceptor getInterceptor() {
-        return interceptor;
+    public List<RankEntity<TeamInterceptor>> getInterceptorList() {
+        return interceptorList;
     }
 
     /**

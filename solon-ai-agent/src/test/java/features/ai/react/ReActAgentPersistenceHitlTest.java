@@ -43,7 +43,7 @@ public class ReActAgentPersistenceHitlTest {
         ReActAgent agent = ReActAgent.of(chatModel)
                 .name(agentName)
                 .addTool(new MethodToolProvider(new RefundTools()))
-                .interceptor(hitlInterceptor)
+                .addInterceptor(hitlInterceptor)
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();
 

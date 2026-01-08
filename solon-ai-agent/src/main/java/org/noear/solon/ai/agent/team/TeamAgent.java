@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.*;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
@@ -65,8 +66,8 @@ public class TeamAgent implements Agent {
         this.flowEngine = FlowEngine.newInstance(true);
 
         // 1. 挂载流拦截器（用于全局监控或审计）
-        if (config != null && config.getInterceptor() != null) {
-            flowEngine.addInterceptor(config.getInterceptor());
+        for (RankEntity<TeamInterceptor> item : config.getInterceptorList()) {
+            flowEngine.addInterceptor(item.target, item.index);
         }
 
         // 2. 构建执行计算图
@@ -246,10 +247,18 @@ public class TeamAgent implements Agent {
         }
 
         /**
-         * 设置团队生命周期拦截器
+         * 设置 Team 生命周期拦截器
          */
-        public Builder interceptor(TeamInterceptor interceptor) {
-            config.setInterceptor(interceptor);
+        public Builder addInterceptor(TeamInterceptor interceptor) {
+            config.addInterceptor(interceptor);
+            return this;
+        }
+
+        /**
+         * 设置 Team 生命周期拦截器
+         */
+        public Builder addInterceptor(TeamInterceptor interceptor, int index) {
+            config.addInterceptor(interceptor, index);
             return this;
         }
 

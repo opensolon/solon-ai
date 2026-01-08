@@ -19,11 +19,13 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActConfig;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
@@ -127,8 +129,8 @@ public class ReasonTask implements NamedTaskComponent {
         trace.setLastAnswer(clearContent);
 
         // 触发拦截器：外部可观察到的“思考过程”
-        if (config.getInterceptor() != null) {
-            config.getInterceptor().onThought(trace, clearContent);
+        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+            item.target.onThought(trace, clearContent);
         }
 
         // [逻辑 7：路由派发]

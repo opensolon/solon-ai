@@ -36,7 +36,7 @@ public class TeamAgentNestedHitlTest {
                     @Override public String description() { return "审代码"; }
                     @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("Perfect. [FINISH]"); }
                 })
-                .interceptor(new TeamInterceptor() {
+                .addInterceptor(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
                         if (Agent.ID_SUPERVISOR.equals(n.getId())) {

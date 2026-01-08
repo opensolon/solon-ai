@@ -46,7 +46,7 @@ public class ReActAgentHitlTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new RefundTools()))
-                .interceptor(hitlInterceptor) // 注入拦截器
+                .addInterceptor(hitlInterceptor) // 注入拦截器
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();
 
@@ -130,7 +130,7 @@ public class ReActAgentHitlTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
-                .interceptor(fullInterceptor)
+                .addInterceptor(fullInterceptor)
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();
 

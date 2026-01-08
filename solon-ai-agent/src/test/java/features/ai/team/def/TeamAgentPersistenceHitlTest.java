@@ -22,7 +22,7 @@ public class TeamAgentPersistenceHitlTest {
                 .name(teamId)
                 .addAgent(ReActAgent.of(chatModel).name("worker").title("初稿撰写").build())
                 .addAgent(ReActAgent.of(chatModel).name("approver").title("修辞优化").build())
-                .interceptor(new TeamInterceptor() {
+                .addInterceptor(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
                         // 逻辑修改：只要检测到 worker 已经产生过至少一条记录，且没有人工信号，就强制挂起

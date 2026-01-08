@@ -82,11 +82,7 @@ public class ReActConfig {
     /**
      * 生命周期拦截器，用于监控思考（Thought）、行动（Action）和观察（Observation）
      */
-    private ReActInterceptor interceptor;
-    /**
-     * 拦截器列表形态
-     */
-    private List<RankEntity<ReActInterceptor>> interceptorList = new ArrayList<>();
+    private final List<RankEntity<ReActInterceptor>> interceptorList = new ArrayList<>();
     /**
      * 提示词模板提供者，默认为英文模板
      */
@@ -164,9 +160,16 @@ public class ReActConfig {
         this.maxSteps = val;
     }
 
-    public void setInterceptor(ReActInterceptor val) {
-        this.interceptor = val;
-        this.interceptorList.add(new RankEntity<>(val, 0));
+    public void addInterceptor(ReActInterceptor val) {
+        addInterceptor(val, 0);
+    }
+
+    public void addInterceptor(ReActInterceptor val, int index) {
+        this.interceptorList.add(new RankEntity<>(val, index));
+
+        if (interceptorList.size() > 1) {
+            Collections.sort(interceptorList);
+        }
     }
 
     public void setPromptProvider(ReActPromptProvider val) {
@@ -234,10 +237,6 @@ public class ReActConfig {
         }
 
         return finishMarker;
-    }
-
-    public ReActInterceptor getInterceptor() {
-        return interceptor;
     }
 
     public List<RankEntity<ReActInterceptor>> getInterceptorList() {

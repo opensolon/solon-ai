@@ -19,6 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActConfig;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.interceptor.ToolChain;
 import org.noear.solon.ai.chat.interceptor.ToolRequest;
@@ -27,6 +28,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
@@ -102,8 +104,8 @@ public class ActionTask implements NamedTaskComponent {
      */
     private void processNativeToolCall(ReActTrace trace, ToolCall call) throws Throwable {
         // 生命周期拦截：工具执行前
-        if (config.getInterceptor() != null) {
-            config.getInterceptor().onAction(trace, call.name(), call.arguments());
+        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+            item.target.onAction(trace, call.name(), call.arguments());
         }
 
         Map<String, Object> args = (call.arguments() == null) ? Collections.emptyMap() : call.arguments();
@@ -112,8 +114,8 @@ public class ActionTask implements NamedTaskComponent {
         String result = executeTool(trace, call.name(), args);
 
         // 生命周期拦截：工具执行之后
-        if (config.getInterceptor() != null) {
-            config.getInterceptor().onObservation(trace, result);
+        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+            item.target.onObservation(trace, result);
         }
 
         // 将 Observation 反馈给模型，作为逻辑闭环
@@ -142,15 +144,15 @@ public class ActionTask implements NamedTaskComponent {
                 ONode argsNode = action.get("arguments");
                 Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
 
-                if (config.getInterceptor() != null) {
-                    config.getInterceptor().onAction(trace, toolName, args);
+                for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+                    item.target.onAction(trace, toolName, args);
                 }
 
                 // 执行并汇总观测结果
                 String result = executeTool(trace, toolName, args);
 
-                if (config.getInterceptor() != null) {
-                    config.getInterceptor().onObservation(trace, result);
+                for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+                    item.target.onObservation(trace, result);
                 }
 
                 allObservations.append("\nObservation: ").append(result);
@@ -184,13 +186,13 @@ public class ActionTask implements NamedTaskComponent {
                     LOG.debug("Executing tool: {} with args: {}", name, args);
                 }
                 // 执行具体的 Handler 逻辑
-                if (config.getInterceptor() != null) {
-                    //有拦截器
-                    ToolRequest toolReq = new ToolRequest(trace.getLastResponse(), args);
-                    return config.getInterceptor().interceptTool(toolReq, new ToolChain(config.getInterceptorList(), tool));
-                } else {
+                if (config.getInterceptorList().isEmpty()) {
                     //没拦截器
                     return tool.handle(args);
+                } else {
+                    //有拦截器
+                    ToolRequest toolReq = new ToolRequest(trace.getLastResponse(), args);
+                    return new ToolChain(config.getInterceptorList(), tool).doIntercept(toolReq);
                 }
 
             } catch (IllegalArgumentException e) {

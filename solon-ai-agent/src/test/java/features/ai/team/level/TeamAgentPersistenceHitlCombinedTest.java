@@ -31,7 +31,7 @@ public class TeamAgentPersistenceHitlCombinedTest {
                     @Override public String description() { return "审批者"; }
                     @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("签字通过。[FINISH]"); }
                 })
-                .interceptor(new TeamInterceptor() {
+                .addInterceptor(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
                         if (Agent.ID_SUPERVISOR.equals(n.getId())) {

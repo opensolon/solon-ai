@@ -29,7 +29,7 @@ public class ReActHitlDemo {
         };
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .interceptor(hitlInterceptor) // 注入拦截器
+                .addInterceptor(hitlInterceptor) // 注入拦截器
                 .addTool(new MethodToolProvider(new WeatherTools()))
                 .build();
 

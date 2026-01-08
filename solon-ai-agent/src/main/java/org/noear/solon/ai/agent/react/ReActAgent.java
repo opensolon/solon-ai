@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowEngine;
 import org.noear.solon.flow.Graph;
@@ -70,8 +71,8 @@ public class ReActAgent implements Agent {
         this.flowEngine = FlowEngine.newInstance(true);
 
         // 1. 挂载流拦截器（用于全局监控或审计）
-        if (config.getInterceptor() != null) {
-            flowEngine.addInterceptor(config.getInterceptor());
+        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+            flowEngine.addInterceptor(item.target, item.index);
         }
 
         // 2. 构建 ReAct 执行计算图：Start -> [Reason <-> Action] -> End
@@ -328,10 +329,18 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 设置 ReAct 专属拦截器
+         * 设置 ReAct 生命周期拦截器
          */
-        public Builder interceptor(ReActInterceptor val) {
-            config.setInterceptor(val);
+        public Builder addInterceptor(ReActInterceptor val) {
+            config.addInterceptor(val);
+            return this;
+        }
+
+        /**
+         * 设置 ReAct 生命周期拦截器
+         */
+        public Builder addInterceptor(ReActInterceptor val, int index) {
+            config.addInterceptor(val, index);
             return this;
         }
 
