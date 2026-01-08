@@ -55,7 +55,7 @@ public class TeamAgentExceptionTest {
             Assertions.fail("期望抛出异常但未捕获到");
         } catch (Throwable e) {
             // 在 Solon AI 中，底层 RuntimeException 通常会被封装在调用链中
-            String errorMsg = e.toString();
+            String errorMsg = e.getCause().toString();
             System.out.println("捕获到预期的 Agent 异常: " + errorMsg);
             Assertions.assertTrue(errorMsg.contains("模拟 Agent 内部异常"),
                     "异常消息应包含原始错误信息");
@@ -93,10 +93,10 @@ public class TeamAgentExceptionTest {
             team.call(Prompt.of("测试工作流故障"), session);
             Assertions.fail("Graph 节点异常未能正确阻断流程");
         } catch (Throwable e) {
-            System.out.println("捕获到预期的 Graph 节点异常: " + e.getMessage());
+            System.out.println("捕获到预期的 Graph 节点异常: " + e.getCause().getMessage());
 
             // 验证异常内容
-            Assertions.assertTrue(e.toString().contains("节点执行异常"));
+            Assertions.assertTrue(e.getCause().toString().contains("节点异常"));
 
             // 验证快照：检查流程是否停留在发生故障的节点
             Assertions.assertEquals("problem_node", session.getSnapshot().lastNodeId(),

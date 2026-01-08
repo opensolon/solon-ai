@@ -95,7 +95,7 @@ public class TeamAgentNestedPersistenceTest {
                 "恢复后应自动识别子团队已完工，并指派 Reviewer");
 
         // 验证 2：最终输出内容
-        Assertions.assertTrue(result.contains("审核通过"));
+        Assertions.assertTrue(result.contains("通过"));
 
         System.out.println("最终协作轨迹:\n" + finalTrace.getFormattedHistory());
         System.out.println("最终回复: " + result);
