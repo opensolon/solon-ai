@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
+
 import java.util.Locale;
 
 /**
@@ -59,7 +60,34 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public void injectAgentInstruction(Locale locale, StringBuilder sb) {
+        if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
+            sb.append("\n## 协作协议：A2A (去中心化移交)\n");
+            sb.append("你正在一个团队中工作。如果你发现当前任务超出了你的能力范围，或者需要其他领域的专家协作，请进行“任务移交”。\n");
 
+            sb.append("\n### 团队专家名录 (你可以移交的对象):\n");
+            for (Agent agent : config.getAgentMap().values()) {
+                // 打印格式：- 专家名: 职责描述
+                sb.append("- ").append(agent.name()).append(": ").append(agent.description()).append("\n");
+            }
+
+            sb.append("\n### 移交指令规范:\n");
+            sb.append("1. **移交语法**：在回复的最末尾，明确输出 'Transfer to [专家名]'。\n");
+            sb.append("2. **示例**：如果你认为需要进行数据分析，且有名为 'Analyst' 的专家，请输出 '...因此，我建议移交任务。Transfer to Analyst'。\n");
+            sb.append("3. **终止任务**：如果你已经彻底完成了所有工作，请输出 '").append(config.getFinishMarker()).append("'。\n");
+        } else {
+            sb.append("\n## Collaboration Protocol: A2A (Decentralized Handoff)\n");
+            sb.append("You are part of a team. If the task exceeds your expertise or requires specific knowledge, perform a 'Handoff'.\n");
+
+            sb.append("\n### Team Directory (Available Experts):\n");
+            for (Agent agent : config.getAgentMap().values()) {
+                sb.append("- ").append(agent.name()).append(": ").append(agent.description()).append("\n");
+            }
+
+            sb.append("\n### Handoff Guidelines:\n");
+            sb.append("1. **Syntax**: Explicitly output 'Transfer to [Agent Name]' at the very end of your response.\n");
+            sb.append("2. **Example**: '...therefore, I am handing off this task. Transfer to Analyst'.\n");
+            sb.append("3. **Completion**: If the goal is fully achieved, output '").append(config.getFinishMarker()).append("'.\n");
+        }
     }
 
     @Override
@@ -77,12 +105,32 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public boolean interceptSupervisorRouting(FlowContext context, TeamTrace trace, String decision) {
-        // 在这里解析 Agent 的输出内容
-        // 如果识别到 "Transfer to WorkerB"，则通过 trace.setNextAgent("WorkerB") 并返回 true
-        if (decision.contains("Transfer to")) {
-            // 解析逻辑...
+        if (decision == null || decision.isEmpty()) {
+            return false;
+        }
+
+        // 查找最后一个移交意图，防止回复中多次提到导致冲突
+        String marker = "Transfer to ";
+        int lastIndex = decision.lastIndexOf(marker);
+
+        if (lastIndex != -1) {
+            String targetName = decision.substring(lastIndex + marker.length()).trim();
+
+            // 遍历配置中的 Agent 名进行匹配，确保目标确实存在
+            for (String agentName : config.getAgentMap().keySet()) {
+                if (targetName.startsWith(agentName)) {
+                    trace.setRoute(agentName);
+                    return true;
+                }
+            }
+        }
+
+        // 检查结束标识
+        if (decision.contains(config.getFinishMarker())) {
+            trace.setRoute(Agent.ID_END);
             return true;
         }
+
         return false;
     }
 }
