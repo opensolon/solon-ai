@@ -160,11 +160,12 @@ public class TeamAgent implements Agent {
         TeamTrace trace = context.getAs(traceKey);
 
         if (trace == null) {
-            trace = new TeamTrace(config, prompt);
+            trace = new TeamTrace(prompt);
             context.put(traceKey, trace);
-        } else {
-            trace.setConfig(config);
         }
+
+        trace.setConfig(config);
+        trace.setSession(session);
 
         if (prompt != null) {
             // 记录流节点的进入，支持多级嵌套追踪
@@ -184,7 +185,7 @@ public class TeamAgent implements Agent {
         }
 
         try {
-            if(prompt != null) {
+            if (prompt != null) {
                 for (ChatMessage message : prompt.getMessages()) {
                     session.addHistoryMessage(this.name, message);
                 }

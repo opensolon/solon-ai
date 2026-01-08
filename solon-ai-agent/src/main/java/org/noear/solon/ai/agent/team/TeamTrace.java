@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
 
@@ -32,8 +33,11 @@ import java.util.stream.Collectors;
 @Preview("3.8")
 public class TeamTrace {
     private transient TeamConfig config;
+    private transient AgentSession session;
 
+    private String agentName;
     private Prompt prompt;
+
     private final List<TeamStep> steps = new ArrayList<>();
 
     private volatile String route;
@@ -48,10 +52,14 @@ public class TeamTrace {
         this.iterations = new AtomicInteger(0);
     }
 
-    public TeamTrace(TeamConfig config, Prompt prompt){
+    public TeamTrace(Prompt prompt, String agentName){
         this();
-        this.config = config; //测试时，可能为 null
         this.prompt = prompt;
+        this.agentName = agentName;
+    }
+
+    public String getAgentName() {
+        return agentName;
     }
 
     public TeamConfig getConfig() {
@@ -60,6 +68,14 @@ public class TeamTrace {
 
     protected void setConfig(TeamConfig config) {
         this.config = config;
+    }
+
+    public AgentSession getSession() {
+        return session;
+    }
+
+    protected void setSession(AgentSession session) {
+        this.session = session;
     }
 
     public Prompt getPrompt() {
@@ -100,6 +116,7 @@ public class TeamTrace {
     public int getStepCount() {
         return steps.size();
     }
+
 
     /**
      * 添加协作步骤

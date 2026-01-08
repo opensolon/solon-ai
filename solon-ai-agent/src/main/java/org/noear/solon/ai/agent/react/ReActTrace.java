@@ -200,7 +200,6 @@ public class ReActTrace {
             return;
         }
 
-        session.addHistoryMessage(this.agentName, message);
         messages.add(message);
 
         // 动态压缩策略：根据最大迭代步数自动计算窗口上限，防止 Token 溢出
