@@ -4,6 +4,7 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -24,7 +25,7 @@ public class TeamAgentNestedHitlTest {
                 .addAgent(new Agent() {
                     @Override public String name() { return "Coder"; }
                     @Override public String description() { return "写代码"; }
-                    @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("代码写好了。"); }
+                    @Override public AssistantMessage call(AgentSession session, Prompt p) { return ChatMessage.ofAssistant("代码写好了。"); }
                 }).build();
 
         // 2. 构建父团队
@@ -34,7 +35,7 @@ public class TeamAgentNestedHitlTest {
                 .addAgent(new Agent() {
                     @Override public String name() { return "Reviewer"; }
                     @Override public String description() { return "审代码"; }
-                    @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("Perfect. [FINISH]"); }
+                    @Override public AssistantMessage call(AgentSession session, Prompt p) { return ChatMessage.ofAssistant("Perfect. [FINISH]"); }
                 })
                 .addInterceptor(new TeamInterceptor() {
                     @Override

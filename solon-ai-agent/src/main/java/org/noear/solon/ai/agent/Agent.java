@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent;
 
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -53,19 +54,20 @@ public interface Agent extends NamedTaskComponent {
         return description();
     }
 
-    AssistantMessage call(FlowContext context, Prompt prompt) throws Throwable;
 
-    default AssistantMessage call(FlowContext context, String prompt) throws Throwable {
-        if (prompt == null) {
-            return call(context, (Prompt) null);
-        } else {
-            return call(context, Prompt.of(prompt));
-        }
+    default AssistantMessage call(FlowContext context, Prompt prompt) throws Throwable{
+        return call(InMemoryAgentSession.of(context), prompt);
     }
 
-    default AssistantMessage call(FlowContext context) throws Throwable {
-        return call(context, (Prompt) null);
+    default AssistantMessage call(FlowContext context, String prompt) throws Throwable{
+        return call(InMemoryAgentSession.of(context), Prompt.of(prompt));
     }
+
+    default AssistantMessage call(FlowContext context) throws Throwable{
+        return call(InMemoryAgentSession.of(context), null);
+    }
+
+    AssistantMessage call(AgentSession session, Prompt prompt) throws Throwable;
 
     /**
      * 作为 solon-flow TaskComponent 运行（方便 solon-flow 整合）
@@ -74,6 +76,12 @@ public interface Agent extends NamedTaskComponent {
      * @param node    当前节点
      */
     default void run(FlowContext context, Node node) throws Throwable {
+        AgentSession session = context.getAs(ID_SESSION);
+        if (session == null) {
+            session = new InMemoryAgentSession("tmp");
+            context.put(ID_SESSION, session);
+        }
+
         String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
         Prompt originalPrompt = (trace != null) ? trace.getPrompt() : null;
@@ -88,7 +96,7 @@ public interface Agent extends NamedTaskComponent {
         }
 
         long start = System.currentTimeMillis();
-        AssistantMessage msg = call(context, effectivePrompt);
+        AssistantMessage msg = call(session, effectivePrompt);
         long duration = System.currentTimeMillis() - start;
 
         String result = msg.getContent();
@@ -113,4 +121,6 @@ public interface Agent extends NamedTaskComponent {
     static String ID_SYSTEM = "system";
     static String ID_SUPERVISOR = "supervisor";
     static String ID_BIDDING = "bidding";
+
+    static String ID_SESSION = "SESSION";
 }

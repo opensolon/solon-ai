@@ -16,6 +16,8 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentRequest;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -130,13 +132,31 @@ public class TeamAgent implements Agent {
         return description;
     }
 
+    public String getTraceKey() {
+        return traceKey;
+    }
+
+    /**
+     * 提示语
+     */
+    public AgentRequest prompt(Prompt prompt) {
+        return new TeamRequestImpl(this, prompt);
+    }
+
+    /**
+     * 提示语
+     */
+    public AgentRequest prompt(String prompt) {
+        return prompt(Prompt.of(prompt));
+    }
+
     /**
      * 触发团队协作调用
      * <p>流程：初始化/更新状态 -> 执行流图 -> 提取结果 -> 资源清理/回调通知</p>
      */
-    @Override
-    public AssistantMessage call(FlowContext context, Prompt prompt) throws Throwable {
+    public AssistantMessage call(AgentSession session, Prompt prompt) throws Throwable {
         // [阶段1：状态初始化] 尝试复用或创建新的执行追踪实例
+        FlowContext context = session.getSnapshot();
         TeamTrace trace = context.getAs(traceKey);
 
         if (trace == null) {
@@ -164,6 +184,12 @@ public class TeamAgent implements Agent {
         }
 
         try {
+            if(prompt != null) {
+                for (ChatMessage message : prompt.getMessages()) {
+                    session.addHistoryMessage(this.name, message);
+                }
+            }
+
             // [阶段2：流图执行] 在特定的上下文范围内驱动 FlowEngine 执行协作逻辑
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
                 flowEngine.eval(graph, context);
@@ -181,7 +207,12 @@ public class TeamAgent implements Agent {
                 context.put(config.getOutputKey(), result);
             }
 
-            return ChatMessage.ofAssistant(result);
+            AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
+
+            session.addHistoryMessage(this.name, assistantMessage);
+            session.updateSnapshot(context);
+
+            return assistantMessage;
         } finally {
             // [阶段4：生命周期销毁] 无论成功失败，触发拦截器和协议的清理回调
             if (config != null) {
@@ -284,7 +315,7 @@ public class TeamAgent implements Agent {
             return this;
         }
 
-        public Builder outputKey(String outputKey){
+        public Builder outputKey(String outputKey) {
             config.setOutputKey(outputKey);
             return this;
         }

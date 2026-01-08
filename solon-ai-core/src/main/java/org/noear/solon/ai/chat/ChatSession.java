@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 
 import java.io.*;
@@ -31,7 +32,7 @@ import java.util.List;
  * @since 3.1
  */
 @Preview("3.1")
-public interface ChatSession {
+public interface ChatSession extends NonSerializable {
     /**
      * 获取会话id
      */

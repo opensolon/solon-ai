@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -41,6 +42,8 @@ import java.util.List;
 @Preview("3.8")
 public class ReActTrace {
     private transient ReActConfig config;
+    private transient AgentSession session;
+
     private String agentName;
     private Prompt prompt;
 
@@ -82,10 +85,9 @@ public class ReActTrace {
         this.route = Agent.ID_REASON;
     }
 
-    public ReActTrace(ReActConfig config, Prompt prompt, String agentName) {
+    public ReActTrace(Prompt prompt, String agentName) {
         this();
         this.agentName = agentName;
-        this.config = config; // 测试或局部调用时可能为 null
         this.prompt = prompt;
     }
 
@@ -99,6 +101,14 @@ public class ReActTrace {
 
     protected void setConfig(ReActConfig config) {
         this.config = config;
+    }
+
+    public AgentSession getSession() {
+        return session;
+    }
+
+    protected void setSession(AgentSession session) {
+        this.session = session;
     }
 
     public String getAgentName() {
@@ -190,6 +200,7 @@ public class ReActTrace {
             return;
         }
 
+        session.addHistoryMessage(this.agentName, message);
         messages.add(message);
 
         // 动态压缩策略：根据最大迭代步数自动计算窗口上限，防止 Token 溢出

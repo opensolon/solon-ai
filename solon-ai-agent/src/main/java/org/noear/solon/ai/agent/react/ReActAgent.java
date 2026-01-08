@@ -16,6 +16,8 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentRequest;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.task.ActionTask;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
 import org.noear.solon.ai.chat.ChatModel;
@@ -141,22 +143,31 @@ public class ReActAgent implements Agent {
         return description;
     }
 
+    public AgentRequest prompt(Prompt prompt) {
+        return new ReActRequestImpl(this, prompt);
+    }
+
+    public AgentRequest prompt(String prompt) {
+        return new ReActRequestImpl(this, Prompt.of(prompt));
+    }
+
     /**
      * 智能体调用入口
      *
-     * @param context 流程上下文，承载多智能体协作或嵌套调用的状态
+     * @param session 会话
      * @param prompt  用户输入的提示词
      */
-    @Override
-    public AssistantMessage call(FlowContext context, Prompt prompt) throws Throwable {
+    public AssistantMessage call(AgentSession session, Prompt prompt) throws Throwable {
+        FlowContext context = session.getSnapshot();
         // 维护执行痕迹：若上下文已存在则复用，支持多轮对话或中断恢复
         ReActTrace trace = context.getAs(traceKey);
         if (trace == null) {
-            trace = new ReActTrace(config, prompt, name);
+            trace = new ReActTrace(prompt, name);
             context.put(traceKey, trace);
-        } else {
-            trace.setConfig(config);
         }
+
+        trace.setSession(session);
+        trace.setConfig(config);
 
         if (prompt != null) {
             // 记录流节点链路，方便追踪调试
@@ -207,7 +218,11 @@ public class ReActAgent implements Agent {
             context.put(config.getOutputKey(), result);
         }
 
-        return ChatMessage.ofAssistant(result);
+        AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
+        session.addHistoryMessage(name, assistantMessage);
+        session.updateSnapshot(context);
+
+        return assistantMessage;
     }
 
     /// //////////// Builder 静态构造模式 ////////////

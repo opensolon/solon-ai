@@ -4,6 +4,7 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
@@ -21,13 +22,13 @@ public class TeamAgentNestedPersistenceTest {
         Agent coder = new Agent() {
             @Override public String name() { return "Coder"; }
             @Override public String description() { return "程序员"; }
-            @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("代码: login.java"); }
+            @Override public AssistantMessage call(AgentSession session, Prompt p) { return ChatMessage.ofAssistant("代码: login.java"); }
         };
 
         Agent reviewer = new Agent() {
             @Override public String name() { return "Reviewer"; }
             @Override public String description() { return "审核员"; }
-            @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("OK [FINISH]"); }
+            @Override public AssistantMessage call(AgentSession session, Prompt p) { return ChatMessage.ofAssistant("OK [FINISH]"); }
         };
 
         TeamAgent projectTeam = TeamAgent.of(chatModel)
