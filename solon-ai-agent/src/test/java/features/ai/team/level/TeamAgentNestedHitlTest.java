@@ -25,7 +25,7 @@ public class TeamAgentNestedHitlTest {
                 .addAgent(new Agent() {
                     @Override public String name() { return "Coder"; }
                     @Override public String description() { return "写代码"; }
-                    @Override public AssistantMessage call(AgentSession session, Prompt p) { return ChatMessage.ofAssistant("代码写好了。"); }
+                    @Override public AssistantMessage call(Prompt prompt, AgentSession session) { return ChatMessage.ofAssistant("代码写好了。"); }
                 }).build();
 
         // 2. 构建父团队
@@ -35,7 +35,7 @@ public class TeamAgentNestedHitlTest {
                 .addAgent(new Agent() {
                     @Override public String name() { return "Reviewer"; }
                     @Override public String description() { return "审代码"; }
-                    @Override public AssistantMessage call(AgentSession session, Prompt p) { return ChatMessage.ofAssistant("Perfect. [FINISH]"); }
+                    @Override public AssistantMessage call(Prompt prompt, AgentSession session) { return ChatMessage.ofAssistant("Perfect. [FINISH]"); }
                 })
                 .addInterceptor(new TeamInterceptor() {
                     @Override

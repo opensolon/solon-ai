@@ -154,7 +154,7 @@ public class TeamAgent implements Agent {
      * 触发团队协作调用
      * <p>流程：初始化/更新状态 -> 执行流图 -> 提取结果 -> 资源清理/回调通知</p>
      */
-    public AssistantMessage call(AgentSession session, Prompt prompt) throws Throwable {
+    public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
         // [阶段1：状态初始化] 尝试复用或创建新的执行追踪实例
         FlowContext context = session.getSnapshot();
         TeamTrace trace = context.getAs(traceKey);

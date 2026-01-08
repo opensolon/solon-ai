@@ -56,18 +56,22 @@ public interface Agent extends NamedTaskComponent {
 
 
     default AssistantMessage call(FlowContext context, Prompt prompt) throws Throwable{
-        return call(InMemoryAgentSession.of(context), prompt);
+        return call(prompt, InMemoryAgentSession.of(context));
     }
 
     default AssistantMessage call(FlowContext context, String prompt) throws Throwable{
-        return call(InMemoryAgentSession.of(context), Prompt.of(prompt));
+        return call(Prompt.of(prompt), InMemoryAgentSession.of(context));
     }
 
     default AssistantMessage call(FlowContext context) throws Throwable{
-        return call(InMemoryAgentSession.of(context), null);
+        return call(null, InMemoryAgentSession.of(context));
     }
 
-    AssistantMessage call(AgentSession session, Prompt prompt) throws Throwable;
+    default AssistantMessage call(Prompt prompt) throws Throwable {
+        return call(prompt, InMemoryAgentSession.of());
+    }
+
+    AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable;
 
     /**
      * 作为 solon-flow TaskComponent 运行（方便 solon-flow 整合）
@@ -96,7 +100,7 @@ public interface Agent extends NamedTaskComponent {
         }
 
         long start = System.currentTimeMillis();
-        AssistantMessage msg = call(session, effectivePrompt);
+        AssistantMessage msg = call(effectivePrompt, session);
         long duration = System.currentTimeMillis() - start;
 
         String result = msg.getContent();

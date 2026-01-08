@@ -22,13 +22,13 @@ public class TeamAgentNestedPersistenceTest {
         Agent coder = new Agent() {
             @Override public String name() { return "Coder"; }
             @Override public String description() { return "程序员"; }
-            @Override public AssistantMessage call(AgentSession session, Prompt p) { return ChatMessage.ofAssistant("代码: login.java"); }
+            @Override public AssistantMessage call(Prompt prompt, AgentSession session) { return ChatMessage.ofAssistant("代码: login.java"); }
         };
 
         Agent reviewer = new Agent() {
             @Override public String name() { return "Reviewer"; }
             @Override public String description() { return "审核员"; }
-            @Override public AssistantMessage call(AgentSession session, Prompt p) { return ChatMessage.ofAssistant("OK [FINISH]"); }
+            @Override public AssistantMessage call(Prompt prompt, AgentSession session) { return ChatMessage.ofAssistant("OK [FINISH]"); }
         };
 
         TeamAgent projectTeam = TeamAgent.of(chatModel)

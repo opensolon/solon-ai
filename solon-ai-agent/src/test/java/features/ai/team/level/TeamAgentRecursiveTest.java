@@ -69,7 +69,7 @@ public class TeamAgentRecursiveTest {
             @Override public String name() { return name; }
             @Override public String description() { return desc; }
             @Override
-            public AssistantMessage call(AgentSession context, Prompt prompt) {
+            public AssistantMessage call(Prompt prompt, AgentSession session) {
                 // 模拟一个带有明确结束意图的返回
                 return ChatMessage.ofAssistant( "[Result from " + name + "]: 任务已处理。 [FINISH]");
             }
@@ -94,7 +94,7 @@ public class TeamAgentRecursiveTest {
                     private int reviewCount = 0;
                     @Override public String name() { return "Reviewer"; }
                     @Override public String description() { return "代码审核员"; }
-                    @Override public AssistantMessage call(AgentSession session, Prompt p) {
+                    @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
                         if (reviewCount++ == 0) {
                             return ChatMessage.ofAssistant("代码发现安全漏洞，请 dev_team 重新修复！");
                         }

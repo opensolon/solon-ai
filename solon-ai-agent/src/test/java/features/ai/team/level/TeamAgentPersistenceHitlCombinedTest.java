@@ -25,12 +25,12 @@ public class TeamAgentPersistenceHitlCombinedTest {
                 .addAgent(new Agent() {
                     @Override public String name() { return "Worker"; }
                     @Override public String description() { return "执行者"; }
-                    @Override public AssistantMessage call(AgentSession session, Prompt p) { return ChatMessage.ofAssistant("任务完成。"); }
+                    @Override public AssistantMessage call(Prompt prompt, AgentSession session) { return ChatMessage.ofAssistant("任务完成。"); }
                 })
                 .addAgent(new Agent() {
                     @Override public String name() { return "Approver"; }
                     @Override public String description() { return "审批者"; }
-                    @Override public AssistantMessage call(AgentSession session, Prompt p) { return ChatMessage.ofAssistant("签字通过。[FINISH]"); }
+                    @Override public AssistantMessage call(Prompt prompt, AgentSession session) { return ChatMessage.ofAssistant("签字通过。[FINISH]"); }
                 })
                 .addInterceptor(new TeamInterceptor() {
                     @Override

@@ -34,7 +34,7 @@ public class TeamAgentExceptionTest {
             }
 
             @Override
-            public AssistantMessage call(AgentSession session, Prompt prompt) throws Throwable {
+            public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
                 throw new RuntimeException("模拟Agent内部异常");
             }
         };

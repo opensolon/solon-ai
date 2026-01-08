@@ -86,6 +86,10 @@ public class Prompt implements ChatPrompt, Serializable {
         return systemContent;
     }
 
+    public static boolean isEmpty(Prompt prompt) {
+        return prompt == null || prompt.messageList.isEmpty();
+    }
+
     /**
      * 构建
      */

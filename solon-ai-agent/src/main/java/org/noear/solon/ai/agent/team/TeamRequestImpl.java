@@ -56,6 +56,6 @@ public class TeamRequestImpl implements AgentRequest {
             session = InMemoryAgentSession.of();
         }
 
-        return agent.call(session, prompt);
+        return agent.call(prompt, session);
     }
 }
