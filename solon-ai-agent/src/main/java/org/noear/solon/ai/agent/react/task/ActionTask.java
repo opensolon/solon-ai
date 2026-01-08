@@ -197,7 +197,7 @@ public class ActionTask implements NamedTaskComponent {
                     return tool.handle(args);
                 } else {
                     //有拦截器
-                    ToolRequest toolReq = new ToolRequest(trace.getLastResponse(), args);
+                    ToolRequest toolReq = new ToolRequest(null, args);
                     return new ToolChain(config.getInterceptorList(), tool).doIntercept(toolReq);
                 }
 

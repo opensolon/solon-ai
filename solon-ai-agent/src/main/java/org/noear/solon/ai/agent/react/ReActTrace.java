@@ -17,7 +17,6 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -64,11 +63,6 @@ public class ReActTrace {
      * 最终生成的回答内容
      */
     private String finalAnswer;
-
-    /**
-     * 模型最近一次响应
-     */
-    private transient ChatResponse lastResponse;
     /**
      * 模型最近一次原始回答内容
      */
@@ -154,15 +148,6 @@ public class ReActTrace {
 
     public void setFinalAnswer(String finalAnswer) {
         this.finalAnswer = finalAnswer;
-    }
-
-
-    public ChatResponse getLastResponse() {
-        return lastResponse;
-    }
-
-    public void setLastResponse(ChatResponse lastResponse) {
-        this.lastResponse = lastResponse;
     }
 
     public String getLastAnswer() {

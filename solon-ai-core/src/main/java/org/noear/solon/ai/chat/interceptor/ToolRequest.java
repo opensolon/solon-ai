@@ -19,6 +19,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfigReadonly;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.lang.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,7 +37,7 @@ public class ToolRequest {
 
     public ToolRequest(ChatResponse resp, Map<String, Object> args) {
         if (resp == null) {
-             this.configReadonly = null;
+            this.configReadonly = null;
             this.options = null;
             this.args = args;
         } else {
@@ -55,14 +56,14 @@ public class ToolRequest {
     /**
      * 获取配置
      */
-    public ChatConfigReadonly getConfig() {
+    public @Nullable ChatConfigReadonly getConfig() {
         return configReadonly;
     }
 
     /**
      * 获取选项
      */
-    public ChatOptions getOptions() {
+    public @Nullable ChatOptions getOptions() {
         return options;
     }
 

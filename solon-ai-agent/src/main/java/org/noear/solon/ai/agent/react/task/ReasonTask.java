@@ -100,9 +100,6 @@ public class ReasonTask implements NamedTaskComponent {
         // [逻辑 4：执行模型推理]
         ChatResponse response = callWithRetry(trace, messages);
 
-        //用于支持工具拦截的参数
-        trace.setLastResponse(response);
-
         // 处理模型空回复异常，通过 User 提示引导模型修正或结束
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
             trace.appendMessage(ChatMessage.ofUser("Your last response was empty. If you need more info, use a tool. Otherwise, provide Final Answer."));
