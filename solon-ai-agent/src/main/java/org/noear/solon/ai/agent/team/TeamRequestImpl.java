@@ -45,12 +45,6 @@ public class TeamRequestImpl implements AgentRequest {
     }
 
     @Override
-    public AgentRequest session(FlowContext context) {
-        this.session = InMemoryAgentSession.of(context);
-        return this;
-    }
-
-    @Override
     public AssistantMessage call() throws Throwable {
         if (session == null) {
             session = InMemoryAgentSession.of();
