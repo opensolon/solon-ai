@@ -52,9 +52,14 @@ public class TeamTrace {
         this.iterations = new AtomicInteger(0);
     }
 
-    public TeamTrace(Prompt prompt, String agentName){
+    public TeamTrace(Prompt prompt){
         this();
         this.prompt = prompt;
+    }
+
+    protected void prepare(TeamConfig config, AgentSession session, String agentName) {
+        this.config = config;
+        this.session = session;
         this.agentName = agentName;
     }
 
@@ -66,17 +71,10 @@ public class TeamTrace {
         return config;
     }
 
-    protected void setConfig(TeamConfig config) {
-        this.config = config;
-    }
-
     public AgentSession getSession() {
         return session;
     }
 
-    protected void setSession(AgentSession session) {
-        this.session = session;
-    }
 
     public Prompt getPrompt() {
         return prompt;

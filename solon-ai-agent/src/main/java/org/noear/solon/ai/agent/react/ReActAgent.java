@@ -162,12 +162,11 @@ public class ReActAgent implements Agent {
         // 维护执行痕迹：若上下文已存在则复用，支持多轮对话或中断恢复
         ReActTrace trace = context.getAs(traceKey);
         if (trace == null) {
-            trace = new ReActTrace(prompt, name);
+            trace = new ReActTrace(prompt);
             context.put(traceKey, trace);
         }
 
-        trace.setSession(session);
-        trace.setConfig(config);
+        trace.prepare(config, session, name);
 
         if (prompt != null) {
             // 记录流节点链路，方便追踪调试

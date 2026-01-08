@@ -160,12 +160,11 @@ public class TeamAgent implements Agent {
         TeamTrace trace = context.getAs(traceKey);
 
         if (trace == null) {
-            trace = new TeamTrace(prompt, name);
+            trace = new TeamTrace(prompt);
             context.put(traceKey, trace);
         }
 
-        trace.setConfig(config);
-        trace.setSession(session);
+        trace.prepare(config, session, name);
 
         if (prompt != null) {
             // 记录流节点的进入，支持多级嵌套追踪

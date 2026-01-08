@@ -50,7 +50,7 @@ public class TeamAgentPersistenceAndResumeTest {
         FlowContext contextStep1 = FlowContext.of("order_sn_998");
         contextStep1.trace().recordNodeId(tripAgent.getGraph(), Agent.ID_SUPERVISOR);
 
-        TeamTrace snapshot = new TeamTrace(null, Prompt.of("帮我规划上海行程并给穿衣建议"));
+        TeamTrace snapshot = new TeamTrace(Prompt.of("帮我规划上海行程并给穿衣建议"));
         snapshot.addStep("searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
 
         contextStep1.put("__" + teamId, snapshot);

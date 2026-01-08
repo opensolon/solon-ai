@@ -85,9 +85,8 @@ public class ReActTrace {
         this.route = Agent.ID_REASON;
     }
 
-    public ReActTrace(Prompt prompt, String agentName) {
+    public ReActTrace(Prompt prompt) {
         this();
-        this.agentName = agentName;
         this.prompt = prompt;
     }
 
@@ -95,21 +94,21 @@ public class ReActTrace {
     // --- 状态访问与生命周期管理 ---
 
 
+    protected void prepare(ReActConfig config, AgentSession session, String agentName) {
+        this.config = config;
+        this.session = session;
+        this.agentName = agentName;
+    }
+
     public ReActConfig getConfig() {
         return config;
     }
 
-    protected void setConfig(ReActConfig config) {
-        this.config = config;
-    }
 
     public AgentSession getSession() {
         return session;
     }
 
-    protected void setSession(AgentSession session) {
-        this.session = session;
-    }
 
     public String getAgentName() {
         return agentName;
