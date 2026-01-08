@@ -178,6 +178,11 @@ public class ReActAgent implements Agent {
 
         Objects.requireNonNull(prompt, "Missing prompt!");
 
+        //开始事件
+        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+            item.target.onAgentStart(trace);
+        }
+
         if (LOG.isDebugEnabled()) {
             LOG.debug("ReActAgent [{}] starting: {}", this.name, prompt.getUserContent());
         }
@@ -220,6 +225,11 @@ public class ReActAgent implements Agent {
         AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
         session.addHistoryMessage(name, assistantMessage);
         session.updateSnapshot(context);
+
+        //结束事件
+        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+            item.target.onAgentEnd(trace);
+        }
 
         return assistantMessage;
     }

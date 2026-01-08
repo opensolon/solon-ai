@@ -167,6 +167,11 @@ public class ReasonTask implements NamedTaskComponent {
                             // 强制关闭模型端的自动工具执行，由 ReActActionTask 统一管控
                             o.autoToolCall(false);
 
+                            // 添加拦截器
+                            for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+                                o.interceptorAdd(item.target);
+                            }
+
                             if (config.getChatOptions() != null) {
                                 config.getChatOptions().accept(o);
                             }
