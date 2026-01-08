@@ -96,7 +96,7 @@ public class TeamAgentExceptionTest {
             System.out.println("捕获到预期的 Graph 节点异常: " + e.getCause().getMessage());
 
             // 验证异常内容
-            Assertions.assertTrue(e.getCause().toString().contains("节点异常"));
+            Assertions.assertTrue(e.getCause().toString().contains("节点执行异常"));
 
             // 验证快照：检查流程是否停留在发生故障的节点
             Assertions.assertEquals("problem_node", session.getSnapshot().lastNodeId(),
