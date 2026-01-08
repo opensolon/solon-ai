@@ -168,6 +168,28 @@ public class ReActAgent implements Agent {
 
         trace.prepare(config, session, name);
 
+        // 只有当 trace 消息为空（首轮执行）且 prompt 不为空时才加载历史
+        if (trace.getMessages().isEmpty() && !Prompt.isEmpty(prompt)) {
+            // 1. 存入当前 prompt 到 session 历史（持久化记录）
+            for (ChatMessage message : prompt.getMessages()) {
+                session.addHistoryMessage(name, message);
+            }
+
+            // 2. 根据 historyWindowSize 从 session 加载最近的历史到当前推理 trace
+            if (config.getHistoryWindowSize() > 0) {
+                Collection<ChatMessage> history = session.getHistoryMessages(name, config.getHistoryWindowSize());
+                for (ChatMessage message : history) {
+                    trace.appendMessage(message);
+                }
+            } else {
+                // 如果窗口为 0，至少要把当前的 prompt 加入 trace 供 ReasonTask 使用
+                for (ChatMessage message : prompt.getMessages()) {
+                    trace.appendMessage(message);
+                }
+            }
+        }
+
+
         if (Prompt.isEmpty(prompt)) {
             // 记录流节点链路，方便追踪调试
             context.trace().recordNode(graph, null);

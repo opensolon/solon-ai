@@ -81,30 +81,13 @@ public class ReasonTask implements NamedTaskComponent {
             return;
         }
 
-        // [逻辑 2：上下文初始化]
-        // 首轮迭代时，将 Prompt 转化为 User Message 加入历史对话序列
-        if (Assert.isEmpty(trace.getMessages())) {
-            if (trace.getPrompt() != null) {
-                //将 Prompt 添加到历史对话序列
-                for (ChatMessage message : trace.getPrompt().getMessages()) {
-                    trace.getSession().addHistoryMessage(trace.getAgentName(), message);
-                }
-
-                //从历史对话中获取最近 10 条对话
-                for (ChatMessage message : trace.getSession().getHistoryMessages(trace.getAgentName(),
-                        trace.getConfig().getHistoryWindowSize())) {
-                    trace.appendMessage(message);
-                }
-            }
-        }
-
-        // [逻辑 3：构建消息全景]
+        // [逻辑 2：构建消息全景]
         // 拼接 System Prompt (ReAct 规范) 和 动态增长的历史对话 (Thought/Action/Observation)
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(config.getSystemPrompt(trace)));
         messages.addAll(trace.getMessages());
 
-        // [逻辑 4：执行模型推理]
+        // [逻辑 3：执行模型推理]
         ChatResponse response = callWithRetry(trace, messages);
 
         // 处理模型空回复异常，通过 User 提示引导模型修正或结束
@@ -114,7 +97,7 @@ public class ReasonTask implements NamedTaskComponent {
             return;
         }
 
-        // [逻辑 5：分支决策 - 原生工具调用 (Native Tool Calls)]
+        // [逻辑 4：分支决策 - 原生工具调用 (Native Tool Calls)]
         // 如果模型通过标准的 ToolCall 协议响应，直接转向 Action 节点执行
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
             trace.appendMessage(response.getMessage());
@@ -122,7 +105,7 @@ public class ReasonTask implements NamedTaskComponent {
             return;
         }
 
-        // [逻辑 6：分支决策 - 文本格式推理 (Text ReAct Mode)]
+        // [逻辑 5：分支决策 - 文本格式推理 (Text ReAct Mode)]
         String rawContent = response.hasContent() ? response.getContent() : "";
         String clearContent = response.hasContent() ? response.getResultContent() : "";
 
@@ -140,7 +123,7 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onThought(trace, clearContent);
         }
 
-        // [逻辑 7：路由派发]
+        // [逻辑 6：路由派发]
         if (rawContent.contains(config.getFinishMarker())) {
             // 匹配到结束标识，提取答案并标记流程结束
             trace.setRoute(Agent.ID_END);
