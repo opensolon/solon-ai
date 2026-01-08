@@ -47,7 +47,7 @@ public class TeamAgentContractNetTest {
 
         FlowContext context = FlowContext.of("test_contract");
         // 这是一个算法任务，Mediator 应该触发 BIDDING 流程并选中 algo_expert
-        String result = team.call(context, "我们需要实现一个复杂的 A* 寻路算法，谁能承接？");
+        String result = team.call(context, "我们需要实现一个复杂的 A* 寻路算法，谁能承接？").getContent();
 
         System.out.println("=== ContractNet 策略测试 ===");
         System.out.println("任务: 实现复杂的 A* 寻路算法");
@@ -112,7 +112,7 @@ public class TeamAgentContractNetTest {
 
         // 使用更开放的提问，可能需要招标才能决定
         String result = team.call(context,
-                "请评估实现一个复杂路径规划系统的最佳方案，需要考虑算法效率和用户界面设计");
+                "请评估实现一个复杂路径规划系统的最佳方案，需要考虑算法效率和用户界面设计").getContent();
 
         System.out.println("=== ContractNet 策略测试（能力重叠） ===");
         System.out.println("任务: 评估路径规划系统方案，需要考虑算法和UI");

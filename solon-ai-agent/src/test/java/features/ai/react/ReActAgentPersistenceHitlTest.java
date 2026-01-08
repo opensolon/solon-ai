@@ -80,7 +80,7 @@ public class ReActAgentPersistenceHitlTest {
         // --- 阶段 C：恢复执行 ---
         System.out.println("\n--- 阶段 C：继续执行 ---");
         // 调用时无需再次传入 prompt，Agent 会自动从恢复的 Trace 中读取上下文
-        String finalResult = agent.call(context2);
+        String finalResult = agent.call(context2).getContent();
 
         System.out.println("最终回复内容: " + finalResult);
 

@@ -7,6 +7,8 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 
@@ -19,13 +21,13 @@ public class TeamAgentNestedPersistenceTest {
         Agent coder = new Agent() {
             @Override public String name() { return "Coder"; }
             @Override public String description() { return "程序员"; }
-            @Override public String call(FlowContext ctx, Prompt p) { return "代码: login.java"; }
+            @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("代码: login.java"); }
         };
 
         Agent reviewer = new Agent() {
             @Override public String name() { return "Reviewer"; }
             @Override public String description() { return "审核员"; }
-            @Override public String call(FlowContext ctx, Prompt p) { return "OK [FINISH]"; }
+            @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("OK [FINISH]"); }
         };
 
         TeamAgent projectTeam = TeamAgent.of(chatModel)
@@ -58,7 +60,7 @@ public class TeamAgentNestedPersistenceTest {
 
         // 阶段 2：恢复并验证逻辑衔接
         FlowContext context2 = FlowContext.fromJson(jsonState);
-        String result = projectTeam.call(context2);
+        String result = projectTeam.call(context2).getContent();
 
         TeamTrace finalTrace = context2.getAs("__quality_project");
         Assertions.assertTrue(finalTrace.getFormattedHistory().contains("Reviewer"), "恢复后应衔接 Reviewer 环节");

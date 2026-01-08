@@ -45,7 +45,7 @@ public class TeamAgentDemo {
 
 
         // 3. 运行
-        String result = team.call(FlowContext.of("demo1"), "写一个 Java 的单例模式并解释它");
+        String result = team.call(FlowContext.of("demo1"), "写一个 Java 的单例模式并解释它").getContent();
         System.out.println(result);
     }
 

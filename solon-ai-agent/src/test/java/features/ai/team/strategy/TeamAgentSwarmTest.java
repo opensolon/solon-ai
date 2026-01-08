@@ -46,7 +46,7 @@ public class TeamAgentSwarmTest {
         System.out.println("\n\n------------------");
 
         FlowContext context = FlowContext.of("test_swarm");
-        String result = team.call(context, "你好，很高兴认识你");
+        String result = team.call(context, "你好，很高兴认识你").getContent();
 
         System.out.println("=== Swarm 策略测试 ===");
         System.out.println("任务: 翻译并润色'你好，很高兴认识你'");
@@ -122,7 +122,7 @@ public class TeamAgentSwarmTest {
         // 使用更复杂的文本
         String result = team.call(context,
                 "人工智能正在改变世界，它通过机器学习算法分析海量数据，为各种行业提供智能解决方案。" +
-                        "从医疗诊断到金融风控，从自动驾驶到智能客服，AI的应用无处不在。");
+                        "从医疗诊断到金融风控，从自动驾驶到智能客服，AI的应用无处不在。").getContent();
 
         System.out.println("=== Swarm 策略测试（长处理链） ===");
         System.out.println("任务: 翻译并处理一段关于人工智能的复杂文本");

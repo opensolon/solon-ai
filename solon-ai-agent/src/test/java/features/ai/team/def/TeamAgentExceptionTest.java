@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.TaskComponent;
@@ -32,7 +33,7 @@ public class TeamAgentExceptionTest {
             }
 
             @Override
-            public String call(FlowContext context, Prompt prompt) throws Throwable {
+            public AssistantMessage call(FlowContext context, Prompt prompt) throws Throwable {
                 throw new RuntimeException("模拟Agent内部异常");
             }
         };
@@ -46,7 +47,7 @@ public class TeamAgentExceptionTest {
 
         // 应该能捕获异常，而不是直接崩溃
         try {
-            String result = team.call(context, "触发异常");
+            String result = team.call(context, "触发异常").getContent();
             // 如果能正常返回，应该包含错误信息
             Assertions.assertNotNull(result);
             System.out.println("异常处理后结果: " + result);

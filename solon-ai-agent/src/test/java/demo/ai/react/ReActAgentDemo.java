@@ -22,7 +22,7 @@ public class ReActAgentDemo {
         System.out.println("--- Agent 开始工作 ---");
         // 这个问题会触发：1.调用工具获取天气 2.根据天气推理穿衣建议
         FlowContext context1 = FlowContext.of("demo1");
-        String response = agent.call(context1, "北京天气怎么样？我该穿什么衣服？");
+        String response = agent.call(context1, "北京天气怎么样？我该穿什么衣服？").getContent();
 
         System.out.println("--- 最终答复 ---");
         System.out.println(response);

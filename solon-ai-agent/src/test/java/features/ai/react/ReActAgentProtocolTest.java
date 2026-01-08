@@ -34,7 +34,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         FlowContext context = FlowContext.of("test_protocol");
         String result = agent.call(context,
-                "我需要查询北京的天气，然后根据天气建议是否带伞");
+                "我需要查询北京的天气，然后根据天气建议是否带伞").getContent();
 
         // 获取轨迹分析
         ReActTrace trace = context.getAs("__" + agent.name());
@@ -87,7 +87,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         FlowContext context = FlowContext.of("test_direct");
         String result = agent.call(context,
-                "你好，简单介绍一下你自己");
+                "你好，简单介绍一下你自己").getContent();
 
         // 应该直接返回最终答案，不需要工具调用
         Assertions.assertNotNull(result);
@@ -116,7 +116,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         FlowContext context = FlowContext.of("test_multi");
         String result = agent.call(context,
-                "请先获取我的用户信息，然后查询余额，最后检查是否有优惠券");
+                "请先获取我的用户信息，然后查询余额，最后检查是否有优惠券").getContent();
 
         Assertions.assertNotNull(result);
 

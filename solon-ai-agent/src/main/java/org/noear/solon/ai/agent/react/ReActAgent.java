@@ -20,6 +20,8 @@ import org.noear.solon.ai.agent.react.task.ActionTask;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
@@ -144,7 +146,7 @@ public class ReActAgent implements Agent {
      * @param prompt  用户输入的提示词
      */
     @Override
-    public String call(FlowContext context, Prompt prompt) throws Throwable {
+    public AssistantMessage call(FlowContext context, Prompt prompt) throws Throwable {
         // 维护执行痕迹：若上下文已存在则复用，支持多轮对话或中断恢复
         ReActTrace trace = context.getAs(traceKey);
         if (trace == null) {
@@ -199,7 +201,7 @@ public class ReActAgent implements Agent {
 //            config.getInterceptor().onCallEnd(context, prompt);
 //        }
 
-        return result;
+        return ChatMessage.ofAssistant(result);
     }
 
     /// //////////// Builder 静态构造模式 ////////////

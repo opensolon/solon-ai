@@ -47,7 +47,7 @@ public class TeamAgentMultiTurnTest {
         // --- 第一轮：基础调研 ---
         FlowContext context1 = FlowContext.of("session_001");
         System.out.println(">>> [Round 1] 用户：我想去杭州玩。");
-        String out1 = conciergeTeam.call(context1, "我想去杭州玩。");
+        String out1 = conciergeTeam.call(context1, "我想去杭州玩。").getContent();
 
         System.out.println("<<< [第一轮输出] 长度: " + (out1 != null ? out1.length() : 0));
         System.out.println("<<< [第一轮输出] 内容: " + (out1 != null && out1.length() > 0 ?
@@ -67,7 +67,7 @@ public class TeamAgentMultiTurnTest {
 
         // --- 第二轮：预算约束注入 ---
         System.out.println("\n>>> [Round 2] 用户：预算只有 500 元，请重新规划杭州行程。");
-        String out2 = conciergeTeam.call(context1, "预算只有 500 元，请重新规划杭州行程。");
+        String out2 = conciergeTeam.call(context1, "预算只有 500 元，请重新规划杭州行程。").getContent();
 
         System.out.println("<<< [第二轮输出] 长度: " + (out2 != null ? out2.length() : 0));
         System.out.println("<<< [第二轮输出] 内容: " + (out2 != null && out2.length() > 0 ?

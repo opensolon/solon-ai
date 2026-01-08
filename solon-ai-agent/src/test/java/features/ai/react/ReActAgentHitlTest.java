@@ -55,7 +55,7 @@ public class ReActAgentHitlTest {
 
         // --- 第一步：发起请求，预期会被拦截 ---
         System.out.println("--- 第一次调用 (预期拦截) ---");
-        String result1 = agent.call(context, prompt);
+        String result1 = agent.call(context, prompt).getContent();
 
         // 验证：结果应为空（或中间态），且 context 处于 stopped 状态
         Assertions.assertTrue(context.isStopped(), "流程应该被拦截并停止");
@@ -72,7 +72,7 @@ public class ReActAgentHitlTest {
         // --- 第三步：恢复执行 ---
         System.out.println("--- 第二次调用 (恢复执行) ---");
         // 恢复时传入原 context，prompt 会从 state 中自动获取
-        String result2 = agent.call(context);
+        String result2 = agent.call(context).getContent();
 
         // 验证：最终结果应包含退款成功的关键字
         Assertions.assertNotNull(result2);
@@ -135,7 +135,7 @@ public class ReActAgentHitlTest {
                 .build();
 
         FlowContext context = FlowContext.of("test_interceptor");
-        String result = agent.call(context, "调用基础工具");
+        String result = agent.call(context, "调用基础工具").getContent();
 
         System.out.println("拦截器调用日志: " + log.toString());
         Assertions.assertFalse(log.toString().isEmpty(), "拦截器回调应该被调用");

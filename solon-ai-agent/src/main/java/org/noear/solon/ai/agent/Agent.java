@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
@@ -52,9 +53,9 @@ public interface Agent extends NamedTaskComponent {
         return description();
     }
 
-    String call(FlowContext context, Prompt prompt) throws Throwable;
+    AssistantMessage call(FlowContext context, Prompt prompt) throws Throwable;
 
-    default String call(FlowContext context, String prompt) throws Throwable {
+    default AssistantMessage call(FlowContext context, String prompt) throws Throwable {
         if (prompt == null) {
             return call(context, (Prompt) null);
         } else {
@@ -62,7 +63,7 @@ public interface Agent extends NamedTaskComponent {
         }
     }
 
-    default String call(FlowContext context) throws Throwable {
+    default AssistantMessage call(FlowContext context) throws Throwable {
         return call(context, (Prompt) null);
     }
 
@@ -87,9 +88,10 @@ public interface Agent extends NamedTaskComponent {
         }
 
         long start = System.currentTimeMillis();
-        String result = call(context, effectivePrompt);
+        AssistantMessage msg = call(context, effectivePrompt);
         long duration = System.currentTimeMillis() - start;
 
+        String result = msg.getContent();
         if (result == null) {
             result = "";
         }

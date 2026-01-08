@@ -48,7 +48,7 @@ public class TeamAgentBlackboardTest {
 
         FlowContext context = FlowContext.of("test_blackboard");
         // 任务涵盖两个领域，观察 Mediator 如何依次分派
-        String result = team.call(context, "请为我的电商系统设计用户模块的数据库和配套接口。");
+        String result = team.call(context, "请为我的电商系统设计用户模块的数据库和配套接口。").getContent();
 
         System.out.println("=== Blackboard 策略测试 ===");
         System.out.println("任务: 为电商系统设计用户模块的数据库和配套接口");
@@ -102,7 +102,7 @@ public class TeamAgentBlackboardTest {
         String result = team.call(context,
                 "请分两部分完成：\n" +
                         "1. 设计用户模块的数据库表结构，需要包含用户表、地址表、订单表\n" +
-                        "2. 设计对应的 RESTful API 接口，包括用户注册、登录、信息查询");
+                        "2. 设计对应的 RESTful API 接口，包括用户注册、登录、信息查询").getContent();
 
         System.out.println("=== Blackboard 策略测试（明确任务） ===");
         System.out.println("任务: 分两部分设计数据库和API");

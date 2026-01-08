@@ -8,6 +8,8 @@ import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -22,12 +24,12 @@ public class TeamAgentPersistenceHitlCombinedTest {
                 .addAgent(new Agent() {
                     @Override public String name() { return "Worker"; }
                     @Override public String description() { return "执行者"; }
-                    @Override public String call(FlowContext ctx, Prompt p) { return "任务完成。"; }
+                    @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("任务完成。"); }
                 })
                 .addAgent(new Agent() {
                     @Override public String name() { return "Approver"; }
                     @Override public String description() { return "审批者"; }
-                    @Override public String call(FlowContext ctx, Prompt p) { return "签字通过。[FINISH]"; }
+                    @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("签字通过。[FINISH]"); }
                 })
                 .interceptor(new TeamInterceptor() {
                     @Override
@@ -66,7 +68,7 @@ public class TeamAgentPersistenceHitlCombinedTest {
         context2.put("signed", true); // 模拟人工审批
         System.out.println(">>> 阶段2：从快照恢复，注入签名。");
 
-        String finalResult = projectTeam.call(context2);
+        String finalResult = projectTeam.call(context2).getContent();
 
         // --- 3. 验证 ---
         TeamTrace trace = context2.getAs("__combined_manager");

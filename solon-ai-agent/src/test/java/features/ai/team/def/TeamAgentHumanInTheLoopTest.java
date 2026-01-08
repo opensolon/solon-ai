@@ -80,7 +80,7 @@ public class TeamAgentHumanInTheLoopTest {
         FlowContext context = FlowContext.of("order_888");
 
         System.out.println(">>> [系统]：AI 开始规划方案...");
-        String firstResult = auditTeam.call(context, "帮我策划一个去拉萨的行程");
+        String firstResult = auditTeam.call(context, "帮我策划一个去拉萨的行程").getContent();
 
         System.out.println(">>> [阶段A结果]：\n" + firstResult);
         System.out.println(">>> [系统]：方案已生成，流程已挂起，等待人工审批...");
@@ -96,7 +96,7 @@ public class TeamAgentHumanInTheLoopTest {
         context.put("audit_approved", true);
 
         // 继续执行：传入null，从human_audit的下一个节点（confirmer）开始
-        String finalOutput = auditTeam.call(context);
+        String finalOutput = auditTeam.call(context).getContent();
 
         // 3. 单测检测
         System.out.println(">>> [最终输出]：\n" + finalOutput);

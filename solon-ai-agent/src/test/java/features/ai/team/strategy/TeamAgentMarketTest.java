@@ -47,7 +47,7 @@ public class TeamAgentMarketTest {
 
         FlowContext context = FlowContext.of("test_market");
         // 发起一个明显属于 Java 领域的高并发需求
-        String result = team.call(context, "我需要实现一个支持每秒万级并发的支付结算网关后端。");
+        String result = team.call(context, "我需要实现一个支持每秒万级并发的支付结算网关后端。").getContent();
 
         System.out.println("=== MarketBased 策略测试 ===");
         System.out.println("任务: 实现支持每秒万级并发的支付结算网关后端");
@@ -101,7 +101,7 @@ public class TeamAgentMarketTest {
 
         // 发起一个明显属于 Python 领域的数据分析任务
         String result = team.call(context,
-                "我需要分析一个大型数据集，进行特征工程和机器学习建模，预测用户行为。");
+                "我需要分析一个大型数据集，进行特征工程和机器学习建模，预测用户行为。").getContent();
 
         System.out.println("=== MarketBased 策略测试（Python任务） ===");
         System.out.println("任务: 数据分析、特征工程和机器学习建模");

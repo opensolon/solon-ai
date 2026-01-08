@@ -53,7 +53,7 @@ public class TeamAgentPersistenceHitlTest {
         FlowContext context2 = FlowContext.fromJson(jsonState);
         context2.put("manager_ok", true); // 注入信号跳过拦截器
 
-        String finalResult = teamAgent.call(context2);
+        String finalResult = teamAgent.call(context2).getContent();
 
         System.out.println("=== 最终结果 ===");
         System.out.println(finalResult);

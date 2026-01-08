@@ -34,7 +34,7 @@ public class CrosstalkDemo {
                 .build();
 
         FlowContext ctx = FlowContext.of("quick_test");
-        String result = crosstalkTeam.call(ctx,"让阿飞和阿紫吵个架");
+        String result = crosstalkTeam.call(ctx,"让阿飞和阿紫吵个架").getContent();
 
         System.out.println("=== 快速测试 ===");
 

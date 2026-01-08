@@ -8,6 +8,8 @@ import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -22,7 +24,7 @@ public class TeamAgentNestedHitlTest {
                 .addAgent(new Agent() {
                     @Override public String name() { return "Coder"; }
                     @Override public String description() { return "写代码"; }
-                    @Override public String call(FlowContext ctx, Prompt p) { return "代码写好了。"; }
+                    @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("代码写好了。"); }
                 }).build();
 
         // 2. 构建父团队
@@ -32,7 +34,7 @@ public class TeamAgentNestedHitlTest {
                 .addAgent(new Agent() {
                     @Override public String name() { return "Reviewer"; }
                     @Override public String description() { return "审代码"; }
-                    @Override public String call(FlowContext ctx, Prompt p) { return "Perfect. [FINISH]"; }
+                    @Override public AssistantMessage call(FlowContext ctx, Prompt p) { return ChatMessage.ofAssistant("Perfect. [FINISH]"); }
                 })
                 .interceptor(new TeamInterceptor() {
                     @Override
@@ -74,7 +76,7 @@ public class TeamAgentNestedHitlTest {
 
         // 第二次调用：注入批准信号，恢复执行
         context.put("approved", true);
-        String result = projectTeam.call(context);
+        String result = projectTeam.call(context).getContent();
 
         Assertions.assertTrue(result.contains("Perfect"));
         System.out.println("最终协作历史:\n" + trace1.getFormattedHistory());

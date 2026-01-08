@@ -62,7 +62,7 @@ public class TeamAgentPersistenceAndResumeTest {
         FlowContext contextStep2 = FlowContext.fromJson(jsonState);
         System.out.println(">>> 阶段2启动：正在从断点 [" + contextStep2.lastNodeId() + "] 恢复任务...");
 
-        String finalResult = tripAgent.call(contextStep2); // 传入 null 触发自动恢复
+        String finalResult = tripAgent.call(contextStep2).getContent(); // 传入 null 触发自动恢复
 
         // 3. 改进的测试断言
         TeamTrace finalTrace = contextStep2.getAs("__" + teamId);
@@ -109,7 +109,7 @@ public class TeamAgentPersistenceAndResumeTest {
         FlowContext context = FlowContext.of("test_reset");
 
         // 第一次调用
-        String result1 = team.call(context, "第一个问题");
+        String result1 = team.call(context, "第一个问题").getContent();
         System.out.println("第一次结果: " + result1);
 
         // 获取轨迹
@@ -117,7 +117,7 @@ public class TeamAgentPersistenceAndResumeTest {
         Assertions.assertNotNull(trace1);
 
         // 第二次调用（新提示词，应该重置）
-        String result2 = team.call(context, "第二个问题");
+        String result2 = team.call(context, "第二个问题").getContent();
         System.out.println("第二次结果: " + result2);
 
         // 应该开始新的轨迹
@@ -143,11 +143,11 @@ public class TeamAgentPersistenceAndResumeTest {
 
         // 在 context1 中设置状态
         context1.put("custom_state", "value1");
-        String result1 = team.call(context1, "会话1的问题");
+        String result1 = team.call(context1, "会话1的问题").getContent();
 
         // context2 不应该看到 context1 的状态
         context2.put("custom_state", "value2");
-        String result2 = team.call(context2, "会话2的问题");
+        String result2 = team.call(context2, "会话2的问题").getContent();
 
         Assertions.assertNotEquals(
                 context1.get("custom_state"),

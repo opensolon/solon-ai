@@ -15,30 +15,6 @@ import org.noear.solon.flow.FlowContext;
  */
 public class LlmDemo {
     public static void main() {
-        //
-        // 1. 创建模型
-        //
-        ChatModel chatModel = LlmUtil.getChatModel();
 
-        //
-        // 2. 创建团队
-        //
-        TeamAgent team = TeamAgent.of(chatModel)
-                .name("demo_team")
-                .addAgent(ReActAgent.of(chatModel)
-                        .name("planner")
-                        .title("规划")
-                        .description("负责生成详细方案")
-                        .build())
-                .build();
-
-        new FunctionToolDesc(team.name())
-                .title(team.title())
-                .description(team.description())
-                .stringParamAdd("prompt", "提示语")
-                .doHandle(args -> {
-                    String prompt = args.get("prompt").toString();
-                    return team.call(FlowContext.of(), Prompt.of(prompt));
-                });
     }
 }

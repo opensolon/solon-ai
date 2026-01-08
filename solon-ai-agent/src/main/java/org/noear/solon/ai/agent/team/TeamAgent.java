@@ -18,6 +18,8 @@ package org.noear.solon.ai.agent.team;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.*;
 import org.noear.solon.lang.Nullable;
@@ -131,7 +133,7 @@ public class TeamAgent implements Agent {
      * <p>流程：初始化/更新状态 -> 执行流图 -> 提取结果 -> 资源清理/回调通知</p>
      */
     @Override
-    public String call(FlowContext context, Prompt prompt) throws Throwable {
+    public AssistantMessage call(FlowContext context, Prompt prompt) throws Throwable {
         // [阶段1：状态初始化] 尝试复用或创建新的执行追踪实例
         TeamTrace trace = context.getAs(traceKey);
 
@@ -172,7 +174,7 @@ public class TeamAgent implements Agent {
             }
 
             trace.setFinalAnswer(result);
-            return result;
+            return ChatMessage.ofAssistant(result);
         } finally {
             // [阶段4：生命周期销毁] 无论成功失败，触发拦截器和协议的清理回调
             if (config != null) {

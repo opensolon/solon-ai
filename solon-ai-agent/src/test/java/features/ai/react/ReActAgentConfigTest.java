@@ -36,10 +36,10 @@ public class ReActAgentConfigTest {
         String prompt = "给这个产品想一个宣传口号";
 
         FlowContext context1 = FlowContext.of("test_temp_1");
-        String result1 = lowTempAgent.call(context1, prompt);
+        String result1 = lowTempAgent.call(context1, prompt).getContent();
 
         FlowContext context2 = FlowContext.of("test_temp_2");
-        String result2 = highTempAgent.call(context2, prompt);
+        String result2 = highTempAgent.call(context2, prompt).getContent();
 
         System.out.println("低温结果: " + result1);
         System.out.println("高温结果: " + result2);
@@ -68,10 +68,10 @@ public class ReActAgentConfigTest {
         String prompt = "写一个简短的故事";
 
         FlowContext context1 = FlowContext.of("test_tokens_1");
-        String result1 = shortAgent.call(context1, prompt);
+        String result1 = shortAgent.call(context1, prompt).getContent();
 
         FlowContext context2 = FlowContext.of("test_tokens_2");
-        String result2 = longAgent.call(context2, prompt);
+        String result2 = longAgent.call(context2, prompt).getContent();
 
         System.out.println("短token结果长度: " + result1.length());
         System.out.println("长token结果长度: " + result2.length());
@@ -98,10 +98,10 @@ public class ReActAgentConfigTest {
 
         // 主要验证不抛出异常
         FlowContext context1 = FlowContext.of("test_logging_1");
-        String result1 = loggingAgent.call(context1, "测试日志");
+        String result1 = loggingAgent.call(context1, "测试日志").getContent();
 
         FlowContext context2 = FlowContext.of("test_logging_2");
-        String result2 = noLoggingAgent.call(context2, "测试无日志");
+        String result2 = noLoggingAgent.call(context2, "测试无日志").getContent();
 
         Assertions.assertNotNull(result1);
         Assertions.assertNotNull(result2);
@@ -119,7 +119,7 @@ public class ReActAgentConfigTest {
                 .build();
 
         FlowContext context = FlowContext.of("test_finish");
-        String result = agent.call(context, "简单问候");
+        String result = agent.call(context, "简单问候").getContent();
 
         System.out.println("自定义结束标记结果: " + result);
         Assertions.assertNotNull(result);

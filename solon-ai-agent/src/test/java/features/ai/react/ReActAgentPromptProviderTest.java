@@ -37,7 +37,7 @@ public class ReActAgentPromptProviderTest {
                 .build();
 
         FlowContext context = FlowContext.of("test_custom_prompt");
-        String result = agent.call(context, "计算 25 + 37");
+        String result = agent.call(context, "计算 25 + 37").getContent();
 
         Assertions.assertNotNull(result);
         System.out.println("自定义提示词结果: " + result);
@@ -60,7 +60,7 @@ public class ReActAgentPromptProviderTest {
                 .build();
 
         FlowContext context = FlowContext.of("test_chinese_prompt");
-        String result = agent.call(context, "查询北京的天气");
+        String result = agent.call(context, "查询北京的天气").getContent();
 
         Assertions.assertNotNull(result);
         System.out.println("中文提示词结果: " + result);
@@ -84,7 +84,7 @@ public class ReActAgentPromptProviderTest {
                 .build();
 
         FlowContext context = FlowContext.of("test_empty_prompt");
-        String result = agent.call(context, "测试");
+        String result = agent.call(context, "测试").getContent();
 
         Assertions.assertNotNull(result);
         System.out.println("空系统提示词结果: " + result);

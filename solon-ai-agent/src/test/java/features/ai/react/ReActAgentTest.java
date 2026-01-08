@@ -25,7 +25,7 @@ public class ReActAgentTest {
                 .build();
 
         FlowContext context = FlowContext.of("demo1");
-        String result = agent.call(context, "先计算 12 加 34 的和，再把结果乘以 2 等于多少？");
+        String result = agent.call(context, "先计算 12 加 34 的和，再把结果乘以 2 等于多少？").getContent();
 
         Assertions.assertNotNull(result);
         Assertions.assertTrue(result.contains("92"), "计算结果应为 92，实际返回: " + result);

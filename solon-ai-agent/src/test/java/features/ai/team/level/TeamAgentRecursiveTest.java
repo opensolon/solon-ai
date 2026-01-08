@@ -7,6 +7,8 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
@@ -46,7 +48,7 @@ public class TeamAgentRecursiveTest {
 
         log.info(">>> 开始测试...");
         // 核心改动：在 Prompt 中明确要求一次性处理
-        String finalResult = projectTeam.call(context, "请 Java 程序员帮我写一个 Hello World。完成后直接结束。");
+        String finalResult = projectTeam.call(context, "请 Java 程序员帮我写一个 Hello World。完成后直接结束。").getContent();
 
         TeamTrace rootTrace = context.getAs("__project_team");
         TeamTrace subTrace = context.getAs("__dev_team");
@@ -66,9 +68,9 @@ public class TeamAgentRecursiveTest {
             @Override public String name() { return name; }
             @Override public String description() { return desc; }
             @Override
-            public String call(FlowContext context, Prompt prompt) {
+            public AssistantMessage call(FlowContext context, Prompt prompt) {
                 // 模拟一个带有明确结束意图的返回
-                return "[Result from " + name + "]: 任务已处理。 [FINISH]";
+                return ChatMessage.ofAssistant( "[Result from " + name + "]: 任务已处理。 [FINISH]");
             }
         };
     }
@@ -91,18 +93,18 @@ public class TeamAgentRecursiveTest {
                     private int reviewCount = 0;
                     @Override public String name() { return "Reviewer"; }
                     @Override public String description() { return "代码审核员"; }
-                    @Override public String call(FlowContext ctx, Prompt p) {
+                    @Override public AssistantMessage call(FlowContext ctx, Prompt p) {
                         if (reviewCount++ == 0) {
-                            return "代码发现安全漏洞，请 dev_team 重新修复！";
+                            return ChatMessage.ofAssistant("代码发现安全漏洞，请 dev_team 重新修复！");
                         }
-                        return "审核通过，表现完美。[FINISH]";
+                        return ChatMessage.ofAssistant("审核通过，表现完美。[FINISH]");
                     }
                 })
                 .maxTotalIterations(10)
                 .build();
 
         FlowContext context = FlowContext.of("sn_feedback_loop");
-        String result = projectTeam.call(context, "请开发一个登录模块。");
+        String result = projectTeam.call(context, "请开发一个登录模块。").getContent();
 
         TeamTrace rootTrace = context.getAs("__quality_project");
 

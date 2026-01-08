@@ -46,7 +46,7 @@ public class TeamAgentSupervisorTest {
         System.out.println("\n\n------------------");
 
         FlowContext context = FlowContext.of("test_decision");
-        String result = team.call(context, "分析一下最近的市场趋势");
+        String result = team.call(context, "分析一下最近的市场趋势").getContent();
 
         System.out.println("Supervisor 决策结果: " + result);
 
@@ -83,7 +83,7 @@ public class TeamAgentSupervisorTest {
                 .build();
 
         FlowContext context = FlowContext.of("test_custom_prompt");
-        String result = team.call(context, "简单任务");
+        String result = team.call(context, "简单任务").getContent();
 
         System.out.println("自定义提示词结果: " + result);
         Assertions.assertNotNull(result);

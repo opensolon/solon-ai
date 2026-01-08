@@ -71,7 +71,7 @@ public class TeamAgentParallelAgentTest {
 
         // 3. 执行
         FlowContext context = FlowContext.of("sn_2025_para_01");
-        String result = team.call(context, "你好，世界");
+        String result = team.call(context, "你好，世界").getContent();
 
         // 4. 单测检测
         System.out.println(result);

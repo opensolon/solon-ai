@@ -32,7 +32,7 @@ public class ReActAgentBoundaryTest {
 
         FlowContext context = FlowContext.of("test_max_steps");
         String result = agent.call(context,
-                "这个问题需要多次思考");
+                "这个问题需要多次思考").getContent();
 
         Assertions.assertNotNull(result);
         Assertions.assertTrue(result.contains("Maximum iterations") ||
@@ -57,7 +57,7 @@ public class ReActAgentBoundaryTest {
 
         FlowContext context = FlowContext.of("test_tool_not_found");
         String result = agent.call(context,
-                "请调用一个不存在的工具，比如 non_existent_tool");
+                "请调用一个不存在的工具，比如 non_existent_tool").getContent();
 
         Assertions.assertNotNull(result);
 
@@ -77,7 +77,7 @@ public class ReActAgentBoundaryTest {
 
         FlowContext context = FlowContext.of("test_tool_error");
         String result = agent.call(context,
-                "调用会出错的工具");
+                "调用会出错的工具").getContent();
 
         Assertions.assertNotNull(result);
 
@@ -115,7 +115,7 @@ public class ReActAgentBoundaryTest {
         agent.call(context, "初始提示");
 
         // 再传空
-        String result = agent.call(context, "");
+        String result = agent.call(context, "").getResultContent();
 
         Assertions.assertNotNull(result);
         System.out.println("空提示词结果: " + result);

@@ -44,7 +44,7 @@ public class TeamAgentBoundaryTest {
                 .build();
 
         FlowContext context = FlowContext.of("test_solo");
-        String result = team.call(context, "你好");
+        String result = team.call(context, "你好").getContent();
 
         Assertions.assertNotNull(result);
         System.out.println("单 Agent 团队结果: " + result);
@@ -73,7 +73,7 @@ public class TeamAgentBoundaryTest {
                 .build();
 
         FlowContext context = FlowContext.of("test_loop");
-        String result = team.call(context, "测试循环");
+        String result = team.call(context, "测试循环").getContent();
 
         System.out.println("死循环结果: " + result);
         Assertions.assertNotNull(result);
@@ -112,7 +112,7 @@ public class TeamAgentBoundaryTest {
         team.call(context, "初始提示");
 
         // 再传 null，应该使用之前的上下文
-        String result = team.call(context);
+        String result = team.call(context).getContent();
 
         Assertions.assertNotNull(result);
         System.out.println("Null prompt 结果: " + result);
@@ -138,7 +138,7 @@ public class TeamAgentBoundaryTest {
 
         long startTime = System.currentTimeMillis();
         FlowContext context = FlowContext.of("perf_test");
-        String result = team.call(context, "性能测试");
+        String result = team.call(context, "性能测试").getContent();
         long endTime = System.currentTimeMillis();
 
         System.out.println("大团队结果: " + result);
@@ -187,7 +187,7 @@ public class TeamAgentBoundaryTest {
         FlowContext context = FlowContext.of("test_real_loop");
 
         // 使用一个非常开放、难以一次性完成的问题
-        String result = team.call(context, "请详细分析人工智能对人类社会各个层面的长期影响，包括但不限于经济结构、就业市场、教育体系、伦理道德、政治体制、文化变迁等方面，要求给出具体的数据支持和预测模型");
+        String result = team.call(context, "请详细分析人工智能对人类社会各个层面的长期影响，包括但不限于经济结构、就业市场、教育体系、伦理道德、政治体制、文化变迁等方面，要求给出具体的数据支持和预测模型").getContent();
 
         TeamTrace trace = team.getTrace(context);
 
@@ -226,7 +226,7 @@ public class TeamAgentBoundaryTest {
         FlowContext context = FlowContext.of("test_all_participate");
 
         // 使用一个需要多方面专业知识的问题
-        String result = team.call(context, "请为一个大型电商平台的黑色星期五促销活动设计完整的性能测试方案，需要涵盖架构分析、指标定义、工具选择、实施步骤和结果分析");
+        String result = team.call(context, "请为一个大型电商平台的黑色星期五促销活动设计完整的性能测试方案，需要涵盖架构分析、指标定义、工具选择、实施步骤和结果分析").getContent();
 
         TeamTrace trace = team.getTrace(context);
 
