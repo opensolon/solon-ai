@@ -213,10 +213,6 @@ public class ReActAgent implements Agent {
             LOG.debug("ReActAgent [{}] final Answer: {}", this.name, result);
         }
 
-        // 触发调用结束回调
-//        if (config.getInterceptor() != null) {
-//            config.getInterceptor().onCallEnd(context, prompt);
-//        }
 
         if (Assert.isNotEmpty(config.getOutputKey())) {
             context.put(config.getOutputKey(), result);
