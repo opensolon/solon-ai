@@ -71,6 +71,21 @@ public class InMemoryAgentSession implements AgentSession {
     }
 
     @Override
+    public Collection<ChatMessage> getHistoryMessages(String agentName, int last) {
+        List<ChatMessage> list = historyMessages.get(agentName);
+
+        if (list != null) {
+            if (list.size() > last) {
+                return list.subList(list.size() - last, list.size());
+            } else {
+                return list;
+            }
+        }
+
+        return Collections.emptyList();
+    }
+
+    @Override
     public void updateSnapshot(FlowContext snapshot) {
         this.snapshot = snapshot;
     }

@@ -16,11 +16,15 @@
 package org.noear.solon.ai.agent.session;
 
 import org.noear.redisx.RedisClient;
+import org.noear.redisx.plus.RedisList;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.flow.FlowContext;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Redis 智能体会话适配
@@ -57,6 +61,27 @@ public class RedisAgentSession implements AgentSession {
     @Override
     public void addHistoryMessage(String agentName, ChatMessage message) {
         redisClient.getList(instanceId + ":" + agentName).add(ChatMessage.toJson(message));
+    }
+
+    @Override
+    public Collection<ChatMessage> getHistoryMessages(String agentName, int last) {
+        RedisList list = redisClient.getList(instanceId + ":" + agentName);
+
+        if (list != null) {
+            if (list.size() > last) {
+                return list.getRange(list.size() - last, list.size())
+                        .stream()
+                        .map(json -> ChatMessage.fromJson(json))
+                        .collect(Collectors.toList());
+            } else {
+                return list.getAll()
+                        .stream()
+                        .map(json -> ChatMessage.fromJson(json))
+                        .collect(Collectors.toList());
+            }
+        }
+
+        return Collections.emptyList();
     }
 
     @Override

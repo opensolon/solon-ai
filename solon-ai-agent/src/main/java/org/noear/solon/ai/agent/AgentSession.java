@@ -20,6 +20,8 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 
+import java.util.Collection;
+
 /**
  * 智能体会话接口
  *
@@ -37,6 +39,11 @@ public interface AgentSession extends NonSerializable {
      * 添加历史消息
      */
     void addHistoryMessage(String agentName, ChatMessage message);
+
+    /**
+     * 获取历史消息
+     */
+    Collection<ChatMessage> getHistoryMessages(String agentName, int last);
 
     /**
      * 更新快照

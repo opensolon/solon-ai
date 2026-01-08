@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Preview;
 
 /**
  * 智能体请求
@@ -24,6 +25,7 @@ import org.noear.solon.flow.FlowContext;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8")
 public interface AgentRequest {
     /**
      * 配置会话
