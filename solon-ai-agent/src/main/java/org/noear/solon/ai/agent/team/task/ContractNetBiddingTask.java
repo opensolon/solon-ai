@@ -81,7 +81,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
             for (Agent agent : config.getAgentMap().values()) {
                 try {
                     // 获取 Agent 的"实时竞标方案"（通常包含：预估工时、处理逻辑概要、信心值等）
-                    String bidProposal = agent.estimate(context, prompt);
+                    String bidProposal = agent.estimate(trace.getSession(), prompt);
 
                     bids.append("Candidate: ").append(agent.name()).append("\n");
                     bids.append("Capability: ").append(agent.description()).append("\n");
