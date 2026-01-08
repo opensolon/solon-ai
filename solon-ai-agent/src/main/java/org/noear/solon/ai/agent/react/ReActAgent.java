@@ -191,11 +191,11 @@ public class ReActAgent implements Agent {
 
 
         if (Prompt.isEmpty(prompt)) {
+            prompt = trace.getPrompt();
+        } else {
             // 记录流节点链路，方便追踪调试
             context.trace().recordNode(graph, null);
             trace.setPrompt(prompt);
-        } else {
-            prompt = trace.getPrompt();
         }
 
         Objects.requireNonNull(prompt, "Missing prompt!");
