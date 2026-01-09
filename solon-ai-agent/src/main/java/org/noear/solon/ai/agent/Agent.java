@@ -96,22 +96,25 @@ public interface Agent extends NamedTaskComponent {
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
         Prompt originalPrompt = (trace != null) ? trace.getPrompt() : null;
 
-        Prompt effectivePrompt = trace.getProtocol().prepareAgentPrompt(
-                trace,
-                this,
-                originalPrompt,
-                trace.getConfig().getPromptProvider().getLocale());
+        Prompt effectivePrompt = originalPrompt;
+        if (trace != null) {
+            effectivePrompt = trace.getProtocol().prepareAgentPrompt(
+                    trace,
+                    this,
+                    originalPrompt,
+                    trace.getConfig().getPromptProvider().getLocale());
+        }
 
         long start = System.currentTimeMillis();
         AssistantMessage msg = call(effectivePrompt, session);
         long duration = System.currentTimeMillis() - start;
 
-        String result = msg.getContent();
-        if (result == null) {
-            result = "";
-        }
-
         if (trace != null) {
+            String result = msg.getContent();
+            if (result == null) {
+                result = "";
+            }
+
             String stepContent = result.trim().isEmpty() ?
                     "No valid output is produced" : result;
             trace.addStep(name(), stepContent, duration);
@@ -119,6 +122,8 @@ public interface Agent extends NamedTaskComponent {
     }
 
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key";
+    static String KEY_LAST_TRACE_KEY = "_last_trace_key";
+
     static String KEY_SESSION = "SESSION";
     static String KEY_PROTOCOL = "PROTOCOL";
 

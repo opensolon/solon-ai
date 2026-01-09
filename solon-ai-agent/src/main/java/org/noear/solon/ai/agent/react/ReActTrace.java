@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -40,7 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class ReActTrace {
+public class ReActTrace implements AgentTrace {
     /**
      * 当前运行配置
      */

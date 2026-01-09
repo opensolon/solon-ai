@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
 
@@ -31,7 +32,7 @@ import java.util.stream.Collectors;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class TeamTrace {
+public class TeamTrace implements AgentTrace {
     /**
      * 团队配置实例（不参与序列化）
      */
