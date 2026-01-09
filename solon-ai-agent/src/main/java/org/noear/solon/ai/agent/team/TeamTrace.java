@@ -177,43 +177,6 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
-     * 智能死循环与重复性检测
-     * <p>利用窗口算法分析：</p>
-     * <ul>
-     * <li>1. <b>单点停滞</b>：同一 Agent 产出了完全相同的内容。</li>
-     * <li>2. <b>镜像死锁</b>：两个 Agent 互为“踢皮球”循环（A-B-A-B）。</li>
-     * </ul>
-     *
-     * @return 存在循环风险返回 true，应由治理器介入（如强制终止或转换 Protocol）
-     */
-    public boolean isLooping() {
-        int n = steps.size();
-        if (n < 4) return false;
-
-        TeamStep lastStep = steps.get(n - 1);
-        String lastAgent = lastStep.getAgentName();
-        String lastContent = lastStep.getContent();
-
-        if (lastContent == null || lastContent.trim().isEmpty()) return false;
-
-        // 1. 单节点幂等检测（Self-Repeating）
-        for (int i = 0; i < n - 1; i++) {
-            TeamStep prev = steps.get(i);
-            if (prev.getAgentName().equals(lastAgent) && Objects.equals(prev.getContent(), lastContent)) {
-                return true;
-            }
-        }
-
-        // 2. 交互式镜像循环检测（Back-and-forth Repeating）
-        if (n >= 8) {
-            return steps.get(n - 1).getAgentName().equals(steps.get(n - 3).getAgentName()) &&
-                    steps.get(n - 2).getAgentName().equals(steps.get(n - 4).getAgentName());
-        }
-
-        return false;
-    }
-
-    /**
      * 获取不可变的步骤列表视图
      */
     public List<TeamStep> getSteps() {

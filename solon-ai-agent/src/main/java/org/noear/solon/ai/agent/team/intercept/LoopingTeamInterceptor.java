@@ -34,7 +34,7 @@ import java.util.Objects;
  * @author noear
  * @since 3.8.1
  */
-public class LoopingInterceptor implements TeamInterceptor {
+public class LoopingTeamInterceptor implements TeamInterceptor {
     /** 最小内容长度，低于此值不判定为循环（避免误伤 "OK", "Done" 等短语） */
     private int minContentLength = 10;
 
