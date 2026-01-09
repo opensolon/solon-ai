@@ -21,6 +21,7 @@ public class ReActAgentConfigTest {
 
     /**
      * 测试不同温度参数对推理多样性的影响
+     * 目的：验证 temperature 是否真实透传并影响了 LLM 的创作发散性。
      */
     @Test
     public void testDifferentTemperatures() throws Throwable {
@@ -40,9 +41,9 @@ public class ReActAgentConfigTest {
                 .name("high_temp_agent")
                 .build();
 
-        String userPrompt = "给这个产品想一个宣传口号";
+        // 【关键改动】：要求 AI 在工具结果基础上“扩写”或“解释”，给采样留出空间
+        String userPrompt = "调用工具获取一个口号关键词，然后基于这个词为我写一段 30 字以上的产品推广文案。";
 
-        // 使用 AgentSession 替代 FlowContext
         AgentSession session1 = InMemoryAgentSession.of("temp_job_1");
         String result1 = lowTempAgent.call(Prompt.of(userPrompt), session1).getContent();
 
@@ -52,7 +53,7 @@ public class ReActAgentConfigTest {
         System.out.println("低温结果（严谨）: " + result1);
         System.out.println("高温结果（创意）: " + result2);
 
-        // 验证：不同采样参数通常会导致输出内容不一致
+        // 验证：在需要“组织语言”的任务下，不同温度必会产生差异化的回复内容
         Assertions.assertNotEquals(result1, result2, "不同温度配置应产生差异化的回复内容");
     }
 
