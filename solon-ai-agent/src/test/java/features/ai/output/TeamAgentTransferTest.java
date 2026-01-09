@@ -89,7 +89,7 @@ public class TeamAgentTransferTest {
         // 技巧：在 description 中明确告诉它输入来自上一步的结果变量
         ReActAgent polisher = ReActAgent.of(chatModel)
                 .name("polisher")
-                .promptProvider(trace -> SnEL.evalTmpl("#{translate_result} xxx", trace.getContext().model()) )
+                .systemPrompt(trace -> SnEL.evalTmpl("#{translate_result} xxx", trace.getContext().model()) )
                 .description("你是一个英文润色专家。" +
                         "请获取上一步的翻译结果：${translate_result}，并对其进行地道化润色。" +
                         "请务必以 'Answer: [润色后的译文]' 格式回答。")

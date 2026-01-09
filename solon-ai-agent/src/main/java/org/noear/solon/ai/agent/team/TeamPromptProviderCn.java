@@ -40,7 +40,7 @@ public class TeamPromptProviderCn implements TeamPromptProvider {
         sb.append("## 角色定义\n");
         sb.append("你是一个团队协作主管 (Supervisor)，负责协调以下 Agent 成员完成任务：\n");
         config.getAgentMap().forEach((name, agent) -> {
-            sb.append("- **").append(name).append("**: ").append(agent.description()).append("\n");
+            sb.append("- **").append(name).append("**: ").append(agent.descriptionFor(trace.getContext())).append("\n");
         });
 
         // 2. 任务上下文

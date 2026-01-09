@@ -21,13 +21,11 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActConfig;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.util.TmplUtil;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
-import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
@@ -87,8 +85,8 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 2：上下文构建]
         // 注入 ReAct 规范提示词、协议指令及动态历史记录（Thought/Action/Observation）
-        String systemPrompt = config.getPromptProvider().getSystemPrompt(trace);
-        systemPrompt = TmplUtil.render(systemPrompt, context);
+        String systemPrompt = config.getPromptProvider()
+                .getSystemPromptFor(trace, context);
 
         if (trace.getProtocol() != null) {
             StringBuilder systemPromptBuilder = new StringBuilder(systemPrompt);

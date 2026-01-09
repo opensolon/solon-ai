@@ -81,7 +81,7 @@ public class A2AProtocol extends TeamProtocolBase {
         // 排除当前 Agent 自身，生成备选专家列表
         String expertList = config.getAgentMap().values().stream()
                 .filter(a -> !a.name().equals(agent.name()))
-                .map(a -> a.name() + (Utils.isNotEmpty(a.description()) ? "(" + a.description() + ")" : ""))
+                .map(a -> a.name() + (Utils.isNotEmpty(a.descriptionFor(trace.getContext())) ? "(" + a.descriptionFor(trace.getContext()) + ")" : ""))
                 .collect(Collectors.joining(", "));
 
         FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_TRANSFER);

@@ -95,7 +95,7 @@ public class TeamAgentSupervisorTest {
                         .name("worker")
                         .description("负责通用任务执行的工作者")
                         .build())
-                .promptProvider(customProvider)
+                .systemPrompt(customProvider)
                 .build();
 
         // 3. 准备会话

@@ -30,12 +30,12 @@ public class CrosstalkDemo {
                 .addAgent(ReActAgent.of(chatModel)
                         .name("aaa")
                         .description("阿飞")
-                        .promptProvider(c -> "你是一个智能体名字叫“阿飞”，演逗哏。将跟另一个叫“阿紫”的智能体，表演相声。每句话不要超过50个字")
+                        .systemPrompt(c -> "你是一个智能体名字叫“阿飞”，演逗哏。将跟另一个叫“阿紫”的智能体，表演相声。每句话不要超过50个字")
                         .build())
                 .addAgent(ReActAgent.of(chatModel)
                         .name("bbb")
                         .description("阿紫")
-                        .promptProvider(c -> "你是一个智能体名字叫“阿紫”，演捧哏。将跟另一个叫“阿飞”的智能体，表演相声。每句话不要超过50个字")
+                        .systemPrompt(c -> "你是一个智能体名字叫“阿紫”，演捧哏。将跟另一个叫“阿飞”的智能体，表演相声。每句话不要超过50个字")
                         .build())
                 .maxTotalIterations(5)  // 限制对话轮数
                 .build();

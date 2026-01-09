@@ -30,13 +30,13 @@ public class TeamAgentBlackboardTest {
         // 1. 定义具备特定领域专长的 Agent
         Agent databaseDesigner = ReActAgent.of(chatModel)
                 .name("db_designer")
-                .promptProvider(c -> "你只负责数据库表结构设计，输出 SQL 代码。只需设计 2 张核心表。")
+                .systemPrompt(c -> "你只负责数据库表结构设计，输出 SQL 代码。只需设计 2 张核心表。")
                 .description("负责数据库表结构设计，输出 SQL 代码。")
                 .build();
 
         Agent apiDesigner = ReActAgent.of(chatModel)
                 .name("api_designer")
-                .promptProvider(c -> "你只负责 RESTful API 接口协议设计。针对数据库表设计 2 个核心接口。")
+                .systemPrompt(c -> "你只负责 RESTful API 接口协议设计。针对数据库表设计 2 个核心接口。")
                 .description("负责 RESTful API 接口协议设计。")
                 .build();
 

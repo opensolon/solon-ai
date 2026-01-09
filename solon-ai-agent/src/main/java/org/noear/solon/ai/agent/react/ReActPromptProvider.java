@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.util.SnelUtil;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 
 import java.util.Locale;
@@ -29,6 +31,16 @@ import java.util.Locale;
 public interface ReActPromptProvider {
     default Locale getLocale(){
         return Locale.CHINESE;
+    }
+
+    /**
+     * 为当前上下文生成最终的系统提示词（执行模板渲染）
+     *
+     * @param trace   协作溯源
+     * @param context 流程上下文
+     */
+    default String getSystemPromptFor(ReActTrace trace, FlowContext context) {
+        return SnelUtil.render(getSystemPrompt(trace), context);
     }
 
     /**

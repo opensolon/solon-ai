@@ -46,7 +46,7 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
         sb.append("## Role Definition\n");
         sb.append("You are the Team Supervisor, responsible for coordinating the following agents to complete the task:\n");
         config.getAgentMap().forEach((name, agent) -> {
-            sb.append("- **").append(name).append("**: ").append(agent.description()).append("\n");
+            sb.append("- **").append(name).append("**: ").append(agent.descriptionFor(trace.getContext())).append("\n");
         });
 
         // 2. Task Context

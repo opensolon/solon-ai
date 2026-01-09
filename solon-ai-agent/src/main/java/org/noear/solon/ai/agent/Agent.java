@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.util.SnelUtil;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.RankEntity;
@@ -54,6 +55,14 @@ public interface Agent extends NamedTaskComponent {
     String description();
 
     /**
+     * 为当前上下文生成动态职责描述
+     * <p>支持对 {@link #description()} 中的占位符（如 #{var}）进行渲染，实现动态角色设定。</p>
+     */
+    default String descriptionFor(FlowContext context){
+        return SnelUtil.render(description(), context);
+    }
+
+    /**
      * 任务评估与能力竞标
      * <p>在合同网（Contract Net）等协作协议下，智能体通过此方法对特定任务进行自评，
      * 返回其解决该问题的匹配度、初步方案或预估代价。</p>
@@ -63,7 +72,7 @@ public interface Agent extends NamedTaskComponent {
      * @return 评估结果或竞标说明（默认返回静态描述）
      */
     default String estimate(AgentSession session, Prompt prompt) {
-        return description();
+        return descriptionFor(session.getSnapshot());
     }
 
     /**

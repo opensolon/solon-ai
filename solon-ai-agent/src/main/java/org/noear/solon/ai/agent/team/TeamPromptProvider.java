@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.util.SnelUtil;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 
 import java.util.Locale;
@@ -27,8 +29,18 @@ import java.util.Locale;
  */
 @Preview("3.8")
 public interface TeamPromptProvider {
-    default Locale getLocale(){
+    default Locale getLocale() {
         return Locale.CHINESE;
+    }
+
+    /**
+     * 为当前上下文生成最终的系统提示词（执行模板渲染）
+     *
+     * @param trace   协作溯源
+     * @param context 流程上下文
+     */
+    default String getSystemPromptFor(TeamTrace trace, FlowContext context) {
+        return SnelUtil.render(getSystemPrompt(trace), context);
     }
 
     /**

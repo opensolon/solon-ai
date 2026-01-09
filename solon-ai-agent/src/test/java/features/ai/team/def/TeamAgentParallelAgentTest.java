@@ -31,13 +31,13 @@ public class TeamAgentParallelAgentTest {
         // 1. 定义翻译专家（采用 ReAct 模式以支持更复杂的逻辑推理）
         Agent enTranslator = ReActAgent.of(chatModel)
                 .name("en_translator")
-                .promptProvider(p -> "你是一个专业的英语翻译专家。请直接输出翻译结果，不要输出多余的解释。")
+                .systemPrompt(p -> "你是一个专业的英语翻译专家。请直接输出翻译结果，不要输出多余的解释。")
                 .description("负责英语翻译的专家")
                 .build();
 
         Agent frTranslator = ReActAgent.of(chatModel)
                 .name("fr_translator")
-                .promptProvider(p -> "你是一个专业的法语翻译专家。请直接输出翻译结果，不要输出多余的解释。")
+                .systemPrompt(p -> "你是一个专业的法语翻译专家。请直接输出翻译结果，不要输出多余的解释。")
                 .description("负责法语翻译的专家")
                 .build();
 

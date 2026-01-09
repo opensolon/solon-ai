@@ -124,7 +124,7 @@ public class TeamAgentA2ATest {
 
         Agent agentA = ReActAgent.of(chatModel).name("agentA")
                 .description("任务初始化专家")
-                .promptProvider(c -> "请立刻调用 transfer_to 移交给 agentB，并在 memo 参数中写入：'KEY_INFO_999'")
+                .systemPrompt(c -> "请立刻调用 transfer_to 移交给 agentB，并在 memo 参数中写入：'KEY_INFO_999'")
                 .build();
 
         Agent agentB = ReActAgent.of(chatModel).name("agentB")
@@ -170,7 +170,7 @@ public class TeamAgentA2ATest {
         // 模拟一个“幻觉”移交，尝试移交给不在团队中的角色
         Agent agentA = ReActAgent.of(chatModel).name("agentA")
                 .description("由于模型幻觉，可能胡乱移交")
-                .promptProvider(c -> "请调用 transfer_to 移交给一个叫 'superman' 的专家，即便他不在列表中")
+                .systemPrompt(c -> "请调用 transfer_to 移交给一个叫 'superman' 的专家，即便他不在列表中")
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)

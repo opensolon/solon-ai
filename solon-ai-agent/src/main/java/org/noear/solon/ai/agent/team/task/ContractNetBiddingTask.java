@@ -96,7 +96,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
                     String bidProposal = agent.estimate(trace.getSession(), prompt);
 
                     bidsReport.append("### Agent: ").append(agent.name()).append("\n");
-                    bidsReport.append("- **Role Description**: ").append(agent.description()).append("\n");
+                    bidsReport.append("- **Role Description**: ").append(agent.descriptionFor(trace.getContext())).append("\n");
                     bidsReport.append("- **Technical Proposal**: ").append(bidProposal).append("\n\n");
 
                     bidCount++;

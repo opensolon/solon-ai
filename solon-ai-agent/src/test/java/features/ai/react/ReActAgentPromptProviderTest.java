@@ -43,7 +43,7 @@ public class ReActAgentPromptProviderTest {
         // 2. 构建 Agent 并注入自定义提供者
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new MathTools()))
-                .promptProvider(customProvider)
+                .systemPrompt(customProvider)
                 .chatOptions(o -> o.temperature(0.0F)) // 严格执行指令
                 .build();
 
@@ -69,7 +69,7 @@ public class ReActAgentPromptProviderTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new ChineseTools()))
-                .promptProvider(ReActPromptProviderCn.getInstance()) // 使用单例中文增强
+                .systemPrompt(ReActPromptProviderCn.getInstance()) // 使用单例中文增强
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();
 
@@ -97,7 +97,7 @@ public class ReActAgentPromptProviderTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))
-                .promptProvider(emptyProvider)
+                .systemPrompt(emptyProvider)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("empty_prompt_job");
