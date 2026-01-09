@@ -76,7 +76,7 @@ public class TeamTrace implements AgentTrace {
     /**
      * 协议相关上下文（供不同协作协议存储自定义的运行时数据）
      */
-    private final Map<String, Object> metadata = new ConcurrentHashMap<>();
+    private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
 
     /**
      * 团队输出的最终答案
@@ -219,8 +219,8 @@ public class TeamTrace implements AgentTrace {
     /**
      * 获取协议上下文 Map
      */
-    public Map<String, Object> getMetadata() {
-        return metadata;
+    public Map<String, Object> getProtocolContext() {
+        return protocolContext;
     }
 
     /**

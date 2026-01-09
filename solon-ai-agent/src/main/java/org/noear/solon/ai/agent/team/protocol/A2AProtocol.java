@@ -119,7 +119,7 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
         // [阶段：执行前] 注入前序 Agent 留下的备注（Memo）
-        String memo = (String) trace.getMetadata().get(KEY_LAST_MEMO);
+        String memo = (String) trace.getProtocolContext().get(KEY_LAST_MEMO);
 
         if (Utils.isNotEmpty(memo)) {
             boolean isChinese = Locale.CHINA.getLanguage().equals(locale.getLanguage());
@@ -127,7 +127,7 @@ public class A2AProtocol extends TeamProtocolBase {
             originalPrompt.getMessages().add(0, ChatMessage.ofSystem(hint + memo));
 
             // 使用后即从上下文清理，确保一次性消费
-            trace.getMetadata().remove(KEY_LAST_MEMO);
+            trace.getProtocolContext().remove(KEY_LAST_MEMO);
         }
 
         return originalPrompt;
@@ -148,7 +148,7 @@ public class A2AProtocol extends TeamProtocolBase {
             // 提取并存储 Memo
             String memo = extractValueFromToolCalls(rt, "memo");
             if (Utils.isNotEmpty(memo)) {
-                trace.getMetadata().put(KEY_LAST_MEMO, memo);
+                trace.getProtocolContext().put(KEY_LAST_MEMO, memo);
             }
 
             // 提取目标 Agent

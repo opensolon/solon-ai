@@ -142,7 +142,7 @@ public class TeamAgentA2ATest {
         TeamTrace trace = team.getTrace(session);
 
         // 验证方式1：检查 protocolContext 中是否有 memo
-        String memoInContext = (String) trace.getMetadata().get("last_memo");
+        String memoInContext = (String) trace.getProtocolContext().get("last_memo");
         boolean memoCaptured = "KEY_INFO_999".equals(memoInContext);
 
         // 验证方式2：检查决策文本是否包含 memo
