@@ -95,7 +95,7 @@ public interface TeamProtocol extends NonSerializable {
      * <p>若返回 true，将跳过 LLM 智能决策逻辑，由协议逻辑完全接管调度权（如顺序模式）。</p>
      */
     default boolean shouldSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
-        return false;
+        return true;
     }
 
     /**
@@ -116,7 +116,7 @@ public interface TeamProtocol extends NonSerializable {
      * @param decision LLM 给出的原始决策文本
      */
     default boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        return false;
+        return true;
     }
 
     /**

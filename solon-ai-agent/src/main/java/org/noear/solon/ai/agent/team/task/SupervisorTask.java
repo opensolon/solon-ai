@@ -104,7 +104,7 @@ public class SupervisorTask implements NamedTaskComponent {
 
             // [逻辑 3：协议预接管]
             // 某些确定性逻辑（如 Pipeline 模式）可能无需 LLM 推理，直接由协议确定下一跳
-            if (config.getProtocol().shouldSupervisorExecute(context, trace)) {
+            if (config.getProtocol().shouldSupervisorExecute(context, trace) == false) {
                 return;
             }
 
@@ -210,7 +210,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         // 优先级 2：协议路由干预
-        if (config.getProtocol().shouldSupervisorRoute(context, trace, decision)) {
+        if (config.getProtocol().shouldSupervisorRoute(context, trace, decision) == false) {
             return;
         }
 
