@@ -105,17 +105,20 @@ public class ContractNetProtocol extends TeamProtocolBase {
         }
     }
 
+    @Override
+    public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        if (decision.toUpperCase().contains(Agent.ID_BIDDING.toUpperCase())) {
+            return Agent.ID_BIDDING;
+        }
+        return null;
+    }
+
     /**
      * 判定决策文本是否包含“招标”信号
      */
     @Override
     public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        // 捕捉指令关键字（忽略大小写）
-        if (decision.toUpperCase().contains(Agent.ID_BIDDING.toUpperCase())) {
-            trace.setRoute(Agent.ID_BIDDING);
-            return true;
-        }
-        return false;
+        return true;
     }
 
     /**
