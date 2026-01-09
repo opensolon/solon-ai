@@ -198,8 +198,8 @@ public class EcommerceOrderRiskSystemTest {
                             .linkAdd("end");
 
                     // 9. 人工审核路径
-                    spec.addEnd("manual_review_end")
-                            .title("转人工审核");
+                    spec.addActivity("manual_review_end").title("转人工审核")
+                            .linkAdd("end");
 
                     spec.addEnd("end");
                 })
