@@ -65,7 +65,7 @@ public class TeamTrace {
     /**
      * 调度器（Supervisor）的最后一次原始决策结论文本
      */
-    private volatile String decision;
+    private volatile String lastDecision;
 
     /**
      * 当前团队协作的迭代次数计数器（用于防止失控或达到最大深度限制）
@@ -183,15 +183,15 @@ public class TeamTrace {
     /**
      * 获取调度器决策文本
      */
-    public String getDecision() {
-        return decision;
+    public String getLastDecision() {
+        return lastDecision;
     }
 
     /**
      * 设置调度器决策文本
      */
-    public void setDecision(String decision) {
-        this.decision = decision;
+    public void setLastDecision(String decision) {
+        this.lastDecision = decision;
     }
 
     /**

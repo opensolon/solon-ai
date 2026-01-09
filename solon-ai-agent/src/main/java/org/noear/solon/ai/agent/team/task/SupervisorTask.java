@@ -142,7 +142,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         // 5. 将原始决策记录到轨迹中，供后续工具或协议分析
-        trace.setDecision(decision);
+        trace.setLastDecision(decision);
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] supervisor decision: {}", config.getName(), decision);

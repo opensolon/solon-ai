@@ -41,6 +41,7 @@ import java.util.stream.Collectors;
  */
 public class A2AProtocol extends TeamProtocolBase {
     private static final String TOOL_TRANSFER = "__transfer_to__";
+    private static final String KEY_LAST_MEMO = "last_memo";
 
     public A2AProtocol(TeamConfig config) {
         super(config);
@@ -110,21 +111,27 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
-        String lastDecision = trace.getDecision();
-        if (Utils.isNotEmpty(lastDecision) && lastDecision.contains(TOOL_TRANSFER)) {
-            String memo = extractMemo(lastDecision);
+        // 首先调用父类方法
+        Prompt prompt = super.prepareAgentPrompt(trace, agent, originalPrompt, locale);
 
+        // 从 protocolContext 获取 memo 信息
+        String lastMemo = (String) trace.getProtocolContext().get(KEY_LAST_MEMO);
+        if (Utils.isNotEmpty(lastMemo)) {
             String content;
             if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-                content = "【接棒提示】： " + (Utils.isNotEmpty(memo) ? memo : "上名专家已将任务移交给您。");
+                content = "【接棒提示-备注信息】： " + lastMemo;
             } else {
-                content = "[Handover Hint]: " + (Utils.isNotEmpty(memo) ? memo : "Previous expert handed over this task to you.");
+                content = "[Handover Hint - Memo]: " + lastMemo;
             }
 
-            // 注入为系统消息置顶
-            originalPrompt.getMessages().add(0, ChatMessage.ofSystem(content));
+            // 将 memo 信息作为系统消息插入
+            prompt.getMessages().add(0, ChatMessage.ofSystem(content));
+
+            // 使用后移除 memo，避免重复
+            trace.getProtocolContext().remove(KEY_LAST_MEMO);
         }
-        return originalPrompt;
+
+        return prompt;
     }
 
     @Override
@@ -136,10 +143,18 @@ public class A2AProtocol extends TeamProtocolBase {
             return true;
         }
 
-        for (String agentName : config.getAgentMap().keySet()) {
-            if (decision.contains(TOOL_TRANSFER) && decision.contains(agentName)) {
-                trace.setRoute(agentName);
-                return true;
+        // 检查是否是 transfer_to 操作
+        if (decision.contains(TOOL_TRANSFER)) {
+            for (String agentName : config.getAgentMap().keySet()) {
+                if (decision.contains(agentName)) {
+                    // 提取 memo 信息并保存到 protocolContext
+                    String memo = extractMemo(decision);
+                    if (memo != null) {
+                        trace.getProtocolContext().put(KEY_LAST_MEMO, memo);
+                    }
+                    trace.setRoute(agentName);
+                    return true;
+                }
             }
         }
         return false;
