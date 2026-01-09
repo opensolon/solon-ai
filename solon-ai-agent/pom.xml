@@ -28,6 +28,11 @@
 
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-expression</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>redisx</artifactId>
             <optional>true</optional>
         </dependency>

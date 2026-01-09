@@ -19,11 +19,13 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.util.TmplUtil;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
+import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
@@ -135,6 +137,9 @@ public class SupervisorTask implements NamedTaskComponent {
         config.getProtocol().prepareSupervisorInstruction(context, trace, protocolExt);
 
         String basePrompt = config.getPromptProvider().getSystemPrompt(trace);
+        basePrompt = TmplUtil.render(basePrompt, context);
+
+
         String finalSystemPrompt = (protocolExt.length() > 0)
                 ? basePrompt + "\n\n### Additional Protocol Rules\n" + protocolExt
                 : basePrompt;
