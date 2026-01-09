@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -28,94 +29,82 @@ import java.util.stream.Collectors;
 /**
  * 团队协作轨迹（记录团队内部各智能体的协作流转状态与历史）
  *
+ * <p>核心职责：持久化任务上下文、追踪路由决策、维护协议私有状态以及提供格式化的对话历史。</p>
+ *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8")
 public class TeamTrace implements AgentTrace {
-    /**
-     * 团队配置实例（不参与序列化）
-     */
+    /** 团队配置（不参与序列化） */
     private transient TeamConfig config;
-
-    /**
-     * 当前 Agent 会话实例（不参与序列化）
-     */
+    /** Agent 会话上下文（不参与序列化） */
     private transient AgentSession session;
 
-    /**
-     * 当前正在执行任务的智能体名称
-     */
+    /** 当前正在执行任务的智能体名称 */
     private String agentName;
-
-    /**
-     * 团队收到的原始提示词或当前阶段的提示词
-     */
+    /** 当前阶段的提示词（可能是原始提示词，也可能是协议裁剪后的提示词） */
     private Prompt prompt;
-
-    /**
-     * 协作步骤详情列表（有序记录每一步的执行者、内容及耗时）
-     */
+    /** 协作步骤列表（按时间顺序记录执行者及其产出） */
     private final List<TeamStep> steps = new ArrayList<>();
 
-    /**
-     * 当前路由目标（决定下一个执行的 Agent ID 或 结束标识）
-     */
+    /** 当前路由指向的目标节点（Agent 名称或 ID_END） */
     private volatile String route;
-
-    /**
-     * 调度器（Supervisor）的最后一次原始决策结论文本
-     */
+    /** 调度器（Supervisor）最后一次生成的决策原文 */
     private volatile String lastDecision;
-
-    /**
-     * 当前团队协作的迭代次数计数器（用于防止失控或达到最大深度限制）
-     */
+    /** 迭代次数计数器（用于防止协作陷入死循环或达到深度上限） */
     private final AtomicInteger iterationCounter;
 
-    /**
-     * 协议相关上下文（供不同协作协议存储自定义的运行时数据）
-     */
+    /** 协议私有上下文（供 TeamProtocol 存储特定的运行时数据，如 A2A 的 Handoff 标记） */
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
 
-    /**
-     * 团队输出的最终答案
-     */
+    /** 团队输出的最终答案 */
     private String finalAnswer;
-
-    /**
-     * 缓存的格式化历史文本（避免重复流式计算）
-     */
+    /** 格式化历史的缓存（避免大上下文下的高频字符串拼接） */
     private String cachedFormattedHistory;
-
-    /**
-     * 历史记录是否需要更新缓存的标识
-     */
+    /** 标记缓存是否失效 */
     private boolean isUpdateHistoryCache = true;
 
-    /**
-     * 默认构造函数（主要用于反序列化）
-     */
     public TeamTrace() {
         this.iterationCounter = new AtomicInteger(0);
     }
 
-    /**
-     * 根据初始提示词创建轨迹
-     *
-     * @param prompt 初始提示词
-     */
     public TeamTrace(Prompt prompt) {
         this();
         this.prompt = prompt;
     }
 
     /**
-     * 准备运行时环境
-     *
-     * @param config    团队配置
-     * @param session   当前会话
-     * @param agentName 当前 Agent 名称
+     * 判断当前是否处于初始阶段（即尚未有任何 Agent 执行产出）
+     */
+    public boolean isInitial() {
+        return steps.isEmpty();
+    }
+
+    /**
+     * 获取最近一个步骤的执行产出内容
+     */
+    public String getLastStepContent() {
+        if (steps.isEmpty()) return "";
+        return steps.get(steps.size() - 1).getContent();
+    }
+
+    /**
+     * 获取最近一次由“非主管（Non-Supervisor）”智能体产出的内容
+     * <p>常用于协议在路由前提取专家的最终结论，过滤掉调度器的决策指令。</p>
+     */
+    public String getLastAgentContent() {
+        for (int i = steps.size() - 1; i >= 0; i--) {
+            TeamStep step = steps.get(i);
+            if (!Agent.ID_SUPERVISOR.equals(step.getAgentName())) {
+                return step.getContent();
+            }
+        }
+        return "";
+    }
+
+    /**
+     * 准备运行时环境（由框架内部调用）
      */
     protected void prepare(TeamConfig config, AgentSession session, String agentName) {
         this.config = config;
@@ -123,119 +112,38 @@ public class TeamTrace implements AgentTrace {
         this.agentName = agentName;
     }
 
-    // ... Getter & Setter 保持不变 ...
+    // --- 属性访问器 ---
+
+    public String getAgentName() { return agentName; }
+    public TeamConfig getConfig() { return config; }
+    public AgentSession getSession() { return session; }
+    public TeamProtocol getProtocol() { return config.getProtocol(); }
+    public Prompt getPrompt() { return prompt; }
+    protected void setPrompt(Prompt prompt) { this.prompt = prompt; }
+    public String getRoute() { return route; }
+    public void setRoute(String route) { this.route = route; }
+    public String getLastDecision() { return lastDecision; }
+    public void setLastDecision(String decision) { this.lastDecision = decision; }
+    public int getIterationsCount() { return iterationCounter.get(); }
+    public void resetIterationsCount() { iterationCounter.set(0); }
+    public int nextIterations() { return iterationCounter.incrementAndGet(); }
 
     /**
-     * 获取当前处理的智能体名称
-     */
-    public String getAgentName() {
-        return agentName;
-    }
-
-    /**
-     * 获取团队配置
-     */
-    public TeamConfig getConfig() {
-        return config;
-    }
-
-    /**
-     * 获取 Agent 会话
-     */
-    public AgentSession getSession() {
-        return session;
-    }
-
-    /**
-     * 获取当前使用的协议
-     */
-    public TeamProtocol getProtocol() {
-        return config.getProtocol();
-    }
-
-    /**
-     * 获取当前提示词
-     */
-    public Prompt getPrompt() {
-        return prompt;
-    }
-
-    /**
-     * 设置当前提示词
-     */
-    protected void setPrompt(Prompt prompt) {
-        this.prompt = prompt;
-    }
-
-    /**
-     * 获取当前路由目标
-     */
-    public String getRoute() {
-        return route;
-    }
-
-    /**
-     * 设置路由目标
-     */
-    public void setRoute(String route) {
-        this.route = route;
-    }
-
-    /**
-     * 获取调度器决策文本
-     */
-    public String getLastDecision() {
-        return lastDecision;
-    }
-
-    /**
-     * 设置调度器决策文本
-     */
-    public void setLastDecision(String decision) {
-        this.lastDecision = decision;
-    }
-
-    /**
-     * 获取当前迭代次数
-     */
-    public int getIterationsCount() {
-        return iterationCounter.get();
-    }
-
-    /**
-     * 重置迭代次数
-     */
-    public void resetIterationsCount() {
-        iterationCounter.set(0);
-    }
-
-    /**
-     * 增加并获取下一次迭代计数
-     */
-    public int nextIterations() {
-        return iterationCounter.incrementAndGet();
-    }
-
-    /**
-     * 获取协议上下文 Map
+     * 获取协议相关的运行时上下文 Map
      */
     public Map<String, Object> getProtocolContext() {
         return protocolContext;
     }
 
     /**
-     * 获取步骤总数
+     * 获取当前协作的总步数
      */
     public int getStepCount() {
         return steps.size();
     }
 
     /**
-     * 添加一个协作步骤
-     *
-     * @param agentName 执行者名称
-     * @param content   执行产出的内容
-     * @param duration  执行耗时（毫秒）
+     * 添加协作步骤并标记历史缓存失效
      */
     public void addStep(String agentName, String content, long duration) {
         steps.add(new TeamStep(agentName, content, duration));
@@ -244,7 +152,7 @@ public class TeamTrace implements AgentTrace {
 
     /**
      * 获取格式化的协作历史文本
-     * <p>常用于提供给 Supervisor 作为决策依据，格式为 "[Agent]: Content"</p>
+     * <p>采用 Markdown 块格式（### Agent: \n Content），增强 LLM 对对话边界的识别能力。</p>
      */
     public String getFormattedHistory() {
         if (steps.isEmpty()) {
@@ -253,8 +161,8 @@ public class TeamTrace implements AgentTrace {
 
         if (isUpdateHistoryCache) {
             cachedFormattedHistory = steps.stream()
-                    .map(step -> String.format("[%s]: %s", step.getAgentName(), step.getContent()))
-                    .collect(Collectors.joining("\n"));
+                    .map(step -> String.format("### %s:\n%s", step.getAgentName(), step.getContent()))
+                    .collect(Collectors.joining("\n\n"));
             isUpdateHistoryCache = false;
         }
 
@@ -262,27 +170,31 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
-     * 循环检测逻辑
-     * <p>检查是否陷入了简单的双人重复循环（A-B-A-B）或同一个 Agent 重复输出相同内容</p>
+     * 协作流异常循环检测
+     * <p>检测包含：1.单人复读模式；2.双人 A-B-A-B 镜像模式。</p>
      *
-     * @return 是否存在死循环风险
+     * @return 若存在死循环风险返回 true
      */
     public boolean isLooping() {
         int n = steps.size();
         if (n < 4) return false;
 
-        String lastAgent = steps.get(n - 1).getAgentName();
-        String lastContent = steps.get(n - 1).getContent();
+        TeamStep lastStep = steps.get(n - 1);
+        String lastAgent = lastStep.getAgentName();
+        String lastContent = lastStep.getContent();
 
-        // 1. 检查单一 Agent 复读：同一个 Agent 输出了跟之前完全一致的内容
+        // 过滤空内容，防止初始化异常导致的误判
+        if (lastContent == null || lastContent.trim().isEmpty()) return false;
+
+        // 1. 检查单一 Agent 复读检测
         for (int i = 0; i < n - 1; i++) {
             TeamStep prev = steps.get(i);
-            if (prev.getAgentName().equals(lastAgent) && prev.getContent().equals(lastContent)) {
+            if (prev.getAgentName().equals(lastAgent) && Objects.equals(prev.getContent(), lastContent)) {
                 return true;
             }
         }
 
-        // 2. 检查 A-B-A-B 模式检测：需要至少 8 步来判定长效循环
+        // 2. 检查多 Agent 镜像循环（A-B-A-B）
         if (n >= 8) {
             return steps.get(n - 1).getAgentName().equals(steps.get(n - 3).getAgentName()) &&
                     steps.get(n - 2).getAgentName().equals(steps.get(n - 4).getAgentName());
@@ -292,43 +204,21 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
-     * 获取所有步骤列表
+     * 获取所有协作步骤（返回只读视图以保证协议安全性）
      */
     public List<TeamStep> getSteps() {
-        return steps;
+        return Collections.unmodifiableList(steps);
     }
 
-    /**
-     * 获取最终答案
-     */
-    public String getFinalAnswer() {
-        return finalAnswer;
-    }
+    public String getFinalAnswer() { return finalAnswer; }
+    public void setFinalAnswer(String finalAnswer) { this.finalAnswer = finalAnswer; }
 
     /**
-     * 设置最终答案
-     */
-    public void setFinalAnswer(String finalAnswer) {
-        this.finalAnswer = finalAnswer;
-    }
-
-    /**
-     * 单个协作步骤实体（不可变对象）
+     * 协作步骤详情实体（Immutable）
      */
     public static class TeamStep {
-        /**
-         * 该步骤的执行智能体名称
-         */
         private final String agentName;
-
-        /**
-         * 该步骤产出的具体文本内容
-         */
         private final String content;
-
-        /**
-         * 运行该步骤所消耗的时间（毫秒）
-         */
         private final long duration;
 
         public TeamStep(String agentName, String content, long duration) {
@@ -337,16 +227,8 @@ public class TeamTrace implements AgentTrace {
             this.duration = duration;
         }
 
-        public String getAgentName() {
-            return agentName;
-        }
-
-        public String getContent() {
-            return content;
-        }
-
-        public long getDuration() {
-            return duration;
-        }
+        public String getAgentName() { return agentName; }
+        public String getContent() { return content; }
+        public long getDuration() { return duration; }
     }
 }
