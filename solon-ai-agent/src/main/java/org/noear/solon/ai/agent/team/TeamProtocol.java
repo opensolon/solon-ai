@@ -98,6 +98,18 @@ public interface TeamProtocol extends NonSerializable {
     }
 
     /**
+     * [语义解析] 将 LLM 的决策文本转化为物理路由目标
+     * 优先级高于默认的正则匹配。
+     * @param decision LLM 给出的原始决策文本
+     * @return 目标 Agent 名称或 ID_END；返回 null 则由 Supervisor 默认逻辑处理
+     */
+    default String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        // 示例：A2A 协议可以在这里检查 decision 是否包含特殊工具调用，
+        // 如果包含，直接解析出 target 参数并返回，不需要走正则匹配
+        return null;
+    }
+
+    /**
      * [阶段：路由干预] 干预主管（Supervisor）的路由决策结果
      * <p>在 LLM 给出决策后触发，用于修正幻觉、解析协议特定信号词（如工具调用标记）并强制转向。</p>
      *

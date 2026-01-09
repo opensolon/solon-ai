@@ -204,17 +204,24 @@ public class SupervisorTask implements NamedTaskComponent {
             return;
         }
 
-        // 1. [协议生命周期 - 路由拦截] 协议优先处理（如根据特定信号词强制重定向）
+        // 1. [一级路由：协议解析] 协议根据业务逻辑（如 ToolCall、XML、特定信号）精准解析目标
+        String protoRoute = config.getProtocol().resolveSupervisorRoute(context, trace, decision);
+        if (Assert.isNotEmpty(protoRoute)) {
+            routeTo(context, trace, protoRoute);
+            return;
+        }
+
+        // 2. [二级路由：拦截器干预] 兼容旧逻辑，用于处理不改变路由但需要处理副作用的情况
         if (config.getProtocol().interceptSupervisorRouting(context, trace, decision)) {
             return;
         }
 
-        // 2. 匹配 Agent 节点：寻找决策文本中提到的下一个执行专家
+        // 3. [三级路由：模糊匹配] 默认的 Agent 名称匹配逻辑
         if (matchAgentRoute(context, trace, decision)) {
             return;
         }
 
-        // 3. 匹配完成标识符：如果包含 Finish Marker，则判定为任务结束
+        // 4. [四级路由：结束判断] 匹配 Finish Marker
         String finishMarker = config.getFinishMarker();
         String finishRegex = "(?i).*?(\\Q" + finishMarker + "\\E)(.*)";
         Pattern pattern = Pattern.compile(finishRegex, Pattern.DOTALL);
