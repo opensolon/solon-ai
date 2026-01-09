@@ -116,6 +116,9 @@ public class SupervisorTask implements NamedTaskComponent {
             decision = decision.split("Collaboration History:")[0].trim();
         }
 
+        // [新增] 将决策同步到 trace 中，供后续 Protocol 拦截器使用
+        trace.setDecision(decision);
+
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] supervisor decision: {}", config.getName(), decision);
         }

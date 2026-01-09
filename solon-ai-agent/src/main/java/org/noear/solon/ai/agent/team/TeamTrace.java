@@ -41,6 +41,7 @@ public class TeamTrace {
     private final List<TeamStep> steps = new ArrayList<>();
 
     private volatile String route;
+    private volatile String decision; // [新增] 记录路由器（Supervisor）的最后一次决策结论
     private AtomicInteger iterations;
     // 协议相关上下文
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
@@ -93,6 +94,16 @@ public class TeamTrace {
 
     public void setRoute(String route) {
         this.route = route;
+    }
+
+
+    public String getDecision() {
+        return decision;
+    }
+
+
+    public void setDecision(String decision) {
+        this.decision = decision;
     }
 
     public int getIterationsCount() {
