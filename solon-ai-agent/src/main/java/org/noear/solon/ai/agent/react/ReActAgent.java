@@ -91,7 +91,7 @@ public class ReActAgent implements Agent {
             spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON);
 
             // 推理任务节点（Reasoning）：决定下一步是调用工具还是直接回答
-            spec.addExclusive(new ReasonTask(config))
+            spec.addExclusive(new ReasonTask(config,this))
                     .linkAdd(Agent.ID_ACTION, l -> l.title("route = " + Agent.ID_ACTION).when(ctx ->
                             Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
                     .linkAdd(Agent.ID_END);

@@ -36,10 +36,6 @@ public abstract class TeamProtocolBase implements TeamProtocol {
         this.config = config;
     }
 
-    public TeamConfig config() {
-        return config;
-    }
-
     protected void linkAgents(NodeSpec ns, String traceKey) {
         for (String agentName : config.getAgentMap().keySet()) {
             ns.linkAdd(agentName, l -> l.title("route = " + agentName).when(ctx ->

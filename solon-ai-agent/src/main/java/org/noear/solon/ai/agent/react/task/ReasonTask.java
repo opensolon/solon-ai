@@ -54,9 +54,11 @@ public class ReasonTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(ReasonTask.class);
 
     private final ReActConfig config;
+    private final ReActAgent agent;
 
-    public ReasonTask(ReActConfig config) {
+    public ReasonTask(ReActConfig config, ReActAgent agent) {
         this.config = config;
+        this.agent = agent;
     }
 
     @Override
@@ -87,7 +89,7 @@ public class ReasonTask implements NamedTaskComponent {
         String systemPrompt = config.getPromptProvider().getSystemPrompt(trace);
         if(trace.getProtocol() != null) {
             StringBuilder systemPromptBuilder = new StringBuilder(systemPrompt);
-            trace.getProtocol().injectAgentInstruction(config.getPromptProvider().getLocale(), systemPromptBuilder);
+            trace.getProtocol().injectAgentInstruction(agent, config.getPromptProvider().getLocale(), systemPromptBuilder);
             systemPrompt = systemPromptBuilder.toString();
         }
         List<ChatMessage> messages = new ArrayList<>();
@@ -159,6 +161,11 @@ public class ReasonTask implements NamedTaskComponent {
                                 o.toolsAdd(config.getTools());
                                 // 注入停止序列，防止模型在推理阶段直接伪造外部观察结果
                                 o.optionPut("stop", Utils.asList("Observation:"));
+                            }
+
+                            // 注入协议
+                            if(trace.getProtocol() != null){
+                                trace.getProtocol().injectAgentOptions(agent, o);
                             }
 
                             // 强制关闭模型端的自动工具执行，由 ReActActionTask 统一管控
