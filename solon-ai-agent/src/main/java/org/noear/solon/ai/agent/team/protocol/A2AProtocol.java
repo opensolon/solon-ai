@@ -15,18 +15,22 @@
  */
 package org.noear.solon.ai.agent.team.protocol;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -130,46 +134,97 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public boolean interceptSupervisorRouting(FlowContext context, TeamTrace trace, String decision) {
-        if (Utils.isEmpty(decision)) return false;
+        // 1. 获取最后执行的 Agent 名称和轨迹
+        String lastAgentName = context.getAs(Agent.KEY_LAST_AGENT_NAME);
+        // 基于约定从 Context 中拿到最新的 Trace 对象
+        AgentTrace latestTrace = context.getAs("__" + lastAgentName);
 
-        if (decision.toLowerCase().contains(config.getFinishMarker().toLowerCase())) {
-            trace.setRoute(Agent.ID_END);
-            return true;
+        String memo = null;
+
+        // 2. 核心优化：直接从结构化的 AgentTrace 中提取数据
+        if (latestTrace instanceof ReActTrace) {
+            ReActTrace reactTrace = (ReActTrace) latestTrace;
+            // 倒序查找最后一次 Assistant 的工具调用，这比解析 decision 字符串稳健得多
+            memo = extractMemoFromMessages(reactTrace);
         }
 
-        // 检查是否是 transfer_to 操作
-        if (decision.contains(TOOL_TRANSFER)) {
-            for (String agentName : config.getAgentMap().keySet()) {
-                if (decision.contains(agentName)) {
-                    // 提取 memo 信息并保存到 protocolContext
-                    String memo = extractMemo(decision);
-                    if (memo != null) {
-                        trace.getProtocolContext().put(KEY_LAST_MEMO, memo);
+        // 3. 兜底逻辑：如果 Trace 里没拿到（比如非 ReAct 模式），尝试从决策文本正则提取
+        if (Utils.isEmpty(memo) && Utils.isNotEmpty(decision)) {
+            memo = extractMemoFromText(decision);
+        }
 
-                        // 将 memo 信息附加到决策文本中，方便测试验证
-                        // 注意：这里修改的是 trace 的 decision，不是传入的 decision 参数
-                        String enhancedDecision = decision + " (Memo: " + memo + ")";
-                        trace.setLastDecision(enhancedDecision);
+        // 4. 处理路由分支
+        if (Utils.isNotEmpty(decision)) {
+            // 处理结束标识
+            if (decision.toLowerCase().contains(config.getFinishMarker().toLowerCase())) {
+                trace.setRoute(Agent.ID_END);
+                return true;
+            }
+
+            // 处理移交逻辑
+            if (decision.contains(TOOL_TRANSFER)) {
+                for (String agentName : config.getAgentMap().keySet()) {
+                    if (decision.contains(agentName)) {
+                        if (Utils.isNotEmpty(memo)) {
+                            trace.getProtocolContext().put(KEY_LAST_MEMO, memo);
+                            // 增强决策文本，方便 UI 显示和单测断言
+                            trace.setLastDecision(decision + " (Memo: " + memo + ")");
+                        }
+                        trace.setRoute(agentName);
+                        return true;
                     }
-                    trace.setRoute(agentName);
-                    return true;
                 }
             }
         }
+
         return false;
     }
 
-    private String extractMemo(String text) {
+    /**
+     * 从 ReAct 消息历史中结构化提取 memo
+     */
+    private String extractMemoFromMessages(ReActTrace reactTrace) {
+        if (reactTrace.getMessages() == null) return null;
+
+        List<ChatMessage> messages = reactTrace.getMessages();
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = messages.get(i);
+            if (msg instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) msg;
+                if (am.getToolCalls() != null) {
+                    for (org.noear.solon.ai.chat.tool.ToolCall tc : am.getToolCalls()) {
+                        if (TOOL_TRANSFER.equals(tc.name())) {
+                            return extractValue(tc.arguments(), "memo");
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private String extractValue(Object arguments, String key) {
+        if (arguments instanceof java.util.Map) {
+            Object val = ((java.util.Map<?, ?>) arguments).get(key);
+            return val == null ? null : val.toString();
+        } else if (arguments instanceof String) {
+            // 如果是 JSON 字符串，使用 ONode 解析
+            String json = (String) arguments;
+            if (json.trim().startsWith("{")) {
+                return ONode.ofJson(json).get(key).getString();
+            }
+        }
+        return null;
+    }
+
+    private String extractMemoFromText(String text) {
         try {
-            // 简单的正则匹配 JSON 里的 memo 字段
             Pattern pattern = Pattern.compile("\"memo\"\\s*:\\s*\"([^\"]+)\"");
             Matcher matcher = pattern.matcher(text);
             if (matcher.find()) {
                 return matcher.group(1);
             }
-        } catch (Exception e) {
-            // ignore
-        }
+        } catch (Exception e) { /* ignore */ }
         return null;
     }
 }
