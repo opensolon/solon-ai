@@ -40,8 +40,10 @@ public abstract class TeamProtocolBase implements TeamProtocol {
 
     protected void linkAgents(NodeSpec ns) {
         for (String agentName : config.getAgentMap().keySet()) {
-            ns.linkAdd(agentName, l -> l.title("route = " + agentName).when(ctx ->
-                    agentName.equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
+            ns.linkAdd(agentName, l -> l.title("route = " + agentName).when(ctx -> {
+                TeamTrace trace = ctx.getAs(traceKey);
+                return agentName.equalsIgnoreCase(trace.getRoute());
+            }));
         }
     }
 

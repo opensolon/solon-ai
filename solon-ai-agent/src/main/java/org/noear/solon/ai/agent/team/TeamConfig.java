@@ -67,7 +67,8 @@ public class TeamConfig {
     /**
      * 协作拓扑协议（决定了任务在团队成员间的流转逻辑，如层级式、流水线式等）
      */
-    private TeamProtocol protocol = TeamProtocols.HIERARCHICAL.create(this);
+    private volatile TeamProtocol protocol;
+    private TeamProtocolFactory protocolFactory = TeamProtocols.HIERARCHICAL;
 
     /**
      * 编排图结构微调钩子（允许在协议生成的标准拓扑上，增加自定义的业务逻辑节点或连线）
@@ -151,7 +152,7 @@ public class TeamConfig {
     /**
      * 统一配置异常调度时的重试策略
      *
-     * @param maxRetries 最大尝试次数（最小为1）
+     * @param maxRetries   最大尝试次数（最小为1）
      * @param retryDelayMs 重试间隔（最小为1000ms）
      */
     public void setRetryConfig(int maxRetries, long retryDelayMs) {
@@ -190,6 +191,7 @@ public class TeamConfig {
     /**
      * 注册团队拦截器，并指定排序权重
      * * @param interceptor 拦截器实例
+     *
      * @param index 排序权重（数值越小执行越靠前）
      */
     public void addInterceptor(TeamInterceptor interceptor, int index) {
@@ -234,7 +236,7 @@ public class TeamConfig {
      */
     public void setProtocol(TeamProtocolFactory protocolFactory) {
         Objects.requireNonNull(protocolFactory, "protocolFactory");
-        this.protocol = protocolFactory.create(this);
+        this.protocolFactory = protocolFactory;
     }
 
     // --- 属性 Getter ---
@@ -264,6 +266,9 @@ public class TeamConfig {
     }
 
     public TeamProtocol getProtocol() {
+        if (protocol == null) {
+            protocol = protocolFactory.create(this);
+        }
         return protocol;
     }
 

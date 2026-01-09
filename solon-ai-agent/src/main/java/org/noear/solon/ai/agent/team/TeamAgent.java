@@ -54,20 +54,34 @@ import java.util.function.Consumer;
 public class TeamAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(TeamAgent.class);
 
-    /** 团队唯一名称标识 */
+    /**
+     * 团队唯一名称标识
+     */
     private final String name;
-    /** 团队标题 */
+    /**
+     * 团队标题
+     */
     private final String title;
-    /** 团队职责描述 */
+    /**
+     * 团队职责描述
+     */
     private final String description;
-    /** 团队轨迹在上下文中的存储键名 */
+    /**
+     * 团队轨迹在上下文中的存储键名
+     */
     private final String traceKey;
 
-    /** 静态配置对象 */
+    /**
+     * 静态配置对象
+     */
     private final TeamConfig config;
-    /** 协作执行图实例 */
+    /**
+     * 协作执行图实例
+     */
     private final Graph graph;
-    /** 工作流驱动引擎 */
+    /**
+     * 工作流驱动引擎
+     */
     private final FlowEngine flowEngine;
 
     /**
@@ -114,28 +128,56 @@ public class TeamAgent implements Agent {
         });
     }
 
-    /** 获取团队内部运行的计算图 */
-    public Graph getGraph() { return graph; }
+    /**
+     * 获取团队内部运行的计算图
+     */
+    public Graph getGraph() {
+        return graph;
+    }
 
-    /** 获取团队原始配置 */
-    protected TeamConfig getConfig() { return config; }
+    /**
+     * 获取团队原始配置
+     */
+    protected TeamConfig getConfig() {
+        return config;
+    }
 
-    /** 从当前会话中提取此团队的执行踪迹 */
+    /**
+     * 从当前会话中提取此团队的执行踪迹
+     */
     public @Nullable TeamTrace getTrace(AgentSession session) {
         return session.getSnapshot().getAs(traceKey);
     }
 
-    @Override public String name() { return name; }
-    @Override public String title() { return title; }
-    @Override public String description() { return description; }
-    public String getTraceKey() { return traceKey; }
+    @Override
+    public String name() {
+        return name;
+    }
 
-    /** 创建异步或流式请求包装器 */
+    @Override
+    public String title() {
+        return title;
+    }
+
+    @Override
+    public String description() {
+        return description;
+    }
+
+    public String getTraceKey() {
+        return traceKey;
+    }
+
+    /**
+     * 创建异步或流式请求包装器
+     */
     public AgentRequest prompt(Prompt prompt) {
         return new TeamRequestImpl(this, prompt);
     }
 
-    /** 创建基于文本的请求包装器 */
+    /**
+     * 创建基于文本的请求包装器
+     */
     public AgentRequest prompt(String prompt) {
         return prompt(Prompt.of(prompt));
     }
@@ -211,7 +253,9 @@ public class TeamAgent implements Agent {
 
     /// ////////////////// Builder 模式实现 ///////////////////////////////
 
-    /** 开启 TeamAgent 构建流程，传入主管模型（若为 null 则需要手动编排图逻辑） */
+    /**
+     * 开启 TeamAgent 构建流程，传入主管模型（若为 null 则需要手动编排图逻辑）
+     */
     public static Builder of(@Nullable ChatModel chatModel) {
         return new Builder(chatModel);
     }
@@ -226,25 +270,33 @@ public class TeamAgent implements Agent {
             this.config = new TeamConfig(chatModel);
         }
 
-        /** 链式调用增强器 */
+        /**
+         * 链式调用增强器
+         */
         public Builder then(Consumer<Builder> consumer) {
             consumer.accept(this);
             return this;
         }
 
-        /** 设置团队逻辑标识 */
+        /**
+         * 设置团队逻辑标识
+         */
         public Builder name(String name) {
             config.setName(name);
             return this;
         }
 
-        /** 设置团队能力简述 */
+        /**
+         * 设置团队能力简述
+         */
         public Builder description(String description) {
             config.setDescription(description);
             return this;
         }
 
-        /** 批量注入团队成员（专家） */
+        /**
+         * 批量注入团队成员（专家）
+         */
         public Builder addAgent(Agent... agents) {
             for (Agent agent : agents) {
                 config.addAgent(agent);
@@ -252,7 +304,9 @@ public class TeamAgent implements Agent {
             return this;
         }
 
-        /** 注册全局拦截器 */
+        /**
+         * 注册全局拦截器
+         */
         public Builder addInterceptor(TeamInterceptor... interceptors) {
             for (TeamInterceptor interceptor : interceptors) {
                 config.addInterceptor(interceptor);
@@ -260,55 +314,73 @@ public class TeamAgent implements Agent {
             return this;
         }
 
-        /** 注册带排序权重的拦截器 */
+        /**
+         * 注册带排序权重的拦截器
+         */
         public Builder addInterceptor(TeamInterceptor interceptor, int index) {
             config.addInterceptor(interceptor, index);
             return this;
         }
 
-        /** 自定义系统指令（System Prompt）的生成模板 */
+        /**
+         * 自定义系统指令（System Prompt）的生成模板
+         */
         public Builder promptProvider(TeamPromptProvider promptProvider) {
             config.setPromptProvider(promptProvider);
             return this;
         }
 
-        /** 设置任务完结的语义标识符 */
+        /**
+         * 设置任务完结的语义标识符
+         */
         public Builder finishMarker(String finishMarker) {
             config.setFinishMarker(finishMarker);
             return this;
         }
 
-        /** 设置结果输出的目标 Key */
+        /**
+         * 设置结果输出的目标 Key
+         */
         public Builder outputKey(String outputKey) {
             config.setOutputKey(outputKey);
             return this;
         }
 
-        /** 细粒度配置调度器的容错重试策略 */
+        /**
+         * 细粒度配置调度器的容错重试策略
+         */
         public Builder retryConfig(int maxRetries, long retryDelayMs) {
             config.setRetryConfig(maxRetries, retryDelayMs);
             return this;
         }
 
-        /** 限制协作最大轮次，保护计算资源 */
+        /**
+         * 限制协作最大轮次，保护计算资源
+         */
         public Builder maxTotalIterations(int maxTotalIterations) {
             config.setMaxTotalIterations(maxTotalIterations);
             return this;
         }
 
-        /** 核心配置：切换不同的团队协作协议（如 Swarm, Sequential 等） */
+        /**
+         * 核心配置：切换不同的团队协作协议（如 Swarm, Sequential 等）
+         */
         public Builder protocol(TeamProtocolFactory protocolFactory) {
             config.setProtocol(protocolFactory);
             return this;
         }
 
-        /** 手动微调流图结构 */
+        /**
+         * 手动微调流图结构
+         */
         public Builder graphAdjuster(Consumer<GraphSpec> graphBuilder) {
             config.setGraphAdjuster(graphBuilder);
             return this;
         }
 
-        /** 定制主管模型推理参数（如 Temperature 为 0 以获取稳定的调度逻辑） */
+        /**
+         * 定制主管模型推理参数（如 Temperature 为 0 以获取稳定的调度逻辑）
+         */
         public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
             config.setChatOptions(chatOptions);
             return this;
@@ -331,6 +403,9 @@ public class TeamAgent implements Agent {
             if (config.getAgentMap().isEmpty() && config.getGraphAdjuster() == null) {
                 throw new IllegalStateException("The agent or graphAdjuster is required for a TeamAgent");
             }
+
+            //初始化下
+            config.getProtocol();
 
             return new TeamAgent(config);
         }
