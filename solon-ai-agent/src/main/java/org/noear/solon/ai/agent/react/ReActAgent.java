@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -54,14 +54,26 @@ import java.util.function.Consumer;
 public class ReActAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
+    /** 智能体名称 */
     private final String name;
+    /** 智能体标题 */
     private final String title;
+    /** 智能体功能描述 */
     private final String description;
+    /** 推理配置 */
     private final ReActConfig config;
+    /** 逻辑计算图 */
     private final Graph graph;
+    /** 工作流引擎 */
     private final FlowEngine flowEngine;
+    /** 状态追踪键 */
     private final String traceKey;
 
+    /**
+     * 构造函数
+     *
+     * @param config ReAct 配置对象
+     */
     public ReActAgent(ReActConfig config) {
         Objects.requireNonNull(config, "Missing config!");
 
@@ -85,6 +97,8 @@ public class ReActAgent implements Agent {
 
     /**
      * 构建计算图（可重写）
+     *
+     * @return 逻辑计算图
      */
     protected Graph buildGraph() {
         return Graph.create(this.name(), spec -> {
@@ -110,6 +124,8 @@ public class ReActAgent implements Agent {
 
     /**
      * 获取当前智能体的逻辑执行图
+     *
+     * @return 逻辑图
      */
     public Graph getGraph() {
         return graph;
@@ -117,6 +133,8 @@ public class ReActAgent implements Agent {
 
     /**
      * 获取配置（方便重写使用）
+     *
+     * @return 推理配置
      */
     protected ReActConfig getConfig() {
         return config;
@@ -124,6 +142,9 @@ public class ReActAgent implements Agent {
 
     /**
      * 从上下文中获取当前 Agent 的执行状态追踪实例
+     *
+     * @param session 会话对象
+     * @return 推理轨迹状态
      */
     public @Nullable ReActTrace getTrace(AgentSession session) {
         return session.getSnapshot().getAs("__" + name);
@@ -144,10 +165,22 @@ public class ReActAgent implements Agent {
         return description;
     }
 
+    /**
+     * 构建推理请求
+     *
+     * @param prompt 提示词对象
+     * @return 请求对象
+     */
     public AgentRequest prompt(Prompt prompt) {
         return new ReActRequestImpl(this, prompt);
     }
 
+    /**
+     * 构建推理请求
+     *
+     * @param prompt 提示词文本
+     * @return 请求对象
+     */
     public AgentRequest prompt(String prompt) {
         return new ReActRequestImpl(this, Prompt.of(prompt));
     }
@@ -155,8 +188,9 @@ public class ReActAgent implements Agent {
     /**
      * 智能体调用入口
      *
-     * @param session 会话
      * @param prompt  用户输入的提示词
+     * @param session 会话
+     * @return 最终响应消息
      */
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
         FlowContext context = session.getSnapshot();
@@ -174,24 +208,25 @@ public class ReActAgent implements Agent {
             protocol.injectAgentTools(this, trace);
         }
 
-        // 只有当 trace 消息为空（首轮执行）且 prompt 不为空时才加载历史
-        if (trace.getMessages().isEmpty() && !Prompt.isEmpty(prompt)) {
-            // 1. 存入当前 prompt 到 session 历史（持久化记录）
-            for (ChatMessage message : prompt.getMessages()) {
-                session.addHistoryMessage(name, message);
-            }
-
-            // 2. 根据 historyWindowSize 从 session 加载最近的历史到当前推理 trace
+        // 1. 记忆加载时序：新推理周期开始时，先从 Session 加载历史记忆
+        if (trace.getMessages().isEmpty()) {
+            // A. 加载历史（如果配置了窗口）
             if (config.getHistoryWindowSize() > 0) {
+                // 此时尚未存入当前 prompt，获取的是纯历史记录
                 Collection<ChatMessage> history = session.getHistoryMessages(name, config.getHistoryWindowSize());
                 for (ChatMessage message : history) {
                     trace.appendMessage(message);
                 }
-            } else {
-                // 如果窗口为 0，至少要把当前的 prompt 加入 trace 供 ReasonTask 使用
-                for (ChatMessage message : prompt.getMessages()) {
-                    trace.appendMessage(message);
-                }
+            }
+        }
+
+        // 2. 消息持久化：将当前请求同步到 Session 归档与 Trace 推理上下文
+        if (!Prompt.isEmpty(prompt)) {
+            for (ChatMessage message : prompt.getMessages()) {
+                // 持久化到 Session（归档）
+                session.addHistoryMessage(name, message);
+                // 追加到 Trace（作为推理上下文）
+                trace.appendMessage(message);
             }
         }
 
@@ -206,7 +241,7 @@ public class ReActAgent implements Agent {
 
         Objects.requireNonNull(prompt, "Missing prompt!");
 
-        //开始事件
+        // 触发开始事件
         for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
             item.target.onAgentStart(trace);
         }
@@ -246,11 +281,12 @@ public class ReActAgent implements Agent {
             context.put(config.getOutputKey(), result);
         }
 
+        // 将 AI 的最终回答持久化到会话并更新快照
         AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
         session.addHistoryMessage(name, assistantMessage);
         session.updateSnapshot(context);
 
-        //结束事件
+        // 触发结束事件
         for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
             item.target.onAgentEnd(trace);
         }
@@ -260,6 +296,12 @@ public class ReActAgent implements Agent {
 
     /// //////////// Builder 静态构造模式 ////////////
 
+    /**
+     * 创建构建器
+     *
+     * @param chatModel 推理模型
+     * @return 构建器实例
+     */
     public static Builder of(ChatModel chatModel) {
         return new Builder(chatModel);
     }
@@ -268,14 +310,23 @@ public class ReActAgent implements Agent {
      * ReAct 智能体构建器
      */
     public static class Builder {
+        /** 推理配置 */
         private ReActConfig config;
 
+        /**
+         * 构造构建器
+         *
+         * @param chatModel 推理模型
+         */
         public Builder(ChatModel chatModel) {
             this.config = new ReActConfig(chatModel);
         }
 
         /**
-         * 然后（构建自己）
+         * 链式配置扩展
+         *
+         * @param consumer 配置函数
+         * @return 构建器
          */
         public Builder then(Consumer<Builder> consumer) {
             consumer.accept(this);
@@ -283,7 +334,10 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 智能体名称
+         * 设置智能体名称
+         *
+         * @param val 名称
+         * @return 构建器
          */
         public Builder name(String val) {
             config.setName(val);
@@ -291,7 +345,10 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 智能体名称
+         * 设置智能体显示标题
+         *
+         * @param val 标题
+         * @return 构建器
          */
         public Builder title(String val) {
             config.setTitle(val);
@@ -299,7 +356,10 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 智能体功能描述（在 TeamAgent 协作模式下尤为重要）
+         * 设置智能体描述（协作模式下尤为重要）
+         *
+         * @param val 描述
+         * @return 构建器
          */
         public Builder description(String val) {
             config.setDescription(val);
@@ -308,6 +368,9 @@ public class ReActAgent implements Agent {
 
         /**
          * 添加功能工具
+         *
+         * @param tool 工具对象
+         * @return 构建器
          */
         public Builder addTool(FunctionTool tool) {
             config.addTool(tool);
@@ -315,7 +378,10 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 批量添加功能工具
+         * 批量添加工具
+         *
+         * @param tools 工具集合
+         * @return 构建器
          */
         public Builder addTool(Collection<FunctionTool> tools) {
             config.addTool(tools);
@@ -324,6 +390,9 @@ public class ReActAgent implements Agent {
 
         /**
          * 通过提供者添加工具
+         *
+         * @param toolProvider 工具提供者
+         * @return 构建器
          */
         public Builder addTool(ToolProvider toolProvider) {
             config.addTool(toolProvider);
@@ -335,6 +404,7 @@ public class ReActAgent implements Agent {
          *
          * @param maxRetries   最大重试次数
          * @param retryDelayMs 重试时间间隔（毫秒）
+         * @return 构建器
          */
         public Builder retryConfig(int maxRetries, long retryDelayMs) {
             config.setRetryConfig(maxRetries, retryDelayMs);
@@ -342,7 +412,10 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 限制单次任务的最大循环思考步数，防止死循环
+         * 限制单次任务的最大循环步数
+         *
+         * @param val 最大步数
+         * @return 构建器
          */
         public Builder maxSteps(int val) {
             config.setMaxSteps(val);
@@ -350,7 +423,10 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 设置图结构微调器（允许在自动构建图后进行手动微调）
+         * 设置图结构微调器
+         *
+         * @param graphBuilder 微调逻辑
+         * @return 构建器
          */
         public Builder graphAdjuster(Consumer<GraphSpec> graphBuilder) {
             config.setGraphAdjuster(graphBuilder);
@@ -358,18 +434,33 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 定义模型输出中的“完成任务”标识（尽量不要改）
+         * 定义模型输出中的“完成任务”标识
+         *
+         * @param val 标识符
+         * @return 构建器
          */
         public Builder finishMarker(String val) {
             config.setFinishMarker(val);
             return this;
         }
 
+        /**
+         * 设置输出结果在 Context 中的存储键
+         *
+         * @param val 存储键
+         * @return 构建器
+         */
         public Builder outputKey(String val) {
             config.setOutputKey(val);
             return this;
         }
 
+        /**
+         * 设置历史窗口大小（多轮对话记忆条数）
+         *
+         * @param val 窗口大小
+         * @return 构建器
+         */
         public Builder historyWindowSize(int val) {
             config.setHistoryWindowSize(val);
             return this;
@@ -377,6 +468,9 @@ public class ReActAgent implements Agent {
 
         /**
          * 自定义推理提示词模板生成器
+         *
+         * @param val 模板生成器
+         * @return 构建器
          */
         public Builder promptProvider(ReActPromptProvider val) {
             config.setPromptProvider(val);
@@ -384,7 +478,10 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 配置推理阶段的 ChatModel 选项（如温度、TopP 等）
+         * 配置 ChatModel 推理选项
+         *
+         * @param chatOptions 配置函数
+         * @return 构建器
          */
         public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
             config.setChatOptions(chatOptions);
@@ -392,7 +489,10 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 设置 ReAct 生命周期拦截器
+         * 添加生命周期拦截器
+         *
+         * @param vals 拦截器数组
+         * @return 构建器
          */
         public Builder addInterceptor(ReActInterceptor... vals) {
             for (ReActInterceptor val : vals) {
@@ -402,7 +502,11 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 设置 ReAct 生命周期拦截器
+         * 添加生命周期拦截器（带排序索引）
+         *
+         * @param val   拦截器
+         * @param index 排序索引
+         * @return 构建器
          */
         public Builder addInterceptor(ReActInterceptor val, int index) {
             config.addInterceptor(val, index);
@@ -411,6 +515,8 @@ public class ReActAgent implements Agent {
 
         /**
          * 实例化 ReActAgent
+         *
+         * @return 智能体实例
          */
         public ReActAgent build() {
             if (config.getName() == null) {
