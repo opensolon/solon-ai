@@ -107,6 +107,9 @@ public class SupervisorTask implements NamedTaskComponent {
             if (Agent.ID_END.equals(trace.getRoute()) ||
                     trace.getIterationsCount() >= config.getMaxTotalIterations()) {
                 trace.setRoute(Agent.ID_END);
+                trace.addStep(Agent.ID_SYSTEM,
+                        "[Terminated] Maximum total iterations reached: " + config.getMaxTotalIterations(),
+                        0);
                 return;
             }
 
