@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.ai.agent.team.TeamConfig;
-import org.noear.solon.ai.agent.team.TeamProtocolFactory;
 
 import java.util.Locale;
 
