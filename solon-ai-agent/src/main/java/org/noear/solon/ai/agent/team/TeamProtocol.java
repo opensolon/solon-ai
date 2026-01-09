@@ -25,95 +25,99 @@ import org.noear.solon.lang.NonSerializable;
 import java.util.Locale;
 
 /**
- * 团队协作协议接口
+ * 团队协作协议（Team Collaboration Protocol）
  *
  * <p>定义 Agent 团队的协作模式（如 SEQUENTIAL, SWARM, HIERARCHICAL 等）。</p>
- * <p>负责控制团队的拓扑结构构建、Agent 参数注入、提示词动态准备及执行路由的干预决策。</p>
+ * <p>核心职责包括：构建拓扑结构、动态工具注入、提示词定制以及对协作路由的精准干预。</p>
  *
  * @author noear
  * @since 3.8.1
  */
 public interface TeamProtocol extends NonSerializable {
     /**
-     * 获取协议唯一标识
+     * 获取协议唯一标识（如 "A2A", "Sequential"）
      */
     String name();
 
     /**
-     * [生命周期：构建期] 构建团队协作图的拓扑结构
-     * <p>用于定义节点间的逻辑连接（如 A -> B 或 A -> Supervisor）。</p>
+     * [阶段：构建期] 构建团队协作图的拓扑结构
+     * <p>定义 Agent 节点间的逻辑链路，决定控制权的流转方向（如 A -> B 或 A -> Supervisor）。</p>
      *
-     * @param spec 图规格定义
+     * @param spec 图规格定义器
      */
     void buildGraph(GraphSpec spec);
 
     /**
-     * [生命周期：Agent 执行前] 注入智能体的运行选项
-     * <p>常用于动态注入协作工具（如 TransferTool）、调整采样参数或设置停止符。</p>
+     * [阶段：执行前] 为执行中的智能体注入专属工具
+     * <p>常用于注入协议相关的系统级工具（如：__transfer_to__）。</p>
      *
-     * @param agent   目标智能体
+     * @param agent 当前执行的智能体
+     * @param trace 运行轨迹上下文
      */
     default void injectAgentTools(Agent agent, ReActTrace trace) { }
 
     /**
-     * [生命周期：Agent 执行前] 注入智能体的系统指令
-     * <p>用于向 Agent 传达当前协议下的协作规范（如：如何移交任务）。</p>
+     * [阶段：执行前] 为智能体注入系统指令（System Instruction）
+     * <p>用于向 Agent 传达当前协议下的协作规范与行为约束。</p>
      *
-     * @param agent  目标智能体
+     * @param agent  当前执行的智能体
      * @param locale 语言环境
      * @param sb     指令构建器
      */
     default void injectAgentInstruction(Agent agent, Locale locale, StringBuilder sb) { }
 
     /**
-     * [生命周期：Agent 执行前] 准备智能体的任务提示词
-     * <p>用于根据协作历史（Trace）裁剪上下文、格式化历史记录或注入状态信息。</p>
+     * [阶段：执行前] 动态准备智能体的任务提示词（Task Prompt）
+     * <p>在 Agent 运行前执行，用于裁剪上下文、衔接前序 Agent 的备注（Memo）或注入黑板状态。</p>
      *
-     * @return 最终交付给 Agent 执行的提示词
+     * @param originalPrompt 原始提示词
+     * @return 最终交付执行的提示词
      */
     default Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
         return originalPrompt;
     }
 
     /**
-     * [生命周期：初始化] 注入主管（Supervisor）的静态系统提示词
+     * [阶段：初始化] 注入主管（Supervisor）的静态系统提示词
+     * <p>仅在团队初始化时触发一次，定义路由器的基本性格与准则。</p>
      */
     default void injectSupervisorInstruction(Locale locale, StringBuilder sb) { }
 
     /**
-     * [生命周期：决策前] 准备主管（Supervisor）运行时的动态补充指令
-     * <p>例如：注入当前的黑板数据、各 Agent 的竞标书摘要或执行次数统计。</p>
+     * [阶段：决策前] 准备主管（Supervisor）决策时的动态补充指令
+     * <p>在每一轮路由决策前触发，可动态注入当前执行进度统计、冲突信息等。</p>
      */
     default void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) { }
 
     /**
-     * [生命周期：决策拦截] 拦截主管（Supervisor）的执行逻辑
-     * <p>若返回 true，则表示协议已自主接管跳转逻辑（如顺序模式），跳过 LLM 智能路由决策。</p>
+     * [阶段：决策拦截] 拦截主管（Supervisor）的执行逻辑
+     * <p>用于实现确定性路由。若返回 true，将跳过 LLM 智能决策逻辑，由协议完全自主接管。 </p>
      */
     default boolean interceptSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
         return false;
     }
 
     /**
-     * [生命周期：路由干预] 在智能决策完成后，干预路由解析结果
-     * <p>用于修正 LLM 的幻觉、解析协议特定的信号词或强制转向。</p>
+     * [阶段：路由干预] 干预主管（Supervisor）的路由决策结果
+     * <p>在 LLM 给出决策后触发，用于修正幻觉、解析协议特定信号词（如工具调用标记）并强制转向。</p>
      *
      * @param decision LLM 给出的原始决策文本
-     * @return true 表示协议已接管路由，不再执行通用的名称匹配逻辑
+     * @return 若返回 true，表示协议已完成路由接管，将忽略通用的 Agent 名称匹配。
      */
     default boolean interceptSupervisorRouting(FlowContext context, TeamTrace trace, String decision) {
         return false;
     }
 
     /**
-     * [生命周期：路由转向] 路由确定后的回调钩子
-     * <p>当下一个执行目标（Agent 或 End）明确后触发，常用于状态同步或统计记录。</p>
+     * [阶段：路由转向] 路由目标确定后的回调
+     * <p>当下一个目标（Agent 或 End）明确后触发，常用于跨节点的数据同步或审计日志记录。</p>
+     * * @param nextAgent 下一个执行节点的标识
      */
     default void onSupervisorRouting(FlowContext context, TeamTrace trace, String nextAgent) { }
 
     /**
-     * [生命周期：任务结束] 团队任务结束后的清理工作
-     * <p>当流程到达 End 节点或异常中断时触发，用于释放资源或归档数据。</p>
+     * [阶段：销毁期] 团队任务结束后的清理回调
+     * <p>当任务到达终点（End）或发生异常中断时触发，用于归档执行轨迹或释放协议资源。</p>
      */
     default void onTeamFinished(FlowContext context, TeamTrace trace) { }
 }

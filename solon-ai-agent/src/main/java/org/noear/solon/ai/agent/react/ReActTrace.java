@@ -41,12 +41,30 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Preview("3.8")
 public class ReActTrace {
+    /**
+     * 当前运行配置
+     */
     private transient ReActConfig config;
+    /**
+     * 当前 Agent 会话上下文
+     */
     private transient AgentSession session;
+    /**
+     * 当前执行的协作协议
+     */
     private transient TeamProtocol protocol;
+    /**
+     * 协议注入的专用工具映射表（如 __transfer_to__）
+     */
     private transient final Map<String, FunctionTool> protocolToolMap = new LinkedHashMap<>();
 
+    /**
+     * 当前执行的智能体名称
+     */
     private String agentName;
+    /**
+     * 当前迭代的提示词模版与选项
+     */
     private Prompt prompt;
 
     /**
@@ -54,7 +72,7 @@ public class ReActTrace {
      */
     private volatile List<ChatMessage> messages;
     /**
-     * 迭代步数计数器
+     * 迭代步数计数器（用于防止死循环和控制 Token 消耗）
      */
     private AtomicInteger stepCounter;
     /**
@@ -63,15 +81,15 @@ public class ReActTrace {
     private volatile String route;
 
     /**
-     * 最终生成的回答内容
+     * 最终生成的回答内容（即最终输出给用户的 Final Answer）
      */
     private String finalAnswer;
     /**
-     * 模型最近一次原始回答内容
+     * 模型最近一次原始回答内容（用于解析 Action 信号）
      */
     private String lastAnswer;
     /**
-     * 性能度量指标
+     * 性能与资源度量指标
      */
     private final ReActMetrics metrics = new ReActMetrics();
 
@@ -91,6 +109,9 @@ public class ReActTrace {
     // --- 状态访问与生命周期管理 ---
 
 
+    /**
+     * 准备执行环境（由运行时注入上下文）
+     */
     protected void prepare(ReActConfig config, AgentSession session, String agentName, TeamProtocol protocol) {
         this.config = config;
         this.session = session;
@@ -98,42 +119,72 @@ public class ReActTrace {
         this.protocol = protocol;
     }
 
+    /**
+     * 获取运行配置
+     */
     public ReActConfig getConfig() {
         return config;
     }
 
+    /**
+     * 获取会话容器
+     */
     public AgentSession getSession() {
         return session;
     }
 
+    /**
+     * 获取当前协作协议
+     */
     public TeamProtocol getProtocol() {
         return protocol;
     }
 
+    /**
+     * 添加协议级内置工具（由 Protocol 注入）
+     */
     public void addProtocolTool(FunctionTool tool) {
         protocolToolMap.put(tool.name(), tool);
     }
 
+    /**
+     * 根据名称获取协议工具
+     */
     public FunctionTool getProtocolTool(String name) {
         return protocolToolMap.get(name);
     }
 
+    /**
+     * 获取所有已注入的协议工具
+     */
     public Collection<FunctionTool> getProtocolTools() {
         return protocolToolMap.values();
     }
 
+    /**
+     * 获取智能体名称
+     */
     public String getAgentName() {
         return agentName;
     }
 
+    /**
+     * 获取任务提示词
+     */
     public Prompt getPrompt() {
         return prompt;
     }
 
+    /**
+     * 设置任务提示词
+     */
     protected void setPrompt(Prompt prompt) {
         this.prompt = prompt;
     }
 
+    /**
+     * 获取度量指标
+     */
     public ReActMetrics getMetrics() {
         return metrics;
     }
@@ -152,26 +203,44 @@ public class ReActTrace {
         return stepCounter.incrementAndGet();
     }
 
+    /**
+     * 获取当前流转路由
+     */
     public String getRoute() {
         return route;
     }
 
+    /**
+     * 设置当前流转路由
+     */
     public void setRoute(String route) {
         this.route = route;
     }
 
+    /**
+     * 获取最终回答内容
+     */
     public String getFinalAnswer() {
         return finalAnswer;
     }
 
+    /**
+     * 设置最终回答内容
+     */
     public void setFinalAnswer(String finalAnswer) {
         this.finalAnswer = finalAnswer;
     }
 
+    /**
+     * 获取最后一次模型响应内容
+     */
     public String getLastAnswer() {
         return lastAnswer;
     }
 
+    /**
+     * 设置最后一次模型响应内容
+     */
     public void setLastAnswer(String lastAnswer) {
         this.lastAnswer = lastAnswer;
     }
@@ -184,7 +253,7 @@ public class ReActTrace {
     }
 
     /**
-     * 获取最后一条交互消息（通常用于 Action 阶段解析指令）
+     * 获取最后一条交互消息（通常用于 Action 阶段解析工具调用）
      */
     public synchronized ChatMessage getLastMessage() {
         if (messages.isEmpty()) {
@@ -195,7 +264,7 @@ public class ReActTrace {
     }
 
     /**
-     * 追加单条消息并尝试触发动态上下文压缩
+     * 追加单条消息并进入历史轨迹
      */
     public synchronized void appendMessage(ChatMessage message) {
         if (message == null) {
@@ -206,7 +275,7 @@ public class ReActTrace {
     }
 
     /**
-     * 替换所有消息（一般用于压缩时用）
+     * 替换所有消息（通常用于触发压缩算法或上下文清洗时）
      */
     public synchronized void replaceMessages(List<ChatMessage> messages) {
         this.messages = messages;
@@ -240,7 +309,7 @@ public class ReActTrace {
     }
 
     /**
-     * 统计总工具调用次数
+     * 统计总工具调用次数（从推理轨迹中计算）
      */
     public int getToolCallCount() {
         int count = 0;
