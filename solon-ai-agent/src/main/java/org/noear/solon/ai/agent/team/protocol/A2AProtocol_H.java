@@ -44,8 +44,8 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.8.1
  */
-public class A2AProtocol extends TeamProtocolBase {
-    private static final Logger LOG = LoggerFactory.getLogger(A2AProtocol.class);
+public class A2AProtocol_H extends TeamProtocolBase {
+    private static final Logger LOG = LoggerFactory.getLogger(A2AProtocol_H.class);
 
     private static final String TOOL_TRANSFER = "__transfer_to__";
     private static final String KEY_LAST_MEMO = "last_memo";
@@ -58,14 +58,14 @@ public class A2AProtocol extends TeamProtocolBase {
     private boolean injectRoleSpecificGuidance = true;
     private boolean enableTargetValidation = true;
 
-    public A2AProtocol(TeamConfig config) {
+    public A2AProtocol_H(TeamConfig config) {
         super(config);
     }
 
     /**
      * 启用或禁用循环检测
      */
-    public A2AProtocol withLoopDetection(boolean enabled) {
+    public A2AProtocol_H withLoopDetection(boolean enabled) {
         this.enableLoopDetection = enabled;
         return this;
     }
@@ -73,7 +73,7 @@ public class A2AProtocol extends TeamProtocolBase {
     /**
      * 设置同一对Agent之间的最大转移次数
      */
-    public A2AProtocol withMaxTransfers(int max) {
+    public A2AProtocol_H withMaxTransfers(int max) {
         this.maxTransfersBetweenAgents = Math.max(1, max);
         return this;
     }
@@ -81,7 +81,7 @@ public class A2AProtocol extends TeamProtocolBase {
     /**
      * 启用或禁用角色特定的指导
      */
-    public A2AProtocol withRoleSpecificGuidance(boolean enabled) {
+    public A2AProtocol_H withRoleSpecificGuidance(boolean enabled) {
         this.injectRoleSpecificGuidance = enabled;
         return this;
     }
@@ -89,7 +89,7 @@ public class A2AProtocol extends TeamProtocolBase {
     /**
      * 启用或禁用目标验证
      */
-    public A2AProtocol withTargetValidation(boolean enabled) {
+    public A2AProtocol_H withTargetValidation(boolean enabled) {
         this.enableTargetValidation = enabled;
         return this;
     }

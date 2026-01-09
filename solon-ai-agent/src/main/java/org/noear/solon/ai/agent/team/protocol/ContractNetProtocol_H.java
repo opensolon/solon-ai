@@ -30,8 +30,8 @@ import java.util.regex.Pattern;
  * @author noear
  * @since 3.8.1
  */
-public class ContractNetProtocol extends TeamProtocolBase {
-    private static final Logger LOG = LoggerFactory.getLogger(ContractNetProtocol.class);
+public class ContractNetProtocol_H extends TeamProtocolBase {
+    private static final Logger LOG = LoggerFactory.getLogger(ContractNetProtocol_H.class);
 
     // 招标信号关键词
     private static final String[] BIDDING_KEYWORDS = {"BIDDING", "CALL_FOR_BIDS", "招标", "竞标", "提案征集"};
@@ -48,14 +48,14 @@ public class ContractNetProtocol extends TeamProtocolBase {
     private static final String KEY_BIDDING_HISTORY = "bidding_history";
     private static final String KEY_LAST_CONTRACTOR = "last_contractor";
 
-    public ContractNetProtocol(TeamConfig config) {
+    public ContractNetProtocol_H(TeamConfig config) {
         super(config);
     }
 
     /**
      * 设置是否启用自动招标
      */
-    public ContractNetProtocol withAutoBidding(boolean enabled) {
+    public ContractNetProtocol_H withAutoBidding(boolean enabled) {
         this.enableAutoBidding = enabled;
         return this;
     }
@@ -63,7 +63,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     /**
      * 设置是否强制初始招标
      */
-    public ContractNetProtocol withForceInitialBidding(boolean forced) {
+    public ContractNetProtocol_H withForceInitialBidding(boolean forced) {
         this.forceInitialBidding = forced;
         return this;
     }
@@ -71,7 +71,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     /**
      * 设置最大招标轮次
      */
-    public ContractNetProtocol withMaxBiddingRounds(int rounds) {
+    public ContractNetProtocol_H withMaxBiddingRounds(int rounds) {
         this.maxBiddingRounds = Math.max(1, rounds);
         return this;
     }
@@ -79,7 +79,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     /**
      * 设置是否启用投标分析
      */
-    public ContractNetProtocol withBidAnalysis(boolean enabled) {
+    public ContractNetProtocol_H withBidAnalysis(boolean enabled) {
         this.enableBidAnalysis = enabled;
         return this;
     }
@@ -87,7 +87,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     /**
      * 设置投标超时时间
      */
-    public ContractNetProtocol withBiddingTimeout(long timeoutMs) {
+    public ContractNetProtocol_H withBiddingTimeout(long timeoutMs) {
         this.biddingTimeoutMs = Math.max(5000, timeoutMs);
         return this;
     }

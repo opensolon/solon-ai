@@ -7,7 +7,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.protocol.SequentialProtocol;
+import org.noear.solon.ai.agent.team.protocol.SequentialProtocol_H;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
@@ -39,7 +39,7 @@ public class TeamAgentTransferTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("editor_team")
                 .addAgent(translator, polisher)
-                .protocol(SequentialProtocol::new)
+                .protocol(SequentialProtocol_H::new)
                 .outputKey("final_report") // 团队最终结果存入 final_report
                 .maxTotalIterations(5)
                 .build();
@@ -81,7 +81,7 @@ public class TeamAgentTransferTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("template_team")
                 .addAgent(translator, polisher)
-                .protocol(SequentialProtocol::new)
+                .protocol(SequentialProtocol_H::new)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_template");
@@ -123,7 +123,7 @@ public class TeamAgentTransferTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("chain_team")
                 .addAgent(preferenceLoader, polisher)
-                .protocol(SequentialProtocol::new)
+                .protocol(SequentialProtocol_H::new)
                 .build();
 
         // 初始任务只给指令，看 preference_loader 能否产出 user_preference 并传给 polisher

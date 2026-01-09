@@ -33,8 +33,8 @@ import java.util.Map;
  * @author noear
  * @since 3.8.1
  */
-public class SwarmProtocolH extends TeamProtocolBase {
-    public SwarmProtocolH(TeamConfig config) {
+public class SwarmProtocol_L extends TeamProtocolBase {
+    public SwarmProtocol_L(TeamConfig config) {
         super(config);
     }
 

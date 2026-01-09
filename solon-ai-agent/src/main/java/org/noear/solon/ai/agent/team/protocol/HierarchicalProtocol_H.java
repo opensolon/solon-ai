@@ -29,8 +29,8 @@ import java.util.Map;
  * @author noear
  * @since 3.8.1
  */
-public class HierarchicalProtocol extends TeamProtocolBase {
-    private static final Logger LOG = LoggerFactory.getLogger(HierarchicalProtocol.class);
+public class HierarchicalProtocol_H extends TeamProtocolBase {
+    private static final Logger LOG = LoggerFactory.getLogger(HierarchicalProtocol_H.class);
 
     // 协议配置
     private boolean enableDirectResponse = true; // 是否允许 Supervisor 直接回复简单问题
@@ -43,14 +43,14 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     private static final String KEY_AGENT_USAGE = "agent_usage";
     private static final String KEY_LAST_ASSIGNMENT = "last_assignment";
 
-    public HierarchicalProtocol(TeamConfig config) {
+    public HierarchicalProtocol_H(TeamConfig config) {
         super(config);
     }
 
     /**
      * 设置是否允许 Supervisor 直接回复简单问题
      */
-    public HierarchicalProtocol withDirectResponse(boolean enabled) {
+    public HierarchicalProtocol_H withDirectResponse(boolean enabled) {
         this.enableDirectResponse = enabled;
         return this;
     }
@@ -58,7 +58,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     /**
      * 设置是否启用负载均衡
      */
-    public HierarchicalProtocol withLoadBalancing(boolean enabled) {
+    public HierarchicalProtocol_H withLoadBalancing(boolean enabled) {
         this.enableLoadBalancing = enabled;
         return this;
     }
@@ -66,7 +66,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     /**
      * 设置是否启用专家智能选择
      */
-    public HierarchicalProtocol withExpertSelection(boolean enabled) {
+    public HierarchicalProtocol_H withExpertSelection(boolean enabled) {
         this.enableExpertSelection = enabled;
         return this;
     }
@@ -74,7 +74,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     /**
      * 设置最大并行任务数
      */
-    public HierarchicalProtocol withMaxParallelTasks(int max) {
+    public HierarchicalProtocol_H withMaxParallelTasks(int max) {
         this.maxParallelTasks = Math.max(1, max);
         return this;
     }
@@ -82,7 +82,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     /**
      * 设置是否严格执行角色边界
      */
-    public HierarchicalProtocol withStrictRoleEnforcement(boolean strict) {
+    public HierarchicalProtocol_H withStrictRoleEnforcement(boolean strict) {
         this.strictRoleEnforcement = strict;
         return this;
     }

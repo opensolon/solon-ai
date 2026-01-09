@@ -42,8 +42,8 @@ import java.util.Locale;
  * @author noear
  * @since 3.8.1
  */
-public class ContractNetProtocolH extends TeamProtocolBase {
-    public ContractNetProtocolH(TeamConfig config) {
+public class ContractNetProtocol_L extends TeamProtocolBase {
+    public ContractNetProtocol_L(TeamConfig config) {
         super(config);
     }
 

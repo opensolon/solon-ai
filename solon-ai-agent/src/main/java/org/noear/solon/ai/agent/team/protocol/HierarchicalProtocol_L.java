@@ -29,8 +29,8 @@ import java.util.Locale;
  * @author noear
  * @since 3.8.1
  */
-public class HierarchicalProtocolH extends TeamProtocolBase {
-    public HierarchicalProtocolH(TeamConfig config){
+public class HierarchicalProtocol_L extends TeamProtocolBase {
+    public HierarchicalProtocol_L(TeamConfig config){
         super(config);
     }
 

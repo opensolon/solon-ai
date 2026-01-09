@@ -30,8 +30,8 @@ import java.util.Map;
  * @author noear
  * @since 3.8.1
  */
-public class SequentialProtocol extends HierarchicalProtocol {
-    private static final Logger LOG = LoggerFactory.getLogger(SequentialProtocol.class);
+public class SequentialProtocol_H extends HierarchicalProtocol_H {
+    private static final Logger LOG = LoggerFactory.getLogger(SequentialProtocol_H.class);
 
     // 协议配置
     private boolean enableSkipOnFailure = false; // 失败时是否跳过当前步骤
@@ -47,14 +47,14 @@ public class SequentialProtocol extends HierarchicalProtocol {
     private static final String KEY_STAGE_RETRIES = "stage_retries";
     private static final String KEY_SEQUENCE_ORDER = "sequence_order";
 
-    public SequentialProtocol(TeamConfig config) {
+    public SequentialProtocol_H(TeamConfig config) {
         super(config);
     }
 
     /**
      * 设置失败时是否跳过当前步骤
      */
-    public SequentialProtocol withSkipOnFailure(boolean enabled) {
+    public SequentialProtocol_H withSkipOnFailure(boolean enabled) {
         this.enableSkipOnFailure = enabled;
         return this;
     }
@@ -62,7 +62,7 @@ public class SequentialProtocol extends HierarchicalProtocol {
     /**
      * 设置是否启用阶段结果验证
      */
-    public SequentialProtocol withStageValidation(boolean enabled) {
+    public SequentialProtocol_H withStageValidation(boolean enabled) {
         this.enableStageValidation = enabled;
         return this;
     }
@@ -70,7 +70,7 @@ public class SequentialProtocol extends HierarchicalProtocol {
     /**
      * 设置是否启用进度跟踪
      */
-    public SequentialProtocol withProgressTracking(boolean enabled) {
+    public SequentialProtocol_H withProgressTracking(boolean enabled) {
         this.enableProgressTracking = enabled;
         return this;
     }
@@ -78,7 +78,7 @@ public class SequentialProtocol extends HierarchicalProtocol {
     /**
      * 设置是否严格执行顺序
      */
-    public SequentialProtocol withStrictOrder(boolean strict) {
+    public SequentialProtocol_H withStrictOrder(boolean strict) {
         this.strictOrderEnforcement = strict;
         return this;
     }
@@ -86,7 +86,7 @@ public class SequentialProtocol extends HierarchicalProtocol {
     /**
      * 设置是否允许提前完成
      */
-    public SequentialProtocol withEarlyCompletion(boolean allowed) {
+    public SequentialProtocol_H withEarlyCompletion(boolean allowed) {
         this.allowEarlyCompletion = allowed;
         return this;
     }
@@ -94,7 +94,7 @@ public class SequentialProtocol extends HierarchicalProtocol {
     /**
      * 设置每个阶段的最大重试次数
      */
-    public SequentialProtocol withMaxRetriesPerStage(int maxRetries) {
+    public SequentialProtocol_H withMaxRetriesPerStage(int maxRetries) {
         this.maxRetriesPerStage = Math.max(0, maxRetries);
         return this;
     }

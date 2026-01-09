@@ -30,8 +30,8 @@ import java.util.Locale;
  * @author noear
  * @since 3.8.1
  */
-public class SequentialProtocolH extends HierarchicalProtocol {
-    public SequentialProtocolH(TeamConfig config) {
+public class SequentialProtocol_L extends HierarchicalProtocol_H {
+    public SequentialProtocol_L(TeamConfig config) {
         super(config);
     }
 

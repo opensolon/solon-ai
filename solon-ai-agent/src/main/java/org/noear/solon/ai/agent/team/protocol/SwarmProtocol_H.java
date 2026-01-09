@@ -11,7 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 蜂群协作协议 (Swarm Protocol)
@@ -29,8 +28,8 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.8.1
  */
-public class SwarmProtocol extends TeamProtocolBase {
-    private static final Logger LOG = LoggerFactory.getLogger(SwarmProtocol.class);
+public class SwarmProtocol_H extends TeamProtocolBase {
+    private static final Logger LOG = LoggerFactory.getLogger(SwarmProtocol_H.class);
 
     // 协议配置
     private boolean enableConsensusVoting = false; // 是否启用共识投票
@@ -47,14 +46,14 @@ public class SwarmProtocol extends TeamProtocolBase {
     private static final String KEY_CONSENSUS_DATA = "consensus_data";
     private static final String KEY_SWARM_STATE = "swarm_state";
 
-    public SwarmProtocol(TeamConfig config) {
+    public SwarmProtocol_H(TeamConfig config) {
         super(config);
     }
 
     /**
      * 设置是否启用共识投票
      */
-    public SwarmProtocol withConsensusVoting(boolean enabled) {
+    public SwarmProtocol_H withConsensusVoting(boolean enabled) {
         this.enableConsensusVoting = enabled;
         return this;
     }
@@ -62,7 +61,7 @@ public class SwarmProtocol extends TeamProtocolBase {
     /**
      * 设置是否允许并行执行
      */
-    public SwarmProtocol withParallelExecution(boolean enabled) {
+    public SwarmProtocol_H withParallelExecution(boolean enabled) {
         this.enableParallelExecution = enabled;
         return this;
     }
@@ -70,7 +69,7 @@ public class SwarmProtocol extends TeamProtocolBase {
     /**
      * 设置是否启用群体智能
      */
-    public SwarmProtocol withSwarmIntelligence(boolean enabled) {
+    public SwarmProtocol_H withSwarmIntelligence(boolean enabled) {
         this.enableSwarmIntelligence = enabled;
         return this;
     }
@@ -78,7 +77,7 @@ public class SwarmProtocol extends TeamProtocolBase {
     /**
      * 设置是否启用负载均衡
      */
-    public SwarmProtocol withLoadBalancing(boolean enabled) {
+    public SwarmProtocol_H withLoadBalancing(boolean enabled) {
         this.enableLoadBalancing = enabled;
         return this;
     }
@@ -86,7 +85,7 @@ public class SwarmProtocol extends TeamProtocolBase {
     /**
      * 设置是否允许涌现行为
      */
-    public SwarmProtocol withEmergentBehavior(boolean enabled) {
+    public SwarmProtocol_H withEmergentBehavior(boolean enabled) {
         this.enableEmergentBehavior = enabled;
         return this;
     }
@@ -94,7 +93,7 @@ public class SwarmProtocol extends TeamProtocolBase {
     /**
      * 设置最大蜂群规模
      */
-    public SwarmProtocol withMaxSwarmSize(int size) {
+    public SwarmProtocol_H withMaxSwarmSize(int size) {
         this.maxSwarmSize = Math.max(2, Math.min(size, 10));
         return this;
     }
@@ -102,7 +101,7 @@ public class SwarmProtocol extends TeamProtocolBase {
     /**
      * 设置共识阈值
      */
-    public SwarmProtocol withConsensusThreshold(double threshold) {
+    public SwarmProtocol_H withConsensusThreshold(double threshold) {
         this.consensusThreshold = Math.max(0.5, Math.min(1.0, threshold));
         return this;
     }

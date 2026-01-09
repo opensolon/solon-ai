@@ -26,8 +26,8 @@ import java.util.*;
  * @author noear
  * @since 3.8.1
  */
-public class MarketBasedProtocol extends HierarchicalProtocol {
-    private static final Logger LOG = LoggerFactory.getLogger(MarketBasedProtocol.class);
+public class MarketBasedProtocol_H extends HierarchicalProtocol_H {
+    private static final Logger LOG = LoggerFactory.getLogger(MarketBasedProtocol_H.class);
 
     // 协议配置
     private boolean enableCostCalculation = true; // 是否启用成本计算
@@ -48,14 +48,14 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     private static final String KEY_TASK_COMPLEXITY = "task_complexity";
     private static final String KEY_LAST_EXECUTION_RESULT = "last_execution_result";
 
-    public MarketBasedProtocol(TeamConfig config) {
+    public MarketBasedProtocol_H(TeamConfig config) {
         super(config);
     }
 
     /**
      * 设置是否启用成本计算
      */
-    public MarketBasedProtocol withCostCalculation(boolean enabled) {
+    public MarketBasedProtocol_H withCostCalculation(boolean enabled) {
         this.enableCostCalculation = enabled;
         return this;
     }
@@ -63,7 +63,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     /**
      * 设置是否启用动态定价
      */
-    public MarketBasedProtocol withDynamicPricing(boolean enabled) {
+    public MarketBasedProtocol_H withDynamicPricing(boolean enabled) {
         this.enableDynamicPricing = enabled;
         return this;
     }
@@ -71,7 +71,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     /**
      * 设置是否启用质量评分
      */
-    public MarketBasedProtocol withQualityScoring(boolean enabled) {
+    public MarketBasedProtocol_H withQualityScoring(boolean enabled) {
         this.enableQualityScoring = enabled;
         return this;
     }
@@ -79,7 +79,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     /**
      * 设置是否启用竞价模拟
      */
-    public MarketBasedProtocol withBiddingSimulation(boolean enabled) {
+    public MarketBasedProtocol_H withBiddingSimulation(boolean enabled) {
         this.enableBiddingSimulation = enabled;
         return this;
     }
@@ -87,7 +87,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     /**
      * 设置是否自动初始化专家表现
      */
-    public MarketBasedProtocol withAutoPerformanceInit(boolean enabled) {
+    public MarketBasedProtocol_H withAutoPerformanceInit(boolean enabled) {
         this.autoInitializePerformance = enabled;
         return this;
     }
@@ -95,7 +95,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     /**
      * 设置决策权重
      */
-    public MarketBasedProtocol withDecisionWeights(double qualityWeight, double efficiencyWeight, double costWeight) {
+    public MarketBasedProtocol_H withDecisionWeights(double qualityWeight, double efficiencyWeight, double costWeight) {
         double total = qualityWeight + efficiencyWeight + costWeight;
         if (total > 0) {
             this.qualityWeight = qualityWeight / total;
@@ -108,7 +108,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     /**
      * 设置初始表现得分
      */
-    public MarketBasedProtocol withInitialScores(double quality, double efficiency, double cost) {
+    public MarketBasedProtocol_H withInitialScores(double quality, double efficiency, double cost) {
         this.initialQualityScore = Math.max(0, Math.min(1, quality));
         this.initialEfficiencyScore = Math.max(0, Math.min(1, efficiency));
         this.initialCostScore = Math.max(0, Math.min(1, cost));

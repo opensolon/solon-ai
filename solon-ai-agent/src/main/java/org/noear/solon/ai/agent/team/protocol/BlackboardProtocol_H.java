@@ -25,8 +25,8 @@ import java.util.Locale;
  * @author noear
  * @since 3.8.1
  */
-public class BlackboardProtocol extends HierarchicalProtocol {
-    private static final Logger LOG = LoggerFactory.getLogger(BlackboardProtocol.class);
+public class BlackboardProtocol_H extends HierarchicalProtocol_H {
+    private static final Logger LOG = LoggerFactory.getLogger(BlackboardProtocol_H.class);
 
     /** 黑板状态摘要的最大长度 */
     private int blackboardSummaryMaxLength = 1000;
@@ -34,14 +34,14 @@ public class BlackboardProtocol extends HierarchicalProtocol {
     /** 是否启用智能摘要 */
     private boolean enableSmartSummary = true;
 
-    public BlackboardProtocol(TeamConfig config) {
+    public BlackboardProtocol_H(TeamConfig config) {
         super(config);
     }
 
     /**
      * 设置黑板摘要的最大长度
      */
-    public BlackboardProtocol withSummaryMaxLength(int maxLength) {
+    public BlackboardProtocol_H withSummaryMaxLength(int maxLength) {
         this.blackboardSummaryMaxLength = Math.max(100, maxLength);
         return this;
     }
@@ -49,7 +49,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
     /**
      * 启用或禁用智能摘要
      */
-    public BlackboardProtocol withSmartSummary(boolean enabled) {
+    public BlackboardProtocol_H withSmartSummary(boolean enabled) {
         this.enableSmartSummary = enabled;
         return this;
     }

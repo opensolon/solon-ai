@@ -41,10 +41,10 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.8.1
  */
-public class A2AProtocolH extends TeamProtocolBase {
+public class A2AProtocol_L extends TeamProtocolBase {
     private static final String TOOL_TRANSFER = "__transfer_to__";
 
-    public A2AProtocolH(TeamConfig config) {
+    public A2AProtocol_L(TeamConfig config) {
         super(config);
     }
 
