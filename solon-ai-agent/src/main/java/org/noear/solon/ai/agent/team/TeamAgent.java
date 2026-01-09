@@ -208,7 +208,7 @@ public class TeamAgent implements Agent {
         }
 
         // 触发协作启动拦截
-        config.getInterceptorList().forEach(item -> item.target.onAgentStart(trace));
+        config.getInterceptorList().forEach(item -> item.target.onTeamStart(trace));
 
         try {
             // 历史消息归档
@@ -241,7 +241,7 @@ public class TeamAgent implements Agent {
             session.updateSnapshot(context);
 
             // 触发协作完成拦截
-            config.getInterceptorList().forEach(item -> item.target.onAgentEnd(trace));
+            config.getInterceptorList().forEach(item -> item.target.onTeamEnd(trace));
 
             return assistantMessage;
 

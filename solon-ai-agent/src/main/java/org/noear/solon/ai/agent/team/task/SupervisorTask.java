@@ -17,9 +17,11 @@ package org.noear.solon.ai.agent.team.task;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
@@ -87,12 +89,18 @@ public class SupervisorTask implements NamedTaskComponent {
                 return;
             }
 
-            // 智能死循环检测：若检测到 A-B-A 镜像死锁或单点复读，触发紧急避险
-            if (trace.isLooping()) {
-                LOG.warn("TeamAgent [{}] loop detected! Emergency stop.", config.getName());
-                trace.setRoute(Agent.ID_END);
-                trace.setFinalAnswer(trace.getLastAgentContent());
-                return;
+            // 触发协作启动拦截
+            for (RankEntity<TeamInterceptor> item : config.getInterceptorList()) {
+                if (item.target.shouldSupervisorContinue(trace) == false) {
+                    trace.addStep(Agent.ID_SUPERVISOR,
+                            "[Skipped] Supervisor decision was intercepted by " + item.target.getClass().getSimpleName(),
+                            0);
+
+                    if (Agent.ID_SUPERVISOR.equals(trace.getRoute())) {
+                        trace.setRoute(Agent.ID_END);
+                    }
+                    return;
+                }
             }
 
             // 边界检查：迭代上限熔断
@@ -141,6 +149,9 @@ public class SupervisorTask implements NamedTaskComponent {
         // 调用推理引擎，支持指数退避重试
         String decision = callWithRetry(trace, messages);
         trace.setLastDecision(decision);
+
+        // 触发决策后拦截（在 commitRoute 解析前）
+        config.getInterceptorList().forEach(item -> item.target.onSupervisorDecision(trace, decision));
 
         // 提交路由指令，转换语义决策为物理流节点
         commitRoute(trace, decision, context);

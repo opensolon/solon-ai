@@ -16,13 +16,17 @@
 package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 智能体核心接口
@@ -36,6 +40,8 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.8")
 public interface Agent extends NamedTaskComponent {
+    static final Logger LOG = LoggerFactory.getLogger(Agent.class);
+
     /**
      * 获取智能体名称（全局唯一标识）
      */
@@ -104,6 +110,22 @@ public interface Agent extends NamedTaskComponent {
         String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
 
+        if(trace != null){
+            for (RankEntity<TeamInterceptor> item : trace.getConfig().getInterceptorList()) {
+                if (item.target.shouldAgentContinue(trace, this) == false) {
+                    trace.addStep(name(),
+                            "[Skipped] Agent execution was intercepted and cancelled by " + item.target.getClass().getSimpleName(),
+                            0);
+
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("TeamAgent agent [{}] execution skipped by interceptor", name());
+                    }
+                    return;
+                }
+            }
+        }
+
+
         // 根据协作协议介入：注入前序工作进度、任务备注（Memo）等信息
         Prompt effectivePrompt = null;
         if (trace != null) {
@@ -124,6 +146,8 @@ public interface Agent extends NamedTaskComponent {
                 result = "Agent [" + name() + "] processed but returned no textual content.";
             }
             trace.addStep(name(), result, duration);
+
+            trace.getConfig().getInterceptorList().forEach(item -> item.target.onAgentEnd(trace, this));
         }
     }
 
