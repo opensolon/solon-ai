@@ -11,6 +11,8 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 
+import java.util.Random;
+
 /**
  * ReActAgent 配置参数测试
  * <p>验证智能体在不同 LLM 参数（温度、Token 限制）及运行参数（结束标记）下的表现差异。</p>
@@ -144,7 +146,14 @@ public class ReActAgentConfigTest {
     public static class CreativeTools {
         @ToolMapping(description = "生成产品创意口号")
         public String generate_idea() {
-            return "科技点亮生活";
+            String[] ideas = {
+                    "科技点亮生活",
+                    "智造未来，开启新篇",
+                    "让想象力触手可及",
+                    "简约而不简单"
+            };
+            // 增加随机性
+            return ideas[new Random().nextInt(ideas.length)];
         }
     }
 
