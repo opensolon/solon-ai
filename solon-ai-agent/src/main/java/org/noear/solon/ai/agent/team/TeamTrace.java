@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -124,6 +125,16 @@ public class TeamTrace implements AgentTrace {
     public String getAgentName() { return agentName; }
     public TeamConfig getConfig() { return config; }
     public AgentSession getSession() { return session; }
+    /**
+     * 获取流程上下文
+     */
+    public FlowContext getContext(){
+        if(session != null){
+            return session.getSnapshot();
+        } else {
+            return null;
+        }
+    }
     public TeamProtocol getProtocol() { return config.getProtocol(); }
     public Prompt getPrompt() { return prompt; }
     protected void setPrompt(Prompt prompt) { this.prompt = prompt; }

@@ -27,6 +27,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -132,6 +133,17 @@ public class ReActTrace implements AgentTrace {
      */
     public AgentSession getSession() {
         return session;
+    }
+
+    /**
+     * 获取流程上下文
+     */
+    public FlowContext getContext(){
+        if(session != null){
+            return session.getSnapshot();
+        } else {
+            return null;
+        }
     }
 
     /**
