@@ -17,19 +17,26 @@ package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
-import java.util.Map;
-import java.util.Objects;
 
 /**
  * ReAct 逻辑死循环拦截器 (ReAct Loop Breaker)
- * <p>该拦截器用于监控模型是否在 Action 阶段陷入死胡同，即：反复尝试完全相同的工具调用。</p>
+ * * <p>该拦截器通过监控 LLM 的输出内容指纹，防止智能体陷入无效的迭代循环。
+ * 相比于传统的步数限制，它能在模型出现“复读机”行为时更早地介入。</p>
+ *
+ * <p><b>典型场景：</b></p>
+ * <ul>
+ * <li>1. <b>工具调用死循环</b>：模型反复以相同的参数调用同一个工具（如查询失败后不停重试）。</li>
+ * <li>2. <b>文本推理死循环</b>：在翻译或润色场景下，模型反复输出相同内容但未触发结束标识（Finish Marker）。</li>
+ * </ul>
  *
  * <p><b>核心逻辑：</b></p>
  * <ul>
- * <li>1. <b>指纹提取</b>：将工具名称与输入参数组合成唯一的执行指纹。</li>
- * <li>2. <b>历史溯源</b>：在当前 {@link ReActTrace} 的历史消息中检索相同指纹的出现次数。</li>
- * <li>3. <b>硬性中断</b>：达到阈值时抛出异常。在 ReAct 闭环中，该异常信息通常会被回传给模型，触发模型的自愈能力（Self-Correction）。</li>
+ * <li>1. <b>语义指纹提取</b>：在 {@code onModelEnd} 阶段获取模型原始回复的清理内容。</li>
+ * <li>2. <b>历史模式比对</b>：统计该指纹在当前 {@link ReActTrace} 上下文消息中的出现频次。</li>
+ * <li>3. <b>硬性熔断</b>：当重复频次达到 {@code maxSameActions} 阈值时抛出异常，强制中断推理流。</li>
  * </ul>
  *
  * @author noear
@@ -37,11 +44,13 @@ import java.util.Objects;
  */
 @Preview("3.8")
 public class StopLoopInterceptor implements ReActInterceptor {
-    /** 同一操作（工具名+参数）允许重复的最大次数 */
+    /**
+     * 同一响应内容允许重复的最大次数
+     */
     private final int maxSameActions;
 
     /**
-     * @param maxSameActions 最大允许重复次数（通常设为 2-3 次，给模型纠错的机会）
+     * @param maxSameActions 最大允许重复次数（推荐 2-3 次，以便给模型留出自愈/修正的空间）
      */
     public StopLoopInterceptor(int maxSameActions) {
         this.maxSameActions = Math.max(2, maxSameActions);
@@ -55,26 +64,29 @@ public class StopLoopInterceptor implements ReActInterceptor {
     }
 
     /**
-     * 在工具执行动作发起前进行检测
+     * 在模型响应返回后立即进行循环检测
      */
     @Override
-    public void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
-        // 1. 生成当前调用的语义指纹（工具名 + 参数）
-        String currentFingerprint = toolName + ":" + Objects.toString(args);
+    public void onModelEnd(ReActTrace trace, ChatResponse resp) {
+        String content = resp.getContent();
+        if (Assert.isEmpty(content)) {
+            return;
+        }
 
-        // 2. 检索历史记录中的重复模式
-        // 策略：扫描全量历史消息，统计该指纹出现的频次
+        // 1. 提取当前回复的清理指纹
+        String fingerprint = content.trim();
+
+        // 2. 检索历史 Assistant 消息中是否存在完全一致的输出模式
+        // 注意：这涵盖了模型生成的 Action JSON 以及普通的推理文本
         long repeatCount = trace.getMessages().stream()
-                .filter(m -> m.getContent() != null && m.getContent().contains(currentFingerprint))
+                .filter(m -> m.getContent() != null && m.getContent().trim().equals(fingerprint))
                 .count();
 
-        // 3. 判定死循环风险
+        // 3. 判定死循环风险并熔断
         if (repeatCount >= maxSameActions) {
-            // 抛出带有指导意义的异常信息。
-            // 好的 ReAct 驱动器会捕获此异常并将其作为 Observation 反馈给 LLM，
-            // 从而提示模型：“此路径已重复多次且无效，请尝试更换参数或切换工具”。
-            throw new RuntimeException("Detected loop: You have tried [" + toolName + "] with same args "
-                    + maxSameActions + " times. Please change your strategy, try different arguments, or stop.");
+            // 抛出异常将直接中断 ReasonTask 的后续解析逻辑与路由派发
+            throw new RuntimeException("Detected ReAct loop: The model is repeating the same response content ("
+                    + maxSameActions + " times). Please refine your prompt or check the tool status.");
         }
     }
 }
