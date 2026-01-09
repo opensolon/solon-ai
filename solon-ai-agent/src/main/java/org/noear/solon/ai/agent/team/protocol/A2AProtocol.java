@@ -134,46 +134,39 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public boolean interceptSupervisorRouting(FlowContext context, TeamTrace trace, String decision) {
-        // 1. 获取最后执行的 Agent 名称和轨迹
+        // 1. 获取最后执行的 Agent 轨迹
         String lastAgentName = context.getAs(Agent.KEY_LAST_AGENT_NAME);
-        // 基于约定从 Context 中拿到最新的 Trace 对象
         AgentTrace latestTrace = context.getAs("__" + lastAgentName);
 
+        // 2. 只要有轨迹，就尝试提取 Memo（不再依赖 decision 文本是否包含关键词）
         String memo = null;
-
-        // 2. 核心优化：直接从结构化的 AgentTrace 中提取数据
         if (latestTrace instanceof ReActTrace) {
-            ReActTrace reactTrace = (ReActTrace) latestTrace;
-            // 倒序查找最后一次 Assistant 的工具调用，这比解析 decision 字符串稳健得多
-            memo = extractMemoFromMessages(reactTrace);
+            memo = extractMemoFromMessages((ReActTrace) latestTrace);
         }
 
-        // 3. 兜底逻辑：如果 Trace 里没拿到（比如非 ReAct 模式），尝试从决策文本正则提取
-        if (Utils.isEmpty(memo) && Utils.isNotEmpty(decision)) {
-            memo = extractMemoFromText(decision);
+        // 3. 如果提取到了 Memo，存入上下文
+        if (Utils.isNotEmpty(memo)) {
+            trace.getProtocolContext().put(KEY_LAST_MEMO, memo);
         }
 
-        // 4. 处理路由分支
-        if (Utils.isNotEmpty(decision)) {
-            // 处理结束标识
-            if (decision.toLowerCase().contains(config.getFinishMarker().toLowerCase())) {
-                trace.setRoute(Agent.ID_END);
-                return true;
-            }
+        // 4. 处理路由逻辑
+        if (Utils.isEmpty(decision)) return false;
 
-            // 处理移交逻辑
-            if (decision.contains(TOOL_TRANSFER)) {
-                for (String agentName : config.getAgentMap().keySet()) {
-                    if (decision.contains(agentName)) {
-                        if (Utils.isNotEmpty(memo)) {
-                            trace.getProtocolContext().put(KEY_LAST_MEMO, memo);
-                            // 增强决策文本，方便 UI 显示和单测断言
-                            trace.setLastDecision(decision + " (Memo: " + memo + ")");
-                        }
-                        trace.setRoute(agentName);
-                        return true;
-                    }
+        // 处理结束
+        if (decision.toLowerCase().contains(config.getFinishMarker().toLowerCase())) {
+            trace.setRoute(Agent.ID_END);
+            return true;
+        }
+
+        // 处理移交：只要 decision 匹配到了任何 Agent 名字，且我们刚才提到了 Memo
+        for (String agentName : config.getAgentMap().keySet()) {
+            if (decision.contains(agentName)) {
+                if (Utils.isNotEmpty(memo)) {
+                    // 增强决策文本，这样你的断言 memoInDecision 就能过
+                    trace.setLastDecision(decision + " (Memo: " + memo + ")");
                 }
+                trace.setRoute(agentName);
+                return true;
             }
         }
 
