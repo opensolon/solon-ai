@@ -325,7 +325,7 @@ public class TeamAgent implements Agent {
         /**
          * 自定义系统指令（System Prompt）的生成模板
          */
-        public Builder promptProvider(TeamPromptProvider promptProvider) {
+        public Builder systemPrompt(TeamPromptProvider promptProvider) {
             config.setPromptProvider(promptProvider);
             return this;
         }

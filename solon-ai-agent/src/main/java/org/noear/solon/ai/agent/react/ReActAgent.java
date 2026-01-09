@@ -472,7 +472,7 @@ public class ReActAgent implements Agent {
          * @param val 模板生成器
          * @return 构建器
          */
-        public Builder promptProvider(ReActPromptProvider val) {
+        public Builder systemPrompt(ReActPromptProvider val) {
             config.setPromptProvider(val);
             return this;
         }
