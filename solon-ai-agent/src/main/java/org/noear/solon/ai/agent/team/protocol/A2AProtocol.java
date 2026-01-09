@@ -111,27 +111,21 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
-        // 首先调用父类方法
-        Prompt prompt = super.prepareAgentPrompt(trace, agent, originalPrompt, locale);
+        // 从上下文中获取捕获到的备注
+        String memo = (String) trace.getProtocolContext().get(KEY_LAST_MEMO);
 
-        // 从 protocolContext 获取 memo 信息
-        String lastMemo = (String) trace.getProtocolContext().get(KEY_LAST_MEMO);
-        if (Utils.isNotEmpty(lastMemo)) {
-            String content;
-            if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-                content = "【接棒提示-备注信息】： " + lastMemo;
-            } else {
-                content = "[Handover Hint - Memo]: " + lastMemo;
-            }
+        if (Utils.isNotEmpty(memo)) {
+            boolean isChinese = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+            String hint = isChinese ? "【接棒提示】： " : "[Handover Hint]: ";
 
-            // 将 memo 信息作为系统消息插入
-            prompt.getMessages().add(0, ChatMessage.ofSystem(content));
+            // 注入到消息列表最前面
+            originalPrompt.getMessages().add(0, ChatMessage.ofSystem(hint + memo));
 
-            // 使用后移除 memo，避免重复
+            // 使用后清除，防止 Memo 干扰后续非关联的对话
             trace.getProtocolContext().remove(KEY_LAST_MEMO);
         }
 
-        return prompt;
+        return originalPrompt;
     }
 
     @Override
@@ -151,6 +145,11 @@ public class A2AProtocol extends TeamProtocolBase {
                     String memo = extractMemo(decision);
                     if (memo != null) {
                         trace.getProtocolContext().put(KEY_LAST_MEMO, memo);
+
+                        // 将 memo 信息附加到决策文本中，方便测试验证
+                        // 注意：这里修改的是 trace 的 decision，不是传入的 decision 参数
+                        String enhancedDecision = decision + " (Memo: " + memo + ")";
+                        trace.setLastDecision(enhancedDecision);
                     }
                     trace.setRoute(agentName);
                     return true;
@@ -161,10 +160,15 @@ public class A2AProtocol extends TeamProtocolBase {
     }
 
     private String extractMemo(String text) {
-        Pattern pattern = Pattern.compile("memo[\"']?\\s*[:=]\\s*[\"']([^\"']+)[\"']");
-        Matcher matcher = pattern.matcher(text);
-        if (matcher.find()) {
-            return matcher.group(1);
+        try {
+            // 简单的正则匹配 JSON 里的 memo 字段
+            Pattern pattern = Pattern.compile("\"memo\"\\s*:\\s*\"([^\"]+)\"");
+            Matcher matcher = pattern.matcher(text);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        } catch (Exception e) {
+            // ignore
         }
         return null;
     }

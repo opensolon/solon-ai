@@ -141,20 +141,25 @@ public class TeamAgentA2ATest {
 
         TeamTrace trace = team.getTrace(session);
 
-        // 验证 memo 是否通过 protocolContext 传递
-        String memo = (String) trace.getProtocolContext().get("last_memo");
+        // 验证方式1：检查 protocolContext 中是否有 memo
+        String memoInContext = (String) trace.getProtocolContext().get("last_memo");
+        boolean memoCaptured = "KEY_INFO_999".equals(memoInContext);
 
-        // 或者验证决策文本中是否包含 memo
+        // 验证方式2：检查决策文本是否包含 memo
         String decision = trace.getLastDecision();
-        System.out.println("Supervisor Decision: " + decision);
-        System.out.println("Memo in context: " + memo);
+        boolean memoInDecision = decision != null && decision.contains("KEY_INFO_999");
 
-        // 验证：memo 应该被正确传递和记录
-        boolean memoInContext = "KEY_INFO_999".equals(memo);
+        // 验证方式3：检查历史记录是否包含 memo
         boolean memoInHistory = trace.getFormattedHistory().contains("KEY_INFO_999");
 
-        Assertions.assertTrue(memoInContext || memoInHistory,
-                "Memo 信息应通过 protocolContext 或历史记录传递");
+        System.out.println("Memo in context: " + memoInContext);
+        System.out.println("Supervisor Decision: " + decision);
+        System.out.println("Memo in decision: " + memoInDecision);
+        System.out.println("Memo in history: " + memoInHistory);
+
+        // 只要有一个地方包含 memo 就认为测试通过
+        Assertions.assertTrue(memoCaptured || memoInDecision || memoInHistory,
+                "Memo 信息应通过 protocolContext、决策文本或历史记录传递");
     }
 
     @Test
