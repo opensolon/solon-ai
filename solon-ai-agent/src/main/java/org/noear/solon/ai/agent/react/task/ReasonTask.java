@@ -23,7 +23,6 @@ import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
@@ -35,7 +34,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * ReAct 推理任务（Reasoning Task）
@@ -163,9 +161,8 @@ public class ReasonTask implements NamedTaskComponent {
                                 o.optionPut("stop", Utils.asList("Observation:"));
                             }
 
-                            // 注入协议
-                            if(trace.getProtocol() != null){
-                                trace.getProtocol().injectAgentOptions(agent, o);
+                            if(!trace.getProtocolTools().isEmpty()){
+                                o.toolsAdd(trace.getProtocolTools());
                             }
 
                             // 强制关闭模型端的自动工具执行，由 ReActActionTask 统一管控

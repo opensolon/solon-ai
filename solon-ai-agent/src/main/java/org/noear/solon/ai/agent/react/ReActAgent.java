@@ -170,6 +170,10 @@ public class ReActAgent implements Agent {
 
         trace.prepare(config, session, name, protocol);
 
+        if(protocol != null){
+            protocol.injectAgentTools(this, trace);
+        }
+
         // 只有当 trace 消息为空（首轮执行）且 prompt 不为空时才加载历史
         if (trace.getMessages().isEmpty() && !Prompt.isEmpty(prompt)) {
             // 1. 存入当前 prompt 到 session 历史（持久化记录）

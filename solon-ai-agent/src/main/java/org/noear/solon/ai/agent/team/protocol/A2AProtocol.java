@@ -2,6 +2,8 @@ package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.react.ReActConfig;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
@@ -18,7 +20,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class A2AProtocol extends TeamProtocolBase {
-    private static final String TOOL_TRANSFER = "transfer_to";
+    private static final String TOOL_TRANSFER = "__transfer_to__";
 
     public A2AProtocol(TeamConfig config) {
         super(config);
@@ -47,18 +49,30 @@ public class A2AProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public void injectAgentOptions(Agent agent, ChatOptions options) {
+    public void injectAgentTools(Agent agent, ReActTrace trace) {
         String expertList = config.getAgentMap().values().stream()
                 .filter(a -> !a.name().equals(agent.name()))
                 .map(a -> a.name() + "(" + a.description() + ")")
                 .collect(Collectors.joining(", "));
 
-        options.toolsAdd(new FunctionToolDesc(TOOL_TRANSFER)
-                .title("移交任务")
-                .description("当你无法独立完成当前任务，或需要其他专家协助时，调用此工具进行移交。")
+        trace.addProtocolTool(new FunctionToolDesc(TOOL_TRANSFER)
+                .title("移交任务 (Protocol)")
+                .description("这是系统级工具。当你无法独立完成当前任务时，调用此工具将控制权移交给其他专家。")
                 .stringParamAdd("target", "目标专家名称，必选值: [" + expertList + "]")
                 .stringParamAdd("memo", "移交备注：说明当前进度和接棒专家需要关注的重点")
-                .doHandle(args -> "Handover initiated. Please terminate output."));
+                .doHandle(args -> "System: Handover process started. Please stop generation."));
+    }
+
+    @Override
+    public void injectAgentInstruction(Agent agent, Locale locale, StringBuilder sb) {
+        boolean isChinese = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+
+        sb.append("\n\n[System Notification]");
+        if (isChinese) {
+            sb.append("\n必要时，你可以使用特殊工具 `").append(TOOL_TRANSFER).append("` 将任务委托给团队中的其他成员。");
+        } else {
+            sb.append("\nIf necessary, you can use the special tool `").append(TOOL_TRANSFER).append("` to delegate tasks to other team members.");
+        }
     }
 
     @Override

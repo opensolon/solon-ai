@@ -16,7 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
@@ -52,9 +52,8 @@ public interface TeamProtocol extends NonSerializable {
      * <p>常用于动态注入协作工具（如 TransferTool）、调整采样参数或设置停止符。</p>
      *
      * @param agent   目标智能体
-     * @param options 聊天选项
      */
-    default void injectAgentOptions(Agent agent, ChatOptions options) { }
+    default void injectAgentTools(Agent agent, ReActTrace trace) { }
 
     /**
      * [生命周期：Agent 执行前] 注入智能体的系统指令

@@ -23,13 +23,13 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
-import java.util.ArrayList;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.List;
 
 /**
  * ReAct 运行轨迹记录器
@@ -44,6 +44,7 @@ public class ReActTrace {
     private transient ReActConfig config;
     private transient AgentSession session;
     private transient TeamProtocol protocol;
+    private transient final Map<String, FunctionTool> protocolToolMap = new LinkedHashMap<>();
 
     private String agentName;
     private Prompt prompt;
@@ -101,13 +102,24 @@ public class ReActTrace {
         return config;
     }
 
-
     public AgentSession getSession() {
         return session;
     }
 
     public TeamProtocol getProtocol() {
         return protocol;
+    }
+
+    public void addProtocolTool(FunctionTool tool) {
+        protocolToolMap.put(tool.name(), tool);
+    }
+
+    public FunctionTool getProtocolTool(String name) {
+        return protocolToolMap.get(name);
+    }
+
+    public Collection<FunctionTool> getProtocolTools() {
+        return protocolToolMap.values();
     }
 
     public String getAgentName() {

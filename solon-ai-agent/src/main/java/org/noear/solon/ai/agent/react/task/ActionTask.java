@@ -181,6 +181,10 @@ public class ActionTask implements NamedTaskComponent {
     private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
         FunctionTool tool = config.getTool(name);
 
+        if(tool == null){
+            tool = trace.getProtocolTool(name);
+        }
+
         if (tool != null) {
             try {
                 if (LOG.isDebugEnabled()) {
