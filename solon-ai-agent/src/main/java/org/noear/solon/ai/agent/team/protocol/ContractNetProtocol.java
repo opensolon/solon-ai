@@ -47,7 +47,9 @@ public class ContractNetProtocol extends TeamProtocolBase {
         super(config);
     }
 
-    /** 协议唯一标识 */
+    /**
+     * 协议唯一标识
+     */
     @Override
     public String name() {
         return "CONTRACT_NET";
@@ -66,7 +68,10 @@ public class ContractNetProtocol extends TeamProtocolBase {
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
             // 分支 A：触发招标任务节点
             ns.linkAdd(Agent.ID_BIDDING, l -> l.title("route = " + Agent.ID_BIDDING)
-                    .when(ctx -> Agent.ID_BIDDING.equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
+                    .when(ctx -> {
+                        TeamTrace trace = ctx.getAs(config.getTraceKey());
+                        return Agent.ID_BIDDING.equals(trace.getRoute());
+                    }));
 
             // 分支 B：动态路由至具体的专家 Agent 节点
             linkAgents(ns);

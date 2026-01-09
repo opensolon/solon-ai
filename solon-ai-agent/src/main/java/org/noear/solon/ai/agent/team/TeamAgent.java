@@ -97,7 +97,7 @@ public class TeamAgent implements Agent {
         this.description = config.getDescription();
 
         // 为团队生成的唯一 Trace 标识，确保在多团队并行或嵌套时数据不冲突
-        this.traceKey = "__" + name;
+        this.traceKey = config.getTraceKey();
         this.flowEngine = FlowEngine.newInstance(true);
 
         // 注入生命周期拦截器，实现审计、监控或数据增强
@@ -403,9 +403,6 @@ public class TeamAgent implements Agent {
             if (config.getAgentMap().isEmpty() && config.getGraphAdjuster() == null) {
                 throw new IllegalStateException("The agent or graphAdjuster is required for a TeamAgent");
             }
-
-            //初始化下
-            config.getProtocol();
 
             return new TeamAgent(config);
         }

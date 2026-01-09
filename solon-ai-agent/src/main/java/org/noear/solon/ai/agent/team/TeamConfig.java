@@ -40,6 +40,11 @@ public class TeamConfig {
     private String name;
 
     /**
+     * 团队状态跟踪键（用于在全局上下文中标识该团队的会话数据）
+     */
+    private volatile String traceKey;
+
+    /**
      * 团队显示标题（用于 UI 展示或报告输出）
      */
     private String title;
@@ -67,8 +72,7 @@ public class TeamConfig {
     /**
      * 协作拓扑协议（决定了任务在团队成员间的流转逻辑，如层级式、流水线式等）
      */
-    private volatile TeamProtocol protocol;
-    private TeamProtocolFactory protocolFactory = TeamProtocols.HIERARCHICAL;
+    private volatile TeamProtocol protocol = TeamProtocols.HIERARCHICAL.create(this);
 
     /**
      * 编排图结构微调钩子（允许在协议生成的标准拓扑上，增加自定义的业务逻辑节点或连线）
@@ -236,13 +240,21 @@ public class TeamConfig {
      */
     public void setProtocol(TeamProtocolFactory protocolFactory) {
         Objects.requireNonNull(protocolFactory, "protocolFactory");
-        this.protocolFactory = protocolFactory;
+        this.protocol = protocolFactory.create(this);
     }
 
     // --- 属性 Getter ---
 
     public String getName() {
         return name;
+    }
+
+    public String getTraceKey() {
+        if (traceKey == null) {
+            traceKey = "__" + this.name;
+        }
+
+        return traceKey;
     }
 
     public String getTitle() {
@@ -266,9 +278,6 @@ public class TeamConfig {
     }
 
     public TeamProtocol getProtocol() {
-        if (protocol == null) {
-            protocol = protocolFactory.create(this);
-        }
         return protocol;
     }
 
