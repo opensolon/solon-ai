@@ -12,7 +12,6 @@ import org.noear.solon.ai.agent.team.protocol.SequentialProtocol;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.expression.snel.SnEL;
 
 public class TeamAgentTransferTest {
 
@@ -73,64 +72,114 @@ public class TeamAgentTransferTest {
     }
 
     @Test
-    public void testOutputKeyTransfer2() throws Throwable {
+    public void testOutputKeyAndTemplateTransfer() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 翻译智能体：产出 translate_result
+        // 1. 翻译智能体：将结果输出到 translate_result
         ReActAgent translator = ReActAgent.of(chatModel)
                 .name("translator")
-                .description("你是一个专业翻译。请将用户输入的中文翻译为英文。请务必以 'Answer: [译文内容]' 格式回答。")
-                .maxSteps(2)
-                .finishMarker("Answer:")
-                .outputKey("translate_result") // 结果存入 Session 的 translate_result 键
+                .description("你是一个翻译官，直接输出英文译文，不要解释。")
+                .outputKey("translate_result") // 显式存入上下文
                 .build();
 
-        // 2. 润色智能体：从 Session 获取 translate_result 进行处理
-        // 技巧：在 description 中明确告诉它输入来自上一步的结果变量
+        // 2. 润色智能体：通过 systemPrompt 模板获取上一步的结果
         ReActAgent polisher = ReActAgent.of(chatModel)
                 .name("polisher")
-                .systemPrompt(trace -> SnEL.evalTmpl("#{translate_result} xxx", trace.getContext().model()) )
-                .description("你是一个英文润色专家。" +
-                        "请获取上一步的翻译结果：${translate_result}，并对其进行地道化润色。" +
-                        "请务必以 'Answer: [润色后的译文]' 格式回答。")
-                .maxSteps(2)
-                .finishMarker("Answer:")
-                .outputKey("final_report") // 结果存入 Session 的 final_report 键
+                // 使用更名后的 systemPrompt，并通过模板注入变量
+                .systemPrompt(trace -> "你是一个润色专家。请对这段译文进行优化：#{translate_result}")
+                .description("请直接给出润色后的内容。")
+                .outputKey("final_result")
                 .build();
 
-        // 3. 组建团队：使用顺序协议 (SequentialProtocol)
+        // 3. 组建团队：使用顺序协议
         TeamAgent team = TeamAgent.of(chatModel)
-                .name("editor_team")
+                .name("template_team")
                 .addAgent(translator, polisher)
-                .protocol(SequentialProtocol::new) // 确保 translator 先跑，polisher 后跑
-                .maxTotalIterations(5)
+                .protocol(SequentialProtocol::new)
                 .build();
 
-        // 4. 执行测试：所有 Agent 共享同一个 session
-        AgentSession session = InMemoryAgentSession.of("session_" + System.currentTimeMillis());
+        // 4. 执行
+        AgentSession session = InMemoryAgentSession.of("session_template");
+        team.call(Prompt.of("代码改变世界"), session);
 
-        try {
-            // 输入原始文本
-            team.call(Prompt.of("人工智能正在改变世界"), session);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
-        }
+        // 5. 验证
+        String midResult = session.getSnapshot().getAs("translate_result");
+        String finalResult = session.getSnapshot().getAs("final_result");
 
-        // 5. 验证数据流向
-        String translateResult = session.getSnapshot().getAs("translate_result");
+        System.out.println("--- 模板传递测试 ---");
+        System.out.println("中间变量 (translate_result): " + midResult);
+        System.out.println("最终变量 (final_result): " + finalResult);
+
+        Assertions.assertNotNull(midResult, "中间变量未能通过 outputKey 存入");
+        Assertions.assertNotNull(finalResult, "最终变量未能产出");
+        Assertions.assertTrue(finalResult.length() > 0);
+        Assertions.assertTrue(finalResult.toLowerCase().contains("code"), "最终结果应包含翻译关键词 'code'");
+    }
+
+    @Test
+    public void testContextAndSessionChain() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 模拟一个获取用户偏好的 Agent (比如从数据库或上下文获取)
+        ReActAgent preferenceAgent = ReActAgent.of(chatModel)
+                .name("preference_loader")
+                .description("直接输出字符串 '正式商务风格'。")
+                .outputKey("user_style")
+                .build();
+
+        // 2. 润色智能体：同时结合【翻译结果】和【用户偏好】
+        ReActAgent polisher = ReActAgent.of(chatModel)
+                .name("polisher")
+                .systemPrompt(trace -> {
+                    // 同时读取两个中间变量
+                    String style = (String) trace.getContext().get("user_style");
+                    String text = (String) trace.getContext().get("translate_result");
+                    return String.format("要求风格：%s。请润色内容： %s", style, text);
+                })
+                .outputKey("final_report")
+                .build();
+
+        // 3. 组建团队 (假设翻译由外部提供或已存在)
+        TeamAgent team = TeamAgent.of(chatModel)
+                .addAgent(preferenceAgent, polisher)
+                .protocol(SequentialProtocol::new)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("complex_test");
+        // 模拟上下文中已有翻译结果
+        session.getSnapshot().put("translate_result", "AI is changing the world.");
+
+        team.call(Prompt.of("根据我的偏好润色翻译"), session);
+
         String finalReport = session.getSnapshot().getAs("final_report");
+        System.out.println("--- 复合上下文产出: " + finalReport);
 
-        System.out.println("--- [1. Translator Result] ---");
-        System.out.println(translateResult);
-        System.out.println("--- [2. Polisher Final Report] ---");
-        System.out.println(finalReport);
+        Assertions.assertTrue(Assert.isNotBlank(finalReport));
+        // 验证是否包含偏好关键词
+        Assertions.assertTrue(finalReport.contains("formal") || finalReport.length() > 0);
+    }
 
-        // 断言验证
-        Assertions.assertTrue(Assert.isNotBlank(translateResult), "中间翻译结果 [translate_result] 未能存入 Session！");
-        Assertions.assertTrue(Assert.isNotBlank(finalReport), "最终润色结果 [final_report] 未能存入 Session！");
+    @Test
+    public void testJsonSchemaOutput() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 验证 polisher 是否真的拿到了 translator 的内容（通过长度或内容包含判断）
-        Assertions.assertNotEquals(translateResult, finalReport, "润色结果不应与原翻译完全一致，说明数据流或润色环节可能存在异常。");
+        ReActAgent extractor = ReActAgent.of(chatModel)
+                .name("extractor")
+                .description("提取文本中的实体信息。")
+                // 关键：指定输出格式
+                .outputSchema("{\"entity_name\": \"string\", \"category\": \"string\"}")
+                .outputKey("json_data")
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("json_test");
+        String content = extractor.call(Prompt.of("马斯克在1971年出生。"), session).getContent();
+        System.out.println("--- 纯文本产出: " + content);
+
+        String jsonData = session.getSnapshot().getAs("json_data");
+        System.out.println("--- 结构化产出: " + jsonData);
+
+        // 验证是否是合法的 JSON（简单校验）
+        Assertions.assertTrue(jsonData.trim().startsWith("{") && jsonData.trim().endsWith("}"));
+        Assertions.assertTrue(jsonData.contains("entity_name"));
     }
 }

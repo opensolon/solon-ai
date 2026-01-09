@@ -28,6 +28,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
@@ -452,6 +453,22 @@ public class ReActAgent implements Agent {
          */
         public Builder outputKey(String val) {
             config.setOutputKey(val);
+            return this;
+        }
+
+        /**
+         * 设置输出格式要求（例如 JSON 结构描述）
+         */
+        public Builder outputSchema(String val) {
+            config.setOutputSchema(val);
+            return this;
+        }
+
+        /**
+         * 快捷方式：通过 Class 生成 schema 描述（如果 ChatModel 支持此功能）
+         */
+        public Builder outputSchema(Class<?> clazz) {
+            config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(clazz));
             return this;
         }
 

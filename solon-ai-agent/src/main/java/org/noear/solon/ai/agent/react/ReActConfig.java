@@ -87,6 +87,11 @@ public class ReActConfig {
     private String outputKey;
 
     /**
+     * 期望的输出 Schema（例如 JSON Schema 字符串或描述）
+     */
+    private String outputSchema;
+
+    /**
      * 历史消息窗口大小（从上下文中回溯并注入到当前执行过程的消息条数）
      */
     private int historyWindowSize = 5;
@@ -170,6 +175,14 @@ public class ReActConfig {
 
     public void setOutputKey(String val) {
         this.outputKey = val;
+    }
+
+    public void setOutputSchema(String val) {
+        this.outputSchema = val;
+    }
+
+    public String getOutputSchema() {
+        return outputSchema;
     }
 
     /**
