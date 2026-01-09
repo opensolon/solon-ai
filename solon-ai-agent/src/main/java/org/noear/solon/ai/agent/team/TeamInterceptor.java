@@ -21,73 +21,84 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.flow.intercept.FlowInterceptor;
 
 /**
- * Team 拦截器
- * <p>提供对团队协作智能体（TeamAgent）执行全生命周期的监控与干预能力。
- * 包括团队起止、监管员决策审计以及成员智能体的准入控制。</p>
+ * 团队协作拦截器 (Team Interceptor)
+ * <p>
+ * 提供对 TeamAgent 协作全生命周期的监控与干预能力。
+ * 开发者可以通过实现此接口，在团队初始化、模型决策、成员执行等关键环节注入业务逻辑。
+ * </p>
  *
  * @author noear
  * @since 3.8.1
  */
 public interface TeamInterceptor extends FlowInterceptor {
 
+    // --- [维度 1：团队生命周期 (Team Level)] ---
+
     /**
-     * 团队生命周期：团队整体任务开始时触发
-     * <p>常用于初始化团队上下文或记录多智能体协作任务的起点。</p>
+     * 协作开始：团队任务启动时触发
+     * <p>常用于初始化全局上下文、分配 Trace ID 或开启性能埋点。</p>
      */
     default void onTeamStart(TeamTrace trace) {}
 
     /**
-     * 决策控制：在监管员（Supervisor）发起决策请求前触发
-     * <p>这是控制协作成本和防止团队死循环的核心拦截点。可用于：</p>
-     * <ul>
-     * <li>1. 预算检查：判断当前 Token 消耗是否超出阈值</li>
-     * <li>2. 循环检测：判断是否在反复调度同一个成员</li>
-     * <li>3. 人工审批：在特定条件下暂停任务，等待人工确认</li>
-     * </ul>
-     * @return true: 继续调用 LLM 进行决策; false: 终止本次决策并结束团队任务
+     * 协作结束：团队任务整体完成（或被强行熔断）后触发
+     * <p>此时可以进行汇总统计、持久化协作日志或清理资源。</p>
+     */
+    default void onTeamEnd(TeamTrace trace) {}
+
+
+    // --- [维度 2：决策生命周期 (Supervisor/Model Level)] ---
+
+    /**
+     * 决策准入：在指挥员 (Supervisor) 发起逻辑判断前触发
+     * <p>这是防止协作失控的“一级刹车”，可用于检查迭代深度、Token 余额或强制人工干预。</p>
+     *
+     * @return true: 继续决策; false: 立即中止团队协作并设为结束状态
      */
     default boolean shouldSupervisorContinue(TeamTrace trace) {
         return true;
     }
 
     /**
-     * 模型推理生命周期：发起监管员模型请求前触发
-     * <p>常用于对监管员的 Prompt 进行动态调整、注入特定约束或进行 Token 预审计。</p>
+     * 模型启动：指挥员发起模型请求 (LLM Call) 前触发
+     * <p>允许动态修改 {@link ChatRequestDesc}，如注入临时变量、调整温度系数或追加协议约束。</p>
      */
     default void onModelStart(TeamTrace trace, ChatRequestDesc req) {
     }
 
     /**
-     * 模型推理生命周期：监管员模型响应后，解析逻辑执行前触发
-     * <p>可用于拦截监管员的原始回复，执行合规性检查或原始数据记录。</p>
+     * 模型返回：指挥员获得模型原始响应后触发
+     * <p>在决策文本解析前介入，可用于拦截原始数据流、审计模型输出或执行内容风控。</p>
      */
     default void onModelEnd(TeamTrace trace, ChatResponse resp) {
     }
 
     /**
-     * 协作生命周期：监管员决策产生后触发
-     * <p>此时模型已完成思考（Thought），但尚未将决策转换为具体的 Agent 执行路由。
-     * 可用于修正、记录或提取决策背后的思考链路（灵感来自 onThought）。</p>
+     * 决策产出：指挥员完成语义解析并确定决策内容后触发
+     * <p>此时模型已完成“思考”，但尚未跳转物理路由。可用于记录指挥员的调度意图（Decision Context）。</p>
+     * * @param decision 经解析后的决策文本（通常是 Agent 名称或 finish 指令）
      */
     default void onSupervisorDecision(TeamTrace trace, String decision) {}
 
+
+    // --- [维度 3：成员生命周期 (Member Agent Level)] ---
+
     /**
-     * 成员调度生命周期：具体成员智能体（Member Agent）执行前触发
-     * <p>提供对特定智能体调度的准入拦截逻辑。</p>
-     * @return true: 允许该 Agent 执行; false: 跳过该 Agent 的本次执行
+     * 成员准入：具体成员智能体被调度执行前触发
+     * <p>提供细粒度的权限控制。例如：只允许特定 Agent 在特定条件下访问敏感工具。</p>
+     *
+     * @param agent 即将执行的目标智能体
+     * @return true: 允许执行; false: 跳过该成员执行，重新回到决策环节
      */
     default boolean shouldAgentContinue(TeamTrace trace, Agent agent) {
         return true;
     }
 
     /**
-     * 成员调度生命周期：具体成员智能体执行完成后触发
-     * <p>此时成员执行的结果已合并入团队上下文 {@link TeamTrace}。</p>
+     * 成员执行结束：具体成员智能体任务完成后触发
+     * <p>此时该成员的输出已同步至 {@link TeamTrace} 的历史记录中，可用于结果后置处理。</p>
+     *
+     * @param agent 已完成执行的智能体
      */
     default void onAgentEnd(TeamTrace trace, Agent agent) {}
-
-    /**
-     * 团队生命周期：团队整体任务结束时触发
-     */
-    default void onTeamEnd(TeamTrace trace) {}
 }
