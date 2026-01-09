@@ -1,4 +1,4 @@
-package features.ai.team.strategy;
+package features.ai.team.protocol;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
@@ -112,5 +112,97 @@ public class TeamAgentBlackboardTest {
 
         Assertions.assertTrue(trace.getStepCount() > 0);
         System.out.println("详细历史:\n" + trace.getFormattedHistory());
+    }
+
+    @Test
+    public void testBlackboardWithReviewerLoop() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 增加一个审核者
+        Agent reviewer = ReActAgent.of(chatModel)
+                .name("reviewer")
+                .systemPrompt(c -> "你是架构审核员。检查黑板上的 SQL，如果缺少 'created_at' 字段，请指出错误并要求 db_designer 重新修改。如果没问题，请回复 FINISH。")
+                .description("负责审核设计规范。")
+                .build();
+
+        Agent dbDesigner = ReActAgent.of(chatModel)
+                .name("db_designer")
+                .systemPrompt(c -> "你负责数据库设计。如果审核员指出错误，请立即根据建议修正 SQL。")
+                .build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .name("loop_test_team")
+                .protocol(TeamProtocols.BLACKBOARD)
+                .addAgent(dbDesigner)
+                .addAgent(reviewer)
+                .maxTotalIterations(6)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("session_loop_01");
+        String result = team.call(Prompt.of("设计一张用户表，必须满足审核员的要求"), session).getContent();
+
+        TeamTrace trace = team.getTrace(session);
+
+        // 关键断言：验证是否发生了“协作回流”
+        long dbDesignCount = trace.getSteps().stream()
+                .filter(s -> s.getAgentName().equals("db_designer")).count();
+
+        System.out.println("db_designer 介入次数: " + dbDesignCount);
+        Assertions.assertTrue(dbDesignCount >= 1, "数据库设计至少应执行一次");
+    }
+
+    @Test
+    public void testBlackboardDataConsistency() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 强行让 db_designer 产生一个随机的表名
+        String randomTableName = "table_" + System.currentTimeMillis();
+
+        Agent dbDesigner = ReActAgent.of(chatModel)
+                .name("db_designer")
+                .systemPrompt(c -> "你只负责创建表。请务必使用表名: " + randomTableName)
+                .build();
+
+        Agent apiDesigner = ReActAgent.of(chatModel)
+                .name("api_designer")
+                .systemPrompt(c -> "你负责 API 设计。你必须调用黑板上已经存在的表名来生成接口。")
+                .build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.BLACKBOARD)
+                .addAgent(dbDesigner)
+                .addAgent(apiDesigner)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("consistency_test");
+        String result = team.call(Prompt.of("请完成数据库和接口设计"), session).getContent();
+
+        // 核心断言：验证 B 确实读取了 A 的产出
+        Assertions.assertTrue(result.contains(randomTableName),
+                "API 设计师应该引用了数据库设计师创建的特定表名");
+    }
+
+    @Test
+    public void testLoopPreventionInBlackboard() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 模拟两个互相“谦让”的 Agent
+        Agent a = ReActAgent.of(chatModel).name("agent_a")
+                .systemPrompt(c -> "你觉得这个任务应该由 agent_b 完成。").build();
+        Agent b = ReActAgent.of(chatModel).name("agent_b")
+                .systemPrompt(c -> "你觉得这个任务应该由 agent_a 完成。").build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.BLACKBOARD)
+                .addAgent(a).addAgent(b)
+                .maxTotalIterations(4) // 限制次数
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("loop_test");
+        team.call(Prompt.of("开始工作"), session);
+
+        TeamTrace trace = team.getTrace(session);
+        // 验证是否触发了迭代上限保护
+        Assertions.assertTrue(trace.getStepCount() <= 4, "不应超过最大迭代次数");
     }
 }

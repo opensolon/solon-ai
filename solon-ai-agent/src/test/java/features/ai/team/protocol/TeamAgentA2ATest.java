@@ -13,11 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package features.ai.team.strategy;
+package features.ai.team.protocol;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
@@ -40,7 +39,6 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 public class TeamAgentA2ATest {
 
     @Test
-    @DisplayName("基础 A2A 协作测试：设计 -> 开发")
     public void testA2ABasicLogic() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
@@ -48,12 +46,27 @@ public class TeamAgentA2ATest {
         Agent designer = ReActAgent.of(chatModel)
                 .name("designer")
                 .description("UI/UX 设计师，负责产出界面设计方案。")
+                .systemPrompt(c -> "你是专业的 UI/UX 设计师。你的职责是：\n" +
+                        "1. 理解用户需求，设计界面布局和视觉风格\n" +
+                        "2. 提供详细的设计说明（颜色、字体、间距等）\n" +
+                        "3. 只有当用户需要具体的 HTML/CSS 代码实现时，才将任务转交给 developer\n" +
+                        "4. 不要轻易转交任务，首先尝试自己提供设计方案")
                 .build();
 
         // 定义开发：专注于代码实现
         Agent developer = ReActAgent.of(chatModel)
                 .name("developer")
                 .description("前端开发工程师，负责 HTML 和 CSS 代码实现。")
+                .systemPrompt(c -> "你是专业的前端开发工程师。你的职责是：\n" +
+                        "1. 接收设计师的设计方案，将其转化为可运行的 HTML/CSS 代码\n" +
+                        "2. 确保代码符合现代 Web 标准，具有响应式设计\n" +
+                        "3. 只有当你确实需要设计指导或创意建议时，才将任务转交给 designer\n" +
+                        "4. 当设计师通过 __transfer_to__ 工具转交给你一个完整的设计方案时，这已经是具体的设计要求，你应该直接生成代码\n" +
+                        "5. 代码生成完成后，应该直接输出 FINISH，而不是将任务转回给设计师\n" +
+                        "\n[协作原则]\n" +
+                        "- 设计师的设计方案 = 具体的设计要求\n" +
+                        "- 收到设计方案后，你的工作是编码，不是审查\n" +
+                        "- 代码生成是任务的终点，完成后输出 FINISH")
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
@@ -88,7 +101,6 @@ public class TeamAgentA2ATest {
     }
 
     @Test
-    @DisplayName("A2A 链式移交测试：研究者 -> 作者 -> 编辑")
     public void testA2AChainTransfer() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
@@ -118,7 +130,6 @@ public class TeamAgentA2ATest {
     }
 
     @Test
-    @DisplayName("A2A Memo 注入测试：验证备注信息透传")
     public void testA2AMemoInjection() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
@@ -141,29 +152,28 @@ public class TeamAgentA2ATest {
 
         TeamTrace trace = team.getTrace(session);
 
-        // 验证方式1：检查 protocolContext 中是否有 memo
-        String memoInContext = (String) trace.getProtocolContext().get("last_memo");
-        boolean memoCaptured = "KEY_INFO_999".equals(memoInContext);
+        // 验证方式1：检查 protocolContext 中是否有 memo（在 onTeamFinished 之后可能已被清理）
+        String memoInContext = (String) trace.getProtocolContext().get("TEST_MEMO_KEY");
 
-        // 验证方式2：检查决策文本是否包含 memo
-        String decision = trace.getLastDecision();
-        boolean memoInDecision = decision != null && decision.contains("KEY_INFO_999");
+        // 验证方式2：检查历史记录是否包含 memo（更可靠）
+        String history = trace.getFormattedHistory();
+        boolean memoInHistory = history.contains("KEY_INFO_999");
 
-        // 验证方式3：检查历史记录是否包含 memo
-        boolean memoInHistory = trace.getFormattedHistory().contains("KEY_INFO_999");
+        // 验证方式3：检查步骤内容
+        boolean memoInSteps = trace.getSteps().stream()
+                .anyMatch(step -> step.getContent() != null && step.getContent().contains("KEY_INFO_999"));
 
         System.out.println("Memo in context: " + memoInContext);
-        System.out.println("Supervisor Decision: " + decision);
-        System.out.println("Memo in decision: " + memoInDecision);
+        System.out.println("History: " + history);
         System.out.println("Memo in history: " + memoInHistory);
+        System.out.println("Memo in steps: " + memoInSteps);
 
-        // 只要有一个地方包含 memo 就认为测试通过
-        Assertions.assertTrue(memoCaptured || memoInDecision || memoInHistory,
-                "Memo 信息应通过 protocolContext、决策文本或历史记录传递");
+        // 只要历史记录或步骤中包含 memo 就认为测试通过
+        Assertions.assertTrue(memoInHistory || memoInSteps,
+                "Memo 信息应通过历史记录或步骤内容传递");
     }
 
     @Test
-    @DisplayName("A2A 鲁棒性测试：移交给不存在的 Agent")
     public void testA2AHallucinationDefense() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 

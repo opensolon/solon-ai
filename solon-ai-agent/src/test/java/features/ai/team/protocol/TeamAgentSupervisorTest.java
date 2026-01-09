@@ -1,4 +1,4 @@
-package features.ai.team.strategy;
+package features.ai.team.protocol;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
@@ -112,5 +112,69 @@ public class TeamAgentSupervisorTest {
         TeamTrace trace = team.getTrace(session);
         Assertions.assertNotNull(trace);
         System.out.println("自定义模式协作轨迹:\n" + trace.getFormattedHistory());
+    }
+
+    /**
+     * 测试：Supervisor 的多轮链式决策
+     * 验证：A 收集完成后，Supervisor 能否感知进度并指派 B 分析
+     */
+    @Test
+    public void testSupervisorChainDecision() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        Agent searcher = ReActAgent.of(chatModel).name("searcher")
+                .description("搜索员：负责查找事实。").build();
+        Agent summarizer = ReActAgent.of(chatModel).name("summarizer")
+                .description("总结员：负责对事实进行简短总结。").build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .addAgent(searcher)
+                .addAgent(summarizer)
+                .maxTotalIterations(5)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("session_chain_test");
+
+        // 强制要求两步走的复杂任务
+        String query = "先帮我搜一下 Solon 框架的最新版本，然后再总结它的主要特性。";
+        team.call(Prompt.of(query), session);
+
+        TeamTrace trace = team.getTrace(session);
+
+        // 核心断言：验证是否至少涉及了两个不同的 Agent
+        long workerCount = trace.getSteps().stream()
+                .map(s -> s.getAgentName())
+                .filter(name -> !name.equals(Agent.ID_SUPERVISOR)) // 排除主管自身
+                .distinct().count();
+
+        System.out.println("实际参与工作的专家数: " + workerCount);
+        Assertions.assertTrue(workerCount >= 2, "Supervisor 应该指派了多个专家完成链式任务");
+    }
+
+    /**
+     * 测试：无合适 Agent 时的 Supervisor 响应
+     * 验证：当所有成员都不匹配时，Supervisor 是否会陷入死循环
+     */
+    @Test
+    public void testSupervisorWithNoMatch() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        Agent javaDev = ReActAgent.of(chatModel).name("java_dev")
+                .description("只懂 Java 后端开发。").build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .addAgent(javaDev)
+                .maxTotalIterations(3) // 设小一点，防止死循环
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("session_no_match");
+
+        // 发送一个完全不相关的厨师任务
+        String result = team.call(Prompt.of("教我如何做一顿正宗的川菜"), session).getContent();
+
+        System.out.println("无法处理时的结果: " + result);
+
+        TeamTrace trace = team.getTrace(session);
+        Assertions.assertTrue(trace.getStepCount() <= 3, "应该在有限步数内停止");
     }
 }

@@ -1,4 +1,4 @@
-package features.ai.team.strategy;
+package features.ai.team.protocol;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
@@ -146,5 +146,56 @@ public class TeamAgentSwarmTest {
 
         System.out.println("\n协作轨迹详情:\n" + trace.getFormattedHistory());
         System.out.println("=== 测试结束 ===\n");
+    }
+
+    /**
+     * 测试：Swarm 动态分发逻辑
+     * <p>场景：分发员根据输入类型，动态决定移交给后端开发还是前端开发。</p>
+     */
+    @Test
+    public void testSwarmDynamicDispatch() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 定义具备分发能力的初始 Agent
+        Agent dispatcher = ReActAgent.of(chatModel)
+                .name("Dispatcher")
+                .description("分析用户的任务类型。如果是 UI/页面相关，移交给 Designer；如果是逻辑/接口相关，移交给 Developer。")
+                .build();
+
+        Agent designer = ReActAgent.of(chatModel)
+                .name("Designer")
+                .description("负责处理前端样式和 UI 设计任务。")
+                .build();
+
+        Agent developer = ReActAgent.of(chatModel)
+                .name("Developer")
+                .description("负责处理后端逻辑和数据库任务。")
+                .build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.SWARM)
+                .addAgent(dispatcher)
+                .addAgent(designer)
+                .addAgent(developer)
+                .build();
+
+        // 2. 发起一个纯后端的任务
+        AgentSession session = InMemoryAgentSession.of("session_dynamic_swarm");
+        String query = "请帮我写一个复杂的 SQL 查询来优化用户订单表。";
+
+        String result = team.call(Prompt.of(query), session).getContent();
+
+        System.out.println("=== Swarm 动态分发结果 ===");
+        TeamTrace trace = team.getTrace(session);
+
+        // 3. 验证路由逻辑
+        boolean handledByDev = trace.getSteps().stream().anyMatch(s -> "Developer".equals(s.getAgentName()));
+        boolean handledByDesigner = trace.getSteps().stream().anyMatch(s -> "Designer".equals(s.getAgentName()));
+
+        System.out.println("后端开发是否参与: " + handledByDev);
+        System.out.println("UI设计师是否参与: " + handledByDesigner);
+
+        Assertions.assertTrue(handledByDev, "后端任务理应由 Developer 处理");
+        Assertions.assertFalse(handledByDesigner, "后端任务不应惊动 Designer");
     }
 }

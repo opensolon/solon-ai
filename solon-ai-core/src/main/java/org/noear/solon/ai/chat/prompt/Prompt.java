@@ -103,6 +103,13 @@ public class Prompt implements ChatPrompt, Serializable {
     /**
      * 构建
      */
+    public static Prompt of(Collection<ChatMessage> messages) {
+        return new Prompt().addMessage(messages);
+    }
+
+    /**
+     * 构建
+     */
     public static Prompt of(String... messages) {
         return new Prompt().addMessage(messages);
     }

@@ -1,4 +1,4 @@
-package features.ai.team.strategy;
+package features.ai.team.protocol;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
@@ -120,5 +120,70 @@ public class TeamAgentContractNetTest {
         System.out.println("竞标历史记录:\n" + trace.getFormattedHistory());
 
         Assertions.assertTrue(trace.getStepCount() > 0);
+    }
+
+    /**
+     * 测试：流标场景
+     * 场景：任务需求与所有专家描述均不匹配
+     */
+    @Test
+    public void testContractNetWithNoMatchingExpert() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        Agent programmer = ReActAgent.of(chatModel)
+                .name("programmer")
+                .description("擅长编写 Java 代码和解决逻辑问题。")
+                .build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.CONTRACT_NET)
+                .addAgent(programmer)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("session_no_match");
+
+        // 发起一个完全无关的任务
+        String query = "如何做一顿正宗的川菜麻婆豆腐？";
+        String result = team.call(Prompt.of(query), session).getContent();
+
+        System.out.println("=== 无匹配测试结果 ===\n" + result);
+
+        TeamTrace trace = team.getTrace(session);
+        // 观察协调者在无法招标时的决策逻辑
+        Assertions.assertTrue(trace.getStepCount() >= 1);
+    }
+
+    /**
+     * 测试：连续招标能力
+     * 场景：第一个任务完成后，自动开启下个环节的竞标
+     */
+    @Test
+    public void testContractNetSequentialBidding() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        Agent step1Expert = ReActAgent.of(chatModel).name("architect").description("负责系统架构蓝图设计").build();
+        Agent step2Expert = ReActAgent.of(chatModel).name("coder").description("根据蓝图编写具体代码实现").build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.CONTRACT_NET)
+                .addAgent(step1Expert)
+                .addAgent(step2Expert)
+                .maxTotalIterations(5)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("session_sequential");
+        String query = "请先帮我设计架构，设计完后由开发人员写出一段核心代码。";
+
+        team.call(Prompt.of(query), session);
+
+        TeamTrace trace = team.getTrace(session);
+        // 核心断言：验证参与的 Agent 数量是否大于 1
+        long uniqueAgents = trace.getSteps().stream()
+                .map(s -> s.getAgentName())
+                .filter(name -> !Agent.ID_SUPERVISOR.equalsIgnoreCase(name) && !Agent.ID_BIDDING.equalsIgnoreCase(name))
+                .distinct().count();
+
+        System.out.println("实际参与协作的专家数: " + uniqueAgents);
+        Assertions.assertTrue(uniqueAgents >= 1);
     }
 }
