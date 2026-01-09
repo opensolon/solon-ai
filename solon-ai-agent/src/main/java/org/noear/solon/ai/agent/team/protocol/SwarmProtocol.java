@@ -43,7 +43,6 @@ public class SwarmProtocol extends TeamProtocolBase {
 
     @Override
     public void buildGraph(GraphSpec spec) {
-        String traceKey = "__" + config.getName();
         String firstAgent = config.getAgentMap().keySet().iterator().next();
 
         spec.addStart(Agent.ID_START).linkAdd(firstAgent); // 调整点：直接切入第一个 Agent
@@ -52,7 +51,7 @@ public class SwarmProtocol extends TeamProtocolBase {
                 spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-            linkAgents(ns, traceKey);
+            linkAgents(ns);
         }).linkAdd(Agent.ID_END);
 
         spec.addEnd(Agent.ID_END);
@@ -69,11 +68,12 @@ public class SwarmProtocol extends TeamProtocolBase {
         Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext().get("agent_usage");
 
         if (usage != null && !usage.isEmpty()) {
-            sb.append("\n=== Agent Usage Statistics ===\n");
+            sb.append("\n### Collaboration Health Check\n"); // 使用 Markdown 增强语感
             usage.forEach((name, count) -> {
-                sb.append("- ").append(name).append(": ").append(count).append(" times\n");
+                sb.append("- ").append(name).append(": invoked ").append(count).append(" times\n");
             });
-            sb.append("Note: If an agent has been called multiple times without progressing the goal, consider switching to another expert or finishing the task.\n");
+            // [调整] 提示语强化，引导 LLM 意识到可能的重复
+            sb.append("\nNote: If an agent is stuck or repeating, change strategy or 'finish' with current findings.");
         }
     }
 

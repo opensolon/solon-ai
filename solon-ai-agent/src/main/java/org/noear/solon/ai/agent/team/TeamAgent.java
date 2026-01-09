@@ -152,60 +152,42 @@ public class TeamAgent implements Agent {
 
     /**
      * 触发团队协作调用
-     * <p>流程：初始化/更新状态 -> 执行流图 -> 提取结果 -> 资源清理/回调通知</p>
+     * <p>流程：初始化环境 -> 驱动流图 -> 自动提取协作结论 -> 生命周期回调</p>
      */
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
-        // [阶段1：状态初始化] 尝试复用或创建新的执行追踪实例
         FlowContext context = session.getSnapshot();
-        TeamTrace trace = context.getAs(traceKey);
+        TeamTrace trace = context.computeIfAbsent(traceKey, k -> new TeamTrace(prompt));
 
-        if (trace == null) {
-            trace = new TeamTrace(prompt);
-            context.put(traceKey, trace);
-        }
-
+        // [优化点] 统一准备运行时上下文
         trace.prepare(config, session, name);
 
         if (prompt != null) {
-            // 记录流节点的进入，支持多级嵌套追踪
             context.trace().recordNode(graph, null);
-
             trace.setPrompt(prompt);
             trace.resetIterationsCount();
-        } else {
-            prompt = trace.getPrompt();
-            trace.resetIterationsCount();
         }
 
-        Objects.requireNonNull(prompt, "Missing prompt!");
-
-        //开始事件
-        for (RankEntity<TeamInterceptor> item : config.getInterceptorList()) {
-            item.target.onAgentStart(trace);
-        }
-
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamAgent [{}] starting: {}", this.name, prompt.getUserContent());
-        }
+        // 触发开始拦截器
+        config.getInterceptorList().forEach(item -> item.target.onAgentStart(trace));
 
         try {
+            // [优化点] 历史注入逻辑保持精简
             if (prompt != null) {
-                for (ChatMessage message : prompt.getMessages()) {
-                    session.addHistoryMessage(this.name, message);
-                }
+                prompt.getMessages().forEach(m -> session.addHistoryMessage(this.name, m));
             }
 
-            // [阶段2：流图执行] 在特定的上下文范围内驱动 FlowEngine 执行协作逻辑
+            // [阶段：流图驱动]
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-                context.with(Agent.KEY_PROTOCOL, config.getProtocol(), ()->{
+                context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
                     flowEngine.eval(graph, context);
                 });
             });
 
-            // [阶段3：结果提取] 优先获取明确的最终答案，否则取最后一个执行步骤的内容
+            // [阶段：结果提取]
+            // 优先取最终答案，若无则取 trace 记录的最后一步有效产出
             String result = trace.getFinalAnswer();
-            if (result == null && trace.getStepCount() > 0) {
-                result = trace.getSteps().get(trace.getStepCount() - 1).getContent();
+            if (result == null) {
+                result = trace.getLastStepContent();
             }
 
             trace.setFinalAnswer(result);
@@ -215,25 +197,17 @@ public class TeamAgent implements Agent {
             }
 
             AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-
             session.addHistoryMessage(this.name, assistantMessage);
             session.updateSnapshot(context);
 
-            //结束事件
-            for (RankEntity<TeamInterceptor> item : config.getInterceptorList()) {
-                item.target.onAgentEnd(trace);
-            }
+            // 触发结束拦截器
+            config.getInterceptorList().forEach(item -> item.target.onAgentEnd(trace));
 
             return assistantMessage;
+
         } finally {
-            // [阶段4：生命周期销毁] 无论成功失败，触发拦截器和协议的清理回调
-            if (config != null) {
-                try {
-                    config.getProtocol().onTeamFinished(context, trace);
-                } catch (Throwable e) {
-                    LOG.warn("TeamAgent [{}] finalization failed", name, e);
-                }
-            }
+            // 确保协议资源得到释放
+            config.getProtocol().onTeamFinished(context, trace);
         }
     }
 

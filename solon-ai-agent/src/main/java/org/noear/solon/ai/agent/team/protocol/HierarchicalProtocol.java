@@ -41,12 +41,10 @@ public class HierarchicalProtocol extends TeamProtocolBase {
 
     @Override
     public void buildGraph( GraphSpec spec) {
-        String traceKey = "__" + config.getName();
-
         spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-            linkAgents(ns, traceKey);
+            linkAgents(ns);
         }).linkAdd(Agent.ID_END);
 
         config.getAgentMap().values().forEach(a ->

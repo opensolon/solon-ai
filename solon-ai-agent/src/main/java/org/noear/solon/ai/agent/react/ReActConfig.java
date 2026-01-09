@@ -288,4 +288,8 @@ public class ReActConfig {
     public ReActPromptProvider getPromptProvider() {
         return promptProvider;
     }
+
+    public Locale getLocale() {
+        return promptProvider.getLocale();
+    }
 }

@@ -55,6 +55,8 @@ public class SequentialProtocol extends HierarchicalProtocol {
     @Override
     public boolean shouldSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
         List<String> agentNames = new ArrayList<>(trace.getConfig().getAgentMap().keySet());
+
+        // [调整点] 这里的 nextIndex 直接映射当前的迭代计数
         int nextIndex = trace.getIterationsCount();
 
         if (nextIndex < agentNames.size()) {
@@ -62,10 +64,10 @@ public class SequentialProtocol extends HierarchicalProtocol {
             trace.setRoute(nextAgent);
         } else {
             trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer("Sequential task completed.");
+            // 这里不需要设置 FinalAnswer，TeamAgent 会自动取最后一步的内容
         }
-        trace.nextIterations();
 
+        // trace.nextIterations(); // [移除] 交给 SupervisorTask 统一处理
         return true;
     }
 }

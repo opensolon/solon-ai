@@ -88,22 +88,16 @@ public interface Agent extends NamedTaskComponent {
     default void run(FlowContext context, Node node) throws Throwable {
         context.put(KEY_LAST_AGENT_NAME, name());
 
-        AgentSession session = context.getAs(KEY_SESSION);
-        if (session == null) {
-            session = new InMemoryAgentSession("tmp");
-            context.put(KEY_SESSION, session);
-        }
+        AgentSession session = context.computeIfAbsent(KEY_SESSION, k -> new InMemoryAgentSession("tmp"));
 
         String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
-        Prompt originalPrompt = (trace != null) ? trace.getPrompt() : null;
 
-        Prompt effectivePrompt = originalPrompt;
+        // [优化点] 协议介入：动态准备针对当前 Agent 的提示词
+        Prompt effectivePrompt = null;
         if (trace != null) {
             effectivePrompt = trace.getProtocol().prepareAgentPrompt(
-                    trace,
-                    this,
-                    originalPrompt,
+                    trace, this, trace.getPrompt(),
                     trace.getConfig().getPromptProvider().getLocale());
         }
 
@@ -111,15 +105,13 @@ public interface Agent extends NamedTaskComponent {
         AssistantMessage msg = call(effectivePrompt, session);
         long duration = System.currentTimeMillis() - start;
 
+        // [优化点] 自动将执行结果存入轨迹
         if (trace != null) {
-            String result = msg.getContent();
-            if (result == null) {
-                result = "";
+            String result = (msg.getContent() == null) ? "" : msg.getContent().trim();
+            if (result.isEmpty()) {
+                result = "Agent " + name() + " returned no content.";
             }
-
-            String stepContent = result.trim().isEmpty() ?
-                    "No valid output is produced" : result;
-            trace.addStep(name(), stepContent, duration);
+            trace.addStep(name(), result, duration);
         }
     }
 

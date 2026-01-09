@@ -92,6 +92,14 @@ public class SupervisorTask implements NamedTaskComponent {
                 return;
             }
 
+            // [优化点] 增加死循环预检逻辑
+            if (trace.isLooping()) {
+                LOG.warn("TeamAgent [{}] loop detected! Emergency stop.", config.getName());
+                trace.setRoute(Agent.ID_END);
+                trace.setFinalAnswer(trace.getLastAgentContent()); // 尝试以最后有效的专家结论结尾
+                return;
+            }
+
             // 2. 预检：判断是否已达到最大迭代次数或已明确结束
             if (Agent.ID_END.equals(trace.getRoute()) ||
                     trace.getIterationsCount() >= config.getMaxTotalIterations()) {
@@ -113,44 +121,31 @@ public class SupervisorTask implements NamedTaskComponent {
     }
 
     /**
-     * 驱动大语言模型进行调度
+     * 驱动大语言模型进行路由调度
      */
     private void dispatch(FlowContext context, TeamTrace trace) throws Exception {
-        // 1. [协议生命周期 - 指令准备] 获取协议动态注入的指令（如：黑板数据、约束规则等）
         StringBuilder protocolExt = new StringBuilder();
         config.getProtocol().prepareSupervisorInstruction(context, trace, protocolExt);
 
-        // 2. 组装提示词（包含系统 Prompt + 协作历史）
         String basePrompt = config.getPromptProvider().getSystemPrompt(trace);
-        String enhancedPrompt = (protocolExt.length() > 0)
-                ? basePrompt + "\n\n=== Protocol Extensions ===\n" + protocolExt
+
+        // [优化点] 强化系统指令的分段标识
+        String finalSystemPrompt = (protocolExt.length() > 0)
+                ? basePrompt + "\n\n### Additional Protocol Rules\n" + protocolExt
                 : basePrompt;
 
+        // [优化点] 利用 iterationCounter 自增，并在 User Prompt 中明确当前轮次
         List<ChatMessage> messages = Arrays.asList(
-                ChatMessage.ofSystem(enhancedPrompt),
-                ChatMessage.ofUser("Collaboration History:\n" + trace.getFormattedHistory() +
-                        "\n\nCurrent iteration: " + trace.getIterationsCount() +
-                        "\nPlease decide the next action:")
+                ChatMessage.ofSystem(finalSystemPrompt),
+                ChatMessage.ofUser("## Collaboration History\n" + trace.getFormattedHistory() +
+                        "\n\n---\nCurrent Iteration: " + trace.nextIterations() +
+                        "\nPlease decide the next agent or 'finish':")
         );
 
-        // 3. 调用 LLM 并获取决策建议
         String decision = callWithRetry(trace, messages);
-
-        // 4. 清理决策文本（防止 LLM 复读历史信息）
-        if (decision.contains("Collaboration History:")) {
-            decision = decision.split("Collaboration History:")[0].trim();
-        }
-
-        // 5. 将原始决策记录到轨迹中，供后续工具或协议分析
         trace.setLastDecision(decision);
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamAgent [{}] supervisor decision: {}", config.getName(), decision);
-        }
-
-        // 6. 进行决策解析与路由派发
         commitRoute(trace, decision, context);
-        trace.nextIterations();
     }
 
     /**

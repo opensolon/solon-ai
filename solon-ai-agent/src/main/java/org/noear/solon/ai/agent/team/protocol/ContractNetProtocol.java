@@ -42,13 +42,12 @@ public class ContractNetProtocol extends TeamProtocolBase {
 
     @Override
     public void buildGraph(GraphSpec spec) {
-        String traceKey = "__" + config.getName();
-
         spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-            ns.linkAdd(Agent.ID_BIDDING, l -> l.title("route = " + Agent.ID_BIDDING).when(ctx -> Agent.ID_BIDDING.equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
-            linkAgents(ns, traceKey);
+            ns.linkAdd(Agent.ID_BIDDING, l -> l.title("route = " + Agent.ID_BIDDING)
+                    .when(ctx -> Agent.ID_BIDDING.equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
+            linkAgents(ns);
         }).linkAdd(Agent.ID_END);
 
         spec.addActivity(new ContractNetBiddingTask(config)).linkAdd(Agent.ID_SUPERVISOR);

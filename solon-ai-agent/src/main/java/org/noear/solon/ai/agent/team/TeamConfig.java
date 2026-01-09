@@ -260,4 +260,8 @@ public class TeamConfig {
     public TeamPromptProvider getPromptProvider() {
         return promptProvider;
     }
+
+    public Locale getLocale() {
+        return promptProvider.getLocale();
+    }
 }

@@ -68,7 +68,7 @@ public class A2AProtocol extends TeamProtocolBase {
 
         // 路由器配置
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-            linkAgents(ns, "__" + config.getName());
+            linkAgents(ns);
         }).linkAdd(Agent.ID_END);
 
         spec.addEnd(Agent.ID_END);
@@ -135,26 +135,24 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        // [语义路由解析] 优先级高于正则匹配
         String lastAgentName = context.getAs(Agent.KEY_LAST_AGENT_NAME);
         if (Utils.isEmpty(lastAgentName)) return null;
 
+        // [调整点] 统一从 FlowContext 获取 Agent 自身的轨迹
         AgentTrace latestTrace = context.getAs("__" + lastAgentName);
 
-        // 1. 尝试从 ReAct 轨迹中结构化提取 Memo 和 Target
         if (latestTrace instanceof ReActTrace) {
             ReActTrace rt = (ReActTrace) latestTrace;
 
-            // 提取并存储 Memo
+            // 提取 Memo 并存入 ProtocolContext (用于下个节点的 prepareAgentPrompt)
             String memo = extractValueFromToolCalls(rt, "memo");
             if (Utils.isNotEmpty(memo)) {
                 trace.getProtocolContext().put(KEY_LAST_MEMO, memo);
             }
 
-            // 提取目标 Agent
+            // 优先返回显式 target
             String target = extractValueFromToolCalls(rt, "target");
             if (Utils.isNotEmpty(target)) {
-                // 如果能从 ToolCall 直接拿到 Target，这是最精准的物理路由
                 return target;
             }
         }

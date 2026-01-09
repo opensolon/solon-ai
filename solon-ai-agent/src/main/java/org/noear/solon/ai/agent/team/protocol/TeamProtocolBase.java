@@ -31,12 +31,14 @@ import java.util.Locale;
  */
 public abstract class TeamProtocolBase implements TeamProtocol {
     protected final TeamConfig config;
+    protected final String traceKey;
 
     public TeamProtocolBase(TeamConfig config) {
         this.config = config;
+        this.traceKey = "__" + config.getName();
     }
 
-    protected void linkAgents(NodeSpec ns, String traceKey) {
+    protected void linkAgents(NodeSpec ns) {
         for (String agentName : config.getAgentMap().keySet()) {
             ns.linkAdd(agentName, l -> l.title("route = " + agentName).when(ctx ->
                     agentName.equalsIgnoreCase(ctx.<TeamTrace>getAs(traceKey).getRoute())));
