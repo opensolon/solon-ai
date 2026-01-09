@@ -71,12 +71,12 @@ public class TeamTrace implements AgentTrace {
     /**
      * 当前团队协作的迭代次数计数器（用于防止失控或达到最大深度限制）
      */
-    private final AtomicInteger iterations;
+    private final AtomicInteger iterationCounter;
 
     /**
      * 协议相关上下文（供不同协作协议存储自定义的运行时数据）
      */
-    private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
+    private final Map<String, Object> metadata = new ConcurrentHashMap<>();
 
     /**
      * 团队输出的最终答案
@@ -97,7 +97,7 @@ public class TeamTrace implements AgentTrace {
      * 默认构造函数（主要用于反序列化）
      */
     public TeamTrace() {
-        this.iterations = new AtomicInteger(0);
+        this.iterationCounter = new AtomicInteger(0);
     }
 
     /**
@@ -199,28 +199,28 @@ public class TeamTrace implements AgentTrace {
      * 获取当前迭代次数
      */
     public int getIterationsCount() {
-        return iterations.get();
+        return iterationCounter.get();
     }
 
     /**
      * 重置迭代次数
      */
     public void resetIterationsCount() {
-        iterations.set(0);
+        iterationCounter.set(0);
     }
 
     /**
      * 增加并获取下一次迭代计数
      */
     public int nextIterations() {
-        return iterations.incrementAndGet();
+        return iterationCounter.incrementAndGet();
     }
 
     /**
      * 获取协议上下文 Map
      */
-    public Map<String, Object> getProtocolContext() {
-        return protocolContext;
+    public Map<String, Object> getMetadata() {
+        return metadata;
     }
 
     /**

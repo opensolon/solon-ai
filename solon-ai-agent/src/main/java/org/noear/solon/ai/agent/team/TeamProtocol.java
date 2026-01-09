@@ -93,7 +93,7 @@ public interface TeamProtocol extends NonSerializable {
      * [阶段：决策拦截] 拦截主管（Supervisor）的执行逻辑
      * <p>用于实现确定性路由。若返回 true，将跳过 LLM 智能决策逻辑，由协议完全自主接管。 </p>
      */
-    default boolean interceptSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
+    default boolean shouldSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
         return false;
     }
 
@@ -116,7 +116,7 @@ public interface TeamProtocol extends NonSerializable {
      * @param decision LLM 给出的原始决策文本
      * @return 若返回 true，表示协议已完成路由接管，将忽略通用的 Agent 名称匹配。
      */
-    default boolean interceptSupervisorRouting(FlowContext context, TeamTrace trace, String decision) {
+    default boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         return false;
     }
 

@@ -73,7 +73,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public boolean interceptSupervisorRouting(FlowContext context, TeamTrace trace, String decision) {
+    public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         if (decision.toUpperCase().contains(Agent.ID_BIDDING.toUpperCase())) {
             trace.setRoute(Agent.ID_BIDDING);
             return true;

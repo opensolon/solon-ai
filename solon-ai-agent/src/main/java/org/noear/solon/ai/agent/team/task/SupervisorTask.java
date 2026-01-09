@@ -100,12 +100,12 @@ public class SupervisorTask implements NamedTaskComponent {
             }
 
             // 3. [协议生命周期 - 执行拦截] 询问协议是否接管执行逻辑（如顺序模式可能不通过 LLM 决策）
-            if (config.getProtocol().interceptSupervisorExecute(context, trace)) {
+            if (config.getProtocol().shouldSupervisorExecute(context, trace)) {
                 return;
             }
 
-            // 4. 进入基于 LLM 的智能决策流程
-            runIntelligent(context, trace);
+            // 4. 进入基于 LLM 调度
+            dispatch(context, trace);
 
         } catch (Exception e) {
             handleError(context, e);
@@ -113,9 +113,9 @@ public class SupervisorTask implements NamedTaskComponent {
     }
 
     /**
-     * 驱动大语言模型进行智能决策
+     * 驱动大语言模型进行调度
      */
-    private void runIntelligent(FlowContext context, TeamTrace trace) throws Exception {
+    private void dispatch(FlowContext context, TeamTrace trace) throws Exception {
         // 1. [协议生命周期 - 指令准备] 获取协议动态注入的指令（如：黑板数据、约束规则等）
         StringBuilder protocolExt = new StringBuilder();
         config.getProtocol().prepareSupervisorInstruction(context, trace, protocolExt);
@@ -149,7 +149,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         // 6. 进行决策解析与路由派发
-        parseAndRoute(trace, decision, context);
+        commitRoute(trace, decision, context);
         trace.nextIterations();
     }
 
@@ -198,7 +198,7 @@ public class SupervisorTask implements NamedTaskComponent {
      * @param decision 原始决策文本
      * @param context  执行上下文
      */
-    private void parseAndRoute(TeamTrace trace, String decision, FlowContext context) {
+    private void commitRoute(TeamTrace trace, String decision, FlowContext context) {
         if (Assert.isEmpty(decision)) {
             trace.setRoute(Agent.ID_END);
             return;
@@ -212,7 +212,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         // 2. [二级路由：拦截器干预] 兼容旧逻辑，用于处理不改变路由但需要处理副作用的情况
-        if (config.getProtocol().interceptSupervisorRouting(context, trace, decision)) {
+        if (config.getProtocol().shouldSupervisorRoute(context, trace, decision)) {
             return;
         }
 

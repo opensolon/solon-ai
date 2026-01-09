@@ -53,7 +53,7 @@ public class SequentialProtocol extends HierarchicalProtocol {
     }
 
     @Override
-    public boolean interceptSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
+    public boolean shouldSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
         List<String> agentNames = new ArrayList<>(trace.getConfig().getAgentMap().keySet());
         int nextIndex = trace.getIterationsCount();
 
