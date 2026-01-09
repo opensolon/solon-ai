@@ -24,11 +24,12 @@ import org.noear.solon.lang.NonSerializable;
 
 import java.util.Locale;
 
+
 /**
  * 团队协作协议（Team Collaboration Protocol）
  *
  * <p>定义 Agent 团队的协作模式（如 SEQUENTIAL, SWARM, HIERARCHICAL 等）。</p>
- * <p>核心职责包括：构建拓扑结构、动态工具注入、提示词定制以及对协作路由的精准干预。</p>
+ * <p>核心职责包括：拓扑构建、工具与指令注入、提示词定制、以及对协作路由的生命周期干预。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -48,30 +49,30 @@ public interface TeamProtocol extends NonSerializable {
     void buildGraph(GraphSpec spec);
 
     /**
-     * [阶段：执行前] 为执行中的智能体注入专属工具
-     * <p>常用于注入协议相关的系统级工具（如：__transfer_to__）。</p>
+     * [阶段：执行前] 为当前执行的 Agent 注入协议专属工具
+     * <p>常用于注入协作控制工具（如：__transfer_to__）。</p>
      *
-     * @param agent 当前执行的智能体
+     * @param agent 执行中的智能体
      * @param trace 运行轨迹上下文
      */
     default void injectAgentTools(Agent agent, ReActTrace trace) { }
 
     /**
-     * [阶段：执行前] 为智能体注入系统指令（System Instruction）
+     * [阶段：执行前] 为当前执行的 Agent 注入系统指令（System Instruction）
      * <p>用于向 Agent 传达当前协议下的协作规范与行为约束。</p>
      *
-     * @param agent  当前执行的智能体
+     * @param agent  执行中的智能体
      * @param locale 语言环境
      * @param sb     指令构建器
      */
     default void injectAgentInstruction(Agent agent, Locale locale, StringBuilder sb) { }
 
     /**
-     * [阶段：执行前] 动态准备智能体的任务提示词（Task Prompt）
-     * <p>在 Agent 运行前执行，用于裁剪上下文、衔接前序 Agent 的备注（Memo）或注入黑板状态。</p>
+     * [阶段：执行前] 动态准备当前 Agent 的任务提示词（Task Prompt）
+     * <p>在 Agent 运行前触发，用于裁剪上下文、衔接前序 Memo 或注入黑板状态。</p>
      *
      * @param originalPrompt 原始提示词
-     * @return 最终交付执行的提示词
+     * @return 最终交付执行的提示词（默认返回原提示词）
      */
     default Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
         return originalPrompt;
@@ -79,57 +80,56 @@ public interface TeamProtocol extends NonSerializable {
 
     /**
      * [阶段：初始化] 注入主管（Supervisor）的静态系统提示词
-     * <p>仅在团队初始化时触发一次，定义路由器的基本性格与准则。</p>
+     * <p>仅在团队初始化时触发一次，定义路由决策者的基本性格与调度准则。</p>
      */
     default void injectSupervisorInstruction(Locale locale, StringBuilder sb) { }
 
     /**
      * [阶段：决策前] 准备主管（Supervisor）决策时的动态补充指令
-     * <p>在每一轮路由决策前触发，可动态注入当前执行进度统计、冲突信息等。</p>
+     * <p>在每一轮路由决策前触发，用于注入实时进度统计、环境感知信息或冲突解决规则。</p>
      */
     default void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) { }
 
     /**
-     * [阶段：决策拦截] 拦截主管（Supervisor）的执行逻辑
-     * <p>用于实现确定性路由。若返回 true，将跳过 LLM 智能决策逻辑，由协议完全自主接管。 </p>
+     * [阶段：决策拦截] 拦截主管（Supervisor）的逻辑执行
+     * <p>若返回 true，将跳过 LLM 智能决策逻辑，由协议逻辑完全接管调度权（如顺序模式）。</p>
      */
     default boolean shouldSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
         return false;
     }
 
     /**
-     * [语义解析] 将 LLM 的决策文本转化为物理路由目标
-     * 优先级高于默认的正则匹配。
+     * [语义解析] 将 LLM 决策文本转化为逻辑路由目标
+     * <p>优先级高于系统的正则匹配。用于精准解析 ToolCall、XML 或协议特定信号词。</p>
+     *
      * @param decision LLM 给出的原始决策文本
-     * @return 目标 Agent 名称或 ID_END；返回 null 则由 Supervisor 默认逻辑处理
+     * @return 目标 Agent 名称或 ID_END；返回 null 则交由系统默认匹配逻辑处理
      */
     default String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        // 示例：A2A 协议可以在这里检查 decision 是否包含特殊工具调用，
-        // 如果包含，直接解析出 target 参数并返回，不需要走正则匹配
         return null;
     }
 
     /**
      * [阶段：路由干预] 干预主管（Supervisor）的路由决策结果
-     * <p>在 LLM 给出决策后触发，用于修正幻觉、解析协议特定信号词（如工具调用标记）并强制转向。</p>
+     * <p>在路由目标确定后触发。若返回 true，表示协议已接管并自主完成路由转向。</p>
      *
      * @param decision LLM 给出的原始决策文本
-     * @return 若返回 true，表示协议已完成路由接管，将忽略通用的 Agent 名称匹配。
      */
     default boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         return false;
     }
 
     /**
-     * [阶段：路由转向] 路由目标确定后的回调
-     * <p>当下一个目标（Agent 或 End）明确后触发，常用于跨节点的数据同步或审计日志记录。</p>
-     * * @param nextAgent 下一个执行节点的标识
+     * [阶段：路由转向] 路由目标确定后的最终回调
+     * <p>当下一个目标明确后触发，常用于跨节点的上下文同步或审计日志记录。</p>
+     *
+     * @param nextAgent 下一个执行节点的标识
      */
     default void onSupervisorRouting(FlowContext context, TeamTrace trace, String nextAgent) { }
 
     /**
      * [阶段：销毁期] 团队任务结束后的清理回调
-     * <p>当任务到达终点（End）或发生异常中断时触发，用于归档执行轨迹或释放协议资源。</p>
+     * <p>当任务到达终点（End）或发生异常中断时触发，用于归档执行轨迹或释放协议相关资源。</p>
      */
     default void onTeamFinished(FlowContext context, TeamTrace trace) { }
 }
