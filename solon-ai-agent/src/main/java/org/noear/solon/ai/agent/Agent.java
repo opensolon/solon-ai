@@ -156,6 +156,8 @@ public interface Agent extends NamedTaskComponent {
             }
             trace.addStep(name(), result, duration);
 
+            trace.getProtocol().onAgentEnd(trace, this);
+
             trace.getConfig().getInterceptorList().forEach(item -> item.target.onAgentEnd(trace, this));
         }
     }

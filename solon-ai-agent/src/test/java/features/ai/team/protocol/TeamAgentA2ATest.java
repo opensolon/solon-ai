@@ -112,7 +112,7 @@ public class TeamAgentA2ATest {
                 .description("负责校对文稿并进行最终发布").build();
 
         TeamAgent team = TeamAgent.of(chatModel)
-                .protocol(TeamProtocols.A2A)
+                .protocol(c->TeamProtocols.A2A.create(c))
                 .addAgent(researcher, writer, editor)
                 .build();
 
