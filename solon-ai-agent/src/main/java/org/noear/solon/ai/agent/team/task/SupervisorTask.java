@@ -33,48 +33,43 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 团队协作调解任务（Team Supervisor / 决策中心）
- * <p>
- * 核心职责：
- * 1. 协调：作为团队的“大脑”，根据协作历史决定下一个执行者。
- * 2. 路由：解析 LLM 决策文本，将其转换为具体的 Flow 节点跳转指令。
- * 3. 拦截：支持通过 {@link org.noear.solon.ai.agent.team.TeamProtocol} 实现自定义的执行与路由拦截逻辑。
- * </p>
+ * 团队协作指挥任务 (Supervisor Task)
+ * <p>作为 AI 团队的决策大脑（Decision Center），负责根据协作轨迹、执行状态及预设协议，动态决定任务流向。</p>
+ *
+ * <p><b>核心生命周期：</b></p>
+ * <ul>
+ * <li>1. <b>状态感知</b>：提取当前 {@link TeamTrace} 执行痕迹并检查死循环风险。</li>
+ * <li>2. <b>协议预检</b>：允许 {@code TeamProtocol} 优先接管逻辑（实现固定逻辑分发）。</li>
+ * <li>3. <b>推理调度</b>：封装历史上下文，通过大模型（LLM）驱动语义决策。</li>
+ * <li>4. <b>多级路由解析</b>：从原始回复中精准提取目标 Agent 或结束标识。</li>
+ * <li>5. <b>异常熔断</b>：在决策失败或系统异常时，实现“安全着陆（Safe Landing）”。</li>
+ * </ul>
+ *
+ *
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8")
 public class SupervisorTask implements NamedTaskComponent {
-    /**
-     * 日志对象
-     */
     private static final Logger LOG = LoggerFactory.getLogger(SupervisorTask.class);
 
-    /**
-     * 团队配置引用
-     */
+    /** 关联的团队配置 */
     private final TeamConfig config;
 
-    /**
-     * 构造函数
-     *
-     * @param config 团队配置信息
-     */
     public SupervisorTask(TeamConfig config) {
         this.config = config;
     }
 
-    /**
-     * 组件名称（对应 ID_SUPERVISOR）
-     */
+    /** 标识为系统主管节点 */
     @Override
     public String name() {
         return Agent.ID_SUPERVISOR;
     }
 
     /**
-     * 核心运行逻辑（Flow 节点入口）
+     * 执行决策分发逻辑
+     * <p>由 Solon Flow 引擎调用，驱动团队向下一个状态演进。</p>
      */
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
@@ -83,7 +78,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         try {
-            // 1. 获取协作轨迹
+            // 获取当前协作流的唯一追踪实例
             String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
             TeamTrace trace = context.getAs(traceKey);
 
@@ -92,27 +87,27 @@ public class SupervisorTask implements NamedTaskComponent {
                 return;
             }
 
-            // [优化点] 增加死循环预检逻辑
+            // 智能死循环检测：若检测到 A-B-A 镜像死锁或单点复读，触发紧急避险
             if (trace.isLooping()) {
                 LOG.warn("TeamAgent [{}] loop detected! Emergency stop.", config.getName());
                 trace.setRoute(Agent.ID_END);
-                trace.setFinalAnswer(trace.getLastAgentContent()); // 尝试以最后有效的专家结论结尾
+                trace.setFinalAnswer(trace.getLastAgentContent());
                 return;
             }
 
-            // 2. 预检：判断是否已达到最大迭代次数或已明确结束
+            // 边界检查：迭代上限熔断
             if (Agent.ID_END.equals(trace.getRoute()) ||
                     trace.getIterationsCount() >= config.getMaxTotalIterations()) {
                 trace.setRoute(Agent.ID_END);
                 return;
             }
 
-            // 3. [协议生命周期 - 执行拦截] 询问协议是否接管执行逻辑（如顺序模式可能不通过 LLM 决策）
+            // 协议挂钩：某些协议（如流水线模式）在此处直接确定路由，无需消耗 LLM Token
             if (config.getProtocol().shouldSupervisorExecute(context, trace)) {
                 return;
             }
 
-            // 4. 进入基于 LLM 调度
+            // 核心驱动：进入基于推理的调度阶段
             dispatch(context, trace);
 
         } catch (Exception e) {
@@ -121,20 +116,21 @@ public class SupervisorTask implements NamedTaskComponent {
     }
 
     /**
-     * 驱动大语言模型进行路由调度
+     * 构造提示词并驱动大模型进行“下一步决策”
      */
     private void dispatch(FlowContext context, TeamTrace trace) throws Exception {
         StringBuilder protocolExt = new StringBuilder();
+        // 允许协议注入额外的运行时规则（如：必须先检查 A，再调用 B）
         config.getProtocol().prepareSupervisorInstruction(context, trace, protocolExt);
 
         String basePrompt = config.getPromptProvider().getSystemPrompt(trace);
 
-        // [优化点] 强化系统指令的分段标识
+        // 组装最终系统指令：基础指令 + 协议动态扩展
         String finalSystemPrompt = (protocolExt.length() > 0)
                 ? basePrompt + "\n\n### Additional Protocol Rules\n" + protocolExt
                 : basePrompt;
 
-        // [优化点] 利用 iterationCounter 自增，并在 User Prompt 中明确当前轮次
+        // 构建上下文：注入结构化协作历史、迭代深度标识
         List<ChatMessage> messages = Arrays.asList(
                 ChatMessage.ofSystem(finalSystemPrompt),
                 ChatMessage.ofUser("## Collaboration History\n" + trace.getFormattedHistory() +
@@ -142,18 +138,17 @@ public class SupervisorTask implements NamedTaskComponent {
                         "\nPlease decide the next agent or 'finish':")
         );
 
+        // 调用推理引擎，支持指数退避重试
         String decision = callWithRetry(trace, messages);
         trace.setLastDecision(decision);
 
+        // 提交路由指令，转换语义决策为物理流节点
         commitRoute(trace, decision, context);
     }
 
     /**
-     * 具备重试机制的 LLM 调用
-     *
-     * @param trace    协作轨迹
-     * @param messages 待发送的消息列表
-     * @return LLM 返回的决策文本
+     * 带韧性机制（Resilience）的大模型调用
+     * <p>应对网络抖动或模型临时不可用的场景，确保团队调度的稳定性。</p>
      */
     private String callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
         int maxRetries = config.getMaxRetries();
@@ -167,31 +162,24 @@ public class SupervisorTask implements NamedTaskComponent {
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
                     LOG.error("TeamAgent [{}] supervisor failed after {} retries", config.getName(), maxRetries, e);
-                    throw new RuntimeException("Failed after " + maxRetries + " retries", e);
+                    throw new RuntimeException("Supervisor dispatch failed after max retries", e);
                 }
 
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("TeamAgent [{}] supervisor call failed (retry: {}): {}", config.getName(), i, e.getMessage());
-                }
-
+                // 指数退避策略 (Retrying with Exponential Backoff)
                 try {
-                    // 采用指数退避策略进行重试延迟
                     Thread.sleep(config.getRetryDelayMs() * (i + 1));
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    throw new RuntimeException("Interrupted during retry", ie);
+                    throw new RuntimeException("Retry interrupted", ie);
                 }
             }
         }
-        throw new RuntimeException("Should not reach here");
+        throw new RuntimeException("Unreachable code");
     }
 
     /**
-     * 解析 LLM 决策文本并确定路由路径
-     *
-     * @param trace    协作轨迹
-     * @param decision 原始决策文本
-     * @param context  执行上下文
+     * 多级解析引擎：解析 LLM 原始决策文本并执行路由重定向
+     * <p>按优先级顺序：协议定制路由 > 拦截器干预 > Agent 名称模糊匹配 > 终结符识别。</p>
      */
     private void commitRoute(TeamTrace trace, String decision, FlowContext context) {
         if (Assert.isEmpty(decision)) {
@@ -199,24 +187,24 @@ public class SupervisorTask implements NamedTaskComponent {
             return;
         }
 
-        // 1. [一级路由：协议解析] 协议根据业务逻辑（如 ToolCall、XML、特定信号）精准解析目标
+        // 优先级 1：协议特定格式解析（如自定义 XML 标签或 JSON 路径）
         String protoRoute = config.getProtocol().resolveSupervisorRoute(context, trace, decision);
         if (Assert.isNotEmpty(protoRoute)) {
             routeTo(context, trace, protoRoute);
             return;
         }
 
-        // 2. [二级路由：拦截器干预] 兼容旧逻辑，用于处理不改变路由但需要处理副作用的情况
+        // 优先级 2：协议通用拦截
         if (config.getProtocol().shouldSupervisorRoute(context, trace, decision)) {
             return;
         }
 
-        // 3. [三级路由：模糊匹配] 默认的 Agent 名称匹配逻辑
+        // 优先级 3：基于当前团队成员名录进行名称解析
         if (matchAgentRoute(context, trace, decision)) {
             return;
         }
 
-        // 4. [四级路由：结束判断] 匹配 Finish Marker
+        // 优先级 4：识别任务终结标识（Finish Marker）
         String finishMarker = config.getFinishMarker();
         String finishRegex = "(?i).*?(\\Q" + finishMarker + "\\E)(.*)";
         Pattern pattern = Pattern.compile(finishRegex, Pattern.DOTALL);
@@ -225,40 +213,34 @@ public class SupervisorTask implements NamedTaskComponent {
         if (matcher.find()) {
             trace.setRoute(Agent.ID_END);
             String finalAnswer = matcher.group(2).trim();
-            // 提取 Marker 后的内容作为最终总结
-            if (!finalAnswer.isEmpty()) {
-                trace.setFinalAnswer(finalAnswer);
-            } else {
-                trace.setFinalAnswer("Task completed by " + config.getName());
-            }
+            // 提取终结符后的文本作为“谢幕词”或最终结论
+            trace.setFinalAnswer(finalAnswer.isEmpty() ? "Task completed." : finalAnswer);
             return;
         }
 
-        // 4. 兜底处理：若既无法识别 Agent 也未结束，则强行终止防止循环死机
+        // 兜底：无法识别的指令直接终止，防止无效循环消耗 Token
         trace.setRoute(Agent.ID_END);
-        LOG.warn("TeamAgent [{}] supervisor could not resolve next agent: {}", config.getName(), decision);
+        LOG.warn("TeamAgent [{}] could not resolve route from decision: {}", config.getName(), decision);
     }
 
     /**
-     * 智能识别决策文本中的智能体身份
-     *
-     * @return 是否成功识别并设置了路由
+     * 智能语义匹配：识别决策内容中提到的 Agent 身份
+     * <p>采用降序贪婪匹配策略，优先匹配长名称（如 SeniorCoder），防止短名（Coder）误触发。</p>
      */
     private boolean matchAgentRoute(FlowContext context, TeamTrace trace, String text) {
-        // 1. 尝试全词精准匹配
+        // 全量精准匹配
         Agent agent = config.getAgentMap().get(text);
         if (agent != null) {
             routeTo(context, trace, agent.name());
             return true;
         }
 
-        // 2. 模糊匹配：按名称长度降序排列，防止短名 Agent 误触发（如防止 SeniorCoder 匹配到 Coder）
+        // 降序模糊匹配：利用单词边界识别 Agent 名称
         List<String> sortedNames = config.getAgentMap().keySet().stream()
                 .sorted((a, b) -> b.length() - a.length())
                 .collect(Collectors.toList());
 
         for (String name : sortedNames) {
-            // 使用单词边界匹配，提高识别精度
             Pattern p = Pattern.compile("\\b" + Pattern.quote(name) + "\\b", Pattern.CASE_INSENSITIVE);
             if (p.matcher(text).find()) {
                 routeTo(context, trace, name);
@@ -269,13 +251,10 @@ public class SupervisorTask implements NamedTaskComponent {
     }
 
     /**
-     * 统一的路由派发方法
-     *
-     * @param targetName 目标智能体 ID
+     * 执行路由分发并通知协议，完成切换入场
      */
     private void routeTo(FlowContext context, TeamTrace trace, String targetName) {
         trace.setRoute(targetName);
-        // [协议生命周期 - 路由确认通知] 告知协议路由已确定，可进行入场前置处理
         config.getProtocol().onSupervisorRouting(context, trace, targetName);
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] supervisor routed to: [{}]", config.getName(), targetName);
@@ -283,16 +262,16 @@ public class SupervisorTask implements NamedTaskComponent {
     }
 
     /**
-     * 统一的异常拦截与状态恢复
+     * 异常收敛：确保任何非预期错误不会导致流引擎挂死
      */
     private void handleError(FlowContext context, Exception e) {
-        LOG.error("TeamAgent [{}] supervisor task failed", config.getName(), e);
+        LOG.error("TeamAgent [{}] supervisor task error", config.getName(), e);
 
         String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = context.getAs(traceKey);
         if (trace != null) {
-            trace.setRoute(Agent.ID_END); // 发生故障时安全着陆
-            trace.addStep(Agent.ID_SUPERVISOR, "Error: " + e.getMessage(), 0);
+            trace.setRoute(Agent.ID_END);
+            trace.addStep(Agent.ID_SUPERVISOR, "Runtime Error: " + e.getMessage(), 0);
         }
     }
 }

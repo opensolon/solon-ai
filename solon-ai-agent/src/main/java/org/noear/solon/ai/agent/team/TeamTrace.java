@@ -27,42 +27,49 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
- * 团队协作轨迹（记录团队内部各智能体的协作流转状态与历史）
+ * 团队协作轨迹（核心治理对象）
  *
- * <p>核心职责：持久化任务上下文、追踪路由决策、维护协议私有状态以及提供格式化的对话历史。</p>
+ * <p>该类是多智能体协作环境中的“黑匣子”与“状态总线”，负责记录任务在智能体团队内部流转的全生命周期状态。</p>
+ * <p>其核心能力包括：</p>
+ * <ul>
+ * <li><b>上下文持久化</b>：追踪并存储任务指令、协作步骤及各专家的阶段性产出。</li>
+ * <li><b>协议状态隔离</b>：提供专属空间供 {@link TeamProtocol} 存储运行时私有数据（如 A2A 协议的 Handoff 标记）。</li>
+ * <li><b>路由决策回溯</b>：记录调度器（Supervisor）的决策链路，辅助解决任务分发死循环。</li>
+ * <li><b>性能与开销监控</b>：统计各节点的执行耗时，提供协作链路的量化数据。</li>
+ * </ul>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8")
 public class TeamTrace implements AgentTrace {
-    /** 团队配置（不参与序列化） */
+    /** 关联的团队配置（生命周期内稳定，不参与持久化序列化） */
     private transient TeamConfig config;
-    /** Agent 会话上下文（不参与序列化） */
+    /** 当前活跃的会话上下文（持有底层 LLM 记忆，不参与持久化序列化） */
     private transient AgentSession session;
 
-    /** 当前正在执行任务的智能体名称 */
+    /** 当前正在处理任务的 Agent 标识 */
     private String agentName;
-    /** 当前阶段的提示词（可能是原始提示词，也可能是协议裁剪后的提示词） */
+    /** 任务的活跃提示词（随协作阶段可能动态裁剪或重组） */
     private Prompt prompt;
-    /** 协作步骤列表（按时间顺序记录执行者及其产出） */
+    /** 协作流水账：按时间轴线性记录的执行步骤详情 */
     private final List<TeamStep> steps = new ArrayList<>();
 
-    /** 当前路由指向的目标节点（Agent 名称或 ID_END） */
+    /** 路由决策结果：指向下一个待执行的 Agent 名称或系统终止符 (ID_END) */
     private volatile String route;
-    /** 调度器（Supervisor）最后一次生成的决策原文 */
+    /** 记录调度器（Supervisor）输出的原始推理文本，用于异常复盘与自省 */
     private volatile String lastDecision;
-    /** 迭代次数计数器（用于防止协作陷入死循环或达到深度上限） */
+    /** 迭代安全计数器：限制协作的最大深度，防止 LLM 幻觉导致的无限递归 */
     private final AtomicInteger iterationCounter;
 
-    /** 协议私有上下文（供 TeamProtocol 存储特定的运行时数据，如 A2A 的 Handoff 标记） */
+    /** 协议私有存储域：允许不同协作模式存储非标准数据（如竞标书、移交说明等） */
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
 
-    /** 团队输出的最终答案 */
+    /** 最终对外交付的结构化答案 */
     private String finalAnswer;
-    /** 格式化历史的缓存（避免大上下文下的高频字符串拼接） */
+    /** 历史记录的格式化快照（Markdown 优化版） */
     private String cachedFormattedHistory;
-    /** 标记缓存是否失效 */
+    /** 脏位标记：用于实现格式化历史的延迟加载与缓存失效逻辑 */
     private boolean isUpdateHistoryCache = true;
 
     public TeamTrace() {
@@ -75,14 +82,14 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
-     * 判断当前是否处于初始阶段（即尚未有任何 Agent 执行产出）
+     * 是否为初始状态（尚未产生实质性协作产出）
      */
     public boolean isInitial() {
         return steps.isEmpty();
     }
 
     /**
-     * 获取最近一个步骤的执行产出内容
+     * 提取最近一轮的产出内容
      */
     public String getLastStepContent() {
         if (steps.isEmpty()) return "";
@@ -90,8 +97,8 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
-     * 获取最近一次由“非主管（Non-Supervisor）”智能体产出的内容
-     * <p>常用于协议在路由前提取专家的最终结论，过滤掉调度器的决策指令。</p>
+     * 提取最近一位专家（非 Supervisor）的结论
+     * <p>在层次化架构中，此方法用于过滤掉调度器的决策性文本，仅获取具体的业务处理结果。</p>
      */
     public String getLastAgentContent() {
         for (int i = steps.size() - 1; i >= 0; i--) {
@@ -104,7 +111,7 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
-     * 准备运行时环境（由框架内部调用）
+     * 运行时环境初始化
      */
     protected void prepare(TeamConfig config, AgentSession session, String agentName) {
         this.config = config;
@@ -112,7 +119,7 @@ public class TeamTrace implements AgentTrace {
         this.agentName = agentName;
     }
 
-    // --- 属性访问器 ---
+    // --- 核心元数据访问 ---
 
     public String getAgentName() { return agentName; }
     public TeamConfig getConfig() { return config; }
@@ -129,21 +136,21 @@ public class TeamTrace implements AgentTrace {
     public int nextIterations() { return iterationCounter.incrementAndGet(); }
 
     /**
-     * 获取协议相关的运行时上下文 Map
+     * 获取协议共享上下文（用于 A2A 移交、市场竞标等复杂逻辑）
      */
     public Map<String, Object> getProtocolContext() {
         return protocolContext;
     }
 
     /**
-     * 获取当前协作的总步数
+     * 获取当前总迭代步数（包含调度与执行）
      */
     public int getStepCount() {
         return steps.size();
     }
 
     /**
-     * 添加协作步骤并标记历史缓存失效
+     * 压入新的执行足迹并使缓存失效
      */
     public void addStep(String agentName, String content, long duration) {
         steps.add(new TeamStep(agentName, content, duration));
@@ -151,8 +158,8 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
-     * 获取格式化的协作历史文本
-     * <p>采用 Markdown 块格式（### Agent: \n Content），增强 LLM 对对话边界的识别能力。</p>
+     * 获取标准化的协作历史报告
+     * <p>使用 Markdown 语义增强角色边界，帮助 LLM 更好地区分不同 Agent 的角色与贡献。</p>
      */
     public String getFormattedHistory() {
         if (steps.isEmpty()) {
@@ -170,10 +177,14 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
-     * 协作流异常循环检测
-     * <p>检测包含：1.单人复读模式；2.双人 A-B-A-B 镜像模式。</p>
+     * 智能死循环与重复性检测
+     * <p>利用窗口算法分析：</p>
+     * <ul>
+     * <li>1. <b>单点停滞</b>：同一 Agent 产出了完全相同的内容。</li>
+     * <li>2. <b>镜像死锁</b>：两个 Agent 互为“踢皮球”循环（A-B-A-B）。</li>
+     * </ul>
      *
-     * @return 若存在死循环风险返回 true
+     * @return 存在循环风险返回 true，应由治理器介入（如强制终止或转换 Protocol）
      */
     public boolean isLooping() {
         int n = steps.size();
@@ -183,10 +194,9 @@ public class TeamTrace implements AgentTrace {
         String lastAgent = lastStep.getAgentName();
         String lastContent = lastStep.getContent();
 
-        // 过滤空内容，防止初始化异常导致的误判
         if (lastContent == null || lastContent.trim().isEmpty()) return false;
 
-        // 1. 检查单一 Agent 复读检测
+        // 1. 单节点幂等检测（Self-Repeating）
         for (int i = 0; i < n - 1; i++) {
             TeamStep prev = steps.get(i);
             if (prev.getAgentName().equals(lastAgent) && Objects.equals(prev.getContent(), lastContent)) {
@@ -194,7 +204,7 @@ public class TeamTrace implements AgentTrace {
             }
         }
 
-        // 2. 检查多 Agent 镜像循环（A-B-A-B）
+        // 2. 交互式镜像循环检测（Back-and-forth Repeating）
         if (n >= 8) {
             return steps.get(n - 1).getAgentName().equals(steps.get(n - 3).getAgentName()) &&
                     steps.get(n - 2).getAgentName().equals(steps.get(n - 4).getAgentName());
@@ -204,7 +214,7 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
-     * 获取所有协作步骤（返回只读视图以保证协议安全性）
+     * 获取不可变的步骤列表视图
      */
     public List<TeamStep> getSteps() {
         return Collections.unmodifiableList(steps);
@@ -214,11 +224,14 @@ public class TeamTrace implements AgentTrace {
     public void setFinalAnswer(String finalAnswer) { this.finalAnswer = finalAnswer; }
 
     /**
-     * 协作步骤详情实体（Immutable）
+     * 协作足迹详情（单次执行的审计快照）
      */
     public static class TeamStep {
+        /** 执行此步骤的智能体 */
         private final String agentName;
+        /** 该步骤产出的内容快照 */
         private final String content;
+        /** 本轮推理消耗的物理耗时（毫秒） */
         private final long duration;
 
         public TeamStep(String agentName, String content, long duration) {

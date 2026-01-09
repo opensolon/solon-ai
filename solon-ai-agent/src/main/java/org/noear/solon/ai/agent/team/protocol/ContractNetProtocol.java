@@ -26,6 +26,18 @@ import org.noear.solon.flow.GraphSpec;
 import java.util.Locale;
 
 /**
+ * 合同网协作协议 (Contract Net Protocol / CNP)
+ *
+ * <p>CNP 是一种基于市场机制的分布式任务分配协议，适用于任务目标明确但执行路径多样的场景。</p>
+ * <p><b>协作阶段说明：</b></p>
+ * <ul>
+ * <li><b>1. 招标 (Call for Proposals)</b>：Supervisor 分析任务，决定发起全员或定向招标（输出 `BIDDING`）。</li>
+ * <li><b>2. 竞标 (Proposing)</b>：候选 Agent 通过 {@link ContractNetBiddingTask} 评估自身能力并提交方案。</li>
+ * <li><b>3. 定标 (Awarding)</b>：Supervisor 审查汇总后的标书（Bids），选择最优执行者。</li>
+ * <li><b>4. 执行 (Expediting)</b>：中选 Agent 完成任务并将结果反馈给 Supervisor 进行闭环审计。</li>
+ * </ul>
+ *
+ *
  *
  * @author noear
  * @since 3.8.1
@@ -35,62 +47,93 @@ public class ContractNetProtocol extends TeamProtocolBase {
         super(config);
     }
 
+    /** 协议唯一标识 */
     @Override
     public String name() {
         return "CONTRACT_NET";
     }
 
+    /**
+     * 构建合同网协作逻辑图
+     * <p>采用中心化拓扑：所有节点执行完毕后统一回归 Supervisor 节点进行状态同步与下一步决策。</p>
+     */
     @Override
     public void buildGraph(GraphSpec spec) {
+        // [入口] 初始状态直接进入决策中心
         spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
 
+        // [决策中心] 负责分支控制
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
+            // 分支 A：触发招标任务节点
             ns.linkAdd(Agent.ID_BIDDING, l -> l.title("route = " + Agent.ID_BIDDING)
                     .when(ctx -> Agent.ID_BIDDING.equals(ctx.<TeamTrace>getAs(traceKey).getRoute())));
+
+            // 分支 B：动态路由至具体的专家 Agent 节点
             linkAgents(ns);
         }).linkAdd(Agent.ID_END);
 
+        // [招标节点] 执行招标逻辑，完成后回归决策中心进行“定标”
         spec.addActivity(new ContractNetBiddingTask(config)).linkAdd(Agent.ID_SUPERVISOR);
 
+        // [执行节点] 专家 Agent 执行任务，完成后回归决策中心进行“审计/下一轮调度”
         config.getAgentMap().values().forEach(a ->
                 spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
 
+        // [终点] 协作完成
         spec.addEnd(Agent.ID_END);
     }
 
+    /**
+     * 向 LLM 提示词注入协议规范
+     * <p>引导 Supervisor 理解其在合同网中的权力与职责。</p>
+     */
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-            sb.append("\n## 协作协议：").append(config.getProtocol().name()).append("\n");
-            sb.append("1. **流程规范**：遵循'招标-定标'流程。若需多个方案对比，请先输出 `BIDDING` 启动招标。\n");
-            sb.append("2. **择优录取**：收到标书后，对比方案优劣，选出最合适的 Agent 执行。");
+            sb.append("\n## 协作协议：").append(name()).append("\n");
+            sb.append("1. **招标指令**：若当前任务需要专家评估方案，请输出 `BIDDING` 指令启动全员招标。\n");
+            sb.append("2. **择优定标**：阅读 'Bids Context' 中的方案后，请直接输出最合适的 Agent 名称来委派任务。");
         } else {
-            sb.append("\n## Collaboration Protocol: ").append(config.getProtocol().name()).append("\n");
-            sb.append("1. **Workflow**: Follow 'Bidding-Awarding' protocol. Output `BIDDING` first if multiple approaches are needed.\n");
-            sb.append("2. **Evaluation**: Compare bids and select the winner based on quality and expertise.");
+            sb.append("\n## Collaboration Protocol: ").append(name()).append("\n");
+            sb.append("1. **Call for Bids**: Output `BIDDING` to collect proposals if the execution plan is unclear.\n");
+            sb.append("2. **Task Awarding**: After reviewing the 'Bids Context', output the specific Agent name to assign the work.");
         }
     }
 
+    /**
+     * 判定决策文本是否包含“招标”信号
+     */
     @Override
     public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        // 捕捉指令关键字（忽略大小写）
         if (decision.toUpperCase().contains(Agent.ID_BIDDING.toUpperCase())) {
             trace.setRoute(Agent.ID_BIDDING);
             return true;
         }
-
         return false;
     }
 
+    /**
+     * 运行时上下文增强
+     * <p>将从 {@link ContractNetBiddingTask} 收集到的物理标书数据注入到逻辑提示词中。</p>
+     */
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
-        String bids = context.getAs("active_bids");
+        // 从 Trace 的协议私有存储空间提取标书（保证了多团队嵌套时的隔离性）
+        Object bids = trace.getProtocolContext().get(ContractNetBiddingTask.CONTEXT_BIDS_KEY);
         if (bids != null) {
-            sb.append("\n=== Bids Context ===\n").append(bids);
+            sb.append("\n### 候选人标书汇总 (Bids Context) ###\n")
+                    .append(bids)
+                    .append("\n请基于以上方案的专业度、可行性进行对比定标。");
         }
     }
 
+    /**
+     * 生命周期清理
+     * <p>在整个团队任务终结时，释放内存中缓存的标书数据。</p>
+     */
     @Override
     public void onTeamFinished(FlowContext context, TeamTrace trace) {
-        context.remove("active_bids");
+        trace.getProtocolContext().remove(ContractNetBiddingTask.CONTEXT_BIDS_KEY);
     }
 }
