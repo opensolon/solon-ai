@@ -327,10 +327,14 @@ public class ReActTrace implements AgentTrace {
     /**
      * 替换所有消息（通常用于触发压缩算法或上下文清洗时）
      */
-    public void replaceMessages(List<ChatMessage> messages) {
+    public void replaceMessages(List<ChatMessage> newMessages) {
+        if (newMessages == null) {
+            throw new IllegalArgumentException("messages cannot be null");
+        }
+
         lock.writeLock().lock();
         try {
-            this.messages = messages;
+            this.messages = new ArrayList<>(newMessages);  // 防御性复制
         } finally {
             lock.writeLock().unlock();
         }
