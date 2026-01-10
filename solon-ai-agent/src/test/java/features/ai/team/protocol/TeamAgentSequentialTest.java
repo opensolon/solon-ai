@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.react.ReActSystemPromptCn; // 引入结构化模板
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -30,7 +31,7 @@ public class TeamAgentSequentialTest {
         // 第一步：强调结构化提取
         Agent extractor = ReActAgent.of(chatModel)
                 .name("step1_extractor")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("流水线第一步：需求分析专家")
                         .instruction("### 任务说明\n" +
                                 "1. 分析用户原始输入，识别核心业务对象和操作逻辑。\n" +
@@ -41,7 +42,7 @@ public class TeamAgentSequentialTest {
         // 第二步：强调对前序结果的消费
         Agent converter = ReActAgent.of(chatModel)
                 .name("step2_converter")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("流水线第二步：逻辑建模专家")
                         .instruction("### 任务说明\n" +
                                 "1. 读取上游生成的 JSON 关键词。\n" +
@@ -53,7 +54,7 @@ public class TeamAgentSequentialTest {
         // 第三步：强调最终交付质量
         Agent polisher = ReActAgent.of(chatModel)
                 .name("step3_polisher")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("流水线第三步：代码优化专家")
                         .instruction("### 任务说明\n" +
                                 "1. 接收上游的业务伪代码。\n" +
@@ -95,7 +96,7 @@ public class TeamAgentSequentialTest {
         // 优化：赋予 Agent 明确的角色感，即使被迫先执行不擅长的任务也要守规矩
         Agent a = ReActAgent.of(chatModel).name("Agent_A")
                 .description("数学预处理专家")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("加一处理器")
                         .instruction("你是流水线的起始点。无论收到什么，你的任务是确保数据传递给下一步。")
                         .build())
@@ -103,7 +104,7 @@ public class TeamAgentSequentialTest {
 
         Agent b = ReActAgent.of(chatModel).name("Agent_B")
                 .description("数学后处理专家")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("加二处理器")
                         .instruction("你只负责接收上游数据并执行加二操作。")
                         .build())

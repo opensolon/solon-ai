@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -50,7 +51,7 @@ public class TeamAgentMultiTurnTest {
         Agent searcher = ReActAgent.of(chatModel)
                 .name("searcher")
                 .description("旅游百科搜素员")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是一个专业的目的地常识专家")
                         .instruction("只需提供目的地的核心特色、人文地理等基础信息。不要发散，直接给出结构化文本。")
                         .build())
@@ -60,7 +61,7 @@ public class TeamAgentMultiTurnTest {
         Agent planner = ReActAgent.of(chatModel)
                 .name("planner")
                 .description("私人行程规划师")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你负责制定具体的旅行方案")
                         .instruction("### 核心准则\n" +
                                 "1. 必须优先检索历史记录（#{history}）中的目的地信息。\n" +

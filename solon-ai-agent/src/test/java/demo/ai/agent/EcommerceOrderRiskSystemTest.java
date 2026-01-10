@@ -17,6 +17,7 @@ package demo.ai.agent;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
@@ -46,7 +47,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent orderReceiver = ReActAgent.of(chatModel)
                 .name("order_receiver")
                 .description("负责订单信息的结构化提取与初步分拣")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是一个严谨的电商订单分检员")
                         .instruction("### 核心任务\n" +
                                 "1. 提取订单核心参数：金额、地址、支付方式。\n" +
@@ -58,7 +59,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent riskAnalyst = ReActAgent.of(chatModel)
                 .name("risk_analyst")
                 .description("资深风险控制分析师")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是首席风险分析官，擅长识别潜在的资损风险")
                         .instruction("### 分析维度\n" +
                                 "1. **客户生命周期**：新客首单且金额巨大是核心红色信号。\n" +
@@ -71,7 +72,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent customerValidator = ReActAgent.of(chatModel)
                 .name("customer_validator")
                 .description("身份验证与行为分析专家")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你负责验证用户身份的真实性与一致性")
                         .instruction("### 验证规则\n" +
                                 "1. 检查实名认证状态。\n" +
@@ -84,7 +85,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent logisticsEvaluator = ReActAgent.of(chatModel)
                 .name("logistics_evaluator")
                 .description("配送成本与高价值商品物流评估员")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你负责评估配送链路的安全与成本")
                         .instruction("### 评估重点\n" +
                                 "1. **商品价值**：针对 3C 电子等高价易损品建议使用顺丰加保。\n" +
@@ -96,7 +97,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent financialAuditor = ReActAgent.of(chatModel)
                 .name("financial_auditor")
                 .description("财务反欺诈与支付审计专家")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是财务合规专家，专注于支付链路安全")
                         .instruction("### 审计任务\n" +
                                 "1. **支付模式**：检测是否存在多张信用卡拆分支付（常见洗钱或盗刷手法）。\n" +
@@ -114,7 +115,7 @@ public class EcommerceOrderRiskSystemTest {
                 .addAgent(
                         ReActAgent.of(chatModel)
                                 .name("senior_risk_manager")
-                                .systemPrompt(ReActSystemPromptCn.builder()
+                                .systemPrompt(ReActSystemPrompt.builder()
                                         .role("你是风险评审主席，拥有最高裁决权")
                                         .instruction("### 裁决准则\n" +
                                                 "综合财务、物流、风控三方意见，输出最终状态：\n" +
@@ -123,7 +124,7 @@ public class EcommerceOrderRiskSystemTest {
                                 .build(),
                         ReActAgent.of(chatModel)
                                 .name("compliance_officer")
-                                .systemPrompt(ReActSystemPromptCn.builder()
+                                .systemPrompt(ReActSystemPrompt.builder()
                                         .role("你负责合规性否决权")
                                         .instruction("确保决策不违反反洗钱法和数据隐私保护法。")
                                         .build())
@@ -133,7 +134,7 @@ public class EcommerceOrderRiskSystemTest {
         // 通知与日志执行员
         ReActAgent notificationExecutor = ReActAgent.of(chatModel)
                 .name("notification_executor")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("负责业务流程收尾工作")
                         .instruction("记录评审摘要，并生成发送给用户的决策通知文案。")
                         .build())

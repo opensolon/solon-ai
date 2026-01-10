@@ -28,7 +28,7 @@ public class TeamAgentResilienceTest {
 
 
         // 统一优化提示词风格
-        ReActSystemPrompt relayPrompt = ReActSystemPromptCn.builder()
+        ReActSystemPrompt relayPrompt = ReActSystemPrompt.builder()
                 .role("协作流水线节点")
                 .instruction("### 核心原则\n" +
                         "1. 处理你职责范围内的任务。\n" +
@@ -63,7 +63,7 @@ public class TeamAgentResilienceTest {
 
         Agent pythonExpert = ReActAgent.of(chatModel).name("python_expert")
                 .description("负责 Python 脚本编写、数据清洗及自动化脚本工具开发。")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("Python 全栈专家")
                         .instruction("专注于 Python 相关的实现。如果任务涉及跨语言协作，请明确你完成的部分。")
                         .build())
@@ -71,7 +71,7 @@ public class TeamAgentResilienceTest {
 
         Agent javaExpert = ReActAgent.of(chatModel).name("java_expert")
                 .description("负责 Java 后端工程、SpringCloud 微服务架构及企业级应用开发。")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("Java 架构专家")
                         .instruction("专注于 Java 系统设计与编码。对于辅助性的脚本需求，可建议通过 Python 工具完成。")
                         .build())
@@ -101,7 +101,7 @@ public class TeamAgentResilienceTest {
 
         Agent coder = ReActAgent.of(chatModel).name("coder")
                 .description("只懂编程、算法和代码实现。")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("软件开发工程师")
                         .instruction("你只处理与代码、架构、技术文档相关的请求。对于非技术类请求（如烹饪、艺术），请明确回复：'抱歉，这超出了我的专业领域'。")
                         .build())
@@ -130,7 +130,7 @@ public class TeamAgentResilienceTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         Agent looper = ReActAgent.of(chatModel).name("looper")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("任务中转节点")
                         .instruction("你只负责将任务移交给他人，永不结束。")
                         .build())

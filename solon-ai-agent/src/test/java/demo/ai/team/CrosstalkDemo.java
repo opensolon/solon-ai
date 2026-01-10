@@ -19,6 +19,7 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -48,7 +49,7 @@ public class CrosstalkDemo {
                 .addAgent(ReActAgent.of(chatModel)
                         .name("afei")
                         .description("阿飞 (逗哏)：机智、爱抬杠、话密")
-                        .systemPrompt(ReActSystemPromptCn.builder()
+                        .systemPrompt(ReActSystemPrompt.builder()
                                 .role("你是职业相声演员“阿飞”，舞台上的“逗哏”")
                                 .instruction("### 表演准则\n" +
                                         "1. **角色性格**：你要表现得稍微有点自大且爱抬杠。\n" +
@@ -59,7 +60,7 @@ public class CrosstalkDemo {
                 .addAgent(ReActAgent.of(chatModel)
                         .name("azi")
                         .description("阿紫 (捧哏)：沉稳、善于拆台、补位")
-                        .systemPrompt(ReActSystemPromptCn.builder()
+                        .systemPrompt(ReActSystemPrompt.builder()
                                 .role("你是职业相声演员“阿紫”，舞台上的“捧哏”")
                                 .instruction("### 表演准则\n" +
                                         "1. **角色性格**：你比较理性，专门负责戳穿“阿飞”的吹牛，或者用简单的词（如：嘿！嚯！那是！）起哄。\n" +

@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -44,7 +45,7 @@ public class LoanApprovalWorkflowTest {
         // 准入官：负责初步 KYC 与数据清洗
         ReActAgent entryOfficer = ReActAgent.of(chatModel).name("entry_officer")
                 .description("贷款申请准入官")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你负责贷款申请的首道关卡审核")
                         .instruction("### 核心任务\n1. 核实申请人身份合法性。\n2. 格式化申请资料，若信息缺失请要求补充。")
                         .build())
@@ -53,7 +54,7 @@ public class LoanApprovalWorkflowTest {
         // 方案架构师：设计产品利率与期限
         ReActAgent loanArchitect = ReActAgent.of(chatModel).name("loan_architect")
                 .description("信贷方案架构师")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你负责根据客户画像匹配最优信贷方案")
                         .instruction("### 准则\n1. 计算 DTI (债务收入比)。\n2. 给出初步风险分级 [high, mid, low]。")
                         .build())
@@ -67,26 +68,26 @@ public class LoanApprovalWorkflowTest {
                         // 征信事业部 (进一步嵌套)
                         TeamAgent.of(chatModel).name("credit_dept")
                                 .addAgent(ReActAgent.of(chatModel).name("big_data_analyst")
-                                        .systemPrompt(ReActSystemPromptCn.builder().role("大数据建模专家").instruction("分析社交、支付、多头借贷数据。").build()).build())
+                                        .systemPrompt(ReActSystemPrompt.builder().role("大数据建模专家").instruction("分析社交、支付、多头借贷数据。").build()).build())
                                 .build(),
                         // 额度精算师
                         ReActAgent.of(chatModel).name("quota_calculator")
-                                .systemPrompt(ReActSystemPromptCn.builder().role("授信额度精算师").instruction("依据抵押物价值与收入流水核定最终额度。").build()).build(),
+                                .systemPrompt(ReActSystemPrompt.builder().role("授信额度精算师").instruction("依据抵押物价值与收入流水核定最终额度。").build()).build(),
                         // 法律合规官
                         ReActAgent.of(chatModel).name("legal_reviewer")
-                                .systemPrompt(ReActSystemPromptCn.builder().role("AML反洗钱审计员").instruction("核查名单库，执行反洗钱合规性审查。").build()).build()
+                                .systemPrompt(ReActSystemPrompt.builder().role("AML反洗钱审计员").instruction("核查名单库，执行反洗钱合规性审查。").build()).build()
                 ).build();
 
         // 压测与审计节点
         ReActAgent riskStressTester = ReActAgent.of(chatModel).name("risk_stress_tester")
-                .systemPrompt(ReActSystemPromptCn.builder().role("风险压测工程师").instruction("模拟利率大幅上涨 200BP 下的违约概率。").build()).build();
+                .systemPrompt(ReActSystemPrompt.builder().role("风险压测工程师").instruction("模拟利率大幅上涨 200BP 下的违约概率。").build()).build();
 
         ReActAgent securityAuditor = ReActAgent.of(chatModel).name("security_auditor")
-                .systemPrompt(ReActSystemPromptCn.builder().role("数据安全审计员").instruction("确保审批过程符合 GDPR 及数据隐私保护协议。").build()).build();
+                .systemPrompt(ReActSystemPrompt.builder().role("数据安全审计员").instruction("确保审批过程符合 GDPR 及数据隐私保护协议。").build()).build();
 
         // 终审决策
         ReActAgent finalApprover = ReActAgent.of(chatModel).name("final_approver")
-                .systemPrompt(ReActSystemPromptCn.builder().role("授信审批部总经理")
+                .systemPrompt(ReActSystemPrompt.builder().role("授信审批部总经理")
                         .instruction("### 决策要求\n综合压测与合规报告，选择发布策略：[canary, full, reject]。")
                         .build()).build();
 

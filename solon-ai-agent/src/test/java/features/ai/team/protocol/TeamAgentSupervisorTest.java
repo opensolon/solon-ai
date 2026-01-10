@@ -82,7 +82,7 @@ public class TeamAgentSupervisorTest {
 
         // 1. 使用 TeamPromptProviderCn.builder 方式构建自定义提示词
         // 这种方式会自动利用框架内置的结构化分段逻辑（Role, Instruction, Output Specification等）
-        TeamSystemPrompt customProvider = TeamSystemPromptCn.builder()
+        TeamSystemPrompt customProvider = TeamSystemPrompt.builder()
                 .role("你是一个高效的任务调度主管，擅长根据专家能力分配工作。")
                 .instruction(trace -> {
                     // 仅需注入增量的业务指令，基础的成员列表和输出规范由 Builder 自动维护

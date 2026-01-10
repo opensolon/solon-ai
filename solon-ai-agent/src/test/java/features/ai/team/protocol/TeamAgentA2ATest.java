@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -33,7 +34,7 @@ public class TeamAgentA2ATest {
         Agent designer = ReActAgent.of(chatModel)
                 .name("designer")
                 .description("UI/UX 设计师，负责视觉方案与交互逻辑。")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是一个富有创意的 UI/UX 设计专家")
                         .instruction("### 工作准则\n" +
                                 "1. 优先提供视觉风格、配色方案及组件布局建议。\n" +
@@ -46,7 +47,7 @@ public class TeamAgentA2ATest {
         Agent developer = ReActAgent.of(chatModel)
                 .name("developer")
                 .description("前端开发工程师，负责高质量代码实现。")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是一个精通现代 Web 技术的程序员")
                         .instruction("### 协作逻辑\n" +
                                 "1. 接收 `designer` 的方案后，立即转化为响应式 HTML/CSS 代码。\n" +
@@ -83,7 +84,7 @@ public class TeamAgentA2ATest {
         // 优化：利用 ReActSystemPromptCn 确保模型明白 memo 是为了上下文接力
         Agent agentA = ReActAgent.of(chatModel).name("agentA")
                 .description("流程发起专家")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("任务初始化节点")
                         .instruction("执行初始化后，务必调用 `transfer_to` 将控制权交给 `agentB`，并将关键信息 'KEY_INFO_999' 放入 memo 中。")
                         .build())
@@ -91,7 +92,7 @@ public class TeamAgentA2ATest {
 
         Agent agentB = ReActAgent.of(chatModel).name("agentB")
                 .description("流程处理专家")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("后端处理节点")
                         .instruction("你将收到来自上游的 memo 信息。请确认收到 'KEY_INFO_999' 并完成后续工作。")
                         .build())
@@ -119,7 +120,7 @@ public class TeamAgentA2ATest {
         // 优化：即便测试幻觉，也给一个标准的提示词结构，让框架更容易捕捉其“异常行为”
         Agent agentA = ReActAgent.of(chatModel).name("agentA")
                 .description("异常测试节点")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("测试受众")
                         .instruction("由于你现在处于异常测试状态，请故意尝试移交给不存在的专家 'superman'。")
                         .build())

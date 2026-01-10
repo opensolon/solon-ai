@@ -37,9 +37,9 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
     /**
      * 默认单例（使用标准主管模板）
      */
-    private static final TeamSystemPromptEn _DEFAULT = new TeamSystemPromptEn(null, null);
+    private static final TeamSystemPrompt _DEFAULT = new TeamSystemPromptEn(null, null);
 
-    public static TeamSystemPromptEn getDefault() { return _DEFAULT; }
+    public static TeamSystemPrompt getDefault() { return _DEFAULT; }
 
     private final Function<TeamTrace, String> roleProvider;
     private final Function<TeamTrace, String> instructionProvider;
@@ -123,7 +123,7 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
     /**
      * TeamSystemPromptEn 构建器
      */
-    public static class Builder {
+    public static class Builder implements TeamSystemPrompt.Builder{
         private Function<TeamTrace, String> roleProvider;
         private Function<TeamTrace, String> instructionProvider;
 
@@ -160,9 +160,9 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
         }
 
         /**
-         * 构建 TeamSystemPromptEn 实例
+         * 构建 TeamSystemPrompt 实例
          */
-        public TeamSystemPromptEn build() {
+        public TeamSystemPrompt build() {
             return new TeamSystemPromptEn(roleProvider, instructionProvider);
         }
     }

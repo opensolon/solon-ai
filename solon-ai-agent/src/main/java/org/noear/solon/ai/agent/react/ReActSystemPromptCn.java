@@ -149,7 +149,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
     /**
      * 构建器
      */
-    public static class Builder {
+    public static class Builder implements ReActSystemPrompt.Builder{
         private Function<ReActTrace, String> roleProvider;
         private Function<ReActTrace, String> instructionProvider;
 

@@ -42,14 +42,14 @@ public class ReActAgentPromptProviderTest {
 
     /**
      * 测试 1：基于 Builder 构建自定义业务提示词
-     * <p>目标：利用 ReActSystemPromptCn.builder() 注入“数学专家”角色，同时不破坏 ReAct 协议格式。</p>
+     * <p>目标：利用 ReActSystemPrompt.builder() 注入“数学专家”角色，同时不破坏 ReAct 协议格式。</p>
      */
     @Test
     public void testCustomPromptProvider() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 使用增量构建模式：保持 ReAct 输出格式约束，同时注入数学专家业务逻辑
-        ReActSystemPrompt mathExpertProvider = ReActSystemPromptCn.builder()
+        ReActSystemPrompt mathExpertProvider = ReActSystemPrompt.builder()
                 .role("你是一个严谨的数学解题专家")
                 .instruction(trace -> {
                     // 动态感知当前工具集
@@ -108,7 +108,7 @@ public class ReActAgentPromptProviderTest {
     public void testDynamicRoleProvider() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        ReActSystemPrompt dynamicProvider = ReActSystemPromptCn.builder()
+        ReActSystemPrompt dynamicProvider = ReActSystemPrompt.builder()
                 .role(trace -> {
                     // 假设根据 Session ID 的某些特征来决定角色（示例逻辑）
                     return trace.getSession().getSnapshot().containsKey("is_pro") ? "高级资深专家" : "新手助手";

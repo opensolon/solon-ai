@@ -104,7 +104,7 @@ public class ReActConfig {
     /**
      * 提示词模板提供者
      */
-    private ReActSystemPrompt systemPrompt = ReActSystemPromptEn.getDefault();
+    private ReActSystemPrompt systemPrompt = ReActSystemPromptCn.getDefault();
 
 
     /**

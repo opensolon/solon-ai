@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.react.ReActSystemPromptCn; // 引入中文增强模板
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -29,7 +30,7 @@ public class TeamAgentBlackboardTest {
         Agent databaseDesigner = ReActAgent.of(chatModel)
                 .name("db_designer")
                 .description("负责数据库表结构设计，输出 SQL 代码。")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是一个资深数据库架构师")
                         .instruction("### 职责\n" +
                                 "1. 仅负责数据库表结构设计（SQL 代码）。\n" +
@@ -42,7 +43,7 @@ public class TeamAgentBlackboardTest {
         Agent apiDesigner = ReActAgent.of(chatModel)
                 .name("api_designer")
                 .description("负责 RESTful API 接口协议设计。")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是一个 API 接口专家")
                         .instruction("### 职责\n" +
                                 "1. 仅负责 RESTful API 接口协议设计。\n" +
@@ -82,7 +83,7 @@ public class TeamAgentBlackboardTest {
         Agent reviewer = ReActAgent.of(chatModel)
                 .name("reviewer")
                 .description("负责审核设计规范。")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是一个严谨的架构审核员")
                         .instruction("### 审核规则\n" +
                                 "1. 检查黑板上的 SQL。\n" +
@@ -94,7 +95,7 @@ public class TeamAgentBlackboardTest {
         Agent dbDesigner = ReActAgent.of(chatModel)
                 .name("db_designer")
                 .description("数据库设计专家")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("数据库开发者")
                         .instruction("根据黑板上审核员给出的反馈修正 SQL 代码。")
                         .build())
@@ -126,7 +127,7 @@ public class TeamAgentBlackboardTest {
         // 优化：利用 Markdown 格式强化 Agent 对特定动态数据的记忆
         Agent dbDesigner = ReActAgent.of(chatModel)
                 .name("db_designer")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("数据库开发者")
                         .instruction("### 强制约束\n" +
                                 "- 请务必创建表，且表名**必须**使用: `" + randomTableName + "`")
@@ -135,7 +136,7 @@ public class TeamAgentBlackboardTest {
 
         Agent apiDesigner = ReActAgent.of(chatModel)
                 .name("api_designer")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("API 开发者")
                         .instruction("### 依赖要求\n" +
                                 "- 检查黑板上存在的表名。\n" +
@@ -161,9 +162,9 @@ public class TeamAgentBlackboardTest {
 
         // 优化：明确 Agent 的补位边界，防止互相推诿
         Agent a = ReActAgent.of(chatModel).name("agent_a")
-                .systemPrompt(ReActSystemPromptCn.builder().role("专家 A").instruction("你认为此任务该由专家 B 完成。").build()).build();
+                .systemPrompt(ReActSystemPrompt.builder().role("专家 A").instruction("你认为此任务该由专家 B 完成。").build()).build();
         Agent b = ReActAgent.of(chatModel).name("agent_b")
-                .systemPrompt(ReActSystemPromptCn.builder().role("专家 B").instruction("你认为此任务该由专家 A 完成。").build()).build();
+                .systemPrompt(ReActSystemPrompt.builder().role("专家 B").instruction("你认为此任务该由专家 A 完成。").build()).build();
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.BLACKBOARD)

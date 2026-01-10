@@ -113,7 +113,7 @@ public class TeamConfig {
     /**
      * 系统提示词（System Prompt）模板提供者，支持多语言动态适配
      */
-    private TeamSystemPrompt systemPrompt = TeamSystemPromptEn.getDefault();
+    private TeamSystemPrompt systemPrompt = TeamSystemPromptCn.getDefault();
 
     /**
      * 基于指定的推理模型初始化团队配置

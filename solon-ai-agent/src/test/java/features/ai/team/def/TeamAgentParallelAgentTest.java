@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -31,7 +32,7 @@ public class TeamAgentParallelAgentTest {
         Agent enTranslator = ReActAgent.of(chatModel)
                 .name("en_translator")
                 .description("负责中英高保真翻译")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是一个资深的中英同声传译专家")
                         .instruction("### 任务要求\n" +
                                 "1. 将输入内容翻译为地道的英语。\n" +
@@ -44,7 +45,7 @@ public class TeamAgentParallelAgentTest {
         Agent frTranslator = ReActAgent.of(chatModel)
                 .name("fr_translator")
                 .description("负责中法地道表达翻译")
-                .systemPrompt(ReActSystemPromptCn.builder()
+                .systemPrompt(ReActSystemPrompt.builder()
                         .role("你是一个精通法语文化的翻译专家")
                         .instruction("### 任务要求\n" +
                                 "1. 将输入内容翻译为准确的法语。\n" +

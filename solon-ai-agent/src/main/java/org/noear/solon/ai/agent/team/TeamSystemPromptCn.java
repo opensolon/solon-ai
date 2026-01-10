@@ -39,9 +39,9 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
     /**
      * 默认单例（使用标准主管模板）
      */
-    private static final TeamSystemPromptCn _DEFAULT = new TeamSystemPromptCn(null, null);
+    private static final TeamSystemPrompt _DEFAULT = new TeamSystemPromptCn(null, null);
 
-    public static TeamSystemPromptCn getDefault() { return _DEFAULT; }
+    public static TeamSystemPrompt getDefault() { return _DEFAULT; }
 
     private final Function<TeamTrace, String> roleProvider;
     private final Function<TeamTrace, String> instructionProvider;
@@ -127,7 +127,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
     /**
      * TeamSystemPromptCn 构建器
      */
-    public static class Builder {
+    public static class Builder implements TeamSystemPrompt.Builder{
         private Function<TeamTrace, String> roleProvider;
         private Function<TeamTrace, String> instructionProvider;
 
@@ -164,9 +164,9 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
         }
 
         /**
-         * 构建 TeamSystemPromptCn 实例
+         * 构建 TeamSystemPrompt 实例
          */
-        public TeamSystemPromptCn build() {
+        public TeamSystemPrompt build() {
             return new TeamSystemPromptCn(roleProvider, instructionProvider);
         }
     }
