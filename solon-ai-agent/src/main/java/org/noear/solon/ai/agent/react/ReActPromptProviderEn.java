@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,13 +23,19 @@ import java.util.function.Function;
 /**
  * ReAct 模式提示词提供者（英文版）
  *
+ * <p>该实现采用“协议+业务”增量构建模式：</p>
+ * <ul>
+ * <li>Role: 优先使用自定义角色，并自动叠加英文环境下的 ReAct 范式定义。</li>
+ * <li>Instruction: 强制注入 ReAct 标准输出协议（英文），并将自定义业务指令作为“Core Task Instructions”增量追加。</li>
+ * </ul>
+ *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8")
 public class ReActPromptProviderEn implements ReActPromptProvider {
     /**
-     * 默认单例（使用标准 ReAct 模板）
+     * 默认单例（使用标准英文 ReAct 模板）
      */
     private static final ReActPromptProvider _DEFAULT = new ReActPromptProviderEn(null, null);
 
@@ -55,38 +61,25 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
     public String getSystemPrompt(ReActTrace trace) {
         ReActConfig config = trace.getConfig();
 
-        // 确定角色定义 (优先使用动态 Provider)
-        final String role;
-        if (roleProvider != null) {
-            role = roleProvider.apply(trace);
-        } else {
-            role = getRole(trace);
-        }
-
-        // 确定执行指令 (优先使用动态 Provider)
-        final String instruction;
-        if (instructionProvider != null) {
-            instruction = instructionProvider.apply(trace);
-        } else {
-            instruction = getInstruction(trace);
-        }
+        final String role = getRole(trace);
+        final String instruction = getInstruction(trace);
 
         StringBuilder sb = new StringBuilder();
 
-        // 1. 定义角色与核心工作流：明确 ReAct (Reasoning and Acting) 循环
+        // 1. 角色与范式定义：明确 ReAct (Reasoning and Acting) 循环要求
         sb.append("## Role\n")
                 .append(role).append(". ")
                 .append("You must solve the problem using the ReAct pattern: ")
                 .append("Thought -> Action -> Observation.\n\n");
 
-        // 2. 注入指令 (输出格式、要求、核心规则与示例)
+        // 2. 注入综合指令 (包含输出格式、核心规则、业务任务与示例)
         sb.append(instruction);
 
         // 3. 工具集定义：动态注入当前可用的工具列表
         if (config.getTools().isEmpty()) {
-            sb.append("Note: No tools available. Provide the Final Answer directly.\n");
+            sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
         } else {
-            sb.append("## Available Tools\n");
+            sb.append("\n## Available Tools\n");
             config.getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ")
                     .append(t.description()).append("\n"));
         }
@@ -96,6 +89,10 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
 
     @Override
     public String getRole(ReActTrace trace) {
+        // 增量逻辑：优先返回自定义角色描述，否则返回默认专业助手描述
+        if (roleProvider != null) {
+            return roleProvider.apply(trace);
+        }
         return "You are a professional Task Solver";
     }
 
@@ -104,7 +101,7 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
         ReActConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
-        // A. 输出格式约束
+        // A. 输出格式约束（ReAct 协议基石）
         sb.append("## Output Format (Strictly Follow)\n")
                 .append("Thought: Briefly explain your reasoning (1-2 sentences).\n")
                 .append("Action: To use a tool, output ONLY a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown, no extra text.\n")
@@ -114,24 +111,28 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
         sb.append("## Final Answer Requirements\n")
                 .append("1. When the task is complete, you MUST provide the final answer.\n")
                 .append("2. The final answer MUST start with ").append(config.getFinishMarker()).append(".\n")
-                .append("3. Directly provide your complete answer after ").append(config.getFinishMarker()).append(" without line breaks or tags.\n")
-                .append("4. Do not output empty responses.\n\n");
+                .append("3. Directly provide your complete answer after ").append(config.getFinishMarker()).append(" without extra tags.\n\n");
 
         // C. 核心行为准则
         sb.append("## Core Rules\n")
                 .append("1. Only use tools from the 'Available Tools' list.\n")
                 .append("2. Output ONLY one Action and STOP immediately to wait for Observation.\n")
-                .append("3. Every Final Answer MUST start with ").append(config.getFinishMarker()).append(" to signal completion.\n")
-                .append("4. If information is insufficient after multiple attempts, provide the best answer starting with ").append(config.getFinishMarker()).append(".\n\n");
+                .append("3. Every Final Answer MUST start with ").append(config.getFinishMarker()).append(" to signal completion.\n\n");
 
-        // D. 示例引导 (Few-shot)
+        // --- 增量业务指令注入 ---
+        if (instructionProvider != null) {
+            sb.append("## Core Task Instructions\n");
+            sb.append(instructionProvider.apply(trace)).append("\n\n");
+        }
+
+        // D. 示例引导 (Few-shot 模仿学习)
         sb.append("## Example\n")
                 .append("User: What is the weather in Paris?\n")
                 .append("Thought: I need to check the current weather for Paris.\n")
                 .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"Paris\"}}\n")
                 .append("Observation: 18°C, Sunny.\n")
                 .append("Thought: I have obtained the weather information.\n")
-                .append("Final Answer: ").append(config.getFinishMarker()).append("The weather in Paris is 18°C and sunny.\n\n");
+                .append("Final Answer: ").append(config.getFinishMarker()).append("The weather in Paris is 18°C and sunny.\n");
 
         return sb.toString();
     }
@@ -172,7 +173,7 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
         }
 
         /**
-         * 设置指令描述（静态字符串）
+         * 设置指令描述（静态字符串，作为核心任务指令增量追加）
          */
         public Builder instruction(String instruction) {
             this.instructionProvider = (trace) -> instruction;
@@ -180,7 +181,7 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
         }
 
         /**
-         * 设置指令提供逻辑（动态函数）
+         * 设置指令提供逻辑（动态函数，作为核心任务指令增量追加）
          */
         public Builder instruction(Function<ReActTrace, String> instructionProvider) {
             this.instructionProvider = instructionProvider;

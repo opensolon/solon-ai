@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,12 @@ import java.util.function.Function;
 
 /**
  * ReAct 模式提示词提供者（中文版）
+ *
+ * <p>该实现采用“协议+业务”增量构建模式：</p>
+ * <ul>
+ * <li>Role: 优先使用自定义角色，并自动叠加 ReAct 范式定义。</li>
+ * <li>Instruction: 强制注入 ReAct 标准输出协议，并将自定义指令作为“核心任务指令”增量追加。</li>
+ * </ul>
  *
  * @author noear
  * @since 3.8.1
@@ -55,31 +61,18 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
     public String getSystemPrompt(ReActTrace trace) {
         ReActConfig config = trace.getConfig();
 
-        // 确定角色定义 (优先使用动态 Provider)
-        final String role;
-        if (roleProvider != null) {
-            role = roleProvider.apply(trace);
-        } else {
-            role = getRole(trace);
-        }
-
-        // 确定执行指令 (优先使用动态 Provider)
-        final String instruction;
-        if (instructionProvider != null) {
-            instruction = instructionProvider.apply(trace);
-        } else {
-            instruction = getInstruction(trace);
-        }
+        final String role = getRole(trace);
+        final String instruction = getInstruction(trace);
 
         StringBuilder sb = new StringBuilder();
 
-        // 1. 角色与范式定义：明确 ReAct (Reasoning and Acting) 循环
+        // 1. 角色与范式定义：明确 ReAct (Reasoning and Acting) 循环要求
         sb.append("## 角色\n")
                 .append(role).append("。")
                 .append("你必须使用 ReAct 模式解决问题：")
                 .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
 
-        // 2. 注入指令 (输出格式、要求、核心规则与示例)
+        // 2. 注入综合指令 (包含输出格式、核心规则、业务任务与示例)
         sb.append(instruction);
 
         // 3. 工具集定义：动态注入当前可用的工具列表
@@ -96,6 +89,11 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
 
     @Override
     public String getRole(ReActTrace trace) {
+        // 增量逻辑：优先返回自定义角色描述，否则返回默认专业助手描述
+        if (roleProvider != null) {
+            return roleProvider.apply(trace);
+        }
+
         return "你是一个专业的任务解决助手";
     }
 
@@ -104,7 +102,7 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
         ReActConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
-        // A. 输出格式约束
+        // A. 输出格式约束（ReAct 协议基石）
         sb.append("## 输出格式（必须遵守）\n")
                 .append("Thought: 简要解释你的思考过程（1-2句话）。\n")
                 .append("Action: 如果需要调用工具，请输出唯一的 JSON 对象：{\"name\": \"工具名\", \"arguments\": {...}}。不要使用代码块，不要有额外文本。\n")
@@ -114,17 +112,22 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
         sb.append("## 最终答案要求\n")
                 .append("1. 当你获得结论或信息已足够时，必须给出最终答案。\n")
                 .append("2. 最终答案**必须**以 ").append(config.getFinishMarker()).append(" 开头。\n")
-                .append("3. 在 ").append(config.getFinishMarker()).append(" 之后直接提供完整回答，不要换行，不要输出 Thought/Action/Observation 标签。\n")
+                .append("3. 在 ").append(config.getFinishMarker()).append(" 之后直接提供完整回答，不要换行，不要输出标注标签。\n")
                 .append("4. 即使不知道答案，也请诚实说明并以 ").append(config.getFinishMarker()).append(" 开头。\n\n");
 
         // C. 核心行为准则
         sb.append("## 核心规则\n")
                 .append("1. 每次仅输出一个 Action，输出后立即停止等待 Observation。\n")
                 .append("2. 严禁伪造 Observation，严禁调用‘可用工具’之外的工具。\n")
-                .append("3. 最终回答必须以 ").append(config.getFinishMarker()).append(" 开头，否则系统无法识别任务完成。\n")
-                .append("4. 如果多次尝试后信息仍不足，请提供包含 ").append(config.getFinishMarker()).append(" 的最佳回答。\n\n");
+                .append("3. 最终回答必须以 ").append(config.getFinishMarker()).append(" 开头，否则系统无法识别任务完成。\n\n");
 
-        // D. 示例引导 (Few-shot)
+        // --- 增量业务指令注入 ---
+        if (instructionProvider != null) {
+            sb.append("## 核心任务指令\n");
+            sb.append(instructionProvider.apply(trace)).append("\n\n");
+        }
+
+        // D. 示例引导 (Few-shot 模仿学习)
         sb.append("## 示例\n")
                 .append("用户: 北京天气怎么样？\n")
                 .append("Thought: 我需要查询北京当前的实时天气信息。\n")
@@ -172,7 +175,7 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
         }
 
         /**
-         * 设置指令描述（静态字符串）
+         * 设置指令描述（静态字符串，作为核心任务指令增量追加）
          */
         public Builder instruction(String instruction) {
             this.instructionProvider = (trace) -> instruction;
@@ -180,7 +183,7 @@ public class ReActPromptProviderCn implements ReActPromptProvider {
         }
 
         /**
-         * 设置指令提供逻辑（动态函数）
+         * 设置指令提供逻辑（动态函数，作为核心任务指令增量追加）
          */
         public Builder instruction(Function<ReActTrace, String> instructionProvider) {
             this.instructionProvider = instructionProvider;

@@ -2,6 +2,7 @@ package demo.ai.agent;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActPromptProviderCn;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.intercept.LoopingTeamInterceptor;
@@ -28,52 +29,67 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent orderReceiver = ReActAgent.of(chatModel)
                 .name("order_receiver")
                 .description("订单接收与初步分类专家")
-                .systemPrompt(c->"你负责接收电商订单，进行初步分类和风险标记。检查订单基本信息：金额、客户历史、收货地址等。")
+                .systemPrompt(ReActPromptProviderCn.builder()
+                        .role("你负责接收电商订单，进行初步分类和风险标记")
+                        .instruction("检查订单基本信息：金额、客户历史、收货地址等")
+                        .build())
                 .build();
 
         // 2. 风控分析师（高风险订单检测）
         ReActAgent riskAnalyst = ReActAgent.of(chatModel)
                 .name("risk_analyst")
                 .description("风险控制分析师")
-                .systemPrompt(c->"你是风控专家，负责分析订单风险。检查：\n" +
-                        "1. 大额订单（超过5000元）\n" +
-                        "2. 新客户首次大额订单\n" +
-                        "3. 高风险地区配送\n" +
-                        "4. 异常支付模式\n" +
-                        "5. 近期频繁退换货历史")
+                .systemPrompt(ReActPromptProviderCn.builder()
+                        .role("你是风控专家，负责分析订单风险")
+                        .instruction("重点检查以下维度：\n" +
+                                "1. 大额订单（超过5000元）\n" +
+                                "2. 新客户首次大额订单\n" +
+                                "3. 高风险地区配送\n" +
+                                "4. 异常支付模式\n" +
+                                "5. 近期频繁退换货历史")
+                        .build())
                 .build();
 
         // 3. 客户验证专员
         ReActAgent customerValidator = ReActAgent.of(chatModel)
                 .name("customer_validator")
                 .description("客户身份验证专员")
-                .systemPrompt(c->"你负责验证客户信息。需要检查：\n" +
-                        "1. 手机号实名认证\n" +
-                        "2. 收货地址与注册地址一致性\n" +
-                        "3. 历史订单行为模式\n" +
-                        "4. 风险评分（来自风控系统）")
+                .systemPrompt(ReActPromptProviderCn.builder()
+                        .role("你负责验证客户信息真实性")
+                        .instruction("执行以下验证逻辑：\n" +
+                                "1. 手机号实名认证\n" +
+                                "2. 收货地址与注册地址一致性\n" +
+                                "3. 历史订单行为模式\n" +
+                                "4. 参考来自风控系统的风险评分")
+                        .build())
                 .build();
 
         // 4. 物流评估员
         ReActAgent logisticsEvaluator = ReActAgent.of(chatModel)
                 .name("logistics_evaluator")
                 .description("物流与配送风险评估员")
-                .systemPrompt(c->"评估订单的物流风险：\n" +
-                        "1. 配送地址是否偏远或高风险地区\n" +
-                        "2. 商品是否易碎或高价值\n" +
-                        "3. 是否需要特殊包装\n" +
-                        "4. 预估配送成本和风险")
+                .systemPrompt(ReActPromptProviderCn.builder()
+                        .role("负责评估订单的物流与配送风险")
+                        .instruction("评估要点：\n" +
+                                "1. 配送地址是否偏远或高风险地区\n" +
+                                "2. 商品是否易碎或高价值\n" +
+                                "3. 是否需要特殊包装\n" +
+                                "4. 预估配送成本和潜在资损风险")
+                        .build())
                 .build();
 
         // 5. 财务审核员
         ReActAgent financialAuditor = ReActAgent.of(chatModel)
                 .name("financial_auditor")
                 .description("财务审核与反欺诈专家")
-                .systemPrompt(c->"进行财务审核：\n" +
-                        "1. 支付渠道安全性评估\n" +
-                        "2. 信用卡欺诈检测\n" +
-                        "3. 洗钱风险识别\n" +
-                        "4. 建议支付限制或额外验证")
+                .systemPrompt(ReActPromptProviderCn.builder()
+                        .role("执行订单财务审核与反欺诈分析")
+                        .instruction("分析任务：\n" +
+                                "1. 支付渠道安全性评估\n" +
+                                "2. 信用卡欺诈检测\n" +
+                                "3. 洗钱风险识别\n" +
+                                "4. 针对异常情况提出支付限制建议")
+                        .build())
                 .build();
 
         // 6. 最终决策委员会（嵌套团队）
@@ -86,32 +102,41 @@ public class EcommerceOrderRiskSystemTest {
                         ReActAgent.of(chatModel)
                                 .name("senior_risk_manager")
                                 .description("高级风险经理，拥有最终否决权")
-                                .systemPrompt(c->"作为高级风险经理，你有最终决策权。综合所有专家意见，决定：\n" +
-                                        "1. APPROVE - 批准订单\n" +
-                                        "2. REJECT - 拒绝订单\n" +
-                                        "3. HOLD - 暂缓并需要人工审核\n" +
-                                        "4. REQUIRE_VERIFICATION - 要求额外验证")
+                                .systemPrompt(ReActPromptProviderCn.builder()
+                                        .role("作为高级风险经理，你拥有最终决策权")
+                                        .instruction("综合所有专家意见，决定订单最终状态：\n" +
+                                                "1. APPROVE - 批准订单\n" +
+                                                "2. REJECT - 拒绝订单\n" +
+                                                "3. HOLD - 暂缓并需要人工审核\n" +
+                                                "4. REQUIRE_VERIFICATION - 要求额外验证")
+                                        .build())
                                 .build()
                 )
                 .addAgent(
                         ReActAgent.of(chatModel)
                                 .name("compliance_officer")
                                 .description("合规官，确保符合监管要求")
-                                .systemPrompt(c->"检查订单是否符合监管要求：\n" +
-                                        "1. 反洗钱法规\n" +
-                                        "2. 消费者保护法\n" +
-                                        "3. 数据隐私法规\n" +
-                                        "4. 特殊商品限制")
+                                .systemPrompt(ReActPromptProviderCn.builder()
+                                        .role("负责检查订单是否符合法律监管要求")
+                                        .instruction("核查清单：\n" +
+                                                "1. 反洗钱法规\n" +
+                                                "2. 消费者保护法\n" +
+                                                "3. 数据隐私合规\n" +
+                                                "4. 特殊受限商品限制")
+                                        .build())
                                 .build()
                 )
                 .addAgent(
                         ReActAgent.of(chatModel)
                                 .name("customer_experience_advocate")
                                 .description("客户体验倡导者，平衡风险与体验")
-                                .systemPrompt(c->"代表客户利益，确保：\n" +
-                                        "1. 风险控制措施不会过度影响良好客户\n" +
-                                        "2. 验证流程合理\n" +
-                                        "3. 提供替代方案（如分期付款）")
+                                .systemPrompt(ReActPromptProviderCn.builder()
+                                        .role("代表客户利益，在风险与体验间寻找平衡点")
+                                        .instruction("确保：\n" +
+                                                "1. 风险控制措施不会过度影响良好客户\n" +
+                                                "2. 验证流程在可接受范围内\n" +
+                                                "3. 对潜在风险提供人性化的替代方案")
+                                        .build())
                                 .build()
                 )
                 .build();
@@ -120,11 +145,14 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent notificationExecutor = ReActAgent.of(chatModel)
                 .name("notification_executor")
                 .description("通知执行与后续处理专员")
-                .systemPrompt(c->"根据最终决策执行：\n" +
-                        "1. 发送批准通知给客户\n" +
-                        "2. 触发风控拒绝流程\n" +
-                        "3. 安排人工审核\n" +
-                        "4. 记录审计日志")
+                .systemPrompt(ReActPromptProviderCn.builder()
+                        .role("根据最终决策执行后续业务流转")
+                        .instruction("执行动作：\n" +
+                                "1. 发送批准通知给客户\n" +
+                                "2. 触发风控拒绝流程\n" +
+                                "3. 安排人工审核任务\n" +
+                                "4. 记录完整的评审审计日志")
+                        .build())
                 .build();
 
         // ============== 构建主评审流程 ==============
