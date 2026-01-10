@@ -103,7 +103,7 @@ public class ReActConfig {
     /**
      * 提示词模板提供者
      */
-    private ReActPromptProvider promptProvider = ReActPromptProviderEn.getInstance();
+    private ReActPromptProvider promptProvider = ReActPromptProviderEn.getDefault();
 
 
     /**
