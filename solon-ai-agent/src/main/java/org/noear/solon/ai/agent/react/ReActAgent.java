@@ -216,9 +216,7 @@ public class ReActAgent implements Agent {
             if (config.getHistoryWindowSize() > 0) {
                 // 此时尚未存入当前 prompt，获取的是纯历史记录
                 Collection<ChatMessage> history = session.getHistoryMessages(name, config.getHistoryWindowSize());
-                for (ChatMessage message : history) {
-                    trace.appendMessage(message);
-                }
+                trace.appendMessages(history);
             }
         }
 
