@@ -2,7 +2,6 @@ package features.ai.session;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -19,7 +18,6 @@ import java.util.Collection;
  * TeamAgent 与 InMemoryAgentSession 集成测试
  * 验证：1. 跨轮次记忆 2. 会话隔离 3. 自动清理逻辑 4. 过滤系统消息
  */
-@DisplayName("TeamAgent 记忆与会话集成实测")
 public class TeamAgentMemoryTest {
 
     /**
@@ -27,7 +25,6 @@ public class TeamAgentMemoryTest {
      * 验证 TeamAgent 作为一个整体，能否通过 Session 记住之前的关键信息
      */
     @Test
-    @DisplayName("跨轮次身份记忆测试")
     public void testTeamMultiTurnMemory() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
@@ -68,7 +65,6 @@ public class TeamAgentMemoryTest {
      * 验证不同的 Session ID 是否互不干扰
      */
     @Test
-    @DisplayName("多会话记忆隔离测试")
     public void testSessionIsolation() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
         TeamAgent team = TeamAgent.of(chatModel).name("iso_team").addAgent(
@@ -97,7 +93,6 @@ public class TeamAgentMemoryTest {
      * 验证 maxAgentMessages 限制下，旧记忆是否被正确“挤出”，且不删光最新消息
      */
     @Test
-    @DisplayName("记忆窗口滚动清理测试")
     public void testMemoryEviction() {
         // 限制只能存 2 条消息（1 组对话）
         AgentSession session = InMemoryAgentSession.of("limit_session", 2);
@@ -122,7 +117,6 @@ public class TeamAgentMemoryTest {
      * 验证 SystemMessage 是否被 InMemoryAgentSession 忽略（不占用记忆空间）
      */
     @Test
-    @DisplayName("系统消息忽略测试")
     public void testIgnoreSystemMessage() {
         AgentSession session = InMemoryAgentSession.of("sys_ignore_test", 10);
         String agentName = "test_agent";
