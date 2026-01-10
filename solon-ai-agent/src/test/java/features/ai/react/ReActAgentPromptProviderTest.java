@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActPromptProvider;
-import org.noear.solon.ai.agent.react.ReActPromptProviderCn;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
+import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
@@ -30,7 +30,7 @@ public class ReActAgentPromptProviderTest {
 
         // 1. 定义自定义 Prompt 模板
         // 通过 trace 可以获取当前工具列表、配置信息等动态数据
-        ReActPromptProvider customProvider = trace -> {
+        ReActSystemPrompt customProvider = trace -> {
             return "你是专门处理数学问题的专家。\n" +
                     "当前可用工具数量: " + trace.getConfig().getTools().size() + "\n" +
                     "请严格按照以下格式进行推理:\n" +
@@ -69,7 +69,7 @@ public class ReActAgentPromptProviderTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new ChineseTools()))
-                .systemPrompt(ReActPromptProviderCn.getInstance()) // 使用单例中文增强
+                .systemPrompt(ReActSystemPromptCn.getInstance()) // 使用单例中文增强
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();
 
@@ -93,7 +93,7 @@ public class ReActAgentPromptProviderTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 提供一个无任何指令的提供者
-        ReActPromptProvider emptyProvider = trace -> "";
+        ReActSystemPrompt emptyProvider = trace -> "";
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new BasicTools()))

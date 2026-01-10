@@ -2,14 +2,12 @@ package demo.ai.agent;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActPromptProviderCn;
+import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.intercept.LoopingTeamInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
-
-import java.util.*;
 
 /**
  * 电商订单风险评审系统 - 生产级测试用例（Java 8 语法）
@@ -29,7 +27,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent orderReceiver = ReActAgent.of(chatModel)
                 .name("order_receiver")
                 .description("订单接收与初步分类专家")
-                .systemPrompt(ReActPromptProviderCn.builder()
+                .systemPrompt(ReActSystemPromptCn.builder()
                         .role("你负责接收电商订单，进行初步分类和风险标记")
                         .instruction("检查订单基本信息：金额、客户历史、收货地址等")
                         .build())
@@ -39,7 +37,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent riskAnalyst = ReActAgent.of(chatModel)
                 .name("risk_analyst")
                 .description("风险控制分析师")
-                .systemPrompt(ReActPromptProviderCn.builder()
+                .systemPrompt(ReActSystemPromptCn.builder()
                         .role("你是风控专家，负责分析订单风险")
                         .instruction("重点检查以下维度：\n" +
                                 "1. 大额订单（超过5000元）\n" +
@@ -54,7 +52,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent customerValidator = ReActAgent.of(chatModel)
                 .name("customer_validator")
                 .description("客户身份验证专员")
-                .systemPrompt(ReActPromptProviderCn.builder()
+                .systemPrompt(ReActSystemPromptCn.builder()
                         .role("你负责验证客户信息真实性")
                         .instruction("执行以下验证逻辑：\n" +
                                 "1. 手机号实名认证\n" +
@@ -68,7 +66,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent logisticsEvaluator = ReActAgent.of(chatModel)
                 .name("logistics_evaluator")
                 .description("物流与配送风险评估员")
-                .systemPrompt(ReActPromptProviderCn.builder()
+                .systemPrompt(ReActSystemPromptCn.builder()
                         .role("负责评估订单的物流与配送风险")
                         .instruction("评估要点：\n" +
                                 "1. 配送地址是否偏远或高风险地区\n" +
@@ -82,7 +80,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent financialAuditor = ReActAgent.of(chatModel)
                 .name("financial_auditor")
                 .description("财务审核与反欺诈专家")
-                .systemPrompt(ReActPromptProviderCn.builder()
+                .systemPrompt(ReActSystemPromptCn.builder()
                         .role("执行订单财务审核与反欺诈分析")
                         .instruction("分析任务：\n" +
                                 "1. 支付渠道安全性评估\n" +
@@ -102,7 +100,7 @@ public class EcommerceOrderRiskSystemTest {
                         ReActAgent.of(chatModel)
                                 .name("senior_risk_manager")
                                 .description("高级风险经理，拥有最终否决权")
-                                .systemPrompt(ReActPromptProviderCn.builder()
+                                .systemPrompt(ReActSystemPromptCn.builder()
                                         .role("作为高级风险经理，你拥有最终决策权")
                                         .instruction("综合所有专家意见，决定订单最终状态：\n" +
                                                 "1. APPROVE - 批准订单\n" +
@@ -116,7 +114,7 @@ public class EcommerceOrderRiskSystemTest {
                         ReActAgent.of(chatModel)
                                 .name("compliance_officer")
                                 .description("合规官，确保符合监管要求")
-                                .systemPrompt(ReActPromptProviderCn.builder()
+                                .systemPrompt(ReActSystemPromptCn.builder()
                                         .role("负责检查订单是否符合法律监管要求")
                                         .instruction("核查清单：\n" +
                                                 "1. 反洗钱法规\n" +
@@ -130,7 +128,7 @@ public class EcommerceOrderRiskSystemTest {
                         ReActAgent.of(chatModel)
                                 .name("customer_experience_advocate")
                                 .description("客户体验倡导者，平衡风险与体验")
-                                .systemPrompt(ReActPromptProviderCn.builder()
+                                .systemPrompt(ReActSystemPromptCn.builder()
                                         .role("代表客户利益，在风险与体验间寻找平衡点")
                                         .instruction("确保：\n" +
                                                 "1. 风险控制措施不会过度影响良好客户\n" +
@@ -145,7 +143,7 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent notificationExecutor = ReActAgent.of(chatModel)
                 .name("notification_executor")
                 .description("通知执行与后续处理专员")
-                .systemPrompt(ReActPromptProviderCn.builder()
+                .systemPrompt(ReActSystemPromptCn.builder()
                         .role("根据最终决策执行后续业务流转")
                         .instruction("执行动作：\n" +
                                 "1. 发送批准通知给客户\n" +

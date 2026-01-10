@@ -28,7 +28,7 @@ import java.util.Locale;
  * @since 3.8.1
  */
 @Preview("3.8")
-public interface ReActPromptProvider {
+public interface ReActSystemPrompt {
     default Locale getLocale(){
         return Locale.CHINESE;
     }

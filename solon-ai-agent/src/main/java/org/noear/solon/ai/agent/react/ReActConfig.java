@@ -103,7 +103,7 @@ public class ReActConfig {
     /**
      * 提示词模板提供者
      */
-    private ReActPromptProvider promptProvider = ReActPromptProviderEn.getDefault();
+    private ReActSystemPrompt promptProvider = ReActSystemPromptEn.getDefault();
 
 
     /**
@@ -216,7 +216,7 @@ public class ReActConfig {
         }
     }
 
-    public void setPromptProvider(ReActPromptProvider val) {
+    public void setPromptProvider(ReActSystemPrompt val) {
         this.promptProvider = val;
     }
 
@@ -298,7 +298,7 @@ public class ReActConfig {
     /**
      * 获取提示词提供者
      */
-    public ReActPromptProvider getPromptProvider() {
+    public ReActSystemPrompt getPromptProvider() {
         return promptProvider;
     }
 

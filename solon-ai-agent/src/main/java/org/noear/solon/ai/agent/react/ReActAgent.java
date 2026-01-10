@@ -489,7 +489,7 @@ public class ReActAgent implements Agent {
          * @param val 模板生成器
          * @return 构建器
          */
-        public Builder systemPrompt(ReActPromptProvider val) {
+        public Builder systemPrompt(ReActSystemPrompt val) {
             config.setPromptProvider(val);
             return this;
         }
