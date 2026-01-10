@@ -112,7 +112,7 @@ public class TeamConfig {
     /**
      * 系统提示词（System Prompt）模板提供者，支持多语言动态适配
      */
-    private TeamPromptProvider promptProvider = TeamPromptProviderEn.getInstance();
+    private TeamSystemPrompt promptProvider = TeamSystemPromptEn.getInstance();
 
     /**
      * 基于指定的推理模型初始化团队配置
@@ -209,7 +209,7 @@ public class TeamConfig {
     /**
      * 设置团队指令模板提供者
      */
-    public void setPromptProvider(TeamPromptProvider promptProvider) {
+    public void setPromptProvider(TeamSystemPrompt promptProvider) {
         this.promptProvider = promptProvider;
     }
 
@@ -317,7 +317,7 @@ public class TeamConfig {
         return interceptorList;
     }
 
-    public TeamPromptProvider getPromptProvider() {
+    public TeamSystemPrompt getPromptProvider() {
         return promptProvider;
     }
 

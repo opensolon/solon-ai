@@ -35,7 +35,7 @@ import java.util.Locale;
  * @since 3.8.1
  */
 @Preview("3.8")
-public interface TeamPromptProvider {
+public interface TeamSystemPrompt {
     /**
      * 获取语言区域（默认：中文）
      */

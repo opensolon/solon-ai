@@ -8,8 +8,8 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.TeamPromptProvider;
-import org.noear.solon.ai.agent.team.TeamPromptProviderCn;
+import org.noear.solon.ai.agent.team.TeamSystemPrompt;
+import org.noear.solon.ai.agent.team.TeamSystemPromptCn;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -82,7 +82,7 @@ public class TeamAgentSupervisorTest {
 
         // 1. 使用 TeamPromptProviderCn.builder 方式构建自定义提示词
         // 这种方式会自动利用框架内置的结构化分段逻辑（Role, Instruction, Output Specification等）
-        TeamPromptProvider customProvider = TeamPromptProviderCn.builder()
+        TeamSystemPrompt customProvider = TeamSystemPromptCn.builder()
                 .role("你是一个高效的任务调度主管，擅长根据专家能力分配工作。")
                 .instruction(trace -> {
                     // 仅需注入增量的业务指令，基础的成员列表和输出规范由 Builder 自动维护

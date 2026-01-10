@@ -33,19 +33,19 @@ import java.util.function.Function;
  * @since 3.8.1
  */
 @Preview("3.8")
-public class TeamPromptProviderEn implements TeamPromptProvider {
+public class TeamSystemPromptEn implements TeamSystemPrompt {
     /**
      * 默认单例（使用标准主管模板）
      */
-    private static final TeamPromptProviderEn _DEFAULT = new TeamPromptProviderEn(null, null);
+    private static final TeamSystemPromptEn _DEFAULT = new TeamSystemPromptEn(null, null);
 
-    public static TeamPromptProviderEn getInstance() { return _DEFAULT; }
+    public static TeamSystemPromptEn getInstance() { return _DEFAULT; }
 
     private final Function<TeamTrace, String> roleProvider;
     private final Function<TeamTrace, String> instructionProvider;
 
-    protected TeamPromptProviderEn(Function<TeamTrace, String> roleProvider,
-                                   Function<TeamTrace, String> instructionProvider) {
+    protected TeamSystemPromptEn(Function<TeamTrace, String> roleProvider,
+                                 Function<TeamTrace, String> instructionProvider) {
         this.roleProvider = roleProvider;
         this.instructionProvider = instructionProvider;
     }
@@ -151,6 +151,6 @@ public class TeamPromptProviderEn implements TeamPromptProvider {
         /**
          * 构建提供者实例
          */
-        public TeamPromptProviderEn build() { return new TeamPromptProviderEn(roleProvider, instructionProvider); }
+        public TeamSystemPromptEn build() { return new TeamSystemPromptEn(roleProvider, instructionProvider); }
     }
 }
