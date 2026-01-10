@@ -52,7 +52,7 @@ import java.util.function.Consumer;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class ReActAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 

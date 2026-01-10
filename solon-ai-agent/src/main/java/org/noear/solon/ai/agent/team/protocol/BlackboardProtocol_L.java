@@ -16,14 +16,17 @@
 package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.lang.Preview;
 
 import java.util.Locale;
 
 /**
+ * 黑板协作协议 (Blackboard Protocol)
  *
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class BlackboardProtocol_L extends HierarchicalProtocol_H {
     public BlackboardProtocol_L(TeamConfig config) {
         super(config);

@@ -36,7 +36,7 @@ import java.util.function.Function;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public interface TeamSystemPrompt {
     /**
      * 获取提示词关联的语言区域

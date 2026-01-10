@@ -16,14 +16,17 @@
 package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.lang.Preview;
 
 import java.util.Locale;
 
 /**
+ * 市场机制协作协议 (Market-Based Protocol)
  *
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class MarketBasedProtocol_L extends HierarchicalProtocol_H {
     public MarketBasedProtocol_L(TeamConfig config) {
         super(config);

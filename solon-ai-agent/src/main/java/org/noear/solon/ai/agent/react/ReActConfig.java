@@ -35,7 +35,7 @@ import java.util.function.Consumer;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class ReActConfig {
     /**
      * 智能体唯一标识名

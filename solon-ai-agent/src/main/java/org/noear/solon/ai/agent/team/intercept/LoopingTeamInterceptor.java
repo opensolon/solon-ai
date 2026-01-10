@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.team.intercept;
 
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.lang.Preview;
 
 import java.util.List;
 import java.util.Objects;
@@ -34,6 +35,7 @@ import java.util.Objects;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class LoopingTeamInterceptor implements TeamInterceptor {
     /** 最小内容长度，低于此值不判定为循环（避免误伤 "OK", "Done" 等短语） */
     private int minContentLength = 10;

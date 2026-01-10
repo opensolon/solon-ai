@@ -54,7 +54,7 @@ import java.util.regex.Pattern;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class ActionTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(ActionTask.class);
 

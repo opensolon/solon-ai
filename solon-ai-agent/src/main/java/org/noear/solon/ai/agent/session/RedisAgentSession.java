@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Preview;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -36,6 +37,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class RedisAgentSession implements AgentSession {
 
     private final String instanceId;

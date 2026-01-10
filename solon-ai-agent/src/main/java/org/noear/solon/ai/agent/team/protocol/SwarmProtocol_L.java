@@ -1,5 +1,3 @@
-
-
 /*
  * Copyright 2017-2025 noear.org and authors
  *
@@ -23,16 +21,19 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
+import org.noear.solon.lang.Preview;
 
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
 /**
+ * 蜂群协作协议 (Swarm Protocol)
  *
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class SwarmProtocol_L extends TeamProtocolBase {
     public SwarmProtocol_L(TeamConfig config) {
         super(config);

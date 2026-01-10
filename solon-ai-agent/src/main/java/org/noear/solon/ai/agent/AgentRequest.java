@@ -25,7 +25,7 @@ import org.noear.solon.lang.Preview;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public interface AgentRequest {
     /**
      * 配置当前请求所属的会话

@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.team.protocol.*;
+import org.noear.solon.lang.Preview;
 
 /**
  * 团队协作协议常量集
@@ -24,6 +25,7 @@ import org.noear.solon.ai.agent.team.protocol.*;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public interface TeamProtocols {
     /**
      * 顺序协作协议 (Sequential)

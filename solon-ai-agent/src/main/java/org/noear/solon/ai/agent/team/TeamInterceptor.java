@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.flow.intercept.FlowInterceptor;
+import org.noear.solon.lang.Preview;
 
 /**
  * 团队协作拦截器 (Team Interceptor)
@@ -30,6 +31,7 @@ import org.noear.solon.flow.intercept.FlowInterceptor;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public interface TeamInterceptor extends FlowInterceptor {
 
     // --- [维度 1：团队生命周期 (Team Level)] ---

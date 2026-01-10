@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public interface Agent extends NamedTaskComponent {
     static final Logger LOG = LoggerFactory.getLogger(Agent.class);
 
@@ -109,9 +109,6 @@ public interface Agent extends NamedTaskComponent {
      */
     @Override
     default void run(FlowContext context, Node node) throws Throwable {
-        // 记录当前执行者的标识，供路由器（Router）回溯
-        context.put(KEY_LAST_AGENT_NAME, name());
-
         // 获取或创建会话
         AgentSession session = context.computeIfAbsent(KEY_SESSION, k -> new InMemoryAgentSession("tmp"));
 
@@ -120,6 +117,7 @@ public interface Agent extends NamedTaskComponent {
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
 
         if(trace != null){
+            trace.setLastAgentName(this.name());
             for (RankEntity<TeamInterceptor> item : trace.getConfig().getInterceptorList()) {
                 if (item.target.shouldAgentContinue(trace, this) == false) {
                     trace.addStep(name(),
@@ -166,8 +164,6 @@ public interface Agent extends NamedTaskComponent {
 
     /** 当前活跃轨迹的 Key */
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key_";
-    /** 最后执行的智能体名称 */
-    static String KEY_LAST_AGENT_NAME = "_last_agent_name_";
     /** 会话对象存储 Key */
     static String KEY_SESSION = "SESSION";
     /** 协作协议存储 Key */

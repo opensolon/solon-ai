@@ -1,5 +1,3 @@
-
-
 /*
  * Copyright 2017-2025 noear.org and authors
  *
@@ -28,6 +26,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
+import org.noear.solon.lang.Preview;
 
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -36,11 +35,11 @@ import java.util.stream.Collectors;
 
 /**
  * A2A (Agent to Agent) 协作协议
- * 实现智能体之间的任务移交与上下文状态衔接
  *
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class A2AProtocol_L extends TeamProtocolBase {
     private static final String TOOL_TRANSFER = "__transfer_to__";
 

@@ -22,26 +22,17 @@ import org.noear.solon.ai.agent.team.task.ContractNetBiddingTask;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
+import org.noear.solon.lang.Preview;
 
 import java.util.Locale;
 
 /**
  * 合同网协作协议 (Contract Net Protocol / CNP)
  *
- * <p>CNP 是一种基于市场机制的分布式任务分配协议，适用于任务目标明确但执行路径多样的场景。</p>
- * <p><b>协作阶段说明：</b></p>
- * <ul>
- * <li><b>1. 招标 (Call for Proposals)</b>：Supervisor 分析任务，决定发起全员或定向招标（输出 `BIDDING`）。</li>
- * <li><b>2. 竞标 (Proposing)</b>：候选 Agent 通过 {@link ContractNetBiddingTask} 评估自身能力并提交方案。</li>
- * <li><b>3. 定标 (Awarding)</b>：Supervisor 审查汇总后的标书（Bids），选择最优执行者。</li>
- * <li><b>4. 执行 (Expediting)</b>：中选 Agent 完成任务并将结果反馈给 Supervisor 进行闭环审计。</li>
- * </ul>
- *
- *
- *
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class ContractNetProtocol_L extends TeamProtocolBase {
     public ContractNetProtocol_L(TeamConfig config) {
         super(config);

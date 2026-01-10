@@ -48,7 +48,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class SupervisorTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(SupervisorTask.class);
 

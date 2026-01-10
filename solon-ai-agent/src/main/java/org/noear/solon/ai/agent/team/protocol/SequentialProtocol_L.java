@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2017-2025 noear.org and authors
  *
@@ -20,16 +19,19 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
+ * 顺序协作协议 (Sequential Protocol)
  *
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class SequentialProtocol_L extends HierarchicalProtocol_H {
     public SequentialProtocol_L(TeamConfig config) {
         super(config);

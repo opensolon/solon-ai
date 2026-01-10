@@ -32,7 +32,7 @@ import org.noear.solon.lang.Preview;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public interface AgentTrace {
     // 后续可以承载：getMessages(), getUsage(), getContext() 等标准方法
 }

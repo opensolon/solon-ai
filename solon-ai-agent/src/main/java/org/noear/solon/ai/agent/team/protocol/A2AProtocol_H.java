@@ -31,6 +31,7 @@ import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +45,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class A2AProtocol_H extends TeamProtocolBase {
     private static final Logger LOG = LoggerFactory.getLogger(A2AProtocol_H.class);
 
@@ -513,10 +515,10 @@ public class A2AProtocol_H extends TeamProtocolBase {
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        String lastAgentName = context.getAs(Agent.KEY_LAST_AGENT_NAME);
-        if (Utils.isEmpty(lastAgentName)) return null;
+        if (Utils.isEmpty(trace.getLastAgentName())) return null;
 
         // [调整点] 统一从 FlowContext 获取 Agent 自身的轨迹
+        String lastAgentName = trace.getLastAgentName();
         AgentTrace latestTrace = context.getAs("__" + lastAgentName);
 
         if (latestTrace instanceof ReActTrace) {

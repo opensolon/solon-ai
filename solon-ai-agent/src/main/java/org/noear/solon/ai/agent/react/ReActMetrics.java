@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.lang.Preview;
+
 import java.io.Serializable;
 
 /**
@@ -23,6 +25,7 @@ import java.io.Serializable;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class ReActMetrics implements Serializable {
     /**
      * 总执行时间（毫秒）

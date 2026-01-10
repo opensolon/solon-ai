@@ -42,7 +42,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class TeamTrace implements AgentTrace {
     /** 关联的团队配置（生命周期内稳定，不参与持久化序列化） */
     private transient TeamConfig config;
@@ -60,6 +60,8 @@ public class TeamTrace implements AgentTrace {
     private volatile String route;
     /** 记录调度器（Supervisor）输出的原始推理文本，用于异常复盘与自省 */
     private volatile String lastDecision;
+    /** 记录最后运行的智能体名字 */
+    private volatile String lastAgentName;
     /** 迭代安全计数器：限制协作的最大深度，防止 LLM 幻觉导致的无限递归 */
     private final AtomicInteger iterationCounter;
 
@@ -142,6 +144,8 @@ public class TeamTrace implements AgentTrace {
     public void setRoute(String route) { this.route = route; }
     public String getLastDecision() { return lastDecision; }
     public void setLastDecision(String decision) { this.lastDecision = decision; }
+    public String getLastAgentName() { return lastAgentName; }
+    public void setLastAgentName(String agentName) { this.lastAgentName = agentName; }
     public int getIterationsCount() { return iterationCounter.get(); }
     public void resetIterationsCount() { iterationCounter.set(0); }
     public int nextIterations() { return iterationCounter.incrementAndGet(); }

@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class ReActTrace implements AgentTrace {
     /**
      * 当前运行配置

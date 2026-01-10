@@ -38,7 +38,7 @@ import java.util.List;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class SummarizationInterceptor implements ReActInterceptor {
     /** 窗口保留的最大消息条数 */
     private final int maxMessages;

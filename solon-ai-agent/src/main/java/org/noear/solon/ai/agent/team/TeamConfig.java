@@ -33,7 +33,7 @@ import java.util.function.Consumer;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class TeamConfig {
     /**
      * 团队唯一标识名称（用于日志追踪及 context 引用）

@@ -30,7 +30,7 @@ import java.util.Map;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public interface ReActInterceptor extends FlowInterceptor, ChatInterceptor {
 
     /**

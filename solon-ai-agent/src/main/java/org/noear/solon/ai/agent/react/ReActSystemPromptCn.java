@@ -32,7 +32,7 @@ import java.util.function.Function;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class ReActSystemPromptCn implements ReActSystemPrompt {
     /**
      * 默认单例（使用标准 ReAct 模板）

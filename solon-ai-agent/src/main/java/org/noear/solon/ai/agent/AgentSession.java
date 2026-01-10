@@ -31,7 +31,7 @@ import java.util.Collection;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public interface AgentSession extends NonSerializable {
     /**
      * 获取会话唯一标识符

@@ -36,7 +36,7 @@ import org.slf4j.LoggerFactory;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class ToolRetryInterceptor implements ReActInterceptor {
     private static final Logger LOG = LoggerFactory.getLogger(ToolRetryInterceptor.class);
 

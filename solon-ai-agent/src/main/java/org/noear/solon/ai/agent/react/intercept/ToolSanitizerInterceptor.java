@@ -36,7 +36,7 @@ import java.util.function.Function;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class ToolSanitizerInterceptor implements ReActInterceptor {
     /** 最大的观察记录长度，超过此长度将执行截断 */
     private final int maxObservationLength;

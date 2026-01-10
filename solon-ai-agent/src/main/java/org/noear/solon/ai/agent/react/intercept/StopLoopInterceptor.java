@@ -42,7 +42,7 @@ import org.noear.solon.lang.Preview;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class StopLoopInterceptor implements ReActInterceptor {
     /**
      * 同一响应内容允许重复的最大次数

@@ -24,6 +24,7 @@ import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Preview;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,6 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class InMemoryAgentSession implements AgentSession {
 
     public static AgentSession of() {

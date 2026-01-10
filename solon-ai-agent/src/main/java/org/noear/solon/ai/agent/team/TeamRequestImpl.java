@@ -21,6 +21,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Preview;
 
 /**
  * 团队模式请求
@@ -28,6 +29,7 @@ import org.noear.solon.flow.FlowContext;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class TeamRequestImpl implements AgentRequest {
     private final TeamAgent agent;
     private final Prompt prompt;

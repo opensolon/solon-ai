@@ -21,6 +21,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Preview;
 
 /**
  * ReAct 模式请求
@@ -28,6 +29,7 @@ import org.noear.solon.flow.FlowContext;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class ReActRequestImpl implements AgentRequest {
     private final ReActAgent agent;
     private final Prompt prompt;

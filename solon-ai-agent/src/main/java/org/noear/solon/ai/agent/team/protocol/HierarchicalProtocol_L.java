@@ -21,14 +21,17 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
+import org.noear.solon.lang.Preview;
 
 import java.util.Locale;
 
 /**
+ * 层级化协作协议 (Hierarchical Protocol)
  *
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public class HierarchicalProtocol_L extends TeamProtocolBase {
     public HierarchicalProtocol_L(TeamConfig config){
         super(config);

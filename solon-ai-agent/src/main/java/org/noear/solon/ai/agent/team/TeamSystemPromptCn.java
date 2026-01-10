@@ -34,7 +34,7 @@ import java.util.function.Function;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class TeamSystemPromptCn implements TeamSystemPrompt {
     /**
      * 默认单例（使用标准主管模板）

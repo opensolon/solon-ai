@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.NonSerializable;
+import org.noear.solon.lang.Preview;
 
 import java.util.Locale;
 
@@ -39,6 +40,7 @@ import java.util.Locale;
  * @author noear
  * @since 3.8.1
  */
+@Preview("3.8.1")
 public interface TeamProtocol extends NonSerializable {
 
     /**

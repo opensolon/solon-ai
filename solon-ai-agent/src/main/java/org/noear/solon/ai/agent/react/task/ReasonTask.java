@@ -48,7 +48,7 @@ import java.util.List;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8")
+@Preview("3.8.1")
 public class ReasonTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(ReasonTask.class);
 
