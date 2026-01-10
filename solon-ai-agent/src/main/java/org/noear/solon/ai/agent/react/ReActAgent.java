@@ -137,7 +137,7 @@ public class ReActAgent implements Agent {
      *
      * @return 推理配置
      */
-    protected ReActConfig getConfig() {
+    public ReActConfig getConfig() {
         return config;
     }
 

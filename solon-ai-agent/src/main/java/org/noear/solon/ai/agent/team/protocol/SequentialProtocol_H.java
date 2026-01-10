@@ -2,6 +2,7 @@ package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.flow.FlowContext;
@@ -469,6 +470,9 @@ public class SequentialProtocol_H extends HierarchicalProtocol_H {
     /**
      * 检查当前阶段是否需要重试
      */
+    /**
+     * 检查当前阶段是否需要重试
+     */
     private boolean shouldRetryCurrentStage(TeamTrace trace, String agentName) {
         if (trace.getSteps().isEmpty()) {
             return false;
@@ -491,8 +495,23 @@ public class SequentialProtocol_H extends HierarchicalProtocol_H {
             return true;
         }
 
+        // 获取当前 Agent 的配置
+        Agent agent = trace.getConfig().getAgentMap().get(agentName);
+        if (agent != null) {
+            // 检查是否包含该 Agent 的 finish marker
+            // 注意：这里假设 agent 是 ReActAgent，需要获取其配置
+            if (agent instanceof ReActAgent) {
+                ReActAgent reactAgent = (ReActAgent) agent;
+                String finishMarker = reactAgent.getConfig().getFinishMarker();
+                if (content.contains(finishMarker)) {
+                    return false; // 包含正确的 finish marker，不需要重试
+                }
+            }
+        }
+
         // 检查输出是否过于简单（可能未完成）
-        if (content.length() < 50 && !content.contains("FINISH") && !content.contains("完成")) {
+        // 放宽长度检查，或者根据 Agent 类型调整阈值
+        if (content.length() < 30 && !content.contains("FINISH") && !content.contains("完成")) {
             return true;
         }
 

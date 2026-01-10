@@ -138,7 +138,7 @@ public class TeamAgent implements Agent {
     /**
      * 获取团队原始配置
      */
-    protected TeamConfig getConfig() {
+    public TeamConfig getConfig() {
         return config;
     }
 
