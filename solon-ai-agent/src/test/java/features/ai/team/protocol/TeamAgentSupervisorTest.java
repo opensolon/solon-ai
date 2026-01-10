@@ -9,6 +9,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamPromptProvider;
+import org.noear.solon.ai.agent.team.TeamPromptProviderCn;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -79,14 +80,17 @@ public class TeamAgentSupervisorTest {
     public void testCustomPromptProvider() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 定义自定义提示词提供者：精细化控制 Supervisor 的指派指令
-        TeamPromptProvider customProvider = trace -> {
-            return "你是团队监督员。当前任务: " + trace.getPrompt().getUserContent() +
-                    "\n团队成员: " + String.join(", ", trace.getConfig().getAgentMap().keySet()) +
-                    "\n指令：根据协作历史决定下一步由谁执行。\n" +
-                    "- 如果任务已圆满完成，请仅回复 '" + trace.getConfig().getFinishMarker() + "'。\n" +
-                    "- 否则，请仅回复成员的名字（例如：'worker'）。";
-        };
+        // 1. 使用 TeamPromptProviderCn.builder 方式构建自定义提示词
+        // 这种方式会自动利用框架内置的结构化分段逻辑（Role, Instruction, Output Specification等）
+        TeamPromptProvider customProvider = TeamPromptProviderCn.builder()
+                .role("你是一个高效的任务调度主管，擅长根据专家能力分配工作。")
+                .instruction(trace -> {
+                    // 仅需注入增量的业务指令，基础的成员列表和输出规范由 Builder 自动维护
+                    return "特殊调度逻辑：\n" +
+                            "1. 如果当前任务涉及‘代码’，优先指派技术类 Agent。\n" +
+                            "2. 必须参考历史记录，避免重复指派同一 Agent 执行相同指令。";
+                })
+                .build();
 
         // 2. 构建包含自定义逻辑的团队
         TeamAgent team = TeamAgent.of(chatModel)
