@@ -312,26 +312,26 @@ public class ContractNetProtocol_H extends TeamProtocolBase {
 
         if (bidCount == 0) {
             return isChinese ?
-                    "⚠️ 未收到任何投标。建议：重新招标或调整任务描述。" :
-                    "⚠️ No bids received. Suggestion: Re-bid or adjust task description.";
+                    "注意：未收到任何投标。建议：重新招标或调整任务描述。" :
+                    "Note: No bids received. Suggestion: Re-bid or adjust task description.";
         }
 
         if (bidCount == 1) {
             return isChinese ?
-                    "ℹ️ 仅收到一份投标。建议：仔细评估其可行性，或考虑重新招标获取更多选项。" :
-                    "ℹ️ Only one bid received. Suggestion: Evaluate feasibility carefully, or consider re-bidding for more options.";
+                    "信息：仅收到一份投标。建议：仔细评估其可行性，或考虑重新招标获取更多选项。" :
+                    "Info: Only one bid received. Suggestion: Evaluate feasibility carefully, or consider re-bidding for more options.";
         }
 
         // 检查是否有明显的专家匹配
         if (bids.contains("Expertise Match") || bids.contains("专业匹配")) {
             return isChinese ?
-                    "✅ 检测到专业匹配的投标。建议优先考虑这些专家。" :
-                    "✅ Expertise matches detected. Suggest prioritizing these experts.";
+                    "提示：检测到专业匹配的投标。建议优先考虑这些专家。" :
+                    "Hint: Expertise matches detected. Suggest prioritizing these experts.";
         }
 
         return isChinese ?
-                "📊 收到多份投标。建议：比较各方案的可行性、效率、专业性。" :
-                "📊 Multiple bids received. Suggestion: Compare feasibility, efficiency, professionalism.";
+                "信息：收到多份投标。建议：比较各方案的可行性、效率、专业性。" :
+                "Info: Multiple bids received. Suggestion: Compare feasibility, efficiency, professionalism.";
     }
 
     /**
@@ -362,13 +362,13 @@ public class ContractNetProtocol_H extends TeamProtocolBase {
             boolean isChinese = Locale.CHINA.getLanguage().equals(trace.getConfig().getLocale());
 
             if (isChinese) {
-                sb.append("\n\n📝 当前是第 ").append(round).append(" 轮招标");
+                sb.append("\n\n状态：当前是第 ").append(round).append(" 轮招标");
                 if (round >= maxBiddingRounds) {
                     sb.append(" (已达最大招标轮次)");
                 }
                 sb.append("。");
             } else {
-                sb.append("\n\n📝 This is bidding round ").append(round);
+                sb.append("\n\nStatus: This is bidding round ").append(round);
                 if (round >= maxBiddingRounds) {
                     sb.append(" (maximum rounds reached)");
                 }

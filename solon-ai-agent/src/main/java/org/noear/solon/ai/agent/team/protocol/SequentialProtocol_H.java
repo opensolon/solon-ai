@@ -129,14 +129,14 @@ public class SequentialProtocol_H extends HierarchicalProtocol_H {
                 String status;
 
                 if (i < currentStage) {
-                    status = "✅ 已完成";
+                    status = "已完成";
                 } else if (i == currentStage) {
-                    status = "▶️ 进行中";
+                    status = "进行中";
                 } else {
-                    status = "⏳ 待执行";
+                    status = "待执行";
                 }
 
-                sb.append(i + 1).append(". ").append(status).append(" - ")
+                sb.append(i + 1).append(". [").append(status).append("] - ")
                         .append(agentName).append("\n");
             }
 
@@ -211,21 +211,21 @@ public class SequentialProtocol_H extends HierarchicalProtocol_H {
         String content = lastStep.getContent();
 
         if (Utils.isEmpty(content)) {
-            return "⚠️ 上一阶段(" + agentName + ")输出为空，可能需要重试";
+            return "警告: 上一阶段(" + agentName + ")输出为空，可能需要重试";
         }
 
         // 简单的验证逻辑
         if (content.contains("ERROR") || content.contains("错误") ||
                 content.contains("FAIL") || content.contains("失败")) {
-            return "❌ 上一阶段(" + agentName + ")可能执行失败";
+            return "错误: 上一阶段(" + agentName + ")可能执行失败";
         }
 
         if (content.contains("FINISH") || content.contains("完成") ||
                 content.contains("DONE")) {
-            return "✅ 上一阶段(" + agentName + ")已明确完成";
+            return "完成: 上一阶段(" + agentName + ")已明确完成";
         }
 
-        return "⏳ 上一阶段(" + agentName + ")已执行，等待下一阶段";
+        return "等待: 上一阶段(" + agentName + ")已执行，等待下一阶段";
     }
 
     /**
@@ -467,9 +467,6 @@ public class SequentialProtocol_H extends HierarchicalProtocol_H {
         super.onAgentEnd(trace, agent);
     }
 
-    /**
-     * 检查当前阶段是否需要重试
-     */
     /**
      * 检查当前阶段是否需要重试
      */

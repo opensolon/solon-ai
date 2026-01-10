@@ -244,26 +244,26 @@ public class SwarmProtocol_H extends TeamProtocolBase {
         // 检查是否有过度使用的工蜂
         String overworkedAgent = findOverworkedAgent(usage, trace.getStepCount());
         if (overworkedAgent != null) {
-            advice.append("⚠️ ").append(overworkedAgent).append(" 工作负担较重，考虑让其他工蜂分担。\n");
+            advice.append("注意: ").append(overworkedAgent).append(" 工作负担较重，考虑让其他工蜂分担。\n");
         }
 
         // 检查是否有闲置的工蜂
         List<String> idleAgents = findIdleAgents(usage);
         if (!idleAgents.isEmpty()) {
-            advice.append("💡 未活跃的工蜂: ").append(String.join(", ", idleAgents))
+            advice.append("建议: 未活跃的工蜂: ").append(String.join(", ", idleAgents))
                     .append("，可以考虑调动他们参与协作。\n");
         }
 
         // 检查是否有重复模式
         if (detectRepetitivePattern(trace)) {
-            advice.append("🔄 检测到重复模式，建议改变协作策略或引入新的工蜂。\n");
+            advice.append("模式: 检测到重复模式，建议改变协作策略或引入新的工蜂。\n");
         }
 
         // 检查蜂群是否过于集中
         if (usage.size() == 1 && trace.getStepCount() > 3) {
-            advice.append("🐝 蜂群过于依赖单一工蜂，建议扩大协作范围。");
+            advice.append("集中: 蜂群过于依赖单一工蜂，建议扩大协作范围。");
         } else if (usage.size() >= maxSwarmSize) {
-            advice.append("✅ 蜂群规模健康，保持了良好的多样性。");
+            advice.append("良好: 蜂群规模健康，保持了良好的多样性。");
         }
 
         return advice.toString();
@@ -361,9 +361,9 @@ public class SwarmProtocol_H extends TeamProtocolBase {
 
         double consensusLevel = (double) agreedVotes / totalVotes;
         if (consensusLevel >= consensusThreshold) {
-            return String.format("✅ 达成共识 (%.0f%%)", consensusLevel * 100);
+            return String.format("共识达成 (%.0f%%)", consensusLevel * 100);
         } else {
-            return String.format("🔄 共识建设中 (%.0f%%)", consensusLevel * 100);
+            return String.format("共识建设中 (%.0f%%)", consensusLevel * 100);
         }
     }
 
@@ -375,21 +375,21 @@ public class SwarmProtocol_H extends TeamProtocolBase {
 
         // 检查步骤数量
         if (trace.getStepCount() > trace.getConfig().getMaxTotalIterations() * 0.8) {
-            health.append("⚠️ 步骤数量接近上限，考虑收敛结论。\n");
+            health.append("注意: 步骤数量接近上限，考虑收敛结论。\n");
         }
 
         // 检查是否有停滞
         if (isSwarmStagnating(trace)) {
-            health.append("⚠️ 蜂群可能陷入停滞，建议改变策略。\n");
+            health.append("注意: 蜂群可能陷入停滞，建议改变策略。\n");
         }
 
         // 检查协作进展
         if (trace.getStepCount() > 0 && trace.getLastAgentContent().length() < 50) {
-            health.append("⚠️ 最近产出内容较少，可能需要更多协作。\n");
+            health.append("注意: 最近产出内容较少，可能需要更多协作。\n");
         }
 
         if (health.length() == 0) {
-            health.append("✅ 蜂群健康状况良好");
+            health.append("良好: 蜂群健康状况良好");
         }
 
         return health.toString();

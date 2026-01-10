@@ -155,8 +155,8 @@ public class BlackboardProtocol_H extends HierarchicalProtocol_H {
             // 如果连续两个步骤是同一个Agent，可能存在问题
             if (lastAgent.equals(secondLastAgent)) {
                 return isChinese ?
-                        "⚠️ 注意：同一专家连续执行，可能需要其他专家介入检查。" :
-                        "⚠️ Note: Same expert executed consecutively, may need other expert review.";
+                        "注意：同一专家连续执行，可能需要其他专家介入检查。" :
+                        "Note: Same expert executed consecutively, may need other expert review.";
             }
         }
 

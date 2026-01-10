@@ -179,7 +179,7 @@ public class MarketBasedProtocol_H extends HierarchicalProtocol_H {
 
         // 如果启用了动态定价，显示定价说明
         if (enableDynamicPricing) {
-            sb.append("\n\n💡 动态定价说明：");
+            sb.append("\n\n动态定价说明：");
             boolean isChinese = Locale.CHINA.getLanguage().equals(trace.getConfig().getLocale());
             if (isChinese) {
                 sb.append("专家价格基于历史表现动态调整，表现越好价格越高，需权衡性价比。");
@@ -411,12 +411,12 @@ public class MarketBasedProtocol_H extends HierarchicalProtocol_H {
         StringBuilder advice = new StringBuilder();
 
         if (bestAgent != null && bestScore > 0.7) {
-            advice.append("🏆 推荐专家: ").append(bestAgent)
+            advice.append("推荐专家: ").append(bestAgent)
                     .append(" (综合得分: ").append(String.format("%.1f", bestScore * 100)).append("%)\n");
         }
 
         if (bestValueAgent != null && !bestValueAgent.equals(bestAgent) && bestValueScore > 2.0) {
-            advice.append("💰 性价比推荐: ").append(bestValueAgent)
+            advice.append("性价比推荐: ").append(bestValueAgent)
                     .append(" (价值比: ").append(String.format("%.1f", bestValueScore)).append(")\n");
         }
 
@@ -497,7 +497,7 @@ public class MarketBasedProtocol_H extends HierarchicalProtocol_H {
 
             // 添加性能初始化说明
             if (autoInitializePerformance) {
-                sb.append("\n\n💡 专家表现已自动初始化，将根据实际执行结果动态更新。");
+                sb.append("\n\n说明：专家表现已自动初始化，将根据实际执行结果动态更新。");
             }
         } else {
             sb.append("1. **Market Perspective**: Treat experts as independent service providers; you act as a client seeking the best service.\n");
@@ -528,7 +528,7 @@ public class MarketBasedProtocol_H extends HierarchicalProtocol_H {
 
             // Add performance initialization note
             if (autoInitializePerformance) {
-                sb.append("\n\n💡 Expert performance automatically initialized and will update dynamically based on execution results.");
+                sb.append("\n\nNote: Expert performance automatically initialized and will update dynamically based on execution results.");
             }
         }
     }
