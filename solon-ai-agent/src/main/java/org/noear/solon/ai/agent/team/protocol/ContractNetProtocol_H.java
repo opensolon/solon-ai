@@ -27,8 +27,11 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 合同网协作协议 (Contract Net Protocol / CNP)
@@ -211,19 +214,22 @@ public class ContractNetProtocol_H extends TeamProtocolBase {
         }
 
         // 检查是否包含招标模式的词汇组合
-        String[] biddingPatterns = {
-                "CALL.*PROPOSAL", "REQUEST.*BID", "SOLICIT.*OFFER",
-                "征集.*方案", "邀请.*投标", "寻求.*报价"
-        };
-
-        for (String pattern : biddingPatterns) {
-            if (Pattern.compile(pattern, Pattern.CASE_INSENSITIVE).matcher(decision).find()) {
+        for (Pattern pattern : BIDDING_PATTERNS) {
+            if (pattern.matcher(decision).find()) {
                 return true;
             }
         }
 
         return false;
     }
+
+    private static List<Pattern> BIDDING_PATTERNS = Arrays.asList(
+                    "CALL.*PROPOSAL",
+                    "REQUEST.*BID", "SOLICIT.*OFFER",
+                    "征集.*方案", "邀请.*投标", "寻求.*报价")
+            .stream()
+            .map(k -> Pattern.compile(k, Pattern.CASE_INSENSITIVE))
+            .collect(Collectors.toList());
 
     /**
      * 检查是否可以发起招标

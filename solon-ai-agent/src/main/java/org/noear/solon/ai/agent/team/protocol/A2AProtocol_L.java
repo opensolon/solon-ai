@@ -147,11 +147,14 @@ public class A2AProtocol_L extends TeamProtocolBase {
     }
 
     private String extractMemo(String text) {
-        Pattern pattern = Pattern.compile("memo[\"']?\\s*[:=]\\s*[\"']([^\"']+)[\"']");
-        Matcher matcher = pattern.matcher(text);
+        Matcher matcher = EXTRACT_MEMO_PATTERN.matcher(text);
         if (matcher.find()) {
             return matcher.group(1);
         }
         return null;
     }
+
+    private static Pattern EXTRACT_MEMO_PATTERN = Pattern.compile(
+            "(?i)memo[\"']?\\s*[:=]\\s*[\"']([^\"']*)[\"']"
+            );
 }
