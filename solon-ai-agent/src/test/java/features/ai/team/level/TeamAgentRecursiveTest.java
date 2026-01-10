@@ -7,6 +7,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
+import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -42,7 +43,12 @@ public class TeamAgentRecursiveTest {
         // 2. 顶层团队：项目管理组 (project_team)
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name("project_team")
-                .description("项目管理。先让 Analyst 分析，然后交给 dev_team 执行。")
+                .systemPrompt(TeamSystemPrompt.builder()
+                        .role("你是一个严谨的项目主管。")
+                        .instruction("1. 先指派 Analyst 进行分析；" +
+                                     "2. 拿到分析结果后指派 dev_team 执行；" +
+                                     "3. 当 dev_team 回复完成后，直接输出 [FINISH]。")
+                        .build())
                 .addAgent(createSimpleAgent("Analyst", "需求分析师"))
                 .addAgent(devTeam) // 嵌套子团队
                 .maxTotalIterations(5)
