@@ -1,78 +1,419 @@
-# solon-ai-agent
+# Solon AI Agent
 
-Solon AI Agent 是基于 Solon-AI 和 Solon-Flow 构建的新时代“智能体”开发框架。
+Solon AI Agent 是一个基于 Solon 框架构建的现代化 AI 智能体开发框架，支持多智能体协作、工具调用和复杂任务编排。
 
-## 特色
+## 一、核心特性
 
-* 流程图驱动：基于 solon-flow，所有 Agent 行为皆为图节点，流程清晰可控。
-* 混合推理模式：支持原生 Tool Call 与 文本 ReAct (Thought-Action-Observation) 混合模式。
-* 多策略协作 (Multi-Agent)：内置层级制 (Hierarchical)、合同网 (Contract Net)、群体智能 (Swarm) 等多种团队协作范式。
-* 工程化保障：内置迭代熔断、死循环检测、消息穿透隔离及全链路 Trace 追踪。
-* 高度可扩展：通过拦截器 (Interceptor) 和提示词提供者 (PromptProvider) 轻松定制行为。
+### 多层次智能体架构
 
-## 核心组件
+* 基础智能体：标准 AI 接口，支持自定义角色与工具
+* ReAct 智能体：基于 Reasoning-Acting 循环的工具调用模型
+* 团队智能体：多智能体协作容器，支持多种协作协议
 
-### 1. ReActAgent 自省反思型智有体 (单兵作战)
+### 丰富的协作协议
 
-负责个体自省。它能理解任务、调用工具并观察结果，直到得出最终结论。
 
-* 防幻觉：物理截断模型伪造的 Observation。
-* 自修复：工具执行异常自动反馈给 LLM 进行修正。
+| 协议            | 模式   | 适用场景          |
+|---------------|------|---------------|
+| HIERARCHICAL  | 层级式  | 任务分解与分发，金字塔管理 |
+| SEQUENTIAL    | 顺序式  | 线性工作流，流水线执行   |
+| SWARM         | 蜂群式  | 动态接力协作，集体智能   |
+| A2A           | 对等式  | 点对点任务移交，高灵活性  |
+| CONTRACT_NET  | 合同网  | 分布式动态任务分配     |
+| MARKET_BASED  | 合同网  | 资源敏感型任务优化     |
+| BLACKBOARD    | 黑板式  | 协同求解，专家按需介入   |
 
-### 2. TeamAgent 团队协作型智能体 (团队协作)
 
-负责多专家（智能体）协同。通过不同的策略（Strategy）驱动多个子 Agent 共同完成复杂任务。
+### 强大的工具生态系统
 
-* Contract Net：招标-定标机制，选出最合适的专家。
-* Hierarchical：主管制，层级分发与结果审计。
-* Sequential：流水线制，任务按序接力。
-* 等其它策略
+* 内置工具链管理
+* 协议级工具注入
+* 工具执行拦截与重试
+* 结果净化与脱敏
 
-## 简单示例，感受下
 
-### 1. 定义一个工具
+### 灵活的扩展机制
+
+
+* 生命周期拦截器
+* 协议自定义
+* 提示词模板化
+* 执行图可编程调整
+
+
+## 二、快速开始
+
+
+### 1. 添加依赖
+
+
+```xml
+<dependency>
+    <groupId>org.noear</groupId>
+    <artifactId>solon-ai-agent</artifactId>
+    <version>${solon.version}</version>
+</dependency>
+```
+
+
+### 2. 创建 ReAct 智能体
+
 
 ```java
-@Component
-public class WeatherTools {
-    @ToolMapping(description = "获取指定城市的天气情况")
-    public String get_weather(@Param(name = "location", description = "根据用户提到的地点推测城市") String location) {
-        return "晴，24度"; 
+// 创建智能体构建器
+ReActAgent agent = ReActAgent.of(chatModel)
+    .name("weather_agent")
+    .title("天气查询助手")
+    .description("专业查询全球天气信息")
+    .addTool(weatherTool)  // 添加天气查询工具
+    .addInterceptor(new ToolRetryInterceptor())  // 添加工具重试拦截器
+    .maxSteps(10)  // 设置最大推理步数
+    .build();
+
+// 执行智能体
+AssistantMessage response = agent.prompt("今天北京的天气如何？")
+    .call();
+```
+
+
+### 3. 创建团队智能体
+
+
+```java
+// 创建多智能体团队
+TeamAgent team = TeamAgent.of(chatModel)
+    .name("design_team")
+    .description("UI设计开发团队")
+    .addAgent(uiDesignerAgent)     // UI设计师
+    .addAgent(frontendDeveloperAgent)  // 前端开发
+    .addAgent(codeReviewerAgent)    // 代码审核
+    .protocol(TeamProtocols.SEQUENTIAL)  // 顺序协作协议
+    .finishMarker("[DESIGN_TEAM_FINISH]")
+    .build();
+
+// 执行团队协作
+AssistantMessage result = team.prompt("设计一个用户登录页面，包含表单验证和响应式布局")
+    .call();
+```
+
+
+## 三、核心概念
+
+
+### 智能体 (Agent)
+
+智能体是框架的基本执行单元，分为三种类型：
+
+* 基础智能体 (Base Agent) - 实现 Agent 接口
+* ReAct 智能体 (ReAct Agent) - 支持工具调用的推理-执行循环
+* 团队智能体 (Team Agent) - 多智能体协作容器
+
+
+### 会话 (Session)
+
+会话管理智能体的状态和历史：
+
+* InMemoryAgentSession - 内存会话（默认）
+* RedisAgentSession - Redis 持久化会话
+
+
+### 协议 (Protocol)
+
+协议定义智能体间的协作逻辑：
+
+* 构建期 - 定义执行图拓扑结构
+* 执行期 - 注入指令、工具和上下文
+* 治理期 - 路由决策和异常处理
+
+### 拦截器 (Interceptor)
+
+拦截器提供全生命周期监控：
+
+* ReActInterceptor - ReAct 智能体生命周期
+* TeamInterceptor - 团队协作生命周期
+* 内置拦截器：循环检测、结果净化、上下文压缩等
+
+## 四、使用示例
+
+
+### 示例 1：工具调用智能体
+
+```java
+// 创建工具
+FunctionTool calculator = new FunctionTool("calculator")
+    .title("计算器")
+    .description("执行数学计算")
+    .stringParamAdd("expression", "数学表达式，如: 2+3*4")
+    .doHandle(args -> {
+        String expr = args.get("expression").toString();
+        // 执行计算逻辑
+        return "计算结果: " + eval(expr);
+    });
+
+// 创建智能体
+ReActAgent mathAgent = ReActAgent.of(chatModel)
+    .name("math_assistant")
+    .addTool(calculator)
+    .systemPrompt(ReActSystemPromptCn.builder()
+        .role("你是专业的数学助手")
+        .instruction("请帮助用户解决数学问题")
+        .build())
+    .build();
+```
+
+### 示例 2：多协议协作
+
+
+```java
+// 创建不同协议的团队
+TeamAgent sequentialTeam = TeamAgent.of(chatModel)
+    .name("sequential_team")
+    .addAgent(researcher, designer, developer)
+    .protocol(TeamProtocols.SEQUENTIAL)  // 顺序执行
+    .build();
+
+TeamAgent swarmTeam = TeamAgent.of(chatModel)
+    .name("swarm_team")
+    .addAgent(researcher, designer, developer)
+    .protocol(TeamProtocols.SWARM)  // 动态接力
+    .build();
+
+TeamAgent a2aTeam = TeamAgent.of(chatModel)
+    .name("a2a_team")
+    .addAgent(researcher, designer, developer)
+    .protocol(TeamProtocols.A2A)  // 对等移交
+    .build();
+```
+
+
+### 示例 3：自定义协议
+
+```java
+// 自定义协作协议
+public class CustomProtocol extends TeamProtocolBase {
+    public CustomProtocol(TeamConfig config) {
+        super(config);
+    }
+    
+    @Override
+    public String name() {
+        return "CUSTOM";
+    }
+    
+    @Override
+    public void buildGraph(GraphSpec spec) {
+        // 自定义执行图
+        spec.addStart("start").linkAdd("analysis");
+        spec.addActivity("analysis").linkAdd("planning");
+        spec.addActivity("planning").linkAdd("execution");
+        spec.addActivity("execution").linkAdd("review");
+        spec.addActivity("review").linkAdd("end");
+        spec.addEnd("end");
+    }
+    
+    @Override
+    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
+        sb.append("\n## 自定义协作协议\n");
+        sb.append("1. 按照分析->规划->执行->评审的流程执行\n");
+        sb.append("2. 每个阶段必须由专业成员处理\n");
     }
 }
 ```
 
-### 2. 构建 ReAct 智能体
+
+## 五、集成配置
+
+### 与 Solon 集成
+
 
 ```java
-Agent agent = ReActAgent.of(chatModel)
-        .addTool(weatherTool)
-        .build();
-
-agent.call(context, "帮我查一下北京的天气");  
+@Configuration
+public class AgentConfig {
+    @Bean
+    public ReActAgent mathAgent(@Autowired ChatModel chatModel) {
+        return ReActAgent.of(chatModel)
+            .name("math_agent")...
+            .build();
+    }
+    
+    @Bean
+    public TeamAgent designTeam(@Autowired ChatModel chatModel) {
+        return TeamAgent.of(chatModel)
+            .name("design_team")...
+            .build();
+    }
+}
 ```
 
-### 3. 构建专家团队
+### 会话存储配置
 
 ```java
-Agent team = TeamAgent.of(chatModel)
-        .strategy(TeamStrategy.HIERARCHICAL)
-        .addAgent(coderAgent)
-        .addAgent(testerAgent)
-        .build();
+//简单示意
+public class AgentSessoinConfig {
+    // 使用 Redis 会话存储
+    //@Bean
+    public AgentSessionProvider redisSession(RedisClient redisClient) {
+        Map<String, AgentSession> map = new ConcurrentHashMap<>();
+        return (sessionId) -> map.computeIfAbsent(sessionId, k -> new RedisAgentSession(k, redisClient));
+    }
 
-team.call(context, "编写一个 Java 快速排序并进行测试");
+    // 使用内存会话存储（默认）
+    @Bean
+    public AgentSessionProvider inMemorySessoin() {
+        Map<String, AgentSession> map = new ConcurrentHashMap<>();
+        return (sessionId) -> map.computeIfAbsent(sessionId, k -> new InMemoryAgentSession(k));
+    }
+
+    public static class Demo {
+        @Inject
+        AgentSessionProvider sessionProvider;
+        @Inject
+        ReActAgent reActAgent;
+
+        public String hello() throws Throwable{
+            AgentSession session = sessionProvider.getSession("test");
+
+            return reActAgent.prompt("你好呀!")
+                    .session(session)
+                    .call()
+                    .getContent();
+        }
+    }
+}
 ```
 
-## 协作策略说明
 
-| 策略项          | 名称 | 机制说明                                                          | 适用场景                              |
-|--------------|-------|---------------------------------------------------------------|-----------------------------------|
-| SEQUENTIAL   | 顺序流转  | 按照预定义的顺序（Pipe）像流水线一样执行。上一个 Agent 的输出直接作为下一个 Agent 的输入。        | 流程固定、逻辑线性的简单任务。如：翻译 -> 润色 -> 校对。  |
-| HIERARCHICAL | 层级协调  | 引入一个 Supervisor（主管） 角色。由主管拆解任务、指派 Agent、审核结果。所有 Agent 只与主管通信。 | 复杂任务、需要强质量管控的场景。如：项目管理、多步分析。      |
-| MARKET_BASED | 市场机制  | 基于“资源/价值”配置。Agent 会根据任务的“价格”或自身“负载”来竞争任务。                     | 资源敏感型任务、需要考虑处理成本或效率最优的场景。         |
-| CONTRACT_NET | 合同网协议 | 类似“招标-投标”。主管发布需求（招标），各 Agent 根据能力提交标书，主管选出最优者执行。              | 任务具有高度专业化、需要从多个潜在方案中择优的场景。        |
-| BLACKBOARD   | 黑板模式  | 所有 Agent 共享一个公共区域（黑板）。Agent 观察黑板状态，当发现自己能解决的部分时就主动介入。         | 探索性问题、非线性逻辑。如：复杂的解密、多源数据融合分析。     |
-| SWARM        | 群体智能  | 无中心化决策。Agent 之间通过简单的启发式规则和局部交互（接力）来完成复杂任务。                    | 强调灵活性、去中心化的动态任务流转。如：快速响应的客服路由。    |
+## 六、监控与调试
 
 
+### 执行轨迹追踪
+
+
+```java
+// 获取执行轨迹
+ReActTrace trace = agent.getTrace(session);
+String history = trace.getFormattedHistory(); // 格式化历史
+ReActMetrics metrics = trace.getMetrics();    // 性能指标
+
+// 监控指标包括：
+// - 总执行时间
+// - 工具调用次数  
+// - 推理步数
+// - Token 消耗
+```
+
+### 拦截器监控
+
+```java
+// 自定义监控拦截器
+public class MonitoringInterceptor implements ReActInterceptor {
+    @Override
+    public void onThought(ReActTrace trace, String thought) {
+        logger.info("Agent {} 思考: {}", trace.getAgentName(), thought);
+    }
+    
+    @Override
+    public void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
+        logger.info("Agent {} 调用工具: {} 参数: {}", 
+            trace.getAgentName(), toolName, args);
+    }
+    
+    @Override
+    public void onObservation(ReActTrace trace, String result) {
+        logger.info("Agent {} 观察结果: {}", trace.getAgentName(), result);
+    }
+}
+```
+
+## 七、进阶功能
+
+
+### 协议上下文共享
+
+
+```java
+// 在协议间共享数据
+@Override
+public void prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
+    // 获取协议上下文
+    Map<String, Object> context = trace.getProtocolContext();
+    String memo = (String) context.get("last_memo");
+    
+    // 注入到提示词
+    if (memo != null) {
+        String enhancedPrompt = originalPrompt.getUserContent() + 
+            "\n\n交接说明: " + memo;
+        return Prompt.of(enhancedPrompt);
+    }
+    
+    return originalPrompt;
+}
+```
+
+
+### 动态路由决策
+
+```java
+// 自定义路由逻辑
+@Override
+public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+    // 解析决策文本
+    if (decision.contains("紧急")) {
+        return "emergency_handler"; // 路由到紧急处理者
+    } else if (decision.contains("技术")) {
+        return "technical_expert"; // 路由到技术专家
+    }
+    
+    return super.resolveSupervisorRoute(context, trace, decision);
+}
+```
+
+
+### 智能体能力评估
+
+```java
+// 实现智能体自评
+@Override
+public String estimate(AgentSession session, Prompt prompt) {
+    // 评估任务匹配度
+    FlowContext context = session.getSnapshot();
+    String task = prompt.getUserContent();
+    
+    if (task.contains("设计") && description.contains("设计师")) {
+        return "匹配度: 90%，我可以处理UI/UX设计任务";
+    } else if (task.contains("代码") && description.contains("开发")) {
+        return "匹配度: 85%，我可以实现前端代码";
+    }
+    
+    return "匹配度: 50%，可能需要其他专家协助";
+}
+```
+
+
+## 八、性能优化
+
+### 上下文压缩
+
+
+```java
+// 添加上下文压缩拦截器
+agent.addInterceptor(new SummarizationInterceptor(10, 4000));
+// 保留最近10条消息，最多4000 Token
+```
+
+### 循环检测
+
+```java
+// 防止死循环
+agent.addInterceptor(new StopLoopInterceptor(3));
+// 同一响应重复3次即终止
+```
+
+
+### 工具重试
+
+```java
+// 工具调用重试
+agent.addInterceptor(new ToolRetryInterceptor(3, 1000));
+// 最多重试3次，间隔1秒
+```
