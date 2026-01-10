@@ -47,4 +47,14 @@ public interface ReActPromptProvider {
      * 获取系统提示词
      */
     String getSystemPrompt(ReActTrace trace);
+
+    /**
+     * 获取角色
+     */
+    String getRole(ReActTrace trace);
+
+    /**
+     * 获取指令
+     */
+    String getInstruction(ReActTrace trace);
 }

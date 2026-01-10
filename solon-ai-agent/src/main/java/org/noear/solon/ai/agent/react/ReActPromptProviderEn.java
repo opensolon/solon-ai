@@ -88,4 +88,14 @@ public class ReActPromptProviderEn implements ReActPromptProvider {
 
         return sb.toString();
     }
+
+    @Override
+    public String getRole(ReActTrace trace) {
+        return "";
+    }
+
+    @Override
+    public String getInstruction(ReActTrace trace) {
+        return "";
+    }
 }
