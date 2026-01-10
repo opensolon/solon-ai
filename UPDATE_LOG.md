@@ -16,8 +16,9 @@
 * 新增 `solon-ai-agent` 插件
 * 添加 `solon-ai-core` autoToolCall 聊天模型选项（默认为 true）
 * 添加 `solon-ai-core` ChatResponse:getResultContent
-* 优化 solon-ai-core AssistantMessage.getResultContent 处理
-* 调整 solon-ai-croe ChatSession 不再扩展 ChatPrompt（打断两者关系，后者定位偏固定数据
+* 添加 `solon-ai-core` AssistantMessage.toBean 方法。
+* 优化 `solon-ai-core` AssistantMessage.getResultContent 处理
+* 调整 `solon-ai-croe` ChatSession 不再扩展 ChatPrompt（打断两者关系，后者定位偏固定数据
 
 
 新增两种模式的智能体：

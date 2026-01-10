@@ -15,11 +15,13 @@
  */
 package org.noear.solon.ai.chat.message;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.lang.Preview;
 
+import java.lang.reflect.Type;
 import java.util.*;
 
 /**
@@ -76,6 +78,13 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     @Override
     public ChatRole getRole() {
         return role;
+    }
+
+    /**
+     * 转为 Bean（content 须是 json，否则会异常）
+     */
+    public <T> T toBean(Type type){
+        return ONode.deserialize(content, type);
     }
 
     /**
