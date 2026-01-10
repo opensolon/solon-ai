@@ -40,6 +40,7 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Type;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -467,8 +468,8 @@ public class ReActAgent implements Agent {
         /**
          * 快捷方式：通过 Class 生成 schema 描述（如果 ChatModel 支持此功能）
          */
-        public Builder outputSchema(Class<?> clazz) {
-            config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(clazz));
+        public Builder outputSchema(Type type) {
+            config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
             return this;
         }
 

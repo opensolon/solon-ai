@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActSystemPrompt;
-import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
@@ -146,18 +145,28 @@ public class TeamAgentTransferTest {
                         .role("你是一个高精度信息提取专家")
                         .instruction("从文本中提取关键实体，严格遵守 JSON Schema 规范。")
                         .build())
-                .outputSchema("{\"entity_name\": \"string\", \"birth_year\": \"integer\", \"title\": \"string\"}")
+                .outputSchema(Personnel.class)//"{\"entity_name\": \"string\", \"birth_year\": \"integer\", \"title\": \"string\"}")
                 .outputKey("structured_data")
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_003");
-        extractor.call(Prompt.of("伊隆·马斯克，1971年出生，现任特斯拉CEO。"), session);
+        Personnel personnel = extractor.prompt("伊隆·马斯克，1971年出生，现任特斯拉CEO。")
+                .session(session)
+                .call()
+                .toBean(Personnel.class);
 
         String jsonData = session.getSnapshot().getAs("structured_data");
+        System.out.println("结构化结果: " + personnel.entity_name);
         System.out.println("结构化结果: " + jsonData);
 
         Assertions.assertTrue(jsonData.contains("entity_name"));
         Assertions.assertTrue(jsonData.contains("1971"));
         Assertions.assertTrue(jsonData.contains("CEO"));
+    }
+
+    public static class Personnel {
+        String entity_name;
+        int birth_year;
+        String title;
     }
 }
