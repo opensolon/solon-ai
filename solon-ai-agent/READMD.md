@@ -309,31 +309,3 @@ public class MonitoringInterceptor implements ReActInterceptor {
     }
 }
 ```
-
-## 七、性能优化
-
-### 上下文压缩
-
-
-```java
-// 添加上下文压缩拦截器
-agent.addInterceptor(new SummarizationInterceptor(10, 4000));
-// 保留最近10条消息，最多4000 Token
-```
-
-### 循环检测
-
-```java
-// 防止死循环
-agent.addInterceptor(new StopLoopInterceptor(3));
-// 同一响应重复3次即终止
-```
-
-
-### 工具重试
-
-```java
-// 工具调用重试
-agent.addInterceptor(new ToolRetryInterceptor(3, 1000));
-// 最多重试3次，间隔1秒
-```
