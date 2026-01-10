@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.agent.util.SnelUtil;
+import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 
@@ -55,7 +55,7 @@ public interface TeamSystemPrompt {
      * @return 最终交付给 LLM 的完整提示词文本
      */
     default String getSystemPromptFor(TeamTrace trace, FlowContext context) {
-        return SnelUtil.render(getSystemPrompt(trace), context);
+        return SnelUtil.render(getSystemPrompt(trace), context.model());
     }
 
     /**

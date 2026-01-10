@@ -18,10 +18,10 @@ package org.noear.solon.ai.agent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
-import org.noear.solon.ai.agent.util.SnelUtil;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.RankEntity;
+import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
@@ -59,7 +59,7 @@ public interface Agent extends NamedTaskComponent {
      * <p>支持对 {@link #description()} 中的占位符（如 #{var}）进行渲染，实现动态角色设定。</p>
      */
     default String descriptionFor(FlowContext context){
-        return SnelUtil.render(description(), context);
+        return SnelUtil.render(description(), context.model());
     }
 
     /**

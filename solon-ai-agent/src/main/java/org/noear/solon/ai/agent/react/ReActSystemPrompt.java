@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.util.SnelUtil;
+import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 
@@ -54,7 +54,7 @@ public interface ReActSystemPrompt {
      * @return 最终发送给 LLM 的字符串
      */
     default String getSystemPromptFor(ReActTrace trace, FlowContext context) {
-        return SnelUtil.render(getSystemPrompt(trace), context);
+        return SnelUtil.render(getSystemPrompt(trace), context.model());
     }
 
     /**
