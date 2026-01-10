@@ -165,9 +165,9 @@ public interface Agent extends NamedTaskComponent {
     /** 当前活跃轨迹的 Key */
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key_";
     /** 会话对象存储 Key */
-    static String KEY_SESSION = "SESSION";
+    static String KEY_SESSION = "_SESSION_";
     /** 协作协议存储 Key */
-    static String KEY_PROTOCOL = "PROTOCOL";
+    static String KEY_PROTOCOL = "_PROTOCOL_";
 
     // --- 标准节点标识 ID ---
 
