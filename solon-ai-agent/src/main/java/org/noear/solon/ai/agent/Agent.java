@@ -58,7 +58,11 @@ public interface Agent extends NamedTaskComponent {
      * 为当前上下文生成动态职责描述
      * <p>支持对 {@link #description()} 中的占位符（如 #{var}）进行渲染，实现动态角色设定。</p>
      */
-    default String descriptionFor(FlowContext context){
+    default String descriptionFor(FlowContext context) {
+        if (context == null) {
+            return description();
+        }
+
         return SnelUtil.render(description(), context.model());
     }
 

@@ -55,6 +55,10 @@ public interface TeamSystemPrompt {
      * @return 最终交付给 LLM 的完整提示词文本
      */
     default String getSystemPromptFor(TeamTrace trace, FlowContext context) {
+        if (context == null) {
+            return getSystemPrompt(trace);
+        }
+
         return SnelUtil.render(getSystemPrompt(trace), context.model());
     }
 

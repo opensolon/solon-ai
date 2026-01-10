@@ -54,6 +54,10 @@ public interface ReActSystemPrompt {
      * @return 最终发送给 LLM 的字符串
      */
     default String getSystemPromptFor(ReActTrace trace, FlowContext context) {
+        if (context == null) {
+            return getSystemPrompt(trace);
+        }
+
         return SnelUtil.render(getSystemPrompt(trace), context.model());
     }
 

@@ -199,7 +199,7 @@ public class A2AProtocol_H extends TeamProtocolBase {
 
             // 根据接收方的角色类型提供特定的指导
             String roleSpecificGuidance = injectRoleSpecificGuidance ?
-                    getRoleSpecificGuidance(agent, locale) : "";
+                    getRoleSpecificGuidance(trace, agent, locale) : "";
 
             // 完全重建消息结构，确保上下文完整性
             List<ChatMessage> messages = new ArrayList<>();
@@ -304,9 +304,9 @@ public class A2AProtocol_H extends TeamProtocolBase {
     /**
      * 根据接收方的角色提供特定的指导
      */
-    private String getRoleSpecificGuidance(Agent agent, Locale locale) {
+    private String getRoleSpecificGuidance(TeamTrace trace, Agent agent, Locale locale) {
         String agentName = agent.name().toLowerCase();
-        String description = agent.descriptionFor(null);
+        String description = agent.descriptionFor(trace.getContext());
         if (description != null) {
             description = description.toLowerCase();
         } else {
