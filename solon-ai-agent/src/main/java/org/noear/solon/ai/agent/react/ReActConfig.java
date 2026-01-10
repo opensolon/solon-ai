@@ -118,31 +118,31 @@ public class ReActConfig {
     }
 
 
-    // --- Setter / 配置项注入 ---
+    // --- 配置注入 (Protected) ---
 
-    public void setName(String name) {
+    protected void setName(String name) {
         this.name = name;
     }
 
-    public void setTitle(String title) {
+    protected void setTitle(String title) {
         this.title = title;
     }
 
-    public void setDescription(String description) {
+    protected void setDescription(String description) {
         this.description = description;
     }
 
     /**
      * 添加单个功能工具
      */
-    public void addTool(FunctionTool tool) {
+    protected void addTool(FunctionTool tool) {
         this.toolMap.put(tool.name(), tool);
     }
 
     /**
      * 批量添加功能工具
      */
-    public void addTool(Collection<FunctionTool> tools) {
+    protected void addTool(Collection<FunctionTool> tools) {
         for (FunctionTool tool : tools) {
             addTool(tool);
         }
@@ -151,7 +151,7 @@ public class ReActConfig {
     /**
      * 通过 ToolProvider 注入工具集
      */
-    public void addTool(ToolProvider toolProvider) {
+    protected void addTool(ToolProvider toolProvider) {
         addTool(toolProvider.getTools());
     }
 
@@ -161,29 +161,25 @@ public class ReActConfig {
      * @param maxRetries   最大重试次数
      * @param retryDelayMs 重试延迟时间（毫秒）
      */
-    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+    protected void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(1000, retryDelayMs);
     }
 
-    public void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
+    protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
         this.graphAdjuster = graphAdjuster;
     }
 
-    public void setFinishMarker(String val) {
+    protected void setFinishMarker(String val) {
         this.finishMarker = val;
     }
 
-    public void setOutputKey(String val) {
+    protected void setOutputKey(String val) {
         this.outputKey = val;
     }
 
-    public void setOutputSchema(String val) {
+    protected void setOutputSchema(String val) {
         this.outputSchema = val;
-    }
-
-    public String getOutputSchema() {
-        return outputSchema;
     }
 
     /**
@@ -191,25 +187,25 @@ public class ReActConfig {
      *
      * @param historyWindowSize 回溯的消息条数（建议设置为奇数以保持对话轮次完整）
      */
-    public void setHistoryWindowSize(int historyWindowSize) {
+    protected void setHistoryWindowSize(int historyWindowSize) {
         this.historyWindowSize = Math.max(0, historyWindowSize);
     }
 
-    public void setMaxSteps(int val) {
+    protected void setMaxSteps(int val) {
         this.maxSteps = val;
     }
 
     /**
      * 添加拦截器
      */
-    public void addInterceptor(ReActInterceptor val) {
+    protected void addInterceptor(ReActInterceptor val) {
         addInterceptor(val, 0);
     }
 
     /**
      * 添加拦截器并指定优先级
      */
-    public void addInterceptor(ReActInterceptor val, int index) {
+    protected void addInterceptor(ReActInterceptor val, int index) {
         this.interceptorList.add(new RankEntity<>(val, index));
 
         if (interceptorList.size() > 1) {
@@ -217,15 +213,16 @@ public class ReActConfig {
         }
     }
 
-    public void setPromptProvider(ReActSystemPrompt val) {
+    protected void setPromptProvider(ReActSystemPrompt val) {
         this.systemPrompt = val;
     }
 
-    public void setChatOptions(Consumer<ChatOptions> chatOptions) {
+    protected void setChatOptions(Consumer<ChatOptions> chatOptions) {
         this.chatOptions = chatOptions;
     }
 
-    // --- Getters / 运行期参数获取 ---
+
+    // --- 参数获取 (Public) ---
 
 
     public String getName() {
@@ -286,6 +283,10 @@ public class ReActConfig {
 
     public String getOutputKey() {
         return outputKey;
+    }
+
+    public String getOutputSchema() {
+        return outputSchema;
     }
 
     public int getHistoryWindowSize() {

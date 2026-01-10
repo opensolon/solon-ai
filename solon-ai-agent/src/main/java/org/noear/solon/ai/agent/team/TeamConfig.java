@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -124,33 +124,33 @@ public class TeamConfig {
         this.chatModel = chatModel;
     }
 
-    // --- 配置 Setter ---
+    // --- 配置注入 (Protected) ---
 
     /**
      * 设置团队唯一标识名称
      */
-    public void setName(String name) {
+    protected void setName(String name) {
         this.name = name;
     }
 
     /**
      * 设置团队可视化标题
      */
-    public void setTitle(String title) {
+    protected void setTitle(String title) {
         this.title = title;
     }
 
     /**
      * 设置团队职能描述
      */
-    public void setDescription(String description) {
+    protected void setDescription(String description) {
         this.description = description;
     }
 
     /**
      * 注入自定义的流程图调整逻辑
      */
-    public void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
+    protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
         this.graphAdjuster = graphAdjuster;
     }
 
@@ -160,7 +160,7 @@ public class TeamConfig {
      * @param maxRetries   最大尝试次数（最小为1）
      * @param retryDelayMs 重试间隔（最小为1000ms）
      */
-    public void setRetryConfig(int maxRetries, long retryDelayMs) {
+    protected void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(1000, retryDelayMs);
     }
@@ -168,38 +168,38 @@ public class TeamConfig {
     /**
      * 设置显式的任务终结指令词
      */
-    public void setFinishMarker(String finishMarker) {
+    protected void setFinishMarker(String finishMarker) {
         this.finishMarker = finishMarker;
     }
 
     /**
      * 设置输出结果在 Context 中的存储键
      */
-    public void setOutputKey(String outputKey) {
+    protected void setOutputKey(String outputKey) {
         this.outputKey = outputKey;
     }
 
     /**
      * 设置协作轮次上限，防止成本过载与逻辑死锁
      */
-    public void setMaxTotalIterations(int maxTotalIterations) {
+    protected void setMaxTotalIterations(int maxTotalIterations) {
         this.maxTotalIterations = Math.max(1, maxTotalIterations);
     }
 
     /**
      * 注册团队拦截器（默认优先级）
      */
-    public void addInterceptor(TeamInterceptor interceptor) {
+    protected void addInterceptor(TeamInterceptor interceptor) {
         this.addInterceptor(interceptor, 0);
     }
 
     /**
      * 注册团队拦截器，并指定排序权重
-     * * @param interceptor 拦截器实例
      *
-     * @param index 排序权重（数值越小执行越靠前）
+     * @param interceptor 拦截器实例
+     * @param index       排序权重（数值越小执行越靠前）
      */
-    public void addInterceptor(TeamInterceptor interceptor, int index) {
+    protected void addInterceptor(TeamInterceptor interceptor, int index) {
         this.interceptorList.add(new RankEntity<>(interceptor, index));
 
         if (interceptorList.size() > 1) {
@@ -210,14 +210,14 @@ public class TeamConfig {
     /**
      * 设置团队指令模板提供者
      */
-    public void setTeamSystem(TeamSystemPrompt promptProvider) {
+    protected void setTeamSystem(TeamSystemPrompt promptProvider) {
         this.systemPrompt = promptProvider;
     }
 
     /**
      * 配置主管推理时的 ChatOptions（如 Temperature, TopP 等参数）
      */
-    public void setChatOptions(Consumer<ChatOptions> chatOptions) {
+    protected void setChatOptions(Consumer<ChatOptions> chatOptions) {
         this.chatOptions = chatOptions;
     }
 
@@ -227,7 +227,7 @@ public class TeamConfig {
      *
      * @param agent 专家智能体或嵌套子团队
      */
-    public void addAgent(Agent agent) {
+    protected void addAgent(Agent agent) {
         Objects.requireNonNull(agent.name(), "agent.name is required");
         Objects.requireNonNull(agent.description(), "agent.description is required for collaboration");
 
@@ -239,12 +239,12 @@ public class TeamConfig {
      *
      * @param protocolFactory 协议工厂
      */
-    public void setProtocol(TeamProtocolFactory protocolFactory) {
+    protected void setProtocol(TeamProtocolFactory protocolFactory) {
         Objects.requireNonNull(protocolFactory, "protocolFactory");
         this.protocol = protocolFactory.create(this);
     }
 
-    // --- 属性 Getter ---
+    // --- 属性获取 (Public) ---
 
     public String getName() {
         return name;
