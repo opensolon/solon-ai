@@ -134,8 +134,7 @@ public class SupervisorTask implements NamedTaskComponent {
         StringBuilder protocolExt = new StringBuilder();
         config.getProtocol().prepareSupervisorInstruction(context, trace, protocolExt);
 
-        String basePrompt = config.getPromptProvider()
-                .getSystemPromptFor(trace, context);
+        String basePrompt = config.getTeamSystem(trace, context);
 
         String finalSystemPrompt = (protocolExt.length() > 0)
                 ? basePrompt + "\n\n### Additional Protocol Rules\n" + protocolExt

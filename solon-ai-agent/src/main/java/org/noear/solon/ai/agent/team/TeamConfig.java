@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.core.util.RankEntity;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
 
@@ -112,7 +113,7 @@ public class TeamConfig {
     /**
      * 系统提示词（System Prompt）模板提供者，支持多语言动态适配
      */
-    private TeamSystemPrompt promptProvider = TeamSystemPromptEn.getInstance();
+    private TeamSystemPrompt systemPrompt = TeamSystemPromptEn.getDefault();
 
     /**
      * 基于指定的推理模型初始化团队配置
@@ -209,8 +210,8 @@ public class TeamConfig {
     /**
      * 设置团队指令模板提供者
      */
-    public void setPromptProvider(TeamSystemPrompt promptProvider) {
-        this.promptProvider = promptProvider;
+    public void setTeamSystem(TeamSystemPrompt promptProvider) {
+        this.systemPrompt = promptProvider;
     }
 
     /**
@@ -317,14 +318,14 @@ public class TeamConfig {
         return interceptorList;
     }
 
-    public TeamSystemPrompt getPromptProvider() {
-        return promptProvider;
+    public String getTeamSystem(TeamTrace trace, FlowContext context) {
+        return systemPrompt.getSystemPromptFor(trace, context);
     }
 
     /**
      * 获取当前配置采用的语言/地区环境
      */
     public Locale getLocale() {
-        return promptProvider.getLocale();
+        return systemPrompt.getLocale();
     }
 }

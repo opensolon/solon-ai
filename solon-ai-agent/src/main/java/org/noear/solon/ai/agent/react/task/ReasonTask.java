@@ -85,8 +85,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 2：上下文构建]
         // 注入 ReAct 规范提示词、协议指令及动态历史记录（Thought/Action/Observation）
-        String systemPrompt = config.getPromptProvider()
-                .getSystemPromptFor(trace, context);
+        String systemPrompt = config.getSystemPrompt(trace, context);
 
         // 如果配置了输出格式，则追加指令
         if (Assert.isNotEmpty(config.getOutputSchema())) {
@@ -97,7 +96,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         if (trace.getProtocol() != null) {
             StringBuilder systemPromptBuilder = new StringBuilder(systemPrompt);
-            trace.getProtocol().injectAgentInstruction(agent, config.getPromptProvider().getLocale(), systemPromptBuilder);
+            trace.getProtocol().injectAgentInstruction(agent, config.getLocale(), systemPromptBuilder);
             systemPrompt = systemPromptBuilder.toString();
         }
 

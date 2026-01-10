@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,13 +22,14 @@ import org.noear.solon.lang.Preview;
 import java.util.Locale;
 
 /**
- * Team 协作模式提示词提供者
+ * Team 协作模式系统提示词
  *
- * <p>该接口负责为团队主管 (Supervisor) 生成系统提示词。采用分段构建模式：</p>
+ * <p>该接口负责为团队主管 (Supervisor) 构造系统提示词 (System Prompt)。</p>
+ * <p>采用分段构建模式，允许对不同维度的提示词进行解耦与定制：</p>
  * <ul>
- * <li><b>Role</b>: 定义主管的角色身份与管理风格。</li>
- * <li><b>Instruction</b>: 注入协议指令（如分发、汇总）及业务规则。</li>
- * <li><b>Template</b>: 支持 Snel 模板渲染，实现动态上下文注入。</li>
+ * <li><b>Role (角色)</b>: 确立主管的身份定位、专业背景及管理风格。</li>
+ * <li><b>Instruction (指令)</b>: 注入协作协议（如任务指派、状态监控）及特定的业务准则。</li>
+ * <li><b>Template (模板)</b>: 支持使用 Snel 模板引擎进行动态变量渲染。</li>
  * </ul>
  *
  * @author noear
@@ -39,39 +40,38 @@ public interface TeamSystemPrompt {
     /**
      * 获取语言区域（默认：中文）
      */
-    default Locale getLocale() {
-        return Locale.CHINESE;
-    }
+    Locale getLocale();
 
     /**
-     * 为当前上下文生成最终渲染后的系统提示词
+     * 为当前上下文生成并渲染最终的系统提示词
      *
-     * @param trace   协作轨迹与配置信息
+     * @param trace   协作轨迹（包含配置与状态）
      * @param context 流程上下文（用于模板变量替换）
-     * @return 渲染后的最终提示词字符串
+     * @return 渲染后的完整提示词字符串
      */
     default String getSystemPromptFor(TeamTrace trace, FlowContext context) {
         return SnelUtil.render(getSystemPrompt(trace), context);
     }
 
     /**
-     * 获取原始系统提示词（通常由 Role 和 Instruction 组合而成）
+     * 获取原始系统提示词
+     * <p>通常由 {@link #getRole(TeamTrace)} 与 {@link #getInstruction(TeamTrace)} 组合而成。</p>
      *
      * @param trace 协作轨迹
      */
     String getSystemPrompt(TeamTrace trace);
 
     /**
-     * 获取角色定义
-     * <p>例如：定义主管是一个“资深项目经理”或“技术评审专家”。</p>
+     * 获取角色定义片段
+     * <p>描述主管是谁。例如：“你是一个资深软件架构师，负责评审团队的代码实现”。</p>
      *
      * @param trace 协作轨迹
      */
     String getRole(TeamTrace trace);
 
     /**
-     * 获取核心协作指令
-     * <p>包含协议特定指令（如顺序执行规范）、任务约束、输出格式限制等。</p>
+     * 获取核心指令片段
+     * <p>描述主管如何行动。包含输出格式约束、协作协议指令（如顺序执行或竞争执行）等。</p>
      *
      * @param trace 协作轨迹
      */

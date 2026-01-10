@@ -140,7 +140,7 @@ public interface Agent extends NamedTaskComponent {
         if (trace != null) {
             effectivePrompt = trace.getProtocol().prepareAgentPrompt(
                     trace, this, trace.getPrompt(),
-                    trace.getConfig().getPromptProvider().getLocale());
+                    trace.getConfig().getLocale());
         }
 
         // 调用推理引擎

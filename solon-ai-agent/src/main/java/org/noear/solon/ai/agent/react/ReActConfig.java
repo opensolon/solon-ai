@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.RankEntity;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
 
@@ -103,7 +104,7 @@ public class ReActConfig {
     /**
      * 提示词模板提供者
      */
-    private ReActSystemPrompt promptProvider = ReActSystemPromptEn.getDefault();
+    private ReActSystemPrompt systemPrompt = ReActSystemPromptEn.getDefault();
 
 
     /**
@@ -217,7 +218,7 @@ public class ReActConfig {
     }
 
     public void setPromptProvider(ReActSystemPrompt val) {
-        this.promptProvider = val;
+        this.systemPrompt = val;
     }
 
     public void setChatOptions(Consumer<ChatOptions> chatOptions) {
@@ -298,11 +299,11 @@ public class ReActConfig {
     /**
      * 获取提示词提供者
      */
-    public ReActSystemPrompt getPromptProvider() {
-        return promptProvider;
+    public String getSystemPrompt(ReActTrace trace, FlowContext context) {
+        return systemPrompt.getSystemPromptFor(trace, context);
     }
 
     public Locale getLocale() {
-        return promptProvider.getLocale();
+        return systemPrompt.getLocale();
     }
 }

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,20 +20,16 @@ import java.util.Locale;
 import java.util.function.Function;
 
 /**
- * Team 协作模式系统提示词提供者（中文版）
+ * Team 协作模式系统提示词实现（中文版）
  *
- * <p>该类负责为团队主管 (Supervisor) 生成系统提示词。其核心逻辑在于：</p>
+ * <p>该类负责为团队主管 (Supervisor) 生成系统提示词。核心逻辑包括：</p>
  * <ul>
- * <li>1. 协调多个 Agent 成员，根据协作协议 (Protocol) 决定任务流转或终止。</li>
- * <li>2. 维护团队成员的名录与职责上下文。</li>
- * <li>3. 强制执行严格的输出规范，确保 Supervisor 只做决策路由。</li>
+ * <li>1. <b>成员调度</b>：根据成员职责描述，决定任务在 Agent 间的流转。</li>
+ * <li>2. <b>协议对齐</b>：注入具体的协作协议指令（如顺序执行、自主路由等）。</li>
+ * <li>3. <b>输出控制</b>：通过严格的规范约束，确保主管仅输出决策指令或最终结果。</li>
  * </ul>
  *
- * <p>该实现采用“协议+业务”分段构建模式：</p>
- * <ul>
- * <li>Role: 优先使用自定义角色描述，默认为团队协作主管。</li>
- * <li>Instruction: 强制注入成员列表、协作协议和输出规范，并将自定义指令作为“核心任务指令”追加。</li>
- * </ul>
+ * <p>支持增量构建模式：可自定义 Role (角色) 和核心业务 Instruction (指令)。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -45,7 +41,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
      */
     private static final TeamSystemPromptCn _DEFAULT = new TeamSystemPromptCn(null, null);
 
-    public static TeamSystemPromptCn getInstance() { return _DEFAULT; }
+    public static TeamSystemPromptCn getDefault() { return _DEFAULT; }
 
     private final Function<TeamTrace, String> roleProvider;
     private final Function<TeamTrace, String> instructionProvider;
@@ -57,13 +53,18 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
     }
 
     @Override
+    public Locale getLocale() {
+        return Locale.CHINESE;
+    }
+
+    @Override
     public String getSystemPrompt(TeamTrace trace) {
         StringBuilder sb = new StringBuilder();
 
-        // 1. 角色定义
+        // 1. 角色定义片段
         sb.append("## 角色定义\n").append(getRole(trace)).append("\n\n");
 
-        // 2. 指令与规范注入 (包含成员、上下文、协议及业务指令)
+        // 2. 综合指令注入 (包含成员名录、任务上下文、协作协议及业务规则)
         sb.append(getInstruction(trace));
 
         return sb.toString();
@@ -71,7 +72,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
     @Override
     public String getRole(TeamTrace trace) {
-        // 优先返回自定义角色描述
+        // 优先使用自定义的角色提供者
         if (roleProvider != null) {
             return roleProvider.apply(trace);
         }
@@ -83,33 +84,33 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
         TeamConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
-        // A. 角色定义与团队成员列表：动态注入当前可用的 Agent 列表
+        // A. 团队成员：动态注入当前团队中各 Agent 的职责描述
         sb.append("### 团队成员\n");
         config.getAgentMap().forEach((name, agent) -> {
             sb.append("- **").append(name).append("**: ").append(agent.descriptionFor(trace.getContext())).append("\n");
         });
 
-        // B. 任务上下文：明确当前处理的原始需求
+        // B. 任务上下文：明确当前原始需求
         sb.append("\n### 当前任务\n").append(trace.getPrompt().getUserContent()).append("\n");
 
-        // C. 协作协议指令：由具体协议（如 Sequential, Market）注入特定的流转逻辑
+        // C. 协作协议：由具体的执行策略（如 Sequential）注入特定流转指令
         sb.append("\n### 协作协议\n");
         config.getProtocol().injectSupervisorInstruction(Locale.CHINESE, sb);
 
-        // D. 输出规范：严格约束 Supervisor 的响应格式，确保系统可解析
+        // D. 输出规范：强制约束回复格式，确保系统可自动化解析决策
         sb.append("\n### 输出规范\n")
                 .append("1. **状态分析**：分析当前执行进度，决定下一步行动。\n")
                 .append("2. **任务终止**：如果任务已完成，必须输出: ").append(config.getFinishMarker())
                 .append(" 并在其后提供最终答案。\n")
                 .append("3. **继续执行**：若任务未完成，请**仅输出**下一个要执行的 Agent 名字，不要有额外文本。\n");
 
-        // E. 历史记录与准则：防止死循环并确保决策质量
+        // E. 决策准则：防止死循环及确保协作深度
         sb.append("\n### 历史分析与准则\n")
                 .append("- 参考协作历史。如果历史记录已足以回答问题，立即结束并输出最终答案。\n")
                 .append("- 任务完成信号：").append(config.getFinishMarker()).append("。\n")
                 .append("- 注意：严禁过早结束，确保必要的专家已参与决策。\n");
 
-        // F. 增量业务指令注入
+        // F. 增量业务指令：追加用户自定义的特定业务约束
         if (instructionProvider != null) {
             sb.append("\n### 核心任务指令\n");
             sb.append(instructionProvider.apply(trace)).append("\n");
@@ -119,41 +120,54 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
     }
 
     /**
-     * 创建提供者构建器
+     * 获取构建器
      */
     public static Builder builder() { return new Builder(); }
 
     /**
-     * 构建器
+     * TeamSystemPromptCn 构建器
      */
     public static class Builder {
         private Function<TeamTrace, String> roleProvider;
         private Function<TeamTrace, String> instructionProvider;
 
         /**
-         * 设置角色描述（静态字符串）
+         * 设置角色描述片段
          */
-        public Builder role(String role) { this.roleProvider = (t) -> role; return this; }
+        public Builder role(String role) {
+            this.roleProvider = (t) -> role;
+            return this;
+        }
 
         /**
-         * 设置角色描述（静态字符串）
+         * 设置角色描述逻辑（支持动态生成）
          */
-        public Builder role(Function<TeamTrace, String> roleProvider) { this.roleProvider = roleProvider; return this; }
+        public Builder role(Function<TeamTrace, String> roleProvider) {
+            this.roleProvider = roleProvider;
+            return this;
+        }
 
         /**
-         * 设置指令描述（静态字符串，作为核心任务指令增量追加）
+         * 设置核心业务指令（将作为“核心任务指令”增量追加）
          */
-        public Builder instruction(String instruction) { this.instructionProvider = (t) -> instruction; return this; }
-
-
-        /**
-         * 设置指令描述（静态字符串，作为核心任务指令增量追加）
-         */
-        public Builder instruction(Function<TeamTrace, String> instructionProvider) { this.instructionProvider = instructionProvider; return this; }
+        public Builder instruction(String instruction) {
+            this.instructionProvider = (t) -> instruction;
+            return this;
+        }
 
         /**
-         * 构建提供者实例
+         * 设置核心业务指令逻辑（支持动态生成）
          */
-        public TeamSystemPromptCn build() { return new TeamSystemPromptCn(roleProvider, instructionProvider); }
+        public Builder instruction(Function<TeamTrace, String> instructionProvider) {
+            this.instructionProvider = instructionProvider;
+            return this;
+        }
+
+        /**
+         * 构建 TeamSystemPromptCn 实例
+         */
+        public TeamSystemPromptCn build() {
+            return new TeamSystemPromptCn(roleProvider, instructionProvider);
+        }
     }
 }
