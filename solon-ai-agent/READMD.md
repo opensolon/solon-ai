@@ -1,44 +1,30 @@
 # Solon AI Agent
 
-Solon AI Agent 是一个基于 Solon 框架构建的现代化 AI 智能体开发框架，支持多智能体协作、工具调用和复杂任务编排。
+**基于 Solon 框架构建的现代化“图驱动”多智能体 (Multi-Agent) 开发框架。**
+
+Solon AI Agent 为企业级智能体应用设计，将 LLM 的推理逻辑转化为可编排、可观测、可治理的工作流图。
 
 ## 一、核心特性
 
 ### 多层次智能体架构
 
-* 基础智能体：标准 AI 接口，支持自定义角色与工具
-* ReAct 智能体：基于 Reasoning-Acting 循环的工具调用模型
-* 团队智能体：多智能体协作容器，支持多种协作协议
+* 基础智能体 (Base Agent)：标准 AI 接口封装，支持自定义角色人格。
+* ReAct 智能体 (ReAct Agent)：基于 Reasoning-Acting 循环，具备强大的自省与自主工具调用能力。
+* 团队智能体 (Team Agent)：智能体容器，通过协作协议驱动多专家协同作业。
 
 ### 丰富的协作协议
 
 
-| 协议            | 模式   | 适用场景          |
-|---------------|------|---------------|
-| HIERARCHICAL  | 层级式  | 任务分解与分发，金字塔管理 |
-| SEQUENTIAL    | 顺序式  | 线性工作流，流水线执行   |
-| SWARM         | 蜂群式  | 动态接力协作，集体智能   |
-| A2A           | 对等式  | 点对点任务移交，高灵活性  |
-| CONTRACT_NET  | 合同网  | 分布式动态任务分配     |
-| MARKET_BASED  | 合同网  | 资源敏感型任务优化     |
-| BLACKBOARD    | 黑板式  | 协同求解，专家按需介入   |
+| 协议            | 模式   | 核心价值         | 适用场景          |
+|---------------|------|--------------|---------------|
+| HIERARCHICAL  | 层级式  | 任务拆解、指派与终审   | 金字塔管理，强质量把控 |
+| SEQUENTIAL    | 顺序式  | 线性传递，状态接力    | 翻译、校对、发布的流水线  |
+| SWARM         | 蜂群式  | 去中心化接力，高灵活性  | 快速响应的客服或路由场景  |
+| A2A           | 对等式  |              | 点对点任务移交，高灵活性 |
+| CONTRACT_NET  | 合同网  | 动态招标，择优执行    | 分布式动态任务分配    |
+| MARKET_BASED  | 市场式  |              | 资源敏感型任务优化    |
+| BLACKBOARD    | 黑板式  | 专家主动介入，协同求解  | 复杂探索性问题的联合攻关  |
 
-
-### 强大的工具生态系统
-
-* 内置工具链管理
-* 协议级工具注入
-* 工具执行拦截与重试
-* 结果净化与脱敏
-
-
-### 灵活的扩展机制
-
-
-* 生命周期拦截器
-* 协议自定义
-* 提示词模板化
-* 执行图可编程调整
 
 
 ## 二、快速开始
@@ -56,7 +42,7 @@ Solon AI Agent 是一个基于 Solon 框架构建的现代化 AI 智能体开发
 ```
 
 
-### 2. 创建 ReAct 智能体
+### 2. 构建 ReAct 智能体 (单兵作战)
 
 
 ```java
@@ -76,7 +62,7 @@ AssistantMessage response = agent.prompt("今天北京的天气如何？")
 ```
 
 
-### 3. 创建团队智能体
+### 3. 构建团队智能体 (多机协同)
 
 
 ```java
@@ -100,21 +86,20 @@ AssistantMessage result = team.prompt("设计一个用户登录页面，包含�
 ## 三、核心概念
 
 
-### 智能体 (Agent)
+### 执行轨迹 (Trace)
 
-智能体是框架的基本执行单元，分为三种类型：
+每一轮思考、每一次决策、每一个 Token 消耗都被完整记录。
 
-* 基础智能体 (Base Agent) - 实现 Agent 接口
-* ReAct 智能体 (ReAct Agent) - 支持工具调用的推理-执行循环
-* 团队智能体 (Team Agent) - 多智能体协作容器
+* 观测性：trace.getFormattedHistory() 还原 AI 完整思考路径。
+* 度量性：内置性能指标（耗时、步数、Token 统计）。
 
 
-### 会话 (Session)
+### 会话治理 (Session)
 
-会话管理智能体的状态和历史：
+管理智能体的短期与长期记忆，支持不同维度的持久化。：
 
-* InMemoryAgentSession - 内存会话（默认）
-* RedisAgentSession - Redis 持久化会话
+* InMemoryAgentSession - 快速原型开发（默认）。
+* RedisAgentSession - 分布式生产环境的状态保持。
 
 
 ### 协议 (Protocol)
@@ -325,72 +310,7 @@ public class MonitoringInterceptor implements ReActInterceptor {
 }
 ```
 
-## 七、进阶功能
-
-
-### 协议上下文共享
-
-
-```java
-// 在协议间共享数据
-@Override
-public void prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
-    // 获取协议上下文
-    Map<String, Object> context = trace.getProtocolContext();
-    String memo = (String) context.get("last_memo");
-    
-    // 注入到提示词
-    if (memo != null) {
-        String enhancedPrompt = originalPrompt.getUserContent() + 
-            "\n\n交接说明: " + memo;
-        return Prompt.of(enhancedPrompt);
-    }
-    
-    return originalPrompt;
-}
-```
-
-
-### 动态路由决策
-
-```java
-// 自定义路由逻辑
-@Override
-public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-    // 解析决策文本
-    if (decision.contains("紧急")) {
-        return "emergency_handler"; // 路由到紧急处理者
-    } else if (decision.contains("技术")) {
-        return "technical_expert"; // 路由到技术专家
-    }
-    
-    return super.resolveSupervisorRoute(context, trace, decision);
-}
-```
-
-
-### 智能体能力评估
-
-```java
-// 实现智能体自评
-@Override
-public String estimate(AgentSession session, Prompt prompt) {
-    // 评估任务匹配度
-    FlowContext context = session.getSnapshot();
-    String task = prompt.getUserContent();
-    
-    if (task.contains("设计") && description.contains("设计师")) {
-        return "匹配度: 90%，我可以处理UI/UX设计任务";
-    } else if (task.contains("代码") && description.contains("开发")) {
-        return "匹配度: 85%，我可以实现前端代码";
-    }
-    
-    return "匹配度: 50%，可能需要其他专家协助";
-}
-```
-
-
-## 八、性能优化
+## 七、性能优化
 
 ### 上下文压缩
 
