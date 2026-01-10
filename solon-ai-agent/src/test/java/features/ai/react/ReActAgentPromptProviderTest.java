@@ -1,3 +1,18 @@
+/*
+ * Copyright 2017-2026 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package features.ai.react;
 
 import demo.ai.agent.LlmUtil;
@@ -15,53 +30,57 @@ import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 
 /**
- * ReActAgent 提示词提供者（PromptProvider）测试
- * <p>验证如何通过自定义 Prompt 模板来改变 Agent 的推理风格、语言偏好和输出格式约束。</p>
+ * ReActAgent 提示词提供者（ReActSystemPrompt）深度测试
+ * * <p>验证通过不同的 ReActSystemPrompt 实现来重塑 Agent 的：</p>
+ * <ol>
+ * <li><b>推理逻辑</b>：通过自定义指令强制改变解题步骤。</li>
+ * <li><b>语言环境</b>：增强中文语境下的工具调用稳定性。</li>
+ * <li><b>协议注入</b>：在保持业务角色的同时，注入底层输出格式约束。</li>
+ * </ol>
  */
 public class ReActAgentPromptProviderTest {
 
     /**
-     * 测试：自定义提示词提供者
-     * <p>目标：强制模型进入“数学专家”角色，并遵循特定的思考步骤。</p>
+     * 测试 1：基于 Builder 构建自定义业务提示词
+     * <p>目标：利用 ReActSystemPromptCn.builder() 注入“数学专家”角色，同时不破坏 ReAct 协议格式。</p>
      */
     @Test
     public void testCustomPromptProvider() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 定义自定义 Prompt 模板
-        // 通过 trace 可以获取当前工具列表、配置信息等动态数据
-        ReActSystemPrompt customProvider = trace -> {
-            return "你是专门处理数学问题的专家。\n" +
-                    "当前可用工具数量: " + trace.getConfig().getTools().size() + "\n" +
-                    "请严格按照以下格式进行推理:\n" +
-                    "分析: [描述解题思路]\n" +
-                    "计算: [调用工具计算]\n" +
-                    "验证: [核对结果正确性]\n" +
-                    "最终答案请以 '答案:' 开头。";
-        };
-
-        // 2. 构建 Agent 并注入自定义提供者
-        ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new MathTools()))
-                .systemPrompt(customProvider)
-                .chatOptions(o -> o.temperature(0.0F)) // 严格执行指令
+        // 1. 使用增量构建模式：保持 ReAct 输出格式约束，同时注入数学专家业务逻辑
+        ReActSystemPrompt mathExpertProvider = ReActSystemPromptCn.builder()
+                .role("你是一个严谨的数学解题专家")
+                .instruction(trace -> {
+                    // 动态感知当前工具集
+                    int toolSize = trace.getConfig().getTools().size();
+                    return "### 专家解题指南 (当前可用工具: " + toolSize + ")\n" +
+                            "1. **分析**: 拆解问题中的数学逻辑。\n" +
+                            "2. **执行**: 利用数学工具进行高精度计算。\n" +
+                            "3. **验证**: 检查计算结果是否符合常理。\n" +
+                            "注意：请在 Final Answer 中详细说明解题过程。";
+                })
                 .build();
 
-        // 3. 使用 AgentSession 替代 FlowContext
-        AgentSession session = InMemoryAgentSession.of("math_expert_job");
-        String result = agent.call(Prompt.of("计算 25 + 37"), session).getContent();
+        // 2. 构建 Agent
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .addTool(new MethodToolProvider(new MathTools()))
+                .systemPrompt(mathExpertProvider)
+                .chatOptions(o -> o.temperature(0.0F)) // 降低随机性，确保严格遵循解题步骤
+                .build();
 
-        Assertions.assertNotNull(result);
+        AgentSession session = InMemoryAgentSession.of("session_math_001");
+        String result = agent.call(Prompt.of("计算 25 + 37 的结果"), session).getContent();
+
         System.out.println("【专家模式结果】:\n" + result);
 
-        // 4. 验证是否遵循了自定义格式
-        boolean hasCustomFormat = result.contains("分析") || result.contains("答案:");
-        Assertions.assertTrue(hasCustomFormat, "Agent 应该遵循自定义 Prompt 要求的输出格式");
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.contains("分析") || result.contains("62"), "Agent 未遵循专家指令进行分析或结果错误");
     }
 
     /**
-     * 测试：内置中文提示词提供者
-     * <p>使用框架提供的 ReActPromptProviderCn，增强 Agent 在中文语境下的工具调用能力。</p>
+     * 测试 2：使用内置默认中文增强单例
+     * <p>验证框架自带的 ReActSystemPromptCn.getDefault() 在中文任务下的表现。</p>
      */
     @Test
     public void testChinesePromptProvider() throws Throwable {
@@ -69,45 +88,48 @@ public class ReActAgentPromptProviderTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .addTool(new MethodToolProvider(new ChineseTools()))
-                .systemPrompt(ReActSystemPromptCn.getInstance()) // 使用单例中文增强
-                .chatOptions(o -> o.temperature(0.0F))
+                // 直接使用默认实现，适合通用中文场景
+                .systemPrompt(ReActSystemPromptCn.getDefault())
                 .build();
 
-        AgentSession session = InMemoryAgentSession.of("weather_job_cn");
+        AgentSession session = InMemoryAgentSession.of("session_weather_001");
         String result = agent.call(Prompt.of("帮我查下北京的天气怎么样？"), session).getContent();
 
-        Assertions.assertNotNull(result);
         System.out.println("【中文模式结果】:\n" + result);
 
-        // 验证中文理解与输出
-        Assertions.assertTrue(result.contains("北京") || result.contains("天气"),
-                "Agent 应准确识别中文参数并返回包含关键词的结果");
+        Assertions.assertTrue(result.contains("北京") && result.contains("20°C"));
     }
 
     /**
-     * 测试：空系统提示词（边界情况）
-     * <p>验证当不提供任何引导指令时，Agent 是否能基于默认底层逻辑运行（取决于 LLM 的本能）。</p>
+     * 测试 3：动态 Role 提供者
+     * <p>验证根据不同的上下文（Trace）动态变换角色。</p>
      */
     @Test
-    public void testEmptySystemPrompt() throws Throwable {
+    public void testDynamicRoleProvider() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 提供一个无任何指令的提供者
-        ReActSystemPrompt emptyProvider = trace -> "";
-
-        ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new BasicTools()))
-                .systemPrompt(emptyProvider)
+        ReActSystemPrompt dynamicProvider = ReActSystemPromptCn.builder()
+                .role(trace -> {
+                    // 假设根据 Session ID 的某些特征来决定角色（示例逻辑）
+                    return trace.getSession().getSnapshot().containsKey("is_pro") ? "高级资深专家" : "新手助手";
+                })
+                .instruction("直接回答用户问题。")
                 .build();
 
-        AgentSession session = InMemoryAgentSession.of("empty_prompt_job");
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .systemPrompt(dynamicProvider)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("session_dynamic_001");
+        session.getSnapshot().put("is_pro", true); // 触发高级角色
+
         String result = agent.call(Prompt.of("你好"), session).getContent();
+        System.out.println("【动态角色结果】: " + result);
 
         Assertions.assertNotNull(result);
-        System.out.println("【空指令结果】: " + result);
     }
 
-    // --- 工具集定义 ---
+    // --- 模拟业务工具集 ---
 
     public static class MathTools {
         @ToolMapping(description = "执行加法运算")
@@ -120,14 +142,7 @@ public class ReActAgentPromptProviderTest {
     public static class ChineseTools {
         @ToolMapping(description = "查询指定城市的天气状况")
         public String get_weather(@Param(description = "城市名称，如：北京") String city) {
-            return city + " 今天气温 20°C，多云转晴，非常适合户外活动。";
-        }
-    }
-
-    public static class BasicTools {
-        @ToolMapping(description = "基础回复工具")
-        public String basic() {
-            return "基础工具响应成功";
+            return city + " 今天气温 20°C，多云转晴。";
         }
     }
 }

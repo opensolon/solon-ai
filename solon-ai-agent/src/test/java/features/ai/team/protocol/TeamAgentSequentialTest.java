@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActSystemPromptCn; // 引入结构化模板
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
@@ -15,12 +16,6 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 
 /**
  * Sequential 策略测试：严格顺序流水线模式
- * <p>
- * 验证目标：
- * 1. 验证任务是否严格按照 Agent 注册顺序执行（A -> B -> C）。
- * 2. 验证后序 Agent 是否能接收到前序 Agent 的处理结果。
- * 3. 验证即使需求更偏向后面的 Agent，系统也不会产生跳跃。
- * </p>
  */
 public class TeamAgentSequentialTest {
 
@@ -28,35 +23,52 @@ public class TeamAgentSequentialTest {
     public void testSequentialPipeline() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 定义三个流水线环节
-        // 第一步：需求提取
+
+
+        // 1. 优化系统提示词：明确流水线坐标与输出契约
+
+        // 第一步：强调结构化提取
         Agent extractor = ReActAgent.of(chatModel)
                 .name("step1_extractor")
-                .systemPrompt(c -> "你是第一步：提取用户需求中的关键词，以 JSON 格式输出。")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("流水线第一步：需求分析专家")
+                        .instruction("### 任务说明\n" +
+                                "1. 分析用户原始输入，识别核心业务对象和操作逻辑。\n" +
+                                "2. **输出要求**：仅输出 JSON 格式的关键词集合，严禁包含任何自然语言描述。")
+                        .build())
                 .build();
 
-        // 第二步：逻辑转换
+        // 第二步：强调对前序结果的消费
         Agent converter = ReActAgent.of(chatModel)
                 .name("step2_converter")
-                .systemPrompt(c -> "你是第二步：根据第一步提供的 JSON 关键词，编写一段伪代码。")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("流水线第二步：逻辑建模专家")
+                        .instruction("### 任务说明\n" +
+                                "1. 读取上游生成的 JSON 关键词。\n" +
+                                "2. **处理逻辑**：将这些关键词转化为易于理解的业务伪代码（Pseudocode）。\n" +
+                                "3. 不要进行额外的润色，保持逻辑纯粹。")
+                        .build())
                 .build();
 
-        // 第三步：代码润色
+        // 第三步：强调最终交付质量
         Agent polisher = ReActAgent.of(chatModel)
                 .name("step3_polisher")
-                .systemPrompt(c -> "你是第三步：对第二步的伪代码进行注释补充和格式优化。")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("流水线第三步：代码优化专家")
+                        .instruction("### 任务说明\n" +
+                                "1. 接收上游的业务伪代码。\n" +
+                                "2. **优化重点**：补充必要的注释、优化代码缩进、提高可读性。\n" +
+                                "3. **最终产出**：输出整理后的美化代码块。")
+                        .build())
                 .build();
 
-        // 2. 使用 SEQUENTIAL 协议构建团队（顺序：extractor -> converter -> polisher）
+        // 2. 构建顺序团队 (保持逻辑不变)
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("sequential_pipeline")
                 .protocol(TeamProtocols.SEQUENTIAL)
-                .addAgent(extractor)
-                .addAgent(converter)
-                .addAgent(polisher)
+                .addAgent(extractor, converter, polisher)
                 .build();
 
-        // 打印图结构：应为单一线性链路
         System.out.println("--- Sequential Team Graph ---\n" + team.getGraph().toYaml());
 
         // 3. 执行任务
@@ -66,51 +78,46 @@ public class TeamAgentSequentialTest {
 
         System.out.println("=== 最终输出结果 ===\n" + result);
 
-        // 4. 验证执行轨迹
+        // 4. 验证执行轨迹 (保持逻辑不变)
         TeamTrace trace = team.getTrace(session);
         Assertions.assertNotNull(trace);
-
-        // 关键断言：执行步数至少为 3（三个 Agent 各走一遍）
         Assertions.assertTrue(trace.getStepCount() >= 3);
 
-        // 验证执行顺序
-        System.out.println("执行链条顺序检查:");
-        for (int i = 0; i < trace.getSteps().size(); i++) {
-            System.out.println("第 " + (i + 1) + " 步: " + trace.getSteps().get(i).getAgentName());
-        }
-
-        String firstWorker = trace.getSteps().get(0).getAgentName();
-        String secondWorker = trace.getSteps().get(1).getAgentName();
-        String thirdWorker = trace.getSteps().get(2).getAgentName();
-
-        Assertions.assertEquals("step1_extractor", firstWorker);
-        Assertions.assertEquals("step2_converter", secondWorker);
-        Assertions.assertEquals("step3_polisher", thirdWorker);
-
-        System.out.println("顺序验证通过！");
+        Assertions.assertEquals("step1_extractor", trace.getSteps().get(0).getAgentName());
+        Assertions.assertEquals("step2_converter", trace.getSteps().get(1).getAgentName());
+        Assertions.assertEquals("step3_polisher", trace.getSteps().get(2).getAgentName());
     }
 
-    /**
-     * 测试：Sequential 的强约束性
-     * 场景：即使任务内容非常像第三步的内容，它也必须先经过第一、二步。
-     */
     @Test
     public void testSequentialRigidity() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent a = ReActAgent.of(chatModel).name("Agent_A").description("只负责加一").build();
-        Agent b = ReActAgent.of(chatModel).name("Agent_B").description("只负责加二").build();
+        // 优化：赋予 Agent 明确的角色感，即使被迫先执行不擅长的任务也要守规矩
+        Agent a = ReActAgent.of(chatModel).name("Agent_A")
+                .description("数学预处理专家")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("加一处理器")
+                        .instruction("你是流水线的起始点。无论收到什么，你的任务是确保数据传递给下一步。")
+                        .build())
+                .build();
+
+        Agent b = ReActAgent.of(chatModel).name("Agent_B")
+                .description("数学后处理专家")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("加二处理器")
+                        .instruction("你只负责接收上游数据并执行加二操作。")
+                        .build())
+                .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.SEQUENTIAL)
-                .addAgent(a).addAgent(b)
+                .addAgent(a, b)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_seq_rigidity");
-        // 即使询问 Agent_B 擅长的事，在 SEQUENTIAL 下也必须 A 先说话
         team.call(Prompt.of("Agent_B 你好，请帮我加二。"), session);
 
         TeamTrace trace = team.getTrace(session);
-        Assertions.assertEquals("Agent_A", trace.getSteps().get(0).getAgentName(), "SEQUENTIAL 模式下必须由第一个定义的 Agent 启动");
+        Assertions.assertEquals("Agent_A", trace.getSteps().get(0).getAgentName());
     }
 }
