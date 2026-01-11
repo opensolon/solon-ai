@@ -57,7 +57,9 @@ public interface Agent extends NamedTaskComponent {
     /**
      * 获取智能体档案
      * */
-    AgentProfile profile();
+    default AgentProfile profile(){
+        return null;
+    }
 
     /**
      * 为当前上下文生成动态职责描述
@@ -157,14 +159,20 @@ public interface Agent extends NamedTaskComponent {
 
         // 自动将执行轨迹同步到团队足迹中
         if (trace != null) {
-            String result = (msg.getContent() == null) ? "" : msg.getContent().trim();
-            if (result.isEmpty()) {
-                result = "Agent [" + name() + "] processed but returned no textual content.";
+            String rawContent = (msg.getContent() == null) ? "" : msg.getContent().trim();
+
+            // [核心修改点]：在记录到 Trace 之前，调用 Protocol 进行内容解析或转换
+            String finalResult = trace.getProtocol().resolveAgentOutput(trace, this, rawContent);
+
+            if (finalResult == null || finalResult.isEmpty()) {
+                finalResult = "Agent [" + name() + "] processed but returned no textual content.";
             }
-            trace.addStep(name(), result, duration);
 
+            // 将转换后的结果存入轨迹
+            trace.addStep(name(), finalResult, duration);
+
+            // 回调协议和拦截器
             trace.getProtocol().onAgentEnd(trace, this);
-
             trace.getOptions().getInterceptorList().forEach(item -> item.target.onAgentEnd(trace, this));
         }
     }

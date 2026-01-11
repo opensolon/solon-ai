@@ -114,6 +114,18 @@ public class SequentialProtocol extends HierarchicalProtocol {
     }
 
     @Override
+    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        if (isZh) {
+            sb.append("\n- 顺序执行模式：请按成员名录顺序调度。");
+            sb.append("\n- 注意：若发现当前任务违背了下一位成员的“行为约束(Constraints)”，请跳过该成员或直接结束。");
+        } else {
+            sb.append("\n- Sequential Mode: Follow the predefined order.");
+            sb.append("\n- Note: If the task violates the next member's 'Constraints', skip that member or terminate.");
+        }
+    }
+
+    @Override
     public boolean shouldSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
         SequenceState state = (SequenceState) trace.getProtocolContext().get(KEY_SEQUENCE_STATE);
         if (state == null) return true;
@@ -123,6 +135,15 @@ public class SequentialProtocol extends HierarchicalProtocol {
 
         // 顺序协议由协议逻辑指定路由，不需要 LLM 介入决策
         return false;
+    }
+
+    @Override
+    public String resolveAgentOutput(TeamTrace trace, Agent agent, String rawContent) {
+        if (!assessQuality(rawContent)) {
+            // 如果质量不达标，返回一个标志位或空，防止垃圾内容污染后续步骤
+            return "[System: Stage execution failed quality check, awaiting retry]";
+        }
+        return rawContent;
     }
 
     @Override

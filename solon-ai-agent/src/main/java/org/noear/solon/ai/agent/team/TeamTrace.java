@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
@@ -45,13 +46,6 @@ import java.util.stream.Collectors;
  */
 @Preview("3.8.1")
 public class TeamTrace implements AgentTrace {
-    private TeamStatus status = TeamStatus.RUNNING;
-
-    // 记录任务的“里程碑”状态，而不是琐碎的每个动作
-    public void markMilestone(TeamStatus status) {
-        this.status = status;
-    }
-
     /**
      * 关联的团队配置（生命周期内稳定，不参与持久化序列化）
      */
@@ -253,6 +247,11 @@ public class TeamTrace implements AgentTrace {
         return protocolContext;
     }
 
+    public String getProtocolDashboardSnapshot() {
+        // 逻辑：将 protocolContext 中非内部字段转为 JSON，方便 Agent 理解当前全局进度
+        return ONode.serialize(protocolContext);
+    }
+
     public <T> T getProtocolContextAs(String key) {
         return (T) protocolContext.get(key);
     }
@@ -273,22 +272,51 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
-     * 获取标准化的协作历史报告
-     * <p>使用 Markdown 语义增强角色边界，帮助 LLM 更好地区分不同 Agent 的角色与贡献。</p>
+     * 获取全量格式化历史
      */
     public String getFormattedHistory() {
+        return getFormattedHistory(0, true);
+    }
+
+    /**
+     * 获取格式化历史（默认包含系统决策）
+     * 适配 SupervisorTask 的调用：trace.getFormattedHistory(5)
+     */
+    public String getFormattedHistory(int windowSize) {
+        return getFormattedHistory(windowSize, true);
+    }
+
+    /**
+     * 智能格式化历史 (完整实现)
+     * @param windowSize 最大步数限制（0 表示不限制）
+     * @param includeSystem 是否包含 Supervisor 的决策过程
+     */
+    public String getFormattedHistory(int windowSize, boolean includeSystem) {
         if (steps.isEmpty()) {
             return "No progress yet.";
         }
 
-        if (isUpdateHistoryCache) {
-            cachedFormattedHistory = steps.stream()
-                    .map(step -> String.format("### %s:\n%s", step.getAgentName(), step.getContent()))
-                    .collect(Collectors.joining("\n\n"));
-            isUpdateHistoryCache = false;
+        // 1. 过滤逻辑
+        List<TeamStep> filteredSteps = steps;
+        if (!includeSystem) {
+            filteredSteps = steps.stream()
+                    .filter(s -> !Agent.ID_SUPERVISOR.equals(s.getAgentName()))
+                    .collect(Collectors.toList());
         }
 
-        return cachedFormattedHistory;
+        // 2. 截取视口 (最近的 maxSteps 步)
+        if (windowSize > 0 && filteredSteps.size() > windowSize) {
+            filteredSteps = filteredSteps.subList(filteredSteps.size() - windowSize, filteredSteps.size());
+        }
+
+        // 3. 渲染 Markdown
+        return filteredSteps.stream()
+                .map(step -> {
+                    boolean isSupervisor = Agent.ID_SUPERVISOR.equals(step.getAgentName());
+                    String title = isSupervisor ? "Decision" : "Output";
+                    return String.format("### %s from [%s]:\n%s", title, step.getAgentName(), step.getContent());
+                })
+                .collect(Collectors.joining("\n\n"));
     }
 
     /**

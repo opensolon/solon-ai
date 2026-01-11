@@ -30,15 +30,11 @@ import org.slf4j.LoggerFactory;
 import java.util.Locale;
 
 /**
- * 蜂群协作协议 (Swarm Protocol) - 基于 Snack4 状态管理
- *
- * 特点：
- * 1. 自动维护信息素 (Pheromone)：通过 Agent 的活跃度控制路由倾向。
- * 2. 任务涌现 (Emergent Tasks)：Agent 输出的 JSON 会自动转化为后续待办任务。
- * 3. 动态负载平衡：防止特定 Agent 陷入过度循环。
- *
- * @author noear
- * @since 3.8.1
+ * 优化版蜂群协作协议 (Swarm Protocol)
+ * * 优化点：
+ * 1. 强化 JSON 嗅探：利用基类 sniffJson 处理非标准输出。
+ * 2. 引入信息素冷降机制：避免单一 Agent 被连续过度使用。
+ * 3. 任务池生命周期管理：自动清理已分配任务。
  */
 @Preview("3.8.1")
 public class SwarmProtocol extends TeamProtocolBase {
@@ -50,116 +46,120 @@ public class SwarmProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public String name() {
-        return "SWARM";
-    }
-
-    // --- 阶段一：构建期 (拓扑构建) ---
+    public String name() { return "SWARM"; }
 
     @Override
     public void buildGraph(GraphSpec spec) {
-        // 蜂群拓扑：起始节点执行后进入主管分发中心
+        // 入口：首个 Agent 执行
         String firstAgent = config.getAgentMap().keySet().iterator().next();
-
         spec.addStart(Agent.ID_START).linkAdd(firstAgent);
 
-        // 所有 Agent 执行完后，统一交还给 Supervisor 进行状态感知与再分发
+        // 环形反馈：Agent 执行完 -> 交给 Supervisor -> 决定去向（另一个 Agent 或 End）
         config.getAgentMap().values().forEach(a ->
                 spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
 
-        // Supervisor 决策逻辑
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-            linkAgents(ns); // 绑定 trace.getRoute() 进行路由
+            linkAgents(ns);
         }).linkAdd(Agent.ID_END);
 
         spec.addEnd(Agent.ID_END);
     }
 
-    // --- 阶段二：状态维护 ---
-
     private ONode getSwarmState(TeamTrace trace) {
         return (ONode) trace.getProtocolContext().computeIfAbsent(KEY_SWARM_STATE, k -> {
             ONode node = new ONode().asObject();
-            node.getOrNew("pheromones"); // 活跃度图
+            node.getOrNew("pheromones"); // 活跃度 (信息素)
             node.getOrNew("task_pool");  // 涌现任务池
             return node;
         });
     }
 
     @Override
-    public void onAgentEnd(TeamTrace trace, Agent agent) {
-        ONode state = getSwarmState(trace);
-        String content = trace.getLastAgentContent();
+    public String resolveAgentOutput(TeamTrace trace, Agent agent, String rawContent) {
+        if (Utils.isEmpty(rawContent)) return rawContent;
 
-        // 1. 信息素累加 (Pheromones)
-        int count = state.select("$.pheromones." + agent.name()).getInt();
-        state.get("pheromones").set(agent.name(), count + 1);
+        // 1. 使用基类优化的嗅探逻辑
+        ONode output = sniffJson(rawContent);
 
-        // 2. 涌现任务提取 (增强防御性解析)
-        if (Utils.isNotEmpty(content)) {
-            String trimmed = content.trim();
-            if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-                try {
-                    ONode output = ONode.ofJson(trimmed);
-                    if (output.hasKey("sub_tasks")) {
-                        state.get("task_pool").addAll(output.get("sub_tasks").getArray());
-                        LOG.debug("Swarm: {} emergent tasks captured", agent.name());
-                    }
-                } catch (Exception ignored) {}
+        // 2. 检查子任务涌现 (识别 sub_tasks 数组)
+        if (output.hasKey("sub_tasks") && output.get("sub_tasks").isArray()) {
+            ONode subTasks = output.get("sub_tasks");
+            if (subTasks.size() > 0) {
+                ONode state = getSwarmState(trace);
+                // 将新任务合并入任务池
+                subTasks.getArray().forEach(taskNode -> {
+                    state.get("task_pool").add(taskNode);
+                });
+
+                LOG.debug("Swarm: [{}] generated {} emergent tasks.", agent.name(), subTasks.size());
+
+                // 3. 剥离 JSON，只返回文本给历史记录，保持上下文整洁
+                return rawContent.replaceAll("\\s*\\{.*\\}\\s*", "\n").trim();
             }
         }
+        return rawContent;
+    }
+
+    @Override
+    public void onAgentEnd(TeamTrace trace, Agent agent) {
+        ONode state = getSwarmState(trace);
+        ONode pheroNode = state.get("pheromones");
+
+        // 1. 信息素挥发逻辑 (Evaporation)
+        // 每次有 Agent 完成任务，所有 Agent 的信息素都会小幅下降（冷降）
+        pheroNode.getObject().forEach((k, v) -> {
+            int val = v.getInt();
+            if (val > 0) pheroNode.set(k, val - 1);
+        });
+
+        // 2. 当前 Agent 堆积信息素 (增量)
+        int current = pheroNode.get(agent.name()).getInt();
+        pheroNode.set(agent.name(), current + 5); // 增加显著权重，防止短时间内被再次指派
     }
 
     @Override
     public void onSupervisorRouting(FlowContext context, TeamTrace trace, String nextAgent) {
-        // 路由转向时，若处理的是任务池中的任务，则进行清理
         ONode state = getSwarmState(trace);
-        if (state.get("task_pool").isArray()) {
-            state.get("task_pool").getArray().removeIf(n -> n.getString().equalsIgnoreCase(nextAgent));
-        }
+        ONode taskPool = state.get("task_pool");
 
-        LOG.debug("Swarm Protocol - Routing to: {}", nextAgent);
+        // 路由转向时，尝试从任务池移除已匹配的任务
+        if (taskPool.isArray()) {
+            taskPool.getArrayUnsafe().removeIf(n -> {
+                String taskDesc = n.isObject() ? n.get("task").getString() : n.getString();
+                return nextAgent.equalsIgnoreCase(taskDesc) || (agentMatchesTask(nextAgent, n));
+            });
+        }
     }
 
-    // --- 阶段三：主管决策治理 ---
+    private boolean agentMatchesTask(String agentName, ONode taskNode) {
+        // 简单匹配逻辑：任务 JSON 中若指定了 agent 字段则匹配
+        return taskNode.isObject() && agentName.equalsIgnoreCase(taskNode.get("agent").getString());
+    }
 
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         ONode state = getSwarmState(trace);
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-        sb.append(isZh ? "\n### 蜂群环境看板 (Swarm Dashboard)\n" : "\n### Swarm Dashboard\n");
-
-        // 注入包含信息素和任务池的 JSON 看板
-        sb.append("```json\n")
-                .append(state.toJson())
-                .append("\n```\n");
+        sb.append(isZh ? "\n### 蜂群实时状态 (Swarm Intelligence)\n" : "\n### Swarm Real-time Intelligence\n");
+        sb.append("```json\n").append(state.toJson()).append("\n```\n");
 
         if (isZh) {
-            sb.append("> 指示：请检查 task_pool 中的待办事项。如果某个成员的 pheromones 值过高，说明其可能陷入死循环，请尝试指派其他专家。");
+            sb.append("> **决策指引**：\n");
+            sb.append("> 1. **负载均衡**：pheromones 分值较高的成员代表正忙或近期过度活跃，优先分配给分值低的成员。\n");
+            sb.append("> 2. **任务消耗**：请优先处理 task_pool 中的涌现任务。\n");
+            sb.append("> 3. **能力对齐**：若任务需要特定 Skills（见下表），请务必精准指派。");
         } else {
-            sb.append("> Instructions: Check task_pool for pending items. If an agent's pheromones value is too high, it may be stuck; try dispatching another expert.");
+            sb.append("> **Decision Guide**:\n");
+            sb.append("> 1. **Load Balancing**: Members with higher 'pheromones' are busy; prioritize low-score members.\n");
+            sb.append("> 2. **Task Pool**: Address emergent tasks in 'task_pool' as a priority.\n");
+            sb.append("> 3. **Skill Alignment**: Ensure the agent's Skills match the task requirements.");
         }
     }
 
     @Override
     public void onTeamFinished(FlowContext context, TeamTrace trace) {
-        // 终态清理资源
         trace.getProtocolContext().remove(KEY_SWARM_STATE);
         super.onTeamFinished(context, trace);
-    }
-
-    @Override
-    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
-        super.injectSupervisorInstruction(locale, sb);
-
-        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
-        if (isZh) {
-            sb.append("\n- 你目前处于蜂群模式。请通过观察环境状态（JSON 看板）来决定任务接力。");
-            sb.append("\n- 关注集体进展，平衡成员负载。");
-        } else {
-            sb.append("\n- You are in Swarm Mode. Observe environment state (JSON dashboard) to decide task relays.");
-            sb.append("\n- Focus on collective progress and balance member load.");
-        }
     }
 }

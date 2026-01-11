@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.lang.Preview;
 import java.util.Locale;
 import java.util.function.Function;
@@ -83,7 +84,17 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
         // A. 团队成员列表：动态注入当前团队中所有可用的 Agent 及其职责描述
         sb.append("### Team Members\n");
         config.getAgentMap().forEach((name, agent) -> {
-            sb.append("- **").append(name).append("**: ").append(agent.descriptionFor(trace.getContext())).append("\n");
+            sb.append("- **").append(name).append("**:\n");
+            sb.append("  - Responsibility: ").append(agent.descriptionFor(trace.getContext())).append("\n");
+
+            // [Refactored]: Unified use of Profile formatted output
+            AgentProfile profile = agent.profile();
+            if (profile != null) {
+                String profileInfo = profile.toFormatString(getLocale());
+                if (!profileInfo.isEmpty()) {
+                    sb.append("  - Profile: ").append(profileInfo).append("\n");
+                }
+            }
         });
 
         // B. 任务上下文：明确当前需要解决的原始用户需求

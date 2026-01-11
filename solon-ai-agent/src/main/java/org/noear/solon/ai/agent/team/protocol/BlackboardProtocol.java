@@ -111,11 +111,11 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         if (isZh) {
             toolDesc.title("同步到黑板")
                     .description("将本阶段的核心结论或下一步计划同步到全局黑板。")
-                    .stringParamAdd("state", "JSON格式数据，必须包含最新进展或todo列表");
+                    .stringParamAdd("state", "JSON格式数据。建议：在 todo 中指派任务时，请务必核对目标成员的“行为约束(Constraints)”。");
         } else {
             toolDesc.title("Sync to Blackboard")
                     .description("Synchronize findings or next steps to the shared blackboard.")
-                    .stringParamAdd("state", "JSON format data with status or todo list");
+                    .stringParamAdd("state", "JSON data. Suggestion: When assigning 'todo' items, ensure they do not violate the target member's 'Constraints'.");
         }
 
         toolDesc.doHandle(args -> "System: Blackboard updated.");
@@ -159,12 +159,14 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
             sb.append("\n### 黑板协作守则：\n");
-            sb.append("1. 依据看板决策：优先处理看板 JSON 中 todo 列表里的待办项。\n");
-            sb.append("2. 增量更新：专家应通过同步工具不断完善看板内容。");
+            sb.append("1. **精准派发**：对比黑板上的 `todo` 与成员档案的 **擅长技能 (Skills)**，派发给最专业的成员。\n");
+            sb.append("2. **合规审计**：严禁指派违背成员 **行为约束 (Constraints)** 的任务。\n");
+            sb.append("3. **增量更新**：专家应通过同步工具不断完善看板内容。");
         } else {
             sb.append("\n### Blackboard Rules:\n");
-            sb.append("1. State-Based Decision: Prioritize tasks listed in the JSON 'todo' list.\n");
-            sb.append("2. Incremental Sync: Experts should update the board via sync tools.");
+            sb.append("1. **Precision Dispatch**: Match `todo` items with members' **Skills** from their profiles.\n");
+            sb.append("2. **Compliance Audit**: Never assign tasks that violate a member's **Constraints**.\n");
+            sb.append("3. **Incremental Sync**: Experts must update the board via sync tools.");
         }
     }
 

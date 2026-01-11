@@ -85,22 +85,34 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public void injectAgentTools(Agent agent, ReActTrace trace) {
-        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
-        String experts = config.getAgentMap().keySet().stream()
-                .filter(name -> !name.equals(agent.name()))
-                .collect(Collectors.joining(","));
+        Locale locale = config.getLocale();
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+
+        // 改进：不仅仅是名字，还要把专家的 Profile 核心信息带出来
+        String expertsDescription = config.getAgentMap().entrySet().stream()
+                .filter(entry -> !entry.getKey().equals(agent.name())) // 排除自己
+                .map(entry -> {
+                    String name = entry.getKey();
+                    Agent expert = entry.getValue();
+                    // 获取格式化后的 Profile 信息（如：擅长技能: java; 行为约束: ...）
+                    String profileSummary = (expert.profile() != null)
+                            ? expert.profile().toFormatString(locale)
+                            : "";
+                    return name + (profileSummary.isEmpty() ? "" : " (" + profileSummary + ")");
+                })
+                .collect(Collectors.joining(" | "));
 
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER);
         if (isZh) {
-            tool.title("任务移交").description("将任务移交给其他专家")
-                    .stringParamAdd("target", "目标专家: [" + experts + "]")
-                    .stringParamAdd("instruction", "给他的具体指令")
-                    .stringParamAdd("state", "需要传递的结构化数据(JSON)");
+            tool.title("任务移交").description("将当前任务移交给团队中更合适的专家进行接力处理")
+                    .stringParamAdd("target", "目标专家名。可选范围: [" + expertsDescription + "]")
+                    .stringParamAdd("instruction", "给接棒专家的具体指令，说明需要他做什么")
+                    .stringParamAdd("state", "需要传递的结构化数据状态(JSON格式)");
         } else {
-            tool.title("Transfer").description("Transfer task to another agent")
-                    .stringParamAdd("target", "Target: [" + experts + "]")
-                    .stringParamAdd("instruction", "Instruction for receiver")
-                    .stringParamAdd("state", "Data state (JSON)");
+            tool.title("Transfer").description("Transfer the current task to a more suitable expert in the team")
+                    .stringParamAdd("target", "Target expert name. Options: [" + expertsDescription + "]")
+                    .stringParamAdd("instruction", "Specific instruction for the next expert")
+                    .stringParamAdd("state", "Data state to transfer (JSON format)");
         }
         trace.addProtocolTool(tool);
     }
@@ -148,26 +160,52 @@ public class A2AProtocol extends TeamProtocolBase {
     // --- 阶段三：主管决策治理 ---
 
     @Override
+    public String resolveAgentOutput(TeamTrace trace, Agent agent, String rawContent) {
+        if (Utils.isEmpty(rawContent)) return rawContent;
+
+        // 尝试从 rawContent 中提取工具调用的结果（如果 LLM 直接输出了 JSON 块或特定格式）
+        // 在 A2A 中，如果通过工具触发，AgentTrace 会记录 ToolCall。
+        // 但如果 Agent 通过文本模拟指令，这里可以进行“文本特征提取”。
+
+        // 我们保持对 ReActTrace 的兼容解析，但这里可以过滤掉文本中的交互指令
+        return rawContent.replaceAll("\\{" + TOOL_TRANSFER + ".*?\\}", "").trim();
+    }
+
+    @Override
+    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
+        super.injectSupervisorInstruction(locale, sb);
+
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        if (isZh) {
+            sb.append("\n- 你目前处于 A2A (Agent-to-Agent) 协作模式。");
+            sb.append("\n- **转交合规性**：当 Agent 发起移交请求时，请核对目标成员的“擅长技能”是否匹配，并确保移交指令不违背其“行为约束”。");
+            sb.append("\n- **模态匹配**：若移交涉及图片或大文件，请确认目标成员具备相应的输入处理能力。");
+        } else {
+            sb.append("\n- You are in A2A (Agent-to-Agent) mode.");
+            sb.append("\n- **Transfer Validation**: When an agent requests a transfer, verify if the target's 'Skills' match the task and ensure instructions do not violate their 'Constraints'.");
+            sb.append("\n- **Modality Check**: Ensure the target can handle the required input modes (e.g., images/files) if applicable.");
+        }
+    }
+
+    @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         String lastAgent = trace.getLastAgentName();
         AgentTrace agentTrace = context.getAs("__" + lastAgent);
 
         if (agentTrace instanceof ReActTrace) {
             ReActTrace rt = (ReActTrace) agentTrace;
-            // 从最后一条 Assistant 消息里提取工具调用参数
             ChatMessage lastMsg = rt.getMessages().get(rt.getMessages().size() - 1);
             if (lastMsg instanceof AssistantMessage) {
                 AssistantMessage am = (AssistantMessage) lastMsg;
                 if (am.getToolCalls() != null) {
                     for (ToolCall tc : am.getToolCalls()) {
                         if (TOOL_TRANSFER.equals(tc.name())) {
-                            // 1. 提取指令和状态到 ProtocolContext
+                            // 提取并存储到上下文
                             String inst = getArg(tc.arguments(), "instruction");
                             String state = getArg(tc.arguments(), "state");
                             if (inst != null) trace.getProtocolContext().put(KEY_LAST_INSTRUCTION, inst);
                             if (state != null) trace.getProtocolContext().put(KEY_GLOBAL_STATE, state);
 
-                            // 2. 返回路由目标
                             return getArg(tc.arguments(), "target");
                         }
                     }

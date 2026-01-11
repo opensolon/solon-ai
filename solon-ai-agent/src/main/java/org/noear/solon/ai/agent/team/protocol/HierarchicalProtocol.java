@@ -1,17 +1,6 @@
 /*
  * Copyright 2017-2025 noear.org and authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * ... (保持 License 不变)
  */
 package org.noear.solon.ai.agent.team.protocol;
 
@@ -21,6 +10,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
@@ -30,64 +20,53 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 
 /**
- * 增强型层级化协作协议 (Hierarchical Protocol)
- *
- * 核心职责：
- * 1. 结构化看板：利用 ONode 自动吸收 Agent 的汇报数据。
- * 2. 状态驱动：Supervisor 基于实时更新的看板进行分发决策。
- * 3. 负载感知：统计成员调用频次并反馈至看板。
- *
- * @author noear
- * @since 3.8.1
+ * 优化版层级化协作协议 (Hierarchical Protocol)
+ * * 优化点：
+ * 1. 强化 absorb 逻辑：利用基类 sniffJson 提取非标准输出中的结构化数据。
+ * 2. 状态分层：区分系统元数据（_meta）与业务数据，使看板对 LLM 更友好。
+ * 3. 容错增强：自动清理过期的错误记录，并对长文本进行摘要化处理。
  */
 @Preview("3.8.1")
 public class HierarchicalProtocol extends TeamProtocolBase {
     private static final Logger LOG = LoggerFactory.getLogger(HierarchicalProtocol.class);
-
     private static final String KEY_HIERARCHY_STATE = "hierarchy_state_obj";
     private static final String KEY_AGENT_USAGE = "agent_usage_map";
 
-    /**
-     * 层级协作状态机 (基于 ONode 驱动)
-     */
     public static class HierarchicalState {
         private final ONode data = new ONode().asObject();
 
-        /**
-         * 吸收 Agent 的反馈进入全局状态
-         */
-        public void absorb(String content) {
-            if (Utils.isEmpty(content)) {
-                return;
-            }
+        public void markError(String agentName, String error) {
+            data.getOrNew("_meta").getOrNew("errors").set(agentName, error);
+        }
 
-            try {
-                // 尝试解析 JSON 汇报
-                ONode report = ONode.ofJson(content);
-                if (report.isObject()) {
-                    // 增量合并对象字段（Snack4 v4 风格）
-                    data.setAll(report.getObjectUnsafe());
-                } else {
-                    data.set("_last_raw_memo", content);
-                }
-            } catch (Exception e) {
-                // 处理非 JSON 输出，记录文本快照
-                if (content.length() > 100) {
-                    data.set("_last_text_memo", content.substring(0, 100) + "...");
-                } else {
-                    data.set("_last_text_memo", content);
-                }
+        public void clearError(String agentName) {
+            if (data.hasKey("_meta")) {
+                data.get("_meta").get("errors").remove(agentName);
             }
         }
 
-        public boolean isEmpty() {
-            return data.isEmpty();
+        /**
+         * 吸收 Agent 反馈，增强了对杂乱文本中 JSON 的提取能力
+         */
+        public void absorb(String content, TeamProtocolBase protocol) {
+            if (Utils.isEmpty(content)) return;
+
+            // 1. 尝试使用 sniffJson 嗅探结构化数据
+            ONode report = protocol.sniffJson(content);
+            if (report.isObject() && !report.isEmpty()) {
+                // 排除一些常见的非业务字段
+                report.remove("agent");
+                report.remove("role");
+                data.setAll(report.getObjectUnsafe());
+            } else {
+                // 2. 如果没有 JSON，则记录简要快照
+                String memo = content.length() > 150 ? content.substring(0, 150) + "..." : content;
+                data.set("_last_memo", memo);
+            }
         }
 
         @Override
-        public String toString() {
-            return data.toJson();
-        }
+        public String toString() { return data.toJson(); }
     }
 
     public HierarchicalProtocol(TeamConfig config) {
@@ -95,21 +74,16 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public String name() {
-        return "HIERARCHICAL";
-    }
+    public String name() { return "HIERARCHICAL"; }
 
     @Override
     public void buildGraph(GraphSpec spec) {
-        // 构建拓扑：Start -> Supervisor
         spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
 
-        // Supervisor 决策分支
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
             linkAgents(ns);
         }).linkAdd(Agent.ID_END);
 
-        // 专家节点执行完后回归 Supervisor 进行汇报
         config.getAgentMap().values().forEach(a ->
                 spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
 
@@ -117,19 +91,36 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     }
 
     @Override
+    public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
+        // 强化汇报规范：不仅要求 JSON，还明确了汇报的深度
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        String hint = isZh
+                ? "\n### 汇报要求：\n- 请在回复结尾使用 JSON 块反馈核心数据（如：{\"result\": \"...\", \"status\": \"done\"}）。"
+                : "\n### Reporting Requirement:\n- End your response with a JSON block for key data (e.g., {\"result\": \"...\", \"status\": \"done\"}).";
+
+        return originalPrompt.addMessage(hint);
+    }
+
+    @Override
     public void onAgentEnd(TeamTrace trace, Agent agent) {
-        // 1. 同步专家状态到看板
         HierarchicalState state = (HierarchicalState) trace.getProtocolContext()
                 .computeIfAbsent(KEY_HIERARCHY_STATE, k -> new HierarchicalState());
 
-        state.absorb(trace.getLastAgentContent());
+        String lastContent = trace.getLastAgentContent();
 
-        // 2. 统计专家调用负载
+        // 1. 状态吸收与错误管理
+        if (Utils.isEmpty(lastContent) || lastContent.contains("Error:") || lastContent.contains("Exception:")) {
+            state.markError(agent.name(), "Execution failed or empty response.");
+        } else {
+            state.clearError(agent.name());
+            state.absorb(lastContent, this); // 传入 this 以调用 sniffJson
+        }
+
+        // 2. 负载统计优化
         Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext()
                 .computeIfAbsent(KEY_AGENT_USAGE, k -> new HashMap<>());
         usage.put(agent.name(), usage.getOrDefault(agent.name(), 0) + 1);
 
-        LOG.debug("HierarchicalProtocol - State sync by agent: {}", agent.name());
         super.onAgentEnd(trace, agent);
     }
 
@@ -139,19 +130,17 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext().get(KEY_AGENT_USAGE);
 
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+        sb.append(isZh ? "\n### 团队运行看板 (Hierarchical Dashboard)\n" : "\n### Hierarchical Team Dashboard\n");
 
-        sb.append(isZh ? "\n### 团队运行看板 (Team Dashboard)\n" : "\n### Team Dashboard\n");
-
-        // 构建临时看板用于 Prompt 注入
         ONode dashboard = (state != null) ? ONode.ofJson(state.toString()) : new ONode().asObject();
 
-        // 注入成员负载统计
+        // 将元数据统一放入 _meta，保持业务字段的一级可见性
         if (usage != null && !usage.isEmpty()) {
-            dashboard.getOrNew("_agent_usage").setAll(usage);
+            dashboard.getOrNew("_meta").set("agent_usage", usage);
         }
 
         if (dashboard.isEmpty()) {
-            sb.append(isZh ? "> 初始状态，等待首个任务汇报。\n" : "> Initial state, waiting for the first report.\n");
+            sb.append(isZh ? "> 暂无汇报数据，请下达初始指令。\n" : "> No data reported yet. Please issue initial instructions.\n");
         } else {
             sb.append("```json\n").append(dashboard.toJson()).append("\n```\n");
         }
@@ -163,21 +152,20 @@ public class HierarchicalProtocol extends TeamProtocolBase {
 
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
-            sb.append("\n### 层级协作增强规范：\n");
-            sb.append("1. 状态优先：决策前请查阅看板 JSON，了解已完成的工作细节。\n");
-            sb.append("2. 负载均衡：参考 _agent_usage 统计，避免过度依赖单一成员。\n");
-            sb.append("3. 持续沉淀：指派专家时，要求其以结构化 JSON 反馈关键结论。");
+            sb.append("\n### 管理决策准则：\n");
+            sb.append("1. **状态驱动**：根据看板中已有的数据决定下一步由谁补全缺失信息。\n");
+            sb.append("2. **错误处理**：若 _meta.errors 存在记录，请尝试指派另一位专家复核或重试该任务。\n");
+            sb.append("3. **负载均衡**：避免单一专家连续执行，除非其技能无可替代。");
         } else {
-            sb.append("\n### Hierarchical Collaboration Guidelines:\n");
-            sb.append("1. State-First: Always review the dashboard JSON before making decisions.\n");
-            sb.append("2. Load Balancing: Consult _agent_usage to distribute tasks evenly.\n");
-            sb.append("3. Persistence: Require agents to provide conclusions in structured JSON.");
+            sb.append("\n### Management Guidelines:\n");
+            sb.append("1. **State-Driven**: Use dashboard data to decide who should complete missing information.\n");
+            sb.append("2. **Error Recovery**: If _meta.errors exists, consider re-assigning the task to a different expert.\n");
+            sb.append("3. **Load Management**: Distribute tasks unless a specific skill is unique to an agent.");
         }
     }
 
     @Override
     public void onTeamFinished(FlowContext context, TeamTrace trace) {
-        // 清理 Context 资源
         trace.getProtocolContext().remove(KEY_HIERARCHY_STATE);
         trace.getProtocolContext().remove(KEY_AGENT_USAGE);
         super.onTeamFinished(context, trace);

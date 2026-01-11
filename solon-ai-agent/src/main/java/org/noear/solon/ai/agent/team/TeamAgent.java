@@ -18,7 +18,6 @@ package org.noear.solon.ai.agent.team;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -254,7 +253,7 @@ public class TeamAgent implements Agent {
             // 结果收敛逻辑：优先取明确标记的 Answer，兜底取最后一个专家的回复
             String result = trace.getFinalAnswer();
             if (result == null) {
-                result = trace.getLastStepContent();
+                result = trace.getLastAgentContent(); // 优先取专家的，而不是 Supervisor 的决策文本
             }
 
             trace.setFinalAnswer(result);

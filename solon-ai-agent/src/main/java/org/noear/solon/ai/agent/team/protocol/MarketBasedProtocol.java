@@ -51,22 +51,37 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
         private final Map<String, AgentProfile> marketplace = new LinkedHashMap<>();
 
         public static class AgentProfile {
-            public double quality = 0.8;    // 初始质量得分
-            public double efficiency = 0.7; // 初始效率得分
-            public int completedTasks = 0;  // 已成交笔数
-            public double currentPrice = 1.0; // 当前身价
+            public double quality = 0.8;
+            public double efficiency = 0.7;
+            public int completedTasks = 0;
+            public double basePrice = 1.0;
+            public double currentPrice = 1.0;
 
-            public double getROI() { return (quality * efficiency) / currentPrice; }
+            // ROI = (质量 * 效率) / 价格。价格越高，ROI 越低；质量越高，ROI 越高。
+            public double getROI() { return (quality * efficiency) / Math.max(0.1, currentPrice); }
         }
 
-        public void recordTransaction(String agentName, double q, double e) {
-            AgentProfile profile = marketplace.computeIfAbsent(agentName, k -> new AgentProfile());
+        public void recordTransaction(String agentName, double q, double e, Agent agent) {
+            AgentProfile profile = marketplace.computeIfAbsent(agentName, k -> {
+                AgentProfile p = new AgentProfile();
+                Object metaPrice = agent.profile().getMetadata().get("base_price");
+                p.basePrice = (metaPrice instanceof Number) ? ((Number) metaPrice).doubleValue() : 1.0;
+                p.currentPrice = p.basePrice;
+                return p;
+            });
+
             profile.completedTasks++;
-            // 增量式更新得分 (移动平均，更看重近期表现)
-            profile.quality = (profile.quality * 0.7) + (q * 0.3);
-            profile.efficiency = (profile.efficiency * 0.7) + (e * 0.3);
-            // 动态定价：干得越多、质量越高，价格越贵
-            profile.currentPrice = 1.0 + (profile.completedTasks * 0.1) + (profile.quality * 0.5);
+            // 采用加权移动平均更新评分 (EMA)
+            profile.quality = (profile.quality * 0.6) + (q * 0.4);
+            profile.efficiency = (profile.efficiency * 0.6) + (e * 0.4);
+
+            /* * 优化后的动态定价逻辑：
+             * 1. 基础系数由质量决定 (0.5 ~ 1.5 之间波动)
+             * 2. 溢价系数由成交量决定 (小幅正向反馈)
+             */
+            double qualityFactor = 0.5 + profile.quality; // 质量越高价格越高
+            double volumePremium = 1.0 + (profile.completedTasks * 0.05);
+            profile.currentPrice = profile.basePrice * qualityFactor * volumePremium;
         }
 
         @Override
@@ -96,35 +111,61 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
                 .computeIfAbsent(KEY_MARKET_STATE, k -> new MarketState());
 
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
-
         sb.append(isZh ? "\n### 专家人才市场 (Expert Marketplace)\n" : "\n### Expert Marketplace\n");
         sb.append("```json\n").append(state.toString()).append("\n```\n");
-        sb.append(isZh ? "> 提示：ROI (性价比) 越高代表相同价格下产出潜能更大。\n"
-                : "> Hint: Higher ROI indicates better potential value for money.\n");
 
-        // 调用父类注入基础数据看板
+        // 增加更具体的博弈提示
+        if (isZh) {
+            sb.append("> 策略提示：\n> - 优先指派 ROI > 1.0 的专家以获得高价值产出。\n");
+            sb.append("> - 若任务预算有限（简单任务），请指派 Price 较低的专家。");
+        } else {
+            sb.append("> Strategy Tips:\n> - Prioritize agents with ROI > 1.0 for high-value output.\n");
+            sb.append("> - For routine tasks with limited budget, assign agents with lower Price.");
+        }
+
         super.prepareSupervisorInstruction(context, trace, sb);
     }
 
     @Override
     public void onAgentEnd(TeamTrace trace, Agent agent) {
-        // 1. 获取最新一轮执行的元数据
-        String content = trace.getLastAgentContent();
-        long duration = trace.getLastAgentDuration();
-
+        // 1. 获取（或初始化）市场状态对象
         MarketState state = (MarketState) trace.getProtocolContext()
                 .computeIfAbsent(KEY_MARKET_STATE, k -> new MarketState());
 
-        // 2. 自动评估：质量(语义简评) + 效率(耗时)
-        double q = assessQuality(content);
-        // 效率分：1分钟内为线性衰减，超过1分钟降至最低
-        double e = Math.max(0.1, 1.0 - (duration / 60000.0));
+        // 2. 获取执行元数据
+        String content = trace.getLastAgentContent();
+        long duration = trace.getLastAgentDuration();
+        String agentName = agent.name();
 
-        state.recordTransaction(agent.name(), q, e);
+        // 3. 自动化质量评估 (Quality) 与 效率评估 (Efficiency)
+        double q;
+        double e;
 
-        LOG.debug("Market Protocol - Transaction recorded for: {}", agent.name());
+        // 审计逻辑：检查是否执行失败或返回空
+        if (Utils.isEmpty(content) || content.contains("Error:") || content.contains("Exception:")) {
+            // 惩罚性评分：执行失败时，质量和效率降至最低
+            q = 0.1;
+            e = 0.1;
+            LOG.warn("Market Protocol - Execution failed for: {}. Applying penalty scores.", agentName);
+        } else {
+            // 成功时进行启发式评估
+            q = assessQuality(content);
+            // 效率分：定义 1 分钟（60000ms）为基准，超时则分值线性衰减，最低 0.1
+            e = Math.max(0.1, 1.0 - (duration / 60000.0));
+        }
 
-        // 3. 必须调用父类，以保证 Hierarchical 看板数据的同步
+        // 4. 记录交易：更新得分、身价及成交笔数
+        state.recordTransaction(agentName, q, e, agent);
+
+        // 5. 打印市场异动日志
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Market Protocol - Transaction finalized: [{}], Q:{}, E:{}, Dur:{}ms",
+                    agentName, String.format("%.2f", q), String.format("%.2f", e), duration);
+        }
+
+        // 6. 核心步骤：调用父类逻辑
+        // 这将触发 HierarchicalProtocol 的 absorb(content) 吸收数据、
+        // markError(agentName, ...) 记录异常看板、以及增加 _agent_usage 计数。
         super.onAgentEnd(trace, agent);
     }
 
