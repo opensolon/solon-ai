@@ -43,6 +43,7 @@ public class SequentialProtocol extends HierarchicalProtocol {
     private static final Logger LOG = LoggerFactory.getLogger(SequentialProtocol.class);
     private static final String KEY_SEQUENCE_STATE = "sequence_state_obj";
     private int maxRetriesPerStage = 1;
+    private boolean stopOnFailure = false; // 默认失败不停止
 
     public static class SequenceState {
         private final List<String> pipeline = new ArrayList<>();
@@ -96,6 +97,16 @@ public class SequentialProtocol extends HierarchicalProtocol {
         super(config);
     }
 
+    public SequentialProtocol stopOnFailure(boolean stopOnFailure) {
+        this.stopOnFailure = stopOnFailure;
+        return this;
+    }
+
+    public SequentialProtocol maxRetriesPerStage(int maxRetriesPerStage) {
+        this.maxRetriesPerStage = maxRetriesPerStage;
+        return this;
+    }
+
     @Override
     public String name() { return "SEQUENTIAL"; }
 
@@ -133,10 +144,45 @@ public class SequentialProtocol extends HierarchicalProtocol {
         if (state == null) return true;
 
         String next = state.getNextAgent();
-        trace.setRoute(next);
 
-        // 顺序协议由协议逻辑指定路由，不需要 LLM 介入决策
+        // --- 模态适配防御逻辑 ---
+        while (!Agent.ID_END.equals(next)) {
+            Agent nextAgent = config.getAgentMap().get(next);
+
+            // 判定当前上下文是否包含多模态数据
+            // 逻辑：如果最后一次输出包含图片，或者初始消息包含图片
+            boolean hasImage = detectMediaPresence(trace);
+
+            if (hasImage && nextAgent.profile() != null) {
+                // 检查目标 Agent 是否明确声明支持 'image'
+                boolean supportImage = nextAgent.profile().getInputModes().contains("image");
+
+                if (!supportImage) {
+                    LOG.warn("Sequential: Auto-skipping [{}] because it doesn't support 'image' mode", next);
+                    state.markCurrent("SKIPPED", "Incompatible modality (no image support)");
+                    state.next();
+                    next = state.getNextAgent();
+                    continue;
+                }
+            }
+            break;
+        }
+        // --- 逻辑结束 ---
+
+        trace.setRoute(next);
         return false;
+    }
+
+    /**
+     * 探测当前协作链路中是否存在多模态媒体数据
+     */
+    private boolean detectMediaPresence(TeamTrace trace) {
+        String content = trace.getLastAgentContent();
+        if (content == null) return false;
+
+        // 增加对标准 Markdown 图片语法的支持判断
+        // 同时也保留你的自定义占位符判断
+        return content.contains("![image]") || content.matches("(?s).*\\[.*?\\]\\(data:image/.*\\).*");
     }
 
     @Override
@@ -163,14 +209,23 @@ public class SequentialProtocol extends HierarchicalProtocol {
             LOG.info("Sequential Stage [{}] COMPLETED", agent.name());
         } else {
             if (info != null && info.retries < maxRetriesPerStage) {
+                // --- 重试逻辑 ---
                 info.retries++;
                 state.markCurrent("RETRYING", "Quality check failed, retrying...");
                 LOG.warn("Sequential Stage [{}] RETRYING ({}/{})", agent.name(), info.retries, maxRetriesPerStage);
-                // 注意：这里不执行 state.next()，Supervisor 会再次路由到当前 Agent
             } else {
+                // --- 最终失败逻辑（在这里插入熔断判断） ---
                 state.markCurrent("FAILED", "Max retries reached");
-                state.next(); // 即使失败也跳过进入下一步，或根据业务需求 trace.setRoute(Agent.ID_END)
-                LOG.error("Sequential Stage [{}] FAILED after {} retries", agent.name(), maxRetriesPerStage);
+
+                if (stopOnFailure) {
+                    // 强依赖模式：立即路由到结束节点
+                    trace.setRoute(Agent.ID_END);
+                    LOG.error("Sequential Stage [{}] FAILED. Stopping team task (stopOnFailure=true).", agent.name());
+                } else {
+                    // 弱依赖模式：跳过当前节点，继续下一个
+                    state.next();
+                    LOG.error("Sequential Stage [{}] FAILED. Moving to next stage (stopOnFailure=false).", agent.name());
+                }
             }
         }
         super.onAgentEnd(trace, agent);
