@@ -87,28 +87,37 @@ public class SupervisorTask implements NamedTaskComponent {
     private void dispatch(FlowContext context, TeamTrace trace) throws Exception {
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-        // 1. 准备协议看板/特定指令
+        // 1. 准备协议指令（System 层面）
         StringBuilder protocolExt = new StringBuilder();
         config.getProtocol().prepareSupervisorInstruction(context, trace, protocolExt);
 
-        // 2. 构建核心 System Prompt
-        String basePrompt = config.getTeamSystem(trace, context);
-        String finalSystemPrompt = (protocolExt.length() > 0)
-                ? basePrompt + "\n\n" + protocolExt
-                : basePrompt;
 
-        // 3. 构建用户侧指令与协作历史 (5 轮视口)
+        // 3. 构建核心 System Prompt
+        String basePrompt = config.getTeamSystem(trace, context);
+        String finalSystemPrompt = (protocolExt.length() > 0) ? basePrompt + "\n\n" + protocolExt : basePrompt;
+
+        // 4. 构建用户侧指令
         StringBuilder userContent = new StringBuilder();
+
+        // 注入协议特定的上下文（如 A2A 的 State）
+        // 2. 准备协议上下文（User 层面，展示 State 等）
+        config.getProtocol().prepareSupervisorContext(context, trace, userContent);
+
+        // 注入通用的协作历史和模态指令
         if (isZh) {
             userContent.append("## 协作进度 (最近 5 轮历史)\n").append(trace.getFormattedHistory(5)).append("\n\n");
             userContent.append("---\n");
             userContent.append("当前迭代轮次: ").append(trace.nextIterations()).append("\n");
-            userContent.append("指令：请根据专家的 Skills 决定下一位执行者名称，或输出 ").append(config.getFinishMarker()).append(" 结束任务。");
+            userContent.append("指令：请根据专家的 Skills 和输入模态(Input Modes) 决定下一位执行者名称。");
+            userContent.append("如果当前输入包含非文本数据（如图片），请确保指派的专家具备相应的处理能力。");
+            userContent.append("或输出 ").append(config.getFinishMarker()).append(" 结束任务。");
         } else {
-            userContent.append("## Collaboration Progress (Last 5 steps)\n").append(trace.getFormattedHistory(5)).append("\n\n");
+            userContent.append("## Collaboration Progress (Last 5 rounds)\n").append(trace.getFormattedHistory(5)).append("\n\n");
             userContent.append("---\n");
             userContent.append("Current Iteration: ").append(trace.nextIterations()).append("\n");
-            userContent.append("Command: Assign the next agent name or output ").append(config.getFinishMarker()).append(" to finish.");
+            userContent.append("Command: Assign the next agent name based on Skills and Input Modes. ");
+            userContent.append("If the input contains non-text media, ensure the expert can handle it. ");
+            userContent.append("Or output ").append(config.getFinishMarker()).append(" to finish.");
         }
 
         List<ChatMessage> messages = Arrays.asList(

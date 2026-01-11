@@ -94,25 +94,27 @@ public class A2AProtocol extends TeamProtocolBase {
                 .map(entry -> {
                     String name = entry.getKey();
                     Agent expert = entry.getValue();
-                    // 获取格式化后的 Profile 信息（如：擅长技能: java; 行为约束: ...）
+                    // 这里的 toFormatString(locale) 会输出：输入模态: text; 擅长技能: java...
                     String profileSummary = (expert.profile() != null)
                             ? expert.profile().toFormatString(locale)
                             : "";
-                    return name + (profileSummary.isEmpty() ? "" : " (" + profileSummary + ")");
+                    return name + (profileSummary.isEmpty() ? "" : " [" + profileSummary + "]");
                 })
                 .collect(Collectors.joining(" | "));
 
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER);
         if (isZh) {
-            tool.title("任务移交").description("将当前任务移交给团队中更合适的专家进行接力处理")
-                    .stringParamAdd("target", "目标专家名。可选范围: [" + expertsDescription + "]")
-                    .stringParamAdd("instruction", "给接棒专家的具体指令，说明需要他做什么")
-                    .stringParamAdd("state", "需要传递的结构化数据状态(JSON格式)");
+            tool.title("任务移交")
+                    .description("将当前任务移交给团队中更合适的专家进行接力处理。")
+                    .stringParamAdd("target", "目标专家名。请务必检查其“输入模态”是否支持当前数据（如图片）。可选: [" + expertsDescription + "]")
+                    .stringParamAdd("instruction", "给接棒专家的具体指令，说明需要他做什么。")
+                    .stringParamAdd("state", "需要传递或更新的结构化数据状态 (JSON 格式)，该状态将持久化存在直至任务结束。");
         } else {
-            tool.title("Transfer").description("Transfer the current task to a more suitable expert in the team")
-                    .stringParamAdd("target", "Target expert name. Options: [" + expertsDescription + "]")
-                    .stringParamAdd("instruction", "Specific instruction for the next expert")
-                    .stringParamAdd("state", "Data state to transfer (JSON format)");
+            tool.title("Transfer")
+                    .description("Transfer the current task to a more suitable expert in the team.")
+                    .stringParamAdd("target", "Target expert name. MUST check if their 'Input Modes' support current data. Options: [" + expertsDescription + "]")
+                    .stringParamAdd("instruction", "Specific instruction for the next expert.")
+                    .stringParamAdd("state", "Structured data state (JSON) to transfer or update. This state persists until the team task ends.");
         }
         trace.addProtocolTool(tool);
     }
@@ -184,6 +186,34 @@ public class A2AProtocol extends TeamProtocolBase {
             sb.append("\n- You are in A2A (Agent-to-Agent) mode.");
             sb.append("\n- **Transfer Validation**: When an agent requests a transfer, verify if the target's 'Skills' match the task and ensure instructions do not violate their 'Constraints'.");
             sb.append("\n- **Modality Check**: Ensure the target can handle the required input modes (e.g., images/files) if applicable.");
+        }
+    }
+
+    @Override
+    public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
+        Locale locale = config.getLocale();
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        if (isZh) {
+            sb.append("\n- 你目前处于 A2A 协作模式，请优先根据 Agent 提供的 state 判断进度。");
+        } else {
+            sb.append("\n- You are in A2A mode; prioritize the provided 'state' to judge progress.");
+        }
+    }
+
+    @Override
+    public void prepareSupervisorContext(FlowContext context, TeamTrace trace, StringBuilder sb) {
+        // 从轨迹中提取 A2A 专属的持久化状态
+        String state = (String) trace.getProtocolContext().get(KEY_GLOBAL_STATE);
+
+        if (Utils.isNotEmpty(state)) {
+            boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+            if (isZh) {
+                sb.append("## 全局业务状态 (State)\n```json\n")
+                        .append(state).append("\n```\n\n");
+            } else {
+                sb.append("## Global Business State\n```json\n")
+                        .append(state).append("\n```\n\n");
+            }
         }
     }
 

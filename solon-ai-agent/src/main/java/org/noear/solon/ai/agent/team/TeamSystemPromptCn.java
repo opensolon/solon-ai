@@ -93,10 +93,10 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
             AgentProfile profile = agent.profile();
             if (profile != null) {
-                // 传入当前类定义的 Locale (CHINESE)
-                String profileInfo = profile.toFormatString(getLocale());
-                if (!profileInfo.isEmpty()) {
-                    sb.append("  - 档案: ").append(profileInfo).append("\n");
+                String info = profile.toFormatString(getLocale());
+                // 只要 profile 不为空且有内容，就作为“契约”注入
+                if (info.length() > 0) {
+                    sb.append("  - 契约: ").append(info).append("\n");
                 }
             }
         });

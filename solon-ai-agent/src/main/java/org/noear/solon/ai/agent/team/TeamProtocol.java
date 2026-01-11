@@ -125,6 +125,13 @@ public interface TeamProtocol extends NonSerializable {
     default void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) { }
 
     /**
+     * 准备主管决策时的上下文信息（如 State、进度条、待办事项等）
+     */
+    default void prepareSupervisorContext(FlowContext context, TeamTrace trace, StringBuilder sb) {
+        // 默认不注入任何额外内容
+    }
+
+    /**
      * 决策执行拦截
      * <p>若返回 false，将跳过默认的 LLM 智能决策逻辑。常用于固定流向协议（如 Sequential）。</p>
      */

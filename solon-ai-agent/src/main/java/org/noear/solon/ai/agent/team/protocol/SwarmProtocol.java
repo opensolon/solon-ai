@@ -146,14 +146,14 @@ public class SwarmProtocol extends TeamProtocolBase {
 
         if (isZh) {
             sb.append("> **决策指引**：\n");
-            sb.append("> 1. **负载均衡**：pheromones 分值较高的成员代表正忙或近期过度活跃，优先分配给分值低的成员。\n");
-            sb.append("> 2. **任务消耗**：请优先处理 task_pool 中的涌现任务。\n");
-            sb.append("> 3. **能力对齐**：若任务需要特定 Skills（见下表），请务必精准指派。");
+            sb.append("> 1. **负载均衡**：优先分配给 pheromones 分值低的成员。\n");
+            sb.append("> 2. **模态适配(重要)**：如果 task_pool 中的任务涉及多模态数据，禁止指派“仅限文本”的成员。\n");
+            sb.append("> 3. **能力对齐**：匹配 Agent 的 Skills。");
         } else {
             sb.append("> **Decision Guide**:\n");
-            sb.append("> 1. **Load Balancing**: Members with higher 'pheromones' are busy; prioritize low-score members.\n");
-            sb.append("> 2. **Task Pool**: Address emergent tasks in 'task_pool' as a priority.\n");
-            sb.append("> 3. **Skill Alignment**: Ensure the agent's Skills match the task requirements.");
+            sb.append("> 1. **Load Balancing**: Prioritize low-pheromone members.\n");
+            sb.append("> 2. **Modality Match**: DO NOT assign multi-modal tasks to 'Text only' members.\n");
+            sb.append("> 3. **Skill Alignment**: Match Agent's Skills.");
         }
     }
 

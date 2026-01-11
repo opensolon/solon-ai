@@ -87,12 +87,13 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
             sb.append("- **").append(name).append("**:\n");
             sb.append("  - Responsibility: ").append(agent.descriptionFor(trace.getContext())).append("\n");
 
-            // [Refactored]: Unified use of Profile formatted output
+            // [Adjustment Point]: Inject Agent Profile Contract
+            // This allows the Supervisor to see technical specs (modes, constraints, etc.)
             AgentProfile profile = agent.profile();
             if (profile != null) {
                 String profileInfo = profile.toFormatString(getLocale());
-                if (!profileInfo.isEmpty()) {
-                    sb.append("  - Profile: ").append(profileInfo).append("\n");
+                if (profileInfo.length() > 0) {
+                    sb.append("  - Contract: ").append(profileInfo).append("\n");
                 }
             }
         });

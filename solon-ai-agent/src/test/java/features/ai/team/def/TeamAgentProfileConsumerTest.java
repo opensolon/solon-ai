@@ -100,6 +100,39 @@ public class TeamAgentProfileConsumerTest {
     }
 
     @Test
+    public void testModalRouting() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        TeamAgent multiModalTeam = TeamAgent.of(chatModel)
+                .name("media_center")
+                .agentAdd(ReActAgent.of(chatModel)
+                        .name("text_editor")
+                        .description("处理文字校对")
+                        .profile(p -> p.modeAdd("text", "text") // 声明仅支持文本
+                                .skillAdd("语法检查"))
+                        .build())
+                .agentAdd(ReActAgent.of(chatModel)
+                        .name("vision_analyst")
+                        .description("处理图像内容提取")
+                        .profile(p -> p.modeAdd("text", "text")
+                                .modeAdd("image", "text") // 声明支持图片
+                                .skillAdd("视觉分析"))
+                        .build())
+                .build();
+
+        // 模拟一个带图片的请求 (假设 Prompt 支持附加媒体)
+        // 如果 Supervisor 足够聪明（基于我们调整的 Prompt），它会精准指派 vision_analyst
+        String query = "请分析这张发票图片中的金额。";
+        AgentSession session = InMemoryAgentSession.of("sn_img_001");
+
+        multiModalTeam.call(Prompt.of(query), session);
+
+        TeamTrace trace = multiModalTeam.getTrace(session);
+        // 校验：第一步应该是 vision_analyst 被选中
+        Assertions.assertEquals("vision_analyst", trace.getSteps().get(0).getAgentName());
+    }
+
+    @Test
     public void testProfileAwareInterceptor() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 

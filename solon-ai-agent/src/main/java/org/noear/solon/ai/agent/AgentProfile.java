@@ -96,6 +96,18 @@ public class AgentProfile implements Serializable {
         boolean isZh = (locale != null && Locale.CHINESE.getLanguage().equals(locale.getLanguage()));
         StringBuilder sb = new StringBuilder();
 
+        // 模态声明，这是 A2A 协作中路由的基础
+        if (!inputModes.contains("image") && inputModes.contains("text") && inputModes.size() == 1) {
+            // 纯文本 Agent 标记，防止 Supervisor 派发图片任务
+            sb.append(isZh ? "输入模态: 仅限文本; " : "Input Modes: Text only; ");
+        } else {
+            sb.append(isZh ? "输入模态: " : "Input Modes: ").append(String.join(", ", inputModes)).append("; ");
+        }
+
+        if (outputModes.contains("image")) {
+            sb.append(isZh ? "产出物: 包含图像; " : "Outputs: Images; ");
+        }
+
         // 技能部分
         if (!skills.isEmpty()) {
             sb.append(isZh ? "擅长技能: " : "Skills: ").append(String.join(", ", skills)).append("; ");
