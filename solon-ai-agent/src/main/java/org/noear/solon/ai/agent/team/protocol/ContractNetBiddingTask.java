@@ -94,7 +94,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
 
                     // 3. 核心改进：直接调用协议状态对象的 addBid 注入数据
                     // 这样 Protocol.toString() 里的看板逻辑能立刻感知到结构化数据
-                    state.addBid(agent.name(), bidProposal);
+                    state.addBid(agent.name(), bidProposal, protocol);
 
                     bidCount++;
                 } catch (Exception e) {
