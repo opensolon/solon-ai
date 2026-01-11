@@ -29,19 +29,23 @@ import java.util.*;
 
 /**
  * 增强型市场机制协作协议 (Market-Based Protocol)
- * * 特点：
- * 1. 引入 MarketState 看板，展示专家身价(Price)与信誉值(Credit)。
- * 2. 自动化表现反馈：根据 Agent 的响应时长和内容质量动态调整得分。
- * 3. 简化 Supervisor 决策：通过“性价比”进行资源配置。
+ *
+ * 特点：
+ * 1. 引入 MarketState 看板：展示专家身价(Price)与信誉值(Score)。
+ * 2. 自动化反馈：根据 Agent 响应时长和质量动态调整得分与定价。
+ * 3. 资源优化：Supervisor 依据性价比(ROI)进行任务分配。
+ *
+ * @author noear
+ * @since 3.8.1
  */
 @Preview("3.8.1")
-public class MarketBasedProtocol_H extends HierarchicalProtocol_H {
-    private static final Logger LOG = LoggerFactory.getLogger(MarketBasedProtocol_H.class);
+public class MarketBasedProtocol extends HierarchicalProtocol {
+    private static final Logger LOG = LoggerFactory.getLogger(MarketBasedProtocol.class);
 
     private static final String KEY_MARKET_STATE = "market_state_obj";
 
     /**
-     * 市场状态内部类：充当“交易所”看板
+     * 市场状态内部类
      */
     public static class MarketState {
         private final Map<String, AgentProfile> marketplace = new LinkedHashMap<>();
@@ -55,10 +59,10 @@ public class MarketBasedProtocol_H extends HierarchicalProtocol_H {
             public double getROI() { return (quality * efficiency) / currentPrice; }
         }
 
-        public void recordTransaction(String agentName, double q, double e, long duration) {
+        public void recordTransaction(String agentName, double q, double e) {
             AgentProfile profile = marketplace.computeIfAbsent(agentName, k -> new AgentProfile());
             profile.completedTasks++;
-            // 增量式更新得分 (移动平均)
+            // 增量式更新得分 (移动平均，更看重近期表现)
             profile.quality = (profile.quality * 0.7) + (q * 0.3);
             profile.efficiency = (profile.efficiency * 0.7) + (e * 0.3);
             // 动态定价：干得越多、质量越高，价格越贵
@@ -69,8 +73,8 @@ public class MarketBasedProtocol_H extends HierarchicalProtocol_H {
         public String toString() {
             ONode root = new ONode().asObject();
             marketplace.forEach((name, p) -> {
-                ONode item = root.getOrNew(name);
-                item.set("score", String.format("%.2f", p.quality))
+                root.getOrNew(name)
+                        .set("score", String.format("%.2f", p.quality))
                         .set("price", String.format("%.2f", p.currentPrice))
                         .set("roi", String.format("%.2f", p.getROI()))
                         .set("deals", p.completedTasks);
@@ -79,7 +83,7 @@ public class MarketBasedProtocol_H extends HierarchicalProtocol_H {
         }
     }
 
-    public MarketBasedProtocol_H(TeamConfig config) {
+    public MarketBasedProtocol(TeamConfig config) {
         super(config);
     }
 
@@ -90,53 +94,65 @@ public class MarketBasedProtocol_H extends HierarchicalProtocol_H {
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         MarketState state = (MarketState) trace.getProtocolContext()
                 .computeIfAbsent(KEY_MARKET_STATE, k -> new MarketState());
+
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-        // 注入市场看板：身价与性价比排行
-        sb.append(isZh ? "\n\n### 💹 专家人才市场 (Expert Marketplace)\n" : "\n\n### 💹 Expert Marketplace\n");
+        sb.append(isZh ? "\n### 专家人才市场 (Expert Marketplace)\n" : "\n### Expert Marketplace\n");
         sb.append("```json\n").append(state.toString()).append("\n```\n");
-        sb.append(isZh ? "> 提示：ROI (性价比) 越高代表相同价格下产出更优。"
-                : "> Hint: Higher ROI indicates better value for money.");
+        sb.append(isZh ? "> 提示：ROI (性价比) 越高代表相同价格下产出潜能更大。\n"
+                : "> Hint: Higher ROI indicates better potential value for money.\n");
 
-        // 调用父类注入历史记录
+        // 调用父类注入基础数据看板
         super.prepareSupervisorInstruction(context, trace, sb);
     }
 
     @Override
     public void onAgentEnd(TeamTrace trace, Agent agent) {
-        // 自动化的市场反馈逻辑
-        TeamTrace.TeamStep lastStep = trace.getSteps().isEmpty() ? null : trace.getSteps().get(trace.getStepCount() - 1);
-        if (lastStep != null && agent.name().equals(lastStep.getAgentName())) {
-            MarketState state = (MarketState) trace.getProtocolContext().get(KEY_MARKET_STATE);
-            if (state != null) {
-                // 1. 自动评估质量 (简单语义分析)
-                double q = assessQuality(lastStep.getContent());
-                // 2. 自动评估效率 (基于时长，5秒内为1.0, 超过30秒递减)
-                double e = Math.max(0.1, 1.0 - (lastStep.getDuration() / 60000.0));
+        // 1. 获取最新一轮执行的元数据
+        String content = trace.getLastAgentContent();
+        long duration = trace.getLastAgentDuration();
 
-                state.recordTransaction(agent.name(), q, e, lastStep.getDuration());
-            }
-        }
+        MarketState state = (MarketState) trace.getProtocolContext()
+                .computeIfAbsent(KEY_MARKET_STATE, k -> new MarketState());
+
+        // 2. 自动评估：质量(语义简评) + 效率(耗时)
+        double q = assessQuality(content);
+        // 效率分：1分钟内为线性衰减，超过1分钟降至最低
+        double e = Math.max(0.1, 1.0 - (duration / 60000.0));
+
+        state.recordTransaction(agent.name(), q, e);
+
+        LOG.debug("Market Protocol - Transaction recorded for: {}", agent.name());
+
+        // 3. 必须调用父类，以保证 Hierarchical 看板数据的同步
+        super.onAgentEnd(trace, agent);
     }
 
     private double assessQuality(String content) {
         if (Utils.isEmpty(content)) return 0.1;
-        if (content.length() > 500 && content.contains("```")) return 0.9; // 详实且有代码
-        if (content.length() > 100) return 0.7;
-        return 0.4;
+        // 简单启发式：通过长度和格式标志判断诚意度
+        if (content.contains("```") && content.length() > 500) return 0.95;
+        if (content.length() > 200) return 0.8;
+        if (content.length() < 20) return 0.3; // 回复太短可能是敷衍
+        return 0.6;
     }
 
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
+        // 先注入基类通用指令
+        super.injectSupervisorInstruction(locale, sb);
+
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
-            sb.append("\n## 市场采购原则\n");
-            sb.append("- **预算控制**：如果你认为当前任务简单，请指派 `price` 较低的专家。\n");
-            sb.append("- **核心攻坚**：对于关键逻辑，请指派 `score` 和 `roi` 最高的专家。");
+            sb.append("\n### 市场采购原则：\n");
+            sb.append("1. 预算控制：简单任务指派 price 较低的专家以节省资源。\n");
+            sb.append("2. 攻坚优先：核心逻辑必须指派 score 和 roi 最高的专家。\n");
+            sb.append("3. 动态调度：如果某个专家 price 飙升且 roi 下降，考虑更换替补专家。");
         } else {
-            sb.append("\n## Market Procurement Principles\n");
-            sb.append("- **Budget Control**: For simple tasks, assign agents with lower `price`.\n");
-            sb.append("- **Critical Tasks**: For core logic, assign agents with the highest `score` and `roi`.");
+            sb.append("\n### Market Procurement Principles:\n");
+            sb.append("1. Budget Control: Assign agents with lower 'price' for routine tasks.\n");
+            sb.append("2. High Priority: Use agents with the highest 'score' and 'roi' for critical logic.\n");
+            sb.append("3. Dynamic Rotation: Consider alternatives if an agent's 'price' spikes while 'roi' drops.");
         }
     }
 

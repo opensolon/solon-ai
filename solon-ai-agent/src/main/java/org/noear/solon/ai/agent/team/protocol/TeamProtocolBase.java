@@ -1,35 +1,19 @@
-/*
- * Copyright 2017-2025 noear.org and authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.NodeSpec;
 import org.noear.solon.lang.Preview;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
-/**
- *
- * @author noear
- * @since 3.8.1
- */
 @Preview("3.8.1")
 public abstract class TeamProtocolBase implements TeamProtocol {
     protected final TeamConfig config;
@@ -50,19 +34,28 @@ public abstract class TeamProtocolBase implements TeamProtocol {
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
         if (trace != null && trace.getStepCount() > 0) {
-            String fullHistory = trace.getFormattedHistory();
-            String newContent = "Current Task: " + originalPrompt.getUserContent() +
-                    "\n\nCollaboration Progress so far:\n" + fullHistory +
+            String history = trace.getFormattedHistory();
+            String wrappedUser = "Collaboration Progress:\n" + history +
+                    "\n---\nCurrent Task: " + originalPrompt.getUserContent() +
                     "\n\nPlease continue based on the progress above.";
-            return Prompt.of(newContent);
-        }
 
+            // 优化点：深度拷贝消息流，仅替换 USER 角色内容，保留 SYSTEM 等指令
+            List<ChatMessage> messages = new ArrayList<>(originalPrompt.getMessages());
+            for (int i = 0; i < messages.size(); i++) {
+                if (messages.get(i).getRole() == ChatRole.USER) {
+                    messages.set(i, ChatMessage.ofUser(wrappedUser));
+                    break;
+                }
+            }
+            return Prompt.of(messages);
+        }
         return originalPrompt;
     }
 
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
-        if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        if (isZh) {
             sb.append("\n## 协作协议：").append(config.getProtocol().name()).append("\n");
             sb.append("- 作为团队主管，请根据任务需求和成员能力做出决策。");
         } else {

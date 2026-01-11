@@ -18,7 +18,6 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -34,38 +33,34 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 
 /**
- * 黑板协作协议 (Blackboard Protocol) - 增强独立版
- * * 特点：
- * 1. 独立状态管理 (BoardState)，不与其他协议耦合。
- * 2. 结构化看板驱动，自动提取并增量维护任务清单 (Todo List)。
- * 3. 强化数据持久性，确保关键结论跨轮次存在。
+ * 黑板协作协议 (Blackboard Protocol)
+ *
+ * 特点：
+ * 1. 独立看板管理：通过同步工具 (__sync_to_blackboard__) 维护全局共识。
+ * 2. 任务涌现：自动提取并维护 todo 列表。
+ * 3. 状态闭环：Supervisor 基于看板状态决定是否继续派发任务。
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class BlackboardProtocol_H extends HierarchicalProtocol_H {
-    private static final Logger LOG = LoggerFactory.getLogger(BlackboardProtocol_H.class);
+public class BlackboardProtocol extends HierarchicalProtocol {
+    private static final Logger LOG = LoggerFactory.getLogger(BlackboardProtocol.class);
 
     private static final String KEY_BOARD_DATA = "blackboard_state_obj";
     private static final String TOOL_SYNC = "__sync_to_blackboard__";
 
-    /**
-     * 黑板协议专用的内部状态对象
-     */
     public static class BoardState {
-        private final Map<String, Object> data = new LinkedHashMap<>();
+        private final ONode data = new ONode().asObject();
         private final List<String> todos = new ArrayList<>();
 
         public void merge(String json) {
             if (Utils.isEmpty(json)) return;
             try {
-                // 使用 SNACK4 4.0 推荐的 load 方式
                 ONode node = ONode.ofJson(json);
                 if (node.isObject()) {
                     node.getObjectUnsafe().forEach((k, v) -> {
                         if ("todo".equalsIgnoreCase(k) && v.isArray()) {
-                            // 增量更新任务清单，避免重复
                             v.getArrayUnsafe().forEach(i -> {
                                 String task = i.getString();
                                 if (Utils.isNotEmpty(task) && !todos.contains(task)) {
@@ -73,13 +68,12 @@ public class BlackboardProtocol_H extends HierarchicalProtocol_H {
                                 }
                             });
                         } else {
-                            // 深度转换为 POJO/Map 存储
-                            data.put(k, v.toBean());
+                            data.set(k, v);
                         }
                     });
                 }
             } catch (Exception e) {
-                LOG.warn("Blackboard state merge failed: {}", json, e);
+                LOG.warn("Blackboard state merge failed: {}", json);
             }
         }
 
@@ -89,17 +83,17 @@ public class BlackboardProtocol_H extends HierarchicalProtocol_H {
 
         @Override
         public String toString() {
-            ONode root = new ONode().asObject();
-            data.forEach(root::set);
+            // 使用 JSON 中转实现深拷贝，避免直接操作原对象
+            ONode root = ONode.ofJson(data.toJson());
             if (!todos.isEmpty()) {
-                ONode todoNode = root.getOrNew("todo");
+                ONode todoNode = root.getOrNew("todo").asArray();
                 todos.forEach(todoNode::add);
             }
             return root.toJson();
         }
     }
 
-    public BlackboardProtocol_H(TeamConfig config) {
+    public BlackboardProtocol(TeamConfig config) {
         super(config);
     }
 
@@ -116,15 +110,15 @@ public class BlackboardProtocol_H extends HierarchicalProtocol_H {
         FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_SYNC);
         if (isZh) {
             toolDesc.title("同步到黑板")
-                    .description("将本阶段的核心结论或下一步计划同步到全局黑板看板。")
-                    .stringParamAdd("state", "JSON格式数据。示例: {\"project_id\":\"123\", \"todo\":[\"执行代码生成的专家检查\"]}");
+                    .description("将本阶段的核心结论或下一步计划同步到全局黑板。")
+                    .stringParamAdd("state", "JSON格式数据，必须包含最新进展或todo列表");
         } else {
             toolDesc.title("Sync to Blackboard")
-                    .description("Synchronize key findings or next steps to the shared blackboard.")
-                    .stringParamAdd("state", "JSON data. E.g., {\"status\":\"validated\", \"todo\":[\"run security scan\"]}");
+                    .description("Synchronize findings or next steps to the shared blackboard.")
+                    .stringParamAdd("state", "JSON format data with status or todo list");
         }
 
-        toolDesc.doHandle(args -> "System: Blackboard state updated.");
+        toolDesc.doHandle(args -> "System: Blackboard updated.");
         trace.addProtocolTool(toolDesc);
     }
 
@@ -133,45 +127,44 @@ public class BlackboardProtocol_H extends HierarchicalProtocol_H {
         BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-        sb.append(isZh ? "\n\n### 💡 黑板看板 (当前共识)\n" : "\n\n### 💡 Blackboard (Current Consensus)\n");
+        sb.append(isZh ? "\n### 黑板看板 (Blackboard Consensus)\n" : "\n### Blackboard Consensus\n");
         if (state != null && !state.isEmpty()) {
             sb.append("```json\n").append(state.toString()).append("\n```\n");
         } else {
-            sb.append(isZh ? "> 尚无看板数据，等待专家上报...\n" : "> No board data, waiting for expert reports...\n");
+            sb.append(isZh ? "> 暂无共识数据\n" : "> No consensus data yet\n");
         }
 
-        // 继承父类的步骤摘要
         super.prepareSupervisorInstruction(context, trace, sb);
     }
 
     @Override
-    public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        String lastAgent = trace.getLastAgentName();
-        if (Utils.isNotEmpty(lastAgent)) {
-            AgentTrace latestTrace = context.getAs("__" + lastAgent);
-            if (latestTrace instanceof ReActTrace) {
-                String rawState = extractValueFromTool((ReActTrace) latestTrace, TOOL_SYNC, "state");
-                if (Utils.isNotEmpty(rawState)) {
-                    BoardState state = (BoardState) trace.getProtocolContext()
-                            .computeIfAbsent(KEY_BOARD_DATA, k -> new BoardState());
-                    state.merge(rawState);
-                }
+    public void onAgentEnd(TeamTrace trace, Agent agent) {
+        // 在 Agent 执行结束时，尝试从上下文存储的 ReActTrace 中提取黑板更新
+        ReActTrace rt = trace.getContext().getAs("__" + agent.name());
+        if (rt != null) {
+            String rawState = extractValueFromTool(rt, TOOL_SYNC, "state");
+            if (Utils.isNotEmpty(rawState)) {
+                BoardState state = (BoardState) trace.getProtocolContext()
+                        .computeIfAbsent(KEY_BOARD_DATA, k -> new BoardState());
+                state.merge(rawState);
+                LOG.debug("Blackboard state updated by: {}", agent.name());
             }
         }
-        return super.resolveSupervisorRoute(context, trace, decision);
+        super.onAgentEnd(trace, agent);
     }
 
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
+        super.injectSupervisorInstruction(locale, sb);
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
-            sb.append("\n## 黑板协作守则\n");
-            sb.append("- **依据看板决策**：优先处理 JSON 中 todo 列表里的事项。\n");
-            sb.append("- **数据闭环**：如果看板已提供所需答案，请直接总结并结束。");
+            sb.append("\n### 黑板协作守则：\n");
+            sb.append("1. 依据看板决策：优先处理看板 JSON 中 todo 列表里的待办项。\n");
+            sb.append("2. 增量更新：专家应通过同步工具不断完善看板内容。");
         } else {
-            sb.append("\n## Blackboard Rules\n");
-            sb.append("- **State-Based Decision**: Prioritize items in the JSON 'todo' list.\n");
-            sb.append("- **Early Exit**: If the board contains sufficient answers, conclude the task.");
+            sb.append("\n### Blackboard Rules:\n");
+            sb.append("1. State-Based Decision: Prioritize tasks listed in the JSON 'todo' list.\n");
+            sb.append("2. Incremental Sync: Experts should update the board via sync tools.");
         }
     }
 
@@ -182,8 +175,9 @@ public class BlackboardProtocol_H extends HierarchicalProtocol_H {
             ChatMessage msg = messages.get(i);
             if (msg instanceof AssistantMessage) {
                 AssistantMessage am = (AssistantMessage) msg;
-                if (am.getToolCalls() != null) {
-                    for (ToolCall tc : am.getToolCalls()) {
+                List<ToolCall> toolCalls = am.getToolCalls();
+                if (toolCalls != null) {
+                    for (ToolCall tc : toolCalls) {
                         if (toolName.equals(tc.name())) {
                             return extractJsonValue(tc.arguments(), key);
                         }
@@ -195,11 +189,14 @@ public class BlackboardProtocol_H extends HierarchicalProtocol_H {
     }
 
     private String extractJsonValue(Object args, String key) {
-        if (args instanceof Map) return String.valueOf(((Map<?, ?>) args).get(key));
+        if (args instanceof Map) {
+            return String.valueOf(((Map<?, ?>) args).get(key));
+        }
         if (args instanceof String) {
             try {
                 return ONode.ofJson((String) args).get(key).getString();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         return null;
     }

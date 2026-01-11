@@ -142,6 +142,16 @@ public class TeamTrace implements AgentTrace {
         return "";
     }
 
+    public long getLastAgentDuration(){
+        for (int i = steps.size() - 1; i >= 0; i--) {
+            TeamStep step = steps.get(i);
+            if (!Agent.ID_SUPERVISOR.equals(step.getAgentName())) {
+                return step.getDuration();
+            }
+        }
+        return 0L;
+    }
+
     /**
      * 运行时环境初始化
      */

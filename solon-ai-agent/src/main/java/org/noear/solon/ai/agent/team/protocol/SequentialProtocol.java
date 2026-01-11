@@ -29,33 +29,34 @@ import java.util.*;
 
 /**
  * 增强型顺序协作协议 (Sequential Protocol)
- * * 特点：
- * 1. 引入 SequenceState 进度看板，实时展示流水线健康度。
- * 2. 自动化的质量门禁 (Quality Gate)：若上一环节输出不达标，自动触发重试。
- * 3. 简化路由逻辑：由状态机控制 Agent 的线性推演。
+ *
+ * 特点：
+ * 1. 引入 SequenceState 进度看板。
+ * 2. 自动化质量门禁 (Quality Gate)：不达标自动重试。
+ * 3. 状态机驱动：由协议直接控制 Agent 的线性路由。
+ *
+ * @author noear
+ * @since 3.8.1
  */
 @Preview("3.8.1")
-public class SequentialProtocol_H extends HierarchicalProtocol_H {
-    private static final Logger LOG = LoggerFactory.getLogger(SequentialProtocol_H.class);
-
+public class SequentialProtocol extends HierarchicalProtocol {
+    private static final Logger LOG = LoggerFactory.getLogger(SequentialProtocol.class);
     private static final String KEY_SEQUENCE_STATE = "sequence_state_obj";
     private int maxRetriesPerStage = 1;
 
-    /**
-     * 流水线状态内部类
-     */
     public static class SequenceState {
         private final List<String> pipeline = new ArrayList<>();
         private int currentIndex = 0;
         private final Map<String, StageInfo> stages = new LinkedHashMap<>();
 
         public static class StageInfo {
-            public String status = "PENDING"; // PENDING, RUNNING, COMPLETED, FAILED
+            public String status = "PENDING";
             public int retries = 0;
             public String summary;
         }
 
         public void init(Collection<String> agentNames) {
+            pipeline.clear();
             pipeline.addAll(agentNames);
             agentNames.forEach(name -> stages.put(name, new StageInfo()));
         }
@@ -65,13 +66,12 @@ public class SequentialProtocol_H extends HierarchicalProtocol_H {
         }
 
         public void markCurrent(String status, String summary) {
+            if (currentIndex >= pipeline.size()) return;
             String name = pipeline.get(currentIndex);
             StageInfo info = stages.get(name);
             info.status = status;
-            if (summary.length() > 50) {
-                info.summary = summary.substring(0, 50) + "..."; // 摘要截断
-            } else {
-                info.summary = summary;
+            if (Utils.isNotEmpty(summary)) {
+                info.summary = summary.length() > 50 ? summary.substring(0, 50) + "..." : summary;
             }
         }
 
@@ -79,18 +79,20 @@ public class SequentialProtocol_H extends HierarchicalProtocol_H {
 
         @Override
         public String toString() {
-            ONode root = new ONode();
+            ONode root = new ONode().asObject();
             root.set("progress", (currentIndex + 1) + "/" + pipeline.size());
-            ONode stagesNode = root.getOrNew("stages");
+            ONode stagesNode = root.getOrNew("stages").asArray();
             stages.forEach((k, v) -> {
-                ONode s = stagesNode.asArray().addNew();
-                s.set("agent", k).set("status", v.status).set("retries", v.retries);
+                stagesNode.add(new ONode().asObject()
+                        .set("agent", k)
+                        .set("status", v.status)
+                        .set("retries", v.retries));
             });
             return root.toJson();
         }
     }
 
-    public SequentialProtocol_H(TeamConfig config) {
+    public SequentialProtocol(TeamConfig config) {
         super(config);
     }
 
@@ -102,12 +104,12 @@ public class SequentialProtocol_H extends HierarchicalProtocol_H {
         SequenceState state = (SequenceState) trace.getProtocolContext()
                 .computeIfAbsent(KEY_SEQUENCE_STATE, k -> {
                     SequenceState s = new SequenceState();
-                    s.init(trace.getConfig().getAgentMap().keySet());
+                    s.init(config.getAgentMap().keySet());
                     return s;
                 });
 
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
-        sb.append(isZh ? "\n\n### ⛓️ 流水线执行状态 (Pipeline State)\n" : "\n\n### ⛓️ Pipeline State\n");
+        sb.append(isZh ? "\n### 流水线执行状态 (Pipeline State)\n" : "\n### Pipeline State\n");
         sb.append("```json\n").append(state.toString()).append("\n```\n");
     }
 
@@ -119,12 +121,7 @@ public class SequentialProtocol_H extends HierarchicalProtocol_H {
         String next = state.getNextAgent();
         trace.setRoute(next);
 
-        // 如果流水线走完了，直接结束，不需要 Supervisor 介入
-        if (Agent.ID_END.equals(next)) {
-            return false;
-        }
-
-        // 顺序协议通常是自动化流转，设为 false 表示协议直接指定路由
+        // 顺序协议由协议逻辑指定路由，不需要 LLM 介入决策
         return false;
     }
 
@@ -133,35 +130,35 @@ public class SequentialProtocol_H extends HierarchicalProtocol_H {
         SequenceState state = (SequenceState) trace.getProtocolContext().get(KEY_SEQUENCE_STATE);
         if (state == null) return;
 
-        TeamTrace.TeamStep lastStep = trace.getSteps().get(trace.getStepCount() - 1);
-        String content = lastStep.getContent();
-
-        // 质量检查 (Quality Gate)
+        String content = trace.getLastAgentContent();
         boolean isSuccess = assessQuality(content);
         SequenceState.StageInfo info = state.stages.get(agent.name());
 
         if (isSuccess) {
             state.markCurrent("COMPLETED", content);
-            state.next(); // 只有成功才推进索引
-            LOG.info("Sequential Stage {} COMPLETED", agent.name());
+            state.next();
+            LOG.info("Sequential Stage [{}] COMPLETED", agent.name());
         } else {
-            if (info.retries < maxRetriesPerStage) {
+            if (info != null && info.retries < maxRetriesPerStage) {
                 info.retries++;
-                state.markCurrent("RETRYING", "Output quality low");
-                LOG.warn("Sequential Stage {} RETRYING ({})", agent.name(), info.retries);
+                state.markCurrent("RETRYING", "Quality check failed, retrying...");
+                LOG.warn("Sequential Stage [{}] RETRYING ({}/{})", agent.name(), info.retries, maxRetriesPerStage);
+                // 注意：这里不执行 state.next()，Supervisor 会再次路由到当前 Agent
             } else {
                 state.markCurrent("FAILED", "Max retries reached");
-                state.next(); // 失败多次后强制跳过或结束（取决于配置）
-                LOG.error("Sequential Stage {} FAILED", agent.name());
+                state.next(); // 即使失败也跳过进入下一步，或根据业务需求 trace.setRoute(Agent.ID_END)
+                LOG.error("Sequential Stage [{}] FAILED after {} retries", agent.name(), maxRetriesPerStage);
             }
         }
+        super.onAgentEnd(trace, agent);
     }
 
     private boolean assessQuality(String content) {
-        // 顺序协议最怕空输出或报错
         if (Utils.isEmpty(content)) return false;
-        if (content.contains("ERROR") || content.contains("失败")) return false;
-        return content.length() > 20; // 过于简短可能意味着 Agent 在敷衍
+        String upper = content.toUpperCase();
+        // 排除常见的 AI 拒绝回复关键词
+        if (upper.contains("CANNOT") || upper.contains("I'M SORRY") || upper.contains("FAILED")) return false;
+        return content.trim().length() > 20;
     }
 
     @Override
