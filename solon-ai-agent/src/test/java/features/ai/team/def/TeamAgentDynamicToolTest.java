@@ -38,11 +38,11 @@ public class TeamAgentDynamicToolTest {
                 .description("差旅搜索专家。请根据你的工具权限为用户提供信息。")
                 .then(slf -> {
                     // 注入基础工具（所有用户可用）
-                    slf.addDefaultTool(new MethodToolProvider(new BasicTravelTool()));
+                    slf.addTool(new MethodToolProvider(new BasicTravelTool()));
 
                     // 权限校验：如果是 VIP，动态注入敏感数据工具
                     if (isVip) {
-                        slf.addDefaultTool(new MethodToolProvider(new VipPrivilegeTool()));
+                        slf.addTool(new MethodToolProvider(new VipPrivilegeTool()));
                     }
                 })
                 .build();

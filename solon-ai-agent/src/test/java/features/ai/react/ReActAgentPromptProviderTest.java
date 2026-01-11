@@ -53,7 +53,7 @@ public class ReActAgentPromptProviderTest {
                 .role("你是一个严谨的数学解题专家")
                 .instruction(trace -> {
                     // 动态感知当前工具集
-                    int toolSize = trace.getOptions().getTools().size();
+                    int toolSize = trace.getConfig().getTools().size();
                     return "### 专家解题指南 (当前可用工具: " + toolSize + ")\n" +
                             "1. **分析**: 拆解问题中的数学逻辑。\n" +
                             "2. **执行**: 利用数学工具进行高精度计算。\n" +
@@ -64,7 +64,7 @@ public class ReActAgentPromptProviderTest {
 
         // 2. 构建 Agent
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addDefaultTool(new MethodToolProvider(new MathTools()))
+                .addTool(new MethodToolProvider(new MathTools()))
                 .systemPrompt(mathExpertProvider)
                 .chatOptions(o -> o.temperature(0.0F)) // 降低随机性，确保严格遵循解题步骤
                 .build();
@@ -87,7 +87,7 @@ public class ReActAgentPromptProviderTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addDefaultTool(new MethodToolProvider(new ChineseTools()))
+                .addTool(new MethodToolProvider(new ChineseTools()))
                 // 直接使用默认实现，适合通用中文场景
                 .systemPrompt(ReActSystemPromptCn.getDefault())
                 .build();

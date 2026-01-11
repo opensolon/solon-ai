@@ -169,8 +169,8 @@ public class ReasonTask implements NamedTaskComponent {
                 .prompt(messages)
                 .options(o -> {
                     // 1. 注入内置工具与协议扩展工具
-                    if (trace.getOptions().getTools().size() > 0) {
-                        o.toolsAdd(trace.getOptions().getTools());
+                    if (config.getTools().size() > 0) {
+                        o.toolsAdd(config.getTools());
                         o.optionPut("stop", Utils.asList("Observation:")); // 强制截断，保证 ReAct 闭环
                     }
 

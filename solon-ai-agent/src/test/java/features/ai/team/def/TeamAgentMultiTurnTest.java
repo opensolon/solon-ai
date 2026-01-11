@@ -54,7 +54,7 @@ public class TeamAgentMultiTurnTest {
                         .role("你是一个专业的目的地常识专家")
                         .instruction("只需提供目的地的核心特色、人文地理等基础信息。不要发散，直接给出结构化文本。")
                         .build())
-                .addDefaultInterceptor(new SummarizationInterceptor()) // 关键：自动对本步推理进行摘要压缩
+                .addInterceptor(new SummarizationInterceptor()) // 关键：自动对本步推理进行摘要压缩
                 .build();
 
         Agent planner = ReActAgent.of(chatModel)
@@ -66,7 +66,7 @@ public class TeamAgentMultiTurnTest {
                                 "1. 必须优先检索历史记录（#{history}）中的目的地信息。\n" +
                                 "2. 严格遵循用户在当前轮次提出的预算、偏好等新约束。")
                         .build())
-                .addDefaultInterceptor(new SummarizationInterceptor())
+                .addInterceptor(new SummarizationInterceptor())
                 .build();
 
         // 2. 构建协作团队

@@ -17,6 +17,8 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
@@ -50,6 +52,10 @@ public class ReActConfig {
      * 执行推理的基础大模型
      */
     private final ChatModel chatModel;
+    /**
+     * 挂载的功能工具集
+     */
+    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     /**
      * 推理阶段的特定 ChatOptions 配置（如温度、TopP 等）
      */
@@ -113,7 +119,30 @@ public class ReActConfig {
     protected void setChatOptions(Consumer<ChatOptions> chatOptions) {
         this.chatOptions = chatOptions;
     }
+    /**
+     * 添加单个功能工具
+     */
+    protected void addTool(FunctionTool... tools) {
+        for (FunctionTool tool : tools) {
+            this.tools.put(tool.name(), tool);
+        }
+    }
 
+    /**
+     * 批量添加功能工具
+     */
+    protected void addTool(Collection<FunctionTool> tools) {
+        for (FunctionTool tool : tools) {
+            addTool(tool);
+        }
+    }
+
+    /**
+     * 通过 ToolProvider 注入工具集
+     */
+    protected void addTool(ToolProvider toolProvider) {
+        addTool(toolProvider.getTools());
+    }
 
     // --- 参数获取 (Public) ---
 
@@ -136,6 +165,14 @@ public class ReActConfig {
 
     public Consumer<ChatOptions> getChatOptions() {
         return chatOptions;
+    }
+
+    public Collection<FunctionTool> getTools() {
+        return tools.values();
+    }
+
+    public FunctionTool getTool(String name) {
+        return tools.get(name);
     }
 
     public Consumer<GraphSpec> getGraphAdjuster() {

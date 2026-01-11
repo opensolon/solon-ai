@@ -122,7 +122,7 @@ public class A2AProtocol_H extends TeamProtocolBase {
 
     @Override
     public void injectAgentTools(Agent agent, ReActTrace trace) {
-        Locale locale = trace.getConfig().getLocale();
+        Locale locale = config.getLocale();
 
         // 排除当前 Agent 自身，生成备选专家列表
         String expertList = config.getAgentMap().values().stream()

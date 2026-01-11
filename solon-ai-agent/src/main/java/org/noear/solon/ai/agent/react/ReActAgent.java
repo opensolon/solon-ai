@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -417,7 +418,7 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 自定义推理提示词模板生成器
+         * 配置自定义推理提示词模板生成器
          *
          * @param val 模板生成器
          * @return 构建器
@@ -428,13 +429,46 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 配置 ChatModel 推理选项
+         * 配置默认 ChatModel 推理选项
          *
          * @param chatOptions 配置函数
          * @return 构建器
          */
         public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
             config.setChatOptions(chatOptions);
+            return this;
+        }
+
+        /**
+         * 添加默认功能工具
+         *
+         * @param tool 工具对象
+         * @return 构建器
+         */
+        public Builder addTool(FunctionTool tool) {
+            config.addTool(tool);
+            return this;
+        }
+
+        /**
+         * 添加功能工具
+         *
+         * @param tools 工具集合
+         * @return 构建器
+         */
+        public Builder addTool(Collection<FunctionTool> tools) {
+            config.addTool(tools);
+            return this;
+        }
+
+        /**
+         * 添加功能工具
+         *
+         * @param toolProvider 工具提供者
+         * @return 构建器
+         */
+        public Builder addTool(ToolProvider toolProvider) {
+            config.addTool(toolProvider);
             return this;
         }
 
@@ -451,7 +485,7 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 限制单次任务的最大循环步数
+         * 设置限制单次任务的最大循环步数
          *
          * @param val 最大步数
          * @return 构建器
@@ -481,7 +515,7 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 快捷方式：通过 Class 生成 schema 描述（如果 ChatModel 支持此功能）
+         * 设置默认输出格式要求：通过 Class 生成 schema 描述（如果 ChatModel 支持此功能）
          */
         public Builder outputSchema(Type type) {
             config.getDefaultOptions().setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
@@ -499,48 +533,29 @@ public class ReActAgent implements Agent {
             return this;
         }
 
-
-
         /**
-         * 添加功能工具
-         *
-         * @param tool 工具对象
-         * @return 构建器
+         * 添加默认工具上下文
          */
-        public Builder addDefaultTool(FunctionTool tool) {
-            config.getDefaultOptions().addTool(tool);
+        public Builder addToolsContext(String key, Object value) {
+            config.getDefaultOptions().getToolsContext().put(key, value);
             return this;
         }
 
         /**
-         * 批量添加工具
-         *
-         * @param tools 工具集合
-         * @return 构建器
+         * 添加默认工具上下文
          */
-        public Builder addDefaultTool(Collection<FunctionTool> tools) {
-            config.getDefaultOptions().addTool(tools);
+        public Builder addToolsContext(Map<String, Object> toolsContext) {
+            config.getDefaultOptions().getToolsContext().putAll(toolsContext);
             return this;
         }
 
         /**
-         * 通过提供者添加工具
-         *
-         * @param toolProvider 工具提供者
-         * @return 构建器
-         */
-        public Builder addDefaultTool(ToolProvider toolProvider) {
-            config.getDefaultOptions().addTool(toolProvider);
-            return this;
-        }
-
-        /**
-         * 添加生命周期拦截器
+         * 添加默认生命周期拦截器
          *
          * @param vals 拦截器数组
          * @return 构建器
          */
-        public Builder addDefaultInterceptor(ReActInterceptor... vals) {
+        public Builder addInterceptor(ReActInterceptor... vals) {
             for (ReActInterceptor val : vals) {
                 config.getDefaultOptions().addInterceptor(val);
             }
@@ -548,13 +563,13 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 添加生命周期拦截器（带排序索引）
+         * 添加默认生命周期拦截器（带排序索引）
          *
          * @param val   拦截器
          * @param index 排序索引
          * @return 构建器
          */
-        public Builder addDefaultInterceptor(ReActInterceptor val, int index) {
+        public Builder addInterceptor(ReActInterceptor val, int index) {
             config.getDefaultOptions().addInterceptor(val, index);
             return this;
         }

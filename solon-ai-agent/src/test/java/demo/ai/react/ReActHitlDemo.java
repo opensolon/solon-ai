@@ -32,8 +32,8 @@ public class ReActHitlDemo {
         };
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addDefaultInterceptor(hitlInterceptor) // 注入拦截器
-                .addDefaultTool(new MethodToolProvider(new WeatherTools()))
+                .addInterceptor(hitlInterceptor) // 注入拦截器
+                .addTool(new MethodToolProvider(new WeatherTools()))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("hitl_session_1");

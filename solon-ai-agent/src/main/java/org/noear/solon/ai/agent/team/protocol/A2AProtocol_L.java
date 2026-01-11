@@ -71,7 +71,7 @@ public class A2AProtocol_L extends TeamProtocolBase {
 
     @Override
     public void injectAgentTools(Agent agent, ReActTrace trace) {
-        Locale locale = trace.getConfig().getLocale();
+        Locale locale = config.getLocale();
 
         String expertList = config.getAgentMap().values().stream()
                 .filter(a -> !a.name().equals(agent.name()))

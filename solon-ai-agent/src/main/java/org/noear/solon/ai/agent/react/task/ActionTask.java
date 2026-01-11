@@ -179,7 +179,7 @@ public class ActionTask implements NamedTaskComponent {
      * @return 工具执行后的字符串结果（用于反馈给模型）
      */
     private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
-        FunctionTool tool = trace.getOptions().getTool(name);
+        FunctionTool tool = config.getTool(name);
 
         if (tool == null) {
             tool = trace.getProtocolTool(name);

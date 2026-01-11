@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
@@ -31,10 +29,6 @@ import java.util.*;
  */
 @Preview("3.8.1")
 public class ReActOptions implements NonSerializable {
-    /**
-     * 挂载的功能工具集
-     */
-    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     /**
      * 工具调用上下文
      */
@@ -55,17 +49,14 @@ public class ReActOptions implements NonSerializable {
      * 重试延迟时间（毫秒）
      */
     private long retryDelayMs = 1000L;
-
     /**
      * 结果输出 Key
      */
     private String outputKey;
-
     /**
      * 期望的输出 Schema（例如 JSON Schema 字符串或描述）
      */
     private String outputSchema;
-
     /**
      * 历史消息窗口大小（从上下文中回溯并注入到当前执行过程的消息条数）
      */
@@ -77,7 +68,6 @@ public class ReActOptions implements NonSerializable {
      */
     protected ReActOptions copy() {
         ReActOptions tmp = new ReActOptions();
-        tmp.tools.putAll( tools);
         tmp.toolsContext.putAll( toolsContext);
         tmp.interceptors.addAll( interceptors);
         tmp.maxSteps = maxSteps;
@@ -93,35 +83,14 @@ public class ReActOptions implements NonSerializable {
     // --- 配置注入 (Protected) ---
 
     /**
-     * 添加单个功能工具
-     */
-    protected void addTool(FunctionTool... tools) {
-        for (FunctionTool tool : tools) {
-            this.tools.put(tool.name(), tool);
-        }
-    }
-
-    /**
-     * 批量添加功能工具
-     */
-    protected void addTool(Collection<FunctionTool> tools) {
-        for (FunctionTool tool : tools) {
-            addTool(tool);
-        }
-    }
-
-    /**
-     * 通过 ToolProvider 注入工具集
-     */
-    protected void addTool(ToolProvider toolProvider) {
-        addTool(toolProvider.getTools());
-    }
-
-    /**
      * 添加工具调用上下文
      */
     protected void addToolsContext(Map<String, Object> toolsContext) {
         this.toolsContext.putAll(toolsContext);
+    }
+
+    protected void addToolsContext(String key, Object value) {
+        this.toolsContext.put(key, value);
     }
 
     /**
@@ -176,14 +145,6 @@ public class ReActOptions implements NonSerializable {
 
     // --- 参数获取 (Public) ---
 
-
-    public Collection<FunctionTool> getTools() {
-        return tools.values();
-    }
-
-    public FunctionTool getTool(String name) {
-        return tools.get(name);
-    }
 
     public Map<String, Object> getToolsContext() {
         return toolsContext;

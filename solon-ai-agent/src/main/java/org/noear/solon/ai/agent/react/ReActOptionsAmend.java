@@ -1,9 +1,5 @@
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
-
-import java.util.Collection;
 import java.util.Map;
 
 /**
@@ -18,35 +14,17 @@ public class ReActOptionsAmend {
         this.options = options;
     }
 
-    /**
-     * 添加单个功能工具
-     */
-    public ReActOptionsAmend toolAdd(FunctionTool... tools) {
-        options.addTool(tools);
-        return this;
-    }
-
-    /**
-     * 批量添加功能工具
-     */
-    public ReActOptionsAmend toolAdd(Collection<FunctionTool> tools) {
-        options.addTool(tools);
-        return this;
-    }
-
-    /**
-     * 通过 ToolProvider 注入工具集
-     */
-    public ReActOptionsAmend toolAdd(ToolProvider toolProvider) {
-        options.addTool(toolProvider);
-        return this;
-    }
 
     /**
      * 添加工具调用上下文
      */
     public ReActOptionsAmend toolsContext(Map<String, Object> toolsContext) {
         options.addToolsContext(toolsContext);
+        return this;
+    }
+
+    public ReActOptionsAmend toolsContext(String key, Object value) {
+        options.addToolsContext(key, value);
         return this;
     }
 

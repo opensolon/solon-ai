@@ -74,11 +74,11 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         sb.append(instruction);
 
         // 3. 工具集定义：动态注入当前可用的工具列表
-        if (trace.getOptions().getTools().isEmpty()) {
+        if (trace.getConfig().getTools().isEmpty()) {
             sb.append("\n注意：当前没有可用工具。请直接给出 Final Answer。\n");
         } else {
             sb.append("\n## 可用工具\n");
-            trace.getOptions().getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ")
+            trace.getConfig().getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ")
                     .append(t.description()).append("\n"));
         }
 
