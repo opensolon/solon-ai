@@ -16,7 +16,9 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -156,6 +158,11 @@ public class TeamAgent implements Agent {
     @Override
     public String description() {
         return description;
+    }
+
+    @Override
+    public AgentProfile profile() {
+        return config.getProfile();
     }
 
     public String getTraceKey() {
@@ -312,6 +319,16 @@ public class TeamAgent implements Agent {
          */
         public Builder description(String description) {
             config.setDescription(description);
+            return this;
+        }
+
+        public Builder profile(AgentProfile profile) {
+            config.setProfile(profile);
+            return this;
+        }
+
+        public Builder profile(Consumer<AgentProfile> profileConsumer) {
+            profileConsumer.accept(config.getProfile());
             return this;
         }
 

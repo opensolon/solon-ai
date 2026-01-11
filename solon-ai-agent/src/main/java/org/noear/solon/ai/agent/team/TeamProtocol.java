@@ -93,6 +93,19 @@ public interface TeamProtocol extends NonSerializable {
     }
 
     /**
+     * 解析并转换当前 Agent 的输出内容
+     * <p>在 Agent 执行完毕后，记录轨迹前触发。用于实现不同 Agent 间的内容适配或结果提取。</p>
+     *
+     * @param trace   协作轨迹
+     * @param agent   当前执行的智能体
+     * @param content 原始输出内容
+     * @return 最终记录到轨迹并传递给下一阶段的内容
+     */
+    default String resolveAgentOutput(TeamTrace trace, Agent agent, String content) {
+        return content;
+    }
+
+    /**
      * Agent 节点执行结束后的回调
      */
     default void onAgentEnd(TeamTrace trace, Agent agent) { }

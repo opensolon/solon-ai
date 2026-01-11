@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -48,6 +49,7 @@ public class ReActConfig {
      * 智能体职责描述（用于团队协作及角色识别）
      */
     private String description;
+    private AgentProfile profile;
     /**
      * 执行推理的基础大模型
      */
@@ -104,6 +106,10 @@ public class ReActConfig {
         this.description = description;
     }
 
+    protected void setProfile(AgentProfile profile) {
+        this.profile = profile;
+    }
+
     protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
         this.graphAdjuster = graphAdjuster;
     }
@@ -157,6 +163,13 @@ public class ReActConfig {
 
     public String getDescription() {
         return description;
+    }
+
+    public AgentProfile getProfile() {
+        if (profile == null) {
+            profile = new AgentProfile();
+        }
+        return profile;
     }
 
     public ChatModel getChatModel() {

@@ -45,6 +45,13 @@ import java.util.stream.Collectors;
  */
 @Preview("3.8.1")
 public class TeamTrace implements AgentTrace {
+    private TeamStatus status = TeamStatus.RUNNING;
+
+    // 记录任务的“里程碑”状态，而不是琐碎的每个动作
+    public void markMilestone(TeamStatus status) {
+        this.status = status;
+    }
+
     /**
      * 关联的团队配置（生命周期内稳定，不参与持久化序列化）
      */

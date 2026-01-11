@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.task.ActionTask;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
@@ -179,6 +180,11 @@ public class ReActAgent implements Agent {
     @Override
     public String description() {
         return description;
+    }
+
+    @Override
+    public AgentProfile profile() {
+        return config.getProfile();
     }
 
     /**
@@ -405,6 +411,16 @@ public class ReActAgent implements Agent {
          */
         public Builder description(String val) {
             config.setDescription(val);
+            return this;
+        }
+
+        public Builder profile(AgentProfile profile) {
+            config.setProfile(profile);
+            return this;
+        }
+
+        public Builder profile(Consumer<AgentProfile> profileConsumer) {
+            profileConsumer.accept(config.getProfile());
             return this;
         }
 

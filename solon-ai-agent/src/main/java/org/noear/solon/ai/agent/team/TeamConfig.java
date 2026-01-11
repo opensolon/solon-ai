@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.core.util.RankEntity;
@@ -55,6 +56,8 @@ public class TeamConfig implements NonSerializable {
      * 团队核心职能描述（在嵌套团队场景下，供上层主管识别该团队的专业领域）
      */
     private String description;
+
+    private AgentProfile profile;
 
     /**
      * 调度中心模型（Supervisor Model），负责解析任务、选择专家及审核产出
@@ -129,6 +132,10 @@ public class TeamConfig implements NonSerializable {
      */
     protected void setDescription(String description) {
         this.description = description;
+    }
+
+    protected void setProfile(AgentProfile profile) {
+        this.profile = profile;
     }
 
     /**
@@ -214,6 +221,13 @@ public class TeamConfig implements NonSerializable {
 
     public String getDescription() {
         return description;
+    }
+
+    public AgentProfile getProfile() {
+        if (profile == null) {
+            profile = new AgentProfile();
+        }
+        return profile;
     }
 
     public ChatModel getChatModel() {

@@ -55,6 +55,11 @@ public interface Agent extends NamedTaskComponent {
     String description();
 
     /**
+     * 获取智能体档案
+     * */
+    AgentProfile profile();
+
+    /**
      * 为当前上下文生成动态职责描述
      * <p>支持对 {@link #description()} 中的占位符（如 #{var}）进行渲染，实现动态角色设定。</p>
      */
