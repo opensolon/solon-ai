@@ -17,10 +17,10 @@ package org.noear.solon.ai.chat.interceptor;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfigReadonly;
-import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.lang.Nullable;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -31,40 +31,35 @@ import java.util.Map;
  * @since 3.3
  */
 public class ToolRequest {
-    private final ChatConfigReadonly configReadonly;
-    private final ChatOptions options;
+    private final ChatRequest request;
+    private final Map<String, Object> toolsContext;
     private Map<String, Object> args;
 
-    public ToolRequest(ChatResponse resp, Map<String, Object> args) {
-        if (resp == null) {
-            this.configReadonly = null;
-            this.options = null;
-            this.args = args;
-        } else {
-            this.configReadonly = resp.getConfig();
-            this.options = resp.getOptions();
+    public ToolRequest(ChatRequest request, Map<String, Object> toolsContext, Map<String, Object> args) {
+        this.request = request;
+        this.toolsContext = Collections.unmodifiableMap(toolsContext);
 
-            if (Utils.isEmpty(options.toolsContext())) {
-                this.args = args;
-            } else {
-                this.args = new LinkedHashMap<>(args);
-                this.args.putAll(options.toolsContext());
-            }
+        if (Utils.isEmpty(toolsContext)) {
+            this.args = Collections.unmodifiableMap(args);
+        } else {
+            Map<String, Object> tmp = new LinkedHashMap<>(args);
+            tmp.putAll(toolsContext);
+            this.args = Collections.unmodifiableMap(tmp);
         }
     }
 
     /**
-     * 获取配置
+     * 获取模型请求
      */
-    public @Nullable ChatConfigReadonly getConfig() {
-        return configReadonly;
+    public ChatRequest getRequest() {
+        return request;
     }
 
-    /**
-     * 获取选项
+    /*
+     * 获取工具上下文
      */
-    public @Nullable ChatOptions getOptions() {
-        return options;
+    public Map<String, Object> getToolsContext() {
+        return toolsContext;
     }
 
     /**

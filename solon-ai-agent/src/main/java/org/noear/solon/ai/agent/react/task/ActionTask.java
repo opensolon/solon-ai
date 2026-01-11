@@ -105,7 +105,7 @@ public class ActionTask implements NamedTaskComponent {
      */
     private void processNativeToolCall(ReActTrace trace, ToolCall call) throws Throwable {
         // 生命周期拦截：工具执行前
-        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
             item.target.onAction(trace, call.name(), call.arguments());
         }
 
@@ -115,7 +115,7 @@ public class ActionTask implements NamedTaskComponent {
         String result = executeTool(trace, call.name(), args);
 
         // 生命周期拦截：工具执行之后
-        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
             item.target.onObservation(trace, result);
         }
 
@@ -145,14 +145,14 @@ public class ActionTask implements NamedTaskComponent {
                 ONode argsNode = action.get("arguments");
                 Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
 
-                for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+                for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
                     item.target.onAction(trace, toolName, args);
                 }
 
                 // 执行并汇总观测结果
                 String result = executeTool(trace, toolName, args);
 
-                for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+                for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
                     item.target.onObservation(trace, result);
                 }
 
@@ -181,7 +181,7 @@ public class ActionTask implements NamedTaskComponent {
     private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
         FunctionTool tool = config.getTool(name);
 
-        if(tool == null){
+        if (tool == null) {
             tool = trace.getProtocolTool(name);
         }
 
@@ -196,13 +196,13 @@ public class ActionTask implements NamedTaskComponent {
                 args.put("__" + trace.getAgentName(), trace);
 
                 // 执行具体的 Handler 逻辑
-                if (config.getInterceptorList().isEmpty()) {
+                if (config.getInterceptors().isEmpty()) {
                     //没拦截器
                     return tool.handle(args);
                 } else {
                     //有拦截器
-                    ToolRequest toolReq = new ToolRequest(null, args);
-                    return new ToolChain(config.getInterceptorList(), tool).doIntercept(toolReq);
+                    ToolRequest toolReq = new ToolRequest(null, config.getToolsContext(), args);
+                    return new ToolChain(config.getInterceptors(), tool).doIntercept(toolReq);
                 }
 
             } catch (IllegalArgumentException e) {

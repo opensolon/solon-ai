@@ -450,7 +450,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             Collections.sort(interceptorList);
         }
 
-        ToolRequest req = new ToolRequest(resp, args);
+        ToolRequest req = new ToolRequest(resp.getRequest(), resp.getOptions().toolsContext(), args);
 
         //构建请求数据
         ToolChain chain = new ToolChain(interceptorList, func);

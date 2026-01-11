@@ -89,7 +89,7 @@ public class ReActAgent implements Agent {
         this.flowEngine = FlowEngine.newInstance(true);
 
         // 1. 挂载流拦截器（用于全局监控或审计）
-        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
             flowEngine.addInterceptor(item.target, item.index);
         }
 
@@ -242,7 +242,7 @@ public class ReActAgent implements Agent {
         Objects.requireNonNull(prompt, "Missing prompt!");
 
         // 触发开始事件
-        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
             item.target.onAgentStart(trace);
         }
 
@@ -287,7 +287,7 @@ public class ReActAgent implements Agent {
         session.updateSnapshot(context);
 
         // 触发结束事件
-        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
             item.target.onAgentEnd(trace);
         }
 
@@ -489,7 +489,7 @@ public class ReActAgent implements Agent {
          * @return 构建器
          */
         public Builder systemPrompt(ReActSystemPrompt val) {
-            config.setPromptProvider(val);
+            config.setSystemPrompt(val);
             return this;
         }
 

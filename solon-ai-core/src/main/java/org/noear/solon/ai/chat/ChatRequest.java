@@ -18,7 +18,7 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.NonSerializable;
 
 import java.util.Collections;
 import java.util.List;
@@ -29,7 +29,7 @@ import java.util.List;
  * @author noear
  * @since 3.3
  */
-public class ChatRequest {
+public class ChatRequest implements NonSerializable {
     private final ChatConfig config;
     private final ChatConfigReadonly configReadonly;
     private final ChatDialect dialect;
@@ -43,7 +43,7 @@ public class ChatRequest {
         this.dialect = dialect;
         this.options = options;
         this.stream = stream;
-        this.messages = messages;
+        this.messages = Collections.unmodifiableList(messages);
     }
 
     /**
@@ -68,19 +68,10 @@ public class ChatRequest {
     }
 
     /**
-     * 设置消息
-     */
-    public void setMessages(List<ChatMessage> messages) {
-        Assert.notEmpty(messages, "messages is empty");
-
-        this.messages = messages;
-    }
-
-    /**
      * 获取消息
      */
     public List<ChatMessage> getMessages() {
-        return Collections.unmodifiableList(messages);
+        return messages;
     }
 
     /**

@@ -85,7 +85,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 2：上下文构建]
         // 注入 ReAct 规范提示词、协议指令及动态历史记录（Thought/Action/Observation）
-        String systemPrompt = config.getSystemPrompt(trace, context);
+        String systemPrompt = config.getSystemPromptFor(trace, context);
 
         // 如果配置了输出格式，则追加指令
         if (Assert.isNotEmpty(config.getOutputSchema())) {
@@ -109,7 +109,7 @@ public class ReasonTask implements NamedTaskComponent {
         ChatResponse response = callWithRetry(trace, messages);
 
         // 触发模型响应拦截：常用于死循环检测（onModelEnd 抛出异常可提前终止推理流）
-        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
             item.target.onModelEnd(trace, response);
         }
 
@@ -141,7 +141,7 @@ public class ReasonTask implements NamedTaskComponent {
         trace.setLastAnswer(clearContent);
 
         // 触发思考拦截：通知外部模型当前的推理进展
-        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
             item.target.onThought(trace, clearContent);
         }
 
@@ -186,7 +186,7 @@ public class ReasonTask implements NamedTaskComponent {
                     o.autoToolCall(false);
 
                     // 3. 同步业务层拦截器到 Chat 层
-                    for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+                    for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
                         o.interceptorAdd(item.target);
                     }
 
@@ -196,7 +196,7 @@ public class ReasonTask implements NamedTaskComponent {
                 });
 
         // 触发请求发起拦截：可在此阶段进行 Token 预警或动态修改请求参数
-        for (RankEntity<ReActInterceptor> item : config.getInterceptorList()) {
+        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
             item.target.onModelStart(trace, req);
         }
 

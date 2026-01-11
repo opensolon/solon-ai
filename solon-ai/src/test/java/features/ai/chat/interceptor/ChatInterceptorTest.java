@@ -27,7 +27,7 @@ public class ChatInterceptorTest implements ChatInterceptor {
 
     @Override
     public String interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
-        log.warn("ChatInterceptor-interceptTool: " + req.getConfig().getModel());
+        log.warn("ChatInterceptor-interceptTool: " + req.getRequest().getConfig().getModel());
 
         return chain.doIntercept(req);
     }

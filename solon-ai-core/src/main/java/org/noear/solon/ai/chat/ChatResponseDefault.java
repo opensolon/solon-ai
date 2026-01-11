@@ -34,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @since 3.1
  */
 public class ChatResponseDefault implements ChatResponse {
+    private final ChatRequest request;
     private final ChatConfigReadonly config;
     private final ChatOptions options;
     private final boolean stream;
@@ -51,9 +52,14 @@ public class ChatResponseDefault implements ChatResponse {
     protected StringBuilder aggregationMessageContent = new StringBuilder();
 
     public ChatResponseDefault(ChatRequest req, boolean stream) {
+        this.request = req;
         this.config = req.getConfig();
         this.options = req.getOptions();
         this.stream = stream;
+    }
+
+    public ChatRequest getRequest() {
+        return request;
     }
 
     @Override
