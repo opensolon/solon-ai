@@ -232,7 +232,7 @@ public class ReActAgent implements Agent {
         }
 
         // 1. 记忆加载时序：新推理周期开始时，先从 Session 加载历史记忆
-        if (trace.getMessages().isEmpty()) {
+        if (trace.getMessagesSize() == 0) {
             // A. 加载历史（如果配置了窗口）
             if (options.getHistoryWindowSize() > 0) {
                 // 此时尚未存入当前 prompt，获取的是纯历史记录

@@ -68,11 +68,11 @@ public class SummarizationInterceptor implements ReActInterceptor {
      */
     @Override
     public void onObservation(ReActTrace trace, String result) {
-        List<ChatMessage> messages = trace.getMessages();
         // 消息量极小时不执行压缩计算
-        if (messages.size() < 4) return;
+        if (trace.getMessagesSize() < 4) return;
 
         // 1. 阈值检查：增加缓冲窗口（2条），避免每一步都执行重组计算
+        List<ChatMessage> messages = trace.getMessages();
         int currentTokens = estimateTokens(messages);
         if (messages.size() <= maxMessages + 2 && currentTokens <= maxTokens) {
             return;

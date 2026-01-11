@@ -277,12 +277,19 @@ public class ReActTrace implements AgentTrace {
     }
 
     /**
+     * 获取消息序列的大小
+     */
+    public int getMessagesSize(){
+        return messages.size();
+    }
+
+    /**
      * 获取消息序列的快照副本，确保外部读取线程安全
      */
     public List<ChatMessage> getMessages() {
         lock.readLock().lock();
         try {
-            return new ArrayList<>(messages);
+            return Collections.unmodifiableList(messages);
         } finally {
             lock.readLock().unlock();
         }

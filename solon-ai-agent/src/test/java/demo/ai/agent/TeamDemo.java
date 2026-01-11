@@ -10,7 +10,7 @@ import org.noear.solon.ai.chat.ChatModel;
  * @author noear 2026/1/10 created
  *
  */
-public class Demo {
+public class TeamDemo {
     @Test
     public void demo() {
         ChatModel chatModel = LlmUtil.getChatModel();
