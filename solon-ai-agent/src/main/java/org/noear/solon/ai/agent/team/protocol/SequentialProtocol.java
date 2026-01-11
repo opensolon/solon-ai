@@ -118,10 +118,12 @@ public class SequentialProtocol extends HierarchicalProtocol {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
             sb.append("\n- 顺序执行模式：请按成员名录顺序调度。");
-            sb.append("\n- 注意：若发现当前任务违背了下一位成员的“行为约束(Constraints)”，请跳过该成员或直接结束。");
+            sb.append("\n- **模态检查**：若当前任务包含非文本数据，请确保下一位成员支持该输入模态。");
+            sb.append("\n- 注意：若发现违背了下一位成员的“行为约束”或“模态不支持”，建议跳过该成员。");
         } else {
             sb.append("\n- Sequential Mode: Follow the predefined order.");
-            sb.append("\n- Note: If the task violates the next member's 'Constraints', skip that member or terminate.");
+            sb.append("\n- **Modality Check**: Ensure the next member supports the input modality if data is non-text.");
+            sb.append("\n- Note: Skip members if they don't support the modality or violate constraints.");
         }
     }
 
