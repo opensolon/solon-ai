@@ -110,17 +110,25 @@ public class ReActAgent implements Agent {
      */
     protected Graph buildGraph() {
         return Graph.create(this.name(), spec -> {
-            spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON);
+            spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON_BEF);
+
+            spec.addActivity(Agent.ID_REASON_BEF)
+                    .title("思考之前（预置埋点）")
+                    .linkAdd(Agent.ID_REASON);
 
             // 推理任务节点（Reasoning）：决定下一步是调用工具还是直接回答
             spec.addExclusive(new ReasonTask(config, this))
-                    .linkAdd(Agent.ID_ACTION, l -> l.title("route = " + Agent.ID_ACTION).when(ctx ->
+                    .linkAdd(Agent.ID_ACTION_BEF, l -> l.title("route = " + Agent.ID_ACTION).when(ctx ->
                             Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
                     .linkAdd(Agent.ID_END);
 
+            spec.addActivity(Agent.ID_ACTION_BEF)
+                    .title("执行之前（预置埋点）")
+                    .linkAdd(Agent.ID_ACTION);
+
             // 执行任务节点（Acting）：执行具体的工具调用并返回观察结果
             spec.addActivity(new ActionTask(config))
-                    .linkAdd(Agent.ID_REASON); // 动作完成后再次回到推理节点
+                    .linkAdd(Agent.ID_REASON_BEF); // 动作完成后再次回到推理节点
 
             spec.addEnd(Agent.ID_END);
 

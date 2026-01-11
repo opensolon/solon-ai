@@ -177,8 +177,12 @@ public interface Agent extends NamedTaskComponent {
 
     static String ID_START = "start";
     static String ID_END = "end";
+
+    static String ID_REASON_BEF = "reason_bef";
     static String ID_REASON = "reason";
+    static String ID_ACTION_BEF = "action_bef";
     static String ID_ACTION = "action";
+
     static String ID_SYSTEM = "system";
     static String ID_SUPERVISOR = "supervisor";
     static String ID_BIDDING = "bidding";
