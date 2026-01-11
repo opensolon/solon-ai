@@ -152,7 +152,9 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         // 3. 模态能力看板注入：让 Supervisor 知道谁能看图/看文件
         ONode capabilities = meta.getOrNew("capabilities");
         config.getAgentMap().forEach((name, ag) -> {
-            capabilities.set(name, ONode.ofBean(ag.profile().getInputModes()));
+            if(ag.profile() != null) {
+                capabilities.set(name, ONode.ofBean(ag.profile().getInputModes()));
+            }
         });
 
         if (usage != null && !usage.isEmpty()) {
