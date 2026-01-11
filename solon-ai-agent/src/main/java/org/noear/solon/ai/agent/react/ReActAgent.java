@@ -30,10 +30,7 @@ import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
-import org.noear.solon.flow.FlowContext;
-import org.noear.solon.flow.FlowEngine;
-import org.noear.solon.flow.Graph;
-import org.noear.solon.flow.GraphSpec;
+import org.noear.solon.flow.*;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -101,12 +98,7 @@ public class ReActAgent implements Agent {
         this.traceKey = "__" + name; // 每个 Agent 实例拥有独立的追踪键
         this.flowEngine = FlowEngine.newInstance(true);
 
-        // 1. 挂载流拦截器（用于全局监控或审计）
-        for (RankEntity<ReActInterceptor> item : config.getDefaultOptions().getInterceptors()) {
-            flowEngine.addInterceptor(item.target, item.index);
-        }
-
-        // 2. 构建 ReAct 执行计算图：Start -> [Reason <-> Action] -> End
+        // 构建 ReAct 执行计算图：Start -> [Reason <-> Action] -> End
         this.graph = buildGraph();
     }
 
@@ -281,10 +273,16 @@ public class ReActAgent implements Agent {
         long startTime = System.currentTimeMillis();
 
         try {
+            // 传递拦截器
+            FlowOptions flowOptions = new FlowOptions();
+            for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
+                flowOptions.interceptorAdd(item.target, item.index);
+            }
+
             // [核心机制] 采用变量域思想传递 KEY_CURRENT_TRACE_KEY
             // 确保任务组件（Task）能根据该 Key 在上下文中定位到正确的状态机（Trace）
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
-                flowEngine.eval(graph, context);
+                flowEngine.eval(graph, -1, context, flowOptions);
             });
         } finally {
             // 记录性能统计指标
@@ -397,62 +395,6 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 添加功能工具
-         *
-         * @param tool 工具对象
-         * @return 构建器
-         */
-        public Builder addTool(FunctionTool tool) {
-            config.getDefaultOptions().addTool(tool);
-            return this;
-        }
-
-        /**
-         * 批量添加工具
-         *
-         * @param tools 工具集合
-         * @return 构建器
-         */
-        public Builder addTool(Collection<FunctionTool> tools) {
-            config.getDefaultOptions().addTool(tools);
-            return this;
-        }
-
-        /**
-         * 通过提供者添加工具
-         *
-         * @param toolProvider 工具提供者
-         * @return 构建器
-         */
-        public Builder addTool(ToolProvider toolProvider) {
-            config.getDefaultOptions().addTool(toolProvider);
-            return this;
-        }
-
-        /**
-         * 配置 LLM 调用重试机制
-         *
-         * @param maxRetries   最大重试次数
-         * @param retryDelayMs 重试时间间隔（毫秒）
-         * @return 构建器
-         */
-        public Builder retryConfig(int maxRetries, long retryDelayMs) {
-            config.getDefaultOptions().setRetryConfig(maxRetries, retryDelayMs);
-            return this;
-        }
-
-        /**
-         * 限制单次任务的最大循环步数
-         *
-         * @param val 最大步数
-         * @return 构建器
-         */
-        public Builder maxSteps(int val) {
-            config.getDefaultOptions().setMaxSteps(val);
-            return this;
-        }
-
-        /**
          * 设置图结构微调器
          *
          * @param graphBuilder 微调逻辑
@@ -497,6 +439,29 @@ public class ReActAgent implements Agent {
         }
 
         /**
+         * 配置 LLM 调用重试机制
+         *
+         * @param maxRetries   最大重试次数
+         * @param retryDelayMs 重试时间间隔（毫秒）
+         * @return 构建器
+         */
+        public Builder retryConfig(int maxRetries, long retryDelayMs) {
+            config.getDefaultOptions().setRetryConfig(maxRetries, retryDelayMs);
+            return this;
+        }
+
+        /**
+         * 限制单次任务的最大循环步数
+         *
+         * @param val 最大步数
+         * @return 构建器
+         */
+        public Builder maxSteps(int val) {
+            config.getDefaultOptions().setMaxSteps(val);
+            return this;
+        }
+
+        /**
          * 设置输出结果在 Context 中的存储键
          *
          * @param val 存储键
@@ -534,13 +499,48 @@ public class ReActAgent implements Agent {
             return this;
         }
 
+
+
+        /**
+         * 添加功能工具
+         *
+         * @param tool 工具对象
+         * @return 构建器
+         */
+        public Builder addDefaultTool(FunctionTool tool) {
+            config.getDefaultOptions().addTool(tool);
+            return this;
+        }
+
+        /**
+         * 批量添加工具
+         *
+         * @param tools 工具集合
+         * @return 构建器
+         */
+        public Builder addDefaultTool(Collection<FunctionTool> tools) {
+            config.getDefaultOptions().addTool(tools);
+            return this;
+        }
+
+        /**
+         * 通过提供者添加工具
+         *
+         * @param toolProvider 工具提供者
+         * @return 构建器
+         */
+        public Builder addDefaultTool(ToolProvider toolProvider) {
+            config.getDefaultOptions().addTool(toolProvider);
+            return this;
+        }
+
         /**
          * 添加生命周期拦截器
          *
          * @param vals 拦截器数组
          * @return 构建器
          */
-        public Builder addInterceptor(ReActInterceptor... vals) {
+        public Builder addDefaultInterceptor(ReActInterceptor... vals) {
             for (ReActInterceptor val : vals) {
                 config.getDefaultOptions().addInterceptor(val);
             }
@@ -554,7 +554,7 @@ public class ReActAgent implements Agent {
          * @param index 排序索引
          * @return 构建器
          */
-        public Builder addInterceptor(ReActInterceptor val, int index) {
+        public Builder addDefaultInterceptor(ReActInterceptor val, int index) {
             config.getDefaultOptions().addInterceptor(val, index);
             return this;
         }

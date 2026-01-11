@@ -12,7 +12,6 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
-import org.noear.solon.flow.FlowContext;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -29,7 +28,7 @@ public class ReActAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new LoopTools()))
+                .addDefaultTool(new MethodToolProvider(new LoopTools()))
                 .chatOptions(o -> o.temperature(0.0F))
                 .maxSteps(3) // 限制最多 3 步迭代
                 .build();
@@ -57,7 +56,7 @@ public class ReActAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new BasicTools()))
+                .addDefaultTool(new MethodToolProvider(new BasicTools()))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_tool_not_found");
@@ -73,7 +72,7 @@ public class ReActAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new ErrorTools()))
+                .addDefaultTool(new MethodToolProvider(new ErrorTools()))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_tool_error");
@@ -105,7 +104,7 @@ public class ReActAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new BasicTools()))
+                .addDefaultTool(new MethodToolProvider(new BasicTools()))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_empty");

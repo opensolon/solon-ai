@@ -63,8 +63,7 @@ public class ReActAgentHitlTest {
 
         // 2. 构建 ReActAgent 并配置拦截器
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new RefundTools()))
-                .addInterceptor(hitlInterceptor) // 注入人工介入拦截器
+                .addDefaultTool(new MethodToolProvider(new RefundTools()))
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();
 
@@ -74,7 +73,11 @@ public class ReActAgentHitlTest {
 
         // --- 第一步：发起请求，预期会被拦截 ---
         System.out.println("--- 第一次调用 (预期拦截) ---");
-        String result1 = agent.call(Prompt.of(prompt), session).getContent();
+        String result1 = agent.prompt(prompt)
+                .options(o -> o.interceptorAdd(hitlInterceptor)) //添加拦截器
+                .session(session)
+                .call()
+                .getContent();
 
         // 通过 session.getSnapshot() 获取底层的 FlowContext 进行验证
         FlowContext context = session.getSnapshot();
@@ -95,7 +98,11 @@ public class ReActAgentHitlTest {
         // --- 第三步：恢复执行 ---
         System.out.println("--- 第二次调用 (恢复执行) ---");
         // 恢复时传入相同的 session，prompt 会从 state 中自动获取
-        String result2 = agent.call(session).getContent();
+        String result2 = agent.prompt(prompt)
+                .options(o -> o.interceptorAdd(hitlInterceptor)) //添加拦截器
+                .session(session)
+                .call()
+                .getContent();
 
         // 验证：最终结果应包含退款成功的关键字
         Assertions.assertNotNull(result2, "结果不应为空");
@@ -183,8 +190,8 @@ public class ReActAgentHitlTest {
 
         // 构建带完整拦截器的 ReActAgent
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new BasicTools()))
-                .addInterceptor(fullInterceptor)
+                .addDefaultTool(new MethodToolProvider(new BasicTools()))
+                .addDefaultInterceptor(fullInterceptor)
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();
 

@@ -17,7 +17,7 @@ public class DemoApp {
                 .build();
 
         ReActAgent robot = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new TimeTool()))
+                .addDefaultTool(new MethodToolProvider(new TimeTool()))
                 .build();
 
         String answer = robot.prompt("现在几点了？")

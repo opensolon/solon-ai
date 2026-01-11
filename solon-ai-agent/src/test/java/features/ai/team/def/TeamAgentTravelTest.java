@@ -31,7 +31,7 @@ public class TeamAgentTravelTest {
                 .addAgent(ReActAgent.of(chatModel)
                         .name("searcher")
                         .description("负责查询实时天气。必须基于 query 工具的 Observation 给出明确结论。")
-                        .addTool(new MethodToolProvider(new WeatherService()))
+                        .addDefaultTool(new MethodToolProvider(new WeatherService()))
                         .build())
                 .addAgent(ReActAgent.of(chatModel)
                         .name("planner")
