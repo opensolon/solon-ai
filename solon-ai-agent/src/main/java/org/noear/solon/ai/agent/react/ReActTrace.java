@@ -293,6 +293,23 @@ public class ReActTrace implements AgentTrace {
         }
     }
 
+    public AssistantMessage getLastAssistantMessage() {
+        List<ChatMessage> currentMessages = this.messages;
+
+        for (int i = currentMessages.size() - 1; i >= 0; i--) {
+            try {
+                ChatMessage msg = currentMessages.get(i);
+                if (msg instanceof AssistantMessage) {
+                    return (AssistantMessage) msg;
+                }
+            } catch (IndexOutOfBoundsException e) {
+                // 防御 CopyOnWriteArrayList 在极短时间内被 replaceMessages 清空的情况
+                return null;
+            }
+        }
+        return null;
+    }
+
     /**
      * 追加单条消息并进入历史轨迹
      */

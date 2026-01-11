@@ -72,6 +72,10 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
         return medias;
     }
 
+    public boolean hasMedias(){
+        return Utils.isNotEmpty(medias);
+    }
+
     /**
      * 获取图像
      */

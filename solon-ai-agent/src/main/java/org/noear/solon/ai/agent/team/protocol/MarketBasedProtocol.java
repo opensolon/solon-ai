@@ -50,6 +50,10 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     public static class MarketState {
         private final Map<String, AgentProfile> marketplace = new LinkedHashMap<>();
 
+        public Map<String, AgentProfile> getMarketplace() {
+            return marketplace;
+        }
+
         public static class AgentProfile {
             public double quality = 0.8;
             public double efficiency = 0.7;
@@ -75,13 +79,18 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
             profile.quality = (profile.quality * 0.6) + (q * 0.4);
             profile.efficiency = (profile.efficiency * 0.6) + (e * 0.4);
 
-            /* * 优化后的动态定价逻辑：
-             * 1. 基础系数由质量决定 (0.5 ~ 1.5 之间波动)
-             * 2. 溢价系数由成交量决定 (小幅正向反馈)
-             */
-            double qualityFactor = 0.5 + profile.quality; // 质量越高价格越高
-            double volumePremium = 1.0 + (profile.completedTasks * 0.05);
-            profile.currentPrice = profile.basePrice * qualityFactor * volumePremium;
+            // 1. 质量系数：保持 0.5 ~ 1.5 波动
+            double qualityFactor = 0.5 + profile.quality;
+
+// 2. 经验/成交溢价：改为对数增长，让价格曲线更平滑
+// Math.log1p(x) 即 ln(1+x)，起步快，后期慢
+            double volumePremium = 1.0 + Math.log1p(profile.completedTasks) * 0.15;
+
+// 3. 多模态倍率：保持不变
+            double modalityMultiplier = agent.profile().getInputModes().contains("image") ? 1.5 : 1.0;
+
+// 最终定价
+            profile.currentPrice = profile.basePrice * qualityFactor * volumePremium * modalityMultiplier;
         }
 
         @Override
@@ -121,6 +130,15 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
         } else {
             sb.append("> Strategy Tips:\n> - Prioritize agents with ROI > 1.0 for high-value output.\n");
             sb.append("> - For routine tasks with limited budget, assign agents with lower Price.");
+        }
+
+        String bestRoiAgent = state.getMarketplace().entrySet().stream()
+                .max(Comparator.comparingDouble(e -> e.getValue().getROI()))
+                .map(Map.Entry::getKey).orElse(null);
+
+        if(bestRoiAgent != null) {
+            sb.append(isZh ? "\n> **当前性价比之王**：" : "\n> **Top ROI Agent**:")
+                    .append(bestRoiAgent);
         }
 
         super.prepareSupervisorInstruction(context, trace, sb);
@@ -171,11 +189,16 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
 
     private double assessQuality(String content) {
         if (Utils.isEmpty(content)) return 0.1;
-        // 简单启发式：通过长度和格式标志判断诚意度
-        if (content.contains("```") && content.length() > 500) return 0.95;
-        if (content.length() > 200) return 0.8;
-        if (content.length() < 20) return 0.3; // 回复太短可能是敷衍
-        return 0.6;
+        double score = 0.5;
+
+        // 维度1：格式规范
+        if (content.contains("```")) score += 0.2;
+        // 维度2：完成度标识 (假设 Agent 会输出 [Done])
+        if (content.contains("[Done]") || content.contains("SUCCESS")) score += 0.2;
+        // 维度3：异常规避
+        if (content.contains("I'm sorry") || content.contains("cannot fulfill")) score -= 0.4;
+
+        return Math.min(1.0, Math.max(0.1, score));
     }
 
     @Override

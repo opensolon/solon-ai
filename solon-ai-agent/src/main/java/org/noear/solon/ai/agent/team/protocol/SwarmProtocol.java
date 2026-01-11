@@ -75,6 +75,16 @@ public class SwarmProtocol extends TeamProtocolBase {
     }
 
     @Override
+    public void injectAgentInstruction(Agent agent, Locale locale, StringBuilder sb) {
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        if (isZh) {
+            sb.append("\n- 协作提醒：若发现当前任务需拆解，请在输出结尾附加 JSON: `{\"sub_tasks\": [{\"task\": \"任务描述\", \"agent\": \"建议执行者\"}]}`");
+        } else {
+            sb.append("\n- Collaboration: If the task needs decomposition, append JSON at the end: `{\"sub_tasks\": [{\"task\": \"description\", \"agent\": \"target_agent\"}]}`");
+        }
+    }
+
+    @Override
     public String resolveAgentOutput(TeamTrace trace, Agent agent, String rawContent) {
         if (Utils.isEmpty(rawContent)) return rawContent;
 

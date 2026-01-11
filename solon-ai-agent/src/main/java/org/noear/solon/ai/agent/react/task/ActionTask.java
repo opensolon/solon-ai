@@ -83,17 +83,14 @@ public class ActionTask implements NamedTaskComponent {
 
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
-        ChatMessage lastMessage = trace.getLastMessage();
+        AssistantMessage lastAssistant = trace.getLastAssistantMessage();
 
         // --- 策略 A: 处理原生工具调用 (Native Tool Calls) ---
-        if (lastMessage instanceof AssistantMessage) {
-            AssistantMessage lastAssistant = (AssistantMessage) lastMessage;
-            if (Assert.isNotEmpty(lastAssistant.getToolCalls())) {
-                for (ToolCall call : lastAssistant.getToolCalls()) {
-                    processNativeToolCall(trace, call);
-                }
-                return; // 原生模式处理完毕
+        if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
+            for (ToolCall call : lastAssistant.getToolCalls()) {
+                processNativeToolCall(trace, call);
             }
+            return;
         }
 
         // --- 策略 B: 处理文本 ReAct 格式 (ReAct Text Mode) ---
