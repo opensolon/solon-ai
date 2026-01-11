@@ -12,11 +12,9 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Collection;
 
-@DisplayName("会话存储存储测试")
 public class InMemorySessionTest {
 
     @Test
-    @DisplayName("基础消息归档与提取测试")
     public void testBasicStorage() {
         AgentSession session = InMemoryAgentSession.of("test_s1");
         String agentName = "Worker";
@@ -34,7 +32,6 @@ public class InMemorySessionTest {
     }
 
     @Test
-    @DisplayName("消息自动清理(MaxMessages)逻辑测试")
     public void testMessageEviction() {
         // 设置最大容量为 2
         AgentSession session = InMemoryAgentSession.of("test_s2", 2);
@@ -51,7 +48,6 @@ public class InMemorySessionTest {
     }
 
     @Test
-    @DisplayName("消息自动清理(MaxMessages)逻辑修复测试")
     public void testMessageEvictionFixed() {
         // 1. 设置最大容量为 2
         int max = 2;

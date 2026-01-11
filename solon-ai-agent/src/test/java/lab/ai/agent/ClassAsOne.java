@@ -15,9 +15,9 @@ public class ClassAsOne {
 
 //        print("/solon-ai-agent/src/test/java/features/ai/team");
 //
-//        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/team");
+        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/team");
 
-        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/react");
+//        print("/solon-ai-agent/src/main/java/org/noear/solon/ai/agent/react");
     }
 
     public static void print(String dir) throws IOException {

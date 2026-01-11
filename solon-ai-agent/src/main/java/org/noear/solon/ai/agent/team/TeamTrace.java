@@ -45,37 +45,63 @@ import java.util.stream.Collectors;
  */
 @Preview("3.8.1")
 public class TeamTrace implements AgentTrace {
-    /** 关联的团队配置（生命周期内稳定，不参与持久化序列化） */
+    /**
+     * 关联的团队配置（生命周期内稳定，不参与持久化序列化）
+     */
     private transient TeamConfig config;
     private transient TeamOptions options;
-    /** 当前活跃的会话上下文（持有底层 LLM 记忆，不参与持久化序列化） */
+    /**
+     * 当前活跃的会话上下文（持有底层 LLM 记忆，不参与持久化序列化）
+     */
     private transient AgentSession session;
 
-    /** 历史记录的格式化快照（Markdown 优化版） */
+    /**
+     * 历史记录的格式化快照（Markdown 优化版）
+     */
     private transient String cachedFormattedHistory;
-    /** 脏位标记：用于实现格式化历史的延迟加载与缓存失效逻辑 */
+    /**
+     * 脏位标记：用于实现格式化历史的延迟加载与缓存失效逻辑
+     */
     private transient boolean isUpdateHistoryCache = true;
 
-    /** 当前正在处理任务的 Agent 标识 */
+    /**
+     * 当前正在处理任务的 Agent 标识
+     */
     private String agentName;
-    /** 任务的活跃提示词（随协作阶段可能动态裁剪或重组） */
+    /**
+     * 任务的活跃提示词（随协作阶段可能动态裁剪或重组）
+     */
     private Prompt prompt;
-    /** 协作流水账：按时间轴线性记录的执行步骤详情 */
+    /**
+     * 协作流水账：按时间轴线性记录的执行步骤详情
+     */
     private final List<TeamStep> steps = new CopyOnWriteArrayList<>();
 
-    /** 路由决策结果：指向下一个待执行的 Agent 名称或系统终止符 (ID_END) */
+    /**
+     * 路由决策结果：指向下一个待执行的 Agent 名称或系统终止符 (ID_END)
+     */
     private volatile String route;
-    /** 记录调度器（Supervisor）输出的原始推理文本，用于异常复盘与自省 */
+    /**
+     * 记录调度器（Supervisor）输出的原始推理文本，用于异常复盘与自省
+     */
     private volatile String lastDecision;
-    /** 记录最后运行的智能体名字 */
+    /**
+     * 记录最后运行的智能体名字
+     */
     private volatile String lastAgentName;
-    /** 迭代安全计数器：限制协作的最大深度，防止 LLM 幻觉导致的无限递归 */
+    /**
+     * 迭代安全计数器：限制协作的最大深度，防止 LLM 幻觉导致的无限递归
+     */
     private final AtomicInteger iterationCounter;
 
-    /** 协议私有存储域：允许不同协作模式存储非标准数据（如竞标书、移交说明等） */
+    /**
+     * 协议私有存储域：允许不同协作模式存储非标准数据（如竞标书、移交说明等）
+     */
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
 
-    /** 最终对外交付的结构化答案 */
+    /**
+     * 最终对外交付的结构化答案
+     */
     private String finalAnswer;
 
     public TeamTrace() {
@@ -128,42 +154,90 @@ public class TeamTrace implements AgentTrace {
 
     // --- 核心元数据访问 ---
 
-    public String getAgentName() { return agentName; }
-    public TeamConfig getConfig() { return config; }
+    public String getAgentName() {
+        return agentName;
+    }
+
+    public TeamConfig getConfig() {
+        return config;
+    }
 
     public TeamOptions getOptions() {
         return options;
     }
 
-    public AgentSession getSession() { return session; }
+    public AgentSession getSession() {
+        return session;
+    }
+
     /**
      * 获取流程上下文
      */
-    public FlowContext getContext(){
-        if(session != null){
+    public FlowContext getContext() {
+        if (session != null) {
             return session.getSnapshot();
         } else {
             return null;
         }
     }
-    public TeamProtocol getProtocol() { return config.getProtocol(); }
-    public Prompt getPrompt() { return prompt; }
-    protected void setPrompt(Prompt prompt) { this.prompt = prompt; }
-    public String getRoute() { return route; }
-    public void setRoute(String route) { this.route = route; }
-    public String getLastDecision() { return lastDecision; }
-    public void setLastDecision(String decision) { this.lastDecision = decision; }
-    public String getLastAgentName() { return lastAgentName; }
-    public void setLastAgentName(String agentName) { this.lastAgentName = agentName; }
-    public int getIterationsCount() { return iterationCounter.get(); }
-    public void resetIterationsCount() { iterationCounter.set(0); }
-    public int nextIterations() { return iterationCounter.incrementAndGet(); }
+
+    public TeamProtocol getProtocol() {
+        return config.getProtocol();
+    }
+
+    public Prompt getPrompt() {
+        return prompt;
+    }
+
+    protected void setPrompt(Prompt prompt) {
+        this.prompt = prompt;
+    }
+
+    public String getRoute() {
+        return route;
+    }
+
+    public void setRoute(String route) {
+        this.route = route;
+    }
+
+    public String getLastDecision() {
+        return lastDecision;
+    }
+
+    public void setLastDecision(String decision) {
+        this.lastDecision = decision;
+    }
+
+    public String getLastAgentName() {
+        return lastAgentName;
+    }
+
+    public void setLastAgentName(String agentName) {
+        this.lastAgentName = agentName;
+    }
+
+    public int getIterationsCount() {
+        return iterationCounter.get();
+    }
+
+    public void resetIterationsCount() {
+        iterationCounter.set(0);
+    }
+
+    public int nextIterations() {
+        return iterationCounter.incrementAndGet();
+    }
 
     /**
      * 获取协议共享上下文（用于 A2A 移交、市场竞标等复杂逻辑）
      */
     public Map<String, Object> getProtocolContext() {
         return protocolContext;
+    }
+
+    public <T> T getProtocolContextAs(String key) {
+        return (T) protocolContext.get(key);
     }
 
     /**
@@ -207,18 +281,29 @@ public class TeamTrace implements AgentTrace {
         return Collections.unmodifiableList(steps);
     }
 
-    public String getFinalAnswer() { return finalAnswer; }
-    public void setFinalAnswer(String finalAnswer) { this.finalAnswer = finalAnswer; }
+    public String getFinalAnswer() {
+        return finalAnswer;
+    }
+
+    public void setFinalAnswer(String finalAnswer) {
+        this.finalAnswer = finalAnswer;
+    }
 
     /**
      * 协作足迹详情（单次执行的审计快照）
      */
     public static class TeamStep {
-        /** 执行此步骤的智能体 */
+        /**
+         * 执行此步骤的智能体
+         */
         private final String agentName;
-        /** 该步骤产出的内容快照 */
+        /**
+         * 该步骤产出的内容快照
+         */
         private final String content;
-        /** 本轮推理消耗的物理耗时（毫秒） */
+        /**
+         * 本轮推理消耗的物理耗时（毫秒）
+         */
         private final long duration;
 
         public TeamStep(String agentName, String content, long duration) {
@@ -227,8 +312,16 @@ public class TeamTrace implements AgentTrace {
             this.duration = duration;
         }
 
-        public String getAgentName() { return agentName; }
-        public String getContent() { return content; }
-        public long getDuration() { return duration; }
+        public String getAgentName() {
+            return agentName;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public long getDuration() {
+            return duration;
+        }
     }
 }

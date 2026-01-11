@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,28 +15,30 @@
  */
 package org.noear.solon.ai.agent.team.protocol;
 
+import org.noear.snack4.ONode;
+import org.noear.solon.Utils;
+import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.flow.FlowContext;
-import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Locale;
+import java.util.*;
 
 /**
- * 黑板协作协议 (Blackboard Protocol)
- *
- * <p>黑板模式是一种经典的协作模式，所有 Agent 共享一个公共的"黑板"（协作历史），
- * 每个 Agent 都可以读取黑板上的信息，并在自己有能力解决问题时写入新的信息。</p>
- *
- * <p><b>核心机制：</b></p>
- * <ul>
- * <li><b>共享状态</b>：所有协作历史作为公共黑板，Agent 可以看到完整上下文</li>
- * <li><b>机会主义协作</b>：Agent 主动识别自己能解决的问题，而不是被动分配</li>
- * <li><b>渐进求精</b>：通过多轮迭代逐步完善解决方案</li>
- * </ul>
+ * 黑板协作协议 (Blackboard Protocol) - 增强独立版
+ * * 特点：
+ * 1. 独立状态管理 (BoardState)，不与其他协议耦合。
+ * 2. 结构化看板驱动，自动提取并增量维护任务清单 (Todo List)。
+ * 3. 强化数据持久性，确保关键结论跨轮次存在。
  *
  * @author noear
  * @since 3.8.1
@@ -45,30 +47,60 @@ import java.util.Locale;
 public class BlackboardProtocol_H extends HierarchicalProtocol_H {
     private static final Logger LOG = LoggerFactory.getLogger(BlackboardProtocol_H.class);
 
-    /** 黑板状态摘要的最大长度 */
-    private int blackboardSummaryMaxLength = 1000;
+    private static final String KEY_BOARD_DATA = "blackboard_state_obj";
+    private static final String TOOL_SYNC = "__sync_to_blackboard__";
 
-    /** 是否启用智能摘要 */
-    private boolean enableSmartSummary = true;
+    /**
+     * 黑板协议专用的内部状态对象
+     */
+    public static class BoardState {
+        private final Map<String, Object> data = new LinkedHashMap<>();
+        private final List<String> todos = new ArrayList<>();
+
+        public void merge(String json) {
+            if (Utils.isEmpty(json)) return;
+            try {
+                // 使用 SNACK4 4.0 推荐的 load 方式
+                ONode node = ONode.ofJson(json);
+                if (node.isObject()) {
+                    node.getObjectUnsafe().forEach((k, v) -> {
+                        if ("todo".equalsIgnoreCase(k) && v.isArray()) {
+                            // 增量更新任务清单，避免重复
+                            v.getArrayUnsafe().forEach(i -> {
+                                String task = i.getString();
+                                if (Utils.isNotEmpty(task) && !todos.contains(task)) {
+                                    todos.add(task);
+                                }
+                            });
+                        } else {
+                            // 深度转换为 POJO/Map 存储
+                            data.put(k, v.toBean());
+                        }
+                    });
+                }
+            } catch (Exception e) {
+                LOG.warn("Blackboard state merge failed: {}", json, e);
+            }
+        }
+
+        public boolean isEmpty() {
+            return data.isEmpty() && todos.isEmpty();
+        }
+
+        @Override
+        public String toString() {
+            ONode root = new ONode().asObject();
+            data.forEach(root::set);
+            if (!todos.isEmpty()) {
+                ONode todoNode = root.getOrNew("todo");
+                todos.forEach(todoNode::add);
+            }
+            return root.toJson();
+        }
+    }
 
     public BlackboardProtocol_H(TeamConfig config) {
         super(config);
-    }
-
-    /**
-     * 设置黑板摘要的最大长度
-     */
-    public BlackboardProtocol_H withSummaryMaxLength(int maxLength) {
-        this.blackboardSummaryMaxLength = Math.max(100, maxLength);
-        return this;
-    }
-
-    /**
-     * 启用或禁用智能摘要
-     */
-    public BlackboardProtocol_H withSmartSummary(boolean enabled) {
-        this.enableSmartSummary = enabled;
-        return this;
     }
 
     @Override
@@ -77,139 +109,104 @@ public class BlackboardProtocol_H extends HierarchicalProtocol_H {
     }
 
     @Override
-    public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
-        super.prepareSupervisorInstruction(context, trace, sb);
+    public void injectAgentTools(Agent agent, ReActTrace trace) {
+        Locale locale = config.getLocale();
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
 
-        // 为黑板协议提供特定的历史分析摘要
-        String blackboardSummary = generateBlackboardSummary(trace);
-        if (blackboardSummary != null && !blackboardSummary.isEmpty()) {
-            sb.append("\n\n### 当前黑板状态摘要\n");
-            sb.append(blackboardSummary);
-        }
-    }
-
-    /**
-     * 生成黑板状态摘要
-     */
-    @Nullable
-    protected String generateBlackboardSummary(TeamTrace trace) {
-        if (trace == null || trace.getSteps().isEmpty()) {
-            return null;
-        }
-
-        StringBuilder summary = new StringBuilder();
-        Locale locale = trace.getConfig().getLocale();
-        boolean isChinese = Locale.CHINA.getLanguage().equals(locale.getLanguage());
-
-        if (isChinese) {
-            summary.append("当前黑板上已有 ").append(trace.getStepCount()).append(" 条记录：\n");
+        FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_SYNC);
+        if (isZh) {
+            toolDesc.title("同步到黑板")
+                    .description("将本阶段的核心结论或下一步计划同步到全局黑板看板。")
+                    .stringParamAdd("state", "JSON格式数据。示例: {\"project_id\":\"123\", \"todo\":[\"执行代码生成的专家检查\"]}");
         } else {
-            summary.append("Current blackboard has ").append(trace.getStepCount()).append(" entries:\n");
+            toolDesc.title("Sync to Blackboard")
+                    .description("Synchronize key findings or next steps to the shared blackboard.")
+                    .stringParamAdd("state", "JSON data. E.g., {\"status\":\"validated\", \"todo\":[\"run security scan\"]}");
         }
 
-        // 提取关键信息
-        int recentSteps = Math.min(5, trace.getStepCount());
-        for (int i = Math.max(0, trace.getStepCount() - recentSteps); i < trace.getStepCount(); i++) {
-            TeamTrace.TeamStep step = trace.getSteps().get(i);
-            String content = extractKeyInfo(step.getContent(), isChinese);
-
-            if (isChinese) {
-                summary.append("- **").append(step.getAgentName()).append("**: ")
-                        .append(content).append("\n");
-            } else {
-                summary.append("- **").append(step.getAgentName()).append("**: ")
-                        .append(content).append("\n");
-            }
-        }
-
-        // 分析可能的缺失或问题
-        String gapAnalysis = analyzeGaps(trace, isChinese);
-        if (gapAnalysis != null && !gapAnalysis.isEmpty()) {
-            summary.append("\n").append(gapAnalysis);
-        }
-
-        // 限制摘要长度
-        if (summary.length() > blackboardSummaryMaxLength && enableSmartSummary) {
-            return summary.substring(0, blackboardSummaryMaxLength) + "...";
-        }
-
-        return summary.toString();
+        toolDesc.doHandle(args -> "System: Blackboard state updated.");
+        trace.addProtocolTool(toolDesc);
     }
 
-    /**
-     * 从内容中提取关键信息
-     */
-    private String extractKeyInfo(String content, boolean isChinese) {
-        if (content == null || content.isEmpty()) {
-            return isChinese ? "无内容" : "No content";
+    @Override
+    public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
+        BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
+        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+
+        sb.append(isZh ? "\n\n### 💡 黑板看板 (当前共识)\n" : "\n\n### 💡 Blackboard (Current Consensus)\n");
+        if (state != null && !state.isEmpty()) {
+            sb.append("```json\n").append(state.toString()).append("\n```\n");
+        } else {
+            sb.append(isZh ? "> 尚无看板数据，等待专家上报...\n" : "> No board data, waiting for expert reports...\n");
         }
 
-        // 简化内容，保留关键信息
-        String simplified = content.replace("\n", " ").trim();
-
-        // 截取合理长度
-        int maxLength = 80;
-        if (simplified.length() > maxLength) {
-            simplified = simplified.substring(0, maxLength) + "...";
-        }
-
-        return simplified;
+        // 继承父类的步骤摘要
+        super.prepareSupervisorInstruction(context, trace, sb);
     }
 
-    /**
-     * 分析黑板上的信息缺口
-     */
-    @Nullable
-    private String analyzeGaps(TeamTrace trace, boolean isChinese) {
-        // 这里可以添加更复杂的缺口分析逻辑
-        // 例如：检查是否有设计但无实现，有数据但无分析等
-
-        // 简单的实现：检查最近的步骤类型
-        if (trace.getStepCount() >= 2) {
-            String lastAgent = trace.getSteps().get(trace.getStepCount() - 1).getAgentName();
-            String secondLastAgent = trace.getSteps().get(trace.getStepCount() - 2).getAgentName();
-
-            // 如果连续两个步骤是同一个Agent，可能存在问题
-            if (lastAgent.equals(secondLastAgent)) {
-                return isChinese ?
-                        "注意：同一专家连续执行，可能需要其他专家介入检查。" :
-                        "Note: Same expert executed consecutively, may need other expert review.";
+    @Override
+    public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        String lastAgent = trace.getLastAgentName();
+        if (Utils.isNotEmpty(lastAgent)) {
+            AgentTrace latestTrace = context.getAs("__" + lastAgent);
+            if (latestTrace instanceof ReActTrace) {
+                String rawState = extractValueFromTool((ReActTrace) latestTrace, TOOL_SYNC, "state");
+                if (Utils.isNotEmpty(rawState)) {
+                    BoardState state = (BoardState) trace.getProtocolContext()
+                            .computeIfAbsent(KEY_BOARD_DATA, k -> new BoardState());
+                    state.merge(rawState);
+                }
             }
         }
-
-        return null;
+        return super.resolveSupervisorRoute(context, trace, decision);
     }
 
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
-        if (Locale.CHINA.getLanguage().equals(locale.getLanguage())) {
-            sb.append("\n## 协作协议：").append(name()).append("\n");
-            sb.append("1. **黑板机制**：历史记录即公共黑板，所有专家都可以看到完整的协作历史。\n");
-            sb.append("2. **缺口驱动**：主动识别黑板上的信息缺口、矛盾或需要完善的地方。\n");
-            sb.append("3. **机会主义协作**：指派最能解决当前最紧迫问题的专家执行。\n");
-            sb.append("4. **渐进求精**：通过多轮迭代逐步完善解决方案，每次解决一个具体问题。");
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        if (isZh) {
+            sb.append("\n## 黑板协作守则\n");
+            sb.append("- **依据看板决策**：优先处理 JSON 中 todo 列表里的事项。\n");
+            sb.append("- **数据闭环**：如果看板已提供所需答案，请直接总结并结束。");
         } else {
-            sb.append("\n## Collaboration Protocol: ").append(name()).append("\n");
-            sb.append("1. **Blackboard Mechanism**: All experts see the complete collaboration history as a shared blackboard.\n");
-            sb.append("2. **Gap-Driven**: Actively identify gaps, contradictions, or areas needing improvement on the blackboard.\n");
-            sb.append("3. **Opportunistic Collaboration**: Assign the expert best suited to solve the most pressing current issue.\n");
-            sb.append("4. **Progressive Refinement**: Refine the solution through iterations, solving one specific problem at a time.");
+            sb.append("\n## Blackboard Rules\n");
+            sb.append("- **State-Based Decision**: Prioritize items in the JSON 'todo' list.\n");
+            sb.append("- **Early Exit**: If the board contains sufficient answers, conclude the task.");
         }
     }
 
-    @Override
-    public boolean shouldSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
-        // 黑板模式下，Supervisor 应该总是执行，因为需要动态分析黑板状态
-        return true;
+    private String extractValueFromTool(ReActTrace rt, String toolName, String key) {
+        List<ChatMessage> messages = rt.getMessages();
+        if (messages == null) return null;
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = messages.get(i);
+            if (msg instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) msg;
+                if (am.getToolCalls() != null) {
+                    for (ToolCall tc : am.getToolCalls()) {
+                        if (toolName.equals(tc.name())) {
+                            return extractJsonValue(tc.arguments(), key);
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private String extractJsonValue(Object args, String key) {
+        if (args instanceof Map) return String.valueOf(((Map<?, ?>) args).get(key));
+        if (args instanceof String) {
+            try {
+                return ONode.ofJson((String) args).get(key).getString();
+            } catch (Exception ignored) {}
+        }
+        return null;
     }
 
     @Override
     public void onTeamFinished(FlowContext context, TeamTrace trace) {
+        trace.getProtocolContext().remove(KEY_BOARD_DATA);
         super.onTeamFinished(context, trace);
-
-        // 黑板协议特定的清理或记录
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Blackboard Protocol - Final blackboard state had {} entries", trace.getStepCount());
-        }
     }
 }
