@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.util.Locale;
@@ -78,8 +79,14 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
         } else {
             sb.append("\n## Available Tools\n");
-            trace.getConfig().getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ")
-                    .append(t.description()).append("\n"));
+            trace.getConfig().getTools().forEach(t -> {
+                sb.append("- ").append(t.name()).append(": ").append(t.description());
+                // Crucial: Append Input Schema for accurate tool calling
+                if (Assert.isNotEmpty(t.inputSchema())) {
+                    sb.append(" Input Schema: ").append(t.inputSchema());
+                }
+                sb.append("\n");
+            });
         }
 
         return sb.toString();

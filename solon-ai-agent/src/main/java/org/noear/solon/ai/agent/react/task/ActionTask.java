@@ -207,7 +207,9 @@ public class ActionTask implements NamedTaskComponent {
 
             } catch (IllegalArgumentException e) {
                 //参数校验异常，喂给模型进行自愈修复
-                return "Invalid arguments for [" + name + "]: " + e.getMessage();
+                return "Invalid arguments for [" + name + "]. " +
+                        "Expected Schema: " + tool.inputSchema() + ". " +
+                        "Error: " + e.getMessage();
             } catch (Throwable e) {
                 LOG.error("Error executing tool: " + name, e);
                 // 返回异常信息给模型，模型通常能识别错误并尝试修复参数后重试

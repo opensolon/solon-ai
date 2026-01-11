@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.util.Locale;
@@ -78,8 +79,14 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
             sb.append("\n注意：当前没有可用工具。请直接给出 Final Answer。\n");
         } else {
             sb.append("\n## 可用工具\n");
-            trace.getConfig().getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ")
-                    .append(t.description()).append("\n"));
+            trace.getConfig().getTools().forEach(t -> {
+                sb.append("- ").append(t.name()).append(": ").append(t.description());
+                // 关键改进：如果定义了参数 Schema，一定要输出给模型看
+                if (Assert.isNotEmpty(t.inputSchema())) {
+                    sb.append(" 参数定义: ").append(t.inputSchema());
+                }
+                sb.append("\n");
+            });
         }
 
         return sb.toString();
