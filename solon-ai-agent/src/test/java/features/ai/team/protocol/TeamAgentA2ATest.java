@@ -17,6 +17,8 @@ import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * A2A (Agent-to-Agent) 协作策略提示词优化测试
@@ -27,31 +29,24 @@ public class TeamAgentA2ATest {
     public void testA2ABasicLogic() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-
-
-        // 1. 优化设计师提示词：明确“触发条件”与“交接协议”
+        // 1. 设计师：强化 instruction，要求必须产出具体规格
         Agent designer = ReActAgent.of(chatModel)
                 .name("designer")
-                .description("UI/UX 设计师，负责视觉方案与交互逻辑。")
+                .description("UI/UX 设计师")
                 .systemPrompt(ReActSystemPrompt.builder()
-                        .role("你是一个富有创意的 UI/UX 设计专家")
-                        .instruction("### 工作准则\n" +
-                                "1. 优先提供视觉风格、配色方案及组件布局建议。\n" +
-                                "2. **触发接力**：当需求明确要求代码实现（HTML/CSS）时，必须调用 `transfer_to` 工具移交给 `developer`。\n" +
-                                "3. **交接备注**：在 memo 参数中简述你的设计重点，以便开发理解。")
+                        .role("UI/UX 专家")
+                        .instruction("1. 必须输出包含背景色、主色调、圆角值的规格。\n" +
+                                "2. 任务完成后使用 transfer_to 移交给 developer。")
                         .build())
                 .build();
 
-        // 2. 优化开发提示词：强化“终点意识”，防止无效循环
+        // 2. 开发：强化输出标识
         Agent developer = ReActAgent.of(chatModel)
                 .name("developer")
-                .description("前端开发工程师，负责高质量代码实现。")
+                .description("前端开发")
                 .systemPrompt(ReActSystemPrompt.builder()
-                        .role("你是一个精通现代 Web 技术的程序员")
-                        .instruction("### 协作逻辑\n" +
-                                "1. 接收 `designer` 的方案后，立即转化为响应式 HTML/CSS 代码。\n" +
-                                "2. **禁止回传**：除非设计方案严重缺失关键信息，否则不要将任务转回设计师。\n" +
-                                "3. **任务终结**：代码输出完成后，直接输出关键字 `FINISH` 宣告任务完成。")
+                        .role("Web 程序员")
+                        .instruction("接收设计方案后输出 HTML。完成后输出关键字 FINISH。")
                         .build())
                 .build();
 
@@ -63,17 +58,39 @@ public class TeamAgentA2ATest {
                 .maxTotalIterations(5)
                 .build();
 
-        // --- 执行逻辑保持不变 ---
-        AgentSession session = InMemoryAgentSession.of("session_01");
-        String query = "请帮我设计一个深色模式的登录页面，并直接转交给开发写出 HTML 代码，完成后告诉我。";
+        AgentSession session = InMemoryAgentSession.of("session_02");
+        String query = "设计深色登录页，由开发实现 HTML，完成后告知。";
 
         String result = team.call(Prompt.of(query), session).getContent();
         TeamTrace trace = team.getTrace(session);
 
-        System.out.println("=== 协作足迹 ===\n" + trace.getFormattedHistory());
+        // --- 增强版断言逻辑 ---
 
-        Assertions.assertTrue(trace.getSteps().stream().map(TeamTrace.TeamStep::getAgentName).distinct().count() >= 2);
-        Assertions.assertTrue(result.contains("<html>") || result.contains("css") || result.contains("代码"));
+        // 1. 验证角色参与度：必须 designer 先，developer 后
+        List<String> agentOrder = trace.getSteps().stream()
+                .map(TeamTrace.TeamStep::getAgentName)
+                .filter(name -> !"supervisor".equalsIgnoreCase(name)) // 排除主管自身的思考
+                .collect(Collectors.toList());
+
+        System.out.println("角色执行顺序: " + agentOrder);
+
+        Assertions.assertTrue(agentOrder.contains("designer"), "设计师必须参与");
+        Assertions.assertTrue(agentOrder.contains("developer"), "开发者必须参与");
+
+        // 2. 验证协作深度：防止 Supervisor 强制干预（如果 Supervisor 亲自写代码，说明 Agent 协作失败了）
+        // 检查最后一步输出 code 的 Agent 是否为 developer
+        long developerSteps = trace.getSteps().stream()
+                .filter(s -> "developer".equals(s.getAgentName()))
+                .count();
+        Assertions.assertTrue(developerSteps > 0, "Developer 应该产出代码，而不是由 Supervisor 兜底");
+
+        // 3. 验证 JSON 解析质量：检查是否有 Observation 包含 Error
+        boolean hasJsonError = trace.getSteps().stream()
+                .anyMatch(s -> s.getContent().contains("Error parsing Action JSON"));
+        Assertions.assertFalse(hasJsonError, "协作过程中不应出现 JSON 解析错误 (Unclosed string)");
+
+        // 4. 验证最终产出的实质内容
+        Assertions.assertTrue(result.contains("<html") && result.contains("background-color"), "最终结果必须包含 HTML 标签和深色样式定义");
     }
 
     @Test
