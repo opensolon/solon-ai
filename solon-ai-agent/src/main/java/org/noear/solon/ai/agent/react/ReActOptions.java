@@ -85,11 +85,11 @@ public class ReActOptions implements NonSerializable {
     /**
      * 添加工具调用上下文
      */
-    protected void addToolsContext(Map<String, Object> toolsContext) {
+    protected void putToolsContext(Map<String, Object> toolsContext) {
         this.toolsContext.putAll(toolsContext);
     }
 
-    protected void addToolsContext(String key, Object value) {
+    protected void putToolsContext(String key, Object value) {
         this.toolsContext.put(key, value);
     }
 

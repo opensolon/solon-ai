@@ -46,8 +46,8 @@ public class TeamAgentContractNetTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("contract_team")
                 .protocol(TeamProtocols.CONTRACT_NET)
-                .addAgent(algoExpert)
-                .addAgent(uiExpert)
+                .agentAdd(algoExpert)
+                .agentAdd(uiExpert)
                 .build();
 
         // 打印图结构 YAML，观察竞标节点编排
@@ -103,8 +103,8 @@ public class TeamAgentContractNetTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("contract_overlap_team")
                 .protocol(TeamProtocols.CONTRACT_NET)
-                .addAgent(expert1)
-                .addAgent(expert2)
+                .agentAdd(expert1)
+                .agentAdd(expert2)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_contract_overlap");
@@ -137,7 +137,7 @@ public class TeamAgentContractNetTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.CONTRACT_NET)
-                .addAgent(programmer)
+                .agentAdd(programmer)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_no_match");
@@ -166,8 +166,8 @@ public class TeamAgentContractNetTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.CONTRACT_NET)
-                .addAgent(step1Expert)
-                .addAgent(step2Expert)
+                .agentAdd(step1Expert)
+                .agentAdd(step2Expert)
                 .maxTotalIterations(5)
                 .build();
 

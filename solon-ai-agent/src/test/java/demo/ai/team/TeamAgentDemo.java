@@ -37,7 +37,7 @@ public class TeamAgentDemo {
         Agent coder = ReActAgent.of(chatModel)
                 .name("coder")
                 .description("Java 程序员，擅长编写高质量代码并能通过工具验证运行结果。")
-                .addTool(new MethodToolProvider(new CodeExecutorTool()))
+                .toolAdd(new MethodToolProvider(new CodeExecutorTool()))
                 .build();
 
         // Writer: 负责逻辑解释与文档包装
@@ -49,8 +49,8 @@ public class TeamAgentDemo {
         // 2. 构建团队智能体（默认采用 Supervisor 模式）
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("dev_team")
-                .addAgent(coder)
-                .addAgent(writer)
+                .agentAdd(coder)
+                .agentAdd(writer)
                 .maxTotalIterations(10)
                 .build();
 

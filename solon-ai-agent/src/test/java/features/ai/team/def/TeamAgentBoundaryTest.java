@@ -42,7 +42,7 @@ public class TeamAgentBoundaryTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("solo_team")
-                .addAgent(soloAgent)
+                .agentAdd(soloAgent)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_solo");
@@ -69,8 +69,8 @@ public class TeamAgentBoundaryTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("loop_team")
-                .addAgent(agentA)
-                .addAgent(agentB)
+                .agentAdd(agentA)
+                .agentAdd(agentB)
                 .maxTotalIterations(3) // 强制限制迭代次数
                 .build();
 
@@ -97,7 +97,7 @@ public class TeamAgentBoundaryTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("restore_context_team")
-                .addAgent(agent)
+                .agentAdd(agent)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_null_restore");
@@ -120,7 +120,7 @@ public class TeamAgentBoundaryTest {
         TeamAgent.Builder builder = TeamAgent.of(chatModel).name("large_team");
 
         for (int i = 0; i < 5; i++) {
-            builder.addAgent(ReActAgent.of(chatModel)
+            builder.agentAdd(ReActAgent.of(chatModel)
                     .name("agent_" + i)
                     .description("我是第 " + i + " 号专家，负责特定模块的分析")
                     .build());
@@ -148,7 +148,7 @@ public class TeamAgentBoundaryTest {
         Agent agentB = ReActAgent.of(chatModel).name("agent_b").description("B: 认为需要更多视角，总是推给 A").build();
 
         TeamAgent team = TeamAgent.of(chatModel)
-                .addAgent(agentA).addAgent(agentB)
+                .agentAdd(agentA).agentAdd(agentB)
                 .maxTotalIterations(2)
                 .build();
 
@@ -171,7 +171,7 @@ public class TeamAgentBoundaryTest {
         TeamAgent.Builder builder = TeamAgent.of(chatModel).name("expert_group");
 
         for (String role : roles) {
-            builder.addAgent(ReActAgent.of(chatModel).name(role).description("我是" + role).build());
+            builder.agentAdd(ReActAgent.of(chatModel).name(role).description("我是" + role).build());
         }
 
         TeamAgent team = builder.build();

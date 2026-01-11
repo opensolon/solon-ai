@@ -3,7 +3,6 @@ package features.ai.team.def;
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
@@ -33,9 +32,9 @@ public class TeamAgentPersistenceHitlTest {
         // 1. 构建团队并注入 HITL 拦截器
         TeamAgent teamAgent = TeamAgent.of(chatModel)
                 .name(teamId)
-                .addAgent(ReActAgent.of(chatModel).name("worker").title("初稿撰写").build())
-                .addAgent(ReActAgent.of(chatModel).name("approver").title("修辞优化").build())
-                .addInterceptor(new TeamInterceptor() {
+                .agentAdd(ReActAgent.of(chatModel).name("worker").title("初稿撰写").build())
+                .agentAdd(ReActAgent.of(chatModel).name("approver").title("修辞优化").build())
+                .defaultInterceptorAdd(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
                         // 逻辑：只要检测到已有阶段性产出（StepCount > 0），且没有审批信号，则挂起

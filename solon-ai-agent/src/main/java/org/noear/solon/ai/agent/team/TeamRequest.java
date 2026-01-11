@@ -21,6 +21,8 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
 
+import java.util.function.Consumer;
+
 /**
  * 团队模式请求
  *
@@ -32,14 +34,21 @@ public class TeamRequest {
     private final TeamAgent agent;
     private final Prompt prompt;
     private AgentSession session;
+    private TeamOptions options;
 
     public TeamRequest(TeamAgent agent, Prompt prompt) {
         this.agent = agent;
         this.prompt = prompt;
+        this.options = agent.getConfig().getDefaultOptions().copy();
     }
 
     public TeamRequest session(AgentSession session) {
         this.session = session;
+        return this;
+    }
+
+    public TeamRequest options(Consumer<TeamOptionsAmend> optionsAmend) {
+        optionsAmend.accept(new TeamOptionsAmend(options));
         return this;
     }
 
@@ -48,6 +57,6 @@ public class TeamRequest {
             session = InMemoryAgentSession.of();
         }
 
-        return agent.call(prompt, session);
+        return agent.call(prompt, session, options);
     }
 }

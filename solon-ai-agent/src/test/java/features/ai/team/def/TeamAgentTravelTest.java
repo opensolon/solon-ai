@@ -28,12 +28,12 @@ public class TeamAgentTravelTest {
         // 1. 组建团队：定义具有条件反射能力的子智能体
         TeamAgent travelTeam = TeamAgent.of(chatModel)
                 .name(teamId)
-                .addAgent(ReActAgent.of(chatModel)
+                .agentAdd(ReActAgent.of(chatModel)
                         .name("searcher")
                         .description("负责查询实时天气。必须基于 query 工具的 Observation 给出明确结论。")
-                        .addTool(new MethodToolProvider(new WeatherService()))
+                        .toolAdd(new MethodToolProvider(new WeatherService()))
                         .build())
-                .addAgent(ReActAgent.of(chatModel)
+                .agentAdd(ReActAgent.of(chatModel)
                         .name("planner")
                         .description("行程规划专家。要求：必须优先阅读协作历史中的天气信息！" +
                                 "如果历史显示下雨，严禁安排户外步行，必须安排室内场馆（如博物馆、室内商场）。")

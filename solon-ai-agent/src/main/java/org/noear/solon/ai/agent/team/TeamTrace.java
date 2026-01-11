@@ -46,6 +46,7 @@ import java.util.stream.Collectors;
 public class TeamTrace implements AgentTrace {
     /** 关联的团队配置（生命周期内稳定，不参与持久化序列化） */
     private transient TeamConfig config;
+    private transient TeamOptions options;
     /** 当前活跃的会话上下文（持有底层 LLM 记忆，不参与持久化序列化） */
     private transient AgentSession session;
 
@@ -116,8 +117,9 @@ public class TeamTrace implements AgentTrace {
     /**
      * 运行时环境初始化
      */
-    protected void prepare(TeamConfig config, AgentSession session, String agentName) {
+    protected void prepare(TeamConfig config, TeamOptions options, AgentSession session, String agentName) {
         this.config = config;
+        this.options = options;
         this.session = session;
         this.agentName = agentName;
     }
@@ -126,6 +128,11 @@ public class TeamTrace implements AgentTrace {
 
     public String getAgentName() { return agentName; }
     public TeamConfig getConfig() { return config; }
+
+    public TeamOptions getOptions() {
+        return options;
+    }
+
     public AgentSession getSession() { return session; }
     /**
      * 获取流程上下文

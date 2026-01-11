@@ -275,9 +275,11 @@ public class ReActAgent implements Agent {
 
         try {
             // 传递拦截器
-            FlowOptions flowOptions = new FlowOptions();
-            for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
-                flowOptions.interceptorAdd(item.target, item.index);
+            final FlowOptions flowOptions = new FlowOptions();
+            if(options.getInterceptors().size() > 0) {
+                for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
+                    flowOptions.interceptorAdd(item.target, item.index);
+                }
             }
 
             //重置使用令牌数
@@ -448,7 +450,7 @@ public class ReActAgent implements Agent {
          * @param tool 工具对象
          * @return 构建器
          */
-        public Builder addTool(FunctionTool tool) {
+        public Builder toolAdd(FunctionTool tool) {
             config.addTool(tool);
             return this;
         }
@@ -459,7 +461,7 @@ public class ReActAgent implements Agent {
          * @param tools 工具集合
          * @return 构建器
          */
-        public Builder addTool(Collection<FunctionTool> tools) {
+        public Builder toolAdd(Collection<FunctionTool> tools) {
             config.addTool(tools);
             return this;
         }
@@ -470,7 +472,7 @@ public class ReActAgent implements Agent {
          * @param toolProvider 工具提供者
          * @return 构建器
          */
-        public Builder addTool(ToolProvider toolProvider) {
+        public Builder toolAdd(ToolProvider toolProvider) {
             config.addTool(toolProvider);
             return this;
         }
@@ -539,7 +541,7 @@ public class ReActAgent implements Agent {
         /**
          * 添加默认工具上下文
          */
-        public Builder addToolsContext(String key, Object value) {
+        public Builder toolsContextPut(String key, Object value) {
             config.getDefaultOptions().getToolsContext().put(key, value);
             return this;
         }
@@ -547,7 +549,7 @@ public class ReActAgent implements Agent {
         /**
          * 添加默认工具上下文
          */
-        public Builder addToolsContext(Map<String, Object> toolsContext) {
+        public Builder toolsContextPut(Map<String, Object> toolsContext) {
             config.getDefaultOptions().getToolsContext().putAll(toolsContext);
             return this;
         }
@@ -558,7 +560,7 @@ public class ReActAgent implements Agent {
          * @param vals 拦截器数组
          * @return 构建器
          */
-        public Builder addInterceptor(ReActInterceptor... vals) {
+        public Builder defaultInterceptorAdd(ReActInterceptor... vals) {
             for (ReActInterceptor val : vals) {
                 config.getDefaultOptions().addInterceptor(val);
             }
@@ -572,7 +574,7 @@ public class ReActAgent implements Agent {
          * @param index 排序索引
          * @return 构建器
          */
-        public Builder addInterceptor(ReActInterceptor val, int index) {
+        public Builder defaultInterceptorAdd(ReActInterceptor val, int index) {
             config.getDefaultOptions().addInterceptor(val, index);
             return this;
         }

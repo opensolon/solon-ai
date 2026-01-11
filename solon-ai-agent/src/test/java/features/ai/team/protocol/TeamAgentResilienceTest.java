@@ -41,7 +41,7 @@ public class TeamAgentResilienceTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.A2A)
-                .addAgent(a, b, c)
+                .agentAdd(a, b, c)
                 .maxTotalIterations(10)
                 .build();
 
@@ -78,7 +78,7 @@ public class TeamAgentResilienceTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.MARKET_BASED)
-                .addAgent(pythonExpert, javaExpert)
+                .agentAdd(pythonExpert, javaExpert)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_market_ambiguous");
@@ -108,7 +108,7 @@ public class TeamAgentResilienceTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.MARKET_BASED)
-                .addAgent(coder)
+                .agentAdd(coder)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_market_none");
@@ -136,7 +136,7 @@ public class TeamAgentResilienceTest {
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
-                .addAgent(looper)
+                .agentAdd(looper)
                 .maxTotalIterations(2)
                 .build();
 

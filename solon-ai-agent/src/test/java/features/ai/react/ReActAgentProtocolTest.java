@@ -36,7 +36,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new TestTools()))
+                .toolAdd(new MethodToolProvider(new TestTools()))
                 .chatOptions(o -> o.temperature(0.0F))
                 .maxSteps(10)
                 .build();
@@ -89,7 +89,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new TestTools()))
+                .toolAdd(new MethodToolProvider(new TestTools()))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("direct_job");
@@ -116,7 +116,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new SequentialTools()))
+                .toolAdd(new MethodToolProvider(new SequentialTools()))
                 .chatOptions(o -> o.temperature(0.0F))
                 .maxSteps(8)
                 .build();

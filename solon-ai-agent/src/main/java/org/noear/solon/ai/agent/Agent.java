@@ -122,7 +122,7 @@ public interface Agent extends NamedTaskComponent {
 
         if(trace != null){
             trace.setLastAgentName(this.name());
-            for (RankEntity<TeamInterceptor> item : trace.getConfig().getInterceptorList()) {
+            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()) {
                 if (item.target.shouldAgentContinue(trace, this) == false) {
                     trace.addStep(name(),
                             "[Skipped] Agent execution was intercepted and cancelled by " + item.target.getClass().getSimpleName(),
@@ -160,7 +160,7 @@ public interface Agent extends NamedTaskComponent {
 
             trace.getProtocol().onAgentEnd(trace, this);
 
-            trace.getConfig().getInterceptorList().forEach(item -> item.target.onAgentEnd(trace, this));
+            trace.getOptions().getInterceptorList().forEach(item -> item.target.onAgentEnd(trace, this));
         }
     }
 

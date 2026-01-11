@@ -36,7 +36,7 @@ public class TeamAgentMemoryTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("support_team")
-                .addAgent(worker)
+                .agentAdd(worker)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_001");
@@ -67,7 +67,7 @@ public class TeamAgentMemoryTest {
     @Test
     public void testSessionIsolation() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-        TeamAgent team = TeamAgent.of(chatModel).name("iso_team").addAgent(
+        TeamAgent team = TeamAgent.of(chatModel).name("iso_team").agentAdd(
                 ReActAgent.of(chatModel).name("helper").description("助手").build()
         ).build();
 

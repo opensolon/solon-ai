@@ -36,7 +36,7 @@ public class TeamAgentRecursiveTest {
         TeamAgent devTeam = TeamAgent.of(chatModel)
                 .name("dev_team")
                 .description("研发小组。输入需求，直接给出代码实现。完成后必须回复：[FINISH] 研发已完成")
-                .addAgent(createSimpleAgent("Coder", "负责写代码"))
+                .agentAdd(createSimpleAgent("Coder", "负责写代码"))
                 .maxTotalIterations(2) // 严格限制子团队迭代次数
                 .build();
 
@@ -49,8 +49,8 @@ public class TeamAgentRecursiveTest {
                                      "2. 拿到分析结果后指派 dev_team 执行；" +
                                      "3. 当 dev_team 回复完成后，直接输出 [FINISH]。")
                         .build())
-                .addAgent(createSimpleAgent("Analyst", "需求分析师"))
-                .addAgent(devTeam) // 嵌套子团队
+                .agentAdd(createSimpleAgent("Analyst", "需求分析师"))
+                .agentAdd(devTeam) // 嵌套子团队
                 .maxTotalIterations(5)
                 .build();
 
@@ -93,14 +93,14 @@ public class TeamAgentRecursiveTest {
         // 1. 简单的开发子团队
         TeamAgent devTeam = TeamAgent.of(chatModel).name("dev_team")
                 .description("代码实现小组")
-                .addAgent(createSimpleAgent("Coder", "程序员"))
+                .agentAdd(createSimpleAgent("Coder", "程序员"))
                 .build();
 
         // 2. 带有审核逻辑的顶层团队
         TeamAgent projectTeam = TeamAgent.of(chatModel).name("quality_project")
                 .description("带质检的项目组。如果结果不满意，Reviewer 会要求重写。")
-                .addAgent(devTeam)
-                .addAgent(new Agent() {
+                .agentAdd(devTeam)
+                .agentAdd(new Agent() {
                     private int reviewCount = 0;
                     @Override public String name() { return "Reviewer"; }
                     @Override public String description() { return "代码审核员"; }

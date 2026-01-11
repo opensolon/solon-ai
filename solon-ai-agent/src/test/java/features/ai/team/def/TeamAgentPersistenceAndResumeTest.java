@@ -86,7 +86,7 @@ public class TeamAgentPersistenceAndResumeTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("reset_test_team")
-                .addAgent(ReActAgent.of(chatModel).name("agent").build())
+                .agentAdd(ReActAgent.of(chatModel).name("agent").build())
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_reset_id");
@@ -111,7 +111,7 @@ public class TeamAgentPersistenceAndResumeTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("isolation_team")
-                .addAgent(ReActAgent.of(chatModel).name("agent").build())
+                .agentAdd(ReActAgent.of(chatModel).name("agent").build())
                 .build();
 
         // 创建两个独立的 Session

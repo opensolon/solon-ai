@@ -18,13 +18,13 @@ public class ReActOptionsAmend {
     /**
      * 添加工具调用上下文
      */
-    public ReActOptionsAmend toolsContext(Map<String, Object> toolsContext) {
-        options.addToolsContext(toolsContext);
+    public ReActOptionsAmend toolsContextPut(Map<String, Object> toolsContext) {
+        options.putToolsContext(toolsContext);
         return this;
     }
 
-    public ReActOptionsAmend toolsContext(String key, Object value) {
-        options.addToolsContext(key, value);
+    public ReActOptionsAmend toolsContextPut(String key, Object value) {
+        options.putToolsContext(key, value);
         return this;
     }
 

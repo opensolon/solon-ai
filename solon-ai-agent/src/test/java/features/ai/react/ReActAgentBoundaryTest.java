@@ -28,7 +28,7 @@ public class ReActAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new LoopTools()))
+                .toolAdd(new MethodToolProvider(new LoopTools()))
                 .chatOptions(o -> o.temperature(0.0F))
                 .maxSteps(3) // 限制最多 3 步迭代
                 .build();
@@ -56,7 +56,7 @@ public class ReActAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new BasicTools()))
+                .toolAdd(new MethodToolProvider(new BasicTools()))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_tool_not_found");
@@ -72,7 +72,7 @@ public class ReActAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new ErrorTools()))
+                .toolAdd(new MethodToolProvider(new ErrorTools()))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_tool_error");
@@ -104,7 +104,7 @@ public class ReActAgentBoundaryTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .addTool(new MethodToolProvider(new BasicTools()))
+                .toolAdd(new MethodToolProvider(new BasicTools()))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_empty");

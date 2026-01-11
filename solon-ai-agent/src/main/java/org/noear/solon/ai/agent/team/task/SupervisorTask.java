@@ -80,7 +80,7 @@ public class SupervisorTask implements NamedTaskComponent {
 
             // [逻辑 1：生命周期拦截 - 准入控制]
             // 允许外部拦截器介入决策流（如：人工干预、Token 预算检查、动态权重调整）
-            for (RankEntity<TeamInterceptor> item : config.getInterceptorList()) {
+            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()) {
                 if (item.target.shouldSupervisorContinue(trace) == false) {
                     trace.addStep(Agent.ID_SUPERVISOR,
                             "[Skipped] Supervisor decision was intercepted by " + item.target.getClass().getSimpleName(),
@@ -97,10 +97,10 @@ public class SupervisorTask implements NamedTaskComponent {
             // [逻辑 2：物理深度熔断]
             // 强制检查总迭代次数，防止模型在复杂任务中产生逻辑闭环导致的无限调用
             if (Agent.ID_END.equals(trace.getRoute()) ||
-                    trace.getIterationsCount() >= config.getMaxTotalIterations()) {
+                    trace.getIterationsCount() >= trace.getOptions().getMaxTotalIterations()) {
                 trace.setRoute(Agent.ID_END);
                 trace.addStep(Agent.ID_SYSTEM,
-                        "[Terminated] Maximum total iterations reached: " + config.getMaxTotalIterations(),
+                        "[Terminated] Maximum total iterations reached: " + trace.getOptions().getMaxTotalIterations(),
                         0);
                 return;
             }
@@ -152,7 +152,7 @@ public class SupervisorTask implements NamedTaskComponent {
         ChatResponse response = callWithRetry(trace, messages);
 
         // 4. 响应拦截：常用于敏感内容风控或 Token 消耗统计
-        for(RankEntity<TeamInterceptor> item : config.getInterceptorList()){
+        for(RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()){
             item.target.onModelEnd(trace, response);
         }
 
@@ -160,7 +160,7 @@ public class SupervisorTask implements NamedTaskComponent {
         trace.setLastDecision(decision);
 
         // 5. 决策观测：通知拦截器当前的调度意图
-        config.getInterceptorList().forEach(item -> item.target.onSupervisorDecision(trace, decision));
+        trace.getOptions().getInterceptorList().forEach(item -> item.target.onSupervisorDecision(trace, decision));
 
         // 6. 决策解析与物理路由提交
         commitRoute(trace, decision, context);
@@ -177,11 +177,11 @@ public class SupervisorTask implements NamedTaskComponent {
         });
 
         // 触发推理发起拦截
-        for(RankEntity<TeamInterceptor> item : config.getInterceptorList()){
+        for(RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()){
             item.target.onModelStart(trace, req);
         }
 
-        int maxRetries = config.getMaxRetries();
+        int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
                 return req.call();
@@ -193,7 +193,7 @@ public class SupervisorTask implements NamedTaskComponent {
 
                 try {
                     // 指数退避或固定延迟重试
-                    Thread.sleep(config.getRetryDelayMs() * (i + 1));
+                    Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException("Retry interrupted", ie);

@@ -43,11 +43,11 @@ public class TeamAgentNestedPersistenceTest {
         };
 
         // 2. 构建层级团队：Project (Parent) -> Dev (Child) -> Coder
-        TeamAgent devTeam = TeamAgent.of(chatModel).name("dev_team").addAgent(coder).build();
+        TeamAgent devTeam = TeamAgent.of(chatModel).name("dev_team").agentAdd(coder).build();
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name("quality_project")
-                .addAgent(devTeam)
-                .addAgent(reviewer)
+                .agentAdd(devTeam)
+                .agentAdd(reviewer)
                 .build();
 
         // 打印 DAG 图结构 YAML

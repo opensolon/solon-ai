@@ -42,8 +42,8 @@ public class TeamAgentMarketTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("market_team")
                 .protocol(TeamProtocols.MARKET_BASED)
-                .addAgent(pythonExpert)
-                .addAgent(javaExpert)
+                .agentAdd(pythonExpert)
+                .agentAdd(javaExpert)
                 .build();
 
         // 打印市场结构 YAML
@@ -95,8 +95,8 @@ public class TeamAgentMarketTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("market_python_team")
                 .protocol(TeamProtocols.MARKET_BASED)
-                .addAgent(pythonExpert)
-                .addAgent(javaExpert)
+                .agentAdd(pythonExpert)
+                .agentAdd(javaExpert)
                 .build();
 
         // 使用 AgentSession

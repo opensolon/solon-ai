@@ -30,7 +30,7 @@ public class TeamAgentNestedHitlTest {
         // 1. 构建子团队（Dev Team）
         TeamAgent devTeam = TeamAgent.of(chatModel)
                 .name("dev_team")
-                .addAgent(new Agent() {
+                .agentAdd(new Agent() {
                     @Override public String name() { return "Coder"; }
                     @Override public String description() { return "负责核心代码编写"; }
                     @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
@@ -41,15 +41,15 @@ public class TeamAgentNestedHitlTest {
         // 2. 构建父团队，并将子团队作为一个 Agent 加入
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name(parentTeamId)
-                .addAgent(devTeam) // 嵌套子团队
-                .addAgent(new Agent() {
+                .agentAdd(devTeam) // 嵌套子团队
+                .agentAdd(new Agent() {
                     @Override public String name() { return "Reviewer"; }
                     @Override public String description() { return "负责代码质量终审"; }
                     @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
                         return ChatMessage.ofAssistant("代码逻辑严谨，准予发布。 [FINISH]");
                     }
                 })
-                .addInterceptor(new TeamInterceptor() {
+                .defaultInterceptorAdd(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
                         // 在 Supervisor 决策前拦截

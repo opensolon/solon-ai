@@ -46,8 +46,8 @@ public class TeamAgentSwarmTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("swarm_team")
                 .protocol(TeamProtocols.SWARM)
-                .addAgent(chineseTranslator)
-                .addAgent(polisher)
+                .agentAdd(chineseTranslator)
+                .agentAdd(polisher)
                 .build();
 
         // 打印团队协作图的 YAML，观察去中心化的节点拓扑
@@ -107,10 +107,10 @@ public class TeamAgentSwarmTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("swarm_chain_team")
                 .protocol(TeamProtocols.SWARM)
-                .addAgent(translator)
-                .addAgent(grammarChecker)
-                .addAgent(styleImprover)
-                .addAgent(finalReviewer)
+                .agentAdd(translator)
+                .agentAdd(grammarChecker)
+                .agentAdd(styleImprover)
+                .agentAdd(finalReviewer)
                 .build();
 
         // 创建 Session 并执行复杂文本处理
@@ -174,9 +174,9 @@ public class TeamAgentSwarmTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.SWARM)
-                .addAgent(dispatcher)
-                .addAgent(designer)
-                .addAgent(developer)
+                .agentAdd(dispatcher)
+                .agentAdd(designer)
+                .agentAdd(developer)
                 .build();
 
         // 2. 发起一个纯后端的任务

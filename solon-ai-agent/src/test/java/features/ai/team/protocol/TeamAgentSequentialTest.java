@@ -66,7 +66,7 @@ public class TeamAgentSequentialTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("sequential_pipeline")
                 .protocol(TeamProtocols.SEQUENTIAL)
-                .addAgent(extractor, converter, polisher)
+                .agentAdd(extractor, converter, polisher)
                 .build();
 
         System.out.println("--- Sequential Team Graph ---\n" + team.getGraph().toYaml());
@@ -111,7 +111,7 @@ public class TeamAgentSequentialTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.SEQUENTIAL)
-                .addAgent(a, b)
+                .agentAdd(a, b)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_seq_rigidity");

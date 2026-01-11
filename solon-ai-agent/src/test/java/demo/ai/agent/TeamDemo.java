@@ -18,14 +18,14 @@ public class TeamDemo {
         ReActAgent agent_b = ReActAgent.of(chatModel).name("b").outputKey("b").build();
 
         TeamAgent agent_c = TeamAgent.of(chatModel).name("c").outputKey("c")
-                .addAgent(TeamAgent.of(chatModel)
+                .agentAdd(TeamAgent.of(chatModel)
                         .name("c1")
-                        .addAgent(ReActAgent.of(chatModel).name("c1-1").build())
+                        .agentAdd(ReActAgent.of(chatModel).name("c1-1").build())
                         .build())
-                .addAgent(ReActAgent.of(chatModel).name("c2").build())
-                .addAgent(ReActAgent.of(chatModel).name("c3").build())
-                .addAgent(ReActAgent.of(chatModel).name("c4").build())
-                .addAgent(ReActAgent.of(chatModel).name("c5").build())
+                .agentAdd(ReActAgent.of(chatModel).name("c2").build())
+                .agentAdd(ReActAgent.of(chatModel).name("c3").build())
+                .agentAdd(ReActAgent.of(chatModel).name("c4").build())
+                .agentAdd(ReActAgent.of(chatModel).name("c5").build())
                 .build();
 
         ReActAgent agent_d = ReActAgent.of(chatModel).name("d").outputKey("d").build();

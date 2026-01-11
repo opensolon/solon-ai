@@ -110,8 +110,8 @@ public class EcommerceOrderRiskSystemTest {
                 .name("decision_committee")
                 .description("由多名高级经理组成的裁决委员会")
                 .protocol(TeamProtocols.HIERARCHICAL)
-                .addInterceptor(new LoopingTeamInterceptor())
-                .addAgent(
+                .defaultInterceptorAdd(new LoopingTeamInterceptor())
+                .agentAdd(
                         ReActAgent.of(chatModel)
                                 .name("senior_risk_manager")
                                 .systemPrompt(ReActSystemPrompt.builder()
@@ -147,11 +147,11 @@ public class EcommerceOrderRiskSystemTest {
                 .name("order_review_system")
                 .description("全流程自动化订单风险评审系统")
                 .protocol(TeamProtocols.SEQUENTIAL)
-                .addInterceptor(new LoopingTeamInterceptor())
+                .defaultInterceptorAdd(new LoopingTeamInterceptor())
                 .maxTotalIterations(15)
                 .finishMarker("[ORDER_REVIEW_COMPLETE]")
                 .outputKey("final_decision")
-                .addAgent(orderReceiver, riskAnalyst, customerValidator,
+                .agentAdd(orderReceiver, riskAnalyst, customerValidator,
                         logisticsEvaluator, financialAuditor,
                         decisionCommittee, notificationExecutor)
                 .graphAdjuster(spec -> {

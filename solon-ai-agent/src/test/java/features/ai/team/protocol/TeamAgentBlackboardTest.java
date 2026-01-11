@@ -53,8 +53,8 @@ public class TeamAgentBlackboardTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("blackboard_team")
                 .protocol(TeamProtocols.BLACKBOARD)
-                .addAgent(databaseDesigner)
-                .addAgent(apiDesigner)
+                .agentAdd(databaseDesigner)
+                .agentAdd(apiDesigner)
                 .maxTotalIterations(5)
                 .build();
 
@@ -101,8 +101,8 @@ public class TeamAgentBlackboardTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("loop_test_team")
                 .protocol(TeamProtocols.BLACKBOARD)
-                .addAgent(dbDesigner)
-                .addAgent(reviewer)
+                .agentAdd(dbDesigner)
+                .agentAdd(reviewer)
                 .maxTotalIterations(6)
                 .build();
 
@@ -143,8 +143,8 @@ public class TeamAgentBlackboardTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.BLACKBOARD)
-                .addAgent(dbDesigner)
-                .addAgent(apiDesigner)
+                .agentAdd(dbDesigner)
+                .agentAdd(apiDesigner)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("consistency_test");
@@ -165,7 +165,7 @@ public class TeamAgentBlackboardTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.BLACKBOARD)
-                .addAgent(a).addAgent(b)
+                .agentAdd(a).agentAdd(b)
                 .maxTotalIterations(4)
                 .build();
 

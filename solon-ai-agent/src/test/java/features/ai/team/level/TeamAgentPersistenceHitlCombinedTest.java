@@ -35,21 +35,21 @@ public class TeamAgentPersistenceHitlCombinedTest {
         // 1. 定义团队结构与拦截策略
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name(teamName)
-                .addAgent(new Agent() {
+                .agentAdd(new Agent() {
                     @Override public String name() { return "Worker"; }
                     @Override public String description() { return "负责执行具体业务逻辑"; }
                     @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
                         return ChatMessage.ofAssistant("单据初稿已处理完成。");
                     }
                 })
-                .addAgent(new Agent() {
+                .agentAdd(new Agent() {
                     @Override public String name() { return "Approver"; }
                     @Override public String description() { return "负责单据最终审批与归档"; }
                     @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
                         return ChatMessage.ofAssistant("核对无误，签字通过。[FINISH]");
                     }
                 })
-                .addInterceptor(new TeamInterceptor() {
+                .defaultInterceptorAdd(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
                         // 在决策中心进行状态研判

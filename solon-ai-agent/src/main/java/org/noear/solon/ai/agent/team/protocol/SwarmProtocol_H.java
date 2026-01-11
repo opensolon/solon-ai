@@ -232,7 +232,7 @@ public class SwarmProtocol_H extends TeamProtocolBase {
         }
 
         // 简单的效率计算：任务完成度 / 步骤数
-        double progress = (double) trace.getIterationsCount() / trace.getConfig().getMaxTotalIterations();
+        double progress = (double) trace.getIterationsCount() / trace.getOptions().getMaxTotalIterations();
         double efficiency = progress / trace.getStepCount();
 
         return Math.max(0, Math.min(1, efficiency * 2)); // 归一化到0-1
@@ -391,7 +391,7 @@ public class SwarmProtocol_H extends TeamProtocolBase {
         StringBuilder health = new StringBuilder();
 
         // 检查步骤数量
-        if (trace.getStepCount() > trace.getConfig().getMaxTotalIterations() * 0.8) {
+        if (trace.getStepCount() > trace.getOptions().getMaxTotalIterations() * 0.8) {
             health.append("注意: 步骤数量接近上限，考虑收敛结论。\n");
         }
 

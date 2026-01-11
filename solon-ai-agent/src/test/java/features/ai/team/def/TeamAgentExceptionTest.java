@@ -43,7 +43,7 @@ public class TeamAgentExceptionTest {
         // 2. 构建包含故障成员的团队
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("exception_team")
-                .addAgent(throwingAgent)
+                .agentAdd(throwingAgent)
                 .build();
 
         // 3. 使用 AgentSession 开启会话

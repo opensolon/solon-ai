@@ -9,7 +9,6 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamSystemPrompt;
-import org.noear.solon.ai.agent.team.TeamSystemPromptCn;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -45,8 +44,8 @@ public class TeamAgentSupervisorTest {
         // 2. 构建团队智能体，默认协议通常即为 SUPERVISOR
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("decision_team")
-                .addAgent(dataCollector)
-                .addAgent(analyzer)
+                .agentAdd(dataCollector)
+                .agentAdd(analyzer)
                 .maxTotalIterations(10)
                 .build();
 
@@ -95,7 +94,7 @@ public class TeamAgentSupervisorTest {
         // 2. 构建包含自定义逻辑的团队
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("custom_prompt_team")
-                .addAgent(ReActAgent.of(chatModel)
+                .agentAdd(ReActAgent.of(chatModel)
                         .name("worker")
                         .description("负责通用任务执行的工作者")
                         .build())
@@ -132,8 +131,8 @@ public class TeamAgentSupervisorTest {
                 .description("总结员：负责对事实进行简短总结。").build();
 
         TeamAgent team = TeamAgent.of(chatModel)
-                .addAgent(searcher)
-                .addAgent(summarizer)
+                .agentAdd(searcher)
+                .agentAdd(summarizer)
                 .maxTotalIterations(5)
                 .build();
 
@@ -167,7 +166,7 @@ public class TeamAgentSupervisorTest {
                 .description("只懂 Java 后端开发。").build();
 
         TeamAgent team = TeamAgent.of(chatModel)
-                .addAgent(javaDev)
+                .agentAdd(javaDev)
                 .maxTotalIterations(3) // 设小一点，防止死循环
                 .build();
 

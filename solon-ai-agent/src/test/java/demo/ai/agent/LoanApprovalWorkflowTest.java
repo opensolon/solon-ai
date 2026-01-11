@@ -63,10 +63,10 @@ public class LoanApprovalWorkflowTest {
 
         TeamAgent riskControlCenter = TeamAgent.of(chatModel).name("risk_control_center")
                 .description("深度风控审计中心")
-                .addAgent(
+                .agentAdd(
                         // 征信事业部 (进一步嵌套)
                         TeamAgent.of(chatModel).name("credit_dept")
-                                .addAgent(ReActAgent.of(chatModel).name("big_data_analyst")
+                                .agentAdd(ReActAgent.of(chatModel).name("big_data_analyst")
                                         .systemPrompt(ReActSystemPrompt.builder().role("大数据建模专家").instruction("分析社交、支付、多头借贷数据。").build()).build())
                                 .build(),
                         // 额度精算师

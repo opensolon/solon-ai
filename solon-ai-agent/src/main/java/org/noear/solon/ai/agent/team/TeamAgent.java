@@ -99,11 +99,6 @@ public class TeamAgent implements Agent {
         this.traceKey = config.getTraceKey();
         this.flowEngine = FlowEngine.newInstance(true);
 
-        // 注入生命周期拦截器，实现审计、监控或数据增强
-        for (RankEntity<TeamInterceptor> item : config.getInterceptorList()) {
-            flowEngine.addInterceptor(item.target, item.index);
-        }
-
         // 初始化协作拓扑结构
         this.graph = buildGraph();
     }
@@ -194,11 +189,30 @@ public class TeamAgent implements Agent {
      */
     @Override
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
+        return call(prompt, session, null);
+    }
+
+    /**
+     * 执行团队协作（同步阻塞模式）
+     * * <p><b>执行全生命周期：</b></p>
+     * <ul>
+     * <li>1. <b>环境对齐：</b> 初始化 TeamTrace 并准备运行参数。</li>
+     * <li>2. <b>前置拦截：</b> 触发 {@code onAgentStart} 监听。</li>
+     * <li>3. <b>引擎求值：</b> 驱动 Solon Flow 引擎，根据协议在节点间跳转。</li>
+     * <li>4. <b>结果聚合：</b> 协作结束后，根据协议策略提取最终答案（Final Answer）。</li>
+     * <li>5. <b>状态同步：</b> 更新会话历史，同步 Context 快照，并触发 {@code onAgentEnd}。</li>
+     * </ul>
+     */
+    public AssistantMessage call(Prompt prompt, AgentSession session, TeamOptions options) throws Throwable {
         FlowContext context = session.getSnapshot();
         TeamTrace trace = context.computeIfAbsent(traceKey, k -> new TeamTrace(prompt));
 
+        if(options == null){
+            options = config.getDefaultOptions();
+        }
+
         // 注入运行时配置与关联
-        trace.prepare(config, session, name);
+        trace.prepare(config, options, session, name);
 
         if (prompt != null) {
             context.trace().recordNode(graph, null);
@@ -207,7 +221,7 @@ public class TeamAgent implements Agent {
         }
 
         // 触发协作启动拦截
-        config.getInterceptorList().forEach(item -> item.target.onTeamStart(trace));
+        options.getInterceptorList().forEach(item -> item.target.onTeamStart(trace));
 
         try {
             // 历史消息归档
@@ -215,10 +229,18 @@ public class TeamAgent implements Agent {
                 prompt.getMessages().forEach(m -> session.addHistoryMessage(this.name, m));
             }
 
+            // 传递拦截器
+            final FlowOptions flowOptions = new FlowOptions();
+            if (options.getInterceptorList().size() > 0) {
+                for (RankEntity<TeamInterceptor> item : options.getInterceptorList()) {
+                    flowOptions.interceptorAdd(item.target, item.index);
+                }
+            }
+
             // 驱动 Flow 引擎执行（闭包内注入协议上下文）
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
                 context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
-                    flowEngine.eval(graph, context);
+                    flowEngine.eval(graph, -1, context, flowOptions);
                 });
             });
 
@@ -240,7 +262,7 @@ public class TeamAgent implements Agent {
             session.updateSnapshot(context);
 
             // 触发协作完成拦截
-            config.getInterceptorList().forEach(item -> item.target.onTeamEnd(trace));
+            options.getInterceptorList().forEach(item -> item.target.onTeamEnd(trace));
 
             return assistantMessage;
 
@@ -296,28 +318,10 @@ public class TeamAgent implements Agent {
         /**
          * 批量注入团队成员（专家）
          */
-        public Builder addAgent(Agent... agents) {
+        public Builder agentAdd(Agent... agents) {
             for (Agent agent : agents) {
                 config.addAgent(agent);
             }
-            return this;
-        }
-
-        /**
-         * 注册全局拦截器
-         */
-        public Builder addInterceptor(TeamInterceptor... interceptors) {
-            for (TeamInterceptor interceptor : interceptors) {
-                config.addInterceptor(interceptor);
-            }
-            return this;
-        }
-
-        /**
-         * 注册带排序权重的拦截器
-         */
-        public Builder addInterceptor(TeamInterceptor interceptor, int index) {
-            config.addInterceptor(interceptor, index);
             return this;
         }
 
@@ -349,7 +353,7 @@ public class TeamAgent implements Agent {
          * 细粒度配置调度器的容错重试策略
          */
         public Builder retryConfig(int maxRetries, long retryDelayMs) {
-            config.setRetryConfig(maxRetries, retryDelayMs);
+            config.getDefaultOptions().setRetryConfig(maxRetries, retryDelayMs);
             return this;
         }
 
@@ -357,7 +361,7 @@ public class TeamAgent implements Agent {
          * 限制协作最大轮次，保护计算资源
          */
         public Builder maxTotalIterations(int maxTotalIterations) {
-            config.setMaxTotalIterations(maxTotalIterations);
+            config.getDefaultOptions().setMaxTotalIterations(maxTotalIterations);
             return this;
         }
 
@@ -384,6 +388,25 @@ public class TeamAgent implements Agent {
             config.setChatOptions(chatOptions);
             return this;
         }
+
+        /**
+         * 注册全局拦截器
+         */
+        public Builder defaultInterceptorAdd(TeamInterceptor... interceptors) {
+            for (TeamInterceptor interceptor : interceptors) {
+                config.getDefaultOptions().addInterceptor(interceptor);
+            }
+            return this;
+        }
+
+        /**
+         * 注册带排序权重的拦截器
+         */
+        public Builder defaultInterceptorAdd(TeamInterceptor interceptor, int index) {
+            config.getDefaultOptions().addInterceptor(interceptor, index);
+            return this;
+        }
+
 
         /**
          * 校验并实例化 TeamAgent。

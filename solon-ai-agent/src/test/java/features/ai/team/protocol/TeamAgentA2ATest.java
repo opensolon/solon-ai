@@ -58,7 +58,7 @@ public class TeamAgentA2ATest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("dev_squad")
                 .protocol(TeamProtocols.A2A)
-                .addAgent(designer, developer)
+                .agentAdd(designer, developer)
                 .finishMarker("FINISH")
                 .maxTotalIterations(5)
                 .build();
@@ -99,7 +99,7 @@ public class TeamAgentA2ATest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.A2A)
-                .addAgent(agentA, agentB)
+                .agentAdd(agentA, agentB)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_03");
@@ -127,7 +127,7 @@ public class TeamAgentA2ATest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.A2A)
-                .addAgent(agentA)
+                .agentAdd(agentA)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_04");

@@ -66,7 +66,7 @@ public class TeamAgentTransferTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("editor_team")
-                .addAgent(translator, polisher)
+                .agentAdd(translator, polisher)
                 .protocol(TeamProtocols.SEQUENTIAL) // 顺序执行
                 .outputKey("final_report")
                 .build();
@@ -112,7 +112,7 @@ public class TeamAgentTransferTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("template_team")
-                .addAgent(translator, polisher)
+                .agentAdd(translator, polisher)
                 .protocol(TeamProtocols.SEQUENTIAL)
                 .build();
 

@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
+import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -34,7 +35,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class TeamConfig {
+public class TeamConfig implements NonSerializable {
     /**
      * 团队唯一标识名称（用于日志追踪及 context 引用）
      */
@@ -90,30 +91,13 @@ public class TeamConfig {
      */
     private String outputKey;
 
-    /**
-     * 协作深度熔断阈值（限制一次任务的最大流转轮数，防止由于模型幻觉导致的无限死循环）
-     */
-    private int maxTotalIterations = 8;
-
-    /**
-     * 调度重试限额（当 Supervisor 输出无法解析的指令或发生网络抖动时的重试次数）
-     */
-    private int maxRetries = 3;
-
-    /**
-     * 调度失败后的重试规避延迟时间（毫秒）
-     */
-    private long retryDelayMs = 1000L;
-
-    /**
-     * 协作拦截器链路（用于在 Agent 切换、指令分发前后注入监控、脱敏或审计逻辑）
-     */
-    private final List<RankEntity<TeamInterceptor>> interceptorList = new ArrayList<>();
 
     /**
      * 系统提示词（System Prompt）模板提供者，支持多语言动态适配
      */
     private TeamSystemPrompt systemPrompt = TeamSystemPromptCn.getDefault();
+
+    private final TeamOptions defaultOptions = new TeamOptions();
 
     /**
      * 基于指定的推理模型初始化团队配置
@@ -155,17 +139,6 @@ public class TeamConfig {
     }
 
     /**
-     * 统一配置异常调度时的重试策略
-     *
-     * @param maxRetries   最大尝试次数（最小为1）
-     * @param retryDelayMs 重试间隔（最小为1000ms）
-     */
-    protected void setRetryConfig(int maxRetries, long retryDelayMs) {
-        this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(1000, retryDelayMs);
-    }
-
-    /**
      * 设置显式的任务终结指令词
      */
     protected void setFinishMarker(String finishMarker) {
@@ -177,34 +150,6 @@ public class TeamConfig {
      */
     protected void setOutputKey(String outputKey) {
         this.outputKey = outputKey;
-    }
-
-    /**
-     * 设置协作轮次上限，防止成本过载与逻辑死锁
-     */
-    protected void setMaxTotalIterations(int maxTotalIterations) {
-        this.maxTotalIterations = Math.max(1, maxTotalIterations);
-    }
-
-    /**
-     * 注册团队拦截器（默认优先级）
-     */
-    protected void addInterceptor(TeamInterceptor interceptor) {
-        this.addInterceptor(interceptor, 0);
-    }
-
-    /**
-     * 注册团队拦截器，并指定排序权重
-     *
-     * @param interceptor 拦截器实例
-     * @param index       排序权重（数值越小执行越靠前）
-     */
-    protected void addInterceptor(TeamInterceptor interceptor, int index) {
-        this.interceptorList.add(new RankEntity<>(interceptor, index));
-
-        if (interceptorList.size() > 1) {
-            Collections.sort(interceptorList);
-        }
     }
 
     /**
@@ -245,6 +190,11 @@ public class TeamConfig {
     }
 
     // --- 属性获取 (Public) ---
+
+
+    public TeamOptions getDefaultOptions() {
+        return defaultOptions;
+    }
 
     public String getName() {
         return name;
@@ -300,22 +250,6 @@ public class TeamConfig {
 
     public String getOutputKey() {
         return outputKey;
-    }
-
-    public int getMaxTotalIterations() {
-        return maxTotalIterations;
-    }
-
-    public int getMaxRetries() {
-        return maxRetries;
-    }
-
-    public long getRetryDelayMs() {
-        return retryDelayMs;
-    }
-
-    public List<RankEntity<TeamInterceptor>> getInterceptorList() {
-        return interceptorList;
     }
 
     public String getTeamSystem(TeamTrace trace, FlowContext context) {
