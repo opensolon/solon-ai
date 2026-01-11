@@ -75,13 +75,13 @@ public class EmbeddingRequestDesc {
         String reqJson = dialect.buildRequestJson(config, options, input);
 
         if (log.isDebugEnabled()) {
-            log.debug("ai-request: {}", reqJson);
+            log.debug("llm-request: {}", reqJson);
         }
 
         String respJson = httpUtils.bodyOfJson(reqJson).post();
 
         if (log.isDebugEnabled()) {
-            log.debug("ai-response: {}", respJson);
+            log.debug("llm-response: {}", respJson);
         }
 
         EmbeddingResponse resp = dialect.parseResponseJson(config, respJson);

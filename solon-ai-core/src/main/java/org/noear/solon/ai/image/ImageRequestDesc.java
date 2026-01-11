@@ -78,13 +78,13 @@ public class ImageRequestDesc {
         String reqJson = dialect.buildRequestJson(config, options, promptStr, promptMap);
 
         if (log.isDebugEnabled()) {
-            log.debug("ai-request: {}", reqJson);
+            log.debug("llm-request: {}", reqJson);
         }
 
         String respJson = httpUtils.bodyOfJson(reqJson).post();
 
         if (log.isDebugEnabled()) {
-            log.debug("ai-response: {}", respJson);
+            log.debug("llm-response: {}", respJson);
         }
 
         ImageResponse resp = dialect.parseResponseJson(config, respJson);
