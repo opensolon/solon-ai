@@ -32,7 +32,6 @@ import org.noear.solon.lang.Preview;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * ReAct 运行轨迹记录器
@@ -64,10 +63,6 @@ public class ReActTrace implements AgentTrace {
      * 协议注入的专用工具映射表（如 __transfer_to__）
      */
     private transient final Map<String, FunctionTool> protocolToolMap = new LinkedHashMap<>();
-    /**
-     * 锁，用于线程安全控制
-     */
-    private transient final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     /**
      * 当前执行的智能体名称
@@ -81,7 +76,7 @@ public class ReActTrace implements AgentTrace {
     /**
      * 消息历史序列（包含 Thought, Action, Observation）
      */
-    private volatile List<ChatMessage> messages;
+    private List<ChatMessage> messages;
 
     /**
      * 迭代步数计数器（用于防止死循环和控制 Token 消耗）
@@ -90,7 +85,7 @@ public class ReActTrace implements AgentTrace {
     /**
      * 逻辑路由标识（决定下一节点是 REASON, ACTION 还是 END）
      */
-    private volatile String route;
+    private String route;
 
     /**
      * 最终生成的回答内容（即最终输出给用户的 Final Answer）
@@ -279,7 +274,7 @@ public class ReActTrace implements AgentTrace {
     /**
      * 获取消息序列的大小
      */
-    public int getMessagesSize(){
+    public int getMessagesSize() {
         return messages.size();
     }
 
@@ -287,27 +282,17 @@ public class ReActTrace implements AgentTrace {
      * 获取消息序列的快照副本，确保外部读取线程安全
      */
     public List<ChatMessage> getMessages() {
-        lock.readLock().lock();
-        try {
-            return Collections.unmodifiableList(messages);
-        } finally {
-            lock.readLock().unlock();
-        }
+        return Collections.unmodifiableList(messages);
     }
 
     /**
      * 获取最后一条交互消息（通常用于 Action 阶段解析工具调用）
      */
     public ChatMessage getLastMessage() {
-        lock.readLock().lock();
-        try {
-            if (messages.isEmpty()) {
-                return null;
-            } else {
-                return messages.get(messages.size() - 1);
-            }
-        } finally {
-            lock.readLock().unlock();
+        if (messages.isEmpty()) {
+            return null;
+        } else {
+            return messages.get(messages.size() - 1);
         }
     }
 
@@ -319,12 +304,7 @@ public class ReActTrace implements AgentTrace {
             return;
         }
 
-        lock.writeLock().lock();
-        try {
-            messages.add(message);
-        } finally {
-            lock.writeLock().unlock();
-        }
+        messages.add(message);
     }
 
     /**
@@ -335,12 +315,7 @@ public class ReActTrace implements AgentTrace {
             return;
         }
 
-        lock.writeLock().lock();
-        try {
-            messages.addAll(newMessages);
-        } finally {
-            lock.writeLock().unlock();
-        }
+        messages.addAll(newMessages);
     }
 
     /**
@@ -351,12 +326,7 @@ public class ReActTrace implements AgentTrace {
             throw new IllegalArgumentException("messages cannot be null");
         }
 
-        lock.writeLock().lock();
-        try {
-            this.messages = new ArrayList<>(newMessages);  // 防御性复制
-        } finally {
-            lock.writeLock().unlock();
-        }
+        this.messages = new ArrayList<>(newMessages);  // 防御性复制
     }
 
     /**
@@ -364,51 +334,41 @@ public class ReActTrace implements AgentTrace {
      * 用于多智能体协作或调试日志输出，按角色标记推理轨迹
      */
     public String getFormattedHistory() {
-        lock.readLock().lock();  // 需要加锁
-        try {
-            StringBuilder sb = new StringBuilder();
-            for (ChatMessage msg : messages) {
-                if (msg instanceof UserMessage) {
-                    sb.append("[User] ").append(msg.getContent()).append("\n");
-                } else if (msg instanceof AssistantMessage) {
-                    AssistantMessage am = (AssistantMessage) msg;
-                    String content = am.getContent();
-                    if (Assert.isNotEmpty(content)) {
-                        sb.append("[Assistant] ").append(content).append("\n");
-                    }
-                    if (Assert.isNotEmpty(am.getToolCalls())) {
-                        for (ToolCall call : am.getToolCalls()) {
-                            sb.append("[Action] ").append(call.name()).append(": ").append(call.arguments()).append("\n");
-                        }
-                    }
-                } else if (msg instanceof ToolMessage) {
-                    sb.append("[Observation] ").append(msg.getContent()).append("\n");
+        StringBuilder sb = new StringBuilder();
+        for (ChatMessage msg : messages) {
+            if (msg instanceof UserMessage) {
+                sb.append("[User] ").append(msg.getContent()).append("\n");
+            } else if (msg instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) msg;
+                String content = am.getContent();
+                if (Assert.isNotEmpty(content)) {
+                    sb.append("[Assistant] ").append(content).append("\n");
                 }
+                if (Assert.isNotEmpty(am.getToolCalls())) {
+                    for (ToolCall call : am.getToolCalls()) {
+                        sb.append("[Action] ").append(call.name()).append(": ").append(call.arguments()).append("\n");
+                    }
+                }
+            } else if (msg instanceof ToolMessage) {
+                sb.append("[Observation] ").append(msg.getContent()).append("\n");
             }
-            return sb.toString();
-        } finally {
-            lock.readLock().unlock();
         }
+        return sb.toString();
     }
 
     /**
      * 统计总工具调用次数（从推理轨迹中计算）
      */
     public int getToolCallCount() {
-        lock.readLock().lock();
-        try {
-            int count = 0;
-            for (ChatMessage msg : messages) {
-                if (msg instanceof AssistantMessage) {
-                    AssistantMessage am = (AssistantMessage) msg;
-                    if (Assert.isNotEmpty(am.getToolCalls())) {
-                        count += am.getToolCalls().size();
-                    }
+        int count = 0;
+        for (ChatMessage msg : messages) {
+            if (msg instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) msg;
+                if (Assert.isNotEmpty(am.getToolCalls())) {
+                    count += am.getToolCalls().size();
                 }
             }
-            return count;
-        } finally {
-            lock.readLock().unlock();
         }
+        return count;
     }
 }
