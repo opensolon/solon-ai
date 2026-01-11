@@ -24,6 +24,7 @@ import org.noear.solon.lang.Preview;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -50,12 +51,17 @@ public class TeamTrace implements AgentTrace {
     /** 当前活跃的会话上下文（持有底层 LLM 记忆，不参与持久化序列化） */
     private transient AgentSession session;
 
+    /** 历史记录的格式化快照（Markdown 优化版） */
+    private transient String cachedFormattedHistory;
+    /** 脏位标记：用于实现格式化历史的延迟加载与缓存失效逻辑 */
+    private transient boolean isUpdateHistoryCache = true;
+
     /** 当前正在处理任务的 Agent 标识 */
     private String agentName;
     /** 任务的活跃提示词（随协作阶段可能动态裁剪或重组） */
     private Prompt prompt;
     /** 协作流水账：按时间轴线性记录的执行步骤详情 */
-    private final List<TeamStep> steps = new ArrayList<>();
+    private final List<TeamStep> steps = new CopyOnWriteArrayList<>();
 
     /** 路由决策结果：指向下一个待执行的 Agent 名称或系统终止符 (ID_END) */
     private volatile String route;
@@ -71,10 +77,6 @@ public class TeamTrace implements AgentTrace {
 
     /** 最终对外交付的结构化答案 */
     private String finalAnswer;
-    /** 历史记录的格式化快照（Markdown 优化版） */
-    private String cachedFormattedHistory;
-    /** 脏位标记：用于实现格式化历史的延迟加载与缓存失效逻辑 */
-    private boolean isUpdateHistoryCache = true;
 
     public TeamTrace() {
         this.iterationCounter = new AtomicInteger(0);

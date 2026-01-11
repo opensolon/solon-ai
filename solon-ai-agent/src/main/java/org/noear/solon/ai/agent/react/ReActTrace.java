@@ -31,6 +31,7 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -72,29 +73,26 @@ public class ReActTrace implements AgentTrace {
      * 当前迭代的提示词模版与选项
      */
     private Prompt prompt;
-
-    /**
-     * 消息历史序列（包含 Thought, Action, Observation）
-     */
-    private List<ChatMessage> messages;
-
     /**
      * 迭代步数计数器（用于防止死循环和控制 Token 消耗）
      */
     private AtomicInteger stepCounter;
     /**
+     * 消息历史序列（包含 Thought, Action, Observation）
+     */
+    private final List<ChatMessage> messages = new CopyOnWriteArrayList<>();
+    /**
      * 逻辑路由标识（决定下一节点是 REASON, ACTION 还是 END）
      */
-    private String route;
-
+    private volatile String route;
     /**
      * 最终生成的回答内容（即最终输出给用户的 Final Answer）
      */
-    private String finalAnswer;
+    private volatile String finalAnswer;
     /**
      * 模型最近一次原始回答内容（用于解析 Action 信号）
      */
-    private String lastAnswer;
+    private volatile String lastAnswer;
     /**
      * 性能与资源度量指标
      */
@@ -103,7 +101,6 @@ public class ReActTrace implements AgentTrace {
     public ReActTrace() {
         // 无参构造：主要用于流程持久化中的反序列化恢复
         this.stepCounter = new AtomicInteger(0);
-        this.messages = new ArrayList<>();
         this.route = Agent.ID_REASON;
     }
 
@@ -326,7 +323,8 @@ public class ReActTrace implements AgentTrace {
             throw new IllegalArgumentException("messages cannot be null");
         }
 
-        this.messages = new ArrayList<>(newMessages);  // 防御性复制
+        this.messages.clear();
+        this.messages.addAll(newMessages);  // 防御性复制
     }
 
     /**
