@@ -21,7 +21,7 @@ import org.noear.solon.lang.Preview;
 import java.util.Locale;
 
 /**
- * 市场机制协作协议 (Market-Based Protocol)
+ * 市场机制协作协议 (Market-Based Protocol)，轻量级实现
  *
  * @author noear
  * @since 3.8.1

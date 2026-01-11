@@ -26,7 +26,7 @@ import org.noear.solon.lang.Preview;
 import java.util.Locale;
 
 /**
- * 层级化协作协议 (Hierarchical Protocol)
+ * 层级化协作协议 (Hierarchical Protocol)，轻量级实现
  *
  * @author noear
  * @since 3.8.1

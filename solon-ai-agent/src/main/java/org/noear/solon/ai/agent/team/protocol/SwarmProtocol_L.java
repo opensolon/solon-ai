@@ -28,7 +28,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 蜂群协作协议 (Swarm Protocol)
+ * 蜂群协作协议 (Swarm Protocol)，轻量级实现
  *
  * @author noear
  * @since 3.8.1

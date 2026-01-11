@@ -27,7 +27,7 @@ import org.noear.solon.lang.Preview;
 import java.util.Locale;
 
 /**
- * 合同网协作协议 (Contract Net Protocol / CNP)
+ * 合同网协作协议 (Contract Net Protocol / CNP)，轻量级实现
  *
  * @author noear
  * @since 3.8.1

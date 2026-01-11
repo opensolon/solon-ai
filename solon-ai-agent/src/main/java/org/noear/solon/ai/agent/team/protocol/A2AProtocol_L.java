@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * A2A (Agent to Agent) 协作协议
+ * A2A (Agent to Agent) 协作协议，轻量级实现
  *
  * @author noear
  * @since 3.8.1

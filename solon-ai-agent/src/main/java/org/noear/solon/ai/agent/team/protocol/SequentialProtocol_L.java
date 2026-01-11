@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 顺序协作协议 (Sequential Protocol)
+ * 顺序协作协议 (Sequential Protocol)，轻量级实现
  *
  * @author noear
  * @since 3.8.1

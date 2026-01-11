@@ -21,7 +21,7 @@ import org.noear.solon.lang.Preview;
 import java.util.Locale;
 
 /**
- * 黑板协作协议 (Blackboard Protocol)
+ * 黑板协作协议 (Blackboard Protocol)，轻量级实现
  *
  * @author noear
  * @since 3.8.1
