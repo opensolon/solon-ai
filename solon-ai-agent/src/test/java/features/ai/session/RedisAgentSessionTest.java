@@ -4,7 +4,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.redisx.RedisClient;
-import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.RedisAgentSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 
@@ -17,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * RedisAgentSession 历史消息功能单元测试
  */
-@DisplayName("Agent Session 历史消息测试")
 class RedisAgentSessionTest {
 
     private RedisAgentSession session;
@@ -37,7 +35,6 @@ class RedisAgentSessionTest {
     }
 
     @Test
-    @DisplayName("基础消息归档与读取测试")
     void testAddAndGetHistoryMessages() {
         session.clear(AGENT_A);
         session.clear(AGENT_B);
@@ -56,7 +53,6 @@ class RedisAgentSessionTest {
     }
 
     @Test
-    @DisplayName("多智能体消息隔离性测试")
     void testAgentIsolation() {
         session.clear(AGENT_A);
         session.clear(AGENT_B);
@@ -72,7 +68,6 @@ class RedisAgentSessionTest {
     }
 
     @Test
-    @DisplayName("最近消息截断测试 (Last N)")
     void testGetLastMessages() {
         session.clear(AGENT_A);
         session.clear(AGENT_B);
@@ -93,7 +88,6 @@ class RedisAgentSessionTest {
     }
 
     @Test
-    @DisplayName("空数据及越界处理测试")
     void testEmptyAndOverflow() {
         session.clear(AGENT_A);
         session.clear(AGENT_B);

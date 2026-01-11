@@ -19,11 +19,9 @@ import java.util.Collection;
  * ReActAgent 与 InMemoryAgentSession 真实记忆集成测试
  * 验证：1. 记忆准确性 2. 避免复读（逻辑不重复）
  */
-@DisplayName("ReAct 智能体记忆实测")
 public class ReActAgentMemoryTest {
 
     @Test
-    @DisplayName("多轮对话记忆效果与输出唯一性测试")
     public void testMultiTurnMemory() throws Throwable {
         // 1. 初始化模型与智能体
         ChatModel chatModel = LlmUtil.getChatModel();

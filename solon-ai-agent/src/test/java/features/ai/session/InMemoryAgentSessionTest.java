@@ -14,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * InMemoryAgentSession 历史消息功能单元测试
  */
-@DisplayName("Agent Session 历史消息测试")
 class InMemoryAgentSessionTest {
 
     private InMemoryAgentSession session;
@@ -28,7 +27,6 @@ class InMemoryAgentSessionTest {
     }
 
     @Test
-    @DisplayName("基础消息归档与读取测试")
     void testAddAndGetHistoryMessages() {
         ChatMessage msg1 = ChatMessage.ofUser("Hello");
         ChatMessage msg2 = ChatMessage.ofAssistant("Hi there");
@@ -44,7 +42,6 @@ class InMemoryAgentSessionTest {
     }
 
     @Test
-    @DisplayName("多智能体消息隔离性测试")
     void testAgentIsolation() {
         session.addHistoryMessage(AGENT_A, ChatMessage.ofUser("Msg to A"));
         session.addHistoryMessage(AGENT_B, ChatMessage.ofUser("Msg to B"));
@@ -57,7 +54,6 @@ class InMemoryAgentSessionTest {
     }
 
     @Test
-    @DisplayName("最近消息截断测试 (Last N)")
     void testGetLastMessages() {
         // 存入 5 条消息
         for (int i = 1; i <= 5; i++) {
@@ -75,7 +71,6 @@ class InMemoryAgentSessionTest {
     }
 
     @Test
-    @DisplayName("空数据及越界处理测试")
     void testEmptyAndOverflow() {
         // 1. 获取不存在的 Agent 消息
         Collection<ChatMessage> emptyHistory = session.getHistoryMessages("Unknown", 10);
