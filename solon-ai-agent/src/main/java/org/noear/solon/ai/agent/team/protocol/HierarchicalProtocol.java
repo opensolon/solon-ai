@@ -54,7 +54,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
             }
         }
 
-        public void absorb(String content, TeamProtocolBase protocol) {
+        public void absorb(String agentName, String content, TeamProtocolBase protocol) {
             if (Utils.isEmpty(content)) return;
 
             ONode report = protocol.sniffJson(content);
@@ -63,8 +63,9 @@ public class HierarchicalProtocol extends TeamProtocolBase {
                 report.remove("role");
                 data.setAll(report.getObjectUnsafe());
             } else {
-                String memo = content.length() > 150 ? content.substring(0, 150) + "..." : content;
-                data.set("_last_memo", memo);
+                // 修复点：将摘要放入专门的 _logs 或 _reports 下，避免被 Supervisor 视为“最终结论”
+                String memo = content.length() > 100 ? content.substring(0, 100) + "..." : content;
+                data.getOrNew("_reports").set(agentName, memo);
             }
         }
 
@@ -128,7 +129,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
             state.markError(agent.name(), "Execution failed or empty response.");
         } else {
             state.clearError(agent.name());
-            state.absorb(lastContent, this);
+            state.absorb(agent.name(), lastContent, this);
         }
 
         Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext()
@@ -165,6 +166,12 @@ public class HierarchicalProtocol extends TeamProtocolBase {
             sb.append(isZh ? "> 暂无汇报数据，请下达初始指令。\n" : "> No data reported yet. Please issue initial instructions.\n");
         } else {
             sb.append("```json\n").append(dashboard.toJson()).append("\n```\n");
+        }
+
+        if (isZh) {
+            sb.append("\n> **决策提醒**：请对比“当前任务”与“运行看板”。除非所有必要的专家（如 Reviewer）都已产出结果，否则严禁结束任务。\n");
+        } else {
+            sb.append("\n> **Decision Hint**: Do not end the task unless all necessary experts (e.g., Reviewer) have contributed.\n");
         }
     }
 

@@ -93,6 +93,13 @@ public class A2AProtocol extends TeamProtocolBase {
                 .collect(Collectors.joining(" | "));
 
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER);
+
+        tool.doHandle(args -> {
+            String target = (String) args.get("target");
+            return isZh ? "已发起向 [" + target + "] 的任务转交，请等待主管确认。"
+                    : "Transfer request to [" + target + "] sent. Waiting for supervisor.";
+        });
+
         if (isZh) {
             tool.title("任务移交")
                     .description("将当前任务移交给团队中更合适的专家接力。")
