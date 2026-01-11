@@ -19,7 +19,6 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
-import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -34,7 +33,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class ReActConfig extends ReActOptions {
+public class ReActConfig {
     /**
      * 智能体唯一标识名
      */
@@ -67,6 +66,11 @@ public class ReActConfig extends ReActOptions {
      * 任务完成标识符（模型输出该字符时循环终止）
      */
     private String finishMarker;
+
+    /**
+     * 默认选项
+     */
+    private final ReActOptions defaultOptions = new ReActOptions();
 
     //----------------------
 
@@ -136,6 +140,10 @@ public class ReActConfig extends ReActOptions {
 
     public Consumer<GraphSpec> getGraphAdjuster() {
         return graphAdjuster;
+    }
+
+    public ReActOptions getDefaultOptions() {
+        return defaultOptions;
     }
 
     /**

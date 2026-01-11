@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
@@ -171,14 +170,14 @@ public class TeamAgent implements Agent {
     /**
      * 创建异步或流式请求包装器
      */
-    public AgentRequest prompt(Prompt prompt) {
-        return new TeamRequestImpl(this, prompt);
+    public TeamRequest prompt(Prompt prompt) {
+        return new TeamRequest(this, prompt);
     }
 
     /**
      * 创建基于文本的请求包装器
      */
-    public AgentRequest prompt(String prompt) {
+    public TeamRequest prompt(String prompt) {
         return prompt(Prompt.of(prompt));
     }
 

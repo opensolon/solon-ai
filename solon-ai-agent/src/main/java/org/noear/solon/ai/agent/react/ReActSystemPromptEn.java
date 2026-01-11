@@ -59,8 +59,6 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
     @Override
     public String getSystemPrompt(ReActTrace trace) {
-        ReActConfig config = trace.getConfig();
-
         final String role = getRole(trace);
         final String instruction = getInstruction(trace);
 
@@ -76,11 +74,11 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         sb.append(instruction);
 
         // 3. 工具集定义：动态注入当前可用的工具列表
-        if (config.getTools().isEmpty()) {
+        if (trace.getOptions().getTools().isEmpty()) {
             sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
         } else {
             sb.append("\n## Available Tools\n");
-            config.getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ")
+            trace.getOptions().getTools().forEach(t -> sb.append("- ").append(t.name()).append(": ")
                     .append(t.description()).append("\n"));
         }
 

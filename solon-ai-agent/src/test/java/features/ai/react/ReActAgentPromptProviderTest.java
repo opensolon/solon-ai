@@ -53,7 +53,7 @@ public class ReActAgentPromptProviderTest {
                 .role("你是一个严谨的数学解题专家")
                 .instruction(trace -> {
                     // 动态感知当前工具集
-                    int toolSize = trace.getConfig().getTools().size();
+                    int toolSize = trace.getOptions().getTools().size();
                     return "### 专家解题指南 (当前可用工具: " + toolSize + ")\n" +
                             "1. **分析**: 拆解问题中的数学逻辑。\n" +
                             "2. **执行**: 利用数学工具进行高精度计算。\n" +

@@ -77,7 +77,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 1：步数安全限制]
         // 检查迭代深度，防止模型在复杂任务中陷入无限逻辑死循环
-        if (trace.nextStep() > config.getMaxSteps()) {
+        if (trace.nextStep() > trace.getOptions().getMaxSteps()) {
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
@@ -88,10 +88,10 @@ public class ReasonTask implements NamedTaskComponent {
         String systemPrompt = config.getSystemPromptFor(trace, context);
 
         // 如果配置了输出格式，则追加指令
-        if (Assert.isNotEmpty(config.getOutputSchema())) {
+        if (Assert.isNotEmpty(trace.getOptions().getOutputSchema())) {
             systemPrompt += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
                     "Please provide the Final Answer strictly following this schema:\n" +
-                    config.getOutputSchema();
+                    trace.getOptions().getOutputSchema();
         }
 
         if (trace.getProtocol() != null) {
@@ -109,7 +109,7 @@ public class ReasonTask implements NamedTaskComponent {
         ChatResponse response = callWithRetry(trace, messages);
 
         // 触发模型响应拦截：常用于死循环检测（onModelEnd 抛出异常可提前终止推理流）
-        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onModelEnd(trace, response);
         }
 
@@ -141,7 +141,7 @@ public class ReasonTask implements NamedTaskComponent {
         trace.setLastAnswer(clearContent);
 
         // 触发思考拦截：通知外部模型当前的推理进展
-        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onThought(trace, clearContent);
         }
 
@@ -169,12 +169,12 @@ public class ReasonTask implements NamedTaskComponent {
                 .prompt(messages)
                 .options(o -> {
                     // 1. 注入内置工具与协议扩展工具
-                    if (config.getTools().size() > 0) {
-                        o.toolsAdd(config.getTools());
+                    if (trace.getOptions().getTools().size() > 0) {
+                        o.toolsAdd(trace.getOptions().getTools());
                         o.optionPut("stop", Utils.asList("Observation:")); // 强制截断，保证 ReAct 闭环
                     }
 
-                    if(config.getOutputSchema() != null){
+                    if(trace.getOptions().getOutputSchema() != null){
                         o.optionPut("response_format",  Utils.asMap("type", "json_object"));
                     }
 
@@ -186,7 +186,7 @@ public class ReasonTask implements NamedTaskComponent {
                     o.autoToolCall(false);
 
                     // 3. 同步业务层拦截器到 Chat 层
-                    for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
+                    for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                         o.interceptorAdd(item.target);
                     }
 
@@ -196,12 +196,12 @@ public class ReasonTask implements NamedTaskComponent {
                 });
 
         // 触发请求发起拦截：可在此阶段进行 Token 预警或动态修改请求参数
-        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onModelStart(trace, req);
         }
 
         // 网络层重试循环
-        int maxRetries = config.getMaxRetries();
+        int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
                 return req.call();
@@ -217,7 +217,7 @@ public class ReasonTask implements NamedTaskComponent {
 
                 try {
                     // 指数退避重试
-                    Thread.sleep(config.getRetryDelayMs() * (i + 1));
+                    Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException("Interrupted during retry", ie);

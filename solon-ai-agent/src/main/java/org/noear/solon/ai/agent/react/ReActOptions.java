@@ -24,7 +24,7 @@ import org.noear.solon.lang.Preview;
 import java.util.*;
 
 /**
- * ReAct 智能体选项（动态调整）
+ * ReAct 智能体选项（可动态调整）
  *
  * @author noear
  * @since 3.8.1
@@ -70,6 +70,24 @@ public class ReActOptions implements NonSerializable {
      * 历史消息窗口大小（从上下文中回溯并注入到当前执行过程的消息条数）
      */
     private int historyWindowSize = 5;
+
+
+    /**
+     * 复制
+     */
+    protected ReActOptions copy() {
+        ReActOptions tmp = new ReActOptions();
+        tmp.tools.putAll( tools);
+        tmp.toolsContext.putAll( toolsContext);
+        tmp.interceptors.addAll( interceptors);
+        tmp.maxSteps = maxSteps;
+        tmp.maxRetries = maxRetries;
+        tmp.retryDelayMs = retryDelayMs;
+        tmp.outputKey = outputKey;
+        tmp.outputSchema = outputSchema;
+        tmp.historyWindowSize = historyWindowSize;
+        return tmp;
+    }
 
 
     // --- 配置注入 (Protected) ---

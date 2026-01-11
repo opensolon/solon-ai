@@ -13,40 +13,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react;
+package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 模式请求
+ * 团队模式请求
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class ReActRequestImpl implements AgentRequest {
-    private final ReActAgent agent;
+public class TeamRequest {
+    private final TeamAgent agent;
     private final Prompt prompt;
     private AgentSession session;
 
-    public ReActRequestImpl(ReActAgent agent, Prompt prompt) {
+    public TeamRequest(TeamAgent agent, Prompt prompt) {
         this.agent = agent;
         this.prompt = prompt;
     }
 
-    @Override
-    public AgentRequest session(AgentSession session) {
+    public TeamRequest session(AgentSession session) {
         this.session = session;
         return this;
     }
 
-    @Override
     public AssistantMessage call() throws Throwable {
         if (session == null) {
             session = InMemoryAgentSession.of();

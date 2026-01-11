@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.task.ActionTask;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
@@ -56,19 +55,33 @@ import java.util.function.Consumer;
 public class ReActAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
-    /** 智能体名称 */
+    /**
+     * 智能体名称
+     */
     private final String name;
-    /** 智能体标题 */
+    /**
+     * 智能体标题
+     */
     private final String title;
-    /** 智能体功能描述 */
+    /**
+     * 智能体功能描述
+     */
     private final String description;
-    /** 推理配置 */
+    /**
+     * 推理配置
+     */
     private final ReActConfig config;
-    /** 逻辑计算图 */
+    /**
+     * 逻辑计算图
+     */
     private final Graph graph;
-    /** 工作流引擎 */
+    /**
+     * 工作流引擎
+     */
     private final FlowEngine flowEngine;
-    /** 状态追踪键 */
+    /**
+     * 状态追踪键
+     */
     private final String traceKey;
 
     /**
@@ -89,7 +102,7 @@ public class ReActAgent implements Agent {
         this.flowEngine = FlowEngine.newInstance(true);
 
         // 1. 挂载流拦截器（用于全局监控或审计）
-        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
+        for (RankEntity<ReActInterceptor> item : config.getDefaultOptions().getInterceptors()) {
             flowEngine.addInterceptor(item.target, item.index);
         }
 
@@ -107,7 +120,7 @@ public class ReActAgent implements Agent {
             spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON);
 
             // 推理任务节点（Reasoning）：决定下一步是调用工具还是直接回答
-            spec.addExclusive(new ReasonTask(config,this))
+            spec.addExclusive(new ReasonTask(config, this))
                     .linkAdd(Agent.ID_ACTION, l -> l.title("route = " + Agent.ID_ACTION).when(ctx ->
                             Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
                     .linkAdd(Agent.ID_END);
@@ -173,8 +186,8 @@ public class ReActAgent implements Agent {
      * @param prompt 提示词对象
      * @return 请求对象
      */
-    public AgentRequest prompt(Prompt prompt) {
-        return new ReActRequestImpl(this, prompt);
+    public ReActRequest prompt(Prompt prompt) {
+        return new ReActRequest(this, prompt);
     }
 
     /**
@@ -183,8 +196,8 @@ public class ReActAgent implements Agent {
      * @param prompt 提示词文本
      * @return 请求对象
      */
-    public AgentRequest prompt(String prompt) {
-        return new ReActRequestImpl(this, Prompt.of(prompt));
+    public ReActRequest prompt(String prompt) {
+        return new ReActRequest(this, Prompt.of(prompt));
     }
 
     /**
@@ -195,6 +208,17 @@ public class ReActAgent implements Agent {
      * @return 最终响应消息
      */
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
+        return this.call(prompt, session, null);
+    }
+
+    /**
+     * 智能体调用入口
+     *
+     * @param prompt  用户输入的提示词
+     * @param session 会话
+     * @return 最终响应消息
+     */
+    public AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) throws Throwable {
         FlowContext context = session.getSnapshot();
         // 维护执行痕迹：若上下文已存在则复用，支持多轮对话或中断恢复
         TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL);
@@ -204,18 +228,22 @@ public class ReActAgent implements Agent {
             context.put(traceKey, trace);
         }
 
-        trace.prepare(config, session, name, protocol);
+        if (options == null) {
+            options = config.getDefaultOptions();
+        }
 
-        if(protocol != null){
+        trace.prepare(config, options, session, name, protocol);
+
+        if (protocol != null) {
             protocol.injectAgentTools(this, trace);
         }
 
         // 1. 记忆加载时序：新推理周期开始时，先从 Session 加载历史记忆
         if (trace.getMessages().isEmpty()) {
             // A. 加载历史（如果配置了窗口）
-            if (config.getHistoryWindowSize() > 0) {
+            if (options.getHistoryWindowSize() > 0) {
                 // 此时尚未存入当前 prompt，获取的是纯历史记录
-                Collection<ChatMessage> history = session.getHistoryMessages(name, config.getHistoryWindowSize());
+                Collection<ChatMessage> history = session.getHistoryMessages(name, options.getHistoryWindowSize());
                 trace.appendMessages(history);
             }
         }
@@ -242,7 +270,7 @@ public class ReActAgent implements Agent {
         Objects.requireNonNull(prompt, "Missing prompt!");
 
         // 触发开始事件
-        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
+        for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
             item.target.onAgentStart(trace);
         }
 
@@ -277,8 +305,8 @@ public class ReActAgent implements Agent {
         }
 
 
-        if (Assert.isNotEmpty(config.getOutputKey())) {
-            context.put(config.getOutputKey(), result);
+        if (Assert.isNotEmpty(options.getOutputKey())) {
+            context.put(options.getOutputKey(), result);
         }
 
         // 将 AI 的最终回答持久化到会话并更新快照
@@ -287,7 +315,7 @@ public class ReActAgent implements Agent {
         session.updateSnapshot(context);
 
         // 触发结束事件
-        for (RankEntity<ReActInterceptor> item : config.getInterceptors()) {
+        for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
             item.target.onAgentEnd(trace);
         }
 
@@ -310,7 +338,9 @@ public class ReActAgent implements Agent {
      * ReAct 智能体构建器
      */
     public static class Builder {
-        /** 推理配置 */
+        /**
+         * 推理配置
+         */
         private ReActConfig config;
 
         /**
@@ -373,7 +403,7 @@ public class ReActAgent implements Agent {
          * @return 构建器
          */
         public Builder addTool(FunctionTool tool) {
-            config.addTool(tool);
+            config.getDefaultOptions().addTool(tool);
             return this;
         }
 
@@ -384,7 +414,7 @@ public class ReActAgent implements Agent {
          * @return 构建器
          */
         public Builder addTool(Collection<FunctionTool> tools) {
-            config.addTool(tools);
+            config.getDefaultOptions().addTool(tools);
             return this;
         }
 
@@ -395,7 +425,7 @@ public class ReActAgent implements Agent {
          * @return 构建器
          */
         public Builder addTool(ToolProvider toolProvider) {
-            config.addTool(toolProvider);
+            config.getDefaultOptions().addTool(toolProvider);
             return this;
         }
 
@@ -407,7 +437,7 @@ public class ReActAgent implements Agent {
          * @return 构建器
          */
         public Builder retryConfig(int maxRetries, long retryDelayMs) {
-            config.setRetryConfig(maxRetries, retryDelayMs);
+            config.getDefaultOptions().setRetryConfig(maxRetries, retryDelayMs);
             return this;
         }
 
@@ -418,7 +448,7 @@ public class ReActAgent implements Agent {
          * @return 构建器
          */
         public Builder maxSteps(int val) {
-            config.setMaxSteps(val);
+            config.getDefaultOptions().setMaxSteps(val);
             return this;
         }
 
@@ -445,44 +475,6 @@ public class ReActAgent implements Agent {
         }
 
         /**
-         * 设置输出结果在 Context 中的存储键
-         *
-         * @param val 存储键
-         * @return 构建器
-         */
-        public Builder outputKey(String val) {
-            config.setOutputKey(val);
-            return this;
-        }
-
-        /**
-         * 设置输出格式要求（例如 JSON 结构描述）
-         */
-        public Builder outputSchema(String val) {
-            config.setOutputSchema(val);
-            return this;
-        }
-
-        /**
-         * 快捷方式：通过 Class 生成 schema 描述（如果 ChatModel 支持此功能）
-         */
-        public Builder outputSchema(Type type) {
-            config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
-            return this;
-        }
-
-        /**
-         * 设置历史窗口大小（多轮对话记忆条数）
-         *
-         * @param val 窗口大小
-         * @return 构建器
-         */
-        public Builder historyWindowSize(int val) {
-            config.setHistoryWindowSize(val);
-            return this;
-        }
-
-        /**
          * 自定义推理提示词模板生成器
          *
          * @param val 模板生成器
@@ -505,6 +497,44 @@ public class ReActAgent implements Agent {
         }
 
         /**
+         * 设置输出结果在 Context 中的存储键
+         *
+         * @param val 存储键
+         * @return 构建器
+         */
+        public Builder outputKey(String val) {
+            config.getDefaultOptions().setOutputKey(val);
+            return this;
+        }
+
+        /**
+         * 设置输出格式要求（例如 JSON 结构描述）
+         */
+        public Builder outputSchema(String val) {
+            config.getDefaultOptions().setOutputSchema(val);
+            return this;
+        }
+
+        /**
+         * 快捷方式：通过 Class 生成 schema 描述（如果 ChatModel 支持此功能）
+         */
+        public Builder outputSchema(Type type) {
+            config.getDefaultOptions().setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
+            return this;
+        }
+
+        /**
+         * 设置历史窗口大小（多轮对话记忆条数）
+         *
+         * @param val 窗口大小
+         * @return 构建器
+         */
+        public Builder historyWindowSize(int val) {
+            config.getDefaultOptions().setHistoryWindowSize(val);
+            return this;
+        }
+
+        /**
          * 添加生命周期拦截器
          *
          * @param vals 拦截器数组
@@ -512,7 +542,7 @@ public class ReActAgent implements Agent {
          */
         public Builder addInterceptor(ReActInterceptor... vals) {
             for (ReActInterceptor val : vals) {
-                config.addInterceptor(val);
+                config.getDefaultOptions().addInterceptor(val);
             }
             return this;
         }
@@ -525,7 +555,7 @@ public class ReActAgent implements Agent {
          * @return 构建器
          */
         public Builder addInterceptor(ReActInterceptor val, int index) {
-            config.addInterceptor(val, index);
+            config.getDefaultOptions().addInterceptor(val, index);
             return this;
         }
 
