@@ -280,6 +280,9 @@ public class ReActAgent implements Agent {
                 flowOptions.interceptorAdd(item.target, item.index);
             }
 
+            //重置使用令牌数
+            trace.getMetrics().setTokenUsage(0L);
+
             // [核心机制] 采用变量域思想传递 KEY_CURRENT_TRACE_KEY
             // 确保任务组件（Task）能根据该 Key 在上下文中定位到正确的状态机（Trace）
             context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {

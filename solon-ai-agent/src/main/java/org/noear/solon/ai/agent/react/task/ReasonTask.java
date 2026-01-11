@@ -108,6 +108,11 @@ public class ReasonTask implements NamedTaskComponent {
         // callWithRetry 负责物理层的网络调用与重试
         ChatResponse response = callWithRetry(trace, messages);
 
+        //记录使用令牌数
+        if(response.getUsage() != null) {
+            trace.getMetrics().addTokenUsage(response.getUsage().totalTokens());
+        }
+
         // 触发模型响应拦截：常用于死循环检测（onModelEnd 抛出异常可提前终止推理流）
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onModelEnd(trace, response);

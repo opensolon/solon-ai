@@ -64,6 +64,10 @@ public class ReActMetrics implements Serializable {
         this.tokenUsage = tokenUsage;
     }
 
+    public void addTokenUsage(long tokenUsage) {
+        this.tokenUsage += tokenUsage;
+    }
+
     // Getter 方法
     public long getTotalDuration() {
         return totalDuration;
