@@ -1,4 +1,4 @@
-package features.ai.react;
+package features.ai.react.generated;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatModel;

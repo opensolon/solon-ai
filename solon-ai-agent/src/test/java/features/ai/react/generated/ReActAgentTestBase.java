@@ -1,4 +1,4 @@
-package features.ai.react;
+package features.ai.react.generated;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;

@@ -1,4 +1,4 @@
-package features.ai.react;
+package features.ai.react.generated;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
