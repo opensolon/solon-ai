@@ -156,6 +156,18 @@ public class SimpleAgent implements Agent {
                 throw new IllegalStateException("Handler or ChatModel must be provided for SimpleAgent");
             }
 
+            if (name == null) {
+                name = "simple_agent";
+            }
+
+            if (title == null) {
+                title = name;
+            }
+
+            if (description == null) {
+                description = title;
+            }
+
             if (profile == null) {
                 profile = new AgentProfile();
             }
