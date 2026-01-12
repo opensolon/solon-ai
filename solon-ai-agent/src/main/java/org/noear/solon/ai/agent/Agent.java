@@ -75,19 +75,6 @@ public interface Agent extends NamedTaskComponent {
     }
 
     /**
-     * 任务评估与能力竞标
-     * <p>在合同网（Contract Net）等协作协议下，智能体通过此方法对特定任务进行自评，
-     * 返回其解决该问题的匹配度、初步方案或预估代价。</p>
-     *
-     * @param session 当前交互会话
-     * @param prompt  待评估的任务提示词
-     * @return 评估结果或竞标说明（默认返回静态描述）
-     */
-    default String estimate(AgentSession session, Prompt prompt) {
-        return descriptionFor(session.getSnapshot());
-    }
-
-    /**
      * 响应式任务执行（基于现有上下文）
      *
      * @param session 会话上下文（持有历史记忆）

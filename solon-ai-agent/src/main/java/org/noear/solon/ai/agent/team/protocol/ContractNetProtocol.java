@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
@@ -115,6 +116,72 @@ public class ContractNetProtocol extends TeamProtocolBase {
         spec.addEnd(Agent.ID_END);
     }
 
+    /**
+     * 根据 Agent 档案自动构造标书 (无需 Agent 介入)
+     * 优化点：引入权重差异，使 Profile 匹配优先于 Description 匹配
+     */
+    protected String constructBid(Agent agent, Prompt prompt) {
+        // 1. 获取任务描述（用户输入）
+        String taskDesc = prompt.getUserContent().toLowerCase();
+        AgentProfile profile = agent.profile();
+
+        // 2. 初始分数
+        int score = 60; // 基础及格分
+
+        // 3. 维度一：Profile Skills 精准匹配 (权重：高)
+        // 命中一个 Skill +15 分，代表该专家有明确的技能认证
+        if (profile != null && !profile.getSkills().isEmpty()) {
+            for (String skill : profile.getSkills()) {
+                if (taskDesc.contains(skill.toLowerCase())) {
+                    score += 15;
+                    break; // 命中核心技能即可显著提升竞争力
+                }
+            }
+        }
+
+        // 4. 维度二：Description 模糊语义匹配 (权重：中)
+        // 如果没有 Profile 或 Profile 未命中，尝试从职责描述中寻找关键词 (+10 分)
+        // 此时 score 如果已经是 75(60+15)，命中描述后可达 85；若仅命中描述则为 70
+        if (containsAnyKeywords(taskDesc, agent.description())) {
+            score += 10;
+        }
+
+        // 5. 维度三：模态契合度校验 (权重：惩罚项)
+        // 如果任务涉及图片但专家不支持，大幅扣分，防止误指派
+        if (profile != null) {
+            boolean taskNeedsImage = taskDesc.matches(".*(图|image|ui|界面|看|海报).*");
+            boolean agentSupportsImage = profile.getInputModes().contains("image");
+            if (taskNeedsImage && !agentSupportsImage) {
+                score -= 40;
+            }
+        }
+
+        // 6. 最终得分约束 (10-95分之间，留出 5 分给 LLM 的主观偏好)
+        score = Math.max(10, Math.min(95, score));
+
+        // 7. 构造结构化标书
+        ONode bidNode = new ONode().asObject();
+        bidNode.set("score", score);
+        bidNode.set("plan", "自动方案评估：基于[" + agent.name() + "]的职能描述与技能标签进行自适应匹配。");
+        bidNode.set("auto_bid", true);
+
+        return bidNode.toJson();
+    }
+
+    /**
+     * 辅助方法：简单的关键词交叉验证
+     */
+    private boolean containsAnyKeywords(String task, String desc) {
+        // 简单的逻辑：将描述按逗号/空格拆分，看有没有命中任务文本
+        String[] keywords = desc.split("[,，\\s]+");
+        for (String kw : keywords) {
+            if (kw.length() > 1 && task.contains(kw.toLowerCase())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         ContractState state = (ContractState) trace.getProtocolContext().get(KEY_CONTRACT_STATE);
@@ -125,8 +192,8 @@ public class ContractNetProtocol extends TeamProtocolBase {
         // 展示当前的标书池
         if (state != null && state.hasBids()) {
             sb.append("```json\n").append(state.toString()).append("\n```\n");
-            sb.append(isZh ? "> 提示：请评估各专家的 plan，并指派最合适的人选。\n"
-                    : "> Tips: Evaluate plans and award the best candidate.\n");
+            sb.append(isZh ? "> 提示：请评估标书。**除非任务已由专家完成，否则必须指派一名专家名以开始执行。**\n"
+                    : "> Tips: Evaluate bids. **You MUST name an agent to execute the task unless it's already finished.**\n");
         } else {
             sb.append(isZh ? "> 状态：尚未发起招标。\n" : "> Status: No bids collected yet.\n");
         }
@@ -149,15 +216,33 @@ public class ContractNetProtocol extends TeamProtocolBase {
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        // A. 显式信号优先（招标阶段）
         if (isBiddingSignal(decision)) {
             Integer round = (Integer) trace.getProtocolContext().getOrDefault(KEY_BIDDING_ROUND, 0);
             if (round < maxBiddingRounds) {
                 trace.getProtocolContext().put(KEY_BIDDING_ROUND, round + 1);
                 return Agent.ID_BIDDING;
             }
-            LOG.warn("ContractNet - Max bidding rounds reached. Force standard routing.");
         }
-        return null;
+
+        // B. 隐式保护：如果没有标书，拦截并强制招标
+        ContractState state = (ContractState) trace.getProtocolContext().get(KEY_CONTRACT_STATE);
+        if (state == null || !state.hasBids()) {
+            if (config.getAgentMap().containsKey(decision)) {
+                LOG.info("ContractNet - Implicit award detected without bids. Redirecting to BiddingTask first.");
+                return Agent.ID_BIDDING;
+            }
+        }
+
+        // C. 定标保护（关键修复点）：
+        // 如果 LLM 输出了专家名字，且该名字在团队成员中，强制返回该名字作为路由目标
+        // 这样可以防止 SupervisorTask 误以为任务结束而走向 [end]
+        if (config.getAgentMap().containsKey(decision)) {
+            LOG.info("ContractNet - Awarding task to: {}", decision);
+            return decision;
+        }
+
+        return null; // 只有当既不是招标也不是指派专家时，才允许走默认逻辑（如结束）
     }
 
     @Override

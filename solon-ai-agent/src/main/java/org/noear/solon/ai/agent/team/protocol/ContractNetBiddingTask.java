@@ -91,7 +91,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
                 try {
                     // 调用智能体的估算接口获取标书内容
                     // 标书通常建议为 JSON 格式：{"score":0.9, "plan":"...", "cost":"..."}
-                    String bidProposal = agent.estimate(trace.getSession(), trace.getPrompt());
+                    String bidProposal = protocol.constructBid(agent, trace.getPrompt());
 
                     // 3. 核心改进：直接调用协议状态对象的 addBid 注入数据
                     // 这样 Protocol.toString() 里的看板逻辑能立刻感知到结构化数据
