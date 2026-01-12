@@ -96,9 +96,20 @@ public class TeamAgentRecursiveTest {
                 .agentAdd(createSimpleAgent("Coder", "程序员"))
                 .build();
 
-        // 2. 带有审核逻辑的顶层团队
+        // 2. 构造团队系统提示词逻辑 (通过 instruction 注入红线)
+        TeamSystemPrompt customPrompt = TeamSystemPrompt.builder()
+                .role("你是一个严谨的代码项目主管。")
+                .instruction(trace ->
+                        "## 协作红线：\n" +
+                                "1. 所有的开发工作（dev_team）完成后，必须指派 Reviewer 进行审核。\n" +
+                                "2. 严禁直接结束任务，除非 Reviewer 给出确认通过的结论。\n" +
+                                "3. 如果 Reviewer 指出问题，你必须重新指派 dev_team 修复。")
+                .build();
+
+        // 3. 带有审核逻辑的顶层团队
         TeamAgent projectTeam = TeamAgent.of(chatModel).name("quality_project")
                 .description("带质检的项目组。如果结果不满意，Reviewer 会要求重写。")
+                .systemPrompt(customPrompt) // 正确注入系统提示词
                 .agentAdd(devTeam)
                 .agentAdd(new Agent() {
                     private int reviewCount = 0;
@@ -117,19 +128,23 @@ public class TeamAgentRecursiveTest {
                 .maxTotalIterations(10)
                 .build();
 
-        // 3. 执行任务
+        // 4. 执行任务
         AgentSession session = InMemoryAgentSession.of("sn_feedback_loop_2026");
         projectTeam.call(Prompt.of("请开发一个登录模块。"), session);
 
-        // 4. 关键检测点：验证反馈循环是否生效
-        TeamTrace rootTrace = session.getSnapshot().getAs("__quality_project");
+        // 5. 关键检测点：验证反馈循环是否生效
+        // 修正：使用 getTraceKey() 获取动态生成的键名
+        TeamTrace rootTrace = session.getSnapshot().getAs(projectTeam.getTraceKey());
         Assertions.assertNotNull(rootTrace, "执行轨迹丢失");
 
-        // 验证 1：验证是否出现了打回重做的路径（dev_team 应被多次调用）
+        // 验证 1：验证是否出现了打回重做的路径
         long devTeamCalls = rootTrace.getSteps().stream()
                 .filter(s -> "dev_team".equalsIgnoreCase(s.getSource())).count();
 
         log.info("反馈循环中 dev_team 被激活次数: {}", devTeamCalls);
+        System.out.println("History Log:\n" + rootTrace.getFormattedHistory());
+
+        // 预期：dev_team(1) -> Reviewer(打回) -> dev_team(2)
         Assertions.assertTrue(devTeamCalls >= 2, "当审核打回时，Supervisor 应该重新路由回 dev_team");
 
         // 验证 2：验证最终 Trace 是否捕获到了审核通过的终态消息
