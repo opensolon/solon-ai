@@ -42,20 +42,29 @@ public class ABTestingDecisionGraphTest {
                 .graphAdjuster(spec -> {
                     // --- 节点定义 ---
 
-                    // 1. 数据输入节点
+                    spec.getNode("supervisor")
+                            .linkClear()
+                            .linkAdd("test_result_input");
+
                     spec.addActivity("test_result_input")
                             .title("准备测试数据")
                             .task((ctx, node) -> {
                                 ctx.put("variant_a_conv", 15.2);
                                 ctx.put("variant_b_conv", 18.7); // B 更好
                                 System.out.println(">>> [Node] 数据已载入上下文");
-                            });
+                            })
+                            .linkAdd("parallel_analysis");
 
-                    // 2. 并行网关节点
-                    spec.addParallel("parallel_analysis").title("并行分析开始");
+                    spec.addParallel("parallel_analysis").title("并行分析开始")
+                            .linkAdd(dataAnalyst.name())
+                            .linkAdd(productManager.name())
+                            .linkAdd(engineeringLead.name());
 
-                    // 3. 决策汇聚节点（由各专家 Link 过来）
-                    spec.addActivity("decision_gateway")
+                    spec.getNode(dataAnalyst.name()).linkClear().linkAdd("decision_gateway");
+                    spec.getNode(productManager.name()).linkClear().linkAdd("decision_gateway");
+                    spec.getNode(engineeringLead.name()).linkClear().linkAdd("decision_gateway");
+
+                    spec.addParallel("decision_gateway")
                             .title("多数票决策")
                             .task((ctx, node) -> {
                                 String d = ctx.getAs("data_opinion");
@@ -70,29 +79,8 @@ public class ABTestingDecisionGraphTest {
                                 String finalVerdict = (approveCount >= 2) ? "PROMOTED_B" : "RETAINED_A";
                                 ctx.put("ab_test_decision", finalVerdict);
                                 System.out.println(">>> [Decision] 赞成票: " + approveCount + ", 最终决策: " + finalVerdict);
-                            });
-
-                    // --- 路由重构 ---
-                    // 强制修改 supervisor -> input
-                    NodeSpec supervisor = spec.getNode("supervisor");
-                    supervisor.getLinks().clear();
-                    supervisor.linkAdd("test_result_input");
-
-                    // input -> parallel_analysis
-                    spec.getNode("test_result_input").linkAdd("parallel_analysis");
-
-                    // parallel_analysis -> 3位专家
-                    spec.getNode("parallel_analysis").linkAdd("data_analyst");
-                    spec.getNode("parallel_analysis").linkAdd("product_manager");
-                    spec.getNode("parallel_analysis").linkAdd("engineering_lead");
-
-                    // 3位专家 -> 汇聚节点
-                    spec.getNode("data_analyst").linkAdd("decision_gateway");
-                    spec.getNode("product_manager").linkAdd("decision_gateway");
-                    spec.getNode("engineering_lead").linkAdd("decision_gateway");
-
-                    // 汇聚节点 -> 结束
-                    spec.getNode("decision_gateway").linkAdd(Agent.ID_END);
+                            })
+                            .linkAdd(Agent.ID_END);
                 })
                 .build();
 
