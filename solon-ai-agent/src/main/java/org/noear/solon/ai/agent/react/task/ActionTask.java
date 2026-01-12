@@ -60,7 +60,7 @@ public class ActionTask implements NamedTaskComponent {
 
     // 正则说明：匹配 Action: 后随的 JSON 内容。支持 Markdown json 块包装，支持跨行。
     private static final Pattern ACTION_PATTERN = Pattern.compile(
-            "Action:\\s*(?:```json)?\\s*(\\{.*?\\})\\s*(?:```)?",
+            "Action:\\s*(?:```json)?\\s*(\\{[\\s\\S]*\\})\\s*(?:```)?",
             Pattern.DOTALL
     );
 
