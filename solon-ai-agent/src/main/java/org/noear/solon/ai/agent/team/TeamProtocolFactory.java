@@ -31,5 +31,5 @@ public interface TeamProtocolFactory {
      *
      * @param config 团队配置
      */
-    TeamProtocol create(TeamConfig config);
+    TeamProtocol create(TeamAgentConfig config);
 }

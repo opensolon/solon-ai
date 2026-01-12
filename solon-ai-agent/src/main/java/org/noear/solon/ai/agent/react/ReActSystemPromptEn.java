@@ -103,7 +103,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
     @Override
     public String getInstruction(ReActTrace trace) {
-        ReActConfig config = trace.getConfig();
+        ReActAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
         // A. 输出格式约束（ReAct 协议基石）

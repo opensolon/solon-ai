@@ -17,7 +17,7 @@ package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.flow.FlowContext;
@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
 public class ContractNetBiddingTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(ContractNetBiddingTask.class);
 
-    private final TeamConfig config;
+    private final TeamAgentConfig config;
     private final ContractNetProtocol protocol;
 
     /**
@@ -53,7 +53,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
      * @param config   团队配置
      * @param protocol 所属的合同网协议实例
      */
-    public ContractNetBiddingTask(TeamConfig config, ContractNetProtocol protocol) {
+    public ContractNetBiddingTask(TeamAgentConfig config, ContractNetProtocol protocol) {
         this.config = config;
         this.protocol = protocol;
     }

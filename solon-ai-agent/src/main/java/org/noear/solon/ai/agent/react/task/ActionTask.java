@@ -18,7 +18,7 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActConfig;
+import org.noear.solon.ai.agent.react.ReActAgentConfig;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.interceptor.ToolChain;
@@ -64,9 +64,9 @@ public class ActionTask implements NamedTaskComponent {
             Pattern.DOTALL
     );
 
-    private final ReActConfig config;
+    private final ReActAgentConfig config;
 
-    public ActionTask(ReActConfig config) {
+    public ActionTask(ReActAgentConfig config) {
         this.config = config;
     }
 

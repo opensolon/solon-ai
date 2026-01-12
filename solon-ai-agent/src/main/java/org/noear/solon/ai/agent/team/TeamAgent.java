@@ -74,7 +74,7 @@ public class TeamAgent implements Agent {
     /**
      * 静态配置对象
      */
-    private final TeamConfig config;
+    private final TeamAgentConfig config;
     /**
      * 协作执行图实例
      */
@@ -88,7 +88,7 @@ public class TeamAgent implements Agent {
      * 构造函数：初始化团队容器
      * * @param config 团队配置，包含成员、协议、拦截器等
      */
-    public TeamAgent(TeamConfig config) {
+    public TeamAgent(TeamAgentConfig config) {
         Objects.requireNonNull(config, "Missing config!");
 
         this.config = config;
@@ -133,7 +133,7 @@ public class TeamAgent implements Agent {
     /**
      * 获取团队原始配置
      */
-    public TeamConfig getConfig() {
+    public TeamAgentConfig getConfig() {
         return config;
     }
 
@@ -291,10 +291,10 @@ public class TeamAgent implements Agent {
      * 团队智能体流式构建器
      */
     public static class Builder {
-        private final TeamConfig config;
+        private final TeamAgentConfig config;
 
         public Builder(@Nullable ChatModel chatModel) {
-            this.config = new TeamConfig(chatModel);
+            this.config = new TeamAgentConfig(chatModel);
         }
 
         /**

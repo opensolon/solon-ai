@@ -1,7 +1,7 @@
 package org.noear.solon.ai.agent.team.task;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRequestDesc;
@@ -28,9 +28,9 @@ import java.util.stream.Collectors;
 @Preview("3.8.1")
 public class SupervisorTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(SupervisorTask.class);
-    private final TeamConfig config;
+    private final TeamAgentConfig config;
 
-    public SupervisorTask(TeamConfig config) {
+    public SupervisorTask(TeamAgentConfig config) {
         this.config = config;
     }
 

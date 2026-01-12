@@ -69,7 +69,7 @@ public class ReActAgent implements Agent {
     /**
      * 推理配置
      */
-    private final ReActConfig config;
+    private final ReActAgentConfig config;
     /**
      * 逻辑计算图
      */
@@ -88,7 +88,7 @@ public class ReActAgent implements Agent {
      *
      * @param config ReAct 配置对象
      */
-    public ReActAgent(ReActConfig config) {
+    public ReActAgent(ReActAgentConfig config) {
         Objects.requireNonNull(config, "Missing config!");
 
         this.config = config;
@@ -153,7 +153,7 @@ public class ReActAgent implements Agent {
      *
      * @return 推理配置
      */
-    public ReActConfig getConfig() {
+    public ReActAgentConfig getConfig() {
         return config;
     }
 
@@ -359,7 +359,7 @@ public class ReActAgent implements Agent {
         /**
          * 推理配置
          */
-        private ReActConfig config;
+        private ReActAgentConfig config;
 
         /**
          * 构造构建器
@@ -367,7 +367,7 @@ public class ReActAgent implements Agent {
          * @param chatModel 推理模型
          */
         public Builder(ChatModel chatModel) {
-            this.config = new ReActConfig(chatModel);
+            this.config = new ReActAgentConfig(chatModel);
         }
 
         /**

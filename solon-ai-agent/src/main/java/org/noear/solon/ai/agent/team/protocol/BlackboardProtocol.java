@@ -19,7 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -103,7 +103,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         }
     }
 
-    public BlackboardProtocol(TeamConfig config) { super(config); }
+    public BlackboardProtocol(TeamAgentConfig config) { super(config); }
 
     @Override
     public String name() { return "BLACKBOARD"; }

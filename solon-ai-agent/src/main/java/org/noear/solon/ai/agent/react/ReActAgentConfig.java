@@ -36,7 +36,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class ReActConfig {
+public class ReActAgentConfig {
     /**
      * 智能体唯一标识名
      */
@@ -87,7 +87,7 @@ public class ReActConfig {
      *
      * @param chatModel 执行推理的模型，不能为空
      */
-    public ReActConfig(ChatModel chatModel) {
+    public ReActAgentConfig(ChatModel chatModel) {
         Objects.requireNonNull(chatModel, "chatModel");
         this.chatModel = chatModel;
     }

@@ -82,7 +82,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
     @Override
     public String getInstruction(TeamTrace trace) {
-        TeamConfig config = trace.getConfig();
+        TeamAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
         // A. 团队成员：动态注入当前团队中各 Agent 的职责描述

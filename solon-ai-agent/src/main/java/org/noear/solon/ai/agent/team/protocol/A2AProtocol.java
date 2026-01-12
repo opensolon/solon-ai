@@ -20,7 +20,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.ChatRole;
@@ -57,7 +57,7 @@ public class A2AProtocol extends TeamProtocolBase {
 
     private final int maxTransferRounds = 5; // 最大转交次数
 
-    public A2AProtocol(TeamConfig config) {
+    public A2AProtocol(TeamAgentConfig config) {
         super(config);
     }
 

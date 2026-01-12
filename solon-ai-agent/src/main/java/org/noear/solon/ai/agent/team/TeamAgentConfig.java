@@ -19,7 +19,6 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.NonSerializable;
@@ -36,7 +35,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class TeamConfig implements NonSerializable {
+public class TeamAgentConfig implements NonSerializable {
     /**
      * 团队唯一标识名称（用于日志追踪及 context 引用）
      */
@@ -107,7 +106,7 @@ public class TeamConfig implements NonSerializable {
      *
      * @param chatModel 担任“主管”角色的 ChatModel
      */
-    public TeamConfig(ChatModel chatModel) {
+    public TeamAgentConfig(ChatModel chatModel) {
         this.chatModel = chatModel;
     }
 

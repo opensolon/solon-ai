@@ -18,7 +18,7 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.ChatRole;
@@ -73,7 +73,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         public String toString() { return data.toJson(); }
     }
 
-    public HierarchicalProtocol(TeamConfig config) {
+    public HierarchicalProtocol(TeamAgentConfig config) {
         super(config);
     }
 

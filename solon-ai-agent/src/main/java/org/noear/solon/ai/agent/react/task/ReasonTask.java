@@ -18,7 +18,7 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActConfig;
+import org.noear.solon.ai.agent.react.ReActAgentConfig;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatRequestDesc;
@@ -52,10 +52,10 @@ import java.util.List;
 public class ReasonTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(ReasonTask.class);
 
-    private final ReActConfig config;
+    private final ReActAgentConfig config;
     private final ReActAgent agent;
 
-    public ReasonTask(ReActConfig config, ReActAgent agent) {
+    public ReasonTask(ReActAgentConfig config, ReActAgent agent) {
         this.config = config;
         this.agent = agent;
     }

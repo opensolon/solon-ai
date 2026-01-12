@@ -47,7 +47,7 @@ public class ReActTrace implements AgentTrace {
     /**
      * 当前运行配置
      */
-    private transient ReActConfig config;
+    private transient ReActAgentConfig config;
     /**
      * 当前运行选项
      */
@@ -116,7 +116,7 @@ public class ReActTrace implements AgentTrace {
     /**
      * 准备执行环境（由运行时注入上下文）
      */
-    protected void prepare(ReActConfig config, ReActOptions options, AgentSession session, String agentName, TeamProtocol protocol) {
+    protected void prepare(ReActAgentConfig config, ReActOptions options, AgentSession session, String agentName, TeamProtocol protocol) {
         this.config = config;
         this.options = options;
         this.session = session;
@@ -127,7 +127,7 @@ public class ReActTrace implements AgentTrace {
     /**
      * 获取运行配置
      */
-    public ReActConfig getConfig() {
+    public ReActAgentConfig getConfig() {
         return config;
     }
 

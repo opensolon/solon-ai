@@ -20,52 +20,38 @@ import java.util.function.Consumer;
  * @author noear 2026/1/12 created
  */
 public class SimpleAgent implements Agent {
-    private final String name;
-    private final String title;
-    private final String description;
-    private final AgentProfile profile;
-    private final SimpleSystemPrompt systemPrompt;
+    private final SimpleAgentConfig config;
 
-    private final ChatModel chatModel;
-    private final AgentHandler handler;
-
-    private SimpleAgent(String name, String title, String description, AgentProfile profile, SimpleSystemPrompt systemPrompt, ChatModel chatModel, AgentHandler handler) {
-        this.name = name;
-        this.title = title;
-        this.description = description;
-        this.profile = profile;
-        this.systemPrompt = systemPrompt;
-
-        this.chatModel = chatModel;
-        this.handler = handler;
+    private SimpleAgent(SimpleAgentConfig config) {
+        this.config = config;
     }
 
     @Override
     public String name() {
-        return name;
+        return config.getName();
     }
 
     @Override
     public String title() {
-        return title;
+        return config.getTitle();
     }
 
     @Override
     public String description() {
-        return description;
+        return config.getDescription();
     }
 
     @Override
     public AgentProfile profile() {
-        return profile;
+        return config.getProfile();
     }
 
     @Override
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
         String spText = null;
-        if (systemPrompt != null) {
+        if (config.getSystemPrompt() != null) {
             FlowContext context = session.getSnapshot();
-            spText = systemPrompt.getSystemPromptFor(context);
+            spText = config.getSystemPrompt().getSystemPromptFor(context);
         }
 
         if (spText != null && !spText.isEmpty()) {
@@ -75,10 +61,10 @@ public class SimpleAgent implements Agent {
             prompt = Prompt.of(newMessages);
         }
 
-        if (chatModel != null) {
-            return chatModel.prompt(prompt).call().getMessage();
+        if (config.getChatModel() != null) {
+            return config.getChatModel().prompt(prompt).call().getMessage();
         } else {
-            return handler.call(prompt, session);
+            return config.getHandler().call(prompt, session);
         }
     }
 
@@ -100,46 +86,40 @@ public class SimpleAgent implements Agent {
      * 智能体构建器
      */
     public static class Builder {
-        private String name;
-        private String title;
-        private String description;
-        private AgentProfile profile;
-        private SimpleSystemPrompt systemPrompt;
-        private ChatModel chatModel;
-        private AgentHandler handler;
+        private SimpleAgentConfig config = new SimpleAgentConfig();
 
         public Builder name(String name) {
-            this.name = name;
+            config.setName(name);
             return this;
         }
 
         public Builder title(String title) {
-            this.title = title;
+            config.setTitle(title);
             return this;
         }
 
         public Builder description(String description) {
-            this.description = description;
+            config.setDescription(description);
             return this;
         }
 
         public Builder profile(AgentProfile profile) {
-            this.profile = profile;
+            config.setProfile(profile);
             return this;
         }
 
         public Builder chatModel(ChatModel chatModel) {
-            this.chatModel = chatModel;
+            config.setChatModel(chatModel);
             return this;
         }
 
         public Builder systemPrompt(SimpleSystemPrompt systemPrompt) {
-            this.systemPrompt = systemPrompt;
+            config.setSystemPrompt(systemPrompt);
             return this;
         }
 
         public Builder handler(AgentHandler handler) {
-            this.handler = handler;
+            config.setHandler(handler);
             return this;
         }
 
@@ -152,27 +132,23 @@ public class SimpleAgent implements Agent {
         }
 
         public SimpleAgent build() {
-            if (handler == null && chatModel == null) {
+            if (config.getHandler() == null && config.getChatModel() == null) {
                 throw new IllegalStateException("Handler or ChatModel must be provided for SimpleAgent");
             }
 
-            if (name == null) {
-                name = "simple_agent";
+            if (config.getName() == null) {
+                config.setName("simple_agent");
             }
 
-            if (title == null) {
-                title = name;
+            if (config.getTitle() == null) {
+                config.setTitle(config.getName());
             }
 
-            if (description == null) {
-                description = title;
+            if (config.getDescription() == null) {
+                config.setDescription(config.getTitle());
             }
 
-            if (profile == null) {
-                profile = new AgentProfile();
-            }
-
-            return new SimpleAgent(name, title, description, profile, systemPrompt, chatModel, handler);
+            return new SimpleAgent(config);
         }
     }
 }

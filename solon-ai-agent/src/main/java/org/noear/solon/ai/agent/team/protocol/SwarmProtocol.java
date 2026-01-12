@@ -18,7 +18,7 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.flow.FlowContext;
@@ -41,7 +41,7 @@ public class SwarmProtocol extends TeamProtocolBase {
     private static final Logger LOG = LoggerFactory.getLogger(SwarmProtocol.class);
     private static final String KEY_SWARM_STATE = "swarm_state_node";
 
-    public SwarmProtocol(TeamConfig config) {
+    public SwarmProtocol(TeamAgentConfig config) {
         super(config);
     }
 

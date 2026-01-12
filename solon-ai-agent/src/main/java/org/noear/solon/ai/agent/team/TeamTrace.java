@@ -49,7 +49,7 @@ public class TeamTrace implements AgentTrace {
     /**
      * 关联的团队配置（生命周期内稳定，不参与持久化序列化）
      */
-    private transient TeamConfig config;
+    private transient TeamAgentConfig config;
     private transient TeamOptions options;
     /**
      * 当前活跃的会话上下文（持有底层 LLM 记忆，不参与持久化序列化）
@@ -157,7 +157,7 @@ public class TeamTrace implements AgentTrace {
     /**
      * 运行时环境初始化
      */
-    protected void prepare(TeamConfig config, TeamOptions options, AgentSession session, String agentName) {
+    protected void prepare(TeamAgentConfig config, TeamOptions options, AgentSession session, String agentName) {
         this.config = config;
         this.options = options;
         this.session = session;
@@ -170,7 +170,7 @@ public class TeamTrace implements AgentTrace {
         return agentName;
     }
 
-    public TeamConfig getConfig() {
+    public TeamAgentConfig getConfig() {
         return config;
     }
 

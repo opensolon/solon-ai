@@ -18,7 +18,7 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.team.TeamConfig;
+import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
@@ -93,7 +93,7 @@ public class SequentialProtocol extends HierarchicalProtocol {
         }
     }
 
-    public SequentialProtocol(TeamConfig config) {
+    public SequentialProtocol(TeamAgentConfig config) {
         super(config);
     }
 
