@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public interface Agent extends NamedTaskComponent {
+public interface Agent extends AgentHandler, NamedTaskComponent {
     static final Logger LOG = LoggerFactory.getLogger(Agent.class);
 
     /**
@@ -57,8 +57,9 @@ public interface Agent extends NamedTaskComponent {
 
     /**
      * 获取智能体档案
-     * */
-    default AgentProfile profile(){
+     *
+     */
+    default AgentProfile profile() {
         return null;
     }
 
@@ -115,7 +116,7 @@ public interface Agent extends NamedTaskComponent {
         String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
 
-        if(trace != null){
+        if (trace != null) {
             trace.setLastAgentName(this.name());
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()) {
                 if (item.target.shouldAgentContinue(trace, this) == false) {
@@ -167,11 +168,17 @@ public interface Agent extends NamedTaskComponent {
 
     // --- 标准上下文字典 Key ---
 
-    /** 当前活跃轨迹的 Key */
+    /**
+     * 当前活跃轨迹的 Key
+     */
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key_";
-    /** 会话对象存储 Key */
+    /**
+     * 会话对象存储 Key
+     */
     static String KEY_SESSION = "_SESSION_";
-    /** 协作协议存储 Key */
+    /**
+     * 协作协议存储 Key
+     */
     static String KEY_PROTOCOL = "_PROTOCOL_";
 
     // --- 标准节点标识 ID ---

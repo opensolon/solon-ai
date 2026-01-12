@@ -314,6 +314,14 @@ public class TeamAgent implements Agent {
         }
 
         /**
+         * 设置团队显示标题
+         */
+        public Builder title(String title) {
+            config.setTitle(title);
+            return this;
+        }
+
+        /**
          * 设置团队能力简述
          */
         public Builder description(String description) {
