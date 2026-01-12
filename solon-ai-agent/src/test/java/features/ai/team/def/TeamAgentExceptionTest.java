@@ -54,6 +54,7 @@ public class TeamAgentExceptionTest {
             team.call(Prompt.of("触发异常测试"), session);
             Assertions.fail("期望抛出异常但未捕获到");
         } catch (Throwable e) {
+            e.printStackTrace();
             // 在 Solon AI 中，底层 RuntimeException 通常会被封装在调用链中
             String errorMsg = e.getCause().toString();
             System.out.println("捕获到预期的 Agent 异常: " + errorMsg);
