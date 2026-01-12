@@ -23,230 +23,121 @@ import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.RankEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Consumer;
 
 /**
+ * 简单智能体配置类
+ *
  * @author noear 2026/1/12 created
  */
 public class SimpleAgentConfig {
+    private static final Logger log = LoggerFactory.getLogger(SimpleAgentConfig.class);
+
+    /** 唯一标识名 */
     private String name;
+    /** 显示标题 */
     private String title;
+    /** 功能描述 */
     private String description;
+    /** 智能体画像（能力、模态支持等） */
     private AgentProfile profile;
+    /** 系统提示词模板（支持动态注入上下文） */
     private SimpleSystemPrompt systemPrompt;
+    /** 绑定的物理聊天模型 */
     private ChatModel chatModel;
-    /**
-     * 挂载的功能工具集
-     */
+    /** 挂载的本地/远程功能工具集 */
     private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
-    /**
-     * 推理阶段的特定 ChatOptions 配置（如温度、TopP 等）
-     */
+    /** 推理阶段的特定 ChatOptions 配置（如温度、TopP 等） */
     private Consumer<ChatOptions> chatOptions;
-
+    /** 自定义处理器（与 chatModel 二选一） */
     private AgentHandler handler;
-
-    /**
-     * 工具调用上下文
-     */
+    /** 工具调用的共享上下文数据 */
     private final Map<String, Object> toolsContext = new LinkedHashMap<>();
-    /**
-     * 生命周期拦截器（监控 Thought, Action, Observation 等状态变化）
-     */
+    /** 生命周期拦截器队列（支持监控、审计、Thought 记录等） */
     private final List<RankEntity<ChatInterceptor>> interceptors = new ArrayList<>();
 
-    /**
-     * 模型调用失败后的最大重试次数
-     */
+    /** 模型调用失败后的最大重试次数 */
     private int maxRetries = 3;
-    /**
-     * 重试延迟时间（毫秒）
-     */
+    /** 指数退避重试的延迟基础时间（毫秒） */
     private long retryDelayMs = 1000L;
-    /**
-     * 历史消息窗口大小（从上下文中回溯并注入到当前执行过程的消息条数）
-     */
+    /** 历史消息回溯窗口（注入到当前 Prompt 的对话轮数） */
     private int historyWindowSize = 5;
 
-    /**
-     * 结果输出 Key
-     */
+    /** 响应结果回填到 FlowContext 的键名 */
     private String outputKey;
-    /**
-     * 期望的输出 Schema（例如 JSON Schema 字符串或描述）
-     */
+    /** 期望的输出 JSON Schema 或格式协议描述 */
     private String outputSchema;
 
+    // --- Setter & Add Methods (Protected/Public) ---
 
-    // --- Getter Methods (Public) ---
+    protected void setName(String name) { this.name = name; }
+    protected void setTitle(String title) { this.title = title; }
+    protected void setDescription(String description) { this.description = description; }
+    protected void setProfile(AgentProfile profile) { this.profile = profile; }
+    protected void setSystemPrompt(SimpleSystemPrompt systemPrompt) { this.systemPrompt = systemPrompt; }
+    protected void setChatModel(ChatModel chatModel) { this.chatModel = chatModel; }
+    protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
+    protected void setHandler(AgentHandler handler) { this.handler = handler; }
 
-    public String getName() {
-        return name;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public AgentProfile getProfile() {
-        if (profile == null) {
-            profile = new AgentProfile();
-        }
-
-        return profile;
-    }
-
-    public SimpleSystemPrompt getSystemPrompt() {
-        return systemPrompt;
-    }
-
-    public ChatModel getChatModel() {
-        return chatModel;
-    }
-
-    public Collection<FunctionTool> getTools() {
-        return tools.values();
-    }
-
-    public Consumer<ChatOptions> getChatOptions() {
-        return chatOptions;
-    }
-
-    public Map<String, Object> getToolsContext() {
-        return toolsContext;
-    }
-
-    public List<RankEntity<ChatInterceptor>> getInterceptors() {
-        return interceptors;
-    }
-
-    public AgentHandler getHandler() {
-        return handler;
-    }
-
-
-    public int getMaxRetries() {
-        return maxRetries;
-    }
-
-    public long getRetryDelayMs() {
-        return retryDelayMs;
-    }
-
-    public int getHistoryWindowSize() {
-        return historyWindowSize;
-    }
-
-
-    public String getOutputKey() {
-        return outputKey;
-    }
-
-    public String getOutputSchema() {
-        return outputSchema;
-    }
-
-
-    // --- Setter Methods (Protected) ---
-
-    protected void setName(String name) {
-        this.name = name;
-    }
-
-    protected void setTitle(String title) {
-        this.title = title;
-    }
-
-    protected void setDescription(String description) {
-        this.description = description;
-    }
-
-    protected void setProfile(AgentProfile profile) {
-        this.profile = profile;
-    }
-
-    protected void setSystemPrompt(SimpleSystemPrompt systemPrompt) {
-        this.systemPrompt = systemPrompt;
-    }
-
-    protected void setChatModel(ChatModel chatModel) {
-        this.chatModel = chatModel;
-    }
-
-    protected void setChatOptions(Consumer<ChatOptions> chatOptions) {
-        this.chatOptions = chatOptions;
-    }
-
-
-    protected void setHandler(AgentHandler handler) {
-        this.handler = handler;
-    }
-
-    /**
-     * 添加单个功能工具
-     */
+    /** 注册功能工具 */
     protected void addTool(FunctionTool... tools) {
         for (FunctionTool tool : tools) {
+            if (log.isDebugEnabled()) log.debug("Agent [{}] linked tool: {}", name, tool.name());
             this.tools.put(tool.name(), tool);
         }
     }
 
-    /**
-     * 批量添加功能工具
-     */
     protected void addTool(Collection<FunctionTool> tools) {
-        for (FunctionTool tool : tools) {
-            addTool(tool);
-        }
+        for (FunctionTool tool : tools) addTool(tool);
     }
 
-    /**
-     * 通过 ToolProvider 注入工具集
-     */
     protected void addTool(ToolProvider toolProvider) {
         addTool(toolProvider.getTools());
     }
 
+    /** 注册并重排拦截器 */
     public void addInterceptor(ChatInterceptor interceptor, int index) {
         interceptors.add(new RankEntity<>(interceptor, index));
-
-        if (interceptors.size() > 0) {
-            Collections.sort(interceptors);
-        }
+        Collections.sort(interceptors);
     }
 
-    /**
-     * 配置重试策略
-     *
-     * @param maxRetries   最大重试次数
-     * @param retryDelayMs 重试延迟时间（毫秒）
-     */
+    /** 配置容错策略 */
     protected void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(500, retryDelayMs); // 最小 500ms
+        this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
-    /**
-     * 设置历史消息窗口大小
-     *
-     * @param historyWindowSize 回溯的消息条数（建议设置为奇数以保持对话轮次完整）
-     */
+    /** 设置短期记忆回溯深度 */
     protected void setHistoryWindowSize(int historyWindowSize) {
         this.historyWindowSize = Math.max(0, historyWindowSize);
     }
 
+    protected void setOutputKey(String val) { this.outputKey = val; }
+    protected void setOutputSchema(String val) { this.outputSchema = val; }
 
-    protected void setOutputKey(String val) {
-        this.outputKey = val;
-    }
+    // --- Getter Methods (Public) ---
 
-    protected void setOutputSchema(String val) {
-        this.outputSchema = val;
+    public String getName() { return name; }
+    public String getTitle() { return title; }
+    public String getDescription() { return description; }
+    public AgentProfile getProfile() {
+        if (profile == null) profile = new AgentProfile();
+        return profile;
     }
+    public SimpleSystemPrompt getSystemPrompt() { return systemPrompt; }
+    public ChatModel getChatModel() { return chatModel; }
+    public Collection<FunctionTool> getTools() { return tools.values(); }
+    public Consumer<ChatOptions> getChatOptions() { return chatOptions; }
+    public Map<String, Object> getToolsContext() { return toolsContext; }
+    public List<RankEntity<ChatInterceptor>> getInterceptors() { return interceptors; }
+    public AgentHandler getHandler() { return handler; }
+    public int getMaxRetries() { return maxRetries; }
+    public long getRetryDelayMs() { return retryDelayMs; }
+    public int getHistoryWindowSize() { return historyWindowSize; }
+    public String getOutputKey() { return outputKey; }
+    public String getOutputSchema() { return outputSchema; }
 }

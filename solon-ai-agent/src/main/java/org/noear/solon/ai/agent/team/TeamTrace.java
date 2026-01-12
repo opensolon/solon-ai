@@ -165,7 +165,7 @@ public class TeamTrace implements AgentTrace {
         steps.add(new TeamStep(role, source, content, duration));
         isUpdateHistoryCache = true;
 
-        if (LOG.isDebugEnabled()) {
+        if (LOG.isDebugEnabled() && config != null) {
             LOG.debug("TeamTrace [{}] step added: role={}, source={}, duration={}ms",
                     config.getName(), role, source, duration);
         }

@@ -18,20 +18,25 @@ package org.noear.solon.ai.agent.simple;
 import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.function.Function;
 
 /**
- * 简单智能体系统提示词提供者
- *
- * <p>支持基于 Snel 模板引擎的动态渲染，允许在执行期从 FlowContext 注入变量</p>
+ * 简单系统提示词 (System Prompt) 提供者
+ * * <p>采用 [角色设定] + [执行指令] 的结构化布局，支持通过 Snel 引擎从 FlowContext 动态渲染变量</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public class SimpleSystemPrompt {
+    private static final Logger LOG = LoggerFactory.getLogger(SimpleSystemPrompt.class);
+
+    /** 角色设定提供者 */
     private final Function<FlowContext, String> roleProvider;
+    /** 执行指令提供者 */
     private final Function<FlowContext, String> instructionProvider;
 
     public SimpleSystemPrompt(Function<FlowContext, String> roleProvider, Function<FlowContext, String> instructionProvider) {
@@ -40,7 +45,7 @@ public class SimpleSystemPrompt {
     }
 
     /**
-     * 获取完整的系统提示词（执行 Snel 渲染）
+     * 获取最终渲染后的系统提示词
      */
     public String getSystemPromptFor(FlowContext context) {
         String rawPrompt = getSystemPrompt(context);
@@ -48,12 +53,18 @@ public class SimpleSystemPrompt {
             return rawPrompt;
         }
 
-        // 支持模板渲染，例如：你正在处理来自 ${user} 的请求
-        return SnelUtil.render(rawPrompt, context.model());
+        // 动态渲染模板（如解析 ${user_name}）
+        String rendered = SnelUtil.render(rawPrompt, context.model());
+
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("SystemPrompt rendered: {}", rendered);
+        }
+
+        return rendered;
     }
 
     /**
-     * 组合角色和指令
+     * 组合 角色 (Role) 与 指令 (Instruction) 文本
      */
     public String getSystemPrompt(FlowContext context) {
         StringBuilder sb = new StringBuilder();
@@ -69,10 +80,12 @@ public class SimpleSystemPrompt {
         return sb.toString();
     }
 
+    /** 获取角色文本 */
     public String getRole(FlowContext context) {
         return roleProvider != null ? roleProvider.apply(context) : null;
     }
 
+    /** 获取指令文本 */
     public String getInstruction(FlowContext context) {
         return instructionProvider != null ? instructionProvider.apply(context) : null;
     }
@@ -81,23 +94,30 @@ public class SimpleSystemPrompt {
         return new Builder();
     }
 
+    /**
+     * 系统提示词构建器
+     */
     public static class Builder {
         private Function<FlowContext, String> roleProvider;
         private Function<FlowContext, String> instructionProvider;
 
+        /** 设置静态角色文本 */
         public Builder role(String role) {
             return role(ctx -> role);
         }
 
+        /** 设置静态指令文本 */
         public Builder instruction(String instruction) {
             return instruction(ctx -> instruction);
         }
 
+        /** 设置动态角色提供逻辑 */
         public Builder role(Function<FlowContext, String> roleProvider) {
             this.roleProvider = roleProvider;
             return this;
         }
 
+        /** 设置动态指令提供逻辑 */
         public Builder instruction(Function<FlowContext, String> instructionProvider) {
             this.instructionProvider = instructionProvider;
             return this;

@@ -21,17 +21,22 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.function.Consumer;
 
 /**
- * ReAct 模式请求
+ * ReAct 模式推理请求
+ * <p>采用 Fluent API 风格，封装了 Agent 调用的完整参数（Prompt、Session、Options）</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public class ReActRequest implements NonSerializable {
+    private static final Logger log = LoggerFactory.getLogger(ReActRequest.class);
+
     private final ReActAgent agent;
     private final Prompt prompt;
     private AgentSession session;
@@ -40,21 +45,34 @@ public class ReActRequest implements NonSerializable {
     public ReActRequest(ReActAgent agent, Prompt prompt) {
         this.agent = agent;
         this.prompt = prompt;
+        // 初始拷贝 Agent 的默认配置，实现请求级别的隔离
         this.options = agent.getConfig().getDefaultOptions().copy();
     }
 
+    /**
+     * 绑定会话实例
+     */
     public ReActRequest session(AgentSession session) {
         this.session = session;
         return this;
     }
 
+    /**
+     * 修改当前请求的运行选项
+     */
     public ReActRequest options(Consumer<ReActOptionsAmend> adjustor) {
         adjustor.accept(new ReActOptionsAmend(options));
         return this;
     }
 
+    /**
+     * 执行同步调用
+     */
     public AssistantMessage call() throws Throwable {
         if (session == null) {
+            if (log.isDebugEnabled()) {
+                log.debug("No session provided for ReActRequest, using temporary InMemoryAgentSession.");
+            }
             session = InMemoryAgentSession.of();
         }
 

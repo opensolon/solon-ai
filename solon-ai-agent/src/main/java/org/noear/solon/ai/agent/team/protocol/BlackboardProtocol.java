@@ -34,10 +34,10 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 
 /**
- * 强化版黑板协作协议 (Blackboard Protocol)
- * 1. 参数平铺：解决嵌套 JSON 导致的 Unclosed string 报错。
- * 2. 指令补全：补全 Supervisor 和 Agent 的注入逻辑，确保协作不脱节。
- * 3. 强力终结：解决 Supervisor 在任务完成后盲目路由导致的死循环。
+ * 黑板协作协议 (Blackboard Protocol)
+ *
+ * <p>核心特征：全局共享看板。Agent 通过工具主动同步结论和待办事项，
+ * Supervisor 依据黑板上的数据补全情况和 `todo` 列表决定下一步路由。</p>
  */
 @Preview("3.8.2")
 public class BlackboardProtocol extends HierarchicalProtocol {
@@ -45,11 +45,17 @@ public class BlackboardProtocol extends HierarchicalProtocol {
     private static final String KEY_BOARD_DATA = "blackboard_state_obj";
     private static final String TOOL_SYNC = "__sync_to_blackboard__";
 
+    /**
+     * 黑板状态机：管理共享数据与待办队列 (TODOs)
+     */
     public static class BoardState {
         private final ONode data = new ONode().asObject();
         public final Set<String> todos = new LinkedHashSet<>();
         private String lastUpdater;
 
+        /**
+         * 结构化合并数据
+         */
         public void merge(String agentName, Object rawInput) {
             if (rawInput == null) return;
             this.lastUpdater = agentName;
@@ -67,7 +73,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
                     data.set("result_" + agentName, node.getString());
                 }
             } catch (Exception e) {
-                LOG.warn("Blackboard merge failed: {}", rawInput);
+                LOG.warn("Blackboard Protocol: Merge failed for [{}], payload: {}", agentName, rawInput);
             }
         }
 
@@ -108,20 +114,23 @@ public class BlackboardProtocol extends HierarchicalProtocol {
     @Override
     public String name() { return "BLACKBOARD"; }
 
+    /**
+     * 为 Agent 注入黑板同步工具，实现主动数据回传
+     */
     @Override
     public void injectAgentTools(Agent agent, ReActTrace trace) {
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
         FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_SYNC);
         if (isZh) {
-            toolDesc.title("同步黑板").description("同步你的结论和后续待办。推荐使用 result 和 todo 参数。")
-                    .stringParamAdd("result", "本阶段的确切产出（如表名、SQL）")
-                    .stringParamAdd("todo", "建议后续待办，多项用分号分隔")
-                    .stringParamAdd("state", "JSON 格式数据（可选）");
+            toolDesc.title("同步黑板").description("同步你的结论和后续待办。建议在完成任务前调用。")
+                    .stringParamAdd("result", "本阶段的确切结论")
+                    .stringParamAdd("todo", "建议后续待办事项")
+                    .stringParamAdd("state", "JSON 格式的详细业务数据");
         } else {
-            toolDesc.title("Sync Blackboard").description("Sync findings and todos.")
-                    .stringParamAdd("result", "Findings or deliverables")
-                    .stringParamAdd("todo", "Next steps, comma separated")
-                    .stringParamAdd("state", "JSON (Optional)");
+            toolDesc.title("Sync Blackboard").description("Sync findings and future todos.")
+                    .stringParamAdd("result", "Key findings")
+                    .stringParamAdd("todo", "Suggested next steps")
+                    .stringParamAdd("state", "Detailed JSON state");
         }
         toolDesc.doHandle(args -> "System: Blackboard updated.");
         trace.addProtocolTool(toolDesc);
@@ -135,7 +144,8 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         List<ChatMessage> messages = new ArrayList<>(originalPrompt.getMessages());
         String info = isZh ? "当前协作黑板内容：" : "Current blackboard content: ";
-        // 注入到 System 消息之后，防止被忽略
+
+        // 注入到消息列表顶部，作为 Agent 的上下文感知
         messages.add(1, ChatMessage.ofSystem(info + "\n" + state.toString()));
         return Prompt.of(messages);
     }
@@ -157,9 +167,12 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        // 强力终结：解决 Supervisor 死循环
+        // 显式终结符判定，防止 Supervisor 在任务收尾阶段胡乱路由
         String lastContent = trace.getLastAgentContent();
         if (lastContent != null && (lastContent.contains("FINISH]") || lastContent.contains("Final Answer:"))) {
+            if(LOG.isDebugEnabled()) {
+                LOG.debug("Blackboard Protocol: Terminal signal detected, ending task.");
+            }
             return null;
         }
         return super.resolveSupervisorRoute(context, trace, decision);
@@ -180,35 +193,31 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
             sb.append("\n### 黑板管理原则：\n");
-            sb.append("1. **依据待办**：优先指派专家完成黑板中列出的 `todo` 任务。\n");
-            sb.append("2. **按需补充**：若黑板中缺失关键信息（如表名、API定义），请指派对应专家补齐。\n");
-            sb.append("3. **结果确认**：若任务已完成，请整理黑板结论并以 [FINISH] 结束。");
+            sb.append("1. **依据待办**：优先处理黑板中 `todo` 列表的任务。\n");
+            sb.append("2. **结论导向**：若所有待办已完成且信息补全，整理黑板结论并结束。");
         } else {
             sb.append("\n### Blackboard Management:\n");
-            sb.append("1. **By Todo**: Prioritize tasks listed in the `todo` section.\n");
-            sb.append("2. **Completeness**: Assign agents to fill missing info (e.g., table names) on the board.\n");
-            sb.append("3. **Finalize**: If all steps are done, summarize findings and end with [FINISH].");
+            sb.append("1. **Todo Driven**: Prioritize agents based on `todo` list.\n");
+            sb.append("2. **Summary**: Finalize findings when todos are cleared.");
         }
     }
 
+    /**
+     * 终结审计：如果黑板中尚存待办事项且未达轮次上限，拦截 [FINISH] 路由
+     */
     @Override
     public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         if (decision.contains(config.getFinishMarker())) {
-            // 如果有自定义图，直接放行
-            if (config.getGraphAdjuster() != null) {
-                return true;
-            }
+            if (config.getGraphAdjuster() != null) return true;
 
             BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
-            // 标准模式：如果黑板里还有待办事项，且轮次还没到熔断阈值，则拦截
             if (state != null && !state.todos.isEmpty()) {
                 if (trace.getIterationsCount() < 5) {
-                    LOG.warn("BlackboardProtocol: Still has pending todos {}, blocking finish.", state.todos);
+                    LOG.warn("Blackboard Protocol: Blocking finish! Pending todos exist: {}", state.todos);
                     return false;
                 }
             }
         }
-        // 兜底调用父类（Hierarchical）的专家参与度检查
         return super.shouldSupervisorRoute(context, trace, decision);
     }
 
@@ -217,12 +226,15 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         return val == null ? null : String.valueOf(val);
     }
 
+    /**
+     * 参数提取：从 ReActTrace 中溯源特定的工具调用参数
+     */
     private Object extractArgObj(ReActTrace rt, String toolName, String key) {
         List<ChatMessage> messages = rt.getMessages();
         if (messages == null) return null;
         for (int i = messages.size() - 1; i >= 0; i--) {
             if (messages.get(i) instanceof AssistantMessage ) {
-                AssistantMessage  am = (AssistantMessage) messages.get(i);
+                AssistantMessage am = (AssistantMessage) messages.get(i);
                 if (am.getToolCalls() != null) {
                     for (ToolCall tc : am.getToolCalls()) {
                         if (toolName.equals(tc.name())) return tc.arguments().get(key);

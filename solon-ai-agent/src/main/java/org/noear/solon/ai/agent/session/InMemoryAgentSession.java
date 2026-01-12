@@ -25,55 +25,38 @@ import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 内存智能体会话实现 (In-Memory Agent Session)
- *
- * <p>该类为智能体提供了一个易失性的（Volatile）存储容器，用于管理单次协作的生命周期数据：</p>
- * <ul>
- * <li><b>短期记忆 (Short-term Memory)</b>：以智能体为维度隔离存储的历史消息。</li>
- * <li><b>运行快照 (Flow Snapshot)</b>：承载 Solon Flow 状态机的变量与上下文。</li>
- * </ul>
- *
- * @author noear
- * @since 3.8.1
+ * 内存型智能体会话 (In-Memory Session)
+ * * <p>管理单次协作的生命周期数据：
+ * 1. 隔离的短期记忆：按 Agent 维度存储历史消息。
+ * 2. 状态快照：承载业务流变量上下文。</p>
  */
 @Preview("3.8.1")
 public class InMemoryAgentSession implements AgentSession {
+    private static final Logger log = LoggerFactory.getLogger(InMemoryAgentSession.class);
 
-    public static AgentSession of() {
-        return new InMemoryAgentSession("tmp");
-    }
-
-    public static AgentSession of(String instanceId) {
-        return new InMemoryAgentSession(instanceId);
-    }
-
+    public static AgentSession of() { return new InMemoryAgentSession("tmp"); }
+    public static AgentSession of(String instanceId) { return new InMemoryAgentSession(instanceId); }
     public static AgentSession of(String instanceId, int maxAgentMessages) {
         return new InMemoryAgentSession(instanceId, maxAgentMessages);
     }
-
-    public static AgentSession of(FlowContext context) {
-        return new InMemoryAgentSession(context, 0);
-    }
+    public static AgentSession of(FlowContext context) { return new InMemoryAgentSession(context, 0); }
 
     private final String sessionId;
-
-    /**
-     * 智能体消息历史存储
-     * <p>Key: AgentName, Value: 消息列表。</p>
-     */
+    /** 智能体隔离的历史消息存储 (Key: AgentName) */
     private final Map<String, List<ChatMessage>> historyMessages = new ConcurrentHashMap<>();
-
+    /** 运行快照 */
     private volatile FlowContext snapshot;
+    /** 最大消息留存数（0 表示无限制） */
     private final int maxAgentMessages;
 
-    public InMemoryAgentSession(String sessionId) {
-        this(sessionId, 0);
-    }
+    public InMemoryAgentSession(String sessionId) { this(sessionId, 0); }
 
     public InMemoryAgentSession(String sessionId, int maxAgentMessages) {
         this.sessionId = sessionId;
@@ -90,53 +73,45 @@ public class InMemoryAgentSession implements AgentSession {
     }
 
     @Override
-    public String getSessionId() {
-        return sessionId;
-    }
+    public String getSessionId() { return sessionId; }
 
-    /**
-     * 归档历史消息
-     *
-     * @param agentName 产生或关联该消息的智能体名称
-     * @param message   聊天消息
-     */
     @Override
     public void addHistoryMessage(String agentName, ChatMessage message) {
-        // 优化点：取消对系统消息的保存（SystemMessage 通常由 Agent 模板生成，无需重复归档）
-        if (message instanceof SystemMessage) {
-            return;
-        }
+        // 系统消息由模板生成，不进入历史归档
+        if (message instanceof SystemMessage) return;
 
         List<ChatMessage> agentMessages = historyMessages.computeIfAbsent(agentName, k -> new ArrayList<>());
         agentMessages.add(message);
 
-        // 逻辑修复：计算超出部分的数量
+        // 窗口滚动逻辑：移除超出容量的消息
         if (maxAgentMessages > 0 && agentMessages.size() > maxAgentMessages) {
             int overflowCount = agentMessages.size() - maxAgentMessages;
+            if (log.isDebugEnabled()) {
+                log.debug("Session [{}]: Agent [{}] history overflow, removing {} steps.", sessionId, agentName, overflowCount);
+            }
             removeMessages(agentMessages, overflowCount);
         }
     }
 
     /**
-     * 移除指定数量的消息
-     * <p>当删除调用 ToolCall 的 AssistantMessage 时，会联动删除后续对应的 ToolMessage。</p>
+     * 滑动窗口删除：支持工具调用链的一致性清理
      */
     private void removeMessages(List<ChatMessage> messages, int size) {
         Iterator<ChatMessage> iterator = messages.iterator();
-        int removeNums = 0;
+        int removed = 0;
 
-        while (iterator.hasNext() && removeNums < size) {
+        while (iterator.hasNext() && removed < size) {
             ChatMessage message = iterator.next();
             iterator.remove();
-            removeNums++;
+            removed++;
 
-            // 联动删除：存在 toolCall 调用的 AssistantMessage，需要删除其后紧跟的 ToolMessage
+            // 联动清理：若删除的是 AssistantToolCall，必须同时清理其后续的 ToolResponse
             if (message instanceof AssistantMessage) {
                 List<ToolCall> toolCalls = ((AssistantMessage) message).getToolCalls();
                 if (Utils.isNotEmpty(toolCalls)) {
                     while (iterator.hasNext() && iterator.next() instanceof ToolMessage) {
                         iterator.remove();
-                        // 联动删除不计入主动请求的 size 扣减，以保证窗口内保留的是完整逻辑链
+                        // 联动清理不计入 removed，确保窗口内保留完整的逻辑轮次
                     }
                 }
             }
@@ -146,26 +121,16 @@ public class InMemoryAgentSession implements AgentSession {
     @Override
     public Collection<ChatMessage> getHistoryMessages(String agentName, int last) {
         List<ChatMessage> list = historyMessages.get(agentName);
-
         if (list != null) {
             int size = list.size();
-            if (size > last) {
-                return list.subList(size - last, size);
-            } else {
-                return list;
-            }
+            return (size > last) ? list.subList(size - last, size) : list;
         }
-
         return Collections.emptyList();
     }
 
     @Override
-    public void updateSnapshot(FlowContext snapshot) {
-        this.snapshot = snapshot;
-    }
+    public void updateSnapshot(FlowContext snapshot) { this.snapshot = snapshot; }
 
     @Override
-    public FlowContext getSnapshot() {
-        return snapshot;
-    }
+    public FlowContext getSnapshot() { return snapshot; }
 }

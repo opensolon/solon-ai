@@ -18,50 +18,41 @@ package org.noear.solon.ai.agent.react;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 /**
- * ReAct 智能体选项（可动态调整）
+ * ReAct 智能体运行选项
+ * <p>用于动态控制推理过程中的深度、重试策略及拦截行为</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public class ReActOptions implements NonSerializable {
-    /**
-     * 工具调用上下文
-     */
+    private static final Logger log = LoggerFactory.getLogger(ReActOptions.class);
+
+    /** 工具调用上下文（透传给 FunctionTool） */
     private final Map<String, Object> toolsContext = new LinkedHashMap<>();
-    /**
-     * 生命周期拦截器（监控 Thought, Action, Observation 等状态变化）
-     */
+    /** 生命周期拦截器（监控 Thought, Action, Observation） */
     private final List<RankEntity<ReActInterceptor>> interceptors = new ArrayList<>();
-    /**
-     * 最大思考步数（防止推理死循环，默认 10 步）
-     */
+    /** 最大推理步数（防止死循环） */
     private int maxSteps = 10;
-    /**
-     * 模型调用失败后的最大重试次数
-     */
+    /** 最大重试次数 */
     private int maxRetries = 3;
-    /**
-     * 重试延迟时间（毫秒）
-     */
+    /** 重试延迟基础时间（毫秒） */
     private long retryDelayMs = 1000L;
-    /**
-     * 历史消息窗口大小（从上下文中回溯并注入到当前执行过程的消息条数）
-     */
+    /** 历史记忆回溯窗口大小 */
     private int historyWindowSize = 5;
 
 
-    /**
-     * 复制
-     */
+    /** 浅拷贝选项实例 */
     protected ReActOptions copy() {
         ReActOptions tmp = new ReActOptions();
-        tmp.toolsContext.putAll( toolsContext);
-        tmp.interceptors.addAll( interceptors);
+        tmp.toolsContext.putAll(toolsContext);
+        tmp.interceptors.addAll(interceptors);
         tmp.maxSteps = maxSteps;
         tmp.maxRetries = maxRetries;
         tmp.retryDelayMs = retryDelayMs;
@@ -72,9 +63,6 @@ public class ReActOptions implements NonSerializable {
 
     // --- 配置注入 (Protected) ---
 
-    /**
-     * 添加工具调用上下文
-     */
     protected void putToolsContext(Map<String, Object> toolsContext) {
         this.toolsContext.putAll(toolsContext);
     }
@@ -83,44 +71,33 @@ public class ReActOptions implements NonSerializable {
         this.toolsContext.put(key, value);
     }
 
-    /**
-     * 配置重试策略
-     *
-     * @param maxRetries   最大重试次数
-     * @param retryDelayMs 重试延迟时间（毫秒）
-     */
+    /** 设置容错策略 */
     protected void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
-
-    /**
-     * 设置历史消息窗口大小
-     *
-     * @param historyWindowSize 回溯的消息条数（建议设置为奇数以保持对话轮次完整）
-     */
+    /** 设置短期记忆回溯深度 */
     protected void setHistoryWindowSize(int historyWindowSize) {
         this.historyWindowSize = Math.max(0, historyWindowSize);
     }
 
     protected void setMaxSteps(int val) {
+        if (log.isDebugEnabled() && val > 20) {
+            log.debug("High maxSteps ({}) might increase token costs.", val);
+        }
         this.maxSteps = val;
     }
 
-    /**
-     * 添加拦截器并指定优先级
-     */
+    /** 添加拦截器并自动重排序 */
     protected void addInterceptor(ReActInterceptor val, int index) {
         this.interceptors.add(new RankEntity<>(val, index));
-
         if (interceptors.size() > 1) {
             Collections.sort(interceptors);
         }
     }
 
     // --- 参数获取 (Public) ---
-
 
     public Map<String, Object> getToolsContext() {
         return toolsContext;

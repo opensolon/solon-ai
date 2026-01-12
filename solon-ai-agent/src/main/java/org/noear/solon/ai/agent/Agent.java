@@ -107,8 +107,8 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
                     trace.addStep(ChatRole.ASSISTANT, name(),
                             "[Skipped] Cancelled by " + item.target.getClass().getSimpleName(), 0);
 
-                    if (LOG.isInfoEnabled()) {
-                        LOG.info("Agent [{}] execution skipped by interceptor: {}", name(), item.target.getClass().getSimpleName());
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Agent [{}] execution skipped by interceptor: {}", name(), item.target.getClass().getSimpleName());
                     }
                     return;
                 }

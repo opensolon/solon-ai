@@ -40,7 +40,8 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /**
- * 简单智能体实现（专注于 直接响应，带重试与格式约束支持）
+ * 简单智能体实现
+ * <p>专注于单次直接响应，具备：指令增强、历史窗口管理、自动重试、JSON 格式强制约束等特性</p>
  *
  * @author noear 2026/1/12 created
  */
@@ -69,69 +70,71 @@ public class SimpleAgent implements Agent {
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
         FlowContext context = session.getSnapshot();
 
-        // 2. 消息持久化：将当前请求同步到 Session 归档与 Trace 推理上下文
+        // 1. 消息归档：同步当前用户请求到 Session 历史
         if (!Prompt.isEmpty(prompt)) {
             for (ChatMessage message : prompt.getMessages()) {
-                // 持久化到 Session（归档）
                 session.addHistoryMessage(config.getName(), message);
             }
         }
 
-        // [功能：带重试支持的物理调用]
-        List<ChatMessage> messages = buildMessages(session,prompt);
+        // 2. 物理调用：执行带重试机制的 LLM 请求
+        List<ChatMessage> messages = buildMessages(session, prompt);
         AssistantMessage assistantMessage = callWithRetry(session, messages);
 
-        //智能体只输出干净的内容（不带思考）
+        // 3. 结果处理：剥离思考过程，仅保留纯净响应内容
         assistantMessage = ChatMessage.ofAssistant(assistantMessage.getContent());
 
-        // [功能：结果回填 Context]
+        // 4. 状态回填：将输出结果自动映射到 FlowContext
         if (Assert.isNotEmpty(config.getOutputKey())) {
             context.put(config.getOutputKey(), assistantMessage.getContent());
         }
 
+        // 5. 更新会话状态与快照
         session.addHistoryMessage(config.getName(), assistantMessage);
         session.updateSnapshot(context);
 
         return assistantMessage;
     }
 
+    /**
+     * 组装完整的 Prompt 消息列表（含 SystemPrompt、OutputSchema 及历史窗口）
+     */
     private List<ChatMessage> buildMessages(AgentSession session, Prompt prompt){
         String spText = "";
 
-        // 1. 获取基础 SystemPrompt
+        // 注入基础系统指令
         if (config.getSystemPrompt() != null) {
             spText = config.getSystemPrompt().getSystemPromptFor(session.getSnapshot());
         }
 
-        // 2. [功能：注入 OutputSchema 指令]
+        // 注入 JSON Schema 指令（强制格式输出）
         if (Assert.isNotEmpty(config.getOutputSchema())) {
             spText += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
-                    "Please provide the response in JSON format strictly following this schema:\n" + // 加入 JSON 关键词
+                    "Please provide the response in JSON format strictly following this schema:\n" +
                     config.getOutputSchema();
         }
 
-        // 3. 构建消息列表
         List<ChatMessage> messages = new ArrayList<>();
 
         if (Assert.isNotEmpty(spText)) {
             messages.add(ChatMessage.ofSystem(spText.trim()));
         }
 
-        // A. 加载历史（如果配置了窗口）
+        // 加载限定窗口大小的历史记录
         if (config.getHistoryWindowSize() > 0) {
             Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), config.getHistoryWindowSize());
-            if (Assert.isNotEmpty(history)) { // 增加安全校验
+            if (Assert.isNotEmpty(history)) {
                 messages.addAll(history);
             }
         }
 
-
-
         messages.addAll(prompt.getMessages());
-
         return messages;
     }
 
+    /**
+     * 实现带指数延迟的自动重试调用
+     */
     private AssistantMessage callWithRetry(AgentSession session, List<ChatMessage> messages) throws Throwable {
         int maxRetries = config.getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
@@ -139,7 +142,7 @@ public class SimpleAgent implements Agent {
                 return doCall(session, messages);
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
-                    throw new RuntimeException("SimpleAgent [" + name() + "] call failed after " + maxRetries + " retries", e);
+                    throw new RuntimeException("SimpleAgent [" + name() + "] failed after " + maxRetries + " retries", e);
                 }
                 long delay = config.getRetryDelayMs() * (i + 1);
                 LOG.warn("SimpleAgent [{}] call failed, retrying({}/{}). Error: {}", name(), i + 1, maxRetries, e.getMessage());
@@ -149,42 +152,41 @@ public class SimpleAgent implements Agent {
         throw new IllegalStateException("Should not reach here");
     }
 
+    /**
+     * 执行底层物理调用，并注入 Tools, Interceptors 与 JSON 选项
+     */
     private AssistantMessage doCall(AgentSession session, List<ChatMessage> messages) throws Throwable {
-
         Prompt finalPrompt = Prompt.of(messages);
 
-        // 4. 发起调用
         if (config.getChatModel() != null) {
             return config.getChatModel().prompt(finalPrompt)
                     .options(o -> {
-                        // 注入工具
-                        for (FunctionTool tool : config.getTools()) {
-                            o.toolsAdd(tool);
-                        }
-                        // 注入拦截器
-                        for (RankEntity<ChatInterceptor> item : config.getInterceptors()) {
-                            o.interceptorAdd(item.index, item.target);
-                        }
-                        // 注入工具上下文
+                        // 注入 Tools 与上下文
+                        config.getTools().forEach(o::toolsAdd);
                         if (Assert.isNotEmpty(config.getToolsContext())) {
                             o.toolsContext(config.getToolsContext());
                         }
-                        // [功能：注入 response_format 约束]
+
+                        // 注入拦截器
+                        config.getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
+
+                        // 启用 JSON Object 响应格式
                         if (Assert.isNotEmpty(config.getOutputSchema())) {
                             o.optionPut("response_format", Utils.asMap("type", "json_object"));
                         }
-                        // 用户自定义配置
+
                         if (config.getChatOptions() != null) {
                             config.getChatOptions().accept(o);
                         }
                     })
                     .call().getMessage();
         } else {
+            // fallback 到自定义处理器
             return config.getHandler().call(finalPrompt, session);
         }
     }
 
-    // Builder 静态方法保持不变...
+    // Builder 静态方法与内部类保持不变...
     public static Builder of() { return new Builder(); }
     public static Builder of(ChatModel chatModel) { return new Builder().chatModel(chatModel); }
 

@@ -16,38 +16,36 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 
 /**
- * ReAct 智能体执行指标
+ * ReAct 智能体执行指标统计
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public class ReActMetrics implements Serializable {
-    /**
-     * 总执行时间（毫秒）
-     */
+    private static final Logger log = LoggerFactory.getLogger(ReActMetrics.class);
+
+    /** 总耗时（毫秒） */
     private long totalDuration;
 
-    /**
-     * 工具调用次数
-     */
+    /** 外部工具调用总次数 */
     private int toolCallCount;
 
-    /**
-     * 执行步数（思考迭代次数）
-     */
+    /** 推理迭代步数 (Reasoning Loops) */
     private int stepCount;
 
-    /**
-     * 使用的令牌总数
-     */
+    /** 累计消耗的 Token 总量 */
     private long tokenUsage;
 
-    // Setter 方法
+
+    // --- Setter & Accumulator Methods ---
+
     public void setTotalDuration(long totalDuration) {
         this.totalDuration = totalDuration;
     }
@@ -64,11 +62,19 @@ public class ReActMetrics implements Serializable {
         this.tokenUsage = tokenUsage;
     }
 
+    /**
+     * 累加 Token 使用量
+     */
     public void addTokenUsage(long tokenUsage) {
         this.tokenUsage += tokenUsage;
+        if (log.isTraceEnabled()) {
+            log.trace("Token usage incremented by {}, total: {}", tokenUsage, this.tokenUsage);
+        }
     }
 
-    // Getter 方法
+
+    // --- Getter Methods ---
+
     public long getTotalDuration() {
         return totalDuration;
     }

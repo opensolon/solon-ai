@@ -40,11 +40,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * A2A (Agent to Agent) 协作协议增强版
- * * 优化：
- * 1. 增加 transfer_count 计数，防止推诿死循环。
- * 2. 强化模态硬校验，确保接棒专家具备处理附件的能力。
- * 3. 优化 Prompt 消息流，增强指令遵循度。
+ * A2A (Agent to Agent) 协作协议
+ * * <p>核心机制：专家自主接力。Agent 可通过工具主动将任务及其上下文状态移交给另一位专家。
+ * 协议内置流转次数审计（防止无限推诿）与多模态兼容性检查（防止能力不匹配）。</p>
  */
 @Preview("3.8.1")
 public class A2AProtocol extends TeamProtocolBase {
@@ -55,7 +53,7 @@ public class A2AProtocol extends TeamProtocolBase {
     private static final String KEY_GLOBAL_STATE = "global_state";
     private static final String KEY_TRANSFER_COUNT = "transfer_count";
 
-    private final int maxTransferRounds = 5; // 最大转交次数
+    private final int maxTransferRounds = 5; // 强制熔断阈值
 
     public A2AProtocol(TeamAgentConfig config) {
         super(config);
@@ -66,87 +64,87 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public void buildGraph(GraphSpec spec) {
-        // A2A 模式通常由首个 Agent 启动或主管分配
+        // 初始拓扑：Start -> First Agent -> Supervisor -> ...
         String firstAgent = config.getAgentMap().keySet().iterator().next();
         spec.addStart(Agent.ID_START).linkAdd(firstAgent);
 
-        // 所有专家执行完归队给 Supervisor 解析接力信号
+        // 专家节点：完成后回归 Supervisor 判定接力信号
         config.getAgentMap().values().forEach(a ->
                 spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-            linkAgents(ns); // 执行动态接力或结束
+            linkAgents(ns); // 动态路由
         }).linkAdd(Agent.ID_END);
 
         spec.addEnd(Agent.ID_END);
     }
 
+    /**
+     * 注入移交工具：动态生成除自身外的专家画像供 Agent 选择
+     */
     @Override
     public void injectAgentTools(Agent agent, ReActTrace trace) {
         Locale locale = config.getLocale();
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
 
-        // 动态构建除自己以外的专家画像
         String expertsDescription = config.getAgentMap().entrySet().stream()
                 .filter(e -> !e.getKey().equals(agent.name()))
                 .map(e -> e.getKey() + " [" + e.getValue().profile().toFormatString(locale) + "]")
                 .collect(Collectors.joining(" | "));
 
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER);
-
         tool.doHandle(args -> {
             String target = (String) args.get("target");
-            return isZh ? "已发起向 [" + target + "] 的任务转交，请等待主管确认。"
-                    : "Transfer request to [" + target + "] sent. Waiting for supervisor.";
+            return isZh ? "已发起向 [" + target + "] 的接力请求。" : "Transfer to [" + target + "] requested.";
         });
 
         if (isZh) {
             tool.title("任务移交")
-                    .description("将当前任务移交给团队中更合适的专家接力。")
+                    .description("将任务移交给更合适的专家。")
                     .stringParamAdd("target", "目标专家名。必选: [" + expertsDescription + "]")
-                    .stringParamAdd("instruction", "给接棒专家的具体作业指令。")
-                    .stringParamAdd("state", "需要传递的业务状态 JSON（持久化直到任务结束）。");
+                    .stringParamAdd("instruction", "给接棒专家的指令。")
+                    .stringParamAdd("state", "业务状态 JSON（全程持久化）。");
         } else {
             tool.title("Transfer")
-                    .description("Transfer current task to a more suitable expert.")
-                    .stringParamAdd("target", "Target expert name. Options: [" + expertsDescription + "]")
+                    .description("Hand over task to another expert.")
+                    .stringParamAdd("target", "Expert name. Options: [" + expertsDescription + "]")
                     .stringParamAdd("instruction", "Specific instruction for the next expert.")
-                    .stringParamAdd("state", "JSON state to persist across handovers.");
+                    .stringParamAdd("state", "Persistent JSON state.");
         }
         trace.addProtocolTool(tool);
     }
 
+    /**
+     * 注入接力上下文：将上一个 Agent 的指令和全局状态合并入提示词
+     */
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
         String instruction = (String) trace.getProtocolContext().get(KEY_LAST_INSTRUCTION);
         String state = (String) trace.getProtocolContext().get(KEY_GLOBAL_STATE);
 
-        if (Utils.isEmpty(instruction) && Utils.isEmpty(state)) {
-            return originalPrompt;
-        }
+        if (Utils.isEmpty(instruction) && Utils.isEmpty(state)) return originalPrompt;
 
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         StringBuilder sb = new StringBuilder();
-        sb.append(isZh ? "\n### 任务接力上下文 (Handover Context)\n" : "\n### Handover Context\n");
+        sb.append(isZh ? "\n### 接力上下文 (Handover Context)\n" : "\n### Handover Context\n");
 
         if (Utils.isNotEmpty(instruction)) {
-            sb.append("- ").append(isZh ? "**接棒指令**: " : "**Instruction**: ").append(instruction).append("\n");
+            sb.append("- ").append(isZh ? "**前序指令**: " : "**Prior Instruction**: ").append(instruction).append("\n");
         }
         if (Utils.isNotEmpty(state)) {
-            sb.append("- ").append(isZh ? "**当前状态**: " : "**Current State**: ").append(state).append("\n");
+            sb.append("- ").append(isZh ? "**累积状态**: " : "**Global State**: ").append(state).append("\n");
         }
-        sb.append("\n---\n");
 
-        // 将接力上下文注入到消息流中，确保其作为 User 提示的头部
         List<ChatMessage> messages = new ArrayList<>(originalPrompt.getMessages());
         messages.add(ChatMessage.ofUser(sb.toString()));
 
-        // 消费瞬时指令
-        trace.getProtocolContext().remove(KEY_LAST_INSTRUCTION);
-
+        trace.getProtocolContext().remove(KEY_LAST_INSTRUCTION); // 消费指令
         return Prompt.of(messages);
     }
 
+    /**
+     * 解析接力信号：执行安全性校验并决定下一跳
+     */
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         String lastAgentName = trace.getLastAgentName();
@@ -160,25 +158,27 @@ public class A2AProtocol extends TeamProtocolBase {
                     if (TOOL_TRANSFER.equals(tc.name())) {
                         String target = getArg(tc.arguments(), "target");
 
-                        // 1. 死循环防护
+                        // 1. 防推诿死循环检查
                         int count = (int) trace.getProtocolContext().getOrDefault(KEY_TRANSFER_COUNT, 0);
                         if (count >= maxTransferRounds) {
-                            LOG.warn("A2A - Max transfers reached. Supervisor taking control.");
+                            LOG.warn("A2A: Max transfer limit ({}) reached. Supervisor reclaiming control.", maxTransferRounds);
                             return null;
                         }
 
-                        // 2. 模态安全校验
+                        // 2. 模态兼容性硬检查：防止将识图任务移交给仅支持文本的专家
                         if (!checkModality(trace, target)) {
-                            LOG.warn("A2A - Target {} does not support multimodal input in context.", target);
-                            // 这里可以决定是拦截报错还是打回 Supervisor
+                            LOG.error("A2A: Transfer blocked. Target [{}] lacks vision capability for multimodal input.", target);
                             return null;
                         }
 
-                        // 3. 提取并暂存接力数据
+                        // 3. 持久化接力元数据
                         trace.getProtocolContext().put(KEY_LAST_INSTRUCTION, getArg(tc.arguments(), "instruction"));
                         trace.getProtocolContext().put(KEY_GLOBAL_STATE, getArg(tc.arguments(), "state"));
                         trace.getProtocolContext().put(KEY_TRANSFER_COUNT, count + 1);
 
+                        if(LOG.isDebugEnabled()) {
+                            LOG.debug("A2A: Handover authorized: {} -> {}", lastAgentName, target);
+                        }
                         return target;
                     }
                 }
@@ -187,18 +187,20 @@ public class A2AProtocol extends TeamProtocolBase {
         return null;
     }
 
+    /**
+     * 模态能力匹配检查
+     */
     private boolean checkModality(TeamTrace trace, String targetName) {
         Agent target = config.getAgentMap().get(targetName);
         if (target == null) return false;
 
-        // 检查原始 Prompt 中是否包含多模态内容
         boolean hasMedia = trace.getPrompt().getMessages().stream()
                 .filter(m -> m.getRole() == ChatRole.USER)
                 .map(m -> (UserMessage) m)
                 .anyMatch(UserMessage::hasMedias);
 
         if (hasMedia) {
-            // 如果任务有图，接棒者必须支持除 text 以外的模式
+            // 若原始任务带图，接力目标必须具备多模态能力
             return target.profile().getInputModes().stream().anyMatch(m -> !m.equalsIgnoreCase("text"));
         }
         return true;
@@ -210,12 +212,12 @@ public class A2AProtocol extends TeamProtocolBase {
         Integer count = (Integer) trace.getProtocolContext().get(KEY_TRANSFER_COUNT);
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-        sb.append(isZh ? "\n### A2A 接力看板\n" : "\n### A2A Transfer Dashboard\n");
+        sb.append(isZh ? "\n### A2A 接力看板\n" : "\n### A2A Dashboard\n");
         if (Utils.isNotEmpty(state)) {
             sb.append("- ").append(isZh ? "全局状态: " : "Global State: ").append(state).append("\n");
         }
         if (count != null) {
-            sb.append("- ").append(isZh ? "流转次数: " : "Transfer Count: ").append(count).append("\n");
+            sb.append("- ").append(isZh ? "接力次数: " : "Handovers: ").append(count).append("\n");
         }
     }
 
@@ -224,9 +226,9 @@ public class A2AProtocol extends TeamProtocolBase {
         super.injectSupervisorInstruction(locale, sb);
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
-            sb.append("\n- **A2A 定标守则**：Agent 之间的自主转交需符合业务逻辑；若发生 3 次以上转交未果，请强制干预并定稿。");
+            sb.append("\n- **A2A 定标守则**：若流转超过 3 次仍无实质进展，请立即介入并强制收尾。");
         } else {
-            sb.append("\n- **A2A Awarding Rules**: Ensure agent handovers align with logic; intervene if >3 transfers occur without progress.");
+            sb.append("\n- **A2A Rules**: Intervene if more than 3 handovers occur without progress.");
         }
     }
 

@@ -37,13 +37,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ReAct 推理任务（Reasoning Task）
- * <p>
- * 核心职责：
- * 1. 组合系统提示词与历史记忆，向 LLM 发起推理请求。
- * 2. 识别模型意图：是需要执行工具（Action）还是已经得到最终答案（Final Answer）。
- * 3. 拦截与监控：在模型交互前后提供拦截点，用于死循环检测、安全审计或 Token 统计。
- * </p>
+ * ReAct 推理任务 (Reasoning)
+ * <p>核心职责：组装上下文发起请求，解析模型意图（Action/Final Answer），并执行路由分发。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -67,27 +62,25 @@ public class ReasonTask implements NamedTaskComponent {
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] reason starting...", config.getName());
-        }
-
-        // 获取当前 Agent 的状态追踪对象
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
 
-        // [逻辑 1：步数安全限制]
-        // 检查迭代深度，防止模型在复杂任务中陷入无限逻辑死循环
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("ReActAgent [{}] reasoning... Step: {}/{}",
+                    config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps());
+        }
+
+        // [逻辑 1: 安全限流] 防止死循环，达到最大步数则强制终止
         if (trace.nextStep() > trace.getOptions().getMaxSteps()) {
+            LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), trace.getOptions().getMaxSteps());
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
         }
 
-        // [逻辑 2：上下文构建]
-        // 注入 ReAct 规范提示词、协议指令及动态历史记录（Thought/Action/Observation）
+        // [逻辑 2: 系统提示词构建] 融合业务角色、ReAct协议与输出格式约束
         String systemPrompt = config.getSystemPromptFor(trace, context);
 
-        // 如果配置了输出格式，则追加指令
         if (Assert.isNotEmpty(trace.getConfig().getOutputSchema())) {
             systemPrompt += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
                     "Please provide the Final Answer strictly following this schema:\n" +
@@ -95,49 +88,45 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         if (trace.getProtocol() != null) {
-            StringBuilder systemPromptBuilder = new StringBuilder(systemPrompt);
-            trace.getProtocol().injectAgentInstruction(agent, config.getLocale(), systemPromptBuilder);
-            systemPrompt = systemPromptBuilder.toString();
+            StringBuilder sb = new StringBuilder(systemPrompt);
+            trace.getProtocol().injectAgentInstruction(agent, config.getLocale(), sb);
+            systemPrompt = sb.toString();
         }
 
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(systemPrompt));
         messages.addAll(trace.getMessages());
 
-        // [逻辑 3：模型推理与生命周期拦截]
-        // callWithRetry 负责物理层的网络调用与重试
+        // [逻辑 3: 模型交互] 执行物理请求与拦截器生命周期
         ChatResponse response = callWithRetry(trace, messages);
 
-        //记录使用令牌数
         if(response.getUsage() != null) {
             trace.getMetrics().addTokenUsage(response.getUsage().totalTokens());
         }
 
-        // 触发模型响应拦截：常用于死循环检测（onModelEnd 抛出异常可提前终止推理流）
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onModelEnd(trace, response);
         }
 
-        // 防御性处理：检查模型是否返回了有效负载
+        // 容错处理：模型响应为空时引导其重试
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
             trace.appendMessage(ChatMessage.ofUser("Your last response was empty. Please provide Action or Final Answer."));
             trace.setRoute(Agent.ID_REASON);
             return;
         }
 
-        // [逻辑 4：路由分发 - 原生工具调用模式]
-        // 模型支持 ToolCall 协议时，直接进入 ActionTask
+        // [逻辑 4: 路由判断 - 原生工具调用协议]
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
             trace.appendMessage(response.getMessage());
             trace.setRoute(Agent.ID_ACTION);
             return;
         }
 
-        // [逻辑 5：路由分发 - 文本 ReAct 模式解析]
+        // [逻辑 5: 路由判断 - 文本 ReAct 协议解析]
         String rawContent = response.hasContent() ? response.getContent() : "";
         String clearContent = response.hasContent() ? response.getResultContent() : "";
 
-        // 物理截断防御：防止模型伪造后续的 Observation 内容，确保观察结果由 ActionTask 生成
+        // 截断防御：防止模型“分身”替系统回复 Observation 内容
         if (rawContent.contains("Observation:")) {
             rawContent = rawContent.split("Observation:")[0];
         }
@@ -145,52 +134,42 @@ public class ReasonTask implements NamedTaskComponent {
         trace.appendMessage(ChatMessage.ofAssistant(rawContent));
         trace.setLastAnswer(clearContent);
 
-        // 触发思考拦截：通知外部模型当前的推理进展
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onThought(trace, clearContent);
         }
 
-        // [逻辑 6：决策路由]
+        // [逻辑 6: 决策分流]
         if (rawContent.contains(config.getFinishMarker())) {
-            // 场景 A: 模型输出结束标记，进入结束节点并提取最终答案
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(clearContent));
         } else if (rawContent.contains("Action:")) {
-            // 场景 B: 模型输出 Action 指令，进入工具执行节点
             trace.setRoute(Agent.ID_ACTION);
         } else {
-            // 场景 C: 兜底逻辑，若模型未按规范输出，则视当前内容为答案并结束
+            // 兜底：未匹配到协议标识则默认视为最终答案
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(clearContent));
         }
     }
 
-    /**
-     * 带重试机制的模型调用封装
-     */
     private ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) {
-        // 构建请求描述对象
         ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o -> {
-                    // 1. 注入内置工具与协议扩展工具
                     if (config.getTools().size() > 0) {
                         o.toolsAdd(config.getTools());
-                        o.optionPut("stop", Utils.asList("Observation:")); // 强制截断，保证 ReAct 闭环
+                        o.optionPut("stop", Utils.asList("Observation:")); // 物理截断保证流程控制权
                     }
 
                     if(trace.getConfig().getOutputSchema() != null){
-                        o.optionPut("response_format",  Utils.asMap("type", "json_object"));
+                        o.optionPut("response_format", Utils.asMap("type", "json_object"));
                     }
 
                     if (!trace.getProtocolTools().isEmpty()) {
                         o.toolsAdd(trace.getProtocolTools());
                     }
 
-                    // 2. 禁用模型端的自动工具执行，由 Agent 框架统一管控调度
-                    o.autoToolCall(false);
+                    o.autoToolCall(false); // 强制由 Agent 框架管理工具链路
 
-                    // 3. 同步业务层拦截器到 Chat 层
                     for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                         o.interceptorAdd(item.target);
                     }
@@ -200,52 +179,45 @@ public class ReasonTask implements NamedTaskComponent {
                     }
                 });
 
-        // 触发请求发起拦截：可在此阶段进行 Token 预警或动态修改请求参数
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onModelStart(trace, req);
         }
 
-        // 网络层重试循环
         int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
                 return req.call();
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
-                    LOG.error("ReActAgent [{}] reason failed after {} retries", config.getName(), maxRetries, e);
-                    throw new RuntimeException("Reasoning failed after " + maxRetries + " retries", e);
+                    LOG.error("ReActAgent [{}] failed after {} retries", config.getName(), maxRetries, e);
+                    throw new RuntimeException("Reasoning failed after max retries", e);
                 }
 
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("ReActAgent [{}] call failed, retrying({}): {}", config.getName(), i + 1, e.getMessage());
-                }
+                LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.getMessage());
 
                 try {
-                    // 指数退避重试
                     Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    throw new RuntimeException("Interrupted during retry", ie);
+                    throw new RuntimeException("Retry interrupted", ie);
                 }
             }
         }
-        throw new RuntimeException("Should not reach here");
+        throw new RuntimeException("Unreachable");
     }
 
     /**
-     * 清理并提取纯净的 Final Answer
-     * 移除思考标签（<think>）、逻辑标签（Thought/Action）及结束标识符
+     * 清理思考过程，提取最终业务答案
      */
     private String extractFinalAnswer(String content) {
         if (content == null) return "";
 
-        // 仅保留 FinishMarker 之后的内容（如果存在）
         if (content.contains(config.getFinishMarker())) {
             content = content.substring(content.indexOf(config.getFinishMarker()) + config.getFinishMarker().length());
         }
 
         return content
-                .replaceAll("(?s)<think>.*?</think>", "")
+                .replaceAll("(?s)<think>.*?</think>", "") // 移除 DeepSeek 等模型的内省标签
                 .replaceAll("(?m)^(Thought|Action|Observation):\\s*", "")
                 .trim();
     }

@@ -17,27 +17,24 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Locale;
 import java.util.function.Function;
 
 /**
  * ReAct 模式提示词提供者（英文版）
- *
- * <p>该实现采用“协议+业务”增量构建模式：</p>
- * <ul>
- * <li>Role: 优先使用自定义角色，并自动叠加英文环境下的 ReAct 范式定义。</li>
- * <li>Instruction: 强制注入 ReAct 标准输出协议（英文），并将自定义业务指令作为“Core Task Instructions”增量追加。</li>
- * </ul>
+ * <p>基于 Reasoning-Acting 范式，强制注入英文协议约束，支持业务指令增量扩展。</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public class ReActSystemPromptEn implements ReActSystemPrompt {
-    /**
-     * 默认单例（使用标准英文 ReAct 模板）
-     */
+    private static final Logger log = LoggerFactory.getLogger(ReActSystemPromptEn.class);
+
+    /** 默认英文模板单例 */
     private static final ReActSystemPrompt _DEFAULT = new ReActSystemPromptEn(null, null);
 
     public static ReActSystemPrompt getDefault() {
@@ -65,23 +62,22 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
         StringBuilder sb = new StringBuilder();
 
-        // 1. 角色与范式定义：明确 ReAct (Reasoning and Acting) 循环要求
+        // 1. Role & Paradigm: Define the ReAct loop (Thought -> Action -> Observation)
         sb.append("## Role\n")
                 .append(role).append(". ")
                 .append("You must solve the problem using the ReAct pattern: ")
                 .append("Thought -> Action -> Observation.\n\n");
 
-        // 2. 注入综合指令 (包含输出格式、核心规则、业务任务与示例)
+        // 2. Instructions: Constraints, rules, and few-shot examples
         sb.append(instruction);
 
-        // 3. 工具集定义：动态注入当前可用的工具列表
+        // 3. Toolset: Dynamic injection of available tools with schemas
         if (trace.getConfig().getTools().isEmpty()) {
             sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
         } else {
             sb.append("\n## Available Tools\n");
             trace.getConfig().getTools().forEach(t -> {
                 sb.append("- ").append(t.name()).append(": ").append(t.description());
-                // Crucial: Append Input Schema for accurate tool calling
                 if (Assert.isNotEmpty(t.inputSchema())) {
                     sb.append(" Input Schema: ").append(t.inputSchema());
                 }
@@ -94,7 +90,6 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
     @Override
     public String getRole(ReActTrace trace) {
-        // 增量逻辑：优先返回自定义角色描述，否则返回默认专业助手描述
         if (roleProvider != null) {
             return roleProvider.apply(trace);
         }
@@ -106,31 +101,31 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         ReActAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
-        // A. 输出格式约束（ReAct 协议基石）
+        // A. Format constraints (Fundamental for ReAct)
         sb.append("## Output Format (Strictly Follow)\n")
                 .append("Thought: Briefly explain your reasoning (1-2 sentences).\n")
                 .append("Action: To use a tool, output ONLY a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown, no extra text.\n")
                 .append("Final Answer: Once the task is finished, start with ").append(config.getFinishMarker()).append(" followed by the answer.\n\n");
 
-        // B. 最终答案规格
+        // B. Completion specs
         sb.append("## Final Answer Requirements\n")
                 .append("1. When the task is complete, you MUST provide the final answer.\n")
                 .append("2. The final answer MUST start with ").append(config.getFinishMarker()).append(".\n")
                 .append("3. Directly provide your complete answer after ").append(config.getFinishMarker()).append(" without extra tags.\n\n");
 
-        // C. 核心行为准则
+        // C. Core behaviors
         sb.append("## Core Rules\n")
                 .append("1. Only use tools from the 'Available Tools' list.\n")
                 .append("2. Output ONLY one Action and STOP immediately to wait for Observation.\n")
-                .append("3. Every Final Answer MUST start with ").append(config.getFinishMarker()).append(" to signal completion.\n\n");
+                .append("3. Completion is signaled ONLY by ").append(config.getFinishMarker()).append(".\n\n");
 
-        // --- 增量业务指令注入 ---
+        // D. Business instructions
         if (instructionProvider != null) {
             sb.append("## Core Task Instructions\n");
             sb.append(instructionProvider.apply(trace)).append("\n\n");
         }
 
-        // D. 示例引导 (Few-shot 模仿学习)
+        // E. Few-shot guidance
         sb.append("## Example\n")
                 .append("User: What is the weather in Paris?\n")
                 .append("Thought: I need to check the current weather for Paris.\n")
@@ -142,16 +137,10 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         return sb.toString();
     }
 
-    /**
-     * 创建提供者构建器
-     */
     public static Builder builder() {
         return new Builder();
     }
 
-    /**
-     * 构建器
-     */
     public static class Builder implements ReActSystemPrompt.Builder{
         private Function<ReActTrace, String> roleProvider;
         private Function<ReActTrace, String> instructionProvider;
@@ -161,42 +150,31 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             this.instructionProvider = null;
         }
 
-        /**
-         * 设置角色描述（静态字符串）
-         */
         public Builder role(String role) {
             this.roleProvider = (trace) -> role;
             return this;
         }
 
-        /**
-         * 设置角色提供逻辑（动态函数）
-         */
         public Builder role(Function<ReActTrace, String> roleProvider) {
             this.roleProvider = roleProvider;
             return this;
         }
 
-        /**
-         * 设置指令描述（静态字符串，作为核心任务指令增量追加）
-         */
         public Builder instruction(String instruction) {
             this.instructionProvider = (trace) -> instruction;
             return this;
         }
 
-        /**
-         * 设置指令提供逻辑（动态函数，作为核心任务指令增量追加）
-         */
         public Builder instruction(Function<ReActTrace, String> instructionProvider) {
             this.instructionProvider = instructionProvider;
             return this;
         }
 
-        /**
-         * 构建提供者实例
-         */
         public ReActSystemPrompt build() {
+            if (log.isDebugEnabled()) {
+                log.debug("Building ReActSystemPromptEn (Custom Role: {}, Custom Instruction: {})",
+                        roleProvider != null, instructionProvider != null);
+            }
             return new ReActSystemPromptEn(roleProvider, instructionProvider);
         }
     }

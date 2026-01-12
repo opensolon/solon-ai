@@ -28,12 +28,10 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 
 /**
- * 增强型顺序协作协议 (Sequential Protocol)
+ * 顺序协作协议 (Sequential Protocol)
  *
- * 特点：
- * 1. 引入 SequenceState 进度看板。
- * 2. 自动化质量门禁 (Quality Gate)：不达标自动重试。
- * 3. 状态机驱动：由协议直接控制 Agent 的线性路由。
+ * <p>核心特征：按照成员定义的物理顺序进行线性调度。具备“质量门禁”和“模态安全检查”机制，
+ * 能够根据上下文数据类型（如图像）自动跳过不兼容的成员。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -43,8 +41,11 @@ public class SequentialProtocol extends HierarchicalProtocol {
     private static final Logger LOG = LoggerFactory.getLogger(SequentialProtocol.class);
     private static final String KEY_SEQUENCE_STATE = "sequence_state_obj";
     private int maxRetriesPerStage = 1;
-    private boolean stopOnFailure = false; // 默认失败不停止
+    private boolean stopOnFailure = false;
 
+    /**
+     * 内部流水线进度看板
+     */
     public static class SequenceState {
         private final List<String> pipeline = new ArrayList<>();
         private int currentIndex = 0;
@@ -72,6 +73,7 @@ public class SequentialProtocol extends HierarchicalProtocol {
             StageInfo info = stages.get(name);
             info.status = status;
             if (Utils.isNotEmpty(summary)) {
+                // 仅保留摘要摘要，避免状态看板过大
                 info.summary = summary.length() > 50 ? summary.substring(0, 50) + "..." : summary;
             }
         }
@@ -120,7 +122,7 @@ public class SequentialProtocol extends HierarchicalProtocol {
                 });
 
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
-        sb.append(isZh ? "\n### 流水线执行状态 (Pipeline State)\n" : "\n### Pipeline State\n");
+        sb.append(isZh ? "\n### 流水线进度 (Pipeline Progress)\n" : "\n### Pipeline Progress\n");
         sb.append("```json\n").append(state.toString()).append("\n```\n");
     }
 
@@ -128,16 +130,17 @@ public class SequentialProtocol extends HierarchicalProtocol {
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
-            sb.append("\n- 顺序执行模式：请按成员名录顺序调度。");
-            sb.append("\n- **模态检查**：若当前任务包含非文本数据，请确保下一位成员支持该输入模态。");
-            sb.append("\n- 注意：若发现违背了下一位成员的“行为约束”或“模态不支持”，建议跳过该成员。");
+            sb.append("\n- **顺序执行**：按流水线顺序执行，严禁乱序。");
+            sb.append("\n- **跳过策略**：若下个成员不支持当前输入模态（如图像），请执行跳过。");
         } else {
-            sb.append("\n- Sequential Mode: Follow the predefined order.");
-            sb.append("\n- **Modality Check**: Ensure the next member supports the input modality if data is non-text.");
-            sb.append("\n- Note: Skip members if they don't support the modality or violate constraints.");
+            sb.append("\n- **Sequential**: Follow the pipeline order strictly.");
+            sb.append("\n- **Skip Strategy**: Skip the next member if it doesn't support current modality.");
         }
     }
 
+    /**
+     * 路由决策逻辑：在此环节实现模态防御
+     */
     @Override
     public boolean shouldSupervisorExecute(FlowContext context, TeamTrace trace) throws Exception {
         SequenceState state = (SequenceState) trace.getProtocolContext().get(KEY_SEQUENCE_STATE);
@@ -145,21 +148,17 @@ public class SequentialProtocol extends HierarchicalProtocol {
 
         String next = state.getNextAgent();
 
-        // --- 模态适配防御逻辑 ---
+        // 循环检查：跳过模态不匹配的 Agent
         while (!Agent.ID_END.equals(next)) {
             Agent nextAgent = config.getAgentMap().get(next);
-
-            // 判定当前上下文是否包含多模态数据
-            // 逻辑：如果最后一次输出包含图片，或者初始消息包含图片
             boolean hasImage = detectMediaPresence(trace);
 
             if (hasImage && nextAgent.profile() != null) {
-                // 检查目标 Agent 是否明确声明支持 'image'
                 boolean supportImage = nextAgent.profile().getInputModes().contains("image");
 
                 if (!supportImage) {
-                    LOG.warn("Sequential: Auto-skipping [{}] because it doesn't support 'image' mode", next);
-                    state.markCurrent("SKIPPED", "Incompatible modality (no image support)");
+                    LOG.warn("Sequential Protocol: Skipping Agent [{}] - Incompatible with image data", next);
+                    state.markCurrent("SKIPPED", "Incompatible modality");
                     state.next();
                     next = state.getNextAgent();
                     continue;
@@ -167,33 +166,29 @@ public class SequentialProtocol extends HierarchicalProtocol {
             }
             break;
         }
-        // --- 逻辑结束 ---
 
         trace.setRoute(next);
-        return false;
+        return false; // 由协议直接接管路由，不再交由 LLM 决定
     }
 
-    /**
-     * 探测当前协作链路中是否存在多模态媒体数据
-     */
     private boolean detectMediaPresence(TeamTrace trace) {
         String content = trace.getLastAgentContent();
         if (content == null) return false;
-
-        // 增加对标准 Markdown 图片语法的支持判断
-        // 同时也保留你的自定义占位符判断
+        // 匹配标准图片 Markdown 或 DataURI
         return content.contains("![image]") || content.matches("(?s).*\\[.*?\\]\\(data:image/.*\\).*");
     }
 
     @Override
     public String resolveAgentOutput(TeamTrace trace, Agent agent, String rawContent) {
         if (!assessQuality(rawContent)) {
-            // 如果质量不达标，返回一个标志位或空，防止垃圾内容污染后续步骤
-            return "[System: Stage execution failed quality check, awaiting retry]";
+            return "[System: Quality Check Failed - Waiting for Retry]";
         }
         return rawContent;
     }
 
+    /**
+     * 阶段结束回调：在此处理重试与熔断逻辑
+     */
     @Override
     public void onAgentEnd(TeamTrace trace, Agent agent) {
         SequenceState state = (SequenceState) trace.getProtocolContext().get(KEY_SEQUENCE_STATE);
@@ -206,35 +201,35 @@ public class SequentialProtocol extends HierarchicalProtocol {
         if (isSuccess) {
             state.markCurrent("COMPLETED", content);
             state.next();
-            LOG.info("Sequential Stage [{}] COMPLETED", agent.name());
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Sequential Protocol: Stage [{}] finished successfully", agent.name());
+            }
         } else {
             if (info != null && info.retries < maxRetriesPerStage) {
-                // --- 重试逻辑 ---
                 info.retries++;
-                state.markCurrent("RETRYING", "Quality check failed, retrying...");
-                LOG.warn("Sequential Stage [{}] RETRYING ({}/{})", agent.name(), info.retries, maxRetriesPerStage);
+                state.markCurrent("RETRYING", "Quality check failed");
+                LOG.warn("Sequential Protocol: Stage [{}] failed quality check. Retrying... ({}/{})",
+                        agent.name(), info.retries, maxRetriesPerStage);
             } else {
-                // --- 最终失败逻辑（在这里插入熔断判断） ---
                 state.markCurrent("FAILED", "Max retries reached");
-
                 if (stopOnFailure) {
-                    // 强依赖模式：立即路由到结束节点
                     trace.setRoute(Agent.ID_END);
-                    LOG.error("Sequential Stage [{}] FAILED. Stopping team task (stopOnFailure=true).", agent.name());
+                    LOG.error("Sequential Protocol: Critical Failure at [{}]. Halting team.", agent.name());
                 } else {
-                    // 弱依赖模式：跳过当前节点，继续下一个
                     state.next();
-                    LOG.error("Sequential Stage [{}] FAILED. Moving to next stage (stopOnFailure=false).", agent.name());
+                    LOG.warn("Sequential Protocol: Stage [{}] failed. Skipping to next.", agent.name());
                 }
             }
         }
         super.onAgentEnd(trace, agent);
     }
 
+    /**
+     * 质量评估逻辑：识别常见的拒绝回复或过短内容
+     */
     private boolean assessQuality(String content) {
         if (Utils.isEmpty(content)) return false;
         String upper = content.toUpperCase();
-        // 排除常见的 AI 拒绝回复关键词
         if (upper.contains("CANNOT") || upper.contains("I'M SORRY") || upper.contains("FAILED")) return false;
         return content.trim().length() > 20;
     }

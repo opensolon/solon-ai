@@ -15,39 +15,47 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
+ * ReAct 运行选项修正器（提供链式调用支持）
  *
  * @author noear
  * @since 3.8.1
  */
 public class ReActOptionsAmend {
+    private static final Logger LOG = LoggerFactory.getLogger(ReActOptionsAmend.class);
     private final ReActOptions options;
 
     public ReActOptionsAmend(ReActOptions options) {
         this.options = options;
     }
 
+    // --- Setter Methods (Fluent) ---
 
     /**
-     * 添加工具调用上下文
+     * 批量注入工具调用上下文
      */
     public ReActOptionsAmend toolsContextPut(Map<String, Object> toolsContext) {
         options.putToolsContext(toolsContext);
         return this;
     }
 
+    /**
+     * 注入单个工具调用上下文
+     */
     public ReActOptionsAmend toolsContextPut(String key, Object value) {
         options.putToolsContext(key, value);
         return this;
     }
 
     /**
-     * 配置重试策略
+     * 配置容错策略
      *
      * @param maxRetries   最大重试次数
-     * @param retryDelayMs 重试延迟时间（毫秒）
+     * @param retryDelayMs 重试延迟（毫秒）
      */
     public ReActOptionsAmend retryConfig(int maxRetries, long retryDelayMs) {
         options.setRetryConfig(maxRetries, retryDelayMs);
@@ -55,22 +63,26 @@ public class ReActOptionsAmend {
     }
 
     /**
-     * 设置历史消息窗口大小
-     *
-     * @param historyWindowSize 回溯的消息条数（建议设置为奇数以保持对话轮次完整）
+     * 设置消息回溯窗口大小（控制短期记忆深度）
      */
     public ReActOptionsAmend historyWindowSize(int historyWindowSize) {
         options.setHistoryWindowSize(historyWindowSize);
         return this;
     }
 
+    /**
+     * 设置单次任务最大推理步数
+     */
     public ReActOptionsAmend maxSteps(int val) {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("ReAct maxSteps amended to: {}", val);
+        }
         options.setMaxSteps(val);
         return this;
     }
 
     /**
-     * 添加拦截器
+     * 添加生命周期拦截器
      */
     public ReActOptionsAmend interceptorAdd(ReActInterceptor val) {
         options.addInterceptor(val, 0);
@@ -78,7 +90,7 @@ public class ReActOptionsAmend {
     }
 
     /**
-     * 添加拦截器并指定优先级
+     * 添加生命周期拦截器（带排序优先级）
      */
     public ReActOptionsAmend interceptorAdd(ReActInterceptor val, int index) {
         options.addInterceptor(val, index);

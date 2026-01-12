@@ -23,234 +23,150 @@ import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Consumer;
 
 /**
- * ReAct 智能体配置（默认配置）
- *
- * <p>用于定义智能体运行时的核心行为参数，包括模型引用、工具集、迭代限制、追溯深度及提示词模板。</p>
+ * ReAct 智能体配置
+ * * <p>定义 ReAct (Reasoning + Acting) 模式的核心参数，控制推理迭代与工具执行行为</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public class ReActAgentConfig {
-    /**
-     * 智能体唯一标识名
-     */
+    private static final Logger log = LoggerFactory.getLogger(ReActAgentConfig.class);
+
+    /** 智能体唯一标识名 */
     private String name;
+    /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
     private volatile String traceKey;
-    /**
-     * 智能体标题（用于 UI 可视化展示）
-     */
+    /** 智能体标题 */
     private String title;
-    /**
-     * 智能体职责描述（用于团队协作及角色识别）
-     */
+    /** 智能体职责描述（用于模型识别角色任务） */
     private String description;
+    /** 智能体画像 */
     private AgentProfile profile;
-    /**
-     * 执行推理的基础大模型
-     */
+    /** 执行推理的基础模型 */
     private final ChatModel chatModel;
-    /**
-     * 挂载的功能工具集
-     */
+    /** 挂载的可调用工具集 */
     private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
-    /**
-     * 推理阶段的特定 ChatOptions 配置（如温度、TopP 等）
-     */
+    /** 模型推理选项（温度、TopP 等） */
     private Consumer<ChatOptions> chatOptions;
-    /**
-     * 图结构微调器（支持对执行图链路进行自定义修改）
-     */
+    /** 计算图微调器（自定义执行链路） */
     private Consumer<GraphSpec> graphAdjuster;
-    /**
-     * 提示词模板提供者
-     */
+    /** 提示词模板（默认中文） */
     private ReActSystemPrompt systemPrompt = ReActSystemPromptCn.getDefault();
-    /**
-     * 任务完成标识符（模型输出该字符时循环终止）
-     */
+    /** 终止标识符（模型输出此词时停止思考循环） */
     private String finishMarker;
-
-    /**
-     * 结果输出 Key
-     */
+    /** 结果回填 Key */
     private String outputKey;
-    /**
-     * 期望的输出 Schema（例如 JSON Schema 字符串或描述）
-     */
+    /** 输出格式约束 (JSON Schema) */
     private String outputSchema;
-
-    /**
-     * 默认选项
-     */
+    /** 默认运行选项（限流、重试、窗口等） */
     private final ReActOptions defaultOptions = new ReActOptions();
 
-    //----------------------
-
     /**
-     * 核心构造函数
-     *
      * @param chatModel 执行推理的模型，不能为空
      */
     public ReActAgentConfig(ChatModel chatModel) {
-        Objects.requireNonNull(chatModel, "chatModel");
+        Objects.requireNonNull(chatModel, "chatModel is required");
         this.chatModel = chatModel;
     }
 
     // --- 配置注入 (Protected) ---
 
-    protected void setName(String name) {
-        this.name = name;
-    }
+    protected void setName(String name) { this.name = name; }
 
-    protected void setTitle(String title) {
-        this.title = title;
-    }
+    protected void setTitle(String title) { this.title = title; }
 
-    protected void setDescription(String description) {
-        this.description = description;
-    }
+    protected void setDescription(String description) { this.description = description; }
 
-    protected void setProfile(AgentProfile profile) {
-        this.profile = profile;
-    }
+    protected void setProfile(AgentProfile profile) { this.profile = profile; }
 
-    protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
-        this.graphAdjuster = graphAdjuster;
-    }
+    protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) { this.graphAdjuster = graphAdjuster; }
 
-    protected void setFinishMarker(String val) {
-        this.finishMarker = val;
-    }
+    protected void setFinishMarker(String val) { this.finishMarker = val; }
 
-    protected void setSystemPrompt(ReActSystemPrompt val) {
-        this.systemPrompt = val;
-    }
+    protected void setSystemPrompt(ReActSystemPrompt val) { this.systemPrompt = val; }
 
-    protected void setChatOptions(Consumer<ChatOptions> chatOptions) {
-        this.chatOptions = chatOptions;
-    }
-    /**
-     * 添加单个功能工具
-     */
+    protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
+
+    /** 注册工具 */
     protected void addTool(FunctionTool... tools) {
         for (FunctionTool tool : tools) {
+            if (log.isDebugEnabled()) log.debug("Agent [{}] add tool: {}", name, tool.name());
             this.tools.put(tool.name(), tool);
         }
     }
 
-    /**
-     * 批量添加功能工具
-     */
     protected void addTool(Collection<FunctionTool> tools) {
-        for (FunctionTool tool : tools) {
-            addTool(tool);
-        }
+        for (FunctionTool tool : tools) addTool(tool);
     }
 
-    /**
-     * 通过 ToolProvider 注入工具集
-     */
     protected void addTool(ToolProvider toolProvider) {
         addTool(toolProvider.getTools());
     }
 
+    protected void setOutputKey(String val) { this.outputKey = val; }
 
-    protected void setOutputKey(String val) {
-        this.outputKey = val;
-    }
-
-    protected void setOutputSchema(String val) {
-        this.outputSchema = val;
-    }
+    protected void setOutputSchema(String val) { this.outputSchema = val; }
 
     // --- 参数获取 (Public) ---
 
-
-    public String getName() {
-        return name;
-    }
+    public String getName() { return name; }
 
     public String getTraceKey() {
         if (traceKey == null) {
             traceKey = "__" + this.name;
         }
-
         return traceKey;
     }
 
-    public String getTitle() {
-        return title;
-    }
+    public String getTitle() { return title; }
 
-    public String getDescription() {
-        return description;
-    }
+    public String getDescription() { return description; }
 
     public AgentProfile getProfile() {
-        if (profile == null) {
-            profile = new AgentProfile();
-        }
+        if (profile == null) profile = new AgentProfile();
         return profile;
     }
 
-    public ChatModel getChatModel() {
-        return chatModel;
-    }
+    public ChatModel getChatModel() { return chatModel; }
 
-    public Consumer<ChatOptions> getChatOptions() {
-        return chatOptions;
-    }
+    public Consumer<ChatOptions> getChatOptions() { return chatOptions; }
 
-    public Collection<FunctionTool> getTools() {
-        return tools.values();
-    }
+    public Collection<FunctionTool> getTools() { return tools.values(); }
 
-    public FunctionTool getTool(String name) {
-        return tools.get(name);
-    }
+    public FunctionTool getTool(String name) { return tools.get(name); }
 
-    public Consumer<GraphSpec> getGraphAdjuster() {
-        return graphAdjuster;
-    }
+    public Consumer<GraphSpec> getGraphAdjuster() { return graphAdjuster; }
 
-    public ReActOptions getDefaultOptions() {
-        return defaultOptions;
-    }
+    public ReActOptions getDefaultOptions() { return defaultOptions; }
 
     /**
-     * 获取完成标记
-     * <p>若未显式设置，则基于名称生成：[AGENTNAME_FINISH]</p>
+     * 获取完成标记（若未设置，默认生成 [NAME_FINISH]）
      */
     public String getFinishMarker() {
         if (finishMarker == null) {
             finishMarker = "[" + name.toUpperCase() + "_FINISH]";
         }
-
         return finishMarker;
     }
 
     /**
-     * 获取提示词提供者
+     * 根据当前上下文获取动态渲染的系统提示词
      */
     public String getSystemPromptFor(ReActTrace trace, FlowContext context) {
         return systemPrompt.getSystemPromptFor(trace, context);
     }
 
-    public Locale getLocale() {
-        return systemPrompt.getLocale();
-    }
+    public Locale getLocale() { return systemPrompt.getLocale(); }
 
-    public String getOutputKey() {
-        return outputKey;
-    }
+    public String getOutputKey() { return outputKey; }
 
-    public String getOutputSchema() {
-        return outputSchema;
-    }
+    public String getOutputSchema() { return outputSchema; }
 }

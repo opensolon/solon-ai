@@ -21,24 +21,22 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Redis 智能体会话适配 (Redis Agent Session)
- *
- * <p>基于 Redis 实现的分布式会话存储，确保多实例环境下的状态一致性：</p>
- * <ul>
- * <li><b>消息持久化</b>：利用 Redis List 存储各智能体的交互历史。</li>
- * <li><b>状态恢复</b>：利用 Redis Bucket 持久化 {@link FlowContext} 快照。</li>
- * </ul>
+ * Redis 智能体会话适配器 (分布式持久化方案)
+ * * <p>提供跨实例的消息同步与状态恢复能力，适用于集群部署。</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public class RedisAgentSession implements AgentSession {
+    private static final Logger LOG = LoggerFactory.getLogger(RedisAgentSession.class);
 
     private final String instanceId;
     private final RedisClient redisClient;
@@ -51,15 +49,18 @@ public class RedisAgentSession implements AgentSession {
         this.instanceId = instanceId;
         this.redisClient = redisClient;
 
-        // 从 Redis 加载会话快照
+        // 加载或初始化持久化快照
         String json = redisClient.getBucket().get(instanceId);
         if (json != null) {
             this.snapshot = FlowContext.fromJson(json);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Session [{}] loaded from Redis.", instanceId);
+            }
         } else {
             this.snapshot = FlowContext.of(instanceId);
         }
 
-        // 将当前 Session 实例注入快照上下文，便于在 Flow 节点中回溯
+        // 注入 Session 实例到上下文，便于 Flow 节点回溯
         this.snapshot.put(Agent.KEY_SESSION, this);
     }
 
@@ -71,31 +72,34 @@ public class RedisAgentSession implements AgentSession {
     @Override
     public void addHistoryMessage(String agentName, ChatMessage message) {
         String key = getHistoryKey(agentName);
-        // 向 Redis List 尾部追加消息
+        // 持久化交互记录到 Redis List
         redisClient.getList(key).add(ChatMessage.toJson(message));
+
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("Message added to Redis history: [{}->{}]", instanceId, agentName);
+        }
     }
 
     /**
-     * 获取指定智能体的历史记忆片段（倒序输出）
-     * * @param last 获取最近的条数
+     * 获取指定智能体的历史记忆
+     * @param last 最近的记录条数
      */
     @Override
     public Collection<ChatMessage> getHistoryMessages(String agentName, int last) {
         String key = getHistoryKey(agentName);
 
-        // 使用 Redis 负索引：获取从倒数第 last 个到最后一个的所有元素
-        List<String> rawList = redisClient.openSession().key(key).listGetRange(0, last-1);
+        // 利用 Redis 索引获取最近的消息片段
+        List<String> rawList = redisClient.openSession().key(key).listGetRange(0, last - 1);
 
         if (rawList == null || rawList.isEmpty()) {
             return Collections.emptyList();
         }
 
-        // 将 JSON 转换为对象列表
         List<ChatMessage> messages = rawList.stream()
                 .map(ChatMessage::fromJson)
                 .collect(Collectors.toList());
 
-        // 执行倒序反转：使最新的消息排在前面（符合某些 UI 或审计逻辑的需求）
+        // 反转列表，使最新消息符合逻辑顺序输出
         Collections.reverse(messages);
 
         return messages;
@@ -104,8 +108,12 @@ public class RedisAgentSession implements AgentSession {
     @Override
     public void updateSnapshot(FlowContext snapshot) {
         this.snapshot = snapshot;
-        // 持久化快照，确保分布式节点可见
+        // 实时同步快照至持久层，确保分布式节点可见性
         redisClient.getBucket().store(instanceId, snapshot.toJson());
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Session [{}] snapshot persisted to Redis.", instanceId);
+        }
     }
 
     @Override
@@ -114,17 +122,18 @@ public class RedisAgentSession implements AgentSession {
     }
 
     /**
-     * 构建智能体专属的历史消息 Key
+     * 构建基于实例 ID 的 Redis Key
      */
     private String getHistoryKey(String agentName) {
         return "ai:session:" + instanceId + ":" + agentName;
     }
 
     /**
-     * 清理指定智能体的内存记忆
+     * 物理清理指定智能体的历史记忆
      */
     public void clear(String agentName) {
         String key = getHistoryKey(agentName);
         redisClient.getList(key).clear();
+        LOG.info("Cleared Redis history for Agent [{}] in Session [{}]", agentName, instanceId);
     }
 }

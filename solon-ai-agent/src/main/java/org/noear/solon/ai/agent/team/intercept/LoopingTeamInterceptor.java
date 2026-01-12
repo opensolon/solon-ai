@@ -18,81 +18,84 @@ package org.noear.solon.ai.agent.team.intercept;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * 智能协作死循环拦截器
- * <p>该拦截器通过分析团队协作足迹（TeamTrace），自动识别并阻断 AI 节点间的无效重复执行。</p>
- *
- * <p><b>核心监测维度：</b></p>
+ * 协作死循环拦截器
+ * * <p>通过回溯 TeamTrace 识别并阻断 AI 节点间的无效重复。支持：</p>
  * <ul>
  * <li>1. <b>单点停滞 (Self-Loop)</b>：同一 Agent 连续产出高度相似的内容。</li>
- * <li>2. <b>序列嵌套 (Pattern-Loop)</b>：多 Agent 间形成固定序列的“踢皮球”现象（如 A-B-A-B 或 A-B-C-A-B-C）。</li>
+ * <li>2. <b>序列嵌套 (Pattern-Loop)</b>：多 Agent 间形成固定序列的“踢皮球”（如 A-B-A-B）。</li>
  * </ul>
- *
- * @author noear
- * @since 3.8.1
  */
 @Preview("3.8.1")
 public class LoopingTeamInterceptor implements TeamInterceptor {
-    /** 最小内容长度，低于此值不判定为循环（避免误伤 "OK", "Done" 等短语） */
+    private static final Logger LOG = LoggerFactory.getLogger(LoopingTeamInterceptor.class);
+
+    /** 最小检测长度（过滤 "OK", "Done" 等短语干扰） */
     private int minContentLength = 10;
 
-    /** 判定为重复的语义相似度阈值 (0.0 ~ 1.0)，建议在 0.9 以上 */
+    /** 语义相似度阈值 (0.0 ~ 1.0) */
     private double similarityThreshold = 0.95;
 
-    /** 回溯检测的最大步数窗口，防止长对话下的性能损耗 */
+    /** 回溯检测的最大步数窗口 */
     private int scanWindowSize = 10;
 
-    /** 允许重复的最大次数（默认 0，即一旦发现重复立即拦截；设为 1 则允许一次重试自纠） */
+    /** 允许的最大重复次数 */
     private int maxRepeatAllowed = 0;
 
-    /**
-     * 在监管员决策前执行拦截逻辑
-     * @return true 继续决策；false 发现循环，强行终止流程
-     */
     @Override
     public boolean shouldSupervisorContinue(TeamTrace trace) {
-        return !isLooping(trace);
+        if (isLooping(trace)) {
+            LOG.warn("Team loop detected! Terminating flow to prevent resource exhaustion.");
+            return false;
+        }
+        return true;
     }
 
     /**
-     * 执行多策略循环检测
+     * 多策略循环检测逻辑
      */
     public boolean isLooping(TeamTrace trace) {
-        // 1. 获取所有步骤
         List<TeamTrace.TeamStep> allSteps = trace.getSteps();
 
-        // 2. 【优化】仅针对真正的 Agent 产出进行循环检测，过滤掉 System/Supervisor 的干扰
+        // 仅针对 Agent 产出进行审计，排除系统开销步骤
         List<TeamTrace.TeamStep> agentSteps = allSteps.stream()
                 .filter(TeamTrace.TeamStep::isAgent)
                 .collect(Collectors.toList());
 
-        int n = allSteps.size();
-        // 协作步数不足以形成逻辑闭环（至少需要 4 步才能判定 A-B-A-B）
+        int n = agentSteps.size();
+        // 步数不足以判定循环（至少需要 A-B-A-B 四步）
         if (n < 4) return false;
 
         TeamTrace.TeamStep lastStep = agentSteps.get(n - 1);
 
-        // 过滤无需检测的极短文本
         if (lastStep.getContent() == null || lastStep.getContent().length() < minContentLength) {
             return false;
         }
 
-        // 策略 A：单点深度重复检测。处理 Agent 陷入自我复读的情况
-        if (checkSelfLoop(agentSteps, n)) return true;
+        // 策略 A：检测 Agent 自我复读
+        if (checkSelfLoop(agentSteps, n)) {
+            LOG.debug("Self-loop detected on agent: {}", lastStep.getSource());
+            return true;
+        }
 
-        // 策略 B：多步序列重复检测。处理 Agent 之间形成 A-B-A-B 或 A-B-C-A-B-C 的死锁
-        if (checkSequenceLoop(agentSteps, n)) return true;
+        // 策略 B：检测多步协同死锁 (A-B-A-B 或 A-B-C-A-B-C)
+        if (checkSequenceLoop(agentSteps, n)) {
+            LOG.debug("Sequence-loop detected ending with: {}", lastStep.getSource());
+            return true;
+        }
 
         return false;
     }
 
     /**
-     * 检测单点 Agent 幂等性停滞
+     * 检测同一 Agent 是否在原地踏步
      */
     private boolean checkSelfLoop(List<TeamTrace.TeamStep> steps, int n) {
         TeamTrace.TeamStep last = steps.get(n - 1);
@@ -101,13 +104,12 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
 
         for (int i = n - 2; i >= limit; i--) {
             TeamTrace.TeamStep prev = steps.get(i);
-            // 匹配同一 Agent 的历史产出
             if (prev.getSource().equals(last.getSource())) {
                 if (calculateSimilarity(prev.getContent(), last.getContent()) >= similarityThreshold) {
                     repeatCount++;
                     if (repeatCount > maxRepeatAllowed) return true;
                 } else {
-                    // 只要中途产出了不同内容，视为逻辑演进，单点循环打破
+                    // 内容发生演进，单点循环打破
                     break;
                 }
             }
@@ -116,11 +118,10 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
     }
 
     /**
-     * 检测多步协同序列死循环
-     * 识别模式：[A, B, A, B] (len=2) 或 [A, B, C, A, B, C] (len=3)
+     * 检测协作序列是否进入循环节
      */
     private boolean checkSequenceLoop(List<TeamTrace.TeamStep> steps, int n) {
-        // len 代表循环节的长度
+        // len 为检测的循环节长度（2=AB型, 3=ABC型）
         for (int len = 2; len <= 3; len++) {
             if (n < len * 2) continue;
 
@@ -129,7 +130,7 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
                 TeamTrace.TeamStep current = steps.get(n - 1 - i);
                 TeamTrace.TeamStep previous = steps.get(n - 1 - i - len);
 
-                // 必须 Agent 名称与内容相似度同时匹配才判定为序列循环
+                // 节点名与内容需双重匹配
                 if (!current.getSource().equals(previous.getSource()) ||
                         calculateSimilarity(current.getContent(), previous.getContent()) < similarityThreshold) {
                     match = false;
@@ -142,13 +143,11 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
     }
 
     /**
-     * 计算两段文本的语义相似度
-     * 基于归一化处理及编辑距离（Levenshtein Distance）实现
+     * 基于归一化编辑距离的语义相似度计算
      */
     private double calculateSimilarity(String s1, String s2) {
         if (Objects.equals(s1, s2)) return 1.0;
 
-        // 归一化处理：忽略空白字符、排版及大小写干扰
         String n1 = normalize(s1);
         String n2 = normalize(s2);
         if (n1.equals(n2)) return 1.0;
@@ -156,14 +155,12 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
         double maxLen = Math.max(n1.length(), n2.length());
         if (maxLen == 0) return 0.0;
 
-        // 计算差异权重：1.0 - (修改次数 / 最大长度)
         int distance = editDistance(n1, n2);
         return 1.0 - (double) distance / maxLen;
     }
 
     /**
-     * 编辑距离算法实现 (Levenshtein Distance)
-     * 用于评估将字符串 A 转换为 B 所需的最少操作次数（插入、删除、替换）
+     * Levenshtein Distance (编辑距离) 实现
      */
     private int editDistance(String s1, String s2) {
         int[] costs = new int[s2.length() + 1];
@@ -187,11 +184,10 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
     }
 
     /**
-     * 内容除噪归一化
+     * 降噪处理：移除空白及格式干扰
      */
     private String normalize(String text) {
         if (text == null) return "";
-        // 移除换行、空格等不可见字符，统一小写
         return text.replaceAll("\\s+", "").toLowerCase();
     }
 }
