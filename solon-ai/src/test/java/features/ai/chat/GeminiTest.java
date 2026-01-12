@@ -8,15 +8,10 @@ import org.noear.solon.test.SolonTest;
  */
 @SolonTest
 public class GeminiTest extends AbsChatTest{
-    private static final String apiUrl = "";
-    private static final String apiKey = "";
-    private static final String provider = "gemini";
-    private static final String model = "xxx";
-
     protected ChatModel.Builder getChatModelBuilder() {
-        return ChatModel.of(apiUrl)
-                .apiKey(apiKey)
-                .provider(provider)
-                .model(model);
+        return ChatModel.of("")
+                .apiKey("")
+                .provider("gemini")
+                .model("");
     }
 }
