@@ -147,7 +147,7 @@ public interface TeamProtocol extends NonSerializable {
      * @return 目标节点 ID 或 {@link Agent#ID_END}；返回 null 则由系统默认解析逻辑接管
      */
     default String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        return null;
+        return decision;
     }
 
     /**
