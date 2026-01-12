@@ -58,6 +58,10 @@ public abstract class TeamProtocolBase implements TeamProtocol {
 
     // 在 TeamProtocolBase 中增强
     protected boolean isLogicFinished(TeamTrace trace) {
+        if (trace.getSteps().isEmpty()) {
+            return false;
+        }
+
         // 默认保护最后 1 个 Agent 必须参与
         return isLastNAgentsParticipated(trace, 1);
     }
@@ -120,18 +124,18 @@ public abstract class TeamProtocolBase implements TeamProtocol {
 
     @Override
     public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        // 只有当决策包含“结束标识”时才进行逻辑检查
+        // 只有当决策包含“结束标识”时，才进行逻辑完备性检查
         if (decision.contains(config.getFinishMarker())) {
 
-            // 核心改动：如果用户定义了 graphAdjuster，表示进入“自由模式”，协议不再进行物理拦截
+            // 如果用户定义了 graphAdjuster，表示进入编排模式，协议不再物理拦截
             if (config.getGraphAdjuster() != null) {
                 return true;
             }
 
-            // 标准模式下，执行逻辑完备性检查（例如：末位 Agent 必须参与）
+            // 检查逻辑是否完备（例如：末位 Agent 是否已参与）
             if (!isLogicFinished(trace)) {
-                LOG.warn("Protocol [{}]: Standard SOP requirement not met. Blocking finish.", name());
-                // 可选：trace.setLastResponse("System: Requirements not met...");
+                LOG.warn("Protocol [{}]: SOP requirements not met. Blocking [FINISH] signal.", name());
+                // 此时拦截结束信号，强制返回 false，流程会重新回到 Supervisor 让它继续指派
                 return false;
             }
         }
