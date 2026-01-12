@@ -81,6 +81,9 @@ public class SimpleAgent implements Agent {
         List<ChatMessage> messages = buildMessages(session,prompt);
         AssistantMessage assistantMessage = callWithRetry(session, messages);
 
+        //智能体只输出干净的内容（不带思考）
+        assistantMessage = ChatMessage.ofAssistant(assistantMessage.getContent());
+
         // [功能：结果回填 Context]
         if (Assert.isNotEmpty(config.getOutputKey())) {
             context.put(config.getOutputKey(), assistantMessage.getContent());
