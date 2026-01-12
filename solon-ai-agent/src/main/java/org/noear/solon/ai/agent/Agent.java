@@ -33,9 +33,7 @@ import org.slf4j.LoggerFactory;
 /**
  * 智能体核心接口
  *
- * <p>定义了 AI 智能体的行为契约，集成了标识、推理评估与任务执行能力。</p>
- * <p>该接口同时继承了 {@link NamedTaskComponent}，使其能够无缝接入 Solon Flow 工作流引擎，
- * 作为分布式协作网络中的一个功能节点（Worker）。</p>
+ * <p>定义 AI 智能体的行为契约。作为 {@link NamedTaskComponent} 接入 Solon Flow，实现分布式协作。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -45,27 +43,24 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
     static final Logger LOG = LoggerFactory.getLogger(Agent.class);
 
     /**
-     * 获取智能体名称（全局唯一标识）
+     * 智能体名称（唯一标识）
      */
     String name();
 
     /**
-     * 获取智能体职责描述
-     * <p>描述该智能体擅长的领域或具备的能力，是 Supervisor 进行语义路由和任务分发的核心参考。</p>
+     * 智能体职责描述（用于语义路由与任务分发参考）
      */
     String description();
 
     /**
-     * 获取智能体档案
-     *
+     * 智能体档案（能力画像与交互契约）
      */
     default AgentProfile profile() {
         return null;
     }
 
     /**
-     * 为当前上下文生成动态职责描述
-     * <p>支持对 {@link #description()} 中的占位符（如 #{var}）进行渲染，实现动态角色设定。</p>
+     * 生成动态职责描述（支持模板渲染）
      */
     default String descriptionFor(FlowContext context) {
         if (context == null) {
@@ -76,10 +71,9 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
     }
 
     /**
-     * 响应式任务执行（基于现有上下文）
+     * 响应式任务执行
      *
-     * @param session 会话上下文（持有历史记忆）
-     * @return AI 模型生成的响应消息
+     * @param session 会话上下文
      */
     default AssistantMessage call(AgentSession session) throws Throwable {
         return call(null, session);
@@ -88,31 +82,21 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
     /**
      * 指定指令的任务执行
      *
-     * @param prompt  显式指定的任务指令（优先级最高）
+     * @param prompt  显式指令
      * @param session 会话上下文
-     * @return AI 模型生成的响应消息
      */
     AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable;
 
     /**
-     * 工作流触发入口（Solon Flow 节点实现）
-     * <p>该方法实现了智能体在团队协作流中的自动化运行逻辑：</p>
-     * <ul>
-     * <li>1. 自动初始化并维护 {@link AgentSession}。</li>
-     * <li>2. 根据协作协议（Protocol）动态重构提示词，注入团队协作进度。</li>
-     * <li>3. 执行 AI 推理并记录执行轨迹（Trace）及耗时。</li>
-     * <li>4. 为后续路由决策更新状态（KEY_LAST_AGENT_NAME）。</li>
-     * </ul>
-     *
-     * @param context 流上下文（包含全局 Trace 及配置）
-     * @param node    工作流节点元数据
+     * Solon Flow 节点运行实现
+     * <p>处理 Session 初始化、协议注入、推理执行及轨迹同步。</p>
      */
     @Override
     default void run(FlowContext context, Node node) throws Throwable {
-        // 获取或创建会话
+        // 1. 获取或初始化会话
         AgentSession session = context.computeIfAbsent(KEY_SESSION, k -> new InMemoryAgentSession("tmp"));
 
-        // 尝试获取团队协作轨迹
+        // 2. 处理团队协作轨迹与拦截
         String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
 
@@ -121,76 +105,63 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()) {
                 if (item.target.shouldAgentContinue(trace, this) == false) {
                     trace.addStep(ChatRole.ASSISTANT, name(),
-                            "[Skipped] Agent execution was intercepted and cancelled by " + item.target.getClass().getSimpleName(),
-                            0);
+                            "[Skipped] Cancelled by " + item.target.getClass().getSimpleName(), 0);
 
-                    if (LOG.isDebugEnabled()) {
-                        LOG.debug("TeamAgent agent [{}] execution skipped by interceptor", name());
+                    if (LOG.isInfoEnabled()) {
+                        LOG.info("Agent [{}] execution skipped by interceptor: {}", name(), item.target.getClass().getSimpleName());
                     }
                     return;
                 }
             }
         }
 
-
-        // 根据协作协议介入：注入前序工作进度、任务备注（Memo）等信息
+        // 3. 准备提示词并执行推理
         Prompt effectivePrompt = null;
         if (trace != null) {
-            effectivePrompt = trace.getProtocol().prepareAgentPrompt(
-                    trace, this, trace.getPrompt(),
-                    trace.getConfig().getLocale());
+            effectivePrompt = trace.getProtocol().prepareAgentPrompt(trace, this, trace.getPrompt(), trace.getConfig().getLocale());
         }
 
-        // 调用推理引擎
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Agent [{}] start calling...", name());
+        }
+
         long start = System.currentTimeMillis();
         AssistantMessage msg = call(effectivePrompt, session);
         long duration = System.currentTimeMillis() - start;
 
-        // 自动将执行轨迹同步到团队足迹中
+        // 4. 同步执行轨迹与结果处理
         if (trace != null) {
             String rawContent = (msg.getContent() == null) ? "" : msg.getContent().trim();
-
-            // [核心修改点]：在记录到 Trace 之前，调用 Protocol 进行内容解析或转换
             String finalResult = trace.getProtocol().resolveAgentOutput(trace, this, rawContent);
 
             if (finalResult == null || finalResult.isEmpty()) {
                 finalResult = "Agent [" + name() + "] processed but returned no textual content.";
             }
 
-            // 将转换后的结果存入轨迹
             trace.addStep(ChatRole.ASSISTANT, name(), finalResult, duration);
 
-            // 回调协议和拦截器
+            // 执行后置回调
             trace.getProtocol().onAgentEnd(trace, this);
             trace.getOptions().getInterceptorList().forEach(item -> item.target.onAgentEnd(trace, this));
         }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Agent [{}] call completed in {}ms", name(), duration);
+        }
     }
 
-    // --- 标准上下文字典 Key ---
-
-    /**
-     * 当前活跃轨迹的 Key
-     */
+    // --- Context Keys ---
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key_";
-    /**
-     * 会话对象存储 Key
-     */
     static String KEY_SESSION = "_SESSION_";
-    /**
-     * 协作协议存储 Key
-     */
     static String KEY_PROTOCOL = "_PROTOCOL_";
 
-    // --- 标准节点标识 ID ---
-
+    // --- Node IDs ---
     static String ID_START = "start";
     static String ID_END = "end";
-
     static String ID_REASON_BEF = "reason_bef";
     static String ID_REASON = "reason";
     static String ID_ACTION_BEF = "action_bef";
     static String ID_ACTION = "action";
-
     static String ID_SYSTEM = "system";
     static String ID_SUPERVISOR = "supervisor";
     static String ID_BIDDING = "bidding";
