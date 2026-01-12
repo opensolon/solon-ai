@@ -27,6 +27,7 @@
 
 
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-dashscope</module>
+        <module>../../solon-ai-llm-dialects/solon-ai-dialect-gemini</module>
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-ollama</module>
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-openai</module>
 

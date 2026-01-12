@@ -60,6 +60,16 @@ public interface ChatDialect extends AiModelDialect {
     HttpUtils createHttpUtils(ChatConfig config);
 
     /**
+     * 创建 http 工具
+     *
+     * @param config   聊天配置
+     * @param isStream 是否流式获取
+     */
+    default HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
+        return createHttpUtils(config);
+    }
+
+    /**
      * 构建请求数据
      *
      * @param config   聊天配置
