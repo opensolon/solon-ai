@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 团队协作指挥任务 (Supervisor Task) - 3.8.1 配套优化版
+ * 团队协作指挥任务 (Supervisor Task) - 3.8.1 精准优化版
  */
 @Preview("3.8.1")
 public class SupervisorTask implements NamedTaskComponent {
@@ -61,7 +61,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 }
             }
 
-            // 2. 物理深度熔断
+            // 2. 深度熔断
             if (Agent.ID_END.equals(trace.getRoute()) ||
                     trace.getIterationsCount() >= trace.getOptions().getMaxTotalIterations()) {
                 trace.addStep(ChatRole.SYSTEM, Agent.ID_SYSTEM, "[Terminated] Max iterations reached", 0);
@@ -69,7 +69,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 return;
             }
 
-            // 3. 协议逻辑干预
+            // 3. 协议执行检查
             if (!config.getProtocol().shouldSupervisorExecute(context, trace)) {
                 if (Agent.ID_SUPERVISOR.equals(trace.getRoute())) {
                     routeTo(context, trace, Agent.ID_END);
@@ -77,7 +77,6 @@ public class SupervisorTask implements NamedTaskComponent {
                 return;
             }
 
-            // 4. 执行调度
             dispatch(context, trace);
 
         } catch (Exception e) {
@@ -88,51 +87,45 @@ public class SupervisorTask implements NamedTaskComponent {
     private void dispatch(FlowContext context, TeamTrace trace) throws Exception {
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-        // 1. 准备协议指令（System 层面）
         StringBuilder protocolExt = new StringBuilder();
         config.getProtocol().prepareSupervisorInstruction(context, trace, protocolExt);
 
-
-        // 3. 构建核心 System Prompt
         String basePrompt = config.getTeamSystem(trace, context);
         String finalSystemPrompt = (protocolExt.length() > 0) ? basePrompt + "\n\n" + protocolExt : basePrompt;
 
-        // 4. 构建用户侧指令
         StringBuilder userContent = new StringBuilder();
-
-        // 注入协议特定的上下文（如 A2A 的 State）
-        // 2. 准备协议上下文（User 层面，展示 State 等）
         config.getProtocol().prepareSupervisorContext(context, trace, userContent);
 
-        // 注入通用的协作历史和模态指令
+        // 注入协作历史和指令
         if (isZh) {
             userContent.append("## 协作进度 (最近 5 轮历史)\n").append(trace.getFormattedHistory(5)).append("\n\n");
             userContent.append("---\n");
             userContent.append("当前迭代轮次: ").append(trace.nextIterations()).append("\n");
-            userContent.append("指令：请根据专家的 Skills 和输入模态(Input Modes) 决定下一位执行者名称。");
-            userContent.append("如果当前输入包含非文本数据（如图片），请确保指派的专家具备相应的处理能力。");
-            userContent.append("或输出 ").append(config.getFinishMarker()).append(" 结束任务。");
+            userContent.append("指令：请根据专家 Skills 指派下一位执行者。已完成则输出 ").append(config.getFinishMarker()).append("。");
         } else {
             userContent.append("## Collaboration Progress (Last 5 rounds)\n").append(trace.getFormattedHistory(5)).append("\n\n");
             userContent.append("---\n");
             userContent.append("Current Iteration: ").append(trace.nextIterations()).append("\n");
-            userContent.append("Command: Assign the next agent name based on Skills and Input Modes. ");
-            userContent.append("If the input contains non-text media, ensure the expert can handle it. ");
-            userContent.append("Or output ").append(config.getFinishMarker()).append(" to finish.");
+            userContent.append("Command: Assign the next agent based on Skills. Or output ").append(config.getFinishMarker()).append(" to finish.");
         }
 
+
+        // --- 优化点 1：使用 isAgent 过滤真正的参与者 ---
+        Set<String> participatedAgentNames = trace.getSteps().stream()
+                .filter(TeamTrace.TeamStep::isAgent)
+                .map(s -> s.getSource().toLowerCase())
+                .collect(Collectors.toSet());
+
         List<String> remainingAgents = config.getAgentMap().keySet().stream()
-                .filter(name -> !trace.getSteps().stream().anyMatch(s -> name.equalsIgnoreCase(s.getSource())))
+                .filter(name -> !participatedAgentNames.contains(name.toLowerCase()))
                 .collect(Collectors.toList());
 
         if (!remainingAgents.isEmpty()) {
             String agentsList = String.join(", ", remainingAgents);
             if (isZh) {
                 userContent.append("\n> **待命专家**：[").append(agentsList).append("]。");
-                userContent.append("请评估其 Skills 是否匹配当前任务，必要时请指派他们。");
             } else {
-                userContent.append("\n> **Pending Experts**: [").append(agentsList).append("]. ");
-                userContent.append("Evaluate if their Skills match the task before finishing.");
+                userContent.append("\n> **Pending Experts**: [").append(agentsList).append("].");
             }
         }
 
@@ -143,7 +136,6 @@ public class SupervisorTask implements NamedTaskComponent {
 
         ChatResponse response = callWithRetry(trace, messages);
 
-        // 响应拦截与决策观测
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()) {
             item.target.onModelEnd(trace, response);
         }
@@ -155,54 +147,28 @@ public class SupervisorTask implements NamedTaskComponent {
         commitRoute(trace, decision, context);
     }
 
-    private ChatResponse callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
-        ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
-            if (config.getChatOptions() != null) config.getChatOptions().accept(o);
-        });
-
-        trace.getOptions().getInterceptorList().forEach(item -> item.target.onModelStart(trace, req));
-
-        int maxRetries = trace.getOptions().getMaxRetries();
-        for (int i = 0; i < maxRetries; i++) {
-            try {
-                return req.call();
-            } catch (Exception e) {
-                if (i == maxRetries - 1) throw new RuntimeException("Supervisor call failed", e);
-                try {
-                    Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(ie);
-                }
-            }
-        }
-        throw new RuntimeException("Unreachable");
-    }
-
     private void commitRoute(TeamTrace trace, String decision, FlowContext context) {
         if (Assert.isEmpty(decision)) {
             routeTo(context, trace, Agent.ID_END);
             return;
         }
 
-        // 1. 优先处理协议自定义路由（如 Swarm 的转移逻辑）
         String protoRoute = config.getProtocol().resolveSupervisorRoute(context, trace, decision);
         if (Assert.isNotEmpty(protoRoute)) {
             routeTo(context, trace, protoRoute);
             return;
         }
 
-        // 2. ！！！【核心改动】优先检查是否包含结束标记 ！！！
         String finishMarker = config.getFinishMarker();
         if (decision.contains(finishMarker)) {
-            // 允许协议在真正结束前做“最后检查”（比如检查必经节点）
             if (config.getProtocol().shouldSupervisorRoute(context, trace, decision)) {
-                String finishRegex = "(?i).*?(\\Q" + finishMarker + "\\E)[:\\s]*(.*)";
+                // --- 优化点 2：增强提取逻辑，防止标记前后文本干扰 ---
+                String finishRegex = "(?i).*?\\Q" + finishMarker + "\\E[:\\s]*(.*)";
                 Pattern pattern = Pattern.compile(finishRegex, Pattern.DOTALL);
                 Matcher matcher = pattern.matcher(decision);
 
                 if (matcher.find()) {
-                    String finalAnswer = matcher.group(2).trim();
+                    String finalAnswer = matcher.group(1).trim();
                     trace.setFinalAnswer(finalAnswer.isEmpty() ? trace.getLastAgentContent() : finalAnswer);
                 } else {
                     trace.setFinalAnswer(trace.getLastAgentContent());
@@ -212,18 +178,19 @@ public class SupervisorTask implements NamedTaskComponent {
             }
         }
 
-        // 3. 只有不包含结束标记，或协议拒绝结束时，才尝试匹配专家名
         if (matchAgentRoute(context, trace, decision)) {
             return;
         }
 
-        // 4. 兜底：如果啥都没匹配到，安全结束
         routeTo(context, trace, Agent.ID_END);
     }
 
     private boolean matchAgentRoute(FlowContext context, TeamTrace trace, String text) {
-        if (config.getAgentMap().containsKey(text)) {
-            routeTo(context, trace, text);
+        // --- 优化点 3：清洗 Markdown 装饰符，提高匹配成功率 ---
+        String cleanText = text.replaceAll("[\\*\\_\\`]", "").trim();
+
+        if (config.getAgentMap().containsKey(cleanText)) {
+            routeTo(context, trace, cleanText);
             return true;
         }
 
@@ -232,8 +199,9 @@ public class SupervisorTask implements NamedTaskComponent {
                 .collect(Collectors.toList());
 
         for (String name : sortedNames) {
+            // 使用单词边界匹配，防止子串误判
             Pattern p = Pattern.compile("(?i)(?<=^|[^a-zA-Z0-9])" + Pattern.quote(name) + "(?=[^a-zA-Z0-9]|$)");
-            if (p.matcher(text).find()) {
+            if (p.matcher(cleanText).find()) {
                 routeTo(context, trace, name);
                 return true;
             }
@@ -241,12 +209,28 @@ public class SupervisorTask implements NamedTaskComponent {
         return false;
     }
 
+    // callWithRetry, routeTo, handleError 保持原样 ...
+    private ChatResponse callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
+        ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
+            if (config.getChatOptions() != null) config.getChatOptions().accept(o);
+        });
+        trace.getOptions().getInterceptorList().forEach(item -> item.target.onModelStart(trace, req));
+        int maxRetries = trace.getOptions().getMaxRetries();
+        for (int i = 0; i < maxRetries; i++) {
+            try { return req.call(); }
+            catch (Exception e) {
+                if (i == maxRetries - 1) throw new RuntimeException("Supervisor call failed", e);
+                try { Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1)); }
+                catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new RuntimeException(ie); }
+            }
+        }
+        throw new RuntimeException("Unreachable");
+    }
+
     private void routeTo(FlowContext context, TeamTrace trace, String targetName) {
         trace.setRoute(targetName);
         config.getProtocol().onSupervisorRouting(context, trace, targetName);
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamAgent [{}] routed to: [{}]", config.getName(), targetName);
-        }
+        if (LOG.isDebugEnabled()) { LOG.debug("TeamAgent [{}] routed to: [{}]", config.getName(), targetName); }
     }
 
     private void handleError(FlowContext context, Exception e) {
