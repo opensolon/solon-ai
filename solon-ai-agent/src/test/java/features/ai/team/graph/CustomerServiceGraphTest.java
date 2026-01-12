@@ -41,12 +41,17 @@ public class CustomerServiceGraphTest {
                         createServiceAgent(chatModel, "complaint_handler", "投诉处理", "非常抱歉给您带来不便，我们正在处理您的投诉。")
                 )
                 .graphAdjuster(spec -> {
+
+                    spec.getNode("supervisor").linkClear()
+                            .linkAdd("customer_checkin");
+
                     // 1. 客户接入（初始化数据）
                     spec.addActivity("customer_checkin")
                             .task((ctx, node) -> {
                                 ctx.put("problem_type", "technical"); // 模拟技术问题
                                 System.out.println(">>> [Node] 客户接入，类型: technical");
-                            });
+                            })
+                            .linkAdd("problem_gateway");
 
                     // 2. 问题分类网关 (Exclusive)
                     spec.addExclusive("problem_gateway")
@@ -58,7 +63,22 @@ public class CustomerServiceGraphTest {
 
                                 ctx.put("handler", handler);
                                 System.out.println(">>> [Gateway] 路由至: " + handler);
-                            });
+                            })
+                            .linkAdd("reception");
+
+                    spec.getNode("reception").linkClear()
+                            .linkAdd("technical_support", l -> l.when(ctx -> "technical_support".equals(ctx.get("handler"))))
+                            .linkAdd("billing_support", l -> l.when(ctx -> "billing_support".equals(ctx.get("handler"))))
+                            .linkAdd("complaint_handler", l -> l.when(ctx -> "complaint_handler".equals(ctx.get("handler"))));
+
+
+                    spec.getNode("technical_support").linkClear()
+                            .linkAdd("satisfaction_survey");
+                    spec.getNode("billing_support").linkClear()
+                            .linkAdd("satisfaction_survey");
+                    spec.getNode("complaint_handler").linkClear()
+                            .linkAdd("satisfaction_survey");
+
 
                     // 3. 满意度调查（终点前置节点）
                     spec.addActivity("satisfaction_survey")
@@ -67,29 +87,6 @@ public class CustomerServiceGraphTest {
                                 System.out.println(">>> [Node] 满意度调查完成");
                             })
                             .linkAdd(Agent.ID_END);
-
-                    // --- 路由编排 ---
-
-                    // A. Supervisor -> 接入口
-                    NodeSpec supervisor = spec.getNode("supervisor");
-                    supervisor.getLinks().clear();
-                    supervisor.linkAdd("customer_checkin");
-
-                    // B. 接入口 -> 分类网关 -> 接待员
-                    spec.getNode("customer_checkin").linkAdd("problem_gateway");
-                    spec.getNode("problem_gateway").linkAdd("reception");
-
-                    // C. 接待员 -> 根据 handler 分流
-                    NodeSpec receptionNode = spec.getNode("reception");
-                    receptionNode.getLinks().clear();
-                    receptionNode.linkAdd("technical_support", l -> l.when(ctx -> "technical_support".equals(ctx.get("handler"))));
-                    receptionNode.linkAdd("billing_support", l -> l.when(ctx -> "billing_support".equals(ctx.get("handler"))));
-                    receptionNode.linkAdd("complaint_handler", l -> l.when(ctx -> "complaint_handler".equals(ctx.get("handler"))));
-
-                    // D. 专项服务 -> 满意度调查
-                    spec.getNode("technical_support").linkAdd("satisfaction_survey");
-                    spec.getNode("billing_support").linkAdd("satisfaction_survey");
-                    spec.getNode("complaint_handler").linkAdd("satisfaction_survey");
                 })
                 .build();
 
@@ -97,21 +94,22 @@ public class CustomerServiceGraphTest {
         AgentSession session = InMemoryAgentSession.of("session_customer_01");
         team.call(Prompt.of("我的电脑无法开机了，请帮我处理。"), session);
 
-        // 3. 结果验证
+        // 3. 验证 Agent 路径（使用 trace）
         TeamTrace trace = team.getTrace(session);
-        List<String> executedNodes = trace.getSteps().stream()
+        List<String> agentPath = trace.getSteps().stream()
                 .map(TeamTrace.TeamStep::getSource)
                 .collect(Collectors.toList());
 
-        System.out.println("客服处理链路: " + executedNodes);
+        System.out.println("AI 专家路径: " + agentPath);
+        Assertions.assertTrue(agentPath.contains("reception"));
+        Assertions.assertTrue(agentPath.contains("technical_support"));
 
-        // 核心路径断言
-        Assertions.assertTrue(executedNodes.contains("customer_checkin"));
-        Assertions.assertTrue(executedNodes.contains("reception"));
-        Assertions.assertTrue(executedNodes.contains("technical_support"), "应该跳转到技术支持节点");
-        Assertions.assertTrue(executedNodes.contains("satisfaction_survey"));
+        // 4. 验证业务逻辑节点（使用 Context 或 外部变量）
+        // 既然日志输出了 ">>> [Node] 满意度调查完成"，说明链路走通了
+        Assertions.assertEquals("Survey_Completed", finalSolution[0], "满意度调查节点未被触发");
 
-        Assertions.assertEquals("Survey_Completed", finalSolution[0]);
+        // 验证分类网关是否生效
+        Assertions.assertEquals("technical_support", session.getSnapshot().get("handler"), "分类网关逻辑错误");
     }
 
     private Agent createServiceAgent(ChatModel chatModel, String name, String role, String reply) {

@@ -12,16 +12,13 @@ import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.flow.NodeSpec;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * A/B测试决策流程测试
- * 场景：并行分析 + 汇聚决策 + 结果上下文透传
+ * A/B测试决策流程测试（优化版）
  */
 public class ABTestingDecisionGraphTest {
 
@@ -30,8 +27,7 @@ public class ABTestingDecisionGraphTest {
     public void testABTestingDecisionProcess() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 定义专家：使用 SimpleAgent 并通过 handler 实现结果自动提取到上下文
-        // 我们通过包装一个简单的逻辑，让 AI 的输出直接影响上下文变量
+        // 1. 使用 SimpleAgent 的原生 outputKey 自动回填 Context
         Agent dataAnalyst = createExpert(chatModel, "data_analyst", "数据分析专家", "data_opinion");
         Agent productManager = createExpert(chatModel, "product_manager", "产品经理", "product_opinion");
         Agent engineeringLead = createExpert(chatModel, "engineering_lead", "工程负责人", "engineering_opinion");
@@ -40,96 +36,90 @@ public class ABTestingDecisionGraphTest {
                 .name("ab_testing_team")
                 .agentAdd(dataAnalyst, productManager, engineeringLead)
                 .graphAdjuster(spec -> {
-                    // --- 节点定义 ---
+                    // 让主管先去加载数据
+                    spec.getNode("supervisor").linkClear().linkAdd("test_result_input");
 
-                    spec.getNode("supervisor")
-                            .linkClear()
-                            .linkAdd("test_result_input");
-
+                    // Activity 节点：负责业务逻辑处理
                     spec.addActivity("test_result_input")
                             .title("准备测试数据")
                             .task((ctx, node) -> {
                                 ctx.put("variant_a_conv", 15.2);
-                                ctx.put("variant_b_conv", 18.7); // B 更好
-                                System.out.println(">>> [Node] 数据已载入上下文");
+                                ctx.put("variant_b_conv", 18.7);
+                                System.out.println(">>> [Node] 业务数据载入成功");
                             })
                             .linkAdd("parallel_analysis");
 
+                    // 并行网关
                     spec.addParallel("parallel_analysis").title("并行分析开始")
                             .linkAdd(dataAnalyst.name())
                             .linkAdd(productManager.name())
                             .linkAdd(engineeringLead.name());
 
+                    // 专家节点汇聚
                     spec.getNode(dataAnalyst.name()).linkClear().linkAdd("decision_gateway");
                     spec.getNode(productManager.name()).linkClear().linkAdd("decision_gateway");
                     spec.getNode(engineeringLead.name()).linkClear().linkAdd("decision_gateway");
 
+                    // 决策节点
                     spec.addParallel("decision_gateway")
                             .title("多数票决策")
                             .task((ctx, node) -> {
+                                // 直接从 Context 获取各 Agent 自动回填的结果
                                 String d = ctx.getAs("data_opinion");
                                 String p = ctx.getAs("product_opinion");
                                 String e = ctx.getAs("engineering_opinion");
 
                                 int approveCount = 0;
-                                if ("approve".equalsIgnoreCase(d)) approveCount++;
-                                if ("approve".equalsIgnoreCase(p)) approveCount++;
-                                if ("approve".equalsIgnoreCase(e)) approveCount++;
+                                if (isApprove(d)) approveCount++;
+                                if (isApprove(p)) approveCount++;
+                                if (isApprove(e)) approveCount++;
 
                                 String finalVerdict = (approveCount >= 2) ? "PROMOTED_B" : "RETAINED_A";
                                 ctx.put("ab_test_decision", finalVerdict);
-                                System.out.println(">>> [Decision] 赞成票: " + approveCount + ", 最终决策: " + finalVerdict);
+                                System.out.println(">>> [Decision] 统计赞成票: " + approveCount + ", 最终裁决: " + finalVerdict);
                             })
                             .linkAdd(Agent.ID_END);
                 })
                 .build();
 
-        // 2. 执行任务
+        // 2. 执行
         AgentSession session = InMemoryAgentSession.of("session_ab_test_01");
-        // Prompt 中带入数据特征，引导模型输出 approve
-        String query = "当前 A 转化率 15%, B 转化率 18%。请分析是否可以推广 B？";
+        String query = "当前 A 转化率 15.2%, B 转化率 18.7%。请给出你的评估意见（approve/reject）。";
         team.call(Prompt.of(query), session);
 
-        // 3. 验证与断言
+        // 3. 断言优化
+        // A. 验证业务逻辑节点是否生效（通过观察上下文变量）
+        Assertions.assertEquals(15.2, session.getSnapshot().getAs("variant_a_conv"), "Activity 节点未执行或数据丢失");
+
+        // B. 验证 Agent 执行轨迹（Trace 记录 Agent 足迹）
         TeamTrace trace = team.getTrace(session);
-        List<String> executedNodes = trace.getSteps().stream()
+        List<String> agentFootprints = trace.getSteps().stream()
                 .map(TeamTrace.TeamStep::getSource)
                 .collect(Collectors.toList());
 
-        System.out.println("实际执行路径: " + executedNodes);
+        System.out.println("Agent 执行足迹: " + agentFootprints);
+        Assertions.assertTrue(agentFootprints.contains("data_analyst"), "Trace 中缺失专家记录");
 
-        // 检测点 1: 关键业务节点必须存在于 Trace 中
-        Assertions.assertTrue(executedNodes.contains("test_result_input"));
-        Assertions.assertTrue(executedNodes.contains("decision_gateway"));
-
-        // 检测点 2: 验证专家参与度（并行节点）
-        Assertions.assertTrue(executedNodes.contains("data_analyst") ||
-                executedNodes.contains("product_manager"), "并行专家节点未触发");
-
-        // 检测点 3: 验证决策逻辑结果是否已写入上下文
+        // C. 验证最终业务决策
         String decision = session.getSnapshot().getAs("ab_test_decision");
-        Assertions.assertNotNull(decision, "决策结果未写入 Context");
-        System.out.println("单元测试成功。最终决策结果: " + decision);
+        Assertions.assertNotNull(decision);
+        System.out.println("测试通过，最终决策结果: " + decision);
     }
 
-    /**
-     * 辅助方法：创建一个能自动将结果写入上下文的专家 Agent
-     */
     private Agent createExpert(ChatModel chatModel, String name, String role, String outputKey) {
+        // 充分利用 SimpleAgent 设计：outputKey 会在 Agent.call 结束时自动同步到 session
         return SimpleAgent.of(chatModel)
                 .name(name)
                 .systemPrompt(SimpleSystemPrompt.builder()
                         .role(role)
                         .instruction("你负责评估 A/B 测试。如果 B 优于 A，回复 'approve'，否则回复 'reject'。只输出单词。")
                         .build())
-                .handler((prompt, session) -> {
-                    // 执行模型调用
-                    AssistantMessage msg = chatModel.prompt(prompt).call().getMessage();
-                    String content = msg.getContent().toLowerCase();
-                    // 模拟结果提取逻辑：将结果注入 FlowContext
-                    session.getSnapshot().put(outputKey, content.contains("approve") ? "approve" : "reject");
-                    return msg;
-                })
+                .outputKey(outputKey) // 利用原生 outputKey，无需手动写 handler 注入
+                .chatOptions(o -> o.temperature(0.1F))
                 .build();
+    }
+
+    private boolean isApprove(String opinion) {
+        return opinion != null && opinion.toLowerCase().contains("approve");
     }
 }
