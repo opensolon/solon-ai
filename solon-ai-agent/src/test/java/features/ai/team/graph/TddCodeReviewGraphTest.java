@@ -89,7 +89,7 @@ public class TddCodeReviewGraphTest {
         Assertions.assertTrue(developerIdx < reviewerIdx, "顺序错误：开发必须在审查之前");
 
         // 检测点 2: 验证 Activity 节点执行（不走 Trace，检查 Context）
-        Assertions.assertTrue(session.getSnapshot().getAs("quality_verified"), "质量检查 Activity 未被触发");
+        Assertions.assertTrue(session.getSnapshot().<Boolean>getAs("quality_verified"), "质量检查 Activity 未被触发");
 
         // 检测点 3: 最终审查报告验证
         String finalReport = trace.getSteps().get(trace.getStepCount() - 1).getContent();

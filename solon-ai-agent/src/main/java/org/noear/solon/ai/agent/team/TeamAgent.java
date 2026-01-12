@@ -181,7 +181,7 @@ public class TeamAgent implements Agent {
      * <li>5. <b>状态同步：</b> 更新会话历史，同步 Context 快照，并触发 {@code onAgentEnd}。</li>
      * </ul>
      */
-    public AssistantMessage call(Prompt prompt, AgentSession session, TeamOptions options) throws Throwable {
+    protected AssistantMessage call(Prompt prompt, AgentSession session, TeamOptions options) throws Throwable {
         FlowContext context = session.getSnapshot();
         TeamTrace trace = context.computeIfAbsent(config.getTraceKey(), k -> new TeamTrace(prompt));
 

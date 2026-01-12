@@ -18,7 +18,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * A/B测试决策流程测试（优化版）
+ * A/B 测试决策流程测试
+ * 场景：并行数据分析 -> 多数票共识决策 -> 结果自动回填上下文
  */
 public class ABTestingDecisionGraphTest {
 
@@ -27,7 +28,7 @@ public class ABTestingDecisionGraphTest {
     public void testABTestingDecisionProcess() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 使用 SimpleAgent 的原生 outputKey 自动回填 Context
+        // --- 1. 初始化专家角色 (利用 SimpleAgent 的 outputKey 自动回填能力) ---
         Agent dataAnalyst = createExpert(chatModel, "data_analyst", "数据分析专家", "data_opinion");
         Agent productManager = createExpert(chatModel, "product_manager", "产品经理", "product_opinion");
         Agent engineeringLead = createExpert(chatModel, "engineering_lead", "工程负责人", "engineering_opinion");
@@ -36,35 +37,36 @@ public class ABTestingDecisionGraphTest {
                 .name("ab_testing_team")
                 .agentAdd(dataAnalyst, productManager, engineeringLead)
                 .graphAdjuster(spec -> {
-                    // 让主管先去加载数据
+
+                    // A. 入口指派：从 Supervisor 指向数据准备节点
                     spec.getNode("supervisor").linkClear().linkAdd("test_result_input");
 
-                    // Activity 节点：负责业务逻辑处理
+                    // B. 数据准备 (Activity)：模拟从数据库/API 加载测试指标
                     spec.addActivity("test_result_input")
                             .title("准备测试数据")
                             .task((ctx, node) -> {
                                 ctx.put("variant_a_conv", 15.2);
                                 ctx.put("variant_b_conv", 18.7);
-                                System.out.println(">>> [Node] 业务数据载入成功");
+                                System.out.println(">>> [Node] 业务指标载入 Context");
                             })
                             .linkAdd("parallel_analysis");
 
-                    // 并行网关
-                    spec.addParallel("parallel_analysis").title("并行分析开始")
+                    // C. 并行分发 (Parallel)：同时触发三个专家的异步分析
+                    spec.addParallel("parallel_analysis").title("启动多维度并行分析")
                             .linkAdd(dataAnalyst.name())
                             .linkAdd(productManager.name())
                             .linkAdd(engineeringLead.name());
 
-                    // 专家节点汇聚
+                    // D. 结果汇聚：所有专家处理完后，自动跳转至决策网关
                     spec.getNode(dataAnalyst.name()).linkClear().linkAdd("decision_gateway");
                     spec.getNode(productManager.name()).linkClear().linkAdd("decision_gateway");
                     spec.getNode(engineeringLead.name()).linkClear().linkAdd("decision_gateway");
 
-                    // 决策节点
+                    // E. 共识决策 (Parallel 汇聚)：基于 Context 中的专家意见进行多数票表决
                     spec.addParallel("decision_gateway")
-                            .title("多数票决策")
+                            .title("多数票共识决策")
                             .task((ctx, node) -> {
-                                // 直接从 Context 获取各 Agent 自动回填的结果
+                                // 提取由 SimpleAgent.outputKey 自动同步过来的结果
                                 String d = ctx.getAs("data_opinion");
                                 String p = ctx.getAs("product_opinion");
                                 String e = ctx.getAs("engineering_opinion");
@@ -76,45 +78,48 @@ public class ABTestingDecisionGraphTest {
 
                                 String finalVerdict = (approveCount >= 2) ? "PROMOTED_B" : "RETAINED_A";
                                 ctx.put("ab_test_decision", finalVerdict);
-                                System.out.println(">>> [Decision] 统计赞成票: " + approveCount + ", 最终裁决: " + finalVerdict);
+                                System.out.println(">>> [Decision] 赞成票: " + approveCount + ", 最终裁决: " + finalVerdict);
                             })
                             .linkAdd(Agent.ID_END);
                 })
                 .build();
 
-        // 2. 执行
+        // --- 2. 运行流程 ---
         AgentSession session = InMemoryAgentSession.of("session_ab_test_01");
         String query = "当前 A 转化率 15.2%, B 转化率 18.7%。请给出你的评估意见（approve/reject）。";
         team.call(Prompt.of(query), session);
 
-        // 3. 断言优化
-        // A. 验证业务逻辑节点是否生效（通过观察上下文变量）
-        Assertions.assertEquals(15.2, session.getSnapshot().getAs("variant_a_conv"), "Activity 节点未执行或数据丢失");
+        // --- 3. 结果验证 ---
 
-        // B. 验证 Agent 执行轨迹（Trace 记录 Agent 足迹）
+        // A. 验证业务 Activity 逻辑：数据是否成功写入上下文
+        Assertions.assertEquals(15.2, session.getSnapshot().getAs("variant_a_conv"), "数据加载节点未执行");
+
+        // B. 验证 Agent 参与轨迹：Trace 记录 AI 专家的交互足迹
         TeamTrace trace = team.getTrace(session);
         List<String> agentFootprints = trace.getSteps().stream()
                 .map(TeamTrace.TeamStep::getSource)
                 .collect(Collectors.toList());
 
-        System.out.println("Agent 执行足迹: " + agentFootprints);
-        Assertions.assertTrue(agentFootprints.contains("data_analyst"), "Trace 中缺失专家记录");
+        System.out.println("AI 执行足迹: " + agentFootprints);
+        Assertions.assertTrue(agentFootprints.contains("data_analyst"), "Trace 记录缺失专家节点");
 
-        // C. 验证最终业务决策
+        // C. 验证最终业务决策结果
         String decision = session.getSnapshot().getAs("ab_test_decision");
-        Assertions.assertNotNull(decision);
-        System.out.println("测试通过，最终决策结果: " + decision);
+        Assertions.assertNotNull(decision, "决策结果未生成");
+        System.out.println("测试成功。最终结论: " + decision);
     }
 
+    /**
+     * 构建专家 Agent，配置 outputKey 实现 Agent 输出与 Session Context 的自动映射
+     */
     private Agent createExpert(ChatModel chatModel, String name, String role, String outputKey) {
-        // 充分利用 SimpleAgent 设计：outputKey 会在 Agent.call 结束时自动同步到 session
         return SimpleAgent.of(chatModel)
                 .name(name)
                 .systemPrompt(SimpleSystemPrompt.builder()
                         .role(role)
                         .instruction("你负责评估 A/B 测试。如果 B 优于 A，回复 'approve'，否则回复 'reject'。只输出单词。")
                         .build())
-                .outputKey(outputKey) // 利用原生 outputKey，无需手动写 handler 注入
+                .outputKey(outputKey) // 重要：Agent 执行完后会自动将 Content 写入 Context[outputKey]
                 .chatOptions(o -> o.temperature(0.1F))
                 .build();
     }

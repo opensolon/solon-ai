@@ -202,7 +202,7 @@ public class ReActAgent implements Agent {
      * @param session 会话
      * @return 最终响应消息
      */
-    public AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) throws Throwable {
+    protected AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) throws Throwable {
         FlowContext context = session.getSnapshot();
         // 维护执行痕迹：若上下文已存在则复用，支持多轮对话或中断恢复
         TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL);

@@ -50,6 +50,10 @@ public class SimpleAgentConfig {
      * 重试延迟时间（毫秒）
      */
     private long retryDelayMs = 1000L;
+    /**
+     * 历史消息窗口大小（从上下文中回溯并注入到当前执行过程的消息条数）
+     */
+    private int historyWindowSize = 5;
 
     /**
      * 结果输出 Key
@@ -118,6 +122,10 @@ public class SimpleAgentConfig {
 
     public long getRetryDelayMs() {
         return retryDelayMs;
+    }
+
+    public int getHistoryWindowSize() {
+        return historyWindowSize;
     }
 
 
@@ -207,6 +215,15 @@ public class SimpleAgentConfig {
     protected void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs); // 最小 500ms
+    }
+
+    /**
+     * 设置历史消息窗口大小
+     *
+     * @param historyWindowSize 回溯的消息条数（建议设置为奇数以保持对话轮次完整）
+     */
+    protected void setHistoryWindowSize(int historyWindowSize) {
+        this.historyWindowSize = Math.max(0, historyWindowSize);
     }
 
 

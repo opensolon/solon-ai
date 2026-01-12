@@ -52,22 +52,73 @@ public class SimpleAgent implements Agent {
 
     @Override
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
+        FlowContext context = session.getSnapshot();
+
+        // 2. 消息持久化：将当前请求同步到 Session 归档与 Trace 推理上下文
+        if (!Prompt.isEmpty(prompt)) {
+            for (ChatMessage message : prompt.getMessages()) {
+                // 持久化到 Session（归档）
+                session.addHistoryMessage(config.getName(), message);
+            }
+        }
+
         // [功能：带重试支持的物理调用]
-        AssistantMessage result = callWithRetry(prompt, session);
+        List<ChatMessage> messages = buildMessages(session,prompt);
+        AssistantMessage assistantMessage = callWithRetry(session, messages);
 
         // [功能：结果回填 Context]
         if (Assert.isNotEmpty(config.getOutputKey())) {
-            session.getSnapshot().put(config.getOutputKey(), result.getContent());
+            context.put(config.getOutputKey(), assistantMessage.getContent());
         }
 
-        return result;
+        session.addHistoryMessage(config.getName(), assistantMessage);
+        session.updateSnapshot(context);
+
+        return assistantMessage;
     }
 
-    private AssistantMessage callWithRetry(Prompt prompt, AgentSession session) throws Throwable {
+    private List<ChatMessage> buildMessages(AgentSession session, Prompt prompt){
+        String spText = "";
+
+        // 1. 获取基础 SystemPrompt
+        if (config.getSystemPrompt() != null) {
+            spText = config.getSystemPrompt().getSystemPromptFor(session.getSnapshot());
+        }
+
+        // 2. [功能：注入 OutputSchema 指令]
+        if (Assert.isNotEmpty(config.getOutputSchema())) {
+            spText += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
+                    "Please provide the response in JSON format strictly following this schema:\n" + // 加入 JSON 关键词
+                    config.getOutputSchema();
+        }
+
+        // 3. 构建消息列表
+        List<ChatMessage> messages = new ArrayList<>();
+
+        if (Assert.isNotEmpty(spText)) {
+            messages.add(ChatMessage.ofSystem(spText.trim()));
+        }
+
+        // A. 加载历史（如果配置了窗口）
+        if (config.getHistoryWindowSize() > 0) {
+            Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), config.getHistoryWindowSize());
+            if (Assert.isNotEmpty(history)) { // 增加安全校验
+                messages.addAll(history);
+            }
+        }
+
+
+
+        messages.addAll(prompt.getMessages());
+
+        return messages;
+    }
+
+    private AssistantMessage callWithRetry(AgentSession session, List<ChatMessage> messages) throws Throwable {
         int maxRetries = config.getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
-                return doCall(prompt, session);
+                return doCall(session, messages);
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
                     throw new RuntimeException("SimpleAgent [" + name() + "] call failed after " + maxRetries + " retries", e);
@@ -80,28 +131,8 @@ public class SimpleAgent implements Agent {
         throw new IllegalStateException("Should not reach here");
     }
 
-    private AssistantMessage doCall(Prompt prompt, AgentSession session) throws Throwable {
-        FlowContext context = session.getSnapshot();
-        String spText = "";
+    private AssistantMessage doCall(AgentSession session, List<ChatMessage> messages) throws Throwable {
 
-        // 1. 获取基础 SystemPrompt
-        if (config.getSystemPrompt() != null) {
-            spText = config.getSystemPrompt().getSystemPromptFor(context);
-        }
-
-        // 2. [功能：注入 OutputSchema 指令]
-        if (Assert.isNotEmpty(config.getOutputSchema())) {
-            spText += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
-                    "Please provide the response in JSON format strictly following this schema:\n" + // 加入 JSON 关键词
-                    config.getOutputSchema();
-        }
-
-        // 3. 构建消息列表
-        List<ChatMessage> messages = new ArrayList<>();
-        if (Assert.isNotEmpty(spText)) {
-            messages.add(ChatMessage.ofSystem(spText.trim()));
-        }
-        messages.addAll(prompt.getMessages());
         Prompt finalPrompt = Prompt.of(messages);
 
         // 4. 发起调用
@@ -152,6 +183,11 @@ public class SimpleAgent implements Agent {
         public Builder handler(AgentHandler handler) { config.setHandler(handler); return this; }
         public Builder chatOptions(Consumer<ChatOptions> chatOptions) { config.setChatOptions(chatOptions); return this; }
         public Builder retryConfig(int maxRetries, long retryDelayMs) { config.setRetryConfig(maxRetries, retryDelayMs); return this; }
+        public Builder historyWindowSize(int historyWindowSize){
+            config.setHistoryWindowSize(historyWindowSize);
+            return this;
+        }
+
         public Builder outputKey(String val) { config.setOutputKey(val); return this; }
         public Builder outputSchema(String val) { config.setOutputSchema(val); return this; }
         public Builder outputSchema(Type type) { config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(type)); return this; }
