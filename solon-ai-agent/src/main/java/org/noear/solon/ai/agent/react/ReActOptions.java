@@ -50,14 +50,6 @@ public class ReActOptions implements NonSerializable {
      */
     private long retryDelayMs = 1000L;
     /**
-     * 结果输出 Key
-     */
-    private String outputKey;
-    /**
-     * 期望的输出 Schema（例如 JSON Schema 字符串或描述）
-     */
-    private String outputSchema;
-    /**
      * 历史消息窗口大小（从上下文中回溯并注入到当前执行过程的消息条数）
      */
     private int historyWindowSize = 5;
@@ -73,8 +65,6 @@ public class ReActOptions implements NonSerializable {
         tmp.maxSteps = maxSteps;
         tmp.maxRetries = maxRetries;
         tmp.retryDelayMs = retryDelayMs;
-        tmp.outputKey = outputKey;
-        tmp.outputSchema = outputSchema;
         tmp.historyWindowSize = historyWindowSize;
         return tmp;
     }
@@ -101,16 +91,9 @@ public class ReActOptions implements NonSerializable {
      */
     protected void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
-        this.retryDelayMs = Math.max(1000, retryDelayMs);
+        this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
-    protected void setOutputKey(String val) {
-        this.outputKey = val;
-    }
-
-    protected void setOutputSchema(String val) {
-        this.outputSchema = val;
-    }
 
     /**
      * 设置历史消息窗口大小
@@ -123,13 +106,6 @@ public class ReActOptions implements NonSerializable {
 
     protected void setMaxSteps(int val) {
         this.maxSteps = val;
-    }
-
-    /**
-     * 添加拦截器
-     */
-    protected void addInterceptor(ReActInterceptor val) {
-        addInterceptor(val, 0);
     }
 
     /**
@@ -160,14 +136,6 @@ public class ReActOptions implements NonSerializable {
 
     public long getRetryDelayMs() {
         return retryDelayMs;
-    }
-
-    public String getOutputKey() {
-        return outputKey;
-    }
-
-    public String getOutputSchema() {
-        return outputSchema;
     }
 
     public int getHistoryWindowSize() {

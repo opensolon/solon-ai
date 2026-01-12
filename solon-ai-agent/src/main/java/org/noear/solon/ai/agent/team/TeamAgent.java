@@ -390,7 +390,7 @@ public class TeamAgent implements Agent {
          */
         public Builder defaultInterceptorAdd(TeamInterceptor... interceptors) {
             for (TeamInterceptor interceptor : interceptors) {
-                config.getDefaultOptions().addInterceptor(interceptor);
+                config.getDefaultOptions().addInterceptor(interceptor, 0);
             }
             return this;
         }

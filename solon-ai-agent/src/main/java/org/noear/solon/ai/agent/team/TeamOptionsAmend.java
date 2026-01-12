@@ -23,7 +23,7 @@ public class TeamOptionsAmend {
     }
 
     public TeamOptionsAmend interceptorAdd(TeamInterceptor interceptor) {
-        options.addInterceptor(interceptor);
+        options.addInterceptor(interceptor, 0);
         return this;
     }
 

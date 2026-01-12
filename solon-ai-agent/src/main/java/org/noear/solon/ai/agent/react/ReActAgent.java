@@ -300,8 +300,8 @@ public class ReActAgent implements Agent {
         }
 
 
-        if (Assert.isNotEmpty(options.getOutputKey())) {
-            context.put(options.getOutputKey(), result);
+        if (Assert.isNotEmpty(config.getOutputKey())) {
+            context.put(config.getOutputKey(), result);
         }
 
         // 将 AI 的最终回答持久化到会话并更新快照
@@ -508,7 +508,7 @@ public class ReActAgent implements Agent {
          * @return 构建器
          */
         public Builder outputKey(String val) {
-            config.getDefaultOptions().setOutputKey(val);
+            config.setOutputKey(val);
             return this;
         }
 
@@ -516,7 +516,7 @@ public class ReActAgent implements Agent {
          * 设置输出格式要求（例如 JSON 结构描述）
          */
         public Builder outputSchema(String val) {
-            config.getDefaultOptions().setOutputSchema(val);
+            config.setOutputSchema(val);
             return this;
         }
 
@@ -524,7 +524,7 @@ public class ReActAgent implements Agent {
          * 设置默认输出格式要求：通过 Class 生成 schema 描述（如果 ChatModel 支持此功能）
          */
         public Builder outputSchema(Type type) {
-            config.getDefaultOptions().setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
+            config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
             return this;
         }
 
@@ -542,7 +542,7 @@ public class ReActAgent implements Agent {
         /**
          * 添加默认工具上下文
          */
-        public Builder toolsContextPut(String key, Object value) {
+        public Builder defaultToolsContextPut(String key, Object value) {
             config.getDefaultOptions().getToolsContext().put(key, value);
             return this;
         }
@@ -550,7 +550,7 @@ public class ReActAgent implements Agent {
         /**
          * 添加默认工具上下文
          */
-        public Builder toolsContextPut(Map<String, Object> toolsContext) {
+        public Builder defaultToolsContextPut(Map<String, Object> toolsContext) {
             config.getDefaultOptions().getToolsContext().putAll(toolsContext);
             return this;
         }
@@ -563,7 +563,7 @@ public class ReActAgent implements Agent {
          */
         public Builder defaultInterceptorAdd(ReActInterceptor... vals) {
             for (ReActInterceptor val : vals) {
-                config.getDefaultOptions().addInterceptor(val);
+                config.getDefaultOptions().addInterceptor(val, 0);
             }
             return this;
         }

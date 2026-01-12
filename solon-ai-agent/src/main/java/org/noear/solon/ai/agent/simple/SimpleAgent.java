@@ -1,156 +1,177 @@
 package org.noear.solon.ai.agent.simple;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
+import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Objects;
+import java.lang.reflect.Type;
+import java.util.*;
 import java.util.function.Consumer;
 
 /**
- * 简单智能体实现（专注于 直接响应，无 ReAct 冗余）
+ * 简单智能体实现（专注于 直接响应，带重试与格式约束支持）
  *
  * @author noear 2026/1/12 created
  */
 public class SimpleAgent implements Agent {
+    private static final Logger LOG = LoggerFactory.getLogger(SimpleAgent.class);
     private final SimpleAgentConfig config;
 
     private SimpleAgent(SimpleAgentConfig config) {
         Objects.requireNonNull(config, "Missing config!");
-
         this.config = config;
     }
 
     @Override
-    public String name() {
-        return config.getName();
-    }
+    public String name() { return config.getName(); }
 
     @Override
-    public String title() {
-        return config.getTitle();
-    }
+    public String title() { return config.getTitle(); }
 
     @Override
-    public String description() {
-        return config.getDescription();
-    }
+    public String description() { return config.getDescription(); }
 
     @Override
-    public AgentProfile profile() {
-        return config.getProfile();
-    }
+    public AgentProfile profile() { return config.getProfile(); }
 
     @Override
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
-        String spText = null;
+        // [功能：带重试支持的物理调用]
+        AssistantMessage result = callWithRetry(prompt, session);
+
+        // [功能：结果回填 Context]
+        if (Assert.isNotEmpty(config.getOutputKey())) {
+            session.getSnapshot().put(config.getOutputKey(), result.getContent());
+        }
+
+        return result;
+    }
+
+    private AssistantMessage callWithRetry(Prompt prompt, AgentSession session) throws Throwable {
+        int maxRetries = config.getMaxRetries();
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                return doCall(prompt, session);
+            } catch (Exception e) {
+                if (i == maxRetries - 1) {
+                    throw new RuntimeException("SimpleAgent [" + name() + "] call failed after " + maxRetries + " retries", e);
+                }
+                long delay = config.getRetryDelayMs() * (i + 1);
+                LOG.warn("SimpleAgent [{}] call failed, retrying({}/{}). Error: {}", name(), i + 1, maxRetries, e.getMessage());
+                Thread.sleep(delay);
+            }
+        }
+        throw new IllegalStateException("Should not reach here");
+    }
+
+    private AssistantMessage doCall(Prompt prompt, AgentSession session) throws Throwable {
+        FlowContext context = session.getSnapshot();
+        String spText = "";
+
+        // 1. 获取基础 SystemPrompt
         if (config.getSystemPrompt() != null) {
-            FlowContext context = session.getSnapshot();
             spText = config.getSystemPrompt().getSystemPromptFor(context);
         }
 
-        if (spText != null && !spText.isEmpty()) {
-            List<ChatMessage> newMessages = new ArrayList<>();
-            newMessages.add(ChatMessage.ofSystem(spText));
-            newMessages.addAll(prompt.getMessages());
-            prompt = Prompt.of(newMessages);
+        // 2. [功能：注入 OutputSchema 指令]
+        if (Assert.isNotEmpty(config.getOutputSchema())) {
+            spText += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
+                    "Please provide the response in JSON format strictly following this schema:\n" + // 加入 JSON 关键词
+                    config.getOutputSchema();
         }
 
+        // 3. 构建消息列表
+        List<ChatMessage> messages = new ArrayList<>();
+        if (Assert.isNotEmpty(spText)) {
+            messages.add(ChatMessage.ofSystem(spText.trim()));
+        }
+        messages.addAll(prompt.getMessages());
+        Prompt finalPrompt = Prompt.of(messages);
+
+        // 4. 发起调用
         if (config.getChatModel() != null) {
-            return config.getChatModel().prompt(prompt).call().getMessage();
+            return config.getChatModel().prompt(finalPrompt)
+                    .options(o -> {
+                        // 注入工具
+                        for (FunctionTool tool : config.getTools()) {
+                            o.toolsAdd(tool);
+                        }
+                        // 注入拦截器
+                        for (RankEntity<ChatInterceptor> item : config.getInterceptors()) {
+                            o.interceptorAdd(item.index, item.target);
+                        }
+                        // 注入工具上下文
+                        if (Assert.isNotEmpty(config.getToolsContext())) {
+                            o.toolsContext(config.getToolsContext());
+                        }
+                        // [功能：注入 response_format 约束]
+                        if (Assert.isNotEmpty(config.getOutputSchema())) {
+                            o.optionPut("response_format", Utils.asMap("type", "json_object"));
+                        }
+                        // 用户自定义配置
+                        if (config.getChatOptions() != null) {
+                            config.getChatOptions().accept(o);
+                        }
+                    })
+                    .call().getMessage();
         } else {
-            return config.getHandler().call(prompt, session);
+            return config.getHandler().call(finalPrompt, session);
         }
     }
 
-    /**
-     * 开启构建流程
-     */
-    public static Builder of() {
-        return new Builder();
-    }
+    // Builder 静态方法保持不变...
+    public static Builder of() { return new Builder(); }
+    public static Builder of(ChatModel chatModel) { return new Builder().chatModel(chatModel); }
 
-    /**
-     * 快速基于 ChatModel 构建一个 SimpleAgent
-     */
-    public static Builder of(ChatModel chatModel) {
-        return new Builder().chatModel(chatModel);
-    }
-
-    /**
-     * 智能体构建器
-     */
     public static class Builder {
         private SimpleAgentConfig config = new SimpleAgentConfig();
 
-        public Builder name(String name) {
-            config.setName(name);
+        public Builder then(Consumer<Builder> consumer) { consumer.accept(this); return this; }
+        public Builder name(String name) { config.setName(name); return this; }
+        public Builder title(String title) { config.setTitle(title); return this; }
+        public Builder description(String description) { config.setDescription(description); return this; }
+        public Builder profile(AgentProfile profile) { config.setProfile(profile); return this; }
+        public Builder chatModel(ChatModel chatModel) { config.setChatModel(chatModel); return this; }
+        public Builder systemPrompt(SimpleSystemPrompt systemPrompt) { config.setSystemPrompt(systemPrompt); return this; }
+        public Builder handler(AgentHandler handler) { config.setHandler(handler); return this; }
+        public Builder chatOptions(Consumer<ChatOptions> chatOptions) { config.setChatOptions(chatOptions); return this; }
+        public Builder retryConfig(int maxRetries, long retryDelayMs) { config.setRetryConfig(maxRetries, retryDelayMs); return this; }
+        public Builder outputKey(String val) { config.setOutputKey(val); return this; }
+        public Builder outputSchema(String val) { config.setOutputSchema(val); return this; }
+        public Builder outputSchema(Type type) { config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(type)); return this; }
+        public Builder toolAdd(FunctionTool... tools) { config.addTool(tools); return this; }
+        public Builder toolAdd(Collection<FunctionTool> tools) { config.addTool(tools); return this; }
+        public Builder toolAdd(ToolProvider toolProvider) { config.addTool(toolProvider); return this; }
+        public Builder defaultToolsContextPut(String key, Object value) { config.getToolsContext().put(key, value); return this; }
+        public Builder defaultInterceptorAdd(ChatInterceptor... vals) {
+            for (ChatInterceptor val : vals) config.addInterceptor(val, 0);
             return this;
         }
-
-        public Builder title(String title) {
-            config.setTitle(title);
-            return this;
-        }
-
-        public Builder description(String description) {
-            config.setDescription(description);
-            return this;
-        }
-
-        public Builder profile(AgentProfile profile) {
-            config.setProfile(profile);
-            return this;
-        }
-
-        public Builder chatModel(ChatModel chatModel) {
-            config.setChatModel(chatModel);
-            return this;
-        }
-
-        public Builder systemPrompt(SimpleSystemPrompt systemPrompt) {
-            config.setSystemPrompt(systemPrompt);
-            return this;
-        }
-
-        public Builder handler(AgentHandler handler) {
-            config.setHandler(handler);
-            return this;
-        }
-
-        /**
-         * 链式调用增强器
-         */
-        public Builder then(Consumer<Builder> consumer) {
-            consumer.accept(this);
-            return this;
-        }
+        public Builder defaultInterceptorAdd(ChatInterceptor val, int index) { config.addInterceptor(val, index); return this; }
 
         public SimpleAgent build() {
-            if (config.getHandler() == null && config.getChatModel() == null) {
-                throw new IllegalStateException("Handler or ChatModel must be provided for SimpleAgent");
-            }
-
-            if (config.getName() == null) {
-                config.setName("simple_agent");
-            }
-
+            if (config.getHandler() == null && config.getChatModel() == null)
+                throw new IllegalStateException("Handler or ChatModel must be provided");
+            if (config.getName() == null) config.setName("simple_agent");
             if (config.getDescription() == null) {
-                if (config.getTitle() != null) {
-                    config.setDescription(config.getTitle());
-                } else {
-                    config.setDescription(config.getName());
-                }
+                config.setDescription(config.getTitle() != null ? config.getTitle() : config.getName());
             }
-
             return new SimpleAgent(config);
         }
     }

@@ -39,16 +39,6 @@ public class ReActOptionsAmend {
         return this;
     }
 
-    public ReActOptionsAmend outputKey(String val) {
-        options.setOutputKey(val);
-        return this;
-    }
-
-    public ReActOptionsAmend outputSchema(String val) {
-        options.setOutputSchema(val);
-        return this;
-    }
-
     /**
      * 设置历史消息窗口大小
      *
@@ -68,7 +58,7 @@ public class ReActOptionsAmend {
      * 添加拦截器
      */
     public ReActOptionsAmend interceptorAdd(ReActInterceptor val) {
-        options.addInterceptor(val);
+        options.addInterceptor(val, 0);
         return this;
     }
 

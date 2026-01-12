@@ -65,13 +65,6 @@ public class TeamOptions implements NonSerializable {
     }
 
     /**
-     * 注册团队拦截器（默认优先级）
-     */
-    protected void addInterceptor(TeamInterceptor interceptor) {
-        this.addInterceptor(interceptor, 0);
-    }
-
-    /**
      * 注册团队拦截器，并指定排序权重
      *
      * @param interceptor 拦截器实例

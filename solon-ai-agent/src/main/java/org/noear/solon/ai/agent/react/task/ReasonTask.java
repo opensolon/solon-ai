@@ -88,10 +88,10 @@ public class ReasonTask implements NamedTaskComponent {
         String systemPrompt = config.getSystemPromptFor(trace, context);
 
         // 如果配置了输出格式，则追加指令
-        if (Assert.isNotEmpty(trace.getOptions().getOutputSchema())) {
+        if (Assert.isNotEmpty(trace.getConfig().getOutputSchema())) {
             systemPrompt += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
                     "Please provide the Final Answer strictly following this schema:\n" +
-                    trace.getOptions().getOutputSchema();
+                    trace.getConfig().getOutputSchema();
         }
 
         if (trace.getProtocol() != null) {
@@ -179,7 +179,7 @@ public class ReasonTask implements NamedTaskComponent {
                         o.optionPut("stop", Utils.asList("Observation:")); // 强制截断，保证 ReAct 闭环
                     }
 
-                    if(trace.getOptions().getOutputSchema() != null){
+                    if(trace.getConfig().getOutputSchema() != null){
                         o.optionPut("response_format",  Utils.asMap("type", "json_object"));
                     }
 

@@ -77,6 +77,15 @@ public class ReActAgentConfig {
     private String finishMarker;
 
     /**
+     * 结果输出 Key
+     */
+    private String outputKey;
+    /**
+     * 期望的输出 Schema（例如 JSON Schema 字符串或描述）
+     */
+    private String outputSchema;
+
+    /**
      * 默认选项
      */
     private final ReActOptions defaultOptions = new ReActOptions();
@@ -149,6 +158,15 @@ public class ReActAgentConfig {
      */
     protected void addTool(ToolProvider toolProvider) {
         addTool(toolProvider.getTools());
+    }
+
+
+    protected void setOutputKey(String val) {
+        this.outputKey = val;
+    }
+
+    protected void setOutputSchema(String val) {
+        this.outputSchema = val;
     }
 
     // --- 参数获取 (Public) ---
@@ -226,5 +244,13 @@ public class ReActAgentConfig {
 
     public Locale getLocale() {
         return systemPrompt.getLocale();
+    }
+
+    public String getOutputKey() {
+        return outputKey;
+    }
+
+    public String getOutputSchema() {
+        return outputSchema;
     }
 }
