@@ -68,12 +68,12 @@ public class TeamAgentContractNetTest {
 
         // 检查是否有 BIDDING (bidding) 步骤记录
         boolean hasBidding = trace.getSteps().stream()
-                .anyMatch(s -> Agent.ID_BIDDING.equalsIgnoreCase(s.getAgentName()));
+                .anyMatch(s -> Agent.ID_BIDDING.equalsIgnoreCase(s.getSource()));
         System.out.println("轨迹中是否触发竞标评估: " + hasBidding);
 
         // 验证执行者（理想情况下应为算法专家）
         if (trace.getStepCount() > 0) {
-            String lastWorker = trace.getSteps().get(trace.getStepCount() - 1).getAgentName();
+            String lastWorker = trace.getSteps().get(trace.getStepCount() - 1).getSource();
             System.out.println("最终中标执行者: " + lastWorker);
         }
 
@@ -179,7 +179,7 @@ public class TeamAgentContractNetTest {
         TeamTrace trace = team.getTrace(session);
         // 核心断言：验证参与的 Agent 数量是否大于 1
         long uniqueAgents = trace.getSteps().stream()
-                .map(s -> s.getAgentName())
+                .map(s -> s.getSource())
                 .filter(name -> !Agent.ID_SUPERVISOR.equalsIgnoreCase(name) && !Agent.ID_BIDDING.equalsIgnoreCase(name))
                 .distinct().count();
 

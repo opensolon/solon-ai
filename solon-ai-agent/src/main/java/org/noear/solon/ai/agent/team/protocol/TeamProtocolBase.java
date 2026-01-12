@@ -71,7 +71,7 @@ public abstract class TeamProtocolBase implements TeamProtocol {
         List<String> requiredTail = agentNames.subList(Math.max(size - n, 0), size);
 
         Set<String> participated = trace.getSteps().stream()
-                .map(s -> s.getAgentName().toLowerCase())
+                .map(s -> s.getSource().toLowerCase())
                 .collect(Collectors.toSet());
 
         return requiredTail.stream().allMatch(name -> participated.contains(name.toLowerCase()));

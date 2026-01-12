@@ -95,7 +95,7 @@ public class TeamAgentProfileConsumerTest {
         Assertions.assertTrue(illustratorProfile.supports("text", "image"));
 
         // 校验协作完整性
-        boolean hasCopywriterWork = trace.getSteps().stream().anyMatch(s -> s.getAgentName().equals("copywriter"));
+        boolean hasCopywriterWork = trace.getSteps().stream().anyMatch(s -> s.getSource().equals("copywriter"));
         Assertions.assertTrue(hasCopywriterWork, "文案专家必须参与任务");
     }
 
@@ -129,7 +129,7 @@ public class TeamAgentProfileConsumerTest {
 
         TeamTrace trace = multiModalTeam.getTrace(session);
         // 校验：第一步应该是 vision_analyst 被选中
-        Assertions.assertEquals("vision_analyst", trace.getSteps().get(0).getAgentName());
+        Assertions.assertEquals("vision_analyst", trace.getSteps().get(0).getSource());
     }
 
     @Test

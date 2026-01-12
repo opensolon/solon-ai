@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.RankEntity;
@@ -131,7 +132,7 @@ public interface Agent extends NamedTaskComponent {
             trace.setLastAgentName(this.name());
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()) {
                 if (item.target.shouldAgentContinue(trace, this) == false) {
-                    trace.addStep(name(),
+                    trace.addStep(ChatRole.ASSISTANT, name(),
                             "[Skipped] Agent execution was intercepted and cancelled by " + item.target.getClass().getSimpleName(),
                             0);
 
@@ -169,7 +170,7 @@ public interface Agent extends NamedTaskComponent {
             }
 
             // 将转换后的结果存入轨迹
-            trace.addStep(name(), finalResult, duration);
+            trace.addStep(ChatRole.ASSISTANT, name(), finalResult, duration);
 
             // 回调协议和拦截器
             trace.getProtocol().onAgentEnd(trace, this);

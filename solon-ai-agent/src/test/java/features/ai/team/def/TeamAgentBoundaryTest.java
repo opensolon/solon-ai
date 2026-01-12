@@ -181,7 +181,7 @@ public class TeamAgentBoundaryTest {
         String result = team.call(Prompt.of(prompt), session).getContent();
 
         TeamTrace trace = team.getTrace(session);
-        long distinctAgents = trace.getSteps().stream().map(s -> s.getAgentName()).distinct().count();
+        long distinctAgents = trace.getSteps().stream().map(s -> s.getSource()).distinct().count();
 
         System.out.println("参与的专家数量: " + distinctAgents);
         Assertions.assertTrue(distinctAgents >= 1, "应该至少有专家参与");

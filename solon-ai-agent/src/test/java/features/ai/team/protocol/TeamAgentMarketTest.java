@@ -65,7 +65,7 @@ public class TeamAgentMarketTest {
 
         // 检查首位执行者
         if (trace.getStepCount() > 0) {
-            String firstAgentName = trace.getSteps().get(0).getAgentName();
+            String firstAgentName = trace.getSteps().get(0).getSource();
             System.out.println("调解器(Mediator)在市场中选择的专家: " + firstAgentName);
 
             // 语义期望：Java 专家应处理高并发支付网关
@@ -111,7 +111,7 @@ public class TeamAgentMarketTest {
         Assertions.assertNotNull(trace);
 
         if (trace.getStepCount() > 0) {
-            String selectedAgent = trace.getSteps().get(0).getAgentName();
+            String selectedAgent = trace.getSteps().get(0).getSource();
             System.out.println("市场指派的专家: " + selectedAgent);
 
             boolean selectedPythonExpert = "python_data_scientist".equals(selectedAgent);

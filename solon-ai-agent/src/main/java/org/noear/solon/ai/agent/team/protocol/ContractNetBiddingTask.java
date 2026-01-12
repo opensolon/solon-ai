@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
@@ -104,7 +105,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
             }
 
             // 4. 状态记录与路由跳转
-            trace.addStep(Agent.ID_BIDDING, "Bidding completed. " + bidCount + " proposals collected.", 0);
+            trace.addStep(ChatRole.SYSTEM, Agent.ID_BIDDING, "Bidding completed. " + bidCount + " proposals collected.", 0);
 
             // 路由指向主管，由主管依据看板中的标书进行定标决策
             trace.setRoute(Agent.ID_SUPERVISOR);
@@ -128,7 +129,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
             TeamTrace trace = context.getAs(traceKey);
             if (trace != null) {
                 trace.setRoute(Agent.ID_END);
-                trace.addStep(Agent.ID_SYSTEM, "Bidding task failed: " + e.getMessage(), 0);
+                trace.addStep(ChatRole.SYSTEM, Agent.ID_SYSTEM, "Bidding task failed: " + e.getMessage(), 0);
             }
         }
     }

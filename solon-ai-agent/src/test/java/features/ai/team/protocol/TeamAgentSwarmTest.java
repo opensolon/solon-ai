@@ -71,18 +71,18 @@ public class TeamAgentSwarmTest {
         Assertions.assertTrue(trace.getStepCount() > 0, "至少应该执行一步");
 
         // 6. 验证执行过程
-        System.out.println("第一步执行者: " + trace.getSteps().get(0).getAgentName());
+        System.out.println("第一步执行者: " + trace.getSteps().get(0).getSource());
         System.out.println("总步数: " + trace.getStepCount());
 
         long uniqueAgents = trace.getSteps().stream()
-                .map(step -> step.getAgentName())
+                .map(step -> step.getSource())
                 .distinct()
                 .count();
         System.out.println("实际参与 Agent 数: " + uniqueAgents + " (期望参与: 2)");
 
         // 检查接力参与情况
-        boolean hasTranslator = trace.getSteps().stream().anyMatch(s -> "ChineseTranslator".equals(s.getAgentName()));
-        boolean hasPolisher = trace.getSteps().stream().anyMatch(s -> "Polisher".equals(s.getAgentName()));
+        boolean hasTranslator = trace.getSteps().stream().anyMatch(s -> "ChineseTranslator".equals(s.getSource()));
+        boolean hasPolisher = trace.getSteps().stream().anyMatch(s -> "Polisher".equals(s.getSource()));
         System.out.println("是否包含翻译器: " + hasTranslator);
         System.out.println("是否包含润色器: " + hasPolisher);
 
@@ -131,7 +131,7 @@ public class TeamAgentSwarmTest {
 
         // 统计参与 Agent 种类
         long uniqueAgents = trace.getSteps().stream()
-                .map(step -> step.getAgentName())
+                .map(step -> step.getSource())
                 .distinct()
                 .count();
         System.out.println("实际参与 Agent 数: " + uniqueAgents + " (可用总数: 4)");
@@ -140,7 +140,7 @@ public class TeamAgentSwarmTest {
         System.out.println("执行链路快照:");
         trace.getSteps().forEach(step -> {
             String summary = step.getContent().trim().replace("\n", " ");
-            System.out.println("  - [" + step.getAgentName() + "]: " +
+            System.out.println("  - [" + step.getSource() + "]: " +
                     summary.substring(0, Math.min(50, summary.length())) + "...");
         });
 
@@ -189,8 +189,8 @@ public class TeamAgentSwarmTest {
         TeamTrace trace = team.getTrace(session);
 
         // 3. 验证路由逻辑
-        boolean handledByDev = trace.getSteps().stream().anyMatch(s -> "Developer".equals(s.getAgentName()));
-        boolean handledByDesigner = trace.getSteps().stream().anyMatch(s -> "Designer".equals(s.getAgentName()));
+        boolean handledByDev = trace.getSteps().stream().anyMatch(s -> "Developer".equals(s.getSource()));
+        boolean handledByDesigner = trace.getSteps().stream().anyMatch(s -> "Designer".equals(s.getSource()));
 
         System.out.println("后端开发是否参与: " + handledByDev);
         System.out.println("UI设计师是否参与: " + handledByDesigner);

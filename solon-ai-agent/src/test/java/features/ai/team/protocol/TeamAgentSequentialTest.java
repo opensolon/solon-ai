@@ -83,9 +83,9 @@ public class TeamAgentSequentialTest {
         Assertions.assertNotNull(trace);
         Assertions.assertTrue(trace.getStepCount() >= 3);
 
-        Assertions.assertEquals("step1_extractor", trace.getSteps().get(0).getAgentName());
-        Assertions.assertEquals("step2_converter", trace.getSteps().get(1).getAgentName());
-        Assertions.assertEquals("step3_polisher", trace.getSteps().get(2).getAgentName());
+        Assertions.assertEquals("step1_extractor", trace.getSteps().get(0).getSource());
+        Assertions.assertEquals("step2_converter", trace.getSteps().get(1).getSource());
+        Assertions.assertEquals("step3_polisher", trace.getSteps().get(2).getSource());
     }
 
     @Test
@@ -118,6 +118,6 @@ public class TeamAgentSequentialTest {
         team.call(Prompt.of("Agent_B 你好，请帮我加二。"), session);
 
         TeamTrace trace = team.getTrace(session);
-        Assertions.assertEquals("Agent_A", trace.getSteps().get(0).getAgentName());
+        Assertions.assertEquals("Agent_A", trace.getSteps().get(0).getSource());
     }
 }

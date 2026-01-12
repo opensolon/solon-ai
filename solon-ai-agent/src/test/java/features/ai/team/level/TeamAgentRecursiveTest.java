@@ -72,7 +72,7 @@ public class TeamAgentRecursiveTest {
 
         if (rootTrace != null) {
             log.info("父团队执行路径: {}", String.join(" -> ",
-                    rootTrace.getSteps().stream().map(s -> s.getAgentName()).toArray(String[]::new)));
+                    rootTrace.getSteps().stream().map(s -> s.getSource()).toArray(String[]::new)));
         }
 
         Assertions.assertNotNull(rootTrace, "父团队 Trace 记录丢失");
@@ -127,14 +127,14 @@ public class TeamAgentRecursiveTest {
 
         // 验证 1：验证是否出现了打回重做的路径（dev_team 应被多次调用）
         long devTeamCalls = rootTrace.getSteps().stream()
-                .filter(s -> "dev_team".equalsIgnoreCase(s.getAgentName())).count();
+                .filter(s -> "dev_team".equalsIgnoreCase(s.getSource())).count();
 
         log.info("反馈循环中 dev_team 被激活次数: {}", devTeamCalls);
         Assertions.assertTrue(devTeamCalls >= 2, "当审核打回时，Supervisor 应该重新路由回 dev_team");
 
         // 验证 2：验证最终 Trace 是否捕获到了审核通过的终态消息
         boolean hasApproval = rootTrace.getSteps().stream()
-                .anyMatch(s -> "Reviewer".equals(s.getAgentName()) && s.getContent().contains("表现完美"));
+                .anyMatch(s -> "Reviewer".equals(s.getSource()) && s.getContent().contains("表现完美"));
 
         Assertions.assertTrue(hasApproval, "Trace 中应包含 Reviewer 的最终确认记录");
     }

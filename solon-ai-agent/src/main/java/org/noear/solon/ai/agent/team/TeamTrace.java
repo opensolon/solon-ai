@@ -16,9 +16,9 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
@@ -136,17 +136,18 @@ public class TeamTrace implements AgentTrace {
     public String getLastAgentContent() {
         for (int i = steps.size() - 1; i >= 0; i--) {
             TeamStep step = steps.get(i);
-            if (!Agent.ID_SUPERVISOR.equals(step.getAgentName())) {
+            // 使用角色判断，而非名称判断
+            if (step.isAgent()) {
                 return step.getContent();
             }
         }
         return "";
     }
 
-    public long getLastAgentDuration(){
+    public long getLastAgentDuration() {
         for (int i = steps.size() - 1; i >= 0; i--) {
             TeamStep step = steps.get(i);
-            if (!Agent.ID_SUPERVISOR.equals(step.getAgentName())) {
+            if (step.isAgent()) {
                 return step.getDuration();
             }
         }
@@ -266,8 +267,8 @@ public class TeamTrace implements AgentTrace {
     /**
      * 压入新的执行足迹并使缓存失效
      */
-    public void addStep(String agentName, String content, long duration) {
-        steps.add(new TeamStep(agentName, content, duration));
+    public void addStep(ChatRole role, String source, String content, long duration) {
+        steps.add(new TeamStep(role, source, content, duration));
         isUpdateHistoryCache = true;
     }
 
@@ -288,7 +289,8 @@ public class TeamTrace implements AgentTrace {
 
     /**
      * 智能格式化历史 (完整实现)
-     * @param windowSize 最大步数限制（0 表示不限制）
+     *
+     * @param windowSize    最大步数限制（0 表示不限制）
      * @param includeSystem 是否包含 Supervisor 的决策过程
      */
     public String getFormattedHistory(int windowSize, boolean includeSystem) {
@@ -300,7 +302,7 @@ public class TeamTrace implements AgentTrace {
         List<TeamStep> filteredSteps = steps;
         if (!includeSystem) {
             filteredSteps = steps.stream()
-                    .filter(s -> !Agent.ID_SUPERVISOR.equals(s.getAgentName()))
+                    .filter(TeamStep::isAgent)
                     .collect(Collectors.toList());
         }
 
@@ -312,9 +314,8 @@ public class TeamTrace implements AgentTrace {
         // 3. 渲染 Markdown
         return filteredSteps.stream()
                 .map(step -> {
-                    boolean isSupervisor = Agent.ID_SUPERVISOR.equals(step.getAgentName());
-                    String title = isSupervisor ? "Decision" : "Output";
-                    return String.format("### %s from [%s]:\n%s", title, step.getAgentName(), step.getContent());
+                    String title = step.isAgent() ? "Expert Output" : "System Instruction";
+                    return String.format("### %s from [%s]:\n%s", title, step.getSource(), step.getContent());
                 })
                 .collect(Collectors.joining("\n\n"));
     }
@@ -339,9 +340,9 @@ public class TeamTrace implements AgentTrace {
      */
     public static class TeamStep {
         /**
-         * 执行此步骤的智能体
+         * 产出源头（可能是 Agent ID、"Supervisor"、"Human" 等）
          */
-        private final String agentName;
+        private final String source;
         /**
          * 该步骤产出的内容快照
          */
@@ -350,15 +351,28 @@ public class TeamTrace implements AgentTrace {
          * 本轮推理消耗的物理耗时（毫秒）
          */
         private final long duration;
+        /**
+         * 聊天角色映射
+         */
+        private final ChatRole role;
 
-        public TeamStep(String agentName, String content, long duration) {
-            this.agentName = agentName;
+        public TeamStep(ChatRole role, String source, String content, long duration) {
+            this.role = role;
+            this.source = source;
             this.content = content;
             this.duration = duration;
         }
 
-        public String getAgentName() {
-            return agentName;
+        public ChatRole getRole() {
+            return role;
+        }
+
+        public boolean isAgent() {
+            return ChatRole.ASSISTANT == role;
+        }
+
+        public String getSource() {
+            return source;
         }
 
         public String getContent() {

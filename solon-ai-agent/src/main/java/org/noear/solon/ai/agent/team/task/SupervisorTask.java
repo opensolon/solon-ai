@@ -6,6 +6,7 @@ import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
@@ -52,7 +53,7 @@ public class SupervisorTask implements NamedTaskComponent {
             // 1. 生命周期拦截
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()) {
                 if (!item.target.shouldSupervisorContinue(trace)) {
-                    trace.addStep(Agent.ID_SUPERVISOR, "[Skipped] Intercepted by " + item.target.getClass().getSimpleName(), 0);
+                    trace.addStep(ChatRole.SYSTEM, Agent.ID_SUPERVISOR, "[Skipped] Intercepted by " + item.target.getClass().getSimpleName(), 0);
                     if (Agent.ID_SUPERVISOR.equals(trace.getRoute())) {
                         routeTo(context, trace, Agent.ID_END);
                     }
@@ -63,7 +64,7 @@ public class SupervisorTask implements NamedTaskComponent {
             // 2. 物理深度熔断
             if (Agent.ID_END.equals(trace.getRoute()) ||
                     trace.getIterationsCount() >= trace.getOptions().getMaxTotalIterations()) {
-                trace.addStep(Agent.ID_SYSTEM, "[Terminated] Max iterations reached", 0);
+                trace.addStep(ChatRole.SYSTEM, Agent.ID_SYSTEM, "[Terminated] Max iterations reached", 0);
                 routeTo(context, trace, Agent.ID_END);
                 return;
             }
@@ -121,12 +122,18 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         List<String> remainingAgents = config.getAgentMap().keySet().stream()
-                .filter(name -> !trace.getSteps().stream().anyMatch(s -> name.equalsIgnoreCase(s.getAgentName())))
+                .filter(name -> !trace.getSteps().stream().anyMatch(s -> name.equalsIgnoreCase(s.getSource())))
                 .collect(Collectors.toList());
 
         if (!remainingAgents.isEmpty()) {
-            userContent.append("\n> **决策指引**：目前尚未参与的专家有: ").append(remainingAgents)
-                    .append("。请评估是否需要他们介入。除非流程已彻底完成，否则严禁结束。\n");
+            String agentsList = String.join(", ", remainingAgents);
+            if (isZh) {
+                userContent.append("\n> **待命专家**：[").append(agentsList).append("]。");
+                userContent.append("请评估其 Skills 是否匹配当前任务，必要时请指派他们。");
+            } else {
+                userContent.append("\n> **Pending Experts**: [").append(agentsList).append("]. ");
+                userContent.append("Evaluate if their Skills match the task before finishing.");
+            }
         }
 
         List<ChatMessage> messages = Arrays.asList(
@@ -248,7 +255,7 @@ public class SupervisorTask implements NamedTaskComponent {
         TeamTrace trace = context.getAs(traceKey);
         if (trace != null) {
             trace.setRoute(Agent.ID_END);
-            trace.addStep(Agent.ID_SUPERVISOR, "Runtime Error: " + e.getMessage(), 0);
+            trace.addStep(ChatRole.SYSTEM, Agent.ID_SUPERVISOR, "Runtime Error: " + e.getMessage(), 0);
         }
     }
 }

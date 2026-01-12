@@ -73,7 +73,7 @@ public class TeamAgentParallelAgentTest {
                         TeamTrace trace = ctx.getAs("__" + teamId);
                         if (trace != null) {
                             String summary = trace.getSteps().stream()
-                                    .map(s -> String.format("[%s]: %s", s.getAgentName(), s.getContent().trim()))
+                                    .map(s -> String.format("[%s]: %s", s.getSource(), s.getContent().trim()))
                                     .collect(Collectors.joining("\n"));
                             trace.setFinalAnswer("多语言翻译处理完成：\n" + summary);
                         }

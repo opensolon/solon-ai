@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 
@@ -43,7 +44,7 @@ public class TeamAgentPersistenceAndResumeTest {
 
         // 手动模拟 Trace 状态：已经完成了天气搜索
         TeamTrace snapshot = new TeamTrace(Prompt.of("帮我规划上海行程并给穿衣建议"));
-        snapshot.addStep("searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
+        snapshot.addStep(ChatRole.ASSISTANT,"searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
         // 设置当前路由断点为 Supervisor，准备让它恢复后进行决策
         snapshot.setRoute(Agent.ID_SUPERVISOR);
 

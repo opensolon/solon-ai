@@ -21,6 +21,7 @@ import org.noear.solon.lang.Preview;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * 智能协作死循环拦截器
@@ -62,12 +63,19 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
      * 执行多策略循环检测
      */
     public boolean isLooping(TeamTrace trace) {
-        int n = trace.getStepCount();
+        // 1. 获取所有步骤
+        List<TeamTrace.TeamStep> allSteps = trace.getSteps();
+
+        // 2. 【优化】仅针对真正的 Agent 产出进行循环检测，过滤掉 System/Supervisor 的干扰
+        List<TeamTrace.TeamStep> agentSteps = allSteps.stream()
+                .filter(TeamTrace.TeamStep::isAgent)
+                .collect(Collectors.toList());
+
+        int n = allSteps.size();
         // 协作步数不足以形成逻辑闭环（至少需要 4 步才能判定 A-B-A-B）
         if (n < 4) return false;
 
-        List<TeamTrace.TeamStep> steps = trace.getSteps();
-        TeamTrace.TeamStep lastStep = steps.get(n - 1);
+        TeamTrace.TeamStep lastStep = agentSteps.get(n - 1);
 
         // 过滤无需检测的极短文本
         if (lastStep.getContent() == null || lastStep.getContent().length() < minContentLength) {
@@ -75,10 +83,10 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
         }
 
         // 策略 A：单点深度重复检测。处理 Agent 陷入自我复读的情况
-        if (checkSelfLoop(steps, n)) return true;
+        if (checkSelfLoop(agentSteps, n)) return true;
 
         // 策略 B：多步序列重复检测。处理 Agent 之间形成 A-B-A-B 或 A-B-C-A-B-C 的死锁
-        if (checkSequenceLoop(steps, n)) return true;
+        if (checkSequenceLoop(agentSteps, n)) return true;
 
         return false;
     }
@@ -94,7 +102,7 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
         for (int i = n - 2; i >= limit; i--) {
             TeamTrace.TeamStep prev = steps.get(i);
             // 匹配同一 Agent 的历史产出
-            if (prev.getAgentName().equals(last.getAgentName())) {
+            if (prev.getSource().equals(last.getSource())) {
                 if (calculateSimilarity(prev.getContent(), last.getContent()) >= similarityThreshold) {
                     repeatCount++;
                     if (repeatCount > maxRepeatAllowed) return true;
@@ -122,7 +130,7 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
                 TeamTrace.TeamStep previous = steps.get(n - 1 - i - len);
 
                 // 必须 Agent 名称与内容相似度同时匹配才判定为序列循环
-                if (!current.getAgentName().equals(previous.getAgentName()) ||
+                if (!current.getSource().equals(previous.getSource()) ||
                         calculateSimilarity(current.getContent(), previous.getContent()) < similarityThreshold) {
                     match = false;
                     break;

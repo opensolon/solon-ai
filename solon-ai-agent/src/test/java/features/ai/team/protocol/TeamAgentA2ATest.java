@@ -68,7 +68,7 @@ public class TeamAgentA2ATest {
 
         // 1. 验证角色参与度：必须 designer 先，developer 后
         List<String> agentOrder = trace.getSteps().stream()
-                .map(TeamTrace.TeamStep::getAgentName)
+                .map(TeamTrace.TeamStep::getSource)
                 .filter(name -> !"supervisor".equalsIgnoreCase(name)) // 排除主管自身的思考
                 .collect(Collectors.toList());
 
@@ -80,7 +80,7 @@ public class TeamAgentA2ATest {
         // 2. 验证协作深度：防止 Supervisor 强制干预（如果 Supervisor 亲自写代码，说明 Agent 协作失败了）
         // 检查最后一步输出 code 的 Agent 是否为 developer
         long developerSteps = trace.getSteps().stream()
-                .filter(s -> "developer".equals(s.getAgentName()))
+                .filter(s -> "developer".equals(s.getSource()))
                 .count();
         Assertions.assertTrue(developerSteps > 0, "Developer 应该产出代码，而不是由 Supervisor 兜底");
 

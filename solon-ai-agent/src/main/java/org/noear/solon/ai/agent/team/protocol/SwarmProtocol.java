@@ -92,12 +92,10 @@ public class SwarmProtocol extends TeamProtocolBase {
                 return true;
             }
 
-            // 标准模式：确保不是只有 Dispatcher 说了话
-            boolean onlyDispatcher = trace.getSteps().stream()
-                    .allMatch(s -> "Dispatcher".equalsIgnoreCase(s.getAgentName())
-                            || Agent.ID_SUPERVISOR.equalsIgnoreCase(s.getAgentName()));
+            boolean noAgentParticipated = trace.getSteps().stream()
+                    .noneMatch(TeamTrace.TeamStep::isAgent);
 
-            if (onlyDispatcher) {
+            if (noAgentParticipated) {
                 LOG.warn("SwarmProtocol: Emergent tasks not yet started. Blocking finish.");
                 return false;
             }

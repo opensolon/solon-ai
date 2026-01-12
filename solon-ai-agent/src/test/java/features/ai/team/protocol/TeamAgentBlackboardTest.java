@@ -111,7 +111,7 @@ public class TeamAgentBlackboardTest {
 
         TeamTrace trace = team.getTrace(session);
         long dbDesignCount = trace.getSteps().stream()
-                .filter(s -> s.getAgentName().equals("db_designer")).count();
+                .filter(s -> s.getSource().equals("db_designer")).count();
 
         Assertions.assertTrue(dbDesignCount >= 1);
     }
