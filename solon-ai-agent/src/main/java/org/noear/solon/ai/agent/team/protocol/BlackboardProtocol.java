@@ -47,7 +47,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
     public static class BoardState {
         private final ONode data = new ONode().asObject();
-        private final Set<String> todos = new LinkedHashSet<>();
+        public final Set<String> todos = new LinkedHashSet<>();
         private String lastUpdater;
 
         public void merge(String agentName, Object rawInput) {
@@ -189,6 +189,27 @@ public class BlackboardProtocol extends HierarchicalProtocol {
             sb.append("2. **Completeness**: Assign agents to fill missing info (e.g., table names) on the board.\n");
             sb.append("3. **Finalize**: If all steps are done, summarize findings and end with [FINISH].");
         }
+    }
+
+    @Override
+    public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        if (decision.contains(config.getFinishMarker())) {
+            // 如果有自定义图，直接放行
+            if (config.getGraphAdjuster() != null) {
+                return true;
+            }
+
+            BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
+            // 标准模式：如果黑板里还有待办事项，且轮次还没到熔断阈值，则拦截
+            if (state != null && !state.todos.isEmpty()) {
+                if (trace.getIterationsCount() < 5) {
+                    LOG.warn("BlackboardProtocol: Still has pending todos {}, blocking finish.", state.todos);
+                    return false;
+                }
+            }
+        }
+        // 兜底调用父类（Hierarchical）的专家参与度检查
+        return super.shouldSupervisorRoute(context, trace, decision);
     }
 
     private String extractArg(ReActTrace rt, String tool, String key) {

@@ -85,6 +85,27 @@ public class SwarmProtocol extends TeamProtocolBase {
     }
 
     @Override
+    public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        if (decision.contains(config.getFinishMarker())) {
+            // 自由图模式下，不干预
+            if (config.getGraphAdjuster() != null) {
+                return true;
+            }
+
+            // 标准模式：确保不是只有 Dispatcher 说了话
+            boolean onlyDispatcher = trace.getSteps().stream()
+                    .allMatch(s -> "Dispatcher".equalsIgnoreCase(s.getAgentName())
+                            || Agent.ID_SUPERVISOR.equalsIgnoreCase(s.getAgentName()));
+
+            if (onlyDispatcher) {
+                LOG.warn("SwarmProtocol: Emergent tasks not yet started. Blocking finish.");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
     public String resolveAgentOutput(TeamTrace trace, Agent agent, String rawContent) {
         if (Utils.isEmpty(rawContent)) return rawContent;
 

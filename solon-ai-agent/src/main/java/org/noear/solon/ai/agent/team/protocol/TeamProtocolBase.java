@@ -7,14 +7,19 @@ import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NodeSpec;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Preview("3.8.1")
 public abstract class TeamProtocolBase implements TeamProtocol {
+    private static final Logger LOG = LoggerFactory.getLogger(TeamProtocolBase.class);
+
     protected final TeamConfig config;
 
     public TeamProtocolBase(TeamConfig config) {
@@ -49,6 +54,27 @@ public abstract class TeamProtocolBase implements TeamProtocol {
                 .filter(e -> e.getValue().profile() != null)
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList());
+    }
+
+    // 在 TeamProtocolBase 中增强
+    protected boolean isLogicFinished(TeamTrace trace) {
+        // 默认保护最后 1 个 Agent 必须参与
+        return isLastNAgentsParticipated(trace, 1);
+    }
+
+    protected boolean isLastNAgentsParticipated(TeamTrace trace, int n) {
+        List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
+        int size = agentNames.size();
+        if (size <= 1) return true;
+
+        // 获取最后 N 个 Agent
+        List<String> requiredTail = agentNames.subList(Math.max(size - n, 0), size);
+
+        Set<String> participated = trace.getSteps().stream()
+                .map(s -> s.getAgentName().toLowerCase())
+                .collect(Collectors.toSet());
+
+        return requiredTail.stream().allMatch(name -> participated.contains(name.toLowerCase()));
     }
 
     @Override
@@ -90,6 +116,26 @@ public abstract class TeamProtocolBase implements TeamProtocol {
 
     protected void injectAgentConstraints(Prompt prompt, Locale locale) {
         // 由子类实现，如注入 JSON 输出格式要求
+    }
+
+    @Override
+    public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        // 只有当决策包含“结束标识”时才进行逻辑检查
+        if (decision.contains(config.getFinishMarker())) {
+
+            // 核心改动：如果用户定义了 graphAdjuster，表示进入“自由模式”，协议不再进行物理拦截
+            if (config.getGraphAdjuster() != null) {
+                return true;
+            }
+
+            // 标准模式下，执行逻辑完备性检查（例如：末位 Agent 必须参与）
+            if (!isLogicFinished(trace)) {
+                LOG.warn("Protocol [{}]: Standard SOP requirement not met. Blocking finish.", name());
+                // 可选：trace.setLastResponse("System: Requirements not met...");
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

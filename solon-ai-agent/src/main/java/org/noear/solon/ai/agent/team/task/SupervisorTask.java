@@ -120,6 +120,15 @@ public class SupervisorTask implements NamedTaskComponent {
             userContent.append("Or output ").append(config.getFinishMarker()).append(" to finish.");
         }
 
+        List<String> remainingAgents = config.getAgentMap().keySet().stream()
+                .filter(name -> !trace.getSteps().stream().anyMatch(s -> name.equalsIgnoreCase(s.getAgentName())))
+                .collect(Collectors.toList());
+
+        if (!remainingAgents.isEmpty()) {
+            userContent.append("\n> **决策指引**：目前尚未参与的专家有: ").append(remainingAgents)
+                    .append("。请评估是否需要他们介入。除非流程已彻底完成，否则严禁结束。\n");
+        }
+
         List<ChatMessage> messages = Arrays.asList(
                 ChatMessage.ofSystem(finalSystemPrompt),
                 ChatMessage.ofUser(userContent.toString())
@@ -169,38 +178,39 @@ public class SupervisorTask implements NamedTaskComponent {
             return;
         }
 
+        // 1. 优先处理协议自定义路由（如 Swarm 的转移逻辑）
         String protoRoute = config.getProtocol().resolveSupervisorRoute(context, trace, decision);
         if (Assert.isNotEmpty(protoRoute)) {
             routeTo(context, trace, protoRoute);
             return;
         }
 
-        if (!config.getProtocol().shouldSupervisorRoute(context, trace, decision)) {
-            trace.addStep(Agent.ID_SUPERVISOR, "[Terminated] Rejected by protocol", 0);
-            routeTo(context, trace, Agent.ID_END);
-            return;
+        // 2. ！！！【核心改动】优先检查是否包含结束标记 ！！！
+        String finishMarker = config.getFinishMarker();
+        if (decision.contains(finishMarker)) {
+            // 允许协议在真正结束前做“最后检查”（比如检查必经节点）
+            if (config.getProtocol().shouldSupervisorRoute(context, trace, decision)) {
+                String finishRegex = "(?i).*?(\\Q" + finishMarker + "\\E)[:\\s]*(.*)";
+                Pattern pattern = Pattern.compile(finishRegex, Pattern.DOTALL);
+                Matcher matcher = pattern.matcher(decision);
+
+                if (matcher.find()) {
+                    String finalAnswer = matcher.group(2).trim();
+                    trace.setFinalAnswer(finalAnswer.isEmpty() ? trace.getLastAgentContent() : finalAnswer);
+                } else {
+                    trace.setFinalAnswer(trace.getLastAgentContent());
+                }
+                routeTo(context, trace, Agent.ID_END);
+                return;
+            }
         }
 
+        // 3. 只有不包含结束标记，或协议拒绝结束时，才尝试匹配专家名
         if (matchAgentRoute(context, trace, decision)) {
             return;
         }
 
-        String finishMarker = config.getFinishMarker();
-        if (decision.contains(finishMarker)) {
-            String finishRegex = "(?i).*?(\\Q" + finishMarker + "\\E)[:\\s]*(.*)";
-            Pattern pattern = Pattern.compile(finishRegex, Pattern.DOTALL);
-            Matcher matcher = pattern.matcher(decision);
-
-            if (matcher.find()) {
-                String finalAnswer = matcher.group(2).trim();
-                trace.setFinalAnswer(finalAnswer.isEmpty() ? trace.getLastAgentContent() : finalAnswer);
-            } else {
-                trace.setFinalAnswer(trace.getLastAgentContent());
-            }
-            routeTo(context, trace, Agent.ID_END);
-            return;
-        }
-
+        // 4. 兜底：如果啥都没匹配到，安全结束
         routeTo(context, trace, Agent.ID_END);
     }
 
@@ -215,7 +225,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 .collect(Collectors.toList());
 
         for (String name : sortedNames) {
-            Pattern p = Pattern.compile("\\b" + Pattern.quote(name) + "\\b", Pattern.CASE_INSENSITIVE);
+            Pattern p = Pattern.compile("(?i)(?<=^|[^a-zA-Z0-9])" + Pattern.quote(name) + "(?=[^a-zA-Z0-9]|$)");
             if (p.matcher(text).find()) {
                 routeTo(context, trace, name);
                 return true;

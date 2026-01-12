@@ -70,9 +70,9 @@ public class TeamConfig implements NonSerializable {
     private Consumer<ChatOptions> chatOptions;
 
     /**
-     * 团队成员名录，存储所有参与协作的专家智能体（Agent）实例
+     * 团队成员名录，存储所有参与协作的专家智能体（Agent）实例，保留添加顺序
      */
-    private final Map<String, Agent> agentMap = new LinkedHashMap<>();
+    private final LinkedHashMap<String, Agent> agentMap = new LinkedHashMap<>();
 
     /**
      * 协作拓扑协议（决定了任务在团队成员间的流转逻辑，如层级式、流水线式等）

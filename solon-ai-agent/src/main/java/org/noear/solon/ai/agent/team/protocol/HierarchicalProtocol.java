@@ -196,6 +196,12 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     }
 
     @Override
+    public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        // 直接调用基类逻辑即可，基类会自动处理 config.getGraphAdjuster() == null 的判断
+        return super.shouldSupervisorRoute(context, trace, decision);
+    }
+
+    @Override
     public void onTeamFinished(FlowContext context, TeamTrace trace) {
         trace.getProtocolContext().remove(KEY_HIERARCHY_STATE);
         trace.getProtocolContext().remove(KEY_AGENT_USAGE);
