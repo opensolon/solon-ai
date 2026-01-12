@@ -11,7 +11,7 @@ import org.noear.solon.test.SolonTest;
 public class DeepSeekTest extends AbsChatTest {
     protected ChatModel.Builder getChatModelBuilder() {
         return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
-                .apiKey("sk-cc0af00391474299b8642af78f601c88")
+                .apiKey("sk-011a4dfa2bbe4c7c8339bcaae41c949c")
                 .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
                 .defaultInterceptorAdd(new ChatInterceptorTest());
     }
