@@ -34,16 +34,6 @@ public class AgentProfile implements Serializable {
         return (val != null) ? (T) val : defaultValue;
     }
 
-    /**
-     * 判断是否具备某种元数据标签 (Tagging)
-     */
-    public boolean hasTag(String tagName) {
-        Object tags = metadata.get("tags");
-        if (tags instanceof Collection) {
-            return ((Collection<?>) tags).contains(tagName);
-        }
-        return false;
-    }
 
     public AgentProfile() {
         this.inputModes.add("text");
@@ -94,36 +84,36 @@ public class AgentProfile implements Serializable {
      */
     public String toFormatString(Locale locale) {
         boolean isZh = (locale != null && Locale.CHINESE.getLanguage().equals(locale.getLanguage()));
-        StringBuilder sb = new StringBuilder();
+        List<String> segments = new ArrayList<>();
 
-        // 模态声明，这是 A2A 协作中路由的基础
+        // 1. 模态声明 (A2A 路由基础)
         if (!inputModes.contains("image") && inputModes.contains("text") && inputModes.size() == 1) {
-            // 纯文本 Agent 标记，防止 Supervisor 派发图片任务
-            sb.append(isZh ? "输入模态: 仅限文本; " : "Input Modes: Text only; ");
+            segments.add(isZh ? "输入限制: 仅限文本" : "Input: Text only");
         } else {
-            sb.append(isZh ? "输入模态: " : "Input Modes: ").append(String.join(", ", inputModes)).append("; ");
+            segments.add((isZh ? "输入模态: " : "Input Modes: ") + String.join(", ", inputModes));
         }
 
         if (outputModes.contains("image")) {
-            sb.append(isZh ? "产出物: 包含图像; " : "Outputs: Images; ");
+            segments.add(isZh ? "产出: 包含图像" : "Outputs: Images");
         }
 
-        // 技能部分
+        // 2. 技能部分
         if (!skills.isEmpty()) {
-            sb.append(isZh ? "擅长技能: " : "Skills: ").append(String.join(", ", skills)).append("; ");
+            segments.add((isZh ? "擅长技能: " : "Skills: ") + String.join(", ", skills));
         }
 
-        // 约束部分
+        // 3. 约束部分
         if (!constraints.isEmpty()) {
-            sb.append(isZh ? "行为约束: " : "Constraints: ").append(String.join(", ", constraints)).append("; ");
+            segments.add((isZh ? "行为约束: " : "Constraints: ") + String.join(", ", constraints));
         }
 
-        // 风格部分
+        // 4. 风格部分
         if (style != null && !style.isEmpty()) {
-            sb.append(isZh ? "交互风格: " : "Style: ").append(style).append("; ");
+            segments.add((isZh ? "交互风格: " : "Style: ") + style);
         }
 
-        return sb.toString().trim();
+        // 使用 | 分隔，不再使用分号，方便后续被包裹
+        return String.join(" | ", segments);
     }
 
     @Override

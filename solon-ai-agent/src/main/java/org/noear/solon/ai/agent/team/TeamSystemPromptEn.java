@@ -87,13 +87,13 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
             sb.append("- **").append(name).append("**:\n");
             sb.append("  - Responsibility: ").append(agent.descriptionFor(trace.getContext())).append("\n");
 
-            // [Adjustment Point]: Inject Agent Profile Contract
-            // This allows the Supervisor to see technical specs (modes, constraints, etc.)
+            // [Optimized]: Inject Agent Profile with code-block wrapping for better LLM recognition
             AgentProfile profile = agent.profile();
             if (profile != null) {
                 String profileInfo = profile.toFormatString(getLocale());
                 if (profileInfo.length() > 0) {
-                    sb.append("  - Contract: ").append(profileInfo).append("\n");
+                    // 使用反引号包裹，使契约内容与自然语言描述产生视觉差异
+                    sb.append("  - Contract: `").append(profileInfo).append("`\n");
                 }
             }
         });

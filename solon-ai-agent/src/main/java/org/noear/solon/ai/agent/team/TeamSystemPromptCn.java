@@ -94,9 +94,9 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
             AgentProfile profile = agent.profile();
             if (profile != null) {
                 String info = profile.toFormatString(getLocale());
-                // 只要 profile 不为空且有内容，就作为“契约”注入
                 if (info.length() > 0) {
-                    sb.append("  - 契约: ").append(info).append("\n");
+                    // 使用行内代码块包裹，并增加醒目的标签
+                    sb.append("  - 契约: `").append(info).append("`\n");
                 }
             }
         });
