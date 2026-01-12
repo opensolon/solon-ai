@@ -17,35 +17,34 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
+ * 团队协作配置选项 (Runtime Options)
  *
- * @author noear 2026/1/11 created
+ * <p>核心职责：管理多智能体协作过程中的熔断阈值、容错策略与拦截器链路。</p>
  *
+ * @author noear
+ * @since 3.8.1
  */
 public class TeamOptions implements NonSerializable {
-    /**
-     * 协作深度熔断阈值（限制一次任务的最大流转轮数，防止由于模型幻觉导致的无限死循环）
-     */
+    private static final Logger LOG = LoggerFactory.getLogger(TeamOptions.class);
+
+    /** 最大迭代轮数（熔断阈值，防止由于模型幻觉导致的无限循环） */
     private int maxTotalIterations = 8;
 
-    /**
-     * 调度重试限额（当 Supervisor 输出无法解析的指令或发生网络抖动时的重试次数）
-     */
+    /** 最大重试次数（针对调度解析失败或网络抖动） */
     private int maxRetries = 3;
 
-    /**
-     * 调度失败后的重试规避延迟时间（毫秒）
-     */
+    /** 重试规避延迟（毫秒） */
     private long retryDelayMs = 1000L;
 
-    /**
-     * 协作拦截器链路（用于在 Agent 切换、指令分发前后注入监控、脱敏或审计逻辑）
-     */
+    /** 团队协作拦截器链（支持排序，用于审计、监控或干预） */
     private final List<RankEntity<TeamInterceptor>> interceptorList = new ArrayList<>();
 
 
@@ -62,10 +61,10 @@ public class TeamOptions implements NonSerializable {
     // --- 配置注入 (Protected) ---
 
     /**
-     * 统一配置异常调度时的重试策略
+     * 配置异常调度时的重试策略
      *
-     * @param maxRetries   最大尝试次数（最小为1）
-     * @param retryDelayMs 重试间隔（最小为1000ms）
+     * @param maxRetries   最大重试次数
+     * @param retryDelayMs 重试间隔
      */
     protected void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
@@ -73,23 +72,28 @@ public class TeamOptions implements NonSerializable {
     }
 
     /**
-     * 设置协作轮次上限，防止成本过载与逻辑死锁
+     * 设置协作轮次上限（安全熔断机制）
      */
     protected void setMaxTotalIterations(int maxTotalIterations) {
         this.maxTotalIterations = Math.max(1, maxTotalIterations);
     }
 
     /**
-     * 注册团队拦截器，并指定排序权重
+     * 注册团队拦截器
      *
      * @param interceptor 拦截器实例
-     * @param index       排序权重（数值越小执行越靠前）
+     * @param index       权重索引（数值越小优先级越高）
      */
     protected void addInterceptor(TeamInterceptor interceptor, int index) {
         this.interceptorList.add(new RankEntity<>(interceptor, index));
 
         if (interceptorList.size() > 1) {
             Collections.sort(interceptorList);
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("TeamOptions register interceptor: {}, index: {}",
+                    interceptor.getClass().getSimpleName(), index);
         }
     }
 

@@ -22,6 +22,8 @@ import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,79 +32,49 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
- * 团队协作轨迹（核心治理对象）
+ * 团队协作轨迹（Team Trace）
  *
- * <p>该类是多智能体协作环境中的“黑匣子”与“状态总线”，负责记录任务在智能体团队内部流转的全生命周期状态。</p>
- * <p>其核心能力包括：</p>
- * <ul>
- * <li><b>上下文持久化</b>：追踪并存储任务指令、协作步骤及各专家的阶段性产出。</li>
- * <li><b>协议状态隔离</b>：提供专属空间供 {@link TeamProtocol} 存储运行时私有数据（如 A2A 协议的 Handoff 标记）。</li>
- * <li><b>路由决策回溯</b>：记录调度器（Supervisor）的决策链路，辅助解决任务分发死循环。</li>
- * <li><b>性能与开销监控</b>：统计各节点的执行耗时，提供协作链路的量化数据。</li>
- * </ul>
+ * <p>核心职责：记录任务在 Agent 团队内部流转的全生命周期状态，充当协作“黑匣子”与“状态总线”。</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public class TeamTrace implements AgentTrace {
-    /**
-     * 关联的团队配置（生命周期内稳定，不参与持久化序列化）
-     */
+    private static final Logger LOG = LoggerFactory.getLogger(TeamTrace.class);
+
+    /** 关联团队配置 */
     private transient TeamAgentConfig config;
+    /** 运行时选项 */
     private transient TeamOptions options;
-    /**
-     * 当前活跃的会话上下文（持有底层 LLM 记忆，不参与持久化序列化）
-     */
+    /** 当前活跃会话（持有 LLM 上下文记忆） */
     private transient AgentSession session;
 
-    /**
-     * 历史记录的格式化快照（Markdown 优化版）
-     */
+    /** 历史记录格式化缓存 */
     private transient String cachedFormattedHistory;
-    /**
-     * 脏位标记：用于实现格式化历史的延迟加载与缓存失效逻辑
-     */
+    /** 缓存失效标记 */
     private transient boolean isUpdateHistoryCache = true;
 
-    /**
-     * 当前正在处理任务的 Agent 标识
-     */
+    /** 当前 Agent 标识 */
     private String agentName;
-    /**
-     * 任务的活跃提示词（随协作阶段可能动态裁剪或重组）
-     */
+    /** 当前任务提示词（随协作阶段动态变化） */
     private Prompt prompt;
-    /**
-     * 协作流水账：按时间轴线性记录的执行步骤详情
-     */
+    /** 协作流水账：按时间轴记录执行详情 */
     private final List<TeamStep> steps = new CopyOnWriteArrayList<>();
 
-    /**
-     * 路由决策结果：指向下一个待执行的 Agent 名称或系统终止符 (ID_END)
-     */
+    /** 路由决策：指向下一个 Agent 或 ID_END */
     private volatile String route;
-    /**
-     * 记录调度器（Supervisor）输出的原始推理文本，用于异常复盘与自省
-     */
+    /** 调度器原始决策文本（用于异常复盘） */
     private volatile String lastDecision;
-    /**
-     * 记录最后运行的智能体名字
-     */
+    /** 最后运行的专家 Agent 名字 */
     private volatile String lastAgentName;
-    /**
-     * 迭代安全计数器：限制协作的最大深度，防止 LLM 幻觉导致的无限递归
-     */
+    /** 迭代安全计数器（防止无限循环） */
     private final AtomicInteger iterationCounter;
 
-    /**
-     * 协议私有存储域：允许不同协作模式存储非标准数据（如竞标书、移交说明等）
-     */
+    /** 协议私有存储空间（供 TeamProtocol 存储私有状态） */
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
 
-    /**
-     * 最终对外交付的结构化答案
-     */
+    /** 最终交付答案 */
     private String finalAnswer;
 
     public TeamTrace() {
@@ -114,32 +86,22 @@ public class TeamTrace implements AgentTrace {
         this.prompt = prompt;
     }
 
-    /**
-     * 是否为初始状态（尚未产生实质性协作产出）
-     */
+    /** 是否为初始状态 */
     public boolean isInitial() {
         return steps.isEmpty();
     }
 
-    /**
-     * 提取最近一轮的产出内容
-     */
+    /** 提取最近一轮产出 */
     public String getLastStepContent() {
         if (steps.isEmpty()) return "";
         return steps.get(steps.size() - 1).getContent();
     }
 
-    /**
-     * 提取最近一位专家（非 Supervisor）的结论
-     * <p>在层次化架构中，此方法用于过滤掉调度器的决策性文本，仅获取具体的业务处理结果。</p>
-     */
+    /** 提取最近一位专家 Agent（非 Supervisor）的内容 */
     public String getLastAgentContent() {
         for (int i = steps.size() - 1; i >= 0; i--) {
             TeamStep step = steps.get(i);
-            // 使用角色判断，而非名称判断
-            if (step.isAgent()) {
-                return step.getContent();
-            }
+            if (step.isAgent()) return step.getContent();
         }
         return "";
     }
@@ -147,16 +109,12 @@ public class TeamTrace implements AgentTrace {
     public long getLastAgentDuration() {
         for (int i = steps.size() - 1; i >= 0; i--) {
             TeamStep step = steps.get(i);
-            if (step.isAgent()) {
-                return step.getDuration();
-            }
+            if (step.isAgent()) return step.getDuration();
         }
         return 0L;
     }
 
-    /**
-     * 运行时环境初始化
-     */
+    /** 运行时环境准备 */
     protected void prepare(TeamAgentConfig config, TeamOptions options, AgentSession session, String agentName) {
         this.config = config;
         this.options = options;
@@ -164,92 +122,35 @@ public class TeamTrace implements AgentTrace {
         this.agentName = agentName;
     }
 
-    // --- 核心元数据访问 ---
+    // --- 属性访问 ---
 
-    public String getAgentName() {
-        return agentName;
-    }
+    public String getAgentName() { return agentName; }
+    public TeamAgentConfig getConfig() { return config; }
+    public TeamOptions getOptions() { return options; }
+    public AgentSession getSession() { return session; }
 
-    public TeamAgentConfig getConfig() {
-        return config;
-    }
-
-    public TeamOptions getOptions() {
-        return options;
-    }
-
-    public AgentSession getSession() {
-        return session;
-    }
-
-    /**
-     * 获取流程上下文
-     */
     public FlowContext getContext() {
-        if (session != null) {
-            return session.getSnapshot();
-        } else {
-            return null;
-        }
+        return (session != null) ? session.getSnapshot() : null;
     }
 
-    public TeamProtocol getProtocol() {
-        return config.getProtocol();
-    }
+    public TeamProtocol getProtocol() { return config.getProtocol(); }
+    public Prompt getPrompt() { return prompt; }
+    protected void setPrompt(Prompt prompt) { this.prompt = prompt; }
+    public String getRoute() { return route; }
+    public void setRoute(String route) { this.route = route; }
+    public String getLastDecision() { return lastDecision; }
+    public void setLastDecision(String decision) { this.lastDecision = decision; }
+    public String getLastAgentName() { return lastAgentName; }
+    public void setLastAgentName(String agentName) { this.lastAgentName = agentName; }
+    public int getIterationsCount() { return iterationCounter.get(); }
+    public void resetIterationsCount() { iterationCounter.set(0); }
+    public int nextIterations() { return iterationCounter.incrementAndGet(); }
 
-    public Prompt getPrompt() {
-        return prompt;
-    }
+    /** 获取协议私有上下文 */
+    public Map<String, Object> getProtocolContext() { return protocolContext; }
 
-    protected void setPrompt(Prompt prompt) {
-        this.prompt = prompt;
-    }
-
-    public String getRoute() {
-        return route;
-    }
-
-    public void setRoute(String route) {
-        this.route = route;
-    }
-
-    public String getLastDecision() {
-        return lastDecision;
-    }
-
-    public void setLastDecision(String decision) {
-        this.lastDecision = decision;
-    }
-
-    public String getLastAgentName() {
-        return lastAgentName;
-    }
-
-    public void setLastAgentName(String agentName) {
-        this.lastAgentName = agentName;
-    }
-
-    public int getIterationsCount() {
-        return iterationCounter.get();
-    }
-
-    public void resetIterationsCount() {
-        iterationCounter.set(0);
-    }
-
-    public int nextIterations() {
-        return iterationCounter.incrementAndGet();
-    }
-
-    /**
-     * 获取协议共享上下文（用于 A2A 移交、市场竞标等复杂逻辑）
-     */
-    public Map<String, Object> getProtocolContext() {
-        return protocolContext;
-    }
-
+    /** 获取协议状态快照（JSON 格式，供 Agent 感知全局进度） */
     public String getProtocolDashboardSnapshot() {
-        // 逻辑：将 protocolContext 中非内部字段转为 JSON，方便 Agent 理解当前全局进度
         return ONode.serialize(protocolContext);
     }
 
@@ -257,61 +158,41 @@ public class TeamTrace implements AgentTrace {
         return (T) protocolContext.get(key);
     }
 
-    /**
-     * 获取当前总迭代步数（包含调度与执行）
-     */
-    public int getStepCount() {
-        return steps.size();
-    }
+    public int getStepCount() { return steps.size(); }
 
-    /**
-     * 压入新的执行足迹并使缓存失效
-     */
+    /** 记录执行足迹 */
     public void addStep(ChatRole role, String source, String content, long duration) {
         steps.add(new TeamStep(role, source, content, duration));
         isUpdateHistoryCache = true;
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("TeamTrace [{}] step added: role={}, source={}, duration={}ms",
+                    config.getName(), role, source, duration);
+        }
     }
 
-    /**
-     * 获取全量格式化历史
-     */
-    public String getFormattedHistory() {
-        return getFormattedHistory(0, true);
-    }
+    /** 获取全量格式化历史 */
+    public String getFormattedHistory() { return getFormattedHistory(0, true); }
+
+    public String getFormattedHistory(int windowSize) { return getFormattedHistory(windowSize, true); }
 
     /**
-     * 获取格式化历史（默认包含系统决策）
-     * 适配 SupervisorTask 的调用：trace.getFormattedHistory(5)
-     */
-    public String getFormattedHistory(int windowSize) {
-        return getFormattedHistory(windowSize, true);
-    }
-
-    /**
-     * 智能格式化历史 (完整实现)
-     *
-     * @param windowSize    最大步数限制（0 表示不限制）
-     * @param includeSystem 是否包含 Supervisor 的决策过程
+     * 渲染协作历史（Markdown 格式）
+     * @param windowSize 限制返回的步数（0 为不限）
+     * @param includeSystem 是否包含调度器决策逻辑
      */
     public String getFormattedHistory(int windowSize, boolean includeSystem) {
-        if (steps.isEmpty()) {
-            return "No progress yet.";
-        }
+        if (steps.isEmpty()) return "No progress yet.";
 
-        // 1. 过滤逻辑
         List<TeamStep> filteredSteps = steps;
         if (!includeSystem) {
-            filteredSteps = steps.stream()
-                    .filter(TeamStep::isAgent)
-                    .collect(Collectors.toList());
+            filteredSteps = steps.stream().filter(TeamStep::isAgent).collect(Collectors.toList());
         }
 
-        // 2. 截取视口 (最近的 maxSteps 步)
         if (windowSize > 0 && filteredSteps.size() > windowSize) {
             filteredSteps = filteredSteps.subList(filteredSteps.size() - windowSize, filteredSteps.size());
         }
 
-        // 3. 渲染 Markdown
         return filteredSteps.stream()
                 .map(step -> {
                     String title = step.isAgent() ? "Expert Output" : "System Instruction";
@@ -320,40 +201,15 @@ public class TeamTrace implements AgentTrace {
                 .collect(Collectors.joining("\n\n"));
     }
 
-    /**
-     * 获取不可变的步骤列表视图
-     */
-    public List<TeamStep> getSteps() {
-        return Collections.unmodifiableList(steps);
-    }
+    public List<TeamStep> getSteps() { return Collections.unmodifiableList(steps); }
+    public String getFinalAnswer() { return finalAnswer; }
+    public void setFinalAnswer(String finalAnswer) { this.finalAnswer = finalAnswer; }
 
-    public String getFinalAnswer() {
-        return finalAnswer;
-    }
-
-    public void setFinalAnswer(String finalAnswer) {
-        this.finalAnswer = finalAnswer;
-    }
-
-    /**
-     * 协作足迹详情（单次执行的审计快照）
-     */
+    /** 协作足迹详情 */
     public static class TeamStep {
-        /**
-         * 产出源头（可能是 Agent ID、"Supervisor"、"Human" 等）
-         */
         private final String source;
-        /**
-         * 该步骤产出的内容快照
-         */
         private final String content;
-        /**
-         * 本轮推理消耗的物理耗时（毫秒）
-         */
         private final long duration;
-        /**
-         * 聊天角色映射
-         */
         private final ChatRole role;
 
         public TeamStep(ChatRole role, String source, String content, long duration) {
@@ -363,24 +219,10 @@ public class TeamTrace implements AgentTrace {
             this.duration = duration;
         }
 
-        public ChatRole getRole() {
-            return role;
-        }
-
-        public boolean isAgent() {
-            return ChatRole.ASSISTANT == role;
-        }
-
-        public String getSource() {
-            return source;
-        }
-
-        public String getContent() {
-            return content;
-        }
-
-        public long getDuration() {
-            return duration;
-        }
+        public ChatRole getRole() { return role; }
+        public boolean isAgent() { return ChatRole.ASSISTANT == role; }
+        public String getSource() { return source; }
+        public String getContent() { return content; }
+        public long getDuration() { return duration; }
     }
 }

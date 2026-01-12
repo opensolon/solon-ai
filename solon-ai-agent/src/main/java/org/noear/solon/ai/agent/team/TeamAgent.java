@@ -36,16 +36,12 @@ import java.util.function.Consumer;
 
 /**
  * 团队协作智能体 (Team Agent)
- * * <p>TeamAgent 是一个高度可扩展的多智能体协作容器，其核心底层依托于 <b>Solon Flow</b> 状态机引擎。</p>
- * <p>它将多个独立智能体封装为一个统一的 Agent 接口，对外部调用者屏蔽了内部复杂的协作细节（如主管分配、专家竞标、顺序接力等）。</p>
- * * <p><b>核心机制：</b></p>
+ * * <p>核心定位：多智能体协作容器。底层依托 <b>Solon Flow</b> 状态机引擎实现复杂的协作逻辑。</p>
  * <ul>
- * <li><b>图驱动 (Graph-Driven)：</b> 协作逻辑被抽象为计算图（Graph），由协议（Protocol）决定拓扑结构。</li>
- * <li><b>上下文隔离：</b> 通过专有的 traceKey 在会话中隔离不同团队的协作痕迹（Trace）。</li>
- * <li><b>动态路由：</b> 支持在运行时根据 LLM 的决策动态决定下一个执行节点。</li>
+ * <li><b>封装性：</b>将多个专家 Agent 封装为统一接口，屏蔽内部调度逻辑。</li>
+ * <li><b>协议驱动：</b>协作模式（如 HIERARCHICAL, SWARM）由 {@link TeamProtocol} 定义并构建执行图。</li>
+ * <li><b>踪迹隔离：</b>通过独有的 TraceKey 隔离不同团队在同一会话中的协作痕迹。</li>
  * </ul>
- *
- *
  *
  * @author noear
  * @since 3.8.1
@@ -53,117 +49,65 @@ import java.util.function.Consumer;
 @Preview("3.8.1")
 public class TeamAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(TeamAgent.class);
-    /**
-     * 静态配置对象
-     */
+
     private final TeamAgentConfig config;
-    /**
-     * 协作执行图实例
-     */
     private final Graph graph;
-    /**
-     * 工作流驱动引擎
-     */
     private final FlowEngine flowEngine;
 
-    /**
-     * 构造函数：初始化团队容器
-     * * @param config 团队配置，包含成员、协议、拦截器等
-     */
     public TeamAgent(TeamAgentConfig config) {
         Objects.requireNonNull(config, "Missing config!");
-
         this.config = config;
         this.flowEngine = FlowEngine.newInstance(true);
-
-        // 初始化协作拓扑结构
+        // 初始化协作拓扑结构（计算图）
         this.graph = buildGraph();
     }
 
     /**
-     * 依据协作协议构建计算图
-     * <p>1. 协议定义骨架（如 HIERARCHICAL 模式自动创建 Supervisor 节点）。</p>
-     * <p>2. 微调器进行个性化修饰（如增加特定的条件分支）。</p>
+     * 依据协作协议构建计算图（Graph）
      */
     protected Graph buildGraph() {
         return Graph.create(config.getTraceKey(), spec -> {
-            // 由协议介入构建基础图谱
+            // 1. 由协议构建基础拓扑结构（如生成 Supervisor 或指定顺序）
             if (config.getChatModel() != null) {
                 config.getProtocol().buildGraph(spec);
             }
 
-            // 执行用户自定义的图结构调整
+            // 2. 执行用户自定义的图结构微调
             if (config.getGraphAdjuster() != null) {
                 config.getGraphAdjuster().accept(spec);
             }
         });
     }
 
-    /**
-     * 获取团队内部运行的计算图
-     */
-    public Graph getGraph() {
-        return graph;
-    }
+    public Graph getGraph() { return graph; }
+
+    public TeamAgentConfig getConfig() { return config; }
 
     /**
-     * 获取团队原始配置
-     */
-    public TeamAgentConfig getConfig() {
-        return config;
-    }
-
-    /**
-     * 从当前会话中提取此团队的执行踪迹
+     * 获取当前会话中的团队协作踪迹（Trace）
      */
     public @Nullable TeamTrace getTrace(AgentSession session) {
         return session.getSnapshot().getAs(config.getTraceKey());
     }
 
-    @Override
-    public String name() {
-        return config.getName();
-    }
-
-    @Override
-    public String title() {
-        return config.getTitle();
-    }
-
-    @Override
-    public String description() {
-        return config.getDescription();
-    }
-
-    @Override
-    public AgentProfile profile() {
-        return config.getProfile();
-    }
+    @Override public String name() { return config.getName(); }
+    @Override public String title() { return config.getTitle(); }
+    @Override public String description() { return config.getDescription(); }
+    @Override public AgentProfile profile() { return config.getProfile(); }
 
     /**
-     * 创建异步或流式请求包装器
+     * 创建团队请求（支持后续流式或异步处理）
      */
     public TeamRequest prompt(Prompt prompt) {
         return new TeamRequest(this, prompt);
     }
 
-    /**
-     * 创建基于文本的请求包装器
-     */
     public TeamRequest prompt(String prompt) {
         return prompt(Prompt.of(prompt));
     }
 
     /**
-     * 执行团队协作（同步阻塞模式）
-     * * <p><b>执行全生命周期：</b></p>
-     * <ul>
-     * <li>1. <b>环境对齐：</b> 初始化 TeamTrace 并准备运行参数。</li>
-     * <li>2. <b>前置拦截：</b> 触发 {@code onAgentStart} 监听。</li>
-     * <li>3. <b>引擎求值：</b> 驱动 Solon Flow 引擎，根据协议在节点间跳转。</li>
-     * <li>4. <b>结果聚合：</b> 协作结束后，根据协议策略提取最终答案（Final Answer）。</li>
-     * <li>5. <b>状态同步：</b> 更新会话历史，同步 Context 快照，并触发 {@code onAgentEnd}。</li>
-     * </ul>
+     * 同步执行团队协作任务
      */
     @Override
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
@@ -171,25 +115,18 @@ public class TeamAgent implements Agent {
     }
 
     /**
-     * 执行团队协作（同步阻塞模式）
-     * * <p><b>执行全生命周期：</b></p>
-     * <ul>
-     * <li>1. <b>环境对齐：</b> 初始化 TeamTrace 并准备运行参数。</li>
-     * <li>2. <b>前置拦截：</b> 触发 {@code onAgentStart} 监听。</li>
-     * <li>3. <b>引擎求值：</b> 驱动 Solon Flow 引擎，根据协议在节点间跳转。</li>
-     * <li>4. <b>结果聚合：</b> 协作结束后，根据协议策略提取最终答案（Final Answer）。</li>
-     * <li>5. <b>状态同步：</b> 更新会话历史，同步 Context 快照，并触发 {@code onAgentEnd}。</li>
-     * </ul>
+     * 执行团队协作（核心生命周期管理）
      */
     protected AssistantMessage call(Prompt prompt, AgentSession session, TeamOptions options) throws Throwable {
         FlowContext context = session.getSnapshot();
+        // 初始化或获取本次协作的轨迹快照
         TeamTrace trace = context.computeIfAbsent(config.getTraceKey(), k -> new TeamTrace(prompt));
 
         if(options == null){
             options = config.getDefaultOptions();
         }
 
-        // 注入运行时配置与关联
+        // 1. 运行时环境准备
         trace.prepare(config, options, session, config.getName());
 
         if (prompt != null) {
@@ -198,39 +135,43 @@ public class TeamAgent implements Agent {
             trace.resetIterationsCount();
         }
 
-        // 触发协作启动拦截
+        // 触发团队启动拦截
         options.getInterceptorList().forEach(item -> item.target.onTeamStart(trace));
 
         try {
-            // 历史消息归档
+            // 2. 消息归档：用户输入存入 Session
             if (prompt != null) {
                 prompt.getMessages().forEach(m -> session.addHistoryMessage(config.getName(), m));
             }
 
-            // 传递拦截器
             final FlowOptions flowOptions = new FlowOptions();
-            if (options.getInterceptorList().size() > 0) {
+            if (!options.getInterceptorList().isEmpty()) {
                 for (RankEntity<TeamInterceptor> item : options.getInterceptorList()) {
                     flowOptions.interceptorAdd(item.target, item.index);
                 }
             }
 
-            // 驱动 Flow 引擎执行（闭包内注入协议上下文）
+            // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("TeamAgent [{}] starting collaboration flow...", name());
+            }
+
             context.with(Agent.KEY_CURRENT_TRACE_KEY, config.getTraceKey(), () -> {
                 context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
                     flowEngine.eval(graph, -1, context, flowOptions);
                 });
             });
 
-            // 结果收敛逻辑：优先取明确标记的 Answer，兜底取最后一个专家的回复
+            // 4. 结果收敛：从轨迹中提取最终答案
             String result = trace.getFinalAnswer();
             if (result == null) {
-                result = trace.getLastAgentContent(); // 优先取专家的，而不是 Supervisor 的决策文本
+                // 兜底策略：若无显式标记的 Final Answer，取最后一个执行专家的回复
+                result = trace.getLastAgentContent();
             }
 
             trace.setFinalAnswer(result);
 
-            // 如果配置了 outputKey，则将结果写入全局上下文
+            // 回填业务上下文
             if (Assert.isNotEmpty(config.getOutputKey())) {
                 context.put(config.getOutputKey(), result);
             }
@@ -239,29 +180,27 @@ public class TeamAgent implements Agent {
             session.addHistoryMessage(config.getName(), assistantMessage);
             session.updateSnapshot(context);
 
-            // 触发协作完成拦截
+            // 触发完成拦截
             options.getInterceptorList().forEach(item -> item.target.onTeamEnd(trace));
+
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("TeamAgent [{}] collaboration completed.", name());
+            }
 
             return assistantMessage;
 
         } finally {
-            // 释放或清理协议相关的运行时资源
+            // 5. 资源清理与协议后置处理
             config.getProtocol().onTeamFinished(context, trace);
         }
     }
 
-    /// ////////////////// Builder 模式实现 ///////////////////////////////
+    // --- Builder 实现 ---
 
-    /**
-     * 开启 TeamAgent 构建流程，传入主管模型（若为 null 则需要手动编排图逻辑）
-     */
     public static Builder of(@Nullable ChatModel chatModel) {
         return new Builder(chatModel);
     }
 
-    /**
-     * 团队智能体流式构建器
-     */
     public static class Builder {
         private final TeamAgentConfig config;
 
@@ -269,33 +208,21 @@ public class TeamAgent implements Agent {
             this.config = new TeamAgentConfig(chatModel);
         }
 
-        /**
-         * 链式调用增强器
-         */
         public Builder then(Consumer<Builder> consumer) {
             consumer.accept(this);
             return this;
         }
 
-        /**
-         * 设置团队逻辑标识
-         */
         public Builder name(String name) {
             config.setName(name);
             return this;
         }
 
-        /**
-         * 设置团队显示标题
-         */
         public Builder title(String title) {
             config.setTitle(title);
             return this;
         }
 
-        /**
-         * 设置团队能力简述
-         */
         public Builder description(String description) {
             config.setDescription(description);
             return this;
@@ -312,7 +239,7 @@ public class TeamAgent implements Agent {
         }
 
         /**
-         * 批量注入团队成员（专家）
+         * 添加团队成员
          */
         public Builder agentAdd(Agent... agents) {
             for (Agent agent : agents) {
@@ -321,40 +248,31 @@ public class TeamAgent implements Agent {
             return this;
         }
 
-        /**
-         * 自定义系统指令（System Prompt）的生成模板
-         */
         public Builder systemPrompt(TeamSystemPrompt promptProvider) {
             config.setTeamSystem(promptProvider);
             return this;
         }
 
         /**
-         * 设置任务完结的语义标识符
+         * 设置任务终止的语义标识符（如 "FINISH"）
          */
         public Builder finishMarker(String finishMarker) {
             config.setFinishMarker(finishMarker);
             return this;
         }
 
-        /**
-         * 设置结果输出的目标 Key
-         */
         public Builder outputKey(String outputKey) {
             config.setOutputKey(outputKey);
             return this;
         }
 
-        /**
-         * 细粒度配置调度器的容错重试策略
-         */
         public Builder retryConfig(int maxRetries, long retryDelayMs) {
             config.getDefaultOptions().setRetryConfig(maxRetries, retryDelayMs);
             return this;
         }
 
         /**
-         * 限制协作最大轮次，保护计算资源
+         * 设置最大迭代轮次，防止死循环
          */
         public Builder maxTotalIterations(int maxTotalIterations) {
             config.getDefaultOptions().setMaxTotalIterations(maxTotalIterations);
@@ -362,7 +280,7 @@ public class TeamAgent implements Agent {
         }
 
         /**
-         * 核心配置：切换不同的团队协作协议（如 Swarm, Sequential 等）
+         * 指定团队协作协议（Swarm, Sequential, Hierarchical 等）
          */
         public Builder protocol(TeamProtocolFactory protocolFactory) {
             config.setProtocol(protocolFactory);
@@ -370,7 +288,7 @@ public class TeamAgent implements Agent {
         }
 
         /**
-         * 手动微调流图结构
+         * 编排或调整计算图逻辑
          */
         public Builder graphAdjuster(Consumer<GraphSpec> graphBuilder) {
             config.setGraphAdjuster(graphBuilder);
@@ -378,16 +296,13 @@ public class TeamAgent implements Agent {
         }
 
         /**
-         * 定制主管模型推理参数（如 Temperature 为 0 以获取稳定的调度逻辑）
+         * 配置主管模型的对话参数
          */
         public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
             config.setChatOptions(chatOptions);
             return this;
         }
 
-        /**
-         * 注册全局拦截器
-         */
         public Builder defaultInterceptorAdd(TeamInterceptor... interceptors) {
             for (TeamInterceptor interceptor : interceptors) {
                 config.getDefaultOptions().addInterceptor(interceptor, 0);
@@ -395,31 +310,22 @@ public class TeamAgent implements Agent {
             return this;
         }
 
-        /**
-         * 注册带排序权重的拦截器
-         */
         public Builder defaultInterceptorAdd(TeamInterceptor interceptor, int index) {
             config.getDefaultOptions().addInterceptor(interceptor, index);
             return this;
         }
 
-
-        /**
-         * 校验并实例化 TeamAgent。
-         * <p>注意：必须至少提供一名成员或具备自定义图调整逻辑，否则无法形成有效的协作链路。</p>
-         */
         public TeamAgent build() {
             if (config.getName() == null) {
                 config.setName("team_agent");
             }
 
-            // 兜底描述处理
             if (config.getDescription() == null) {
                 config.setDescription(config.getTitle() != null ? config.getTitle() : config.getName());
             }
 
             if (config.getAgentMap().isEmpty() && config.getGraphAdjuster() == null) {
-                throw new IllegalStateException("The agent or graphAdjuster is required for a TeamAgent");
+                throw new IllegalStateException("At least one agent or a graphAdjuster is required.");
             }
 
             return new TeamAgent(config);

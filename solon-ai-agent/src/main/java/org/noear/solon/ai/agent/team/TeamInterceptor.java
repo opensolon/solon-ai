@@ -23,10 +23,7 @@ import org.noear.solon.lang.Preview;
 
 /**
  * 团队协作拦截器 (Team Interceptor)
- * <p>
- * 提供对 TeamAgent 协作全生命周期的监控与干预能力。
- * 开发者可以通过实现此接口，在团队初始化、模型决策、成员执行等关键环节注入业务逻辑。
- * </p>
+ * * <p>核心职责：提供对 TeamAgent 协作全生命周期的观察与干预能力。支持团队、决策、成员三个维度的切面注入。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -34,73 +31,61 @@ import org.noear.solon.lang.Preview;
 @Preview("3.8.1")
 public interface TeamInterceptor extends FlowInterceptor {
 
-    // --- [维度 1：团队生命周期 (Team Level)] ---
+    // --- [维度 1：团队级 (Team Level)] ---
 
     /**
-     * 协作开始：团队任务启动时触发
-     * <p>常用于初始化全局上下文、分配 Trace ID 或开启性能埋点。</p>
+     * 团队协作开始
      */
     default void onTeamStart(TeamTrace trace) {}
 
     /**
-     * 协作结束：团队任务整体完成（或被强行熔断）后触发
-     * <p>此时可以进行汇总统计、持久化协作日志或清理资源。</p>
+     * 团队协作结束
      */
     default void onTeamEnd(TeamTrace trace) {}
 
 
-    // --- [维度 2：决策生命周期 (Supervisor/Model Level)] ---
+    // --- [维度 2：决策级 (Supervisor Level)] ---
 
     /**
-     * 决策准入：在指挥员 (Supervisor) 发起逻辑判断前触发
-     * <p>这是防止协作失控的“一级刹车”，可用于检查迭代深度、Token 余额或强制人工干预。</p>
-     *
-     * @return true: 继续决策; false: 立即中止团队协作并设为结束状态
+     * 决策准入校验（主管发起思考前）
+     * * @return true: 继续执行; false: 熔断并中止协作
      */
     default boolean shouldSupervisorContinue(TeamTrace trace) {
         return true;
     }
 
     /**
-     * 模型启动：指挥员发起模型请求 (LLM Call) 前触发
-     * <p>允许动态修改 {@link ChatRequestDesc}，如注入临时变量、调整温度系数或追加协议约束。</p>
+     * 模型请求前置（LLM 调用前）
+     * <p>常用于动态调整 Request 参数（如 Temperature, MaxTokens 等）。</p>
      */
-    default void onModelStart(TeamTrace trace, ChatRequestDesc req) {
-    }
+    default void onModelStart(TeamTrace trace, ChatRequestDesc req) {}
 
     /**
-     * 模型返回：指挥员获得模型原始响应后触发
-     * <p>在决策文本解析前介入，可用于拦截原始数据流、审计模型输出或执行内容风控。</p>
+     * 模型响应后置（LLM 返回后，解析前）
+     * <p>常用于内容安全审计或原始 Token 统计。</p>
      */
-    default void onModelEnd(TeamTrace trace, ChatResponse resp) {
-    }
+    default void onModelEnd(TeamTrace trace, ChatResponse resp) {}
 
     /**
-     * 决策产出：指挥员完成语义解析并确定决策内容后触发
-     * <p>此时模型已完成“思考”，但尚未跳转物理路由。可用于记录指挥员的调度意图（Decision Context）。</p>
-     * * @param decision 经解析后的决策文本（通常是 Agent 名称或 finish 指令）
+     * 决策结果输出（指令解析后）
+     * * @param decision 经解析确定的目标 Agent 名称或终结指令
      */
     default void onSupervisorDecision(TeamTrace trace, String decision) {}
 
 
-    // --- [维度 3：成员生命周期 (Member Agent Level)] ---
+    // --- [维度 3：成员级 (Agent Level)] ---
 
     /**
-     * 成员准入：具体成员智能体被调度执行前触发
-     * <p>提供细粒度的权限控制。例如：只允许特定 Agent 在特定条件下访问敏感工具。</p>
-     *
-     * @param agent 即将执行的目标智能体
-     * @return true: 允许执行; false: 跳过该成员执行，重新回到决策环节
+     * 成员执行准入校验（Agent 运行前）
+     * * @param agent 即将运行的智能体
+     * @return true: 允许运行; false: 跳过并回滚至决策层
      */
     default boolean shouldAgentContinue(TeamTrace trace, Agent agent) {
         return true;
     }
 
     /**
-     * 成员执行结束：具体成员智能体任务完成后触发
-     * <p>此时该成员的输出已同步至 {@link TeamTrace} 的历史记录中，可用于结果后置处理。</p>
-     *
-     * @param agent 已完成执行的智能体
+     * 成员执行结束
      */
     default void onAgentEnd(TeamTrace trace, Agent agent) {}
 }

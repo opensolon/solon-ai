@@ -19,8 +19,9 @@ import org.noear.solon.ai.agent.team.protocol.*;
 import org.noear.solon.lang.Preview;
 
 /**
- * 团队协作协议常量集
- * <p>提供了多智能体协作中常见的拓扑结构和交互模式实现。</p>
+ * 团队协作协议常量集 (Standard Protocols)
+ *
+ * <p>预设了多种经典的多智能体协作模式（MAS Patterns），决定了任务在 Agent 间的流转拓扑。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -28,51 +29,44 @@ import org.noear.solon.lang.Preview;
 @Preview("3.8.1")
 public interface TeamProtocols {
     /**
-     * 顺序协作协议 (Sequential)
-     * <p>场景：线性工作流（流水线）。</p>
-     * <p>特征：任务按预定义顺序在 Agent 之间严格传递，逻辑确定性最高。</p>
+     * 顺序流协议 (Sequential)
+     * <p>核心：线性流水线。任务按成员注册顺序依次传递，适合步骤固定的标准化流程。</p>
      */
     TeamProtocolFactory SEQUENTIAL = SequentialProtocol::new;
 
     /**
-     * 层级协作协议 (Hierarchical)
-     * <p>场景：复杂任务拆解与分发。</p>
-     * <p>特征：金字塔管理模式。由 Supervisor 进行决策、分配和结果汇总，成员只与 Supervisor 通信。</p>
+     * 层级制协议 (Hierarchical)
+     * <p>核心：主管中心化。Supervisor 负责分解任务、分派成员并汇总结果，适合复杂指令处理。</p>
      */
     TeamProtocolFactory HIERARCHICAL = HierarchicalProtocol::new;
 
     /**
      * 市场机制协议 (Market-Based)
-     * <p>场景：资源敏感型任务分配。</p>
-     * <p>特征：Agent 根据自身负载或“成本”对任务进行报价，系统基于策略择优匹配执行者。</p>
+     * <p>核心：竞争选择。Agent 基于当前状态提供“报价”，由系统择优指派，适合资源负载敏感场景。</p>
      */
     TeamProtocolFactory MARKET_BASED = MarketBasedProtocol::new;
 
     /**
      * 合同网协议 (Contract Net)
-     * <p>场景：分布式动态任务分配。</p>
-     * <p>特征：招投标模式。包含发布、投标、选标阶段，充分发挥各 Agent 的主动性。</p>
+     * <p>核心：招投标模式。包含发布(Call for Proposal)、投标、选标、执行等阶段，适合分布式决策。</p>
      */
     TeamProtocolFactory CONTRACT_NET = ContractNetProtocol::new;
 
     /**
      * 黑板模式协议 (Blackboard)
-     * <p>场景：协作式协同求解。</p>
-     * <p>特征：去中心化。所有 Agent 观察共享黑板，基于专家经验在满足触发条件时主动介入。</p>
+     * <p>核心：共享空间。各专家 Agent 持续监测共享状态（黑板），并在擅长环节主动介入协作。</p>
      */
     TeamProtocolFactory BLACKBOARD = BlackboardProtocol::new;
 
     /**
      * 蜂群协议 (Swarm)
-     * <p>场景：动态接力协作。</p>
-     * <p>特征：以节点接力为核心。Agent 执行完后交回控制权，由中枢根据最新进度动态指派“下一棒”。</p>
+     * <p>核心：动态接力。Agent 结束后交还控制权，由中枢基于实时进度动态指派“下一棒”。</p>
      */
     TeamProtocolFactory SWARM = SwarmProtocol::new;
 
     /**
-     * A2A 协议 (Agent-to-Agent)
-     * <p>场景：高灵活度的点对点协作。</p>
-     * <p>特征：权限下放。Agent 之间可直接进行“移交（Handoff）”，减少中枢中转，适合快速反馈场景。</p>
+     * 点对点协议 (A2A / Agent-to-Agent)
+     * <p>核心：直接移交。Agent 之间支持直接 Handoff（转交），减少中转延迟，适合快速响应协作。</p>
      */
     TeamProtocolFactory A2A = A2AProtocol::new;
 }

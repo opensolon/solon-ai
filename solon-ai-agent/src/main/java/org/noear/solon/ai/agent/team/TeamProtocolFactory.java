@@ -18,8 +18,10 @@ package org.noear.solon.ai.agent.team;
 import org.noear.solon.lang.Preview;
 
 /**
- * 团队协作协议工厂
- * <p>用于根据团队配置动态创建协议实例，支持协议的延迟初始化与多实例隔离。</p>
+ * 团队协作协议工厂 (Protocol Factory)
+ *
+ * <p>核心职责：根据 {@link TeamAgentConfig} 动态创建协议实例，实现协议与团队配置的绑定。</p>
+ * <p>通过工厂模式确保不同团队（Team）之间协议实例的独立性与参数隔离。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -29,7 +31,8 @@ public interface TeamProtocolFactory {
     /**
      * 创建协议实例
      *
-     * @param config 团队配置
+     * @param config 团队配置（包含成员列表、调度模型等）
+     * @return 绑定了特定配置的 {@link TeamProtocol} 实例
      */
     TeamProtocol create(TeamAgentConfig config);
 }

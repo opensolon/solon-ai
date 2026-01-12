@@ -23,256 +23,142 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Consumer;
 
 /**
  * 团队协作配置（Team Configuration）
- * <p>用于定义 AI 团队的组织架构、决策大脑（Supervisor）、协作协议以及运行时的治理策略。</p>
+ * <p>核心职责：定义团队组织架构、决策大脑（Supervisor）、协作协议与运行治理策略。</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public class TeamAgentConfig implements NonSerializable {
-    /**
-     * 团队唯一标识名称（用于日志追踪及 context 引用）
-     */
+    private static final Logger LOG = LoggerFactory.getLogger(TeamAgentConfig.class);
+
+    /** 团队唯一标识 */
     private String name;
-
-    /**
-     * 团队状态跟踪键（用于在全局上下文中标识该团队的会话数据）
-     */
+    /** 状态跟踪键（用于隔离 Session 中的轨迹数据） */
     private volatile String traceKey;
-
-    /**
-     * 团队显示标题（用于 UI 展示或报告输出）
-     */
+    /** 显示标题 */
     private String title;
-
-    /**
-     * 团队核心职能描述（在嵌套团队场景下，供上层主管识别该团队的专业领域）
-     */
+    /** 职能描述（供上层团队调度识别） */
     private String description;
-
+    /** 档案信息（能力与边界定义） */
     private AgentProfile profile;
 
-    /**
-     * 调度中心模型（Supervisor Model），负责解析任务、选择专家及审核产出
-     */
+    /** 调度中心模型（Supervisor），负责分发任务、协调专家与审核结果 */
     private final ChatModel chatModel;
-
-    /**
-     * 调度中心推理配置（用于精细化控制 Supervisor 的采样随机性、Token 限制等）
-     */
+    /** 调度中心推理参数（控制采样随机性、Token 等） */
     private Consumer<ChatOptions> chatOptions;
 
-    /**
-     * 团队成员名录，存储所有参与协作的专家智能体（Agent）实例，保留添加顺序
-     */
+    /** 成员名录（有序存储专家 Agent） */
     private final LinkedHashMap<String, Agent> agentMap = new LinkedHashMap<>();
-
-    /**
-     * 协作拓扑协议（决定了任务在团队成员间的流转逻辑，如层级式、流水线式等）
-     */
+    /** 协作协议（定义任务流转的逻辑骨架，默认层级式） */
     private volatile TeamProtocol protocol = TeamProtocols.HIERARCHICAL.create(this);
-
-    /**
-     * 编排图结构微调钩子（允许在协议生成的标准拓扑上，增加自定义的业务逻辑节点或连线）
-     */
+    /** 执行图微调钩子（支持在协议骨架上增加业务节点或连线） */
     private Consumer<GraphSpec> graphAdjuster;
 
-    /**
-     * 任务终结符（当 Supervisor 输出此标记时，视为整个协作流程圆满结束）
-     */
+    /** 任务终结符（Supervisor 输出此词时视为协作结束） */
     private String finishMarker;
-
-    /**
-     * 指定最终结果输出到 Context 中的 Key 名
-     */
+    /** 结果回填 Key（将 Final Answer 自动存入 FlowContext） */
     private String outputKey;
 
-
-    /**
-     * 系统提示词（System Prompt）模板提供者，支持多语言动态适配
-     */
+    /** 系统提示词（System Prompt）模板提供者 */
     private TeamSystemPrompt systemPrompt = TeamSystemPromptCn.getDefault();
-
+    /** 运行时全局配置选项 */
     private final TeamOptions defaultOptions = new TeamOptions();
 
-    /**
-     * 基于指定的推理模型初始化团队配置
-     *
-     * @param chatModel 担任“主管”角色的 ChatModel
-     */
     public TeamAgentConfig(ChatModel chatModel) {
         this.chatModel = chatModel;
     }
 
     // --- 配置注入 (Protected) ---
 
-    /**
-     * 设置团队唯一标识名称
-     */
-    protected void setName(String name) {
-        this.name = name;
-    }
+    protected void setName(String name) { this.name = name; }
+    protected void setTitle(String title) { this.title = title; }
+    protected void setDescription(String description) { this.description = description; }
+    protected void setProfile(AgentProfile profile) { this.profile = profile; }
+    protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) { this.graphAdjuster = graphAdjuster; }
+    protected void setFinishMarker(String finishMarker) { this.finishMarker = finishMarker; }
+    protected void setOutputKey(String outputKey) { this.outputKey = outputKey; }
+    protected void setTeamSystem(TeamSystemPrompt promptProvider) { this.systemPrompt = promptProvider; }
+    protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
 
     /**
-     * 设置团队可视化标题
-     */
-    protected void setTitle(String title) {
-        this.title = title;
-    }
-
-    /**
-     * 设置团队职能描述
-     */
-    protected void setDescription(String description) {
-        this.description = description;
-    }
-
-    protected void setProfile(AgentProfile profile) {
-        this.profile = profile;
-    }
-
-    /**
-     * 注入自定义的流程图调整逻辑
-     */
-    protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) {
-        this.graphAdjuster = graphAdjuster;
-    }
-
-    /**
-     * 设置显式的任务终结指令词
-     */
-    protected void setFinishMarker(String finishMarker) {
-        this.finishMarker = finishMarker;
-    }
-
-    /**
-     * 设置输出结果在 Context 中的存储键
-     */
-    protected void setOutputKey(String outputKey) {
-        this.outputKey = outputKey;
-    }
-
-    /**
-     * 设置团队指令模板提供者
-     */
-    protected void setTeamSystem(TeamSystemPrompt promptProvider) {
-        this.systemPrompt = promptProvider;
-    }
-
-    /**
-     * 配置主管推理时的 ChatOptions（如 Temperature, TopP 等参数）
-     */
-    protected void setChatOptions(Consumer<ChatOptions> chatOptions) {
-        this.chatOptions = chatOptions;
-    }
-
-    /**
-     * 注入团队成员（Agent）
-     * <p>每个成员必须拥有唯一的名称和明确的职责描述（Description），以便主管理解其用途。</p>
-     *
-     * @param agent 专家智能体或嵌套子团队
+     * 注册团队成员（专家）
+     * @param agent 具备明确职责描述的智能体实例
      */
     protected void addAgent(Agent agent) {
         Objects.requireNonNull(agent.name(), "agent.name is required");
-        Objects.requireNonNull(agent.description(), "agent.description is required for collaboration");
+        Objects.requireNonNull(agent.description(), "agent.description is required");
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("TeamAgentConfig [{}] register agent: {}", name, agent.name());
+        }
         agentMap.put(agent.name(), agent);
     }
 
     /**
-     * 设置团队协作协议（即执行图的逻辑骨架）
-     *
-     * @param protocolFactory 协议工厂
+     * 设置协作协议（生成执行图逻辑骨架）
      */
     protected void setProtocol(TeamProtocolFactory protocolFactory) {
-        Objects.requireNonNull(protocolFactory, "protocolFactory");
+        Objects.requireNonNull(protocolFactory, "protocolFactory is null");
         this.protocol = protocolFactory.create(this);
+
+        if (LOG.isInfoEnabled()) {
+            LOG.info("TeamAgentConfig [{}] switched protocol to: {}", name, protocol.getClass().getSimpleName());
+        }
     }
 
     // --- 属性获取 (Public) ---
 
+    public TeamOptions getDefaultOptions() { return defaultOptions; }
+    public String getName() { return name; }
 
-    public TeamOptions getDefaultOptions() {
-        return defaultOptions;
-    }
-
-    public String getName() {
-        return name;
-    }
-
+    /**
+     * 获取 Trace 存储键（默认使用双下划线前缀隔离）
+     */
     public String getTraceKey() {
         if (traceKey == null) {
             traceKey = "__" + this.name;
         }
-
         return traceKey;
     }
 
-    public String getTitle() {
-        return title;
-    }
-
-    public String getDescription() {
-        return description;
-    }
+    public String getTitle() { return title; }
+    public String getDescription() { return description; }
 
     public AgentProfile getProfile() {
-        if (profile == null) {
-            profile = new AgentProfile();
-        }
+        if (profile == null) profile = new AgentProfile();
         return profile;
     }
 
-    public ChatModel getChatModel() {
-        return chatModel;
-    }
-
-    public Consumer<ChatOptions> getChatOptions() {
-        return chatOptions;
-    }
-
-    public Map<String, Agent> getAgentMap() {
-        return agentMap;
-    }
-
-    public TeamProtocol getProtocol() {
-        return protocol;
-    }
-
-    public Consumer<GraphSpec> getGraphAdjuster() {
-        return graphAdjuster;
-    }
+    public ChatModel getChatModel() { return chatModel; }
+    public Consumer<ChatOptions> getChatOptions() { return chatOptions; }
+    public Map<String, Agent> getAgentMap() { return agentMap; }
+    public TeamProtocol getProtocol() { return protocol; }
+    public Consumer<GraphSpec> getGraphAdjuster() { return graphAdjuster; }
 
     /**
-     * 获取任务终结标识
-     * <p>逻辑：若未显式配置，则根据团队名称生成特征标记（例如：[TEAM_NAME_FINISH]）</p>
+     * 获取终结标识符（兜底生成模式）
      */
     public String getFinishMarker() {
         if (finishMarker == null) {
-            finishMarker = "[" + name.toUpperCase() + "_FINISH]";
+            finishMarker = "[" + (name != null ? name.toUpperCase() : "TEAM") + "_FINISH]";
         }
-
         return finishMarker;
     }
 
-    public String getOutputKey() {
-        return outputKey;
-    }
+    public String getOutputKey() { return outputKey; }
 
     public String getTeamSystem(TeamTrace trace, FlowContext context) {
         return systemPrompt.getSystemPromptFor(trace, context);
     }
 
-    /**
-     * 获取当前配置采用的语言/地区环境
-     */
-    public Locale getLocale() {
-        return systemPrompt.getLocale();
-    }
+    public Locale getLocale() { return systemPrompt.getLocale(); }
 }
