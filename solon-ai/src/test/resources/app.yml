@@ -6,6 +6,28 @@ solon.ai.chat:
     apiUrl: "http://127.0.0.1:11434/api/chat" # 使用完整地址（而不是 api_base）
     provider: "ollama" # 使用 ollama 服务时，需要配置 provider
     model: "llama3.2"
+  gemini1: # gemini普通模型测试配置，是否是流式输出，根据读取方式来自动判断
+    apiUrl: "https://generativelanguage.googleapis.com/v1beta" 
+    provider: "gemini"
+    model: "gemini-2.5-flash-lite"
+    apiKey: "{gemini api key}" 
+  gemini2: # gemini思考模型测试配置
+    apiUrl: "https://generativelanguage.googleapis.com/v1beta" 
+    provider: "gemini" 
+    model: "gemini-2.5-pro" #思考模型
+    apiKey: "{gemini api key}" 
+    defaultOptions:
+      generationConfig:
+        temperature: 1
+        topP: 1
+        thinkingConfig:
+          includeThoughts: true
+          thinkingBudget: 26240
+  openai:
+    apiUrl: "https://yunwu.ai/v1/chat/completions" # open ai测试
+    provider: "openai"
+    model: "gpt-5-nano-2025-08-07"
+    apiKey: "{openai api key}" 
   proxy1:
     apiUrl: "http://127.0.0.1:11434/api/chat" # 使用完整地址（而不是 api_base）
     provider: "ollama" # 使用 ollama 服务时，需要配置 provider

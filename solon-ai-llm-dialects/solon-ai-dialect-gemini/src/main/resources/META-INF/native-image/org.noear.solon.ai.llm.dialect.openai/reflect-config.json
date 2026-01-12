@@ -1,0 +1,6 @@
+[
+  {
+    "name": "org.noear.solon.ai.llm.dialect.openai.GeminiChatDialect",
+    "allDeclaredConstructors": true
+  }
+]
