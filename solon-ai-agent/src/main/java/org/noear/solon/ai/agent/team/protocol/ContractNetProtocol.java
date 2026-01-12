@@ -59,16 +59,8 @@ public class ContractNetProtocol extends TeamProtocolBase {
         private final Map<String, ONode> bids = new LinkedHashMap<>();
         private String awardedAgent;
 
-        public void addBid(String agentName, String bidContent, TeamProtocolBase protocol) {
-            // 使用基类的 sniffJson 提取 Agent 回复中的 JSON 标书
-            ONode node = protocol.sniffJson(bidContent);
-            if (node.isObject() && !node.isEmpty()) {
-                bids.put(agentName, node);
-            } else {
-                // 如果提取失败，记录原始摘要
-                String summary = bidContent.length() > 100 ? bidContent.substring(0, 100) + "..." : bidContent;
-                bids.put(agentName, new ONode().asObject().set("raw_summary", summary));
-            }
+        public void addBid(String agentName, ONode bidContent) {
+            bids.put(agentName, bidContent);
         }
 
         public void setAwardedAgent(String agentName) { this.awardedAgent = agentName; }
@@ -120,7 +112,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
      * 根据 Agent 档案自动构造标书 (无需 Agent 介入)
      * 优化点：引入权重差异，使 Profile 匹配优先于 Description 匹配
      */
-    protected String constructBid(Agent agent, Prompt prompt) {
+    protected ONode constructBid(Agent agent, Prompt prompt) {
         // 1. 获取任务描述（用户输入）
         String taskDesc = prompt.getUserContent().toLowerCase();
         AgentProfile profile = agent.profile();
@@ -165,7 +157,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
         bidNode.set("plan", "自动方案评估：基于[" + agent.name() + "]的职能描述与技能标签进行自适应匹配。");
         bidNode.set("auto_bid", true);
 
-        return bidNode.toJson();
+        return bidNode;
     }
 
     /**
