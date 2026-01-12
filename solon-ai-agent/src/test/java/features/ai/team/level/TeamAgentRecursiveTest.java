@@ -134,7 +134,7 @@ public class TeamAgentRecursiveTest {
 
         // 5. 关键检测点：验证反馈循环是否生效
         // 修正：使用 getTraceKey() 获取动态生成的键名
-        TeamTrace rootTrace = session.getSnapshot().getAs(projectTeam.getTraceKey());
+        TeamTrace rootTrace = session.getSnapshot().getAs(projectTeam.getConfig().getTraceKey());
         Assertions.assertNotNull(rootTrace, "执行轨迹丢失");
 
         // 验证 1：验证是否出现了打回重做的路径

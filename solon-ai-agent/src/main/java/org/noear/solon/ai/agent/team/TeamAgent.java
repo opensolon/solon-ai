@@ -53,24 +53,6 @@ import java.util.function.Consumer;
 @Preview("3.8.1")
 public class TeamAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(TeamAgent.class);
-
-    /**
-     * 团队唯一名称标识
-     */
-    private final String name;
-    /**
-     * 团队标题
-     */
-    private final String title;
-    /**
-     * 团队职责描述
-     */
-    private final String description;
-    /**
-     * 团队轨迹在上下文中的存储键名
-     */
-    private final String traceKey;
-
     /**
      * 静态配置对象
      */
@@ -92,12 +74,6 @@ public class TeamAgent implements Agent {
         Objects.requireNonNull(config, "Missing config!");
 
         this.config = config;
-        this.name = config.getName();
-        this.title = config.getTitle();
-        this.description = config.getDescription();
-
-        // 为团队生成的唯一 Trace 标识，确保在多团队并行或嵌套时数据不冲突
-        this.traceKey = config.getTraceKey();
         this.flowEngine = FlowEngine.newInstance(true);
 
         // 初始化协作拓扑结构
@@ -110,7 +86,7 @@ public class TeamAgent implements Agent {
      * <p>2. 微调器进行个性化修饰（如增加特定的条件分支）。</p>
      */
     protected Graph buildGraph() {
-        return Graph.create(this.name(), spec -> {
+        return Graph.create(config.getTraceKey(), spec -> {
             // 由协议介入构建基础图谱
             if (config.getChatModel() != null) {
                 config.getProtocol().buildGraph(spec);
@@ -141,31 +117,27 @@ public class TeamAgent implements Agent {
      * 从当前会话中提取此团队的执行踪迹
      */
     public @Nullable TeamTrace getTrace(AgentSession session) {
-        return session.getSnapshot().getAs(traceKey);
+        return session.getSnapshot().getAs(config.getTraceKey());
     }
 
     @Override
     public String name() {
-        return name;
+        return config.getName();
     }
 
     @Override
     public String title() {
-        return title;
+        return config.getTitle();
     }
 
     @Override
     public String description() {
-        return description;
+        return config.getDescription();
     }
 
     @Override
     public AgentProfile profile() {
         return config.getProfile();
-    }
-
-    public String getTraceKey() {
-        return traceKey;
     }
 
     /**
@@ -211,14 +183,14 @@ public class TeamAgent implements Agent {
      */
     public AssistantMessage call(Prompt prompt, AgentSession session, TeamOptions options) throws Throwable {
         FlowContext context = session.getSnapshot();
-        TeamTrace trace = context.computeIfAbsent(traceKey, k -> new TeamTrace(prompt));
+        TeamTrace trace = context.computeIfAbsent(config.getTraceKey(), k -> new TeamTrace(prompt));
 
         if(options == null){
             options = config.getDefaultOptions();
         }
 
         // 注入运行时配置与关联
-        trace.prepare(config, options, session, name);
+        trace.prepare(config, options, session, config.getName());
 
         if (prompt != null) {
             context.trace().recordNode(graph, null);
@@ -232,7 +204,7 @@ public class TeamAgent implements Agent {
         try {
             // 历史消息归档
             if (prompt != null) {
-                prompt.getMessages().forEach(m -> session.addHistoryMessage(this.name, m));
+                prompt.getMessages().forEach(m -> session.addHistoryMessage(config.getName(), m));
             }
 
             // 传递拦截器
@@ -244,7 +216,7 @@ public class TeamAgent implements Agent {
             }
 
             // 驱动 Flow 引擎执行（闭包内注入协议上下文）
-            context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
+            context.with(Agent.KEY_CURRENT_TRACE_KEY, config.getTraceKey(), () -> {
                 context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
                     flowEngine.eval(graph, -1, context, flowOptions);
                 });
@@ -264,7 +236,7 @@ public class TeamAgent implements Agent {
             }
 
             AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-            session.addHistoryMessage(this.name, assistantMessage);
+            session.addHistoryMessage(config.getName(), assistantMessage);
             session.updateSnapshot(context);
 
             // 触发协作完成拦截

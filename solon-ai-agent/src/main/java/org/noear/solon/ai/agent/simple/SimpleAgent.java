@@ -12,6 +12,7 @@ import org.noear.solon.flow.FlowContext;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -23,6 +24,8 @@ public class SimpleAgent implements Agent {
     private final SimpleAgentConfig config;
 
     private SimpleAgent(SimpleAgentConfig config) {
+        Objects.requireNonNull(config, "Missing config!");
+
         this.config = config;
     }
 
@@ -140,12 +143,12 @@ public class SimpleAgent implements Agent {
                 config.setName("simple_agent");
             }
 
-            if (config.getTitle() == null) {
-                config.setTitle(config.getName());
-            }
-
             if (config.getDescription() == null) {
-                config.setDescription(config.getTitle());
+                if (config.getTitle() != null) {
+                    config.setDescription(config.getTitle());
+                } else {
+                    config.setDescription(config.getName());
+                }
             }
 
             return new SimpleAgent(config);

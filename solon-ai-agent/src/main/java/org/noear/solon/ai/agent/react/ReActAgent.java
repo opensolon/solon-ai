@@ -53,19 +53,6 @@ import java.util.function.Consumer;
 @Preview("3.8.1")
 public class ReActAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
-
-    /**
-     * 智能体名称
-     */
-    private final String name;
-    /**
-     * 智能体标题
-     */
-    private final String title;
-    /**
-     * 智能体功能描述
-     */
-    private final String description;
     /**
      * 推理配置
      */
@@ -78,10 +65,6 @@ public class ReActAgent implements Agent {
      * 工作流引擎
      */
     private final FlowEngine flowEngine;
-    /**
-     * 状态追踪键
-     */
-    private final String traceKey;
 
     /**
      * 构造函数
@@ -92,12 +75,6 @@ public class ReActAgent implements Agent {
         Objects.requireNonNull(config, "Missing config!");
 
         this.config = config;
-
-        this.name = config.getName();
-        this.title = config.getTitle();
-        this.description = config.getDescription();
-
-        this.traceKey = "__" + name; // 每个 Agent 实例拥有独立的追踪键
         this.flowEngine = FlowEngine.newInstance(true);
 
         // 构建 ReAct 执行计算图：Start -> [Reason <-> Action] -> End
@@ -110,7 +87,7 @@ public class ReActAgent implements Agent {
      * @return 逻辑计算图
      */
     protected Graph buildGraph() {
-        return Graph.create(this.name(), spec -> {
+        return Graph.create(config.getTraceKey(), spec -> {
             spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON_BEF);
 
             spec.addActivity(Agent.ID_REASON_BEF)
@@ -120,7 +97,7 @@ public class ReActAgent implements Agent {
             // 推理任务节点（Reasoning）：决定下一步是调用工具还是直接回答
             spec.addExclusive(new ReasonTask(config, this))
                     .linkAdd(Agent.ID_ACTION_BEF, l -> l.title("route = " + Agent.ID_ACTION).when(ctx ->
-                            Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(traceKey).getRoute())))
+                            Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(config.getTraceKey()).getRoute())))
                     .linkAdd(Agent.ID_END);
 
             spec.addActivity(Agent.ID_ACTION_BEF)
@@ -164,22 +141,22 @@ public class ReActAgent implements Agent {
      * @return 推理轨迹状态
      */
     public @Nullable ReActTrace getTrace(AgentSession session) {
-        return session.getSnapshot().getAs("__" + name);
+        return session.getSnapshot().getAs(config.getTraceKey());
     }
 
     @Override
     public String name() {
-        return name;
+        return config.getName();
     }
 
     @Override
     public String title() {
-        return title;
+        return config.getTitle();
     }
 
     @Override
     public String description() {
-        return description;
+        return config.getDescription();
     }
 
     @Override
@@ -229,17 +206,17 @@ public class ReActAgent implements Agent {
         FlowContext context = session.getSnapshot();
         // 维护执行痕迹：若上下文已存在则复用，支持多轮对话或中断恢复
         TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL);
-        ReActTrace trace = context.getAs(traceKey);
+        ReActTrace trace = context.getAs(config.getTraceKey());
         if (trace == null) {
             trace = new ReActTrace(prompt);
-            context.put(traceKey, trace);
+            context.put(config.getTraceKey(), trace);
         }
 
         if (options == null) {
             options = config.getDefaultOptions();
         }
 
-        trace.prepare(config, options, session, name, protocol);
+        trace.prepare(config, options, session, config.getName(), protocol);
 
         if (protocol != null) {
             protocol.injectAgentTools(this, trace);
@@ -250,7 +227,7 @@ public class ReActAgent implements Agent {
             // A. 加载历史（如果配置了窗口）
             if (options.getHistoryWindowSize() > 0) {
                 // 此时尚未存入当前 prompt，获取的是纯历史记录
-                Collection<ChatMessage> history = session.getHistoryMessages(name, options.getHistoryWindowSize());
+                Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getHistoryWindowSize());
                 trace.appendMessages(history);
             }
         }
@@ -259,7 +236,7 @@ public class ReActAgent implements Agent {
         if (!Prompt.isEmpty(prompt)) {
             for (ChatMessage message : prompt.getMessages()) {
                 // 持久化到 Session（归档）
-                session.addHistoryMessage(name, message);
+                session.addHistoryMessage(config.getName(), message);
                 // 追加到 Trace（作为推理上下文）
                 trace.appendMessage(message);
             }
@@ -282,7 +259,7 @@ public class ReActAgent implements Agent {
         }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] starting: {}", this.name, prompt.getUserContent());
+            LOG.debug("ReActAgent [{}] starting: {}", config.getName(), prompt.getUserContent());
         }
 
         long startTime = System.currentTimeMillis();
@@ -301,7 +278,7 @@ public class ReActAgent implements Agent {
 
             // [核心机制] 采用变量域思想传递 KEY_CURRENT_TRACE_KEY
             // 确保任务组件（Task）能根据该 Key 在上下文中定位到正确的状态机（Trace）
-            context.with(Agent.KEY_CURRENT_TRACE_KEY, traceKey, () -> {
+            context.with(Agent.KEY_CURRENT_TRACE_KEY, config.getTraceKey(), () -> {
                 flowEngine.eval(graph, -1, context, flowOptions);
             });
         } finally {
@@ -313,13 +290,13 @@ public class ReActAgent implements Agent {
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("ReActAgent [{}] completed in {}ms, {} steps, {} tool calls",
-                        this.name, duration, trace.getStepCount(), trace.getMetrics().getToolCallCount());
+                        config.getName(), duration, trace.getStepCount(), trace.getMetrics().getToolCallCount());
             }
         }
 
         String result = trace.getFinalAnswer();
         if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] final Answer: {}", this.name, result);
+            LOG.debug("ReActAgent [{}] final Answer: {}", config.getName(), result);
         }
 
 
@@ -329,7 +306,7 @@ public class ReActAgent implements Agent {
 
         // 将 AI 的最终回答持久化到会话并更新快照
         AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-        session.addHistoryMessage(name, assistantMessage);
+        session.addHistoryMessage(config.getName(), assistantMessage);
         session.updateSnapshot(context);
 
         // 触发结束事件

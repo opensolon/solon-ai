@@ -41,6 +41,7 @@ public class ReActAgentConfig {
      * 智能体唯一标识名
      */
     private String name;
+    private volatile String traceKey;
     /**
      * 智能体标题（用于 UI 可视化展示）
      */
@@ -155,6 +156,14 @@ public class ReActAgentConfig {
 
     public String getName() {
         return name;
+    }
+
+    public String getTraceKey() {
+        if (traceKey == null) {
+            traceKey = "__" + this.name;
+        }
+
+        return traceKey;
     }
 
     public String getTitle() {
