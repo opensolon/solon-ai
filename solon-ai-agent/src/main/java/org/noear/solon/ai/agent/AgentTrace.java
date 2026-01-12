@@ -18,21 +18,20 @@ package org.noear.solon.ai.agent;
 import org.noear.solon.lang.Preview;
 
 /**
- * 智能体执行轨迹（上下文/状态跟踪）
+ * 智能体执行轨迹（执行过程的状态快照）
  *
- * <p>用于承载智能体（Agent）单次任务执行过程中的完整状态，包括：</p>
+ * <p>核心职责：记录 Agent 单次任务中的完整推理链条与执行状态。</p>
  * <ul>
- * <li>消息历史记录（Chat Messages）</li>
- * <li>推理过程状态（ReAct / CoT 轨迹）</li>
- * <li>工具调用及返回结果</li>
- * <li>Token 消耗及性能统计</li>
+ * <li><b>消息流：</b>存储推理过程中的上下文消息序列。</li>
+ * <li><b>推理链：</b>承载 ReAct/CoT 等模式下的思考轨迹（Thoughts）与步骤。</li>
+ * <li><b>交互记录：</b>保留工具调用（Tool Calls）及观察结果（Observations）。</li>
+ * <li><b>效能度量：</b>提供 Token 消耗及各节点耗时统计。</li>
  * </ul>
- * <p>它是实现“多轮对话记忆”和“复杂任务自省”的核心数据载体。</p>
+ * * <p>它是实现任务自省（Self-reflection）与会话持久化的关键数据载体。</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public interface AgentTrace {
-    // 后续可以承载：getMessages(), getUsage(), getContext() 等标准方法
 }
