@@ -81,6 +81,12 @@ public class SimpleAgent implements Agent {
     }
 
     protected AssistantMessage call(Prompt prompt, AgentSession session, Consumer<ChatOptions> chatOptionsAdjustor) throws Throwable {
+        if(Prompt.isEmpty(prompt)){
+            LOG.warn("Prompt is empty!");
+            return ChatMessage.ofAssistant("");
+        }
+
+
         FlowContext context = session.getSnapshot();
 
         // 1. 构建请求消息
@@ -106,7 +112,7 @@ public class SimpleAgent implements Agent {
     /**
      * 组装完整的 Prompt 消息列表（含 SystemPrompt、OutputSchema 及历史窗口）
      */
-    private List<ChatMessage> buildMessages(AgentSession session, Prompt prompt){
+    private List<ChatMessage> buildMessages(AgentSession session, Prompt prompt) {
         String spText = "";
 
         // 注入基础系统指令

@@ -3,6 +3,7 @@ package features.ai.simple;
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
@@ -90,11 +91,16 @@ public class SimpleAgentTest {
         Assertions.assertEquals(message.getContent(), message.getResultContent(), "没有清理掉思考");
 
 
-        message = agent.prompt(Prompt.of("现在知道我是谁了吗？")).session(session).call();
+        message = agent.prompt("现在知道我是谁了吗？").session(session).call();
 
         System.out.println("模型直接返回1: " + message.getContent());
         System.out.println("模型直接返回2: " + message.getResultContent());
         Assertions.assertEquals(message.getContent(), message.getResultContent(), "没有清理掉思考");
         Assertions.assertTrue(message.getContent().contains("阿飞"), "记忆失败了");
+
+
+        message = agent.call(session);
+
+        Assertions.assertTrue(Utils.isEmpty(message.getContent()));
     }
 }
