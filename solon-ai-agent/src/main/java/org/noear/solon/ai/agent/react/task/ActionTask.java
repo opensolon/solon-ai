@@ -181,12 +181,15 @@ public class ActionTask implements NamedTaskComponent {
                     LOG.debug("Agent [{}] invoking tool [{}], args: {}", config.getName(), name, args);
                 }
 
+                final String result;
                 if (trace.getOptions().getInterceptors().isEmpty()) {
-                    return tool.handle(args);
+                    result = tool.handle(args);
                 } else {
                     ToolRequest toolReq = new ToolRequest(null, trace.getOptions().getToolsContext(), args);
-                    return new ToolChain(trace.getOptions().getInterceptors(), tool).doIntercept(toolReq);
+                    result = new ToolChain(trace.getOptions().getInterceptors(), tool).doIntercept(toolReq);
                 }
+                trace.incrementToolCallCount();
+                return result;
             } catch (IllegalArgumentException e) {
                 // 引导模型自愈：返回 Schema 错误提示
                 return "Invalid arguments for [" + name + "]. Expected Schema: " + tool.inputSchema() + ". Error: " + e.getMessage();

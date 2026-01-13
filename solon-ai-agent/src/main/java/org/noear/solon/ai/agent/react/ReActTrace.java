@@ -63,7 +63,9 @@ public class ReActTrace implements AgentTrace {
     /** 任务提示词 */
     private Prompt prompt;
     /** 迭代步数计数器 */
-    private AtomicInteger stepCounter;
+    private AtomicInteger stepCounter = new AtomicInteger(0);
+    /** 工具调用计数器 */
+    private AtomicInteger toolCounter = new AtomicInteger(0);
     /** 消息历史序列 (Thought, Action, Observation) */
     private final List<ChatMessage> messages = new CopyOnWriteArrayList<>();
     /** 逻辑路由标识 (REASON, ACTION, END) */
@@ -288,18 +290,16 @@ public class ReActTrace implements AgentTrace {
     }
 
     /**
+     * 增加工具调用计数
+     */
+    public void incrementToolCallCount() {
+        toolCounter.incrementAndGet();
+    }
+
+    /**
      * 获取已触发的工具调用总数
      */
     public int getToolCallCount() {
-        int count = 0;
-        for (ChatMessage msg : messages) {
-            if (msg instanceof AssistantMessage) {
-                AssistantMessage am = (AssistantMessage) msg;
-                if (Assert.isNotEmpty(am.getToolCalls())) {
-                    count += am.getToolCalls().size();
-                }
-            }
-        }
-        return count;
+        return toolCounter.get();
     }
 }
