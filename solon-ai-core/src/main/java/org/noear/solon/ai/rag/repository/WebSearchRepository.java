@@ -67,10 +67,9 @@ public class WebSearchRepository implements Repository {
         ONode respNode = ONode.ofJson(respJson);
 
         int code = respNode.get("code").getInt();
-        String msg = respNode.get("msg").getString();
 
         if (code != 200) {
-            throw new IOException(msg);
+            throw new IOException(respNode.toJson());
         }
 
         List<Document> docs = new ArrayList<>();
