@@ -149,7 +149,8 @@ public class SupervisorTask implements NamedTaskComponent {
         ChatResponse response = callWithRetry(trace, messages);
         trace.getOptions().getInterceptorList().forEach(item -> item.target.onModelEnd(trace, response));
 
-        String decision = response.getResultContent().trim();
+        String clearContent = response.hasContent() ? response.getResultContent() : "";
+        String decision = clearContent.trim();
         trace.setLastDecision(decision);
         trace.getOptions().getInterceptorList().forEach(item -> item.target.onSupervisorDecision(trace, decision));
 

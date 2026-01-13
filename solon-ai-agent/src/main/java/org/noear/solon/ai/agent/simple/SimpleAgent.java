@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -30,8 +31,8 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,8 +44,10 @@ import java.util.function.Consumer;
  * 简单智能体实现
  * <p>专注于单次直接响应，具备：指令增强、历史窗口管理、自动重试、JSON 格式强制约束等特性</p>
  *
- * @author noear 2026/1/12 created
+ * @author noear
+ * @since 3.8.1
  */
+@Preview("3.8.1")
 public class SimpleAgent implements Agent {
     private static final Logger LOG = LoggerFactory.getLogger(SimpleAgent.class);
     private final SimpleAgentConfig config;
@@ -79,21 +82,18 @@ public class SimpleAgent implements Agent {
 
         // 2. 物理调用：执行带重试机制的 LLM 请求
         List<ChatMessage> messages = buildMessages(session, prompt);
-        AssistantMessage assistantMessage = callWithRetry(session, messages);
-
-        // 3. 结果处理：剥离思考过程，仅保留纯净响应内容
-        assistantMessage = ChatMessage.ofAssistant(assistantMessage.getContent());
+        AssistantMessage result = callWithRetry(session, messages);
 
         // 4. 状态回填：将输出结果自动映射到 FlowContext
         if (Assert.isNotEmpty(config.getOutputKey())) {
-            context.put(config.getOutputKey(), assistantMessage.getContent());
+            context.put(config.getOutputKey(), result.getContent());
         }
 
         // 5. 更新会话状态与快照
-        session.addHistoryMessage(config.getName(), assistantMessage);
+        session.addHistoryMessage(config.getName(), result);
         session.updateSnapshot(context);
 
-        return assistantMessage;
+        return result;
     }
 
     /**
@@ -159,7 +159,7 @@ public class SimpleAgent implements Agent {
         Prompt finalPrompt = Prompt.of(messages);
 
         if (config.getChatModel() != null) {
-            return config.getChatModel().prompt(finalPrompt)
+            ChatResponse resp = config.getChatModel().prompt(finalPrompt)
                     .options(o -> {
                         // 注入 Tools 与上下文
                         config.getTools().forEach(o::toolsAdd);
@@ -179,7 +179,10 @@ public class SimpleAgent implements Agent {
                             config.getChatOptions().accept(o);
                         }
                     })
-                    .call().getMessage();
+                    .call();
+
+            String clearContent = resp.hasContent() ? resp.getResultContent() : "";
+            return ChatMessage.ofAssistant(clearContent);
         } else {
             // fallback 到自定义处理器
             return config.getHandler().call(finalPrompt, session);
