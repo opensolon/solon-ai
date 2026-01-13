@@ -8,7 +8,7 @@ Solon AI Agent 为企业级智能体应用设计，将 LLM 的推理逻辑转化
 
 ### 多层次智能体架构
 
-* 基础智能体 (Simple Agent)：标准 AI 接口封装，支持自定义角色人格与 Profile 档案。
+* 简单智能体 (Simple Agent)：标准 AI 接口封装，支持自定义角色人格与 Profile 档案。
 * ReAct 智能体 (ReAct Agent)：基于 Reasoning-Acting 循环，具备强大的自省与自主工具调用能力。
 * 团队智能体 (Team Agent)：智能体容器，通过协作协议驱动多专家协同作业。
 
