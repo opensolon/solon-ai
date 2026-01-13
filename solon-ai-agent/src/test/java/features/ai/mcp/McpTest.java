@@ -2,6 +2,7 @@ package features.ai.mcp;
 
 import demo.ai.agent.LlmUtil;
 import demo.ai.mcp.McpServerTool2;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.mcp.McpChannel;
@@ -32,5 +33,6 @@ public class McpTest {
                 .getContent();
 
         System.out.println(tmp);
+        Assertions.assertTrue(tmp.contains("晴"));
     }
 }

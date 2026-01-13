@@ -14,6 +14,7 @@ import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
+import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -55,6 +56,10 @@ public class TeamAgentA2ATest {
                 .protocol(TeamProtocols.A2A)
                 .agentAdd(designer, developer)
                 .finishMarker("FINISH")
+                .systemPrompt(TeamSystemPrompt.builder()
+                        .role("团队指挥")
+                        .instruction("如果任务完成，输出 FINISH 并在其后完整转发 developer 的 HTML 代码。")
+                        .build())
                 .maxTotalIterations(5)
                 .build();
 

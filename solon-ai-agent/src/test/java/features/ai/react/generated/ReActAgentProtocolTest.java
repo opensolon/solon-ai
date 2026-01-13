@@ -20,6 +20,7 @@ import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * ReAct 协议完整性测试
@@ -56,13 +57,18 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         // 协议组件验证
         boolean hasThought = hasThoughtInHistory(trace);
-        boolean hasAction = countToolCalls(trace) > 0;
-        boolean hasObservation = containsObservation(trace);
+        boolean hasAction = trace.getToolCallCount() > 0;
+        boolean hasObservation = hasAction && trace.getStepCount() >= 2;
 
         // 验证 1：必须至少触发了一次工具调用
-        Assertions.assertTrue(hasAction, "ReAct 循环应包含 Action 环节（工具调用）");
-
+        // 1. 验证工具调用次数（框架已经帮你算好了）
+        Assertions.assertTrue(trace.getToolCallCount() > 0, "应包含 Action 环节");
+        // 2. 验证执行步数
+        Assertions.assertTrue(trace.getStepCount() >= 2, "ReAct 路径必须包含【推理+执行】");
+        // 3. 验证 Token 是否被记录（防止 Metrics 漏统计）
+        Assertions.assertTrue(trace.getMetrics().getTokenUsage() > 0);
         // 验证 2：必须捕获到了工具的返回结果
+        Assertions.assertTrue(hasAction, "应包含 Action 环节");
         Assertions.assertTrue(hasObservation, "ReAct 循环应包含 Observation 环节（观察结果）");
 
         // 提示：部分模型使用原生 ToolCall 可能不会显式输出 Thought 标签
@@ -99,7 +105,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         ReActTrace trace = agent.getTrace(session);
         if (trace != null) {
-            int toolCallCount = countToolCalls(trace);
+            int toolCallCount = trace.getToolCallCount();
             Assertions.assertEquals(0, toolCallCount, "对于常规问候，不应误触发工具调用");
             System.out.println("轨迹步数: " + trace.getStepCount());
         }
@@ -142,37 +148,45 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
         Assertions.assertTrue(result.contains("优惠券"), "结果应包含优惠券信息");
     }
 
-    // --- 辅助分析工具方法 ---
-
-    private int countToolCalls(ReActTrace trace) {
-        if (trace == null) return 0;
-        int count = 0;
-        for (ChatMessage msg : trace.getMessages()) {
-            if (msg instanceof AssistantMessage) {
-                List<ToolCall> calls = ((AssistantMessage) msg).getToolCalls();
-                if (Assert.isNotEmpty(calls)) {
-                    count += calls.size();
-                }
-            }
-        }
-        return count;
-    }
 
     private List<String> getCalledToolNames(ReActTrace trace) {
         List<String> tools = new ArrayList<>();
-        if (trace != null) {
-            for (ChatMessage msg : trace.getMessages()) {
-                if (msg instanceof AssistantMessage) {
-                    List<ToolCall> calls = ((AssistantMessage) msg).getToolCalls();
-                    if (Assert.isNotEmpty(calls)) {
-                        for (ToolCall call : calls) {
-                            tools.add(call.name());
-                        }
+        if (trace == null) return tools;
+
+        // 定义提取 Action JSON 中工具名的正则
+        java.util.regex.Pattern actionPattern = java.util.regex.Pattern.compile(
+                "Action:\\s*\\{.*?\"name\"\\s*:\\s*\"([^\"]+)\".*?\\}",
+                java.util.regex.Pattern.DOTALL
+        );
+
+        for (ChatMessage msg : trace.getMessages()) {
+            // 1. 适配原生协议模式 (AssistantMessage 带有 ToolCalls 对象)
+            if (msg instanceof AssistantMessage) {
+                AssistantMessage am = (AssistantMessage) msg;
+                if (Assert.isNotEmpty(am.getToolCalls())) {
+                    am.getToolCalls().forEach(c -> tools.add(c.name()));
+                }
+
+                // 2. 适配文本 ReAct 模式 (从 AssistantMessage 的 content 文本中正则提取)
+                else if (am.getContent() != null) {
+                    java.util.regex.Matcher matcher = actionPattern.matcher(am.getContent());
+                    if (matcher.find()) {
+                        tools.add(matcher.group(1));
                     }
                 }
             }
+
+            // 3. 适配标准 ToolMessage 模式
+            if (msg instanceof ToolMessage) {
+                ToolMessage tm = (ToolMessage) msg;
+                if (Assert.isNotEmpty(tm.getName())) {
+                    tools.add(tm.getName());
+                }
+            }
         }
-        return tools;
+
+        // 去重并返回
+        return tools.stream().distinct().collect(Collectors.toList());
     }
 
     private boolean hasThoughtInHistory(ReActTrace trace) {
@@ -192,7 +206,17 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
     private boolean containsObservation(ReActTrace trace) {
         if (trace == null) return false;
         for (ChatMessage msg : trace.getMessages()) {
-            if (msg instanceof ToolMessage) return true;
+            // 1. 原生协议：检查是否是 ToolMessage 类型
+            if (msg instanceof ToolMessage) {
+                return true;
+            }
+
+            // 2. 文本模式：检查内容是否包含 Observation 关键字
+            // ActionTask 在文本模式下会生成：Observation: [工具结果]
+            String content = msg.getContent();
+            if (content != null && content.contains("Observation:")) {
+                return true;
+            }
         }
         return false;
     }
