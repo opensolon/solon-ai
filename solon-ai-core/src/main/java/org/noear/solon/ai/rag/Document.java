@@ -17,6 +17,7 @@ package org.noear.solon.ai.rag;
 
 import org.noear.solon.lang.Preview;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,7 +28,7 @@ import java.util.Map;
  * @since 3.1
  */
 @Preview("3.1")
-public class Document {
+public class Document implements Serializable {
     protected String id;
     protected String content;
     protected final Map<String, Object> metadata = new HashMap<>();
