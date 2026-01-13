@@ -11,6 +11,10 @@
 *  channel 概念改为 transport （并保持兼容）???
 
 
+### v3.8.3
+
+* 修复 `solon-ai-agent` ActionTask 与 mcp 的兼容性（取消 trace 作为工具上下文注入，它不能被mcp 序列化）
+
 ### v3.8.2
 
 * 修复 `solon-ai-agent` SimpleAgent 没有反回干净内容的问题（带了 think）

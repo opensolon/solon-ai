@@ -45,6 +45,12 @@
 
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-ai-mcp</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>solon-web</artifactId>
             <scope>test</scope>
         </dependency>

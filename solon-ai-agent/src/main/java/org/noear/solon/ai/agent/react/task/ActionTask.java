@@ -181,10 +181,6 @@ public class ActionTask implements NamedTaskComponent {
                     LOG.debug("Agent [{}] invoking tool [{}], args: {}", config.getName(), name, args);
                 }
 
-                // 注入 trace 对象到参数，允许工具内部访问智能体上下文
-                args = new LinkedHashMap<>(args);
-                args.put("__" + trace.getAgentName(), trace);
-
                 if (trace.getOptions().getInterceptors().isEmpty()) {
                     return tool.handle(args);
                 } else {
