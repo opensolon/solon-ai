@@ -8,6 +8,12 @@ import org.noear.solon.ai.chat.ChatModel;
  *
  */
 public class LlmUtil {
+    public static ChatModel getChatModelReasoner() {
+        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
+                .apiKey("sk-011a4dfa2bbe4c7c8339bcaae41c949c")
+                .model("deepseek-reasoner") //deepseek-reasoner//deepseek-chat
+                .build();
+    }
     public static ChatModel getChatModel() {
         return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
                 .apiKey("sk-011a4dfa2bbe4c7c8339bcaae41c949c")

@@ -68,24 +68,33 @@ public class SimpleAgentTest {
     }
 
     @Test
-    public void case2(){
-        ChatModel chatModel = LlmUtil.getChatModel();
-        SimpleAgent resumeAgent = SimpleAgent.of(chatModel)
-                .name("ResumeExtractor")
-                .title("简历信息提取器")
-                // 配置系统提示词模板
-                .systemPrompt(SimpleSystemPrompt.builder()
-                        .role("你是一个专业的人事助理")
-                        .instruction("请从用户提供的文本中提取关键信息")
-                        .build())
-                // 配置输出格式（自动将 POJO 转为 JSON Schema）
-                .outputSchema(ResumeInfo.class)
-                // 配置结果存储到 Context 中的键名
-                .outputKey("extracted_resume")
-                // 配置重试机制（如果网络报错，重试 3 次，间隔 2 秒）
+    public void case2() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModelReasoner();
+
+        AgentSession session = InMemoryAgentSession.of("tmp");
+        SimpleAgent agent = SimpleAgent.of(chatModel)
                 .retryConfig(3, 2000L)
-                // 配置模型参数
-                .chatOptions(o -> o.temperature(0.1F))
                 .build();
+
+        AssistantMessage message = agent.call(Prompt.of("你还记得我是谁吗？"), session);
+
+        System.out.println("模型直接返回1: " + message.getContent());
+        System.out.println("模型直接返回2: " + message.getResultContent());
+        Assertions.assertEquals(message.getContent(), message.getResultContent(), "没有清理掉思考");
+
+
+        message = agent.call(Prompt.of("我叫阿飞啊!"), session);
+
+        System.out.println("模型直接返回1: " + message.getContent());
+        System.out.println("模型直接返回2: " + message.getResultContent());
+        Assertions.assertEquals(message.getContent(), message.getResultContent(), "没有清理掉思考");
+
+
+        message = agent.call(Prompt.of("现在知道我是谁了吗？"), session);
+
+        System.out.println("模型直接返回1: " + message.getContent());
+        System.out.println("模型直接返回2: " + message.getResultContent());
+        Assertions.assertEquals(message.getContent(), message.getResultContent(), "没有清理掉思考");
+        Assertions.assertTrue(message.getContent().contains("阿飞"), "记忆失败了");
     }
 }

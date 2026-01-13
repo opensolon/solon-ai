@@ -73,23 +73,18 @@ public class SimpleAgent implements Agent {
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
         FlowContext context = session.getSnapshot();
 
-        // 1. 消息归档：同步当前用户请求到 Session 历史
-        if (!Prompt.isEmpty(prompt)) {
-            for (ChatMessage message : prompt.getMessages()) {
-                session.addHistoryMessage(config.getName(), message);
-            }
-        }
+        // 1. 构建请求消息
+        List<ChatMessage> messages = buildMessages(session, prompt);
 
         // 2. 物理调用：执行带重试机制的 LLM 请求
-        List<ChatMessage> messages = buildMessages(session, prompt);
         AssistantMessage result = callWithRetry(session, messages);
 
-        // 4. 状态回填：将输出结果自动映射到 FlowContext
+        // 3. 状态回填：将输出结果自动映射到 FlowContext
         if (Assert.isNotEmpty(config.getOutputKey())) {
             context.put(config.getOutputKey(), result.getContent());
         }
 
-        // 5. 更新会话状态与快照
+        // 4. 更新会话状态与快照
         session.addHistoryMessage(config.getName(), result);
         session.updateSnapshot(context);
 
@@ -129,6 +124,15 @@ public class SimpleAgent implements Agent {
         }
 
         messages.addAll(prompt.getMessages());
+
+
+        // 消息归档：同步当前用户请求到 Session 历史
+        if (!Prompt.isEmpty(prompt)) {
+            for (ChatMessage message : prompt.getMessages()) {
+                session.addHistoryMessage(config.getName(), message);
+            }
+        }
+
         return messages;
     }
 

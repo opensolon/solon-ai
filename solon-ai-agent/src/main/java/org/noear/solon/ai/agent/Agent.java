@@ -71,7 +71,7 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
     }
 
     /**
-     * 响应式任务执行
+     * 响应式任务执行（继续上次的任务）
      *
      * @param session 会话上下文
      */
@@ -80,7 +80,7 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
     }
 
     /**
-     * 指定指令的任务执行
+     * 指定指令的任务执行（开始新任务）
      *
      * @param prompt  显式指令
      * @param session 会话上下文
