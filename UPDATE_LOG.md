@@ -28,37 +28,37 @@
 * 调整 `solon-ai-croe` ChatSession 不再扩展 ChatPrompt（打断两者关系，后者定位偏固定数据
 
 
-新增两种模式的智能体：
+新增三种模式的智能体：
 
-| 智能体        | 模式描述                     |
-|------------|--------------------------|
-| ReActAgent | 自省模式：单兵作战，思考+行动。         | 
-| TeamAgent  | 协作模式：团队作战，分工+编排。多智能体系统（multi-agent system，MAS） | 
+| 智能体          | 模式描述                                      |
+|--------------|-------------------------------------------|
+| SimpleAgent  | 简单模式                                      | 
+| ReActAgent   | 自省模式，思考+行动。                               | 
+| TeamAgent    | 协作模式，分工+编排。多智能体系统（multi-agent system，MAS） | 
 
 
 新特性示例：ReActAgent
 
 ```java
 public class DemoApp {
-    public static void main(String[] args) throws Throwable {
-        ChatModel chatModel = LlmUtil.getChatModel();
+  public static void main(String[] args) throws Throwable {
+    ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent robot = ReActAgent.builder(chatModel)
-                .addTool(new MethodToolProvider(new TimeTool()))
-                .build();
+    SimpleAgent robot = SimpleAgent.of(chatModel)
+            .toolAdd(new MethodToolProvider(new TimeTool()))
+            .build();
 
-        FlowContext context = FlowContext.of("session_001");
-        String answer = robot.call(context, "现在几点了？");
+    String answer = robot.prompt("现在几点了？").call().getContent();
 
-        System.out.println("Robot 答复: " + answer);
+    System.out.println("Robot 答复: " + answer);
+  }
+
+  public static class TimeTool {
+    @ToolMapping(description = "获取当前系统时间")
+    public String getTime() {
+      return LocalDateTime.now().toString();
     }
-
-    public static class TimeTool {
-        @ToolMapping(description = "获取当前系统时间")
-        public String getTime() {
-            return LocalDateTime.now().toString();
-        }
-    }
+  }
 }
 ```
 
