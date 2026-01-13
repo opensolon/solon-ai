@@ -11,6 +11,13 @@
 *  channel 概念改为 transport （并保持兼容）???
 
 
+### v3.8.2
+
+* 修复 `solon-ai-agent` SimpleAgent 没有反回干净内容的问题（带了 think）
+* 添加 `solon-ai-agent` SimpleRequest
+* 添加 `solon-ai-agent` SimpleAgent.prompt 方法（为三个智能体提供相同体验）
+
+
 ### v3.8.1
 
 * 新增 `solon-ai-agent` 插件
