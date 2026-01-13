@@ -144,7 +144,7 @@ Solon AI 将推理逻辑转化为图驱动的协作流，支持单兵 ReAct 推�
 
 ```java
 //单兵智能体：
-Agent agent = ReActAgent.of(chatModel) // 或者用 SimpleAgent.of(chatModel)
+ReActAgent agent = ReActAgent.of(chatModel) // 或者用 SimpleAgent.of(chatModel)
     .name("weather_expert")
     .description("查询天气并提供建议")
     .addTool(weatherTool) // 注入 MCP 或本地工具
@@ -153,7 +153,7 @@ Agent agent = ReActAgent.of(chatModel) // 或者用 SimpleAgent.of(chatModel)
 agent.prompt("今天北京适合穿什么？").call(); // 自动完成：思考 -> 调用工具 -> 观察 -> 总结
 
 // 组建团队智能体：通过协议（Protocol）自动编排成员角色
-Agent team = TeamAgent.of(chatModel)
+TeamAgent team = TeamAgent.of(chatModel)
     .name("marketing_team")
     .protocol(TeamProtocols.HIERARCHICAL) // 层级式协作（6种预置协议）
     .agentAdd(copywriterAgent) // 文案专家
