@@ -76,21 +76,21 @@ public class SimpleAgentTest {
                 .retryConfig(3, 2000L)
                 .build();
 
-        AssistantMessage message = agent.call(Prompt.of("你还记得我是谁吗？"), session);
+        AssistantMessage message = agent.prompt("你还记得我是谁吗？").session(session).call();
 
         System.out.println("模型直接返回1: " + message.getContent());
         System.out.println("模型直接返回2: " + message.getResultContent());
         Assertions.assertEquals(message.getContent(), message.getResultContent(), "没有清理掉思考");
 
 
-        message = agent.call(Prompt.of("我叫阿飞啊!"), session);
+        message = agent.prompt("我叫阿飞啊!").session(session).call();
 
         System.out.println("模型直接返回1: " + message.getContent());
         System.out.println("模型直接返回2: " + message.getResultContent());
         Assertions.assertEquals(message.getContent(), message.getResultContent(), "没有清理掉思考");
 
 
-        message = agent.call(Prompt.of("现在知道我是谁了吗？"), session);
+        message = agent.prompt(Prompt.of("现在知道我是谁了吗？")).session(session).call();
 
         System.out.println("模型直接返回1: " + message.getContent());
         System.out.println("模型直接返回2: " + message.getResultContent());

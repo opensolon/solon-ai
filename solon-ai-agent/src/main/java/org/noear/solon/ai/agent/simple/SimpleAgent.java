@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -69,15 +70,24 @@ public class SimpleAgent implements Agent {
     @Override
     public AgentProfile profile() { return config.getProfile(); }
 
+
+    public SimpleRequest prompt(Prompt prompt) { return new SimpleRequest(this, prompt); }
+
+    public SimpleRequest prompt(String prompt) { return new SimpleRequest(this, Prompt.of(prompt)); }
+
     @Override
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
+        return call(prompt, session, null);
+    }
+
+    protected AssistantMessage call(Prompt prompt, AgentSession session, Consumer<ChatOptions> chatOptionsAdjustor) throws Throwable {
         FlowContext context = session.getSnapshot();
 
         // 1. 构建请求消息
         List<ChatMessage> messages = buildMessages(session, prompt);
 
         // 2. 物理调用：执行带重试机制的 LLM 请求
-        AssistantMessage result = callWithRetry(session, messages);
+        AssistantMessage result = callWithRetry(session, messages, chatOptionsAdjustor);
 
         // 3. 状态回填：将输出结果自动映射到 FlowContext
         if (Assert.isNotEmpty(config.getOutputKey())) {
@@ -90,6 +100,8 @@ public class SimpleAgent implements Agent {
 
         return result;
     }
+
+
 
     /**
      * 组装完整的 Prompt 消息列表（含 SystemPrompt、OutputSchema 及历史窗口）
@@ -139,11 +151,40 @@ public class SimpleAgent implements Agent {
     /**
      * 实现带指数延迟的自动重试调用
      */
-    private AssistantMessage callWithRetry(AgentSession session, List<ChatMessage> messages) throws Throwable {
+    private AssistantMessage callWithRetry(AgentSession session, List<ChatMessage> messages, Consumer<ChatOptions> chatOptionsAdjustor) throws Throwable {
+        Prompt finalPrompt = Prompt.of(messages);
+        ChatRequestDesc chatReq   = null;
+
+        if (config.getChatModel() != null) {
+            //构建 chatModel 请求
+            chatReq = config.getChatModel().prompt(messages)
+                    .options(o -> {
+                        config.getTools().forEach(o::toolsAdd);
+                        if (Assert.isNotEmpty(config.getToolsContext())) {
+                            o.toolsContext(config.getToolsContext());
+                        }
+
+                        config.getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
+
+                        if (Assert.isNotEmpty(config.getOutputSchema())) {
+                            o.optionPut("response_format", Utils.asMap("type", "json_object"));
+                        }
+
+                        if (config.getChatOptions() != null) {
+                            config.getChatOptions().accept(o);
+                        }
+
+                        if (chatOptionsAdjustor != null) {
+                            chatOptionsAdjustor.accept(o);
+                        }
+                    });
+        }
+
+
         int maxRetries = config.getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
-                return doCall(session, messages);
+                return doCall(session, finalPrompt, chatReq);
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
                     throw new RuntimeException("SimpleAgent [" + name() + "] failed after " + maxRetries + " retries", e);
@@ -153,38 +194,17 @@ public class SimpleAgent implements Agent {
                 Thread.sleep(delay);
             }
         }
+
         throw new IllegalStateException("Should not reach here");
     }
 
     /**
      * 执行底层物理调用，并注入 Tools, Interceptors 与 JSON 选项
      */
-    private AssistantMessage doCall(AgentSession session, List<ChatMessage> messages) throws Throwable {
-        Prompt finalPrompt = Prompt.of(messages);
-
-        if (config.getChatModel() != null) {
-            ChatResponse resp = config.getChatModel().prompt(finalPrompt)
-                    .options(o -> {
-                        // 注入 Tools 与上下文
-                        config.getTools().forEach(o::toolsAdd);
-                        if (Assert.isNotEmpty(config.getToolsContext())) {
-                            o.toolsContext(config.getToolsContext());
-                        }
-
-                        // 注入拦截器
-                        config.getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
-
-                        // 启用 JSON Object 响应格式
-                        if (Assert.isNotEmpty(config.getOutputSchema())) {
-                            o.optionPut("response_format", Utils.asMap("type", "json_object"));
-                        }
-
-                        if (config.getChatOptions() != null) {
-                            config.getChatOptions().accept(o);
-                        }
-                    })
-                    .call();
-
+    private AssistantMessage doCall(AgentSession session, Prompt finalPrompt, ChatRequestDesc chatReq) throws Throwable {
+        if (chatReq != null) {
+            // chatModel 处理
+            ChatResponse resp = chatReq.call();
             String clearContent = resp.hasContent() ? resp.getResultContent() : "";
             return ChatMessage.ofAssistant(clearContent);
         } else {
