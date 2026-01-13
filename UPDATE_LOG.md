@@ -21,6 +21,7 @@
 ### v3.8.1
 
 * 新增 `solon-ai-agent` 插件
+* 新增 `solon-ai-dialect-gemini` 插件
 * 添加 `solon-ai-core` autoToolCall 聊天模型选项（默认为 true）
 * 添加 `solon-ai-core` ChatResponse:getResultContent
 * 添加 `solon-ai-core` AssistantMessage.toBean 方法。
