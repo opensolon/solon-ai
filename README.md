@@ -139,11 +139,11 @@ McpClientProvider clientProvider = McpClientProvider.builder()
 
 * Agent (基于计算流图的智能体体验)
 
-Solon AI 将推理逻辑转化为图驱动的协作流，支持单兵 ReAct 推理与多专家团队协作。
+Solon AI 将推理逻辑转化为图驱动的协作流，支持ReAct 自省推理与多专家 Team 协作。
 
 
 ```java
-//单兵智能体：
+//自省智能体：
 ReActAgent agent = ReActAgent.of(chatModel) // 或者用 SimpleAgent.of(chatModel)
     .name("weather_expert")
     .description("查询天气并提供建议")

@@ -42,7 +42,7 @@ Solon AI Agent 为企业级智能体应用设计，将 LLM 的推理逻辑转化
 ```
 
 
-### 2. 构建 ReAct 智能体 (单兵作战)
+### 2. 构建 ReAct 智能体 (单体)
 
 
 ```java
@@ -62,7 +62,7 @@ AssistantMessage response = agent.prompt("今天北京的天气如何？")
 ```
 
 
-### 3. 构建团队智能体 (多机协同)
+### 3. 构建团队智能体 (团队，多专家协同)
 
 
 ```java
