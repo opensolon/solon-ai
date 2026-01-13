@@ -22,6 +22,8 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.agent.simple.SimpleAgent;
+import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.chat.ChatModel;
@@ -138,10 +140,10 @@ public class TeamAgentTransferTest {
 
         //
 
-        ReActAgent extractor = ReActAgent.of(chatModel)
+        SimpleAgent extractor = SimpleAgent.of(chatModel)
                 .name("extractor")
                 .description("实体关系提取器")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(SimpleSystemPrompt.builder()
                         .role("你是一个高精度信息提取专家")
                         .instruction("从文本中提取关键实体，严格遵守 JSON Schema 规范。")
                         .build())
