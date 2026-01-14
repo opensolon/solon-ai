@@ -154,22 +154,25 @@ public class ReActAgent implements Agent {
             trace.appendMessages(history);
         }
 
-        // 2. 持久化当前请求到 Session 与 Trace
-        if (!Prompt.isEmpty(prompt)) {
+        if (Prompt.isEmpty(prompt)) {
+            //可能是旧问题（之前中断的）
+            prompt = trace.getPrompt();
+
+            if(Prompt.isEmpty(prompt)){
+                LOG.warn("Prompt is empty!");
+                return ChatMessage.ofAssistant("");
+            }
+        } else {
+            //新的问题
             for (ChatMessage message : prompt.getMessages()) {
                 session.addHistoryMessage(config.getName(), message);
                 trace.appendMessage(message);
             }
-        }
 
-        if (Prompt.isEmpty(prompt)) {
-            prompt = trace.getPrompt();
-        } else {
             context.trace().recordNode(graph, null);
             trace.setPrompt(prompt);
         }
 
-        Objects.requireNonNull(prompt, "Missing prompt!");
 
         // 拦截器：任务开始事件
         for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {

@@ -134,6 +134,11 @@ public class TeamAgent implements Agent {
             trace.setPrompt(prompt);
             trace.setRoute(null);
             trace.resetIterationsCount();
+        } else {
+            if (Prompt.isEmpty(trace.getPrompt())) {
+                LOG.warn("Prompt is empty!");
+                return ChatMessage.ofAssistant("");
+            }
         }
 
         // 触发团队启动拦截
