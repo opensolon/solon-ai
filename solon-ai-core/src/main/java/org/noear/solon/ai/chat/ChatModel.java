@@ -237,7 +237,10 @@ public class ChatModel implements AiModel {
 
         /**
          * 默认工具上下文添加
+         *
+         * @deprecated  3.8.4 {@link #defaultToolsContextPut(String, Object)}
          */
+        @Deprecated
         public Builder defaultToolsContextAdd(String key, Object value) {
             config.addDefaultToolsContext(key, value);
             return this;
@@ -245,8 +248,31 @@ public class ChatModel implements AiModel {
 
         /**
          * 默认工具上下文添加
+         *
+         * @deprecated  3.8.4 {@link #defaultToolsContextPut(Map)}
          */
+        @Deprecated
         public Builder defaultToolsContextAdd(Map<String, Object> toolsContext) {
+            config.addDefaultToolsContext(toolsContext);
+            return this;
+        }
+
+        /**
+         * 默认工具上下文添加
+         *
+         * @since 3.8.4
+         */
+        public Builder defaultToolsContextPut(String key, Object value) {
+            config.addDefaultToolsContext(key, value);
+            return this;
+        }
+
+        /**
+         * 默认工具上下文添加
+         *
+         * @since 3.8.4
+         */
+        public Builder defaultToolsContextPut(Map<String, Object> toolsContext) {
             config.addDefaultToolsContext(toolsContext);
             return this;
         }

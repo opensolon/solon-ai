@@ -75,8 +75,28 @@ public class ChatOptions {
         return toolsContext;
     }
 
+    /**
+     * @deprecated 3.8.4 {@link #toolsContextPut(Map)}
+     */
+    @Deprecated
     public ChatOptions toolsContext(Map<String, Object> toolsContext) {
         this.toolsContext.putAll(toolsContext);
+        return this;
+    }
+
+    /**
+     * @since 3.8.4
+     */
+    public ChatOptions toolsContextPut(Map<String, Object> toolsContext) {
+        this.toolsContext.putAll(toolsContext);
+        return this;
+    }
+
+    /**
+     * @since 3.8.4
+     */
+    public ChatOptions toolsContextPut(String key, String val) {
+        this.toolsContext.put(key, val);
         return this;
     }
 
