@@ -72,7 +72,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
             sb.append("\n注意：当前没有可用工具。请直接给出 Final Answer。\n");
         } else {
             sb.append("\n## 可用工具\n");
-            sb.append("你也可以通过内置函数调用工具（Native Tool Call）使用以下工具：\n");
+            sb.append("你也可以通过模型内置的函数调用工具（Function Calling）使用以下工具：\n");
             trace.getConfig().getTools().forEach(t -> {
                 sb.append("- ").append(t.name()).append(": ").append(t.description());
                 // 必须告知模型参数 Schema 以便生成正确的 JSON
@@ -102,7 +102,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         // A. 格式约束：ReAct 循环的语法基石
         sb.append("## 输出格式（必须遵守）\n")
                 .append("Thought: 简要解释你的思考过程（1-2句话）。\n")
-                .append("Action: 如果需要调用工具。优先触发内置工具调用（Native Tool Call），若环境不支持则输出 JSON 对象：{\"name\": \"工具名\", \"arguments\": {...}}。不要使用代码块，不要有额外文本。\n")
+                .append("Action: 如果需要调用工具。优先使用模型内置的函数调用工具（Function Calling），若环境不支持则输出 JSON 对象：{\"name\": \"工具名\", \"arguments\": {...}}。不要使用代码块，不要有额外文本。\n")
                 .append("Final Answer: 任务完成后，以 ").append(config.getFinishMarker()).append(" 开头给出回答。\n\n");
 
         // B. 结束规格：确保任务能被系统正确识别截断

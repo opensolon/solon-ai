@@ -76,8 +76,8 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
         } else {
             sb.append("\n## Available Tools\n");
-            // 引导词：明确原生调用
-            sb.append("You should prioritize using the following tools via Native Tool Call:\n");
+            // 同步中文版：明确使用内置函数调用
+            sb.append("You can also use the following tools, preferably via the model's built-in Function Calling feature:\n");
             trace.getConfig().getTools().forEach(t -> {
                 sb.append("- ").append(t.name()).append(": ").append(t.description());
                 if (Assert.isNotEmpty(t.inputSchema())) {
@@ -106,7 +106,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         // A. Format constraints
         sb.append("## Output Format (Strictly Follow)\n")
                 .append("Thought: Briefly explain your reasoning (1-2 sentences).\n")
-                .append("Action: To use a tool, prioritize triggering a Native Tool Call. If not supported, output ONLY a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown, no extra text.\n")
+                .append("Action: To use a tool, prioritize using the model's built-in Function Calling tool. If the environment does not support it, output ONLY a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown, no extra text.\n")
                 .append("Final Answer: Once the task is finished, start with ").append(config.getFinishMarker()).append(" followed by the answer.\n\n");
 
         // B. Completion specs
