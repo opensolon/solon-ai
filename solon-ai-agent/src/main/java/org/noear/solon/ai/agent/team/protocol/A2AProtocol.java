@@ -15,22 +15,17 @@
  */
 package org.noear.solon.ai.agent.team.protocol;
 
-import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentTrace;
-import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.ChatRole;
-import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
-import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
@@ -52,6 +47,7 @@ public class A2AProtocol extends TeamProtocolBase {
 
     private static final String TOOL_TRANSFER = "__transfer_to__";
     private static final String KEY_LAST_INSTRUCTION = "last_instruction";
+    private static final String KEY_LAST_TEMP_TARGET = "last_temp_target";
     private static final String KEY_GLOBAL_STATE = "global_state";
     private static final String KEY_TRANSFER_COUNT = "transfer_count";
 
@@ -85,7 +81,7 @@ public class A2AProtocol extends TeamProtocolBase {
      * 注入移交工具：动态生成除自身外的专家画像供 Agent 选择
      */
     @Override
-    public void injectAgentTools(Agent agent, Consumer<FunctionTool> receiver) {
+    public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
         Locale locale = config.getLocale();
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
 
@@ -97,6 +93,18 @@ public class A2AProtocol extends TeamProtocolBase {
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER);
         tool.doHandle(args -> {
             String target = (String) args.get("target");
+            String instruction = (String) args.get("instruction");
+            String state = (String) args.get("state");
+
+            TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+
+            // 关键点：直接把解析好的参数存入协议上下文
+            if(trace != null) {
+                trace.getProtocolContext().put(KEY_LAST_TEMP_TARGET, target); // 标记本次要跳往的目标
+                trace.getProtocolContext().put(KEY_LAST_INSTRUCTION, instruction);
+                trace.getProtocolContext().put(KEY_GLOBAL_STATE, state);
+            }
+
             return isZh ? "已发起向 [" + target + "] 的接力请求。" : "Transfer to [" + target + "] requested.";
         });
 
@@ -149,44 +157,29 @@ public class A2AProtocol extends TeamProtocolBase {
      */
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        String lastAgentName = trace.getLastAgentName();
-        AgentTrace agentTrace = context.getAs("__" + lastAgentName);
+        String target = (String) trace.getProtocolContext().get(KEY_LAST_TEMP_TARGET);
 
-        if (agentTrace instanceof ReActTrace) {
-            ReActTrace rt = (ReActTrace) agentTrace;
-            AssistantMessage am = rt.getLastAssistantMessage();
-            if (am != null && am.getToolCalls() != null) {
-                for (ToolCall tc : am.getToolCalls()) {
-                    if (TOOL_TRANSFER.equals(tc.name())) {
-                        String target = getArg(tc.arguments(), "target");
+        // 1. 处理 A2A 工具触发的接力
+        if (Utils.isNotEmpty(target)) {
+            trace.getProtocolContext().remove(KEY_LAST_TEMP_TARGET);
 
-                        // 1. 防推诿死循环检查
-                        int count = (int) trace.getProtocolContext().getOrDefault(KEY_TRANSFER_COUNT, 0);
-                        if (count >= maxTransferRounds) {
-                            LOG.warn("A2A: Max transfer limit ({}) reached. Supervisor reclaiming control.", maxTransferRounds);
-                            return null;
-                        }
-
-                        // 2. 模态兼容性硬检查：防止将识图任务移交给仅支持文本的专家
-                        if (!checkModality(trace, target)) {
-                            LOG.error("A2A: Transfer blocked. Target [{}] lacks vision capability for multimodal input.", target);
-                            return null;
-                        }
-
-                        // 3. 持久化接力元数据
-                        trace.getProtocolContext().put(KEY_LAST_INSTRUCTION, getArg(tc.arguments(), "instruction"));
-                        trace.getProtocolContext().put(KEY_GLOBAL_STATE, getArg(tc.arguments(), "state"));
-                        trace.getProtocolContext().put(KEY_TRANSFER_COUNT, count + 1);
-
-                        if(LOG.isDebugEnabled()) {
-                            LOG.debug("A2A: Handover authorized: {} -> {}", lastAgentName, target);
-                        }
-                        return target;
-                    }
-                }
+            // 审计与校验
+            int count = (int) trace.getProtocolContext().getOrDefault(KEY_TRANSFER_COUNT, 0);
+            if (count >= maxTransferRounds) {
+                LOG.warn("A2A: Max transfer limit reached.");
+                return null;
             }
+
+            if (!checkModality(trace, target)) {
+                return null;
+            }
+
+            trace.getProtocolContext().put(KEY_TRANSFER_COUNT, count + 1);
+            LOG.debug("A2A: Signal detected from context, routing to: {}", target);
+            return target;
         }
-        return null;
+
+        return super.resolveSupervisorRoute(context, trace, decision);
     }
 
     /**
@@ -227,20 +220,22 @@ public class A2AProtocol extends TeamProtocolBase {
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         super.injectSupervisorInstruction(locale, sb);
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
-        if (isZh) {
-            sb.append("\n- **A2A 定标守则**：若流转超过 3 次仍无实质进展，请立即介入并强制收尾。");
-        } else {
-            sb.append("\n- **A2A Rules**: Intervene if more than 3 handovers occur without progress.");
-        }
-    }
 
-    private String getArg(Map args, String key) {
-        return ONode.ofBean(args).get(key).getString();
+        if (isZh) {
+            sb.append("\n### A2A 协作准则：\n");
+            sb.append("1. **直接交付**：任务完成时请直接输出 `" + config.getFinishMarker() + "`，**禁止**对专家的内容进行二次总结或润色。\n");
+            sb.append("2. **流转审计**：若专家间接力流转超过 3 次仍无实质进展，请立即介入并强制收尾。");
+        } else {
+            sb.append("\n### A2A Collaboration Rules:\n");
+            sb.append("1. **Direct Delivery**: Output `" + config.getFinishMarker() + "` directly upon completion. **DO NOT** summarize or refine the expert's output.\n");
+            sb.append("2. **Handover Audit**: Intervene and force termination if more than 3 handovers occur without progress.");
+        }
     }
 
     @Override
     public void onTeamFinished(FlowContext context, TeamTrace trace) {
         trace.getProtocolContext().remove(KEY_LAST_INSTRUCTION);
+        trace.getProtocolContext().remove(KEY_LAST_TEMP_TARGET);
         trace.getProtocolContext().remove(KEY_GLOBAL_STATE);
         trace.getProtocolContext().remove(KEY_TRANSFER_COUNT);
         super.onTeamFinished(context, trace);

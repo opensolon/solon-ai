@@ -50,11 +50,6 @@ public class TeamTrace implements AgentTrace {
     /** 当前活跃会话（持有 LLM 上下文记忆） */
     private transient AgentSession session;
 
-    /** 历史记录格式化缓存 */
-    private transient String cachedFormattedHistory;
-    /** 缓存失效标记 */
-    private transient boolean isUpdateHistoryCache = true;
-
     /** 当前 Agent 标识 */
     private String agentName;
     /** 当前任务提示词（随协作阶段动态变化） */
@@ -163,7 +158,6 @@ public class TeamTrace implements AgentTrace {
     /** 记录执行足迹 */
     public void addStep(ChatRole role, String source, String content, long duration) {
         steps.add(new TeamStep(role, source, content, duration));
-        isUpdateHistoryCache = true;
 
         if (LOG.isDebugEnabled() && config != null) {
             LOG.debug("TeamTrace [{}] step added: role={}, source={}, duration={}ms",

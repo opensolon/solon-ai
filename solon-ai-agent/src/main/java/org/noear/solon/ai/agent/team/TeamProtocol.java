@@ -57,12 +57,12 @@ public interface TeamProtocol extends NonSerializable {
     /**
      * 注入协议专属工具（如转交、抄送等控制工具）
      */
-    default void injectAgentTools(Agent agent, Consumer<FunctionTool> receiver) { }
+    default void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) { }
 
     /**
      * 注入 Agent 行为约束指令（定义角色规范）
      */
-    default void injectAgentInstruction(Agent agent, Locale locale, StringBuilder sb) { }
+    default void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) { }
 
     /**
      * 动态生成 Agent 提示词（在此处处理上下文衔接或状态同步）

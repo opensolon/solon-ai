@@ -89,7 +89,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         if (trace.getProtocol() != null) {
             StringBuilder sb = new StringBuilder(systemPrompt);
-            trace.getProtocol().injectAgentInstruction(agent, config.getLocale(), sb);
+            trace.getProtocol().injectAgentInstruction(context, agent, config.getLocale(), sb);
             systemPrompt = sb.toString();
         }
 

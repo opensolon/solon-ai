@@ -120,7 +120,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
      * 为 Agent 注入黑板同步工具，实现主动数据回传
      */
     @Override
-    public void injectAgentTools(Agent agent, Consumer<FunctionTool> receiver) {
+    public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
         FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_SYNC);
         if (isZh) {

@@ -116,9 +116,11 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
         }
 
         // 3. 准备提示词并执行推理
-        Prompt effectivePrompt = null;
+        final Prompt effectivePrompt;
         if (trace != null) {
             effectivePrompt = trace.getProtocol().prepareAgentPrompt(trace, this, trace.getPrompt(), trace.getConfig().getLocale());
+        } else {
+            effectivePrompt = null;
         }
 
         if (LOG.isDebugEnabled()) {
@@ -126,7 +128,11 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
         }
 
         long start = System.currentTimeMillis();
-        AssistantMessage msg = call(effectivePrompt, session);
+        AssistantMessage msg = context.with(KEY_CURRENT_TEAM_KEY, trace, () -> {
+            return call(effectivePrompt, session);
+        });
+
+
         long duration = System.currentTimeMillis() - start;
 
         // 4. 同步执行轨迹与结果处理
@@ -152,6 +158,7 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
 
     // --- Context Keys ---
     static String KEY_CURRENT_TRACE_KEY = "_current_trace_key_";
+    static String KEY_CURRENT_TEAM_KEY = "_current_team_key_";
     static String KEY_SESSION = "_SESSION_";
     static String KEY_PROTOCOL = "_PROTOCOL_";
 

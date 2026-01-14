@@ -172,7 +172,7 @@ public class SimpleAgent implements Agent {
 
                         //协议工具
                         if(protocol != null){
-                            protocol.injectAgentTools(this, o::toolsAdd);
+                            protocol.injectAgentTools(session.getSnapshot(),this, o::toolsAdd);
                         }
 
                         if (Assert.isNotEmpty(config.getToolsContext())) {
