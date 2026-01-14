@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.core.util.IgnoreCaseMap;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.NonSerializable;
@@ -56,8 +57,8 @@ public class TeamAgentConfig implements NonSerializable {
     /** 调度中心推理参数（控制采样随机性、Token 等） */
     private Consumer<ChatOptions> chatOptions;
 
-    /** 成员名录（有序存储专家 Agent） */
-    private final LinkedHashMap<String, Agent> agentMap = new LinkedHashMap<>();
+    /** 成员名录（有序不计大小写存储专家 Agent） */
+    private final Map<String, Agent> agentMap = new IgnoreCaseMap<>();
     /** 协作协议（定义任务流转的逻辑骨架，默认层级式） */
     private volatile TeamProtocol protocol = TeamProtocols.HIERARCHICAL.create(this);
     /** 执行图微调钩子（支持在协议骨架上增加业务节点或连线） */
