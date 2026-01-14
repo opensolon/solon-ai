@@ -29,6 +29,12 @@ import org.noear.solon.lang.Preview;
 @Preview("3.8.1")
 public interface TeamProtocols {
     /**
+     * 无协议模式（透明容器模式）
+     * <p>不构建内部执行图。将编排权完全交给外部（如 Solon Flow 或代码手动调用）。</p>
+     */
+    TeamProtocolFactory NONE = NoneProtocol::new;
+
+    /**
      * 顺序流协议 (Sequential)
      * <p>核心：线性流水线。任务按成员注册顺序依次传递，适合步骤固定的标准化流程。</p>
      */

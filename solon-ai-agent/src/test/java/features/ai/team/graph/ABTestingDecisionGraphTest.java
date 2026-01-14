@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamAgent;
+import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -35,11 +36,12 @@ public class ABTestingDecisionGraphTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("ab_testing_team")
-                .agentAdd(dataAnalyst, productManager, engineeringLead)
+                .protocol(TeamProtocols.NONE)
                 .graphAdjuster(spec -> {
 
                     // A. 入口指派：从 Supervisor 指向数据准备节点
-                    spec.getNode("supervisor").linkClear().linkAdd("test_result_input");
+                    spec.addStart(Agent.ID_START)
+                            .linkAdd("test_result_input");
 
                     // B. 数据准备 (Activity)：模拟从数据库/API 加载测试指标
                     spec.addActivity("test_result_input")
@@ -58,9 +60,9 @@ public class ABTestingDecisionGraphTest {
                             .linkAdd(engineeringLead.name());
 
                     // D. 结果汇聚：所有专家处理完后，自动跳转至决策网关
-                    spec.getNode(dataAnalyst.name()).linkClear().linkAdd("decision_gateway");
-                    spec.getNode(productManager.name()).linkClear().linkAdd("decision_gateway");
-                    spec.getNode(engineeringLead.name()).linkClear().linkAdd("decision_gateway");
+                    spec.addActivity(dataAnalyst).linkAdd("decision_gateway");
+                    spec.addActivity(productManager).linkAdd("decision_gateway");
+                    spec.addActivity(engineeringLead).linkAdd("decision_gateway");
 
                     // E. 共识决策 (Parallel 汇聚)：基于 Context 中的专家意见进行多数票表决
                     spec.addParallel("decision_gateway")
@@ -81,6 +83,8 @@ public class ABTestingDecisionGraphTest {
                                 System.out.println(">>> [Decision] 赞成票: " + approveCount + ", 最终裁决: " + finalVerdict);
                             })
                             .linkAdd(Agent.ID_END);
+
+                    spec.addEnd(Agent.ID_END);
                 })
                 .build();
 
