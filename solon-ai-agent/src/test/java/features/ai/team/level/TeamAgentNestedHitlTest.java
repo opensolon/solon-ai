@@ -61,19 +61,12 @@ public class TeamAgentNestedHitlTest {
                 })
                 .defaultInterceptorAdd(new TeamInterceptor() {
                     @Override
-                    public void onNodeStart(FlowContext ctx, Node n) {
-                        if (Agent.ID_SUPERVISOR.equals(n.getId())) {
-                            // 优化点：使用动态 traceKey 访问，确保路径 100% 正确
-                            String traceKey = "__" + parentTeamId;
-                            TeamTrace trace = ctx.getAs(traceKey);
-
-                            if (trace != null && trace.getFormattedHistory().contains("dev_team")) {
-                                boolean hasReviewer = trace.getFormattedHistory().contains("Reviewer");
-                                // 逻辑：dev_team 完事了，Reviewer 还没进场，且没拿到人工批准，则挂起
-                                if (!hasReviewer && !ctx.containsKey("approved")) {
-                                    System.out.println("[HITL] 拦截器捕获：等待人工批准成果...");
-                                    ctx.stop();
-                                }
+                    public void onNodeEnd(FlowContext ctx, Node n) {
+                        // 关键点：当 dev_team 这个节点执行完时，立即挂起，不给 Supervisor 决策的机会
+                        if ("dev_team".equals(n.getId())) {
+                            if (!ctx.containsKey("approved")) {
+                                System.out.println("[HITL] 拦截器捕获：dev_team 已完成，强制挂起等待人工批准...");
+                                ctx.stop();
                             }
                         }
                     }
