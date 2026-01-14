@@ -182,12 +182,8 @@ public abstract class TeamProtocolBase implements TeamProtocol {
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        // 1. 基础清洗（去掉 Markdown 的粗体、斜体、代码块标记以及首尾空白）
-        String cleanId = decision.replaceAll("[\\*\\_\\`]", "").trim();
-
-        // 2. 精准 ID 匹配
-        if (config.getAgentMap().containsKey(cleanId)) {
-            return cleanId;
+        if (config.getAgentMap().containsKey(decision)) {
+            return decision;
         }
 
         return null; // 返回 null，触发 SupervisorTask 的模糊匹配兜底
