@@ -120,7 +120,14 @@ public class SwarmProtocol extends TeamProtocolBase {
                 }
 
                 // 清理历史记录：剥离 JSON 块以保持对话历史的纯净
-                return rawContent.replaceAll("\\s*\\{.*\\}\\s*", "\n").trim();
+                int start = rawContent.indexOf("{");
+                int end = rawContent.lastIndexOf("}");
+                if (start != -1 && end > start) {
+                    String before = rawContent.substring(0, start).trim();
+                    String after = rawContent.substring(end + 1).trim();
+                    String cleaned = (before + " " + after).trim();
+                    return Utils.isEmpty(cleaned) ? "[已生成 " + subTasks.size() + " 个子任务]" : cleaned;
+                }
             }
         }
         return rawContent;
