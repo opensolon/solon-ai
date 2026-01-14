@@ -22,6 +22,8 @@ import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.llm.dialect.gemini.model.GeminiConfigConverter;
+import org.noear.solon.ai.llm.dialect.gemini.model.GenerationConfig;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -382,42 +384,8 @@ public class GeminiChatDialect extends AbstractChatDialect {
             if ("generationConfig".equals(key) && value instanceof Map) {
                 Map<?, ?> genConfig = (Map<?, ?>) value;
                 ONode genConfigNode = root.getOrNew("generationConfig");
-                
-                for (Map.Entry<?, ?> genKv : genConfig.entrySet()) {
-                    String genKey = genKv.getKey().toString();
-                    Object genValue = genKv.getValue();
-                    
-                    if ("temperature".equals(genKey) || "topP".equals(genKey)) {
-                        if (genValue instanceof String) {
-                            genValue = Double.parseDouble((String) genValue);
-                        }
-                        genConfigNode.set(genKey, genValue);
-                    } else if ("thinkingBudget".equals(genKey)) {
-                        if (genValue instanceof String) {
-                            genValue = Integer.parseInt((String) genValue);
-                        }
-                        genConfigNode.set(genKey, genValue);
-                    } else if ("thinkingConfig".equals(genKey) && genValue instanceof Map) {
-                         ONode thinkingConfigNode = genConfigNode.getOrNew("thinkingConfig");
-                         Map<?, ?> thinkingConfig = (Map<?, ?>) genValue;
-                         for (Map.Entry<?, ?> tcKv : thinkingConfig.entrySet()) {
-                             String tcKey = tcKv.getKey().toString();
-                             Object tcValue = tcKv.getValue();
-                             if ("includeThoughts".equals(tcKey)) {
-                                 if (tcValue instanceof String) {
-                                     tcValue = Boolean.parseBoolean((String) tcValue);
-                                 }
-                             } else if ("thinkingBudget".equals(tcKey)) {
-                                 if (tcValue instanceof String) {
-                                     tcValue = Integer.parseInt((String) tcValue);
-                                 }
-                             }
-                             thinkingConfigNode.set(tcKey, tcValue);
-                         }
-                    } else {
-                        genConfigNode.set(genKey, ONode.ofBean(genValue));
-                    }
-                }
+                GenerationConfig generationConfig = GeminiConfigConverter.toGenerationConfig((Map<String, Object>) genConfig);
+                root.set("generationConfig", ONode.ofBean(generationConfig));
             } else {
                 root.set(key, ONode.ofBean(value));
             }
