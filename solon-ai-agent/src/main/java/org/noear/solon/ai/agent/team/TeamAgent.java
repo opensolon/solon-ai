@@ -129,9 +129,10 @@ public class TeamAgent implements Agent {
         // 1. 运行时环境准备
         trace.prepare(config, options, session, config.getName());
 
-        if (prompt != null) {
+        if (Prompt.isEmpty(prompt) == false) {
             context.trace().recordNode(graph, null);
             trace.setPrompt(prompt);
+            trace.setRoute(null);
             trace.resetIterationsCount();
         }
 

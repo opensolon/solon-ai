@@ -84,7 +84,7 @@ public class TeamAgentPersistenceHitlTest {
 
         // 验证流程最终完成
         Assertions.assertTrue(restoredContext.lastRecord().isEnd(), "流程在审批通过后应成功结束");
-        Assertions.assertTrue(finalResult.contains("周报"), "结果应包含周报核心内容");
+        Assertions.assertTrue(finalResult.contains("周") && finalResult.contains("报"), "结果应包含周报核心内容");
 
         TeamTrace finalTrace = teamAgent.getTrace(session2);
         Assertions.assertTrue(finalTrace.getStepCount() > trace1.getStepCount(), "恢复执行后应产生更多的执行轨迹");

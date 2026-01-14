@@ -87,7 +87,10 @@ public class TeamAgentMultiTurnTest {
 
         // --- 第二轮：约束注入 (这是最容易失败的地方) ---
         System.out.println("\n>>> [Round 2] 用户：预算只有 500 元，帮我重新规划。");
-        conciergeTeam.call(Prompt.of("预算只有 500 元，帮我重新规划。"), session);
+        String finalResult = conciergeTeam.call(Prompt.of("预算只有 500 元，帮我重新规划。"), session).getContent();
+
+        System.out.println("=== 最终执行结果 ===");
+        System.out.println(finalResult);
 
         // --- 4. 深度业务断言 (优化提取逻辑) ---
         TeamTrace trace2 = conciergeTeam.getTrace(session);
