@@ -62,20 +62,22 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
         StringBuilder sb = new StringBuilder();
 
-        // 1. Role & Paradigm: Define the ReAct loop (Thought -> Action -> Observation)
+        // 1. Role & Paradigm
         sb.append("## Role\n")
                 .append(role).append(". ")
                 .append("You must solve the problem using the ReAct pattern: ")
                 .append("Thought -> Action -> Observation.\n\n");
 
-        // 2. Instructions: Constraints, rules, and few-shot examples
+        // 2. Instructions
         sb.append(instruction);
 
-        // 3. Toolset: Dynamic injection of available tools with schemas
+        // 3. Toolset
         if (trace.getConfig().getTools().isEmpty()) {
             sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
         } else {
             sb.append("\n## Available Tools\n");
+            // 引导词：明确原生调用
+            sb.append("You should prioritize using the following tools via Native Tool Call:\n");
             trace.getConfig().getTools().forEach(t -> {
                 sb.append("- ").append(t.name()).append(": ").append(t.description());
                 if (Assert.isNotEmpty(t.inputSchema())) {
@@ -101,10 +103,10 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         ReActAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
-        // A. Format constraints (Fundamental for ReAct)
+        // A. Format constraints
         sb.append("## Output Format (Strictly Follow)\n")
                 .append("Thought: Briefly explain your reasoning (1-2 sentences).\n")
-                .append("Action: To use a tool, output ONLY a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown, no extra text.\n")
+                .append("Action: To use a tool, prioritize triggering a Native Tool Call. If not supported, output ONLY a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown, no extra text.\n")
                 .append("Final Answer: Once the task is finished, start with ").append(config.getFinishMarker()).append(" followed by the answer.\n\n");
 
         // B. Completion specs
@@ -115,9 +117,10 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
         // C. Core behaviors
         sb.append("## Core Rules\n")
-                .append("1. Only use tools from the 'Available Tools' list.\n")
-                .append("2. Output ONLY one Action and STOP immediately to wait for Observation.\n")
-                .append("3. Completion is signaled ONLY by ").append(config.getFinishMarker()).append(".\n\n");
+                .append("1. Prioritize using the model's built-in Function Calling protocol.\n")
+                .append("2. Only use tools from the 'Available Tools' list.\n")
+                .append("3. Output ONLY one Action and STOP immediately to wait for Observation.\n")
+                .append("4. Completion is signaled ONLY by ").append(config.getFinishMarker()).append(".\n\n");
 
         // D. Business instructions
         if (instructionProvider != null) {
