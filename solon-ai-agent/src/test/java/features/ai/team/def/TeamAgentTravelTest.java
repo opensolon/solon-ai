@@ -4,6 +4,7 @@ import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -30,13 +31,20 @@ public class TeamAgentTravelTest {
                 .name(teamId)
                 .agentAdd(ReActAgent.of(chatModel)
                         .name("searcher")
-                        .description("负责查询实时天气。必须基于 query 工具的 Observation 给出明确结论。")
+                        .description("天气查询专家")
+                        .systemPrompt(ReActSystemPrompt.builder()
+                                .role("天气查询专家")
+                                .instruction("必须基于 query 工具的 Observation 给出明确结论。")
+                                .build())
                         .toolAdd(new MethodToolProvider(new WeatherService()))
                         .build())
                 .agentAdd(ReActAgent.of(chatModel)
                         .name("planner")
-                        .description("行程规划专家。要求：必须优先阅读协作历史中的天气信息！" +
-                                "如果历史显示下雨，严禁安排户外步行，必须安排室内场馆（如博物馆、室内商场）。")
+                        .description("行程规划专家")
+                        .systemPrompt(ReActSystemPrompt.builder() // 使用 builder 明确注入业务规则
+                                .role("行程规划专家")
+                                .instruction("核心禁令：必须优先阅读历史天气！如果下雨，禁止安排：浅草寺（户外）、晴空塔（观景）、隅田川。必须改为：博物馆、美术馆或商场。")
+                                .build())
                         .build())
                 .maxTotalIterations(8) // 增加迭代上限，确保团队有足够空间完成“搜索-规划-校验”循环
                 .build();

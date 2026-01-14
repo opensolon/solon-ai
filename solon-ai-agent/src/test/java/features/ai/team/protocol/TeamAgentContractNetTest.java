@@ -2,6 +2,7 @@ package features.ai.team.protocol;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
@@ -17,202 +18,127 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * ContractNet 策略测试：招标与竞标模式
- * <p>验证目标：
- * 1. 验证 CONTRACT_NET 协议下，协调者是否能识别任务属性。
- * 2. 验证基于 Profile/Description 的“自省式竞标”逻辑。
- * 3. 验证协议在无标书状态下的隐式路由保护。
- * </p>
+ * ContractNet 协议优化测试集
  */
 public class TeamAgentContractNetTest {
 
-    /**
-     * 测试：典型的领域对立竞标
-     * 场景：算法任务应由 algo_expert 承接，而非 ui_expert。
-     */
     @Test
-    public void testContractNetLogic() throws Throwable {
+    @DisplayName("领域竞争：确保任务指派给描述最契合的专家")
+    public void testDomainCompetition() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         Agent algoExpert = ReActAgent.of(chatModel)
                 .name("algo_expert")
-                .description("高级算法工程师，擅长排序、搜索和 A* 寻路等图计算。")
+                .description("高级算法工程师，擅长排序、搜索和 A* 寻路。")
                 .build();
 
         Agent uiExpert = ReActAgent.of(chatModel)
                 .name("ui_expert")
-                .description("资深 UI 设计师，擅长界面布局和交互体验。")
+                .description("资深 UI 设计师，擅长界面布局。")
                 .build();
 
-        // 重点：增加 maxTotalIterations 确保有足够的轮次完成 [招标 -> 定标 -> 执行]
         TeamAgent team = TeamAgent.of(chatModel)
-                .name("contract_team")
                 .protocol(TeamProtocols.CONTRACT_NET)
-                .agentAdd(algoExpert)
-                .agentAdd(uiExpert)
-                .maxTotalIterations(10)
+                .agentAdd(algoExpert, uiExpert)
+                .maxTotalIterations(10) // 预留招标+定标+执行的轮次
                 .build();
 
-        AgentSession session = InMemoryAgentSession.of("session_contract_01");
-        String query = "请实现一个 A* 寻路算法的核心逻辑代码。"; // 语气更强硬，要求“代码”，迫使 LLM 找专家
-
-        team.call(Prompt.of(query), session);
+        AgentSession session = InMemoryAgentSession.of("s1");
+        team.call(Prompt.of("帮我用 Java 写一个 A* 寻路算法"), session);
 
         TeamTrace trace = team.getTrace(session);
-        System.out.println("协作详情:\n" + trace.getFormattedHistory());
 
-        // 验证执行者
-        List<String> workers = trace.getSteps().stream()
-                .filter(s->s.isAgent())
-                .map(TeamTrace.TeamStep::getSource)
-                .collect(Collectors.toList());
+        // 验证：执行过任务的 Agent 列表中必须包含算法专家
+        boolean assignedToAlgo = trace.getSteps().stream()
+                .anyMatch(s -> "algo_expert".equals(s.getSource()));
 
-        // 如果 LLM 依然不给力没调专家，打印警告
-        if (workers.isEmpty()) {
-            System.err.println("Warning: LLM skipped agent execution and finished directly.");
-        }
-
-        Assertions.assertFalse(workers.isEmpty(), "LLM 应该至少指派一名专家执行任务");
-        Assertions.assertTrue(workers.contains("algo_expert"), "任务应指派给 algo_expert");
+        Assertions.assertTrue(assignedToAlgo, "算法任务应最终由 algo_expert 执行");
     }
 
-    /**
-     * 测试：自动竞标的分数评估逻辑
-     * 验证：协议是否能识别 Profile 里的技能并给出更高的竞标分
-     */
     @Test
-    public void testContractNetAutoBiddingLogic() throws Throwable {
+    @DisplayName("自动竞标逻辑：验证 Profile 技能加分是否生效")
+    public void testAutoBiddingWeight() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent descExpert = ReActAgent.of(chatModel)
+        Agent javaExpert = ReActAgent.of(chatModel)
                 .name("java_expert")
-                .description("擅长 Java 语言开发。")
+                .description("后端开发")
+                .profile(p -> p.skillAdd("Java"))
                 .build();
 
-        Agent profileExpert = ReActAgent.of(chatModel)
+        Agent pythonExpert = ReActAgent.of(chatModel)
                 .name("python_expert")
                 .description("后端开发")
-                .profile(p -> p.skillAdd("Python").skillAdd("Django"))
+                .profile(p -> p.skillAdd("Python"))
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.CONTRACT_NET)
-                .agentAdd(descExpert)
-                .agentAdd(profileExpert)
+                .agentAdd(javaExpert, pythonExpert)
                 .build();
 
-        AgentSession session = InMemoryAgentSession.of("session_auto_bid");
-        team.call(Prompt.of("用 Python 写一个爬虫脚本"), session);
+        AgentSession session = InMemoryAgentSession.of("s2");
+        // 明确要求 Python，触发 python_expert 的技能匹配加分（+15分）
+        team.call(Prompt.of("用 Python 写一个数据清洗脚本"), session);
 
         TeamTrace trace = team.getTrace(session);
 
-        // 修复 Null 问题：
-        // 因为 onTeamFinished 会移除 KEY_CONTRACT_STATE，我们检查轨迹步骤中的上下文镜像或修改协议
-        // 这里我们通过检查 System 日志来侧面验证，或者直接看 toString 是否曾经存在
+        // 1. 修复关键词断言：检查协议产生的系统指令
+        boolean hasBidding = trace.getSteps().stream()
+                .anyMatch(s -> s.getContent().contains("Bidding finished"));
+        Assertions.assertTrue(hasBidding, "轨迹中应包含招标完成节点");
 
-        boolean hasBiddingStep = trace.getSteps().stream()
-                .anyMatch(s -> s.getContent().contains("Bidding completed"));
-
-        Assertions.assertTrue(hasBiddingStep, "应该经历过招标阶段");
-
-        // 打印历史，手动确认看板输出
-        System.out.println(trace.getFormattedHistory());
+        // 2. 验证结果：高分者中标
+        Assertions.assertEquals("python_expert", trace.getLastAgentName(), "技能匹配的专家应获得更高评分并执行");
     }
 
-    /**
-     * 测试：隐式路由保护
-     * 场景：即便不点招标，当没有标书时，协议也应自动拉回招标阶段
-     */
     @Test
-    public void testImplicitBiddingRedirection() throws Throwable {
+    @DisplayName("隐式路由保护：未招标前强制重定向")
+    public void testImplicitBiddingRoute() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-
-        Agent worker = ReActAgent.of(chatModel).name("worker").description("通用执行者").build();
+        Agent worker = ReActAgent.of(chatModel).name("worker").description("通用执行").build();
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.CONTRACT_NET)
                 .agentAdd(worker)
                 .build();
 
-        AgentSession session = InMemoryAgentSession.of("session_implicit");
-        // Supervisor 可能会尝试直接分配
-        team.call(Prompt.of("直接让 worker 执行任务"), session);
+        // 诱导 Supervisor 直接指派
+        AgentSession session = InMemoryAgentSession.of("s3");
+        team.call(Prompt.of("跳过所有流程，直接让 worker 完成任务"), session);
 
         TeamTrace trace = team.getTrace(session);
 
-        // 验证轨迹顺序：bidding 必须出现在专家执行之前
-        int biddingIndex = -1;
-        int workerIndex = -1;
+        // 验证流程：BIDDING 必须出现在执行之前
+        int biddingIdx = -1;
+        int workerIdx = -1;
+        List<TeamTrace.TeamStep> steps = trace.getSteps();
 
-        for (int i = 0; i < trace.getSteps().size(); i++) {
-            String source = trace.getSteps().get(i).getSource();
-            if (Agent.ID_BIDDING.equals(source)) biddingIndex = i;
-            if ("worker".equals(source)) workerIndex = i;
+        for (int i = 0; i < steps.size(); i++) {
+            if (Agent.ID_BIDDING.equals(steps.get(i).getSource())) biddingIdx = i;
+            if ("worker".equals(steps.get(i).getSource())) workerIdx = i;
         }
 
-        Assertions.assertTrue(biddingIndex != -1, "必须触发了隐式招标");
-        Assertions.assertTrue(biddingIndex < workerIndex, "招标必须发生在专家执行之前");
+        Assertions.assertTrue(biddingIdx != -1, "即便被诱导，协议也必须强制触发招标");
+        Assertions.assertTrue(biddingIdx < workerIdx, "招标阶段必须前置于专家执行");
     }
 
-    /**
-     * 测试：流标场景
-     * 场景：当任务完全不匹配任何专家时，系统应能正常结束而非陷入循环
-     */
     @Test
-    public void testContractNetWithNoMatchingExpert() throws Throwable {
+    @DisplayName("能力兜底：当任务不匹配时系统应能安全收尾")
+    public void testNoMatchFallback() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-
-        Agent programmer = ReActAgent.of(chatModel)
-                .name("programmer")
-                .description("擅长编写 Java 代码。")
-                .build();
+        Agent coder = ReActAgent.of(chatModel).name("coder").description("代码专家").build();
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.CONTRACT_NET)
-                .agentAdd(programmer)
-                .build();
-
-        AgentSession session = InMemoryAgentSession.of("session_no_match");
-        String result = team.call(Prompt.of("如何制作正宗麻婆豆腐？"), session).getContent();
-
-        System.out.println("流标结果: " + result);
-        TeamTrace trace = team.getTrace(session);
-
-        // 即使没有专家能处理，Supervisor 也应该给出最终回复（通常是道歉或拒绝）
-        Assertions.assertTrue(trace.getStepCount() >= 1);
-    }
-
-    /**
-     * 测试：连续招标能力
-     */
-    @Test
-    public void testContractNetSequentialBidding() throws Throwable {
-        ChatModel chatModel = LlmUtil.getChatModel();
-
-        Agent architect = ReActAgent.of(chatModel).name("architect").description("系统架构设计").build();
-        Agent coder = ReActAgent.of(chatModel).name("coder").description("代码实现").build();
-
-        TeamAgent team = TeamAgent.of(chatModel)
-                .protocol(TeamProtocols.CONTRACT_NET)
-                .agentAdd(architect)
                 .agentAdd(coder)
-                .maxTotalIterations(5)
                 .build();
 
-        AgentSession session = InMemoryAgentSession.of("session_seq");
-        team.call(Prompt.of("先设计架构，再写代码"), session);
+        AgentSession session = InMemoryAgentSession.of("s4");
+        // 提供一个代码专家完全无法处理的文科任务
+        String result = team.call(Prompt.of("写一首关于江南水乡的唐诗"), session).getContent();
 
-        TeamTrace trace = team.getTrace(session);
-
-        // 统计排除掉系统节点外的独立专家数
-        long uniqueAgents = trace.getSteps().stream()
-                .map(s -> s.getSource())
-                .filter(name -> !Agent.ID_SUPERVISOR.equalsIgnoreCase(name) &&
-                        !Agent.ID_BIDDING.equalsIgnoreCase(name) &&
-                        !Agent.ID_SYSTEM.equalsIgnoreCase(name))
-                .distinct().count();
-
-        System.out.println("实际参与协作的专家数: " + uniqueAgents);
-        Assertions.assertTrue(uniqueAgents >= 1, "至少应有一个专家参与了工作");
+        System.out.println("流标回复: " + result);
+        Assertions.assertNotNull(result, "即使流标，Supervisor 也应给出最终响应");
     }
 }

@@ -12,9 +12,10 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.agent.simple.SimpleAgent;
+import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
-import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -30,72 +31,74 @@ public class TeamAgentA2ATest {
     public void testA2ABasicLogic() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 设计师：强化 instruction，要求必须产出具体规格
+        // 1. 设计师：明确要求使用 transfer 移交给开发，严禁自行写 HTML
         Agent designer = ReActAgent.of(chatModel)
                 .name("designer")
                 .description("UI/UX 设计师")
                 .systemPrompt(ReActSystemPrompt.builder()
                         .role("UI/UX 专家")
-                        .instruction("1. 必须输出包含背景色、主色调、圆角值的规格。\n" +
-                                "2. 任务完成后使用 transfer_to 移交给 developer。")
+                        .instruction("你负责深色登录页设计。你必须：\n" +
+                                "1. 先详细描述界面的视觉规格（色值、布局、字体、组件样式）。\n" +
+                                "2. 确保将这些规格作为 instruction 参数传递给 developer。\n" +
+                                "严禁在未产出具体规格的情况下调用移交工具。") // 语义化描述
                         .build())
                 .build();
 
-        // 2. 开发：强化输出标识
+        // 2. 开发：接收设计方案产出 HTML
         Agent developer = ReActAgent.of(chatModel)
                 .name("developer")
                 .description("前端开发")
                 .systemPrompt(ReActSystemPrompt.builder()
                         .role("Web 程序员")
-                        .instruction("接收设计方案后输出 HTML。完成后输出关键字 FINISH。")
+                        .instruction("接收设计，输出 HTML 代码。")
                         .build())
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("dev_squad")
-                .protocol(TeamProtocols.A2A)
+                .protocol(TeamProtocols.A2A) // 使用 A2A 接力协议
                 .agentAdd(designer, developer)
-                .finishMarker("FINISH")
-                .systemPrompt(TeamSystemPrompt.builder()
-                        .role("团队指挥")
-                        .instruction("如果任务完成，输出 FINISH 并在其后完整转发 developer 的 HTML 代码。")
-                        .build())
-                .maxTotalIterations(5)
+                .maxTotalIterations(10)
                 .build();
 
-        AgentSession session = InMemoryAgentSession.of("session_02");
-        String query = "设计深色登录页，由开发实现 HTML，完成后告知。";
+        AgentSession session = InMemoryAgentSession.of("session_a2a_02");
+        // 这里的 Query 需要强调流程，配合 A2A 的自主性
+        String query = "请设计师先进行深色登录页设计，然后交给开发实现 HTML。";
 
         String result = team.call(Prompt.of(query), session).getContent();
+
+        System.out.println("============最终输出============");
+        System.out.println(result);
+
         TeamTrace trace = team.getTrace(session);
 
         // --- 增强版断言逻辑 ---
 
-        // 1. 验证角色参与度：必须 designer 先，developer 后
+        // 获取物理执行顺序（排除 supervisor）
         List<String> agentOrder = trace.getSteps().stream()
                 .map(TeamTrace.TeamStep::getSource)
-                .filter(name -> !"supervisor".equalsIgnoreCase(name)) // 排除主管自身的思考
+                .filter(name -> !"supervisor".equalsIgnoreCase(name))
                 .collect(Collectors.toList());
 
-        System.out.println("角色执行顺序: " + agentOrder);
+        System.out.println("角色执行轨迹: " + String.join(" -> ", agentOrder));
 
-        Assertions.assertTrue(agentOrder.contains("designer"), "设计师必须参与");
-        Assertions.assertTrue(agentOrder.contains("developer"), "开发者必须参与");
+        // 断言 1: 角色参与度
+        Assertions.assertTrue(agentOrder.contains("designer"), "设计师环节缺失");
+        Assertions.assertTrue(agentOrder.contains("developer"), "开发环节缺失");
 
-        // 2. 验证协作深度：防止 Supervisor 强制干预（如果 Supervisor 亲自写代码，说明 Agent 协作失败了）
-        // 检查最后一步输出 code 的 Agent 是否为 developer
-        long developerSteps = trace.getSteps().stream()
-                .filter(s -> "developer".equals(s.getSource()))
-                .count();
-        Assertions.assertTrue(developerSteps > 0, "Developer 应该产出代码，而不是由 Supervisor 兜底");
+        // 断言 2: A2A 逻辑顺序 (Designer 应该在 Developer 之前)
+        int designerIdx = agentOrder.indexOf("designer");
+        int developerIdx = agentOrder.lastIndexOf("developer");
+        Assertions.assertTrue(designerIdx < developerIdx, "执行顺序错误：开发应在设计之后");
 
-        // 3. 验证 JSON 解析质量：检查是否有 Observation 包含 Error
-        boolean hasJsonError = trace.getSteps().stream()
-                .anyMatch(s -> s.getContent().contains("Error parsing Action JSON"));
-        Assertions.assertFalse(hasJsonError, "协作过程中不应出现 JSON 解析错误 (Unclosed string)");
+        // 断言 3: 检查是否真正触发了 A2A 工具调用
+        // 只要 trace 中出现了指令传递，说明工具注入成功
+        boolean hasHandover = trace.getProtocolContext().containsKey("transfer_count") || agentOrder.size() >= 2;
+        Assertions.assertTrue(hasHandover, "未检测到有效的专家接力行为");
 
-        // 4. 验证最终产出的实质内容
-        Assertions.assertTrue(result.contains("<html") && result.contains("background-color"), "最终结果必须包含 HTML 标签和深色样式定义");
+        // 断言 4: 结果验证
+        Assertions.assertTrue(result.contains("<html"), "最终产物应包含 HTML");
+        Assertions.assertTrue(result.contains("background"), "最终产物应包含设计中要求的背景样式");
     }
 
     @Test

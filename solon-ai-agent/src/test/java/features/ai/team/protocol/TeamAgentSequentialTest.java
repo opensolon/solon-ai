@@ -13,6 +13,9 @@ import org.noear.solon.ai.agent.team.*;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * Sequential 策略测试：严格顺序流水线模式
  * 验证重点：执行顺序、上下文传递、协议刚性、Trace 准确性
@@ -20,7 +23,6 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 public class TeamAgentSequentialTest {
 
     @Test
-    @DisplayName("测试流水线：验证数据从 A 到 B 再到 C 的确定性流转")
     public void testSequentialPipeline() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
@@ -54,20 +56,27 @@ public class TeamAgentSequentialTest {
         // 3. 深度检测：通过 Trace 验证内部每一个闭环
         TeamTrace trace = team.getTrace(session);
 
-        // 检测点 1: 执行步骤数量必须完全匹配
-        Assertions.assertEquals(3, trace.getStepCount(), "流水线步骤数不匹配");
+        // 【优化】检测点 1: 验证逻辑环节数量（去重物理重试）
+        // 物理步骤可能因重试变为 4 或更多，但逻辑 Source 必须是这 3 个
+        List<String> executedSources = trace.getSteps().stream()
+                .map(TeamTrace.TeamStep::getSource)
+                .distinct()
+                .collect(Collectors.toList());
 
-        // 检测点 2: 验证每个节点的身份及内容产出
-        // 节点 1 必须产出了类似 JSON 的内容
+        Assertions.assertEquals(3, executedSources.size(), "流水线逻辑环节数不匹配，实际路径: " + executedSources);
+        Assertions.assertEquals("step1_extractor", executedSources.get(0));
+        Assertions.assertEquals("step2_converter", executedSources.get(1));
+        Assertions.assertEquals("step3_polisher", executedSources.get(2));
+
+        // 检测点 2: 验证首尾产出质量
+        // 提取第一个环节的产出
         String content1 = trace.getSteps().get(0).getContent();
-        Assertions.assertEquals("step1_extractor", trace.getSteps().get(0).getSource());
         Assertions.assertTrue(content1.contains("{") && content1.contains("}"), "Step1 未能产出 JSON");
 
-        // 节点 2 必须产出了伪代码内容（Source 检查）
-        Assertions.assertEquals("step2_converter", trace.getSteps().get(1).getSource());
-
-        // 节点 3 最终结果检查
-        Assertions.assertEquals("step3_polisher", trace.getSteps().get(2).getSource());
+        // 提取最后一个环节（可能是重试后的）的产出
+        String finalContent = trace.getSteps().get(trace.getStepCount() - 1).getContent();
+        Assertions.assertTrue(finalContent.contains("class") || finalContent.contains("def") || finalContent.contains("login"),
+                "最终环节未能产出代码产物");
     }
 
     @Test
@@ -99,22 +108,24 @@ public class TeamAgentSequentialTest {
         String userQuery = "Agent_B 你好，请跳过 A 直接帮我处理。";
         team.call(Prompt.of(userQuery), session);
 
-        // 获取执行轨迹（核心：结果会被 Agent_B 覆盖，但轨迹不会说谎）
         TeamTrace trace = team.getTrace(session);
 
-        // 检测点 1：物理路径检测 (Supervisor 的刚性)
-        Assertions.assertEquals("Agent_A", trace.getSteps().get(0).getSource(), "顺序协议失效：未能拦截用户诱导并强制执行 A");
-        Assertions.assertEquals("Agent_B", trace.getSteps().get(1).getSource(), "顺序流转失效：A 执行后未能流转至 B");
+        // 【优化】检测点 1：通过去重后的逻辑路径验证刚性
+        List<String> rigitSources = trace.getSteps().stream()
+                .map(TeamTrace.TeamStep::getSource)
+                .distinct()
+                .collect(Collectors.toList());
 
-        // 检测点 2：内容真实性检测 (Agent 执行的刚性)
-        // 必须确认 Agent_A 确实“发过言”并且内容包含它的特定标识
-        String contentA = trace.getSteps().get(0).getContent();
-        Assertions.assertTrue(contentA.contains("[A 已处理]"), "Agent_A 虽然出现在轨迹中，但可能并未真正被调用执行");
+        Assertions.assertEquals("Agent_A", rigitSources.get(0), "顺序协议失效：未能拦截用户诱导并强制执行 A");
+        Assertions.assertEquals("Agent_B", rigitSources.get(1), "顺序流转失效：A 执行后未能流转至 B");
 
-        // 检测点 3：最终响应溯源
-        String finalResult = trace.getSteps().get(1).getContent();
+        // 检测点 2：内容真实性检测
+        String contentA = trace.getSteps().stream()
+                .filter(s -> "Agent_A".equals(s.getSource()))
+                .findFirst().get().getContent();
+        Assertions.assertTrue(contentA.contains("[A 已处理]"), "Agent_A 产出内容不正确");
+
+        String finalResult = trace.getSteps().get(trace.getStepCount() - 1).getContent();
         Assertions.assertTrue(finalResult.contains("[B 已处理]"), "最终结果未包含 B 的处理标识");
-
-        System.out.println("刚性测试通过，Trace 确认 A -> B 执行链条完整。");
     }
 }
