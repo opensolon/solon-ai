@@ -26,12 +26,16 @@ public class McpServerTool2 {
     }
 
     @ToolMapping(description = "查询天气预报", returnDirect = true)
-    public CompletableFuture<String> getWeather(@Param(description = "城市位置") String location, Context ctx) {
+    public CompletableFuture<String> getWeather(@Param(description = "城市位置") String location, String userId, Context ctx) {
         System.out.println("------------: sessionId: " + ctx.sessionId());
 
         ctx.realIp();
 
-        return CompletableFuture.completedFuture("晴，14度");
+        if ("aaa".equals(userId)) {
+            return CompletableFuture.completedFuture("晴，14度! 风很大! " + userId);
+        } else {
+            return CompletableFuture.completedFuture("晴，14度! ");
+        }
     }
 
     @ResourceMapping(uri = "config://app-version", description = "获取应用版本号", mimeType = "text/config")

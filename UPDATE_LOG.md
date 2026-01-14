@@ -10,6 +10,11 @@
 
 *  channel 概念改为 transport （并保持兼容）???
 
+### v3.8.4
+
+* 添加 `solon-ai-core` defaultToolsContextPut 方法
+* 添加 `solon-ai-agent` NoneProtocol（无协议模式）
+* 修复 `solon-ai-agent` ReActAgent 没有拦截器时 ReActAgent 不能传递 toolsContext 的问题
 
 ### v3.8.3
 

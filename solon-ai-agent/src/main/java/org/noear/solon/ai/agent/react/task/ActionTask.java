@@ -181,11 +181,12 @@ public class ActionTask implements NamedTaskComponent {
                     LOG.debug("Agent [{}] invoking tool [{}], args: {}", config.getName(), name, args);
                 }
 
+                //合并工具上个文和参数，形成请求
+                final ToolRequest toolReq = new ToolRequest(null, trace.getOptions().getToolsContext(), args);
                 final String result;
                 if (trace.getOptions().getInterceptors().isEmpty()) {
-                    result = tool.handle(args);
+                    result = tool.handle(toolReq.getArgs());
                 } else {
-                    ToolRequest toolReq = new ToolRequest(null, trace.getOptions().getToolsContext(), args);
                     result = new ToolChain(trace.getOptions().getInterceptors(), tool).doIntercept(toolReq);
                 }
                 trace.incrementToolCallCount();
