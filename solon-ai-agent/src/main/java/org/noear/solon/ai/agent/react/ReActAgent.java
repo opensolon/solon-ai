@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -294,6 +295,11 @@ public class ReActAgent implements Agent {
 
         public Builder defaultToolsContextPut(String key, Object value) {
             config.getDefaultOptions().getToolsContext().put(key, value);
+            return this;
+        }
+
+        public Builder defaultToolsContextPut(Map<String, Objects> objectsMap) {
+            config.getDefaultOptions().getToolsContext().putAll(objectsMap);
             return this;
         }
 

@@ -248,6 +248,7 @@ public class SimpleAgent implements Agent {
         public Builder toolAdd(Collection<FunctionTool> tools) { config.addTool(tools); return this; }
         public Builder toolAdd(ToolProvider toolProvider) { config.addTool(toolProvider); return this; }
         public Builder defaultToolsContextPut(String key, Object value) { config.getToolsContext().put(key, value); return this; }
+        public Builder defaultToolsContextPut(Map<String,Object> objectMap) { config.getToolsContext().putAll(objectMap); return this; }
         public Builder defaultInterceptorAdd(ChatInterceptor... vals) {
             for (ChatInterceptor val : vals) config.addInterceptor(val, 0);
             return this;
