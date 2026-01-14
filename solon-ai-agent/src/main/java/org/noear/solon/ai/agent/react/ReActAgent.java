@@ -145,7 +145,7 @@ public class ReActAgent implements Agent {
         trace.prepare(config, options, session, config.getName(), protocol);
 
         if (protocol != null) {
-            protocol.injectAgentTools(this, trace);
+            protocol.injectAgentTools(this, trace::addProtocolTool);
         }
 
         // 1. 加载历史上下文（短期记忆）

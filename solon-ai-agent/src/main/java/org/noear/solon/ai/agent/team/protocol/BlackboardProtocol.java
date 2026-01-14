@@ -24,6 +24,7 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.flow.FlowContext;
@@ -32,6 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * 黑板协作协议 (Blackboard Protocol)
@@ -118,7 +120,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
      * 为 Agent 注入黑板同步工具，实现主动数据回传
      */
     @Override
-    public void injectAgentTools(Agent agent, ReActTrace trace) {
+    public void injectAgentTools(Agent agent, Consumer<FunctionTool> receiver) {
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
         FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_SYNC);
         if (isZh) {
@@ -133,7 +135,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
                     .stringParamAdd("state", "Detailed JSON state");
         }
         toolDesc.doHandle(args -> "System: Blackboard updated.");
-        trace.addProtocolTool(toolDesc);
+        receiver.accept(toolDesc);
     }
 
     @Override

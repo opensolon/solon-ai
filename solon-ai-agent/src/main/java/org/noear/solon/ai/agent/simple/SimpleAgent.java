@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequestDesc;
@@ -163,9 +164,17 @@ public class SimpleAgent implements Agent {
 
         if (config.getChatModel() != null) {
             //构建 chatModel 请求
+            final TeamProtocol protocol = session.getSnapshot().getAs(Agent.KEY_PROTOCOL);
             chatReq = config.getChatModel().prompt(messages)
                     .options(o -> {
+                        //配置工具
                         config.getTools().forEach(o::toolsAdd);
+
+                        //协议工具
+                        if(protocol != null){
+                            protocol.injectAgentTools(this, o::toolsAdd);
+                        }
+
                         if (Assert.isNotEmpty(config.getToolsContext())) {
                             o.toolsContext(config.getToolsContext());
                         }

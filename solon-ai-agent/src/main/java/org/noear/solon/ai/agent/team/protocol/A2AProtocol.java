@@ -28,6 +28,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.flow.FlowContext;
@@ -37,6 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -83,7 +85,7 @@ public class A2AProtocol extends TeamProtocolBase {
      * 注入移交工具：动态生成除自身外的专家画像供 Agent 选择
      */
     @Override
-    public void injectAgentTools(Agent agent, ReActTrace trace) {
+    public void injectAgentTools(Agent agent, Consumer<FunctionTool> receiver) {
         Locale locale = config.getLocale();
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
 
@@ -111,7 +113,7 @@ public class A2AProtocol extends TeamProtocolBase {
                     .stringParamAdd("instruction", "Specific instruction for the next expert.")
                     .stringParamAdd("state", "Persistent JSON state.");
         }
-        trace.addProtocolTool(tool);
+        receiver.accept(tool);
     }
 
     /**

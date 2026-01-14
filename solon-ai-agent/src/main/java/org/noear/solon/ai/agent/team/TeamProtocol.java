@@ -16,8 +16,8 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.NonSerializable;
@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Locale;
+import java.util.function.Consumer;
 
 /**
  * 团队协作协议 (Team Protocol)
@@ -56,7 +57,7 @@ public interface TeamProtocol extends NonSerializable {
     /**
      * 注入协议专属工具（如转交、抄送等控制工具）
      */
-    default void injectAgentTools(Agent agent, ReActTrace trace) { }
+    default void injectAgentTools(Agent agent, Consumer<FunctionTool> receiver) { }
 
     /**
      * 注入 Agent 行为约束指令（定义角色规范）
