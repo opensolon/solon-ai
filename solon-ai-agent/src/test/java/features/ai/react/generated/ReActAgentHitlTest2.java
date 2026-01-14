@@ -46,7 +46,7 @@ public class ReActAgentHitlTest2 {
                 .toolAdd(new MethodToolProvider(new ReActAgentHitlTest.RefundTools()))
                 .chatOptions(o -> o.temperature(0.0F))
                 .graphAdjuster(spec-> {
-                    spec.getNode(Agent.ID_ACTION_BEF).task(new HumanAuditTask());
+                    spec.getNode(Agent.ID_ACTION_AFT).task(new HumanAuditTask());
                 })
                 .build();
 
@@ -66,7 +66,7 @@ public class ReActAgentHitlTest2 {
 
         // 验证：流程应该被拦截并停止，最后停留在工具节点
         Assertions.assertTrue(context.isStopped(), "流程应该被拦截并停止");
-        Assertions.assertEquals(Agent.ID_ACTION_BEF, context.lastNodeId(), "最后应停留在工具节点之前");
+        Assertions.assertEquals(Agent.ID_ACTION_AFT, context.lastNodeId(), "最后应停留在工具节点之前");
 
         // 获取执行状态追踪，验证已有执行步骤
         ReActTrace state = context.getAs("__" + agent.name());

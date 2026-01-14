@@ -49,7 +49,7 @@ public class ReActAgentHitlTest {
         // 1. 定义人工介入拦截器 - 检测敏感操作节点
         ReActInterceptor hitlInterceptor = new ReActInterceptor() {
             @Override
-            public void onNodeStart(FlowContext ctx, Node node) {
+            public void onNodeEnd(FlowContext ctx, Node node) {
                 // 当进入工具执行节点时，检查是否已获得人工批准
                 if (Agent.ID_ACTION.equals(node.getId())) {
                     Boolean approved = ctx.getAs("is_approved");
