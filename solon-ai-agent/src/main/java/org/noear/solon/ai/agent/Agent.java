@@ -158,10 +158,12 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
     // --- Node IDs ---
     static String ID_START = "start";
     static String ID_END = "end";
-    static String ID_REASON_BEF = "reason_bef";
     static String ID_REASON = "reason";
-    static String ID_ACTION_BEF = "action_bef";
+    static String ID_REASON_BEF = "reason_bef";
+    static String ID_REASON_AFT = "reason_aft";
     static String ID_ACTION = "action";
+    static String ID_ACTION_BEF = "action_bef";
+    static String ID_ACTION_AFT = "action_aft";
     static String ID_SYSTEM = "system";
     static String ID_SUPERVISOR = "supervisor";
     static String ID_BIDDING = "bidding";

@@ -74,14 +74,17 @@ public class ReActAgent implements Agent {
 
             // 推理节点：通过 LLM 决定是执行动作（Action）还是给出最终回答（End）
             spec.addExclusive(new ReasonTask(config, this))
-                    .linkAdd(Agent.ID_ACTION_BEF, l -> l.title("route = ACTION").when(ctx ->
+                    .linkAdd(Agent.ID_REASON_AFT, l -> l.title("route = ACTION").when(ctx ->
                             Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(config.getTraceKey()).getRoute())))
                     .linkAdd(Agent.ID_END);
+
+            spec.addActivity(Agent.ID_REASON_AFT).title("Post-Reasoning").linkAdd(Agent.ID_ACTION_BEF);
 
             spec.addActivity(Agent.ID_ACTION_BEF).title("Pre-Action").linkAdd(Agent.ID_ACTION);
 
             // 执行节点：调用工具，产生观察结果（Observation），然后返回推理节点
-            spec.addActivity(new ActionTask(config)).linkAdd(Agent.ID_REASON_BEF);
+            spec.addActivity(new ActionTask(config)).linkAdd(Agent.ID_ACTION_AFT);
+            spec.addActivity(Agent.ID_ACTION_AFT).title("Post-Action").linkAdd(Agent.ID_REASON_BEF);
 
             spec.addEnd(Agent.ID_END);
 
