@@ -76,7 +76,7 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
         StringBuilder sb = new StringBuilder();
 
         // A. Team Directory: 注入成员职责与契约 (Contract)
-        sb.append("### Team Members\n");
+        sb.append("## Team Members\n");
         config.getAgentMap().forEach((name, agent) -> {
             sb.append("- **").append(name).append("**:\n");
             sb.append("  - Responsibility: ").append(agent.descriptionFor(trace.getContext())).append("\n");
@@ -92,28 +92,28 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
         });
 
         // B. Context: 注入原始用户需求
-        sb.append("\n### Current Task\n").append(trace.getPrompt().getUserContent()).append("\n");
+        sb.append("\n## Current Task\n").append(trace.getPrompt().getUserContent()).append("\n");
 
         // C. Protocol: 注入特定协议（如 Sequential/A2A）的调度逻辑
-        sb.append("\n### Collaboration Protocol\n");
         config.getProtocol().injectSupervisorInstruction(Locale.ENGLISH, sb);
+        sb.append("\n");
 
         // D. Output Specification: 强制格式化响应，确保下游解析成功
-        sb.append("\n### Output Specification\n")
+        sb.append("\n## Output Specification\n")
                 .append("1. **Progress Analysis**: Evaluate current progress and decide the next step.\n")
                 .append("2. **Termination**: If the task is finished, output: ").append(config.getFinishMarker())
                 .append(" followed by the final result.\n")
                 .append("3. **Routing**: Otherwise, output **ONLY** the name of the next Agent to execute.\n");
 
         // E. Guidelines: 防止死循环及过度协作
-        sb.append("\n### History Analysis & Guidelines\n")
+        sb.append("\n## History Analysis & Guidelines\n")
                 .append("- Reference collaboration history to avoid redundant steps.\n")
                 .append("- Task Finish Marker: ").append(config.getFinishMarker()).append(".\n")
                 .append("- Note: Do not terminate prematurely; ensure necessary expert input is obtained.\n");
 
         // F. Custom Business Logic: 注入增量业务指令
         if (instructionProvider != null) {
-            sb.append("\n### Core Task Instructions\n");
+            sb.append("\n## Core Task Instructions\n");
             sb.append(instructionProvider.apply(trace)).append("\n");
         }
 

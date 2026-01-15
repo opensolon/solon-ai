@@ -57,7 +57,7 @@ public class SimpleSystemPrompt {
         String rendered = SnelUtil.render(rawPrompt, context.model());
 
         if (LOG.isTraceEnabled()) {
-            LOG.trace("SystemPrompt rendered: {}", rendered);
+            LOG.trace("Simple SystemPrompt rendered: {}", rendered);
         }
 
         return rendered;

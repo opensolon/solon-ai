@@ -174,7 +174,7 @@ public abstract class TeamProtocolBase implements TeamProtocol {
             sb.append("- 备选成员: [").append(candidates).append("]\n");
             sb.append("- 决策要求：任务完成请输出 ").append(config.getFinishMarker());
         } else {
-            sb.append("\n## Protocol: ").append(name()).append("\n");
+            sb.append("\n## Collaboration Protocol: ").append(name()).append("\n");
             sb.append("- Candidates: [").append(candidates).append("]\n");
             sb.append("- Requirement: Output ").append(config.getFinishMarker()).append(" when finished.");
         }

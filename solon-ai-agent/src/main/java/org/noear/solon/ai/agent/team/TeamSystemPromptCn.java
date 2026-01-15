@@ -81,7 +81,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
         StringBuilder sb = new StringBuilder();
 
         // A. 团队成员名录：基于 Agent 职责描述与契约构建知识库
-        sb.append("### 团队成员\n");
+        sb.append("## 团队成员\n");
         config.getAgentMap().forEach((name, agent) -> {
             sb.append("- **").append(name).append("**:\n");
             sb.append("  - 职责: ").append(agent.descriptionFor(trace.getContext())).append("\n");
@@ -96,28 +96,28 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
         });
 
         // B. 任务背景：注入用户原始 Prompt
-        sb.append("\n### 当前任务\n").append(trace.getPrompt().getUserContent()).append("\n");
+        sb.append("\n## 当前任务\n").append(trace.getPrompt().getUserContent()).append("\n");
 
         // C. 协议规则：由协作协议（如 Swarm）注入特定的流转逻辑
-        sb.append("\n### 协作协议\n");
         config.getProtocol().injectSupervisorInstruction(Locale.CHINESE, sb);
+        sb.append("\n");
 
         // D. 输出规范：强制约束回复格式，便于程序化解析决策
-        sb.append("\n### 输出规范\n")
+        sb.append("\n## 输出规范\n")
                 .append("1. **状态分析**：分析当前执行进度，决定下一步行动。\n")
                 .append("2. **任务终止**：如果任务已完成，必须输出: ").append(config.getFinishMarker())
                 .append(" 并在其后提供最终答案。\n")
                 .append("3. **继续执行**：若任务未完成，请**仅输出**下一个要执行的 Agent 名字，不要有额外文本。\n");
 
         // E. 治理准则：防死循环与合规性约束
-        sb.append("\n### 历史分析与准则\n")
+        sb.append("\n## 历史分析与准则\n")
                 .append("- 参考协作历史，避免重复执行相同逻辑。\n")
                 .append("- 任务完成信号：").append(config.getFinishMarker()).append("。\n")
                 .append("- 注意：严禁过早结束，确保专家意见已被充分获取。\n");
 
         // F. 增量指令：业务侧自定义的补充约束
         if (instructionProvider != null) {
-            sb.append("\n### 核心任务指令\n");
+            sb.append("\n## 核心任务指令\n");
             sb.append(instructionProvider.apply(trace)).append("\n");
         }
 

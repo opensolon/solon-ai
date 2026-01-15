@@ -58,7 +58,7 @@ public interface TeamSystemPrompt {
         String finalPrompt = SnelUtil.render(template, context.model());
 
         if (LOG.isTraceEnabled()) {
-            LOG.trace("TeamSystemPrompt rendered for agent [{}]:\n{}", trace.getAgentName(), finalPrompt);
+            LOG.trace("Team SystemPrompt rendered for agent [{}]:\n{}", trace.getAgentName(), finalPrompt);
         }
 
         return finalPrompt;
