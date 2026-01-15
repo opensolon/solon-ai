@@ -207,7 +207,8 @@ public class SupervisorTask implements NamedTaskComponent {
      * 模糊匹配文本中的 Agent 名称
      */
     private boolean matchAgentRoute(FlowContext context, TeamTrace trace, String text) {
-        String cleanText = text.replaceAll("[\\*\\_\\`]", "").trim();
+        // 移除 Markdown 格式字符（加粗/斜体的 * 和代码的 `），保留下划线，避免agent 名称的合法字符被误删，如step1_extractor
+        String cleanText = text.replaceAll("[\\*\\`]", "").trim();
 
         if (config.getAgentMap().containsKey(cleanText)) {
             routeTo(context, trace, cleanText);

@@ -11,6 +11,7 @@ import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
 import org.noear.solon.ai.agent.team.*;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 
 import java.util.List;
@@ -18,7 +19,13 @@ import java.util.stream.Collectors;
 
 /**
  * Sequential 策略测试：严格顺序流水线模式
- * 验证重点：执行顺序、上下文传递、协议刚性、Trace 准确性
+ * 验证重点：执行顺序、上下文传递、协议刚性、Trace 准确性、FinalAnswer 正确性
+ *
+ * <p>
+ * 注意：SEQUENTIAL 协议是"刚性"流水线，由协议直接控制路由（shouldSupervisorExecute 返回 false），
+ * 不调用 Supervisor 的 LLM 决策。因此 finishMarker 和 systemPrompt 对此协议无效。
+ * finalAnswer 通过 TeamAgent 的兜底逻辑设置为最后一个 Agent 的输出。
+ * </p>
  */
 public class TeamAgentSequentialTest {
 
@@ -51,7 +58,7 @@ public class TeamAgentSequentialTest {
 
         AgentSession session = InMemoryAgentSession.of("session_seq_01");
         String query = "我要做一个简单的用户登录功能，包含用户名和密码。";
-        team.call(Prompt.of(query), session);
+        AssistantMessage result = team.call(Prompt.of(query), session);
 
         // 3. 深度检测：通过 Trace 验证内部每一个闭环
         TeamTrace trace = team.getTrace(session);
@@ -77,6 +84,22 @@ public class TeamAgentSequentialTest {
         String finalContent = trace.getSteps().get(trace.getStepCount() - 1).getContent();
         Assertions.assertTrue(finalContent.contains("class") || finalContent.contains("def") || finalContent.contains("login"),
                 "最终环节未能产出代码产物");
+
+        // 检测点 3: 验证 FinalAnswer 正确性
+        String finalAnswer = trace.getFinalAnswer();
+        String resultContent = result.getContent();
+        String lastAgentOutput = trace.getSteps().get(2).getContent();
+
+        Assertions.assertNotNull(finalAnswer, "finalAnswer 不应为空");
+        Assertions.assertNotNull(resultContent, "result.getContent() 不应为空");
+
+        // finalAnswer 应该与最后一个 Agent (step3_polisher) 的输出一致
+        Assertions.assertEquals(lastAgentOutput, finalAnswer,
+                "finalAnswer 应该是流水线最后一个 Agent 的输出");
+
+        // result.getContent() 应该与 finalAnswer 一致
+        Assertions.assertEquals(finalAnswer, resultContent,
+                "result.getContent() 应该与 trace.getFinalAnswer() 一致");
     }
 
     @Test
