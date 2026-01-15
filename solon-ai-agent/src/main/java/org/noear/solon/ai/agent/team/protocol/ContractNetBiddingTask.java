@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 /**
  * 合同网协议 (Contract Net Protocol) - 自动招标任务
  *
- * <p>核心职责：遍历团队成员，调用协议算法生成初始标书，并结构化存储于协议上下文，供主管定标。</p>
+ * <p>核心职责：遍历团队成员，优先保留已通过工具提交的标书，对未提交成员调用协议算法进行自动打分补全。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -59,14 +59,16 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
         }
 
         try {
-            String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
-            TeamTrace trace = context.getAs(traceKey);
+            TeamTrace trace = context.getAs(config.getTraceKey());
+            if (trace == null) {
+                LOG.error("ContractNet: TeamTrace not found in FlowContext");
+                return;
+            }
 
-            // 初始化协议私有状态（看板数据源）
-            ContractNetProtocol.ContractState state = (ContractNetProtocol.ContractState) trace.getProtocolContext()
-                    .computeIfAbsent("contract_state_obj", k -> new ContractNetProtocol.ContractState());
+            ContractNetProtocol.ContractState state = protocol.getContractState(trace);
 
-            int bidCount = 0;
+            int manualBidCount = 0;
+            int autoBidCount = 0;
 
             // 迭代执行成员竞标逻辑
             for (Agent agent : config.getAgentMap().values()) {
@@ -75,29 +77,43 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
                     continue;
                 }
 
+                // 核心优化：检查该 Agent 是否已经通过工具 (Tool) 主动提交过标书
+                if (state.hasAgentBid(agent.name())) {
+                    manualBidCount++;
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("ContractNet: Agent [{}] already submitted a manual bid, skipping auto-construct.", agent.name());
+                    }
+                    continue;
+                }
+
                 try {
-                    // 调用协议内置的打分/估算逻辑生成结构化标书
+                    // 调用协议内置的打分/估算逻辑生成保底标书 (算法代投)
                     ONode bidProposal = protocol.constructBid(agent, trace.getPrompt());
 
-                    // 将标书持久化到协议状态中
+                    // 将保底标书持久化到协议状态中
                     state.addBid(agent.name(), bidProposal);
 
                     if (LOG.isTraceEnabled()) {
-                        LOG.trace("Agent [{}] submitted a bid: {}", agent.name(), bidProposal.toJson());
+                        LOG.trace("Agent [{}] auto-submitted a bid: {}", agent.name(), bidProposal.toJson());
                     }
 
-                    bidCount++;
+                    autoBidCount++;
                 } catch (Exception e) {
-                    LOG.warn("Agent [{}] bidding failed: {}", agent.name(), e.getMessage());
+                    LOG.warn("Agent [{}] auto-bidding failed: {}", agent.name(), e.getMessage());
                 }
             }
 
             // 记录轨迹并重定向至主管进行“定标”决策
-            trace.addStep(ChatRole.SYSTEM, Agent.ID_BIDDING, "Bidding finished. " + bidCount + " proposals collected.", 0);
+            String summary = String.format("Bidding finished. %d bids collected (%d manual, %d auto).",
+                    (manualBidCount + autoBidCount), manualBidCount, autoBidCount);
+
+            trace.addStep(ChatRole.SYSTEM, Agent.ID_BIDDING, summary, 0);
+
+            // 归还路由控制权给 Supervisor
             trace.setRoute(Agent.ID_SUPERVISOR);
 
             if (LOG.isDebugEnabled()) {
-                LOG.debug("TeamAgent [{}] bidding finalized. Bids count: {}", config.getName(), bidCount);
+                LOG.debug("TeamAgent [{}] bidding finalized. {}", config.getName(), summary);
             }
 
         } catch (Exception e) {
@@ -110,13 +126,10 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
      */
     private void handleFatalError(FlowContext context, Exception e) {
         LOG.error("ContractNet bidding task fatal error", e);
-        String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
-        if (traceKey != null) {
-            TeamTrace trace = context.getAs(traceKey);
-            if (trace != null) {
-                trace.setRoute(Agent.ID_END);
-                trace.addStep(ChatRole.SYSTEM, Agent.ID_SYSTEM, "Bidding interrupted: " + e.getMessage(), 0);
-            }
+        TeamTrace trace = context.getAs(config.getTraceKey());
+        if (trace != null) {
+            trace.setRoute(Agent.ID_END);
+            trace.addStep(ChatRole.SYSTEM, Agent.ID_SYSTEM, "Bidding interrupted: " + e.getMessage(), 0);
         }
     }
 }

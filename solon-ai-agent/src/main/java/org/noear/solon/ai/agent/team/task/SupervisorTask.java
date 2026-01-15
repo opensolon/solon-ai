@@ -234,7 +234,12 @@ public class SupervisorTask implements NamedTaskComponent {
      */
     private ChatResponse callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
-            if (config.getChatOptions() != null) config.getChatOptions().accept(o);
+            //尝试添加协议工具
+            config.getProtocol().injectSupervisorTools(trace.getContext(), o::toolsAdd);
+
+            if (config.getChatOptions() != null) {
+                config.getChatOptions().accept(o);
+            }
         });
         trace.getOptions().getInterceptorList().forEach(item -> item.target.onModelStart(trace, req));
 

@@ -55,7 +55,7 @@ public interface TeamProtocol extends NonSerializable {
     // --- [阶段 2：成员 Agent 运行期] ---
 
     /**
-     * 注入协议专属工具（如转交、抄送等控制工具）
+     * 注入 Agent 协议专属工具（如转交、抄送等控制工具）
      */
     default void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) { }
 
@@ -86,17 +86,24 @@ public interface TeamProtocol extends NonSerializable {
     // --- [阶段 3：主管 Supervisor 治理] ---
 
     /**
-     * 注入主管静态系统指令（定义全局调度准则）
+     * 注入 Supervisor 协议专属工具（如转交、抄送等控制工具）
+     */
+    default void injectSupervisorTools(FlowContext context, Consumer<FunctionTool> receiver){
+
+    }
+
+    /**
+     * 注入 Supervisor 静态系统指令（定义全局调度准则）
      */
     default void injectSupervisorInstruction(Locale locale, StringBuilder sb) { }
 
     /**
-     * 注入主管动态决策指令（如实时进度、环境感知）
+     * 注入 Supervisor 动态决策指令（如实时进度、环境感知）
      */
     default void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) { }
 
     /**
-     * 注入主管决策上下文（如待办事项、黑板状态）
+     * 注入 Supervisor 决策上下文（如待办事项、黑板状态）
      */
     default void prepareSupervisorContext(FlowContext context, TeamTrace trace, StringBuilder sb) { }
 

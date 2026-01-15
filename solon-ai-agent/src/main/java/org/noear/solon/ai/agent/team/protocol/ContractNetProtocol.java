@@ -18,11 +18,12 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
@@ -30,26 +31,27 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * 合同网协作协议 (Contract Net Protocol)
  *
- * <p>核心特征：引入竞争性招标机制。通过自动化的“标书构造器”对候选人进行多维度打分（技能、描述、模态兼容性），
- * 由 Supervisor 作为“招标方”选定最优执行者。</p>
+ * <p>核心特征：引入竞争性招标机制。支持 Supervisor 显式招标工具与 Agent 自主投标工具，配合算法自动打分兜底。</p>
  */
+
 @Preview("3.8.1")
 public class ContractNetProtocol extends TeamProtocolBase {
     private static final Logger LOG = LoggerFactory.getLogger(ContractNetProtocol.class);
 
     private static final String KEY_CONTRACT_STATE = "contract_state_obj";
     private static final String KEY_BIDDING_ROUND = "bidding_round";
-    private static final String[] BIDDING_KEYWORDS = {"BIDDING", "招标", "竞标", "CALL_FOR_BIDS"};
 
-    private final int maxBiddingRounds = 2; // 最大招标轮次限制
+    // 工具常量定义
+    private static final String TOOL_CALL_BIDS = "__call_for_bids__";
+    private static final String TOOL_SUBMIT_BID = "__submit_proposal__";
 
-    /**
-     * 合同状态：记录投标池与中标人
-     */
+    private final int maxBiddingRounds = 2;
+
     public static class ContractState {
         private final Map<String, ONode> bids = new LinkedHashMap<>();
         private String awardedAgent;
@@ -57,6 +59,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
         public void addBid(String agentName, ONode bidContent) { bids.put(agentName, bidContent); }
         public void setAwardedAgent(String agentName) { this.awardedAgent = agentName; }
         public boolean hasBids() { return !bids.isEmpty(); }
+        public boolean hasAgentBid(String name) { return bids.containsKey(name); }
 
         @Override
         public String toString() {
@@ -68,9 +71,13 @@ public class ContractNetProtocol extends TeamProtocolBase {
         }
     }
 
-    public ContractNetProtocol(TeamAgentConfig config) {
-        super(config);
+    public ContractState getContractState(TeamTrace trace){
+      return  (ContractNetProtocol.ContractState) trace.getProtocolContext()
+                .computeIfAbsent(ContractNetProtocol.KEY_CONTRACT_STATE, k -> new ContractNetProtocol.ContractState());
+
     }
+
+    public ContractNetProtocol(TeamAgentConfig config) { super(config); }
 
     @Override
     public String name() { return "CONTRACT_NET"; }
@@ -80,130 +87,99 @@ public class ContractNetProtocol extends TeamProtocolBase {
         spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-            // 招标路由：Supervisor 可决定进入招标阶段
+            // 路由控制：优先处理来自工具或决策的招标请求
             ns.linkAdd(Agent.ID_BIDDING, l -> l.when(ctx -> {
                 TeamTrace trace = ctx.getAs(config.getTraceKey());
                 return Agent.ID_BIDDING.equals(trace.getRoute());
             }));
-            linkAgents(ns); // 普通执行路由
+            linkAgents(ns);
         }).linkAdd(Agent.ID_END);
 
-        // 招标任务 (BiddingTask) 完成后回归 Supervisor 进行定标
         spec.addActivity(new ContractNetBiddingTask(config, this)).linkAdd(Agent.ID_SUPERVISOR);
-
-        config.getAgentMap().values().forEach(a ->
-                spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
-
+        config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
         spec.addEnd(Agent.ID_END);
     }
 
-    /**
-     * 自动化标书构造器：基于专家档案 (Profile) 进行量化打分
-     */
-    protected ONode constructBid(Agent agent, Prompt prompt) {
-        String taskDesc = prompt.getUserContent().toLowerCase();
-        AgentProfile profile = agent.profile();
-
-        int score = 60; // 基础及格分
-
-        // 维度一：精准技能匹配 (High Weight)
-        if (profile != null && !profile.getSkills().isEmpty()) {
-            for (String skill : profile.getSkills()) {
-                if (taskDesc.contains(skill.toLowerCase())) {
-                    score += 15;
-                    break;
-                }
+    @Override
+    public void injectSupervisorTools(FlowContext context, Consumer<FunctionTool> receiver) {
+        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+        FunctionToolDesc tool = new FunctionToolDesc(TOOL_CALL_BIDS);
+        if (isZh) {
+            tool.title("发起招标").description("向全体专家征集方案。当你无法确定由谁执行任务时使用此工具。")
+                    .stringParamAdd("requirement", "任务具体需求");
+        } else {
+            tool.title("Call for Bids").description("Collect proposals from all experts when the best executor is not obvious.")
+                    .stringParamAdd("requirement", "Task requirements");
+        }
+        tool.doHandle(args -> {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("ContractNet: Supervisor initiated bidding tool. Requirement: {}", args.get("requirement"));
             }
-        }
 
-        // 维度二：描述语义匹配 (Medium Weight)
-        if (containsAnyKeywords(taskDesc, agent.description())) {
-            score += 10;
-        }
-
-        // 维度三：模态契合度校验 (Penalty/Protection)
-        // 核心防御：若任务需识图但专家不支持，给予大幅扣分，强制降低其竞标优先级
-        if (profile != null) {
-            boolean taskNeedsImage = taskDesc.matches(".*(图|image|ui|界面|看|海报).*");
-            boolean agentSupportsImage = profile.getInputModes().contains("image");
-            if (taskNeedsImage && !agentSupportsImage) {
-                score -= 40;
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("ContractNet: Agent [{}] penalized for lacking vision capability.", agent.name());
-                }
-            }
-        }
-
-        score = Math.max(10, Math.min(95, score));
-
-        ONode bidNode = new ONode().asObject();
-        bidNode.set("score", score);
-        bidNode.set("plan", "Auto-evaluation based on [" + agent.name() + "]'s profile/skills.");
-        bidNode.set("auto_bid", true);
-
-        return bidNode;
-    }
-
-    private boolean containsAnyKeywords(String task, String desc) {
-        String[] keywords = desc.split("[,，\\s]+");
-        for (String kw : keywords) {
-            if (kw.length() > 1 && task.contains(kw.toLowerCase())) return true;
-        }
-        return false;
+            TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+            if(trace != null) trace.setRoute(Agent.ID_BIDDING);
+            return isZh ? "已进入招标流程。" : "Bidding phase initiated.";
+        });
+        receiver.accept(tool);
     }
 
     @Override
-    public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
-        ContractState state = (ContractState) trace.getProtocolContext().get(KEY_CONTRACT_STATE);
-        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+    public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
+        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+        if (trace != null && Agent.ID_BIDDING.equals(trace.getRoute())) {
+            boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+            FunctionToolDesc tool = new FunctionToolDesc(TOOL_SUBMIT_BID);
+            if (isZh) {
+                tool.title("提交投标").description("提交你的执行计划和信心分。")
+                        .intParamAdd("score", "信心分(1-100)")
+                        .stringParamAdd("plan", "计划摘要");
+            } else {
+                tool.title("Submit Bid").description("Submit your execution plan and confidence score.")
+                        .intParamAdd("score", "Confidence score(1-100)")
+                        .stringParamAdd("plan", "Plan summary");
+            }
+            tool.doHandle(args -> {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("ContractNet: Agent [{}] submitted a manual bid via tool. Score: {}", agent.name(), args.get("score"));
+                }
 
-        sb.append(isZh ? "\n### 合同网竞标看板 (Contract Dashboard)\n" : "\n### Contract Net Dashboard\n");
-
-        if (state != null && state.hasBids()) {
-            sb.append("```json\n").append(state.toString()).append("\n```\n");
-            sb.append(isZh ? "> 提示：请评估标书并指派专家。除非任务已完成，否则必须选择一名执行者。\n"
-                    : "> Tips: Evaluate bids and name an agent to execute.\n");
-        } else {
-            sb.append(isZh ? "> 状态：待招标。\n" : "> Status: Waiting for bids.\n");
+                ContractState state = getContractState(trace);
+                ONode bid = new ONode().asObject();
+                bid.set("score", args.get("score"));
+                bid.set("plan", args.get("plan"));
+                bid.set("auto_bid", false);
+                state.addBid(agent.name(), bid);
+                return isZh ? "标书已收录。" : "Bid received.";
+            });
+            receiver.accept(tool);
         }
-
-        // 注入专家能力矩阵（含多模态标签）
-        sb.append(isZh ? "#### 专家资质清单 (Profiles):\n" : "#### Expert Profiles:\n");
-        config.getAgentMap().forEach((name, ag) -> {
-            String skills = String.join(",", ag.profile().getSkills());
-            String modes = String.join(",", ag.profile().getInputModes());
-            sb.append("- **").append(name).append("**: ")
-                    .append(isZh ? "技能[" : "Skills[").append(skills).append("], ")
-                    .append(isZh ? "模式[" : "Modes[").append(modes).append("]\n");
-        });
     }
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        // 信号处理：识别招标指令
-        if (isBiddingSignal(decision)) {
-            Integer round = (Integer) trace.getProtocolContext().getOrDefault(KEY_BIDDING_ROUND, 0);
-            if (round < maxBiddingRounds) {
-                trace.getProtocolContext().put(KEY_BIDDING_ROUND, round + 1);
-                return Agent.ID_BIDDING;
+        if (Agent.ID_BIDDING.equals(trace.getRoute())) {
+            return Agent.ID_BIDDING;
+        }
+
+        if (Utils.isNotEmpty(decision)) {
+            String upper = decision.toUpperCase();
+            if (upper.contains("BIDDING") || upper.contains("招标") || upper.contains("CALL_FOR_BIDS")) {
+                Integer round = (Integer) trace.getProtocolContext().getOrDefault(KEY_BIDDING_ROUND, 0);
+                if (round < maxBiddingRounds) {
+                    trace.getProtocolContext().put(KEY_BIDDING_ROUND, round + 1);
+                    return Agent.ID_BIDDING;
+                }
             }
         }
 
-        // 隐式招标保护：若无标书却尝试指派，重定向至招标任务
-        ContractState state = (ContractState) trace.getProtocolContext().get(KEY_CONTRACT_STATE);
-        if (state == null || !state.hasBids()) {
-            if (config.getAgentMap().containsKey(decision)) {
+        if (config.getAgentMap().containsKey(decision)) {
+            ContractState state = (ContractState) trace.getProtocolContext().get(KEY_CONTRACT_STATE);
+            if (state == null || !state.hasBids()) {
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("ContractNet: Implicit award detected without bids. Forcing Bidding phase.");
+                    LOG.debug("ContractNet: Agent [{}] attempted to assign '{}' without bidding. Forcing bidding phase.",
+                            config.getName(), decision);
                 }
                 return Agent.ID_BIDDING;
-            }
-        }
-
-        // 定标路由：若决策结果为具体专家，则确认中标
-        if (config.getAgentMap().containsKey(decision)) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("ContractNet: Awarding task to Agent [{}].", decision);
             }
             return decision;
         }
@@ -212,39 +188,33 @@ public class ContractNetProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public void onSupervisorRouting(FlowContext context, TeamTrace trace, String nextAgent) {
-        // 更新中标人状态
-        if (!Agent.ID_BIDDING.equals(nextAgent) && !Agent.ID_SUPERVISOR.equals(nextAgent) && !Agent.ID_END.equals(nextAgent)) {
-            ContractState state = (ContractState) trace.getProtocolContext()
-                    .computeIfAbsent(KEY_CONTRACT_STATE, k -> new ContractState());
-            state.setAwardedAgent(nextAgent);
-        }
-    }
+    public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
+        ContractState state = (ContractState) trace.getProtocolContext().get(KEY_CONTRACT_STATE);
+        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-    private boolean isBiddingSignal(String decision) {
-        if (Utils.isEmpty(decision)) return false;
-        String upper = decision.toUpperCase();
-        return Arrays.stream(BIDDING_KEYWORDS).anyMatch(upper::contains);
-    }
-
-    @Override
-    public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
-        // 仅在招标阶段注入投标规范
-        if (Agent.ID_BIDDING.equals(trace.getRoute())) {
-            boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
-            StringBuilder sb = new StringBuilder();
+        sb.append(isZh ? "\n### 合同网竞标看板\n" : "\n### Contract Net Dashboard\n");
+        if (state != null && state.hasBids()) {
+            sb.append("```json\n").append(state.toString()).append("\n```\n");
+            sb.append(isZh ? "> 提示：请根据各专家的 `score` 和 `plan` 择优指派。 \n"
+                    : "> Tips: Award the task to the best candidate based on `score` and `plan`.\n");
+        } else {
             if (isZh) {
-                sb.append("\n### 投标指令 (Proposal Instruction)\n");
-                sb.append("- 请反馈 JSON 标书，包含 `plan`(方案摘要) 和 `score`(信心值 1-100)。\n");
-                sb.append("- 若无法承接请回复 \"REFUSE\" 并说明理由。");
+                sb.append("> **强制规范**：当前处于“待招标”状态。在进行任何指派前，**必须**先获取专家标书。\n");
+                sb.append("> **操作建议**：请调用 `").append(TOOL_CALL_BIDS).append("` 工具发起招标，或直接进入招标环节。\n");
             } else {
-                sb.append("\n### Proposal Instruction\n");
-                sb.append("- Reply with a JSON bid containing `plan` and `score` (1-100).\n");
-                sb.append("- Reply \"REFUSE\" if unsuitable.");
+                sb.append("> **Mandatory**: Status is 'Waiting'. You **MUST** collect proposals before any assignment.\n");
+                sb.append("> **Action**: Please call `").append(TOOL_CALL_BIDS).append("` to initiate bidding.\n");
             }
-            return originalPrompt.addMessage(sb.toString());
         }
-        return originalPrompt;
+
+        sb.append(isZh ? "#### 成员资质表:\n" : "#### Agent Profiles:\n");
+        config.getAgentMap().forEach((name, ag) -> {
+            sb.append("- **").append(name).append("** (")
+                    .append(ag.description()).append("): ")
+                    .append("Skills").append(ag.profile().getSkills())
+                    .append(", Modes").append(ag.profile().getInputModes())
+                    .append("\n");
+        });
     }
 
     @Override
@@ -252,20 +222,46 @@ public class ContractNetProtocol extends TeamProtocolBase {
         super.injectSupervisorInstruction(locale, sb);
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
-            sb.append("\n### CNP 定标原则：\n");
-            sb.append("1. **模式优先**：识图任务必须指派 `image` 模式专家。\n");
-            sb.append("2. **择优录取**：对比标书中的信心值(`score`)，择优定标。");
+            sb.append("\n### CNP 协作规范：\n");
+            sb.append("1. **工具招标**：若无法确定最佳人选，优先调用 `").append(TOOL_CALL_BIDS).append("`。\n");
+            sb.append("2. **择优录取**：对比看板中的标书分数，直接回复专家名称进行定标。\n");
+            sb.append("3. **模态检查**：请确保所选专家的 `Modes` 支持当前任务模态（如识图需具备 `image`）。");
         } else {
-            sb.append("\n### CNP Awarding Rules:\n");
-            sb.append("1. **Mode Affinity**: Assign vision-capable agents for image tasks.\n");
-            sb.append("2. **Highest Score**: Award the agent with the highest bidding score.");
+            sb.append("\n### CNP Collaboration Rules:\n");
+            sb.append("1. **Tool Usage**: Call `").append(TOOL_CALL_BIDS).append("` if unsure about assignments.\n");
+            sb.append("2. **Decision**: Award the task by naming the best agent based on their bid score.\n");
+            sb.append("3. **Constraint**: Match task requirements with agent `Modes` (e.g., `image` for vision tasks).");
         }
     }
 
     @Override
     public void onTeamFinished(FlowContext context, TeamTrace trace) {
+        // 清理协议状态，防止长上下文干扰
         trace.getProtocolContext().remove(KEY_CONTRACT_STATE);
         trace.getProtocolContext().remove(KEY_BIDDING_ROUND);
         super.onTeamFinished(context, trace);
+    }
+
+    /**
+     * 算法兜底打分：基于关键词匹配
+     */
+    protected ONode constructBid(Agent agent, Prompt prompt) {
+        String taskDesc = prompt.getUserContent().toLowerCase();
+        int score = 60;
+
+        if (agent.profile() != null) {
+            for (String skill : agent.profile().getSkills()) {
+                if (taskDesc.contains(skill.toLowerCase())) {
+                    score += 15;
+                    break;
+                }
+            }
+        }
+
+        ONode bidNode = new ONode().asObject();
+        bidNode.set("score", Math.min(95, score));
+        bidNode.set("plan", "Profile-based auto evaluation.");
+        bidNode.set("auto_bid", true);
+        return bidNode;
     }
 }
