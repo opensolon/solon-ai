@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
+import org.noear.snack4.Feature;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -132,7 +134,7 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         trace.appendMessage(ChatMessage.ofAssistant(rawContent));
-        trace.setLastAnswer(clearContent);
+        trace.setLastResult(clearContent);
 
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onThought(trace, clearContent);
@@ -152,6 +154,12 @@ public class ReasonTask implements NamedTaskComponent {
     }
 
     private ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) {
+        if(LOG.isTraceEnabled()){
+            LOG.trace("ReActAgent [{}] calling model... messages: {}",
+                    config.getName(),
+                    ONode.serialize(messages, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
+        }
+
         ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o -> {

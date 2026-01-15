@@ -130,7 +130,10 @@ public class TeamTrace implements AgentTrace {
 
     public TeamProtocol getProtocol() { return config.getProtocol(); }
     public Prompt getPrompt() { return prompt; }
-    protected void setPrompt(Prompt prompt) { this.prompt = prompt; }
+    public void setPrompt(Prompt prompt) {
+        Objects.requireNonNull(prompt, "prompt cannot be null");
+        this.prompt = prompt;
+    }
     public String getRoute() { return route; }
     public void setRoute(String route) { this.route = route; }
     public String getLastDecision() { return lastDecision; }

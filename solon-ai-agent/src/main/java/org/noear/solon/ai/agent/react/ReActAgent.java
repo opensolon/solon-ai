@@ -142,7 +142,7 @@ public class ReActAgent implements Agent {
             options = config.getDefaultOptions();
         }
 
-        trace.prepare(config, options, session, config.getName(), protocol);
+        trace.prepare(config, options, session, protocol);
 
         if (protocol != null) {
             protocol.injectAgentTools(session.getSnapshot(),this, trace::addProtocolTool);

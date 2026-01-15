@@ -58,8 +58,6 @@ public class ReActTrace implements AgentTrace {
     /** 协议注入的专用工具映射表 */
     private transient final Map<String, FunctionTool> protocolToolMap = new LinkedHashMap<>();
 
-    /** 智能体名称 */
-    private String agentName;
     /** 任务提示词 */
     private Prompt prompt;
     /** 迭代步数计数器 */
@@ -72,13 +70,12 @@ public class ReActTrace implements AgentTrace {
     private volatile String route;
     /** 最终回答内容 (Final Answer) */
     private volatile String finalAnswer;
-    /** 模型最近一次原始回答 */
-    private volatile String lastAnswer;
+    /** 模型最近一次原始思考内容 */
+    private volatile String lastResult;
     /** 度量指标 */
     private final ReActMetrics metrics = new ReActMetrics();
 
     public ReActTrace() {
-        this.stepCounter = new AtomicInteger(0);
         this.route = Agent.ID_REASON;
     }
 
@@ -92,11 +89,10 @@ public class ReActTrace implements AgentTrace {
     /**
      * 准备执行环境
      */
-    protected void prepare(ReActAgentConfig config, ReActOptions options, AgentSession session, String agentName, TeamProtocol protocol) {
+    protected void prepare(ReActAgentConfig config, ReActOptions options, AgentSession session, TeamProtocol protocol) {
         this.config = config;
         this.options = options;
         this.session = session;
-        this.agentName = agentName;
         this.protocol = protocol;
     }
 
@@ -139,7 +135,7 @@ public class ReActTrace implements AgentTrace {
     }
 
     public String getAgentName() {
-        return agentName;
+        return config.getName();
     }
 
     public Prompt getPrompt() {
@@ -164,7 +160,7 @@ public class ReActTrace implements AgentTrace {
     public int nextStep() {
         int step = stepCounter.incrementAndGet();
         if (log.isDebugEnabled()) {
-            log.debug("Agent [{}] proceed to step: {}", agentName, step);
+            log.debug("Agent [{}] proceed to step: {}", getAgentName(), step);
         }
         return step;
     }
@@ -178,7 +174,7 @@ public class ReActTrace implements AgentTrace {
      */
     public void setRoute(String route) {
         if (log.isTraceEnabled()) {
-            log.trace("Agent [{}] route changed: {} -> {}", agentName, this.route, route);
+            log.trace("Agent [{}] route changed: {} -> {}", getAgentName(), this.route, route);
         }
         this.route = route;
     }
@@ -191,12 +187,12 @@ public class ReActTrace implements AgentTrace {
         this.finalAnswer = finalAnswer;
     }
 
-    public String getLastAnswer() {
-        return lastAnswer;
+    public String getLastResult() {
+        return lastResult;
     }
 
-    public void setLastAnswer(String lastAnswer) {
-        this.lastAnswer = lastAnswer;
+    public void setLastResult(String lastResult) {
+        this.lastResult = lastResult;
     }
 
     public int getMessagesSize() {
@@ -258,7 +254,7 @@ public class ReActTrace implements AgentTrace {
             throw new IllegalArgumentException("messages cannot be null");
         }
         if (log.isDebugEnabled()) {
-            log.debug("Agent [{}] messages replaced, size: {} -> {}", agentName, messages.size(), newMessages.size());
+            log.debug("Agent [{}] messages replaced, size: {} -> {}", getAgentName(), messages.size(), newMessages.size());
         }
         this.messages.clear();
         this.messages.addAll(newMessages);

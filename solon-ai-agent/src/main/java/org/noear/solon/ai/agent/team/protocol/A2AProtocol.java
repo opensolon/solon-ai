@@ -86,8 +86,20 @@ public class A2AProtocol extends TeamProtocolBase {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
 
         String expertsDescription = config.getAgentMap().entrySet().stream()
-                .filter(e -> !e.getKey().equals(agent.name()))
-                .map(e -> e.getKey() + " [" + e.getValue().profile().toFormatString(locale) + "]")
+                .filter(e -> !e.getKey().equals(agent.name())) // 排除自己
+                .map(e -> {
+                    Agent expert = e.getValue();
+                    String profile = expert.profile().toFormatString(locale); // [输入限制: ...]
+
+                    // 关键增强：加入专家描述
+                    String desc = expert.description();
+                    if (Utils.isEmpty(desc)) {
+                        desc = isZh ? "协同专家" : "Collaborative Expert";
+                    }
+
+                    // 格式化为：designer(网页设计专家) [输入限制: 仅限文本]
+                    return String.format("%s(%s) [%s]", e.getKey(), desc, profile);
+                })
                 .collect(Collectors.joining(" | "));
 
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER);
@@ -159,23 +171,47 @@ public class A2AProtocol extends TeamProtocolBase {
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         String target = (String) trace.getProtocolContext().get(KEY_LAST_TEMP_TARGET);
 
-        // 1. 处理 A2A 工具触发的接力
+
         if (Utils.isNotEmpty(target)) {
+            Locale locale = config.getLocale();
+            boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+
             trace.getProtocolContext().remove(KEY_LAST_TEMP_TARGET);
 
-            // 审计与校验
+            // 1. 熔断检查
             int count = (int) trace.getProtocolContext().getOrDefault(KEY_TRANSFER_COUNT, 0);
             if (count >= maxTransferRounds) {
-                LOG.warn("A2A: Max transfer limit reached.");
+                trace.setFinalAnswer(isZh ? "协作达到最大流转次数，任务中止。" : "Max transfer limit reached.");
                 return null;
             }
 
-            if (!checkModality(trace, target)) {
-                return null;
+            // 2. 核心校验
+            Agent targetAgent = config.getAgentMap().get(target);
+            if (targetAgent == null || !checkModality(trace, target)) {
+
+                // 构造反馈文本
+                String feedback = isZh
+                        ? "【系统通知】移交失败：专家 [" + target + "] 不存在或能力不匹配（如无法处理图片）。请重新选择专家或直接回答。"
+                        : "[System] Transfer failed: Expert [" + target + "] is invalid or lacks required capabilities. Please re-select or answer.";
+
+                // --- 关键适配点 ---
+                // A. 记录一个系统步骤，让“黑匣子”轨迹完整
+                trace.addStep(ChatRole.SYSTEM, "Supervisor", feedback, 0);
+
+                // B. 注入到 Prompt 中，确保回退后的 Agent 在下一轮能看到这个 User 反馈
+                List<ChatMessage> messages = new ArrayList<>(trace.getPrompt().getMessages());
+                messages.add(ChatMessage.ofUser(feedback));
+                trace.setPrompt(Prompt.of(messages));
+
+                // C. 利用现有的 lastAgentName 实现精准回退
+                String lastAgent = trace.getLastAgentName();
+                LOG.warn("A2A: Invalid target [{}], bouncing back to [{}]", target, lastAgent);
+
+                return lastAgent;
             }
 
+            // 3. 校验通过
             trace.getProtocolContext().put(KEY_TRANSFER_COUNT, count + 1);
-            LOG.debug("A2A: Signal detected from context, routing to: {}", target);
             return target;
         }
 

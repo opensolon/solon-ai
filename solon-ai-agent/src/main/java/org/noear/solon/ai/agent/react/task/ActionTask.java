@@ -37,7 +37,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -97,6 +96,10 @@ public class ActionTask implements NamedTaskComponent {
      * 处理标准 ToolCall 协议调用
      */
     private void processNativeToolCall(ReActTrace trace, ToolCall call) throws Throwable {
+        if(LOG.isDebugEnabled()) {
+            LOG.debug("Processing native tool call for agent [{}]: {}.", config.getName(), call);
+        }
+
         // 触发 Action 生命周期拦截
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onAction(trace, call.name(), call.arguments());
@@ -118,9 +121,13 @@ public class ActionTask implements NamedTaskComponent {
      * 解析并执行文本模式下的 Action 指令
      */
     private void processTextModeAction(ReActTrace trace) throws Throwable {
-        String lastContent = trace.getLastAnswer();
+        String lastContent = trace.getLastResult();
         if (Assert.isEmpty(lastContent)) {
             return;
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Processing text mode action for agent [{}].", config.getName());
         }
 
         Matcher matcher = ACTION_PATTERN.matcher(lastContent);
