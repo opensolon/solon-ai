@@ -167,6 +167,22 @@ public class SwarmProtocol extends TeamProtocolBase {
         return taskNode.isObject() && agentName.equalsIgnoreCase(taskNode.get("agent").getString());
     }
 
+    @Override
+    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
+        super.injectSupervisorInstruction(locale, sb); // 保留基类逻辑
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+
+        if (isZh) {
+            sb.append("\n### SWARM 决策准则：\n");
+            sb.append("1. **严禁总结**：当认为任务已完成时，请**直接输出** `[" + config.getFinishMarker() + "]` 并在其后**紧跟**最后一位专家的原话。不要添加任何你的总结、评论或反馈。\n");
+            sb.append("2. **决策优先**：除非任务完成，否则你只能输出下一个 Agent 的名字。不要解释原因。");
+        } else {
+            sb.append("\n### SWARM Decision Rules:\n");
+            sb.append("1. **No Summarization**: When the task is complete, output `[" + config.getFinishMarker() + "]` followed **immediately** by the last expert's original response. DO NOT add any of your own summary, comments, or feedback.\n");
+            sb.append("2. **Decision Only**: Unless finishing, only output the name of the next Agent. No explanations.");
+        }
+    }
+
     /**
      * 向 Supervisor 注入实时状态看板，辅助其做出负载均衡的决策
      */
