@@ -29,19 +29,62 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Locale;
+import java.util.*;
 import java.util.function.Consumer;
 
 /**
  * 蜂群协作协议 (Swarm Protocol)
- * * <p>核心机制：基于“任务涌现”与“信息素挥发”。Agent 可动态生成子任务并放入共享任务池，
- * 通过信息素（Pheromones）权重实现各成员间的负载均衡。</p>
  */
 @Preview("3.8.1")
 public class SwarmProtocol extends TeamProtocolBase {
     private static final Logger LOG = LoggerFactory.getLogger(SwarmProtocol.class);
-    private static final String KEY_SWARM_STATE = "swarm_state_node";
+    private static final String KEY_SWARM_STATE = "swarm_state_obj";
     private static final String TOOL_EMERGE = "__emerge_tasks__";
+
+    /**
+     * 涌现任务实体
+     */
+    public static class SwarmTask {
+        public String task;
+        public String agent;
+
+        public SwarmTask(String task, String agent) {
+            this.task = task;
+            this.agent = agent;
+        }
+    }
+
+    /**
+     * 强类型蜂群状态实体
+     */
+    public static class SwarmState {
+        private final Map<String, Integer> pheromones = new HashMap<>();
+        private final List<SwarmTask> taskPool = new ArrayList<>();
+
+        public Map<String, Integer> getPheromones() { return pheromones; }
+        public List<SwarmTask> getTaskPool() { return taskPool; }
+
+        public void emerge(String tasks, String agents) {
+            if (Utils.isEmpty(tasks)) return;
+            String[] taskArr = tasks.split("[,;，；\n]+");
+            String[] agentArr = Utils.isNotEmpty(agents) ? agents.split("[,;，；\n]+") : new String[0];
+
+            for (int i = 0; i < taskArr.length; i++) {
+                taskPool.add(new SwarmTask(taskArr[i].trim(), (i < agentArr.length) ? agentArr[i].trim() : null));
+            }
+        }
+
+        public void decayAndReinforce(String currentAgent) {
+            // 挥发
+            pheromones.replaceAll((k, v) -> Math.max(0, v - 1));
+            // 增强
+            pheromones.merge(currentAgent, 5, Integer::sum);
+        }
+
+        public void consume(String nextAgent) {
+            taskPool.removeIf(t -> nextAgent.equalsIgnoreCase(t.agent) || nextAgent.equalsIgnoreCase(t.task));
+        }
+    }
 
     public SwarmProtocol(TeamAgentConfig config) {
         super(config);
@@ -62,23 +105,17 @@ public class SwarmProtocol extends TeamProtocolBase {
         spec.addEnd(Agent.ID_END);
     }
 
-    private ONode getSwarmState(TeamTrace trace) {
-        return (ONode) trace.getProtocolContext().computeIfAbsent(KEY_SWARM_STATE, k -> {
-            ONode node = new ONode().asObject();
-            node.getOrNew("pheromones");
-            node.getOrNew("task_pool").asArray();
-            return node;
-        });
+    private SwarmState getSwarmState(TeamTrace trace) {
+        return (SwarmState) trace.getProtocolContext()
+                .computeIfAbsent(KEY_SWARM_STATE, k -> new SwarmState());
     }
 
-    /**
-     * 注入涌现工具，让 Agent 能够动态拆解任务
-     */
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
         TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
 
         if (trace != null) {
+            SwarmState state = getSwarmState(trace);
             FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_EMERGE);
             boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
@@ -93,28 +130,11 @@ public class SwarmProtocol extends TeamProtocolBase {
             }
 
             toolDesc.doHandle(args -> {
-                ONode state = getSwarmState(trace);
-                String tasks = (String) args.get("tasks");
-                String agents = (String) args.get("agents");
-                parseToPool(state.get("task_pool"), tasks, agents);
-
-                return isZh ? "系统：子任务已加入任务池，Supervisor 将据此调度。" : "System: Tasks added to pool.";
+                state.emerge((String) args.get("tasks"), (String) args.get("agents"));
+                return isZh ? "系统：子任务已加入任务池。" : "System: Tasks added to pool.";
             });
 
             receiver.accept(toolDesc);
-        }
-    }
-
-    private void parseToPool(ONode taskPool, String tasks, String agents) {
-        if (Utils.isEmpty(tasks)) return;
-        String[] taskArr = tasks.split("[,;，；\n]+");
-        String[] agentArr = Utils.isNotEmpty(agents) ? agents.split("[,;，；\n]+") : new String[0];
-
-        for (int i = 0; i < taskArr.length; i++) {
-            ONode t = new ONode().asObject();
-            t.set("task", taskArr[i].trim());
-            if (i < agentArr.length) t.set("agent", agentArr[i].trim());
-            taskPool.add(t);
         }
     }
 
@@ -134,9 +154,8 @@ public class SwarmProtocol extends TeamProtocolBase {
     @Override
     public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         if (decision.contains(config.getFinishMarker())) {
-            ONode state = getSwarmState(trace);
-            // 如果任务池还有任务，拦截结束信号（防早停）
-            if (state.get("task_pool").size() > 0 && trace.getIterationsCount() < 5) {
+            SwarmState state = getSwarmState(trace);
+            if (!state.getTaskPool().isEmpty() && trace.getIterationsCount() < 5) {
                 LOG.warn("Swarm: Finish blocked! Emergent tasks pending in pool.");
                 return false;
             }
@@ -146,35 +165,17 @@ public class SwarmProtocol extends TeamProtocolBase {
 
     @Override
     public void onAgentEnd(TeamTrace trace, Agent agent) {
-        ONode state = getSwarmState(trace);
-        ONode pheroNode = state.get("pheromones");
-
-        // 1. 信息素挥发：全员权重小幅下降（冷降）
-        pheroNode.getObject().forEach((k, v) -> {
-            int val = v.getInt();
-            if (val > 0) pheroNode.set(k, val - 1);
-        });
-
-        // 2. 局部增强：当前 Agent 增加权重，降低短期内被重复指派的概率（负载均衡）
-        int current = pheroNode.get(agent.name()).getInt();
-        pheroNode.set(agent.name(), current + 5);
+        getSwarmState(trace).decayAndReinforce(agent.name());
     }
 
     @Override
     public void onSupervisorRouting(FlowContext context, TeamTrace trace, String nextAgent) {
-        ONode state = getSwarmState(trace);
-        ONode taskPool = state.get("task_pool");
-        if (taskPool.isArray()) {
-            taskPool.getArrayUnsafe().removeIf(n ->
-                    nextAgent.equalsIgnoreCase(n.get("agent").getString()) ||
-                            nextAgent.equalsIgnoreCase(n.get("task").getString())
-            );
-        }
+        getSwarmState(trace).consume(nextAgent);
     }
 
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
-        super.injectSupervisorInstruction(locale, sb); // 保留基类逻辑
+        super.injectSupervisorInstruction(locale, sb);
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
 
         if (isZh) {
@@ -190,11 +191,12 @@ public class SwarmProtocol extends TeamProtocolBase {
 
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
-        ONode state = getSwarmState(trace);
+        SwarmState state = getSwarmState(trace);
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
         sb.append(isZh ? "\n### 蜂群状态看板 (Swarm Intelligence)\n" : "\n### Swarm Intelligence Dashboard\n");
-        sb.append("```json\n").append(state.toJson()).append("\n```\n");
+        // 保持看板的 JSON 可读性，内部自动序列化
+        sb.append("```json\n").append(ONode.serialize(state)).append("\n```\n");
 
         if (isZh) {
             sb.append("> **调度指引**：\n");
