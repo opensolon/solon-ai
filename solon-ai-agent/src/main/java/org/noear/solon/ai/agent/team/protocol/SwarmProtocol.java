@@ -76,30 +76,33 @@ public class SwarmProtocol extends TeamProtocolBase {
      */
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
-        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
-        FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_EMERGE);
+        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
 
-        if (isZh) {
-            toolDesc.title("涌现任务").description("当你发现需要拆解子任务或建议其他专家介入时调用。")
-                    .stringParamAdd("tasks", "待办任务描述，多个用分号分隔")
-                    .stringParamAdd("agents", "建议执行的专家名，多个用分号分隔");
-        } else {
-            toolDesc.title("Emerge Tasks").description("Call this to decompose tasks or suggest other experts.")
-                    .stringParamAdd("tasks", "Task descriptions, separated by semicolons")
-                    .stringParamAdd("agents", "Suggested agent names, separated by semicolons");
-        }
+        if (trace != null) {
+            FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_EMERGE);
+            boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-        toolDesc.doHandle(args -> {
-            TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
-            if (trace != null) {
+            if (isZh) {
+                toolDesc.title("涌现任务").description("当你发现需要拆解子任务或建议其他专家介入时调用。")
+                        .stringParamAdd("tasks", "待办任务描述，多个用分号分隔")
+                        .stringParamAdd("agents", "建议执行的专家名，多个用分号分隔");
+            } else {
+                toolDesc.title("Emerge Tasks").description("Call this to decompose tasks or suggest other experts.")
+                        .stringParamAdd("tasks", "Task descriptions, separated by semicolons")
+                        .stringParamAdd("agents", "Suggested agent names, separated by semicolons");
+            }
+
+            toolDesc.doHandle(args -> {
                 ONode state = getSwarmState(trace);
                 String tasks = (String) args.get("tasks");
                 String agents = (String) args.get("agents");
                 parseToPool(state.get("task_pool"), tasks, agents);
-            }
-            return isZh ? "系统：子任务已加入任务池，Supervisor 将据此调度。" : "System: Tasks added to pool.";
-        });
-        receiver.accept(toolDesc);
+
+                return isZh ? "系统：子任务已加入任务池，Supervisor 将据此调度。" : "System: Tasks added to pool.";
+            });
+
+            receiver.accept(toolDesc);
+        }
     }
 
     private void parseToPool(ONode taskPool, String tasks, String agents) {

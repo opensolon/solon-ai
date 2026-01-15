@@ -82,61 +82,60 @@ public class A2AProtocol extends TeamProtocolBase {
      */
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
-        Locale locale = config.getLocale();
-        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
 
-        String expertsDescription = config.getAgentMap().entrySet().stream()
-                .filter(e -> !e.getKey().equals(agent.name())) // 排除自己
-                .map(e -> {
-                    Agent expert = e.getValue();
-                    String skills = String.join(",", expert.profile().getSkills());
-                    String modes = String.join(",", expert.profile().getInputModes());
-                    String desc = expert.description();
+        if (trace != null) {
+            FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER).returnDirect(true);
+            boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-                    if (isZh) {
-                        return String.format("%s(%s) [技能:%s | 模态:%s]", e.getKey(), desc, skills, modes);
-                    } else {
-                        return String.format("%s(%s) [Skills:%s | Modes:%s]", e.getKey(), desc, skills, modes);
-                    }
-                })
-                .collect(Collectors.joining(" | "));
+            String expertsDescription = config.getAgentMap().entrySet().stream()
+                    .filter(e -> !e.getKey().equals(agent.name())) // 排除自己
+                    .map(e -> {
+                        Agent expert = e.getValue();
+                        String skills = String.join(",", expert.profile().getSkills());
+                        String modes = String.join(",", expert.profile().getInputModes());
+                        String desc = expert.description();
 
-        FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER);
-        tool.doHandle(args -> {
-            String target = (String) args.get("target");
-            String instruction = (String) args.get("instruction");
-            String state = (String) args.get("state");
+                        if (isZh) {
+                            return String.format("%s(%s) [技能:%s | 模态:%s]", e.getKey(), desc, skills, modes);
+                        } else {
+                            return String.format("%s(%s) [Skills:%s | Modes:%s]", e.getKey(), desc, skills, modes);
+                        }
+                    })
+                    .collect(Collectors.joining(" | "));
 
-            TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+            tool.doHandle(args -> {
+                String target = (String) args.get("target");
+                String instruction = (String) args.get("instruction");
+                String state = (String) args.get("state");
 
-            // 关键点：直接把解析好的参数存入协议上下文
-            if(trace != null) {
                 trace.getProtocolContext().put(KEY_LAST_TEMP_TARGET, target); // 标记本次要跳往的目标
                 trace.getProtocolContext().put(KEY_LAST_INSTRUCTION, instruction);
                 trace.getProtocolContext().put(KEY_GLOBAL_STATE, state);
-            }
+
+                if (isZh) {
+                    return "已发起向 [" + target + "] 的接力请求。";
+                } else {
+                    return "Transfer to [" + target + "] requested.";
+                }
+            });
 
             if (isZh) {
-                return "已发起向 [" + target + "] 的接力请求。";
+                tool.title("任务移交")
+                        .description("当你无法完成当前任务时，将其移交给更合适的专家。")
+                        .stringParamAdd("target", "目标专家名。必选范围: [" + expertsDescription + "]")
+                        .stringParamAdd("instruction", "给接棒专家的具体执行指令。")
+                        .stringParamAdd("state", "业务状态 JSON。");
             } else {
-                return "Transfer to [" + target + "] requested.";
+                tool.title("Transfer")
+                        .description("When you are unable to complete the current task, hand it over to a more appropriate expert.")
+                        .stringParamAdd("target", "Expert name. Options: [" + expertsDescription + "]")
+                        .stringParamAdd("instruction", "Specific instruction for the next expert.")
+                        .stringParamAdd("state", "Persistent JSON state.");
             }
-        });
 
-        if (isZh) {
-            tool.title("任务移交")
-                    .description("当你无法完成当前任务时，将其移交给更合适的专家。")
-                    .stringParamAdd("target", "目标专家名。必选范围: [" + expertsDescription + "]")
-                    .stringParamAdd("instruction", "给接棒专家的具体执行指令。")
-                    .stringParamAdd("state", "业务状态 JSON。");
-        } else {
-            tool.title("Transfer")
-                    .description("When you are unable to complete the current task, hand it over to a more appropriate expert.")
-                    .stringParamAdd("target", "Expert name. Options: [" + expertsDescription + "]")
-                    .stringParamAdd("instruction", "Specific instruction for the next expert.")
-                    .stringParamAdd("state", "Persistent JSON state.");
+            receiver.accept(tool);
         }
-        receiver.accept(tool);
     }
 
     @Override

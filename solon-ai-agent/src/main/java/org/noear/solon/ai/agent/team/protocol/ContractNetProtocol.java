@@ -126,9 +126,11 @@ public class ContractNetProtocol extends TeamProtocolBase {
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
         TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+
         if (trace != null && Agent.ID_BIDDING.equals(trace.getRoute())) {
+            FunctionToolDesc tool = new FunctionToolDesc(TOOL_SUBMIT_BID).returnDirect(true);
             boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
-            FunctionToolDesc tool = new FunctionToolDesc(TOOL_SUBMIT_BID);
+
             if (isZh) {
                 tool.title("提交投标").description("提交你的执行计划和信心分。")
                         .intParamAdd("score", "信心分(1-100)")
@@ -138,6 +140,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
                         .intParamAdd("score", "Confidence score(1-100)")
                         .stringParamAdd("plan", "Plan summary");
             }
+
             tool.doHandle(args -> {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("ContractNet: Agent [{}] submitted a manual bid via tool. Score: {}", agent.name(), args.get("score"));
@@ -151,6 +154,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
                 state.addBid(agent.name(), bid);
                 return isZh ? "标书已收录。" : "Bid received.";
             });
+
             receiver.accept(tool);
         }
     }
