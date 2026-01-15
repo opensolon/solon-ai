@@ -280,12 +280,12 @@ public class A2AProtocol extends TeamProtocolBase {
 
         if (isZh) {
             sb.append("\n### A2A 协作准则：\n");
-            sb.append("1. **直接交付**：任务完成时请直接输出 `").append(config.getFinishMarker()).append("`，禁止二次总结。\n");
-            sb.append("2. **流转审计**：若流转超过 3 次无进展，请强制收尾。");
+            sb.append("1. **直接交付**：任务完成时请直接输出 `" + config.getFinishMarker() + "`，**禁止**对专家的内容进行二次总结或润色。\n");
+            sb.append("2. **流转审计**：若专家间接力流转超过 3 次仍无实质进展，请立即介入并强制收尾。");
         } else {
             sb.append("\n### A2A Collaboration Rules:\n");
-            sb.append("1. **Direct Delivery**: Output `").append(config.getFinishMarker()).append("` directly upon completion. No re-summarization.\n");
-            sb.append("2. **Audit**: Force termination if >3 handovers occur without progress.");
+            sb.append("1. **Direct Delivery**: Output `" + config.getFinishMarker() + "` directly upon completion. **DO NOT** summarize or refine the expert's output.\n");
+            sb.append("2. **Handover Audit**: Intervene and force termination if more than 3 handovers occur without progress.");
         }
     }
 
