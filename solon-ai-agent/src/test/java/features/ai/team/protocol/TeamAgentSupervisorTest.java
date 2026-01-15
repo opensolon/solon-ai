@@ -9,8 +9,11 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamSystemPrompt;
+import org.noear.solon.ai.agent.team.TeamSystemPromptCn;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 
 /**
@@ -179,5 +182,112 @@ public class TeamAgentSupervisorTest {
 
         TeamTrace trace = team.getTrace(session);
         Assertions.assertTrue(trace.getStepCount() <= 3, "应该在有限步数内停止");
+    }
+
+    /**
+     * 测试：FinalAnswer 应该是 Coder 的代码输出，而不是 Reviewer 的审查结果
+     * <p>
+     * 验证场景：Coder 编写代码 -> Reviewer 审查通过 -> Supervisor 输出最终结果
+     * 预期结果：finalAnswer 和 result.getContent() 应该包含 Coder 输出的 HTML 代码
+     * </p>
+     */
+    @Test
+    public void testFinalAnswer() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 定义【开发者】Agent
+        Agent coder = ReActAgent.of(chatModel)
+                .name("Coder")
+                .description("前端开发专家，负责编写 HTML/CSS/JS 代码，并根据审查反馈进行修改。")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("你是一位经验丰富的网页开发者，精通 HTML、JS、CSS、TailwindCSS、现代前端技术")
+                        .instruction(
+                                "# 任务\n" +
+                                        "你需要帮助我生成一个完整的前端页面代码（简单实现，不超过500行代码），包含 HTML、CSS、JavaScript 三部分。\n" +
+                                        "如果收到审查反馈，请根据反馈修改代码。\n\n" +
+                                        "# 输出要求\n" +
+                                        "直接输出完整的 HTML 代码，不需要用 ```html 包裹。\n" +
+                                        "如果是修改，先简要说明修改点。"
+                        )
+                        .build())
+                .build();
+
+        // 2. 定义【审核员】Agent
+        Agent reviewer = ReActAgent.of(chatModel)
+                .name("Reviewer")
+                .description("代码审查专家，负责检查代码质量，输出审查结果和修改建议。")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("你是一名严格的代码审查专家")
+                        .instruction(
+                                "# 任务\n" +
+                                        "审查前端代码的质量、规范性、功能完整性。\n\n" +
+                                        "# 输出格式\n" +
+                                        "- 如果代码有问题：以【需要修改】开头，列出具体问题和修改建议\n" +
+                                        "- 如果代码没问题：输出【审查通过】代码质量良好，可以交付。\n\n" +
+                                        "# 审查要点\n" +
+                                        "1. HTML 结构是否语义化\n" +
+                                        "2. CSS 样式是否合理\n" +
+                                        "3. JS 逻辑是否正确\n" +
+                                        "4. 是否满足原始需求"
+                        )
+                        .build())
+                .build();
+
+        // 3. 组建【开发小组】Team
+        TeamAgent devTeam = TeamAgent.of(chatModel)
+                .name("DevTeam")
+                .agentAdd(coder, reviewer)
+                .maxTotalIterations(8)
+                .finishMarker("FINISH")
+                .systemPrompt(TeamSystemPromptCn.builder()
+                        .role("团队指挥")
+                        .instruction("如果Reviewer审查通过，输出 FINISH 并在其后完整转发 Coder 的 HTML 代码。")
+                        .build())
+                .build();
+
+        // 4. 执行任务
+        AgentSession agentSession = InMemoryAgentSession.of();
+        AssistantMessage result = devTeam.call(Prompt.of("帮我写一个简单的计数器页面，包含加减按钮"), agentSession);
+
+        // 5. 获取轨迹和最终答案
+        TeamTrace trace = devTeam.getTrace(agentSession);
+        String finalAnswer = trace.getFinalAnswer();
+        String resultContent = result.getContent();
+
+        System.out.println("--- FinalAnswer (前200字符) ---");
+        System.out.println(finalAnswer != null && finalAnswer.length() > 200
+                ? finalAnswer.substring(0, 200) + "..."
+                : finalAnswer);
+
+        System.out.println("\n--- Result Content (前200字符) ---");
+        System.out.println(resultContent != null && resultContent.length() > 200
+                ? resultContent.substring(0, 200) + "..."
+                : resultContent);
+
+        // 6. 打印执行轨迹
+        System.out.println("\n--- 执行轨迹 ---");
+        for (TeamTrace.TeamStep step : trace.getSteps()) {
+            String content = step.getContent();
+            int len = Math.min(100, content.length());
+            System.out.println("[" + step.getSource() + "] " + content.substring(0, len) + "...");
+        }
+
+        // 7. finalAnswer 应该包含 HTML 代码，而不是审查结果
+        Assertions.assertNotNull(finalAnswer, "finalAnswer 不应为空");
+        Assertions.assertNotNull(resultContent, "result.getContent() 不应为空");
+
+        boolean containsHtml = finalAnswer.contains("<html") || finalAnswer.contains("<!DOCTYPE")
+                || finalAnswer.contains("<div") || finalAnswer.contains("<button");
+        Assertions.assertTrue(containsHtml,
+                "finalAnswer 应该包含 HTML 代码（Coder 的输出），而不是审查结果。实际内容: "
+                        + (finalAnswer.length() > 100 ? finalAnswer.substring(0, 100) + "..." : finalAnswer));
+
+        // finalAnswer 不应该是 Reviewer 的审查结果
+        boolean containsReview = finalAnswer.contains("【审查通过】") || finalAnswer.contains("【需要修改】");
+        Assertions.assertFalse(containsReview, "finalAnswer 不应该是 Reviewer 的审查结果");
+
+        // result.getContent() 应该与 finalAnswer 一致
+        Assertions.assertEquals(finalAnswer, resultContent,
+                "result.getContent() 应该与 trace.getFinalAnswer() 一致");
     }
 }
