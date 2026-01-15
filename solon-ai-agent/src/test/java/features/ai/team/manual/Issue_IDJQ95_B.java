@@ -5,66 +5,59 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
-import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.test.SolonTest;
 
-import java.util.List;
-
 /**
- * 优化后的 Agent 团队协作单测
- * 1. Reviewer 使用 SimpleAgent 降低 Token 干扰
- * 2. 强化 Trace 链路检测
+ * 改造为 NONE 协议的工作流模式
+ * 1. 彻底移除 ReAct 引擎干扰，全部使用 SimpleAgent
+ * 2. 使用 graphAdjuster 手动编排 [Coder] -> [Reviewer] 链路
  */
 @SolonTest
-public class Issue_IDJQ95 {
+public class Issue_IDJQ95_B {
+
     @Test
     public void case1() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. Coder (ReAct)
-        Agent coder = ReActAgent.of(chatModel)
+        // 1. Coder (Simple) - 纯净输出，不带 ReAct 杂质
+        Agent coder = SimpleAgent.of(chatModel)
                 .name("Coder")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(SimpleSystemPrompt.builder()
                         .role("前端开发者")
-                        .instruction(
-                                "任务：编写完整的 HTML/JS 代码。\n" +
-                                        "要求：\n" +
-                                        "1. 直接输出代码内容，不要使用 Markdown 代码块（即不要包裹 ```）。\n" +
-                                        "2. 严禁尝试调用任何函数或 Action。\n" +
-                                        "3. 如果收到修改建议，请修复后再次输出完整代码。")
+                        .instruction("任务：编写完整的 HTML/JS 代码。直接输出代码内容，不要包裹 ```。")
                         .build())
                 .build();
 
-        // 2. Reviewer (Simple)
-        Agent reviewer = ReActAgent.of(chatModel)
+        // 2. Reviewer (Simple) - 纯净审查
+        Agent reviewer = SimpleAgent.of(chatModel)
                 .name("Reviewer")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(SimpleSystemPrompt.builder()
                         .role("代码审查专家")
-                        .instruction("你的任务是审查上下文（Context）中 Coder 提供的代码。\n" +
-                                "1. 如果上下文中已经有 HTML 代码，请根据审查标准给出意见。\n" +
-                                "2. 只要包含 <!DOCTYPE html> 且逻辑通顺，回复：【审查通过】 [FINISH]\n" +
-                                "3. 严禁复读‘请提供代码’，代码就在你面前的协作进度中。")
+                        .instruction("审查上文中的代码。若包含 <!DOCTYPE html>，回复：【审查通过】。")
                         .build())
                 .build();
 
-        // 3. TeamAgent 使用 SWARM 协议
+        // 3. TeamAgent 使用 NONE 协议 + 手动绘图
         TeamAgent devTeam = TeamAgent.of(chatModel)
                 .name("DevTeam")
-                .protocol(TeamProtocols.SEQUENTIAL) // 切换到动态接力的蜂群模式
+                .protocol(TeamProtocols.NONE) // 禁用自动协议
                 .agentAdd(coder, reviewer)
-                .maxTotalIterations(4) // 允许循环修正
-                .finishMarker("[FINISH]")
+                .graphAdjuster(spec -> {
+                    // 定义工作流逻辑：START -> Coder -> Reviewer -> END
+                    spec.addStart(Agent.ID_START).linkAdd(coder.name());
+                    spec.addActivity(coder).linkAdd(reviewer.name());
+                    spec.addActivity(reviewer).linkAdd(Agent.ID_END);
+                    spec.addEnd(Agent.ID_END);
+                })
                 .build();
 
         // 4. 执行
@@ -74,18 +67,22 @@ public class Issue_IDJQ95 {
                 agentSession
         );
 
-        System.out.println("=======最终输出=======");
+        System.out.println("======= 最终输出 =======");
         System.out.println(result.getContent());
 
         // 5. 轨迹解析
         TeamTrace trace = devTeam.getTrace(agentSession);
-        System.out.println("\n--- SWARM 动态协作轨迹 ---");
+        System.out.println("\n--- NONE 协议工作流轨迹 ---");
         trace.getSteps().forEach(s -> {
             System.out.printf("[%s]: %s\n", s.getSource(),
                     s.getContent().substring(0, Math.min(50, s.getContent().length())));
         });
 
         // 6. 最终断言
+        // 由于是顺序流，最终输出 result 通常是最后一个节点（Reviewer）的内容
+        Assertions.assertTrue(trace.getSteps().stream().anyMatch(s -> s.getSource().equals("Coder")));
+        Assertions.assertTrue(trace.getSteps().stream().anyMatch(s -> s.getSource().equals("Reviewer")));
+
         Assertions.assertTrue(result.getContent().contains("<html lang=\"en\">"));
     }
 }

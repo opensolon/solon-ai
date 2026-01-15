@@ -1,0 +1,6 @@
+
+
+
+solon.logging.appender:
+  console:
+    level: TRACE
