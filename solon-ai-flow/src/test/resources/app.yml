@@ -1,7 +1,7 @@
 solon.logging:
   appender:
     console:
-      level: INFO
+      level: DEBUG
   logger:
     "org.noear.dami":
       level: ERROR

@@ -1,4 +1,4 @@
-package features.ai.flow.app;
+package features.ai.flow.manual.app;
 
 import org.noear.solon.Solon;
 

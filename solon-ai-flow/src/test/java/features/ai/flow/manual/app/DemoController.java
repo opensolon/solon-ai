@@ -1,4 +1,4 @@
-package features.ai.flow.app;
+package features.ai.flow.manual.app;
 
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;

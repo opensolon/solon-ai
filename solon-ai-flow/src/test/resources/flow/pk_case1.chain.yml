@@ -37,7 +37,7 @@ layout:
     link:
       - nextId: model_a
         title: "重复5次"
-        condition: 'context.incrAdd("demo", 1) < 5'
+        condition: 'demo.incrementAndGet() < 5'
       - nextId: end
   - type: "end"
     id: "end"
