@@ -2,6 +2,7 @@ package features.ai.team.protocol;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
@@ -120,5 +121,99 @@ public class TeamAgentMarketTest {
 
         System.out.println("协作轨迹:\n" + trace.getFormattedHistory());
         Assertions.assertTrue(trace.getStepCount() > 0);
+    }
+
+    @Test
+    @DisplayName("生产级 Market 协作：多维度能力匹配与跨界兜底")
+    public void testMarketProductionComplexity() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 准备专业领域极其接近的专家
+        Agent iosDev = ReActAgent.of(chatModel).name("ios_dev")
+                .description("专注 Swift 和 SwiftUI。擅长苹果生态系统应用开发。")
+                .build();
+
+        Agent androidDev = ReActAgent.of(chatModel).name("android_dev")
+                .description("专注 Kotlin 和 Compose。擅长安卓平台原生开发。")
+                .build();
+
+        Agent crossPlatform = ReActAgent.of(chatModel).name("flutter_dev")
+                .description("全栈开发专家。擅长 Flutter 跨端方案，能同时生成 iOS 和 Android 代码。")
+                .build();
+
+        TeamAgent appMarket = TeamAgent.of(chatModel)
+                .name("App_Dev_Market")
+                .protocol(TeamProtocols.MARKET_BASED)
+                .agentAdd(iosDev, androidDev, crossPlatform)
+                .build();
+
+        // 场景 A：明确的跨端需求。期望：市场调度给 flutter_dev
+        AgentSession session1 = InMemoryAgentSession.of("s_cross");
+        String res1 = appMarket.call(Prompt.of("我需要低成本一次性开发出支持双平台的 App 演示原型"), session1).getContent();
+
+        TeamTrace trace1 = appMarket.getTrace(session1);
+        System.out.println("跨端需求指派给: " + trace1.getLastAgentName());
+        Assertions.assertEquals("flutter_dev", trace1.getLastAgentName(), "跨端任务应优先匹配全栈专家");
+
+        // 场景 B：无法匹配的极端需求（如：嵌入式硬件驱动）
+        AgentSession session2 = InMemoryAgentSession.of("s_hardware");
+        String res2 = appMarket.call(Prompt.of("帮我写一个基于 C 语言的 STM32 芯片驱动"), session2).getContent();
+
+        // 验证：即使无法匹配，系统也应能给出“市场中无合适专家”的响应，而不是随机指派
+        System.out.println("无人接单时的回复: " + res2);
+        Assertions.assertNotNull(res2);
+    }
+
+    @Test
+    @DisplayName("生产级 Market 协作：多云环境下的语义博弈与精准指派")
+    public void testMarketCloudNativeProductionLevel() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 定义具有高度竞争力的“市场专家”
+        Agent aliyun = ReActAgent.of(chatModel).name("aliyun_expert")
+                .description("阿里云首席架构师。精通 ACK(K8s)、SLB 和阿里云全家桶。")
+                .profile(p -> p.skillAdd("ACK").skillAdd("AlibabaCloud"))
+                .build();
+
+        Agent aws = ReActAgent.of(chatModel).name("aws_expert")
+                .description("AWS 认证专家。精通 EKS、IAM、S3 及 AWS 架构模式。")
+                .profile(p -> p.skillAdd("EKS").skillAdd("AWS"))
+                .build();
+
+        Agent generalist = ReActAgent.of(chatModel).name("k8s_generalist")
+                .description("云原生通用专家。擅长 Docker、标准 Kubernetes 编排，不依赖特定云平台。")
+                .build();
+
+        TeamAgent cloudMarket = TeamAgent.of(chatModel)
+                .name("Cloud_Services_Market")
+                .protocol(TeamProtocols.MARKET_BASED)
+                .agentAdd(aliyun, aws, generalist)
+                .build();
+
+        // 场景 A：具有强平台偏好的任务
+        AgentSession sessionA = InMemoryAgentSession.of("aliyun_task");
+        String resA = cloudMarket.call(Prompt.of("帮我把业务迁移到 ACK 上，并配置 SLB 负载均衡"), sessionA).getContent();
+
+        TeamTrace traceA = cloudMarket.getTrace(sessionA);
+        System.out.println("场景 A 指派给: " + traceA.getLastAgentName());
+        Assertions.assertEquals("aliyun_expert", traceA.getLastAgentName(), "应精准指派给阿里云专家");
+
+        // 场景 B：平台无关的底层架构任务
+        AgentSession sessionB = InMemoryAgentSession.of("generic_task");
+        String resB = cloudMarket.call(Prompt.of("写一个通用的 Kubernetes Deployment YAML，要求支持滚动更新"), sessionB).getContent();
+
+        TeamTrace traceB = cloudMarket.getTrace(sessionB);
+        System.out.println("场景 B 指派给: " + traceB.getLastAgentName());
+        // 预期：调解器应发现 generalist 或 aliyun 都能做，但 generalist 描述更匹配“通用”
+        Assertions.assertNotNull(traceB.getLastAgentName());
+
+        // 场景 C：冲突与自愈测试（故意给一个 AWS 和 阿里云 混合的任务）
+        AgentSession sessionC = InMemoryAgentSession.of("hybrid_task");
+        String queryC = "我们需要一个多云方案：既要在 AWS 上跑 EKS，又要在阿里云上跑 OSS。";
+        String resC = cloudMarket.call(Prompt.of(queryC), sessionC).getContent();
+
+        System.out.println(">>> 多云任务最终结果预览: " + resC);
+        // 在 Market 协议下，这类任务通常由 Mediator 选出一个“主专家”来领头，或者触发接力
+        Assertions.assertTrue(resC.contains("EKS") || resC.contains("OSS"), "复杂任务执行失败");
     }
 }

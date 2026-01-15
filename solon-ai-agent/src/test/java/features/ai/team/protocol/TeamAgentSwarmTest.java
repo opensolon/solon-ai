@@ -2,6 +2,7 @@ package features.ai.team.protocol;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
@@ -472,5 +473,177 @@ public class TeamAgentSwarmTest {
                 "result.getContent() 应该与 trace.getFinalAnswer() 一致");
 
         System.out.println("协作轨迹:\n" + trace.getFormattedHistory());
+    }
+
+    @Test
+    @DisplayName("生产级 Swarm：自循环防御与结构化任务涌现")
+    public void testSwarmProductionRobustness() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 定义两个“互相推诿”的 Agent
+        Agent agentA = ReActAgent.of(chatModel).name("AgentA")
+                .description("处理器 A。如果你觉得处理不了，请移交给 AgentB。")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .instruction("回复：[A已阅]，我觉得该让 AgentB 处理。").build()).build();
+
+        Agent agentB = ReActAgent.of(chatModel).name("AgentB")
+                .description("处理器 B。如果你觉得处理不了，请移交给 AgentA。")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .instruction("回复：[B已阅]，我觉得该让 AgentA 处理。").build()).build();
+
+        // 2. 定义一个“清道夫” Agent
+        Agent cleaner = ReActAgent.of(chatModel).name("Cleaner")
+                .description("最后的清理员。当 A 和 B 都在推卸时，由你终结任务。")
+                .build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.SWARM)
+                .agentAdd(agentA, agentB, cleaner)
+                .maxTotalIterations(8)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("test_robustness");
+
+        // 执行一个会导致推诿的任务
+        team.call(Prompt.of("请处理这个烫手山芋"), session);
+
+        TeamTrace trace = team.getTrace(session);
+        List<String> order = trace.getSteps().stream()
+                .filter(TeamTrace.TeamStep::isAgent)
+                .map(TeamTrace.TeamStep::getSource)
+                .collect(java.util.stream.Collectors.toList());
+
+        System.out.println("Swarm 执行链: " + String.join(" -> ", order));
+
+        // 验证：因为信息素的存在（每次执行 +5），AgentA 不可能无限循环
+        // 轨迹中 AgentA 出现的频率应该受到明显限制
+        long aCount = order.stream().filter(s -> s.equals("AgentA")).count();
+        Assertions.assertTrue(aCount <= 2, "信息素负载均衡失效，AgentA 出现次数过多: " + aCount);
+
+        // 验证：最终可能由于 A, B 信息素过高，Supervisor 强行指派了 Cleaner 或结束
+        Assertions.assertTrue(order.size() < 8, "Swarm 应该在触发最大迭代前通过信息素避障完成任务");
+    }
+
+    @Test
+    @DisplayName("验证 Swarm 的子任务涌现协议逻辑")
+    public void testSwarmSubTaskProtocol() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 模拟一个会精准产出 sub_tasks 的 Agent
+        Agent lead = ReActAgent.of(chatModel).name("Lead")
+                .description("项目组长。负责拆解任务。")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .instruction("分析需求并必须输出 JSON 子任务格式：{\"sub_tasks\": [{\"task\": \"具体工作\", \"agent\": \"Worker\"}]}").build()).build();
+
+        Agent worker = ReActAgent.of(chatModel).name("Worker")
+                .description("具体执行者。").build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.SWARM)
+                .agentAdd(lead, worker)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("test_json_emergence");
+        team.call(Prompt.of("开始拆解并执行任务"), session);
+
+        TeamTrace trace = team.getTrace(session);
+
+        // 断言：Worker 必须出现在执行轨迹中，证明 Lead 涌现出的任务被成功分发给了 Worker
+        boolean workerExecuted = trace.getSteps().stream()
+                .anyMatch(s -> "Worker".equals(s.getSource()));
+
+        Assertions.assertTrue(workerExecuted, "Swarm 任务涌现失败：Lead 产生的子任务未能激活 Worker");
+    }
+
+    /**
+     * 测试：生产级 Swarm 复杂协作
+     * 场景：跨境电商供应链风险处置。
+     * 流程：风险识别 -> (涌现) 物流调度 + 财务对冲 -> 品牌公关 -> 最终报告
+     */
+    @Test
+    @DisplayName("生产级 Swarm：跨境供应链风险动态处置博弈")
+    public void testSwarmProductionSupplyChainCrisis() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 风险官：入口 Agent，负责识别并拆解任务（涌现核心）
+        Agent riskOfficer = ReActAgent.of(chatModel).name("RiskOfficer")
+                .description("风险控制官。负责监控供应链风险并拆解任务。")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("风险控制官")
+                        .instruction("如果发现严重风险，必须生成 sub_tasks 分配给 Logistics 和 Finance。" +
+                                "任务描述需包含 JSON：{\"sub_tasks\": [{\"task\": \"重调度\", \"agent\": \"Logistics\"}, {\"task\": \"亏损评估\", \"agent\": \"Finance\"}]}")
+                        .build()).build();
+
+        // 2. 物流专家：处理具体操作
+        Agent logistics = ReActAgent.of(chatModel).name("Logistics")
+                .description("物流调度专家。负责更换承运商和航线。")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("物流专家")
+                        .instruction("提供新的航线方案。处理完后需请 PR 专家进行客户告知。")
+                        .build()).build();
+
+        // 3. 财务专家：资金管控
+        Agent finance = ReActAgent.of(chatModel).name("Finance")
+                .description("财务分析师。负责亏损核算。")
+                .build();
+
+        // 4. 公关专家：对外口径（容易产生打回博弈）
+        Agent prExpert = ReActAgent.of(chatModel).name("PR_Expert")
+                .description("公关与客户关系专家。")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("公关专家")
+                        .instruction("如果物流方案会导致 3 天以上的延报，必须打回给 Logistics 重新优化，否则输出【客户告知函】。")
+                        .build()).build();
+
+        // 5. 组建 Swarm 团队
+        TeamAgent crisisTeam = TeamAgent.of(chatModel)
+                .name("SupplyChain_Crisis_Swarm")
+                .protocol(TeamProtocols.SWARM)
+                .agentAdd(riskOfficer, logistics, finance, prExpert)
+                .maxTotalIterations(12) // 复杂场景预留更多步数
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("crisis_001");
+        String query = "由于苏伊士运河突发堵塞，我们有 5000 万美金的货物滞留，请立即处置。";
+
+        System.out.println(">>> 启动 Swarm 跨境危机处置程序...");
+        AssistantMessage result = crisisTeam.call(Prompt.of(query), session);
+
+        // --- 深度生产断言 ---
+        TeamTrace trace = crisisTeam.getTrace(session);
+        List<String> order = trace.getSteps().stream()
+                .filter(TeamTrace.TeamStep::isAgent)
+                .map(TeamTrace.TeamStep::getSource)
+                .collect(java.util.stream.Collectors.toList());
+
+        System.out.println("执行链路: " + String.join(" -> ", order));
+
+        // 1. 验证去中心化入口逻辑
+        Assertions.assertEquals("RiskOfficer", order.get(0), "Swarm 必须从首个注册 Agent 开始");
+
+        // 2. 验证任务涌现（并行/分支指派）
+        boolean hasLogistics = order.contains("Logistics");
+        boolean hasFinance = order.contains("Finance");
+        Assertions.assertTrue(hasLogistics && hasFinance, "RiskOfficer 应该涌现出物流和财务子任务");
+
+        // 3. 验证信息素避障
+        // 检查是否存在过长的连续重复指派（Swarm 默认 Pheromone 会阻止模型在同一个 Agent 上死磕）
+        int maxRepeat = 0, currentRepeat = 1;
+        for (int i = 1; i < order.size(); i++) {
+            if (order.get(i).equals(order.get(i-1))) {
+                currentRepeat++;
+            } else {
+                maxRepeat = Math.max(maxRepeat, currentRepeat);
+                currentRepeat = 1;
+            }
+        }
+        Assertions.assertTrue(maxRepeat <= 2, "信息素避障失效，出现了过长的单一节点循环: " + maxRepeat);
+
+        // 4. 验证最终产物的质量
+        String finalContent = result.getContent();
+        Assertions.assertTrue(finalContent.contains("告知函") || finalContent.contains("方案"),
+                "最终输出应包含处理结果或公关建议");
+
+        System.out.println("最终处置报告摘要: " + (finalContent.length() > 200 ? finalContent.substring(0, 200) : finalContent));
     }
 }

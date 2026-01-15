@@ -2,6 +2,7 @@ package features.ai.team.protocol;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
@@ -10,6 +11,7 @@ import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
+import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -227,5 +229,190 @@ public class TeamAgentBlackboardTest {
         System.out.println("轨迹总步数: " + trace.getStepCount());
         // 允许 3 轮决策，每轮 Agent 思考 3 步，总步数预留到 15 比较安全
         Assertions.assertTrue(trace.getStepCount() < 20, "总步数异常，可能发生了深度死循环");
+    }
+
+    @Test
+    public void testBlackboardAutomaticGapFilling() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 只有前端专家和后端专家，没有 UI 专家
+        Agent frontend = ReActAgent.of(chatModel).name("frontend")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .instruction("根据黑板上的接口定义和 UI 样式，编写 React 组件。").build()).build();
+
+        Agent backend = ReActAgent.of(chatModel).name("backend")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .instruction("根据黑板上的业务逻辑，编写 Spring Boot 控制器。").build()).build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.BLACKBOARD)
+                .agentAdd(frontend, backend)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("gap_fill_test");
+
+        // 注入一个已经包含了 UI 设计图地址的黑板初始状态（模拟部分任务已完成）
+        session.getSnapshot().put("shared_blackboard", "{\"ui_design_url\": \"http://figma.com/design_001\"}");
+
+        String query = "UI 设计已经有了，请前后端专家根据这个地址的内容完成实现。";
+        String result = team.call(Prompt.of(query), session).getContent();
+
+        // --- 断言 ---
+        TeamTrace trace = team.getTrace(session);
+        // 验证：即使没有 UI 专家参与，团队也应该能基于 context 中的 UI 信息继续工作
+        Assertions.assertTrue(result.contains("React") && result.contains("Spring"), "前后端专家未能在补位场景下完成工作");
+    }
+
+    @Test
+    public void testBlackboardEnterpriseProductionLevel() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 架构师：设定黑板的“基准目标”
+        Agent architect = ReActAgent.of(chatModel).name("Architect")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("首席架构师")
+                        .instruction("定义系统目标：支持 10w QPS 的秒杀。在黑板登记选型（如 Redis+Lua）。")
+                        .build()).build();
+
+        // 2. DBA：基于架构师的选型设计存储
+        Agent dba = ReActAgent.of(chatModel).name("DBA")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("DB 专家")
+                        .instruction("检查黑板上的 QPS 目标，设计 Redis 预热脚本。若发现 QPS 过高，需在黑板提示内存风险。")
+                        .build()).build();
+
+        // 3. 安全专家：横向补位，检查 DBA 的逻辑
+        Agent security = ReActAgent.of(chatModel).name("Security")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("安全审计员")
+                        .instruction("针对黑板上的接口设计防刷策略。必须包含 '设备指纹' 校验逻辑。")
+                        .build()).build();
+
+        // 4. 运维专家：垂直补位，设计扩容
+        Agent devops = ReActAgent.of(chatModel).name("DevOps")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("SRE 工程师")
+                        .instruction("基于黑板上的资源消耗，设计 K8s 自动伸缩策略（HPA）。")
+                        .build()).build();
+
+        // 5. 审核者：确保黑板信息达成共识
+        Agent reviewer = ReActAgent.of(chatModel).name("Reviewer")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("交付负责人")
+                        .instruction("当黑板上包含：[架构选型]、[存储脚本]、[安全策略]、[扩容策略] 四项时，回复 'DONE'。")
+                        .build()).build();
+
+        TeamAgent enterpriseTeam = TeamAgent.of(chatModel)
+                .name("High_Availability_Squad")
+                .protocol(TeamProtocols.BLACKBOARD)
+                .agentAdd(architect, dba, security, devops, reviewer)
+                .maxTotalIterations(15) // 生产环境链路长，角色多，允许更多决策轮次
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("enterprise_prod_001");
+        String query = "我们要上线一个‘1元抢购耳机’的活动，QPS 预期 10 万，请全组成员在黑板上协作完成技术方案。";
+
+        System.out.println(">>> 正在启动企业级 Blackboard 协作流水线...");
+        String result = enterpriseTeam.call(Prompt.of(query), session).getContent();
+
+        // --- 生产环境关键断言 ---
+        TeamTrace trace = enterpriseTeam.getTrace(session);
+        String dashboard = trace.getProtocolDashboardSnapshot();
+
+        System.out.println(">>> 最终协作看板内容: " + dashboard);
+
+        // 断言 1: 角色广泛性
+        long distinctAgents = trace.getSteps().stream()
+                .map(TeamTrace.TeamStep::getSource)
+                .filter(s -> !s.equalsIgnoreCase("supervisor"))
+                .distinct().count();
+        Assertions.assertTrue(distinctAgents >= 3, "协作深度不足，专家参与度不够");
+
+        // 断言 2: 黑板数据沉淀
+        // 在生产环境，黑板不应该只在 Prompt 里，应该在执行后保留关键的 JSON 状态
+        Assertions.assertTrue(dashboard.contains("QPS") || dashboard.contains("Redis"), "黑板关键选型丢失");
+
+        // 断言 3: 安全性验证
+        Assertions.assertTrue(result.contains("指纹") || result.contains("校验"), "安全合规逻辑在协作中被遗漏");
+    }
+
+    @Test
+    @DisplayName("生产级多协议博弈：跨境清算系统重构方案设计")
+    public void testEnterpriseComplexProductionLevel() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. CTO：定义全局目标
+        Agent cto = ReActAgent.of(chatModel).name("CTO")
+                .description("首席技术官。设定架构标准：高并发、低延迟、分布式。")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("CTO")
+                        .instruction("定义系统基准：必须支持 10k TPS。要求使用分布式数据库，并在黑板上登记选型。")
+                        .build()).build();
+
+        // 2. 金融专家：业务建模
+        Agent finExpert = ReActAgent.of(chatModel).name("FinExpert")
+                .description("金融业务专家。负责跨境清算流程和货币对转换规则。")
+                .build();
+
+        // 3. DBA：性能建模（依赖 CTO 的选型）
+        Agent dba = ReActAgent.of(chatModel).name("DBA")
+                .description("数据库专家。设计分库分表。若 CTO 选型不合理，必须在黑板提出质疑。")
+                .build();
+
+        // 4. 安全专家（关键拦截者）：负责找茬
+        Agent security = ReActAgent.of(chatModel).name("Security")
+                .description("合规与安全官。强制要求国密算法和数据脱敏。")
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("安全合规")
+                        .instruction("检查方案。若未提及 'SM4加密' 或 '数据脱敏'，必须在回复中明确回复【审计打回】，且不允许流程结束。")
+                        .build()).build();
+
+        // 5. 运维专家：负责灾备
+        Agent sre = ReActAgent.of(chatModel).name("SRE")
+                .description("运维专家。设计两地三中心方案。")
+                .build();
+
+        // 6. 决策团队
+        TeamAgent heavyTeam = TeamAgent.of(chatModel)
+                .name("Core_Settlement_Squad")
+                .protocol(TeamProtocols.BLACKBOARD) // 使用黑板协议，支持非线性协作
+                .agentAdd(cto, finExpert, dba, security, sre)
+                .maxTotalIterations(20) // 给专家组充分“吵架”的空间
+                .finishMarker("FINISH_ARCH")
+                .systemPrompt(TeamSystemPrompt.builder()
+                        .role("方案协调中心")
+                        .instruction("### 协作逻辑：\n" +
+                                "1. 必须在黑板上汇总：架构、业务规则、数据库设计、安全方案、运维方案。\n" +
+                                "2. **硬性约束**：如果 Security 提出了【审计打回】，必须让相关专家重新修改方案，直到 Security 确认【审计通过】。\n" +
+                                "3. 所有模块完整且审计通过后，输出 FINISH_ARCH 并总结最终技术规格书。")
+                        .build())
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("complex_prod_001");
+        String query = "我们要重构跨境支付清算系统，请团队各成员协作，输出一份符合金融合规的高并发架构方案。";
+
+        System.out.println(">>> 生产级协作启动...");
+        String result = heavyTeam.call(Prompt.of(query), session).getContent();
+
+        // --- 深度生产断言 ---
+        TeamTrace trace = heavyTeam.getTrace(session);
+
+        // 1. 断言：角色博弈深度
+        // 生产环境下，好的协作不应该是每个 Agent 只说一次，应该有“打回-修改-再审”的循环
+        long totalSteps = trace.getStepCount();
+        System.out.println("协作总步数: " + totalSteps);
+        Assertions.assertTrue(totalSteps > 6, "协作深度不足，可能只是简单的点名，没有形成有效博弈");
+
+        // 2. 断言：安全红线穿透
+        // 验证安全专家的要求是否被最终方案采纳
+        Assertions.assertTrue(result.contains("加密") || result.contains("脱敏"), "安全合规要求在协作中被遗漏");
+
+        // 3. 断言：技术指标达成
+        Assertions.assertTrue(result.contains("TPS") && (result.contains("分布式") || result.contains("分库")), "核心技术指标未达成");
+
+        // 4. 断言：协议看板完整性
+        String dashboard = trace.getProtocolDashboardSnapshot();
+        System.out.println("最终黑板状态: " + dashboard);
+        Assertions.assertNotNull(dashboard, "协作黑板快照不能为空");
     }
 }

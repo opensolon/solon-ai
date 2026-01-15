@@ -2,6 +2,7 @@ package features.ai.team.protocol;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
@@ -15,6 +16,9 @@ import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Supervisor 决策逻辑测试
@@ -289,5 +293,128 @@ public class TeamAgentSupervisorTest {
         // result.getContent() 应该与 finalAnswer 一致
         Assertions.assertEquals(finalAnswer, resultContent,
                 "result.getContent() 应该与 trace.getFinalAnswer() 一致");
+    }
+
+    @Test
+    @DisplayName("生产级 Supervisor：全链路金融故障修复与安全审计博弈")
+    public void testEnterpriseIncidentResponsePipeline() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. SRE (运维)：只提供原始日志和系统指标
+        Agent sre = ReActAgent.of(chatModel).name("SRE_Ops")
+                .description("负责收集故障日志。已知当前支付网关出现 OutOfMemoryError。")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("资深运维工程师")
+                        .instruction("你只需提供详细的 JVM 堆栈日志片段。不要尝试修复。")
+                        .build()).build();
+
+        // 2. Architect (架构师)：分析根本原因
+        Agent architect = ReActAgent.of(chatModel).name("Architect")
+                .description("负责定位 OOM 根源，判断是内存泄漏还是并发过高。")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("系统架构师")
+                        .instruction("基于 SRE 的日志定位问题（如：ThreadLocal 未清理）。给出修复思路，但不写代码。")
+                        .build()).build();
+
+        // 3. Developer (开发者)：编写修复补丁
+        Agent developer = ReActAgent.of(chatModel).name("Developer")
+                .description("负责根据架构师的思路编写 Java 修复代码。")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("Java 开发工程师")
+                        .instruction("编写具体的 Java 代码补丁。如果被安全审计打回，需根据建议重新编写。")
+                        .build()).build();
+
+        // 4. Security (安全专家)：安全审计（这个角色最关键，他会产生打回逻辑）
+        Agent security = ReActAgent.of(chatModel).name("Security_Audit")
+                .description("负责审计代码是否有 SQL 注入或资源未释放等安全隐患。")
+                .systemPrompt(ReActSystemPromptCn.builder()
+                        .role("安全合规专家")
+                        .instruction("检查 Developer 的代码。如果代码中存在资源未关闭或硬编码密钥，必须明确回复【审计打回】并给出原因。" +
+                                "如果完全没问题，回复【审计通过】。")
+                        .build()).build();
+
+        // 5. 组建超级团队
+        TeamAgent incidentTeam = TeamAgent.of(chatModel)
+                .name("Incident_Response_Force")
+                .agentAdd(sre, architect, developer, security)
+                .maxTotalIterations(15) // 复杂博弈需要更多轮次
+                .finishMarker("FINISH") // 显式结束标记
+                .systemPrompt(TeamSystemPromptCn.builder()
+                        .role("紧急事件指挥官")
+                        .instruction("### 调度逻辑\n" +
+                                "1. 按 SRE -> Architect -> Developer -> Security 顺序推进。\n" +
+                                "2. **关键：** 如果 Security 输出包含'审计打回'，必须指挥 Developer 重新修改。\n" +
+                                "3. 只有 Security 输出包含'审计通过'后，你才总结修复方案并输出 FINISH。")
+                        .build())
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("incident_001");
+        String query = "线上支付网关响应极慢并伴随 OOM 报错，请团队立即协作修复并确保符合安全规范。";
+
+        System.out.println(">>> 正在启动生产级故障处理流水线...");
+        String result = incidentTeam.call(Prompt.of(query), session).getContent();
+
+        // --- 核心深度断言 ---
+        TeamTrace trace = incidentTeam.getTrace(session);
+
+        // 断言 1: 角色参与度（至少应该涉及 4 个角色）
+        long activeRoles = trace.getSteps().stream()
+                .map(TeamTrace.TeamStep::getSource)
+                .filter(name -> !name.equals("supervisor") && !name.equals("user"))
+                .distinct().count();
+        System.out.println("参与角色总数: " + activeRoles);
+        Assertions.assertTrue(activeRoles >= 4, "角色参与度不足，流水线执行不完整");
+
+        // 断言 2: 逻辑顺序（Architect 必须在 SRE 之后）
+        int sreIdx = -1, archIdx = -1;
+        for (int i = 0; i < trace.getSteps().size(); i++) {
+            String source = trace.getSteps().get(i).getSource();
+            if (source.equals("SRE_Ops")) sreIdx = i;
+            if (source.equals("Architect")) archIdx = i;
+        }
+        Assertions.assertTrue(sreIdx < archIdx, "执行顺序错误：架构师应在运维提供日志后分析");
+
+        // 断言 3: 最终产物（必须包含 Java 代码）
+        Assertions.assertTrue(result.contains("class") || result.contains("ThreadLocal") || result.contains("public"),
+                "最终结果中缺失核心修复代码");
+
+        // 断言 4: 结果纯净度（FinalAnswer 不应包含中间的争吵过程）
+        Assertions.assertFalse(result.contains("审计打回"), "FinalAnswer 应该只包含最终结论，不应包含中间纠错过程");
+    }
+
+    @Test
+    @DisplayName("生产模拟：自动补位逻辑")
+    public void testSupervisorSelfHealing() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 专家 A：只给思路，不给代码
+        Agent strategist = ReActAgent.of(chatModel).name("strategist")
+                .description("战略家，只提供算法思路，绝对不写任何代码。").build();
+
+        // 专家 B：只管实现
+        Agent implementer = ReActAgent.of(chatModel).name("implementer")
+                .description("程序员，根据思路实现 Java 代码。").build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .agentAdd(strategist, implementer)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("self_healing_session");
+        String query = "请帮我实现一个冒泡排序。";
+
+        // 执行并获取结果
+        String result = team.call(Prompt.of(query), session).getContent();
+
+        TeamTrace trace = team.getTrace(session);
+
+        // 断言：逻辑必须经过 [Strategist -> Implementer]
+        List<String> sources = trace.getSteps().stream()
+                .map(s -> s.getSource())
+                .filter(n -> !n.equals("supervisor"))
+                .collect(Collectors.toList());
+
+        System.out.println("补位路径: " + String.join(" -> ", sources));
+        Assertions.assertTrue(sources.contains("strategist"), "必须经过战略思考");
+        Assertions.assertTrue(sources.contains("implementer"), "必须经过代码实现");
     }
 }

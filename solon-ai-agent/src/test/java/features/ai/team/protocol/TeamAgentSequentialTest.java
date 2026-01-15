@@ -14,6 +14,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -150,5 +151,105 @@ public class TeamAgentSequentialTest {
 
         String finalResult = trace.getSteps().get(trace.getStepCount() - 1).getContent();
         Assertions.assertTrue(finalResult.contains("[B 已处理]"), "最终结果未包含 B 的处理标识");
+    }
+
+    @Test
+    @DisplayName("生产级 Sequential：全链路 DevOps 发布流水线")
+    public void testSequentialProductionComplexity() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 代码分析员
+        Agent analyzer = SimpleAgent.of(chatModel).name("Analyzer")
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .instruction("分析 Git Diff，提取：1.修改模块名 2.变更版本号。输出格式：[模块] - [版本]").build()).build();
+
+        // 2. 变更日志生成器
+        Agent changelog = SimpleAgent.of(chatModel).name("Changelog")
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .instruction("基于 Analyzer 的输出，写一段技术变更日志。").build()).build();
+
+        // 3. 运营文案翻译
+        Agent translator = SimpleAgent.of(chatModel).name("Translator")
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .instruction("将技术变更日志翻译成通俗易懂的英文。").build()).build();
+
+        // 4. 最终审核与格式化
+        Agent formatter = SimpleAgent.of(chatModel).name("Formatter")
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .instruction("将翻译结果封装进 HTML 邮件模版。").build()).build();
+
+        TeamAgent devOpsTeam = TeamAgent.of(chatModel)
+                .name("Release_Pipeline")
+                .protocol(TeamProtocols.SEQUENTIAL)
+                .agentAdd(analyzer, changelog, translator, formatter)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("session_release_001");
+        // 给出一个包含明确版本号的输入
+        String query = "Git Diff: Modified solon.ai version from 1.0.1 to 1.1.0; Fixed Swarm Protocol bug.";
+
+        String result = devOpsTeam.call(Prompt.of(query), session).getContent();
+
+        // --- 生产级断言 ---
+        TeamTrace trace = devOpsTeam.getTrace(session);
+
+        // 验证顺序完整性
+        List<String> order = trace.getSteps().stream()
+                .map(TeamTrace.TeamStep::getSource).distinct().collect(Collectors.toList());
+        Assertions.assertEquals(Arrays.asList("Analyzer", "Changelog", "Translator", "Formatter"), order);
+
+        // 验证数据穿透能力：最初输入的 "1.1.0" 必须穿透 4 层 Agent 到达最终结果
+        Assertions.assertTrue(result.contains("1.1.0"), "关键版本信息在流水线传递中丢失");
+    }
+
+    @Test
+    @DisplayName("生产级 Sequential：金融研报长链路数据穿透测试")
+    public void testSequentialFinancialProductionPipeline() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 环节一：原始数据抓取（产生核心变量：ticker, pe_ratio）
+        Agent miner = SimpleAgent.of(chatModel).name("DataMiner")
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .instruction("识别股票代码和 PE 比例。输出格式：Ticker: [代码], PE: [数值]").build()).build();
+
+        // 2. 环节二：风险建模（必须保留 Ticker 这一关键锚点）
+        Agent analyzer = SimpleAgent.of(chatModel).name("RiskAnalyzer")
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .instruction("接收数据并计算风险分值（1-10）。必须在回复中包含原始 Ticker。").build()).build();
+
+        // 3. 环节三：投资建议（根据风险分值做决策）
+        Agent strategist = SimpleAgent.of(chatModel).name("Strategist")
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .instruction("根据风险分值给出建议。1-3 分买入，4-10 分观望。").build()).build();
+
+        // 4. 环节四：合规审查（最终格式化，确保输出安全）
+        Agent censor = SimpleAgent.of(chatModel).name("ComplianceCensor")
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .instruction("将所有信息整理为正式 HTML 报告。对敏感财务数据进行脱敏处理（用 * 代替部分数字）。").build()).build();
+
+        TeamAgent reportTeam = TeamAgent.of(chatModel)
+                .name("Financial_Report_Pipeline")
+                .protocol(TeamProtocols.SEQUENTIAL)
+                .agentAdd(miner, analyzer, strategist, censor)
+                .build();
+
+        // 生产环境模拟输入：复杂的非结构化文本
+        AgentSession session = InMemoryAgentSession.of("fin_report_2026_001");
+        String query = "分析某科技股（代码：SOLON_TECH），目前其市盈率为 45 倍，近期波动剧烈。";
+
+        String result = reportTeam.call(Prompt.of(query), session).getContent();
+
+        // --- 生产级深度断言 ---
+        TeamTrace trace = reportTeam.getTrace(session);
+
+        // 1. 验证“传声筒”效应：第一个环节提取的 Ticker 是否成功抵达最后环节
+        Assertions.assertTrue(result.contains("SOLON_TECH"), "关键锚点数据在长链条传递中丢失");
+
+        // 2. 验证“逻辑闭环”：观察 Strategist 是否根据 45 倍 PE（高风险）给出了正确的“观望”建议
+        // 注意：这取决于 LLM 对 45 倍 PE 的风险认知，生产测试中通常配合特定的 Prompt 指引
+        Assertions.assertTrue(result.contains("观望") || result.contains("Wait"), "投资逻辑与输入数据不符");
+
+        // 3. 验证“格式规范”：HTML 标签是否存在
+        Assertions.assertTrue(result.contains("<html") || result.contains("</div>"), "最终环节未能完成格式化职责");
     }
 }
