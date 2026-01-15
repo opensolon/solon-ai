@@ -89,16 +89,13 @@ public class A2AProtocol extends TeamProtocolBase {
                 .filter(e -> !e.getKey().equals(agent.name())) // 排除自己
                 .map(e -> {
                     Agent expert = e.getValue();
-                    String profile = expert.profile().toFormatString(locale); // [输入限制: ...]
-
-                    // 关键增强：加入专家描述
+                    String skills = String.join(",", expert.profile().getSkills());
+                    String modes = String.join(",", expert.profile().getInputModes());
                     String desc = expert.description();
-                    if (Utils.isEmpty(desc)) {
-                        desc = isZh ? "协同专家" : "Collaborative Expert";
-                    }
 
-                    // 格式化为：designer(网页设计专家) [输入限制: 仅限文本]
-                    return String.format("%s(%s) [%s]", e.getKey(), desc, profile);
+                    return isZh ?
+                            String.format("%s(%s) [技能:%s | 模态:%s]", e.getKey(), desc, skills, modes) :
+                            String.format("%s(%s) [Skills:%s | Modes:%s]", e.getKey(), desc, skills, modes);
                 })
                 .collect(Collectors.joining(" | "));
 
@@ -122,18 +119,27 @@ public class A2AProtocol extends TeamProtocolBase {
 
         if (isZh) {
             tool.title("任务移交")
-                    .description("将任务移交给更合适的专家。")
+                    .description("当你无法完成当前任务时，将其移交给更合适的专家。")
                     .stringParamAdd("target", "目标专家名。必选: [" + expertsDescription + "]")
                     .stringParamAdd("instruction", "给接棒专家的指令。")
                     .stringParamAdd("state", "业务状态 JSON（全程持久化）。");
         } else {
             tool.title("Transfer")
-                    .description("Hand over task to another expert.")
+                    .description("When you are unable to complete the current task, hand it over to a more appropriate expert.")
                     .stringParamAdd("target", "Expert name. Options: [" + expertsDescription + "]")
                     .stringParamAdd("instruction", "Specific instruction for the next expert.")
                     .stringParamAdd("state", "Persistent JSON state.");
         }
         receiver.accept(tool);
+    }
+
+    @Override
+    public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        sb.append(isZh ? "\n## 专家协作指引\n" : "\n## Collaboration Guidelines\n");
+        sb.append(isZh ?
+                "- 必须根据各专家的 [技能] 和 [模态] 标签精准选择目标，严禁向不支持相关模态的专家移交任务。\n" :
+                "- You must choose the target precisely based on [Skills] and [Modes] tags. Never transfer to an agent that lacks the required modality.\n");
     }
 
     /**

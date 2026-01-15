@@ -62,9 +62,10 @@ public class AgentProfile implements Serializable {
 
 
     public AgentProfile() {
-        // 默认初始化为基础文本模态
+        // 初始化基础技术与模态（确保不空）
         this.inputModes.add("text");
         this.outputModes.add("text");
+        this.skills.add("assistant");
     }
 
     // --- Fluent API (链式配置) ---
