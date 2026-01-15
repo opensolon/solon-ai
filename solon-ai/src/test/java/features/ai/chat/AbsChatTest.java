@@ -257,6 +257,10 @@ public abstract class AbsChatTest {
 
         System.out.println(chatSession.toNdjson());
 
+        System.out.println("-----------------------------------");
+
+        System.out.println(chatSession.getMessages().size());
+
         assert chatSession.getMessages().size() == 4;
     }
 
@@ -323,6 +327,10 @@ public abstract class AbsChatTest {
         System.out.println("-----------------------------------");
 
         System.out.println(chatSession.toNdjson());
+
+        System.out.println("-----------------------------------");
+
+        System.out.println(chatSession.getMessages().size());
 
         assert chatSession.getMessages().size() == 8;
     }

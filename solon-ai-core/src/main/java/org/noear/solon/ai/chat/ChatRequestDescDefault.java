@@ -345,6 +345,12 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             session.addMessage(assistantMessages);
 
             if (options.isAutoToolCall()) {
+                // 如果没有消息，说明工具调用解析失败或没有工具需要处理，直接完成
+                if (assistantMessages.isEmpty()) {
+                    log.debug("工具调用解析结果为空，结束流式响应");
+                    return true; //触发外层的完成事件
+                }
+
                 List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
 
                 if (Utils.isEmpty(returnDirectMessages)) {
