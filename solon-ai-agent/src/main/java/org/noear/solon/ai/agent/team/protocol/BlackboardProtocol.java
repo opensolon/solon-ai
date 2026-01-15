@@ -18,15 +18,12 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
-import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
-import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -34,6 +31,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * 黑板协作协议 (Blackboard Protocol)
@@ -56,7 +54,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         private String lastUpdater;
 
         /**
-         * 结构化合并数据
+         * 结构化合并数据（来自 state 字段）
          */
         public void merge(String agentName, Object rawInput) {
             if (rawInput == null) return;
@@ -79,24 +77,37 @@ public class BlackboardProtocol extends HierarchicalProtocol {
             }
         }
 
+        /**
+         * 直接写入结论和待办
+         */
         public void addDirect(String agentName, String result, String todo) {
             this.lastUpdater = agentName;
-            if (Utils.isNotEmpty(result)) data.set("output_" + agentName, result);
+            if (Utils.isNotEmpty(result)) {
+                data.set("output_" + agentName, result);
+            }
             if (Utils.isNotEmpty(todo)) {
-                Arrays.asList(todo.split("[,;，；\n]")).forEach(t -> {
-                    if (Utils.isNotEmpty(t.trim())) todos.add(t.trim());
-                });
+                parseAndAddTodos(todo);
             }
         }
 
         private void addTodoNode(ONode v) {
             if (v.isArray()) {
-                v.getArrayUnsafe().forEach(i -> {
-                    if (Utils.isNotEmpty(i.getString())) todos.add(i.getString());
-                });
+                v.getArrayUnsafe().forEach(i -> parseAndAddTodos(i.getString()));
             } else if (v.isValue()) {
-                todos.add(v.getString());
+                parseAndAddTodos(v.getString());
             }
+        }
+
+        private void parseAndAddTodos(String rawTodo) {
+            if (Utils.isEmpty(rawTodo)) return;
+            // 正则清洗：统一分隔符 -> 去除序号/Markdown符号 -> 去空去重
+            String normalized = rawTodo.replaceAll("[,;，；\n\r]+", ";");
+            Arrays.stream(normalized.split(";"))
+                    .map(String::trim)
+                    .map(t -> t.replaceAll("^(?i)([\\d\\.\\*\\-\\s、]+)", "")) // 清洗序号
+                    .map(String::trim)
+                    .filter(t -> t.length() > 1)
+                    .forEach(todos::add);
         }
 
         @Override
@@ -111,10 +122,14 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         }
     }
 
-    public BlackboardProtocol(TeamAgentConfig config) { super(config); }
+    public BlackboardProtocol(TeamAgentConfig config) {
+        super(config);
+    }
 
     @Override
-    public String name() { return "BLACKBOARD"; }
+    public String name() {
+        return "BLACKBOARD";
+    }
 
     /**
      * 为 Agent 注入黑板同步工具，实现主动数据回传
@@ -134,8 +149,41 @@ public class BlackboardProtocol extends HierarchicalProtocol {
                     .stringParamAdd("todo", "Suggested next steps")
                     .stringParamAdd("state", "Detailed JSON state");
         }
-        toolDesc.doHandle(args -> "System: Blackboard updated.");
+        toolDesc.doHandle(args -> {
+            TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+            if (trace != null) {
+                BoardState state = (BoardState) trace.getProtocolContext().computeIfAbsent(KEY_BOARD_DATA, k -> new BoardState());
+                String res = (String) args.get("result");
+                String todo = (String) args.get("todo");
+                Object rawState = args.get("state");
+
+                if (Utils.isNotEmpty(res) || Utils.isNotEmpty(todo)) state.addDirect(agent.name(), res, todo);
+                if (rawState != null) state.merge(agent.name(), rawState);
+            }
+
+            if (isZh) {
+                return "系统：黑板已更新。后续专家将基于此状态继续。";
+            } else {
+                return "System: Blackboard updated. Subsequent experts will proceed based on this state.";
+            }
+        });
         receiver.accept(toolDesc);
+    }
+
+    @Override
+    public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        if (isZh) {
+            sb.append("\n## 黑板协作规范\n");
+            sb.append("- **主动同步**：在得出阶段性结论或发现新待办（TODO）时，必须调用 `").append(TOOL_SYNC).append("` 工具。\n");
+            sb.append("- **数据导向**：决策前请先查阅“当前协作黑板内容”，避免重复劳动。\n");
+            sb.append("- **闭环意识**：如果你完成了黑板上的某个 TODO，请在 result 中明确说明，以便 Supervisor 更新状态。\n");
+        } else {
+            sb.append("\n## Blackboard Guidelines\n");
+            sb.append("- **Proactive Sync**: You must call `").append(TOOL_SYNC).append("` when you reach a conclusion or identify new tasks (TODOs).\n");
+            sb.append("- **Data-Driven**: Check the \"Current blackboard content\" before acting to avoid redundant work.\n");
+            sb.append("- **Closure**: If you complete a TODO from the board, clearly state it in your result for the Supervisor to update.\n");
+        }
     }
 
     @Override
@@ -153,26 +201,11 @@ public class BlackboardProtocol extends HierarchicalProtocol {
     }
 
     @Override
-    public void onAgentEnd(TeamTrace trace, Agent agent) {
-        ReActTrace rt = trace.getContext().getAs("__" + agent.name());
-        if (rt != null) {
-            BoardState state = (BoardState) trace.getProtocolContext().computeIfAbsent(KEY_BOARD_DATA, k -> new BoardState());
-            String res = extractArg(rt, TOOL_SYNC, "result");
-            String todo = extractArg(rt, TOOL_SYNC, "todo");
-            Object rawState = extractArgObj(rt, TOOL_SYNC, "state");
-
-            if (Utils.isNotEmpty(res) || Utils.isNotEmpty(todo)) state.addDirect(agent.name(), res, todo);
-            if (rawState != null) state.merge(agent.name(), rawState);
-        }
-        super.onAgentEnd(trace, agent);
-    }
-
-    @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         // 显式终结符判定，防止 Supervisor 在任务收尾阶段胡乱路由
         String lastContent = trace.getLastAgentContent();
         if (lastContent != null && (lastContent.contains("FINISH]") || lastContent.contains("Final Answer:"))) {
-            if(LOG.isDebugEnabled()) {
+            if (LOG.isDebugEnabled()) {
                 LOG.debug("Blackboard Protocol: Terminal signal detected, ending task.");
             }
             return null;
@@ -221,29 +254,5 @@ public class BlackboardProtocol extends HierarchicalProtocol {
             }
         }
         return super.shouldSupervisorRoute(context, trace, decision);
-    }
-
-    private String extractArg(ReActTrace rt, String tool, String key) {
-        Object val = extractArgObj(rt, tool, key);
-        return val == null ? null : String.valueOf(val);
-    }
-
-    /**
-     * 参数提取：从 ReActTrace 中溯源特定的工具调用参数
-     */
-    private Object extractArgObj(ReActTrace rt, String toolName, String key) {
-        List<ChatMessage> messages = rt.getMessages();
-        if (messages == null) return null;
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            if (messages.get(i) instanceof AssistantMessage ) {
-                AssistantMessage am = (AssistantMessage) messages.get(i);
-                if (am.getToolCalls() != null) {
-                    for (ToolCall tc : am.getToolCalls()) {
-                        if (toolName.equals(tc.name())) return tc.arguments().get(key);
-                    }
-                }
-            }
-        }
-        return null;
     }
 }

@@ -35,8 +35,7 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * ReAct 推理任务 (Reasoning)
@@ -129,8 +128,9 @@ public class ReasonTask implements NamedTaskComponent {
         String clearContent = response.hasContent() ? response.getResultContent() : "";
 
         // 截断防御：防止模型“分身”替系统回复 Observation 内容
-        if (rawContent.contains("Observation:")) {
-            rawContent = rawContent.split("Observation:")[0];
+        int obsIndex = rawContent.indexOf("Observation:");
+        if (obsIndex != -1) {
+            rawContent = rawContent.substring(0, obsIndex).trim();
         }
 
         trace.appendMessage(ChatMessage.ofAssistant(rawContent));
@@ -165,15 +165,15 @@ public class ReasonTask implements NamedTaskComponent {
                 .options(o -> {
                     if (config.getTools().size() > 0) {
                         o.toolsAdd(config.getTools());
-                        o.optionPut("stop", Utils.asList("Observation:")); // 物理截断保证流程控制权
-                    }
-
-                    if(trace.getConfig().getOutputSchema() != null){
-                        o.optionPut("response_format", Utils.asMap("type", "json_object"));
+                        //o.optionPut("stop", Utils.asList("Observation:")); // 物理截断保证流程控制权 //不用加了
                     }
 
                     if (!trace.getProtocolTools().isEmpty()) {
                         o.toolsAdd(trace.getProtocolTools());
+                    }
+
+                    if(trace.getConfig().getOutputSchema() != null){
+                        o.optionPut("response_format", Utils.asMap("type", "json_object"));
                     }
 
                     o.autoToolCall(false); // 强制由 Agent 框架管理工具链路

@@ -93,9 +93,11 @@ public class A2AProtocol extends TeamProtocolBase {
                     String modes = String.join(",", expert.profile().getInputModes());
                     String desc = expert.description();
 
-                    return isZh ?
-                            String.format("%s(%s) [技能:%s | 模态:%s]", e.getKey(), desc, skills, modes) :
-                            String.format("%s(%s) [Skills:%s | Modes:%s]", e.getKey(), desc, skills, modes);
+                    if (isZh) {
+                        return String.format("%s(%s) [技能:%s | 模态:%s]", e.getKey(), desc, skills, modes);
+                    } else {
+                        return String.format("%s(%s) [Skills:%s | Modes:%s]", e.getKey(), desc, skills, modes);
+                    }
                 })
                 .collect(Collectors.joining(" | "));
 
@@ -114,15 +116,19 @@ public class A2AProtocol extends TeamProtocolBase {
                 trace.getProtocolContext().put(KEY_GLOBAL_STATE, state);
             }
 
-            return isZh ? "已发起向 [" + target + "] 的接力请求。" : "Transfer to [" + target + "] requested.";
+            if (isZh) {
+                return "已发起向 [" + target + "] 的接力请求。";
+            } else {
+                return "Transfer to [" + target + "] requested.";
+            }
         });
 
         if (isZh) {
             tool.title("任务移交")
                     .description("当你无法完成当前任务时，将其移交给更合适的专家。")
-                    .stringParamAdd("target", "目标专家名。必选: [" + expertsDescription + "]")
-                    .stringParamAdd("instruction", "给接棒专家的指令。")
-                    .stringParamAdd("state", "业务状态 JSON（全程持久化）。");
+                    .stringParamAdd("target", "目标专家名。必选范围: [" + expertsDescription + "]")
+                    .stringParamAdd("instruction", "给接棒专家的具体执行指令。")
+                    .stringParamAdd("state", "业务状态 JSON。");
         } else {
             tool.title("Transfer")
                     .description("When you are unable to complete the current task, hand it over to a more appropriate expert.")
@@ -136,10 +142,13 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
-        sb.append(isZh ? "\n## 专家协作指引\n" : "\n## Collaboration Guidelines\n");
-        sb.append(isZh ?
-                "- 必须根据各专家的 [技能] 和 [模态] 标签精准选择目标，严禁向不支持相关模态的专家移交任务。\n" :
-                "- You must choose the target precisely based on [Skills] and [Modes] tags. Never transfer to an agent that lacks the required modality.\n");
+        if (isZh) {
+            sb.append("\n## 专家协作指引\n");
+            sb.append("- 必须根据各专家的 [技能] 和 [模态] 标签精准选择目标，严禁向不支持相关模态的专家移交任务。\n");
+        } else {
+            sb.append("\n## Collaboration Guidelines\n");
+            sb.append("- You must choose the target precisely based on [Skills] and [Modes] tags. Never transfer to an agent that lacks the required modality.\n");
+        }
     }
 
     /**
@@ -154,13 +163,14 @@ public class A2AProtocol extends TeamProtocolBase {
 
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         StringBuilder sb = new StringBuilder();
-        sb.append(isZh ? "\n### 接力上下文 (Handover Context)\n" : "\n### Handover Context\n");
-
-        if (Utils.isNotEmpty(instruction)) {
-            sb.append("- ").append(isZh ? "**前序指令**: " : "**Prior Instruction**: ").append(instruction).append("\n");
-        }
-        if (Utils.isNotEmpty(state)) {
-            sb.append("- ").append(isZh ? "**累积状态**: " : "**Global State**: ").append(state).append("\n");
+        if (isZh) {
+            sb.append("\n### 接力上下文 (Handover Context)\n");
+            if (Utils.isNotEmpty(instruction)) sb.append("- **前序指令**: ").append(instruction).append("\n");
+            if (Utils.isNotEmpty(state)) sb.append("- **累积状态**: ").append(state).append("\n");
+        } else {
+            sb.append("\n### Handover Context\n");
+            if (Utils.isNotEmpty(instruction)) sb.append("- **Prior Instruction**: ").append(instruction).append("\n");
+            if (Utils.isNotEmpty(state)) sb.append("- **Global State**: ").append(state).append("\n");
         }
 
         List<ChatMessage> messages = new ArrayList<>(originalPrompt.getMessages());
@@ -177,28 +187,31 @@ public class A2AProtocol extends TeamProtocolBase {
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         String target = (String) trace.getProtocolContext().get(KEY_LAST_TEMP_TARGET);
 
-
         if (Utils.isNotEmpty(target)) {
             Locale locale = config.getLocale();
             boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
-
             trace.getProtocolContext().remove(KEY_LAST_TEMP_TARGET);
 
             // 1. 熔断检查
             int count = (int) trace.getProtocolContext().getOrDefault(KEY_TRANSFER_COUNT, 0);
             if (count >= maxTransferRounds) {
-                trace.setFinalAnswer(isZh ? "协作达到最大流转次数，任务中止。" : "Max transfer limit reached.");
+                if (isZh) {
+                    trace.setFinalAnswer("协作达到最大流转次数，任务中止。");
+                } else {
+                    trace.setFinalAnswer("Max transfer limit reached.");
+                }
                 return null;
             }
 
             // 2. 核心校验
             Agent targetAgent = config.getAgentMap().get(target);
             if (targetAgent == null || !checkModality(trace, target)) {
-
-                // 构造反馈文本
-                String feedback = isZh
-                        ? "【系统通知】移交失败：专家 [" + target + "] 不存在或能力不匹配（如无法处理图片）。请重新选择专家或直接回答。"
-                        : "[System] Transfer failed: Expert [" + target + "] is invalid or lacks required capabilities. Please re-select or answer.";
+                String feedback;
+                if (isZh) {
+                    feedback = "【系统通知】移交失败：专家 [" + target + "] 不存在或能力不匹配（如无法处理图片）。请重新选择或尝试自行解决。";
+                } else {
+                    feedback = "[System] Transfer failed: Expert [" + target + "] is invalid or lacks required capabilities. Please re-select or resolve yourself.";
+                }
 
                 // --- 关键适配点 ---
                 // A. 记录一个系统步骤，让“黑匣子”轨迹完整
@@ -249,12 +262,14 @@ public class A2AProtocol extends TeamProtocolBase {
         Integer count = (Integer) trace.getProtocolContext().get(KEY_TRANSFER_COUNT);
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-        sb.append(isZh ? "\n### A2A 接力看板\n" : "\n### A2A Dashboard\n");
-        if (Utils.isNotEmpty(state)) {
-            sb.append("- ").append(isZh ? "全局状态: " : "Global State: ").append(state).append("\n");
-        }
-        if (count != null) {
-            sb.append("- ").append(isZh ? "接力次数: " : "Handovers: ").append(count).append("\n");
+        if (isZh) {
+            sb.append("\n### A2A 接力看板\n");
+            if (Utils.isNotEmpty(state)) sb.append("- 全局状态: ").append(state).append("\n");
+            if (count != null) sb.append("- 接力次数: ").append(count).append("\n");
+        } else {
+            sb.append("\n### A2A Dashboard\n");
+            if (Utils.isNotEmpty(state)) sb.append("- Global State: ").append(state).append("\n");
+            if (count != null) sb.append("- Handovers: ").append(count).append("\n");
         }
     }
 
@@ -265,12 +280,12 @@ public class A2AProtocol extends TeamProtocolBase {
 
         if (isZh) {
             sb.append("\n### A2A 协作准则：\n");
-            sb.append("1. **直接交付**：任务完成时请直接输出 `" + config.getFinishMarker() + "`，**禁止**对专家的内容进行二次总结或润色。\n");
-            sb.append("2. **流转审计**：若专家间接力流转超过 3 次仍无实质进展，请立即介入并强制收尾。");
+            sb.append("1. **直接交付**：任务完成时请直接输出 `").append(config.getFinishMarker()).append("`，禁止二次总结。\n");
+            sb.append("2. **流转审计**：若流转超过 3 次无进展，请强制收尾。");
         } else {
             sb.append("\n### A2A Collaboration Rules:\n");
-            sb.append("1. **Direct Delivery**: Output `" + config.getFinishMarker() + "` directly upon completion. **DO NOT** summarize or refine the expert's output.\n");
-            sb.append("2. **Handover Audit**: Intervene and force termination if more than 3 handovers occur without progress.");
+            sb.append("1. **Direct Delivery**: Output `").append(config.getFinishMarker()).append("` directly upon completion. No re-summarization.\n");
+            sb.append("2. **Audit**: Force termination if >3 handovers occur without progress.");
         }
     }
 
