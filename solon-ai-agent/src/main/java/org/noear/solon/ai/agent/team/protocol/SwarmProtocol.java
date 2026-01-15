@@ -21,6 +21,8 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
@@ -28,6 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Locale;
+import java.util.function.Consumer;
 
 /**
  * 蜂群协作协议 (Swarm Protocol)
@@ -38,6 +41,7 @@ import java.util.Locale;
 public class SwarmProtocol extends TeamProtocolBase {
     private static final Logger LOG = LoggerFactory.getLogger(SwarmProtocol.class);
     private static final String KEY_SWARM_STATE = "swarm_state_node";
+    private static final String TOOL_EMERGE = "__emerge_tasks__";
 
     public SwarmProtocol(TeamAgentConfig config) {
         super(config);
@@ -48,89 +52,93 @@ public class SwarmProtocol extends TeamProtocolBase {
 
     @Override
     public void buildGraph(GraphSpec spec) {
-        // 入口：首个 Agent 启动任务
         String firstAgent = config.getAgentMap().keySet().iterator().next();
         spec.addStart(Agent.ID_START).linkAdd(firstAgent);
 
-        // 环形反馈：Agent 完成任务后统一由 Supervisor 决定下一步去向
         config.getAgentMap().values().forEach(a ->
                 spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
 
-        spec.addExclusive(new SupervisorTask(config)).then(ns -> {
-            linkAgents(ns);
-        }).linkAdd(Agent.ID_END);
-
+        spec.addExclusive(new SupervisorTask(config)).then(this::linkAgents).linkAdd(Agent.ID_END);
         spec.addEnd(Agent.ID_END);
     }
 
-    /**
-     * 获取或初始化蜂群状态（信息素+任务池）
-     */
     private ONode getSwarmState(TeamTrace trace) {
         return (ONode) trace.getProtocolContext().computeIfAbsent(KEY_SWARM_STATE, k -> {
             ONode node = new ONode().asObject();
-            node.getOrNew("pheromones"); // 各成员活跃度权重
-            node.getOrNew("task_pool");  // 动态涌现的任务池
+            node.getOrNew("pheromones");
+            node.getOrNew("task_pool").asArray();
             return node;
         });
+    }
+
+    /**
+     * 注入涌现工具，让 Agent 能够动态拆解任务
+     */
+    @Override
+    public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
+        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+        FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_EMERGE);
+
+        if (isZh) {
+            toolDesc.title("涌现任务").description("当你发现需要拆解子任务或建议其他专家介入时调用。")
+                    .stringParamAdd("tasks", "待办任务描述，多个用分号分隔")
+                    .stringParamAdd("agents", "建议执行的专家名，多个用分号分隔");
+        } else {
+            toolDesc.title("Emerge Tasks").description("Call this to decompose tasks or suggest other experts.")
+                    .stringParamAdd("tasks", "Task descriptions, separated by semicolons")
+                    .stringParamAdd("agents", "Suggested agent names, separated by semicolons");
+        }
+
+        toolDesc.doHandle(args -> {
+            TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+            if (trace != null) {
+                ONode state = getSwarmState(trace);
+                String tasks = (String) args.get("tasks");
+                String agents = (String) args.get("agents");
+                parseToPool(state.get("task_pool"), tasks, agents);
+            }
+            return isZh ? "系统：子任务已加入任务池，Supervisor 将据此调度。" : "System: Tasks added to pool.";
+        });
+        receiver.accept(toolDesc);
+    }
+
+    private void parseToPool(ONode taskPool, String tasks, String agents) {
+        if (Utils.isEmpty(tasks)) return;
+        String[] taskArr = tasks.split("[,;，；\n]+");
+        String[] agentArr = Utils.isNotEmpty(agents) ? agents.split("[,;，；\n]+") : new String[0];
+
+        for (int i = 0; i < taskArr.length; i++) {
+            ONode t = new ONode().asObject();
+            t.set("task", taskArr[i].trim());
+            if (i < agentArr.length) t.set("agent", agentArr[i].trim());
+            taskPool.add(t);
+        }
     }
 
     @Override
     public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
-            sb.append("\n- 协作提醒：若需拆解任务，请在回复末尾附加 JSON: `{\"sub_tasks\": [{\"task\": \"描述\", \"agent\": \"建议人\"}]}`");
+            sb.append("\n## 蜂群协作规范\n");
+            sb.append("- **任务涌现**：若当前任务需他人配合或拆解，请调用 `").append(TOOL_EMERGE).append("` 将子任务放入池中。\n");
+            sb.append("- **专注性**：仅在发现新任务维度时调用工具，不要重复同步已有任务。\n");
         } else {
-            sb.append("\n- Collaboration: If decomposition is needed, append: `{\"sub_tasks\": [{\"task\": \"...\", \"agent\": \"...\"}]}`");
+            sb.append("\n## Swarm Collaboration\n");
+            sb.append("- **Emergence**: Use `").append(TOOL_EMERGE).append("` to add sub-tasks to the pool when delegation or decomposition is needed.\n");
         }
     }
 
     @Override
     public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         if (decision.contains(config.getFinishMarker())) {
-            if (config.getGraphAdjuster() != null) return true;
-
-            // 防早停：若任务池仍有涌现任务未处理，拦截结束信号
-            boolean noAgentParticipated = trace.getSteps().stream()
-                    .noneMatch(TeamTrace.TeamStep::isAgent);
-
-            if (noAgentParticipated) {
-                LOG.warn("SwarmProtocol: Emergent tasks detected in pool but not yet executed. Blocking finish.");
+            ONode state = getSwarmState(trace);
+            // 如果任务池还有任务，拦截结束信号（防早停）
+            if (state.get("task_pool").size() > 0 && trace.getIterationsCount() < 5) {
+                LOG.warn("Swarm: Finish blocked! Emergent tasks pending in pool.");
                 return false;
             }
         }
         return true;
-    }
-
-    @Override
-    public String resolveAgentOutput(TeamTrace trace, Agent agent, String rawContent) {
-        if (Utils.isEmpty(rawContent)) return rawContent;
-
-        // 提取并解析 Agent 可能生成的子任务 JSON
-        ONode output = sniffJson(rawContent);
-
-        if (output.hasKey("sub_tasks") && output.get("sub_tasks").isArray()) {
-            ONode subTasks = output.get("sub_tasks");
-            if (subTasks.size() > 0) {
-                ONode state = getSwarmState(trace);
-                subTasks.getArray().forEach(taskNode -> state.get("task_pool").add(taskNode));
-
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Swarm: Agent [{}] emerged {} new tasks into the pool.", agent.name(), subTasks.size());
-                }
-
-                // 清理历史记录：剥离 JSON 块以保持对话历史的纯净
-                int start = rawContent.indexOf("{");
-                int end = rawContent.lastIndexOf("}");
-                if (start != -1 && end > start) {
-                    String before = rawContent.substring(0, start).trim();
-                    String after = rawContent.substring(end + 1).trim();
-                    String cleaned = (before + " " + after).trim();
-                    return Utils.isEmpty(cleaned) ? "[已生成 " + subTasks.size() + " 个子任务]" : cleaned;
-                }
-            }
-        }
-        return rawContent;
     }
 
     @Override
@@ -153,18 +161,12 @@ public class SwarmProtocol extends TeamProtocolBase {
     public void onSupervisorRouting(FlowContext context, TeamTrace trace, String nextAgent) {
         ONode state = getSwarmState(trace);
         ONode taskPool = state.get("task_pool");
-
-        // 路由命中后，从动态任务池中清理已分配的任务
         if (taskPool.isArray()) {
-            taskPool.getArrayUnsafe().removeIf(n -> {
-                String taskDesc = n.isObject() ? n.get("task").getString() : n.getString();
-                return nextAgent.equalsIgnoreCase(taskDesc) || (agentMatchesTask(nextAgent, n));
-            });
+            taskPool.getArrayUnsafe().removeIf(n ->
+                    nextAgent.equalsIgnoreCase(n.get("agent").getString()) ||
+                            nextAgent.equalsIgnoreCase(n.get("task").getString())
+            );
         }
-    }
-
-    private boolean agentMatchesTask(String agentName, ONode taskNode) {
-        return taskNode.isObject() && agentName.equalsIgnoreCase(taskNode.get("agent").getString());
     }
 
     @Override
@@ -174,18 +176,15 @@ public class SwarmProtocol extends TeamProtocolBase {
 
         if (isZh) {
             sb.append("\n### SWARM 决策准则：\n");
-            sb.append("1. **严禁总结**：当认为任务已完成时，请**直接输出** `[" + config.getFinishMarker() + "]` 并在其后**紧跟**最后一位专家的原话。不要添加任何你的总结、评论或反馈。\n");
-            sb.append("2. **决策优先**：除非任务完成，否则你只能输出下一个 Agent 的名字。不要解释原因。");
+            sb.append("1. **任务终止**：若任务完成，输出 `[" + config.getFinishMarker() + "]`。\n");
+            sb.append("2. **决策优先**：若未完成，仅输出下一位 Agent 名字。不要解释。");
         } else {
             sb.append("\n### SWARM Decision Rules:\n");
-            sb.append("1. **No Summarization**: When the task is complete, output `[" + config.getFinishMarker() + "]` followed **immediately** by the last expert's original response. DO NOT add any of your own summary, comments, or feedback.\n");
-            sb.append("2. **Decision Only**: Unless finishing, only output the name of the next Agent. No explanations.");
+            sb.append("1. **Termination**: Output `[" + config.getFinishMarker() + "]` when done.\n");
+            sb.append("2. **Routing**: Output only the next Agent name.");
         }
     }
 
-    /**
-     * 向 Supervisor 注入实时状态看板，辅助其做出负载均衡的决策
-     */
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         ONode state = getSwarmState(trace);
@@ -207,7 +206,6 @@ public class SwarmProtocol extends TeamProtocolBase {
 
     @Override
     public void onTeamFinished(FlowContext context, TeamTrace trace) {
-        // 团队结束时清理状态，防止内存泄漏
         trace.getProtocolContext().remove(KEY_SWARM_STATE);
         super.onTeamFinished(context, trace);
     }
