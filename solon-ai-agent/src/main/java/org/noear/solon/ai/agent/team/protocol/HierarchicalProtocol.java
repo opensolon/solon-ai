@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
@@ -109,6 +110,13 @@ public class HierarchicalProtocol extends TeamProtocolBase {
      */
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
+        ChatMessage lastMessage = originalPrompt.getLastMessage();
+        if(lastMessage != null && lastMessage.getContent() != null && lastMessage.getContent().contains("### 汇报要求：")){
+            // 已经包含汇报要求，则不重复添加
+            return super.prepareAgentPrompt(trace, agent, originalPrompt, locale);
+        }
+
+
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         StringBuilder sb = new StringBuilder();
 
