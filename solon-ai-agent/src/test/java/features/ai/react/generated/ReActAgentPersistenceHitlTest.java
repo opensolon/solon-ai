@@ -31,7 +31,7 @@ public class ReActAgentPersistenceHitlTest {
         // 1. 定义带有 HITL（人工介入）逻辑的拦截器
         ReActInterceptor hitlInterceptor = new ReActInterceptor() {
             @Override
-            public void onNodeStart(FlowContext ctx, Node node) {
+            public void onNodeEnd(FlowContext ctx, Node node) {
                 // 仅对 Action（工具调用）节点进行敏感操作拦截
                 if (Agent.ID_ACTION.equals(node.getId())) {
                     // 检查上下文中是否存在审批标记
