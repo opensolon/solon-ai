@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.tool.*;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
@@ -80,15 +81,16 @@ public class ChatOptions {
      */
     @Deprecated
     public ChatOptions toolsContext(Map<String, Object> toolsContext) {
-        this.toolsContext.putAll(toolsContext);
-        return this;
+       return toolsContextPut(toolsContext);
     }
 
     /**
      * @since 3.8.4
      */
     public ChatOptions toolsContextPut(Map<String, Object> toolsContext) {
-        this.toolsContext.putAll(toolsContext);
+        if (Assert.isNotEmpty(toolsContext)) {
+            this.toolsContext.putAll(toolsContext);
+        }
         return this;
     }
 
