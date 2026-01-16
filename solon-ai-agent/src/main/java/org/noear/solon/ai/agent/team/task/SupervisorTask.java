@@ -237,11 +237,8 @@ public class SupervisorTask implements NamedTaskComponent {
             o.toolsAdd(config.getTools());
             config.getProtocol().injectSupervisorTools(trace.getContext(), o::toolsAdd);
 
-            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
-                o.interceptorAdd(item.target);
-            }
-
             o.toolsContextPut(trace.getOptions().getToolsContext());
+            trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.target));
 
             if (config.getChatOptions() != null) {
                 config.getChatOptions().accept(o);

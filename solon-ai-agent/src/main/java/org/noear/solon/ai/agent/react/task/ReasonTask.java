@@ -172,11 +172,8 @@ public class ReasonTask implements NamedTaskComponent {
 
                     o.autoToolCall(false); // 强制由 Agent 框架管理工具链路
 
-                    for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-                        o.interceptorAdd(item.target);
-                    }
-
                     o.toolsContextPut(trace.getOptions().getToolsContext());
+                    trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.target));
 
                     if (config.getChatOptions() != null) {
                         config.getChatOptions().accept(o);
