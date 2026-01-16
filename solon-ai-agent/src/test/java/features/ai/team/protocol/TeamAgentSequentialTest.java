@@ -6,13 +6,18 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
+import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
 import org.noear.solon.ai.agent.team.*;
+import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
 
 import java.util.Arrays;
 import java.util.List;
@@ -202,30 +207,63 @@ public class TeamAgentSequentialTest {
         Assertions.assertTrue(result.contains("1.1.0"), "关键版本信息在流水线传递中丢失");
     }
 
+    public static class MarketTools {
+        @ToolMapping(description = "获取行业平均市盈率")
+        public double getIndustryAveragePE(String sector) {
+            return 25.0; // 模拟返回行业均值
+        }
+    }
+
     @Test
     @DisplayName("生产级 Sequential：金融研报长链路数据穿透测试")
     public void testSequentialFinancialProductionPipeline() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 环节一：原始数据抓取（产生核心变量：ticker, pe_ratio）
-        Agent miner = SimpleAgent.of(chatModel).name("DataMiner")
-                .systemPrompt(SimpleSystemPrompt.builder()
-                        .instruction("识别股票代码和 PE 比例。输出格式：Ticker: [代码], PE: [数值]").build()).build();
+        Agent miner = ReActAgent.of(chatModel).name("DataMiner")
+                .toolAdd(new MethodToolProvider(new MarketTools()))
+                .systemPrompt(ReActSystemPrompt.builder()
+                        .role("财务数据挖掘专家")
+                        .instruction("你的任务是提取关键财务指标。\n" +
+                                "1. 识别股票代码（Ticker）和市盈率（PE）。\n" +
+                                "2. 必须调用 get_industry_average_pe 获取均值。\n" +
+                                "3. 输出必须包含以下结构：\n" +
+                                "   - [DATA_START]\n" +
+                                "   - Ticker: {ticker}\n" +
+                                "   - PE: {pe}\n" +
+                                "   - AvgPE: {avg_pe}\n" +
+                                "   - [DATA_END]")
+                        .build()).build();
 
         // 2. 环节二：风险建模（必须保留 Ticker 这一关键锚点）
         Agent analyzer = SimpleAgent.of(chatModel).name("RiskAnalyzer")
                 .systemPrompt(SimpleSystemPrompt.builder()
-                        .instruction("接收数据并计算风险分值（1-10）。必须在回复中包含原始 Ticker。").build()).build();
+                        .role("风控建模师")
+                        .instruction("你负责计算风险等级。\n" +
+                                "1. 从上文 [DATA_START] 区域提取 Ticker, PE, AvgPE。\n" +
+                                "2. 计算逻辑：若 PE > AvgPE * 1.5，风险分值为 8；若 PE > AvgPE，风险分值为 6；否则为 3。\n" +
+                                "3. 必须输出格式：Ticker: {ticker}, RiskScore: {score}")
+                        .build()).build();
 
         // 3. 环节三：投资建议（根据风险分值做决策）
         Agent strategist = SimpleAgent.of(chatModel).name("Strategist")
                 .systemPrompt(SimpleSystemPrompt.builder()
-                        .instruction("根据风险分值给出建议。1-3 分买入，4-10 分观望。").build()).build();
+                        .role("投资策略师")
+                        .instruction("根据 RiskScore 给出最终动作。\n" +
+                                "- Score >= 7: 建议【观望】并提示估值过高。\n" +
+                                "- Score < 7: 建议【买入】。\n" +
+                                "输出必须保留 Ticker。")
+                        .build()).build();
 
         // 4. 环节四：合规审查（最终格式化，确保输出安全）
         Agent censor = SimpleAgent.of(chatModel).name("ComplianceCensor")
                 .systemPrompt(SimpleSystemPrompt.builder()
-                        .instruction("将所有信息整理为正式 HTML 报告。对敏感财务数据进行脱敏处理（用 * 代替部分数字）。").build()).build();
+                        .role("合规合规审计员")
+                        .instruction("生成最终 HTML 报告。\n" +
+                                "1. 必须使用 <div> 和 <table> 标签。\n" +
+                                "2. 数据脱敏：将 Ticker 的最后 3 位替换为 ***（如 SOLON_***）。\n" +
+                                "3. 确保包含‘风险提示：市场有风险，投资需谨慎’。")
+                        .build()).build();
 
         TeamAgent reportTeam = TeamAgent.of(chatModel)
                 .name("Financial_Report_Pipeline")
@@ -242,8 +280,11 @@ public class TeamAgentSequentialTest {
         // --- 生产级深度断言 ---
         TeamTrace trace = reportTeam.getTrace(session);
 
-        // 1. 验证“传声筒”效应：第一个环节提取的 Ticker 是否成功抵达最后环节
-        Assertions.assertTrue(result.contains("SOLON_TECH"), "关键锚点数据在长链条传递中丢失");
+        // 1. 验证“传声筒”效应：从 DataMiner 的历史产出中寻找原始 Ticker
+        boolean originalTickerCaptured = trace.getSteps().stream()
+                .filter(s -> "DataMiner".equals(s.getSource()))
+                .anyMatch(s -> s.getContent().contains("SOLON_TECH"));
+        Assertions.assertTrue(originalTickerCaptured, "DataMiner 未能正确识别原始 Ticker");
 
         // 2. 验证“逻辑闭环”：观察 Strategist 是否根据 45 倍 PE（高风险）给出了正确的“观望”建议
         // 注意：这取决于 LLM 对 45 倍 PE 的风险认知，生产测试中通常配合特定的 Prompt 指引
@@ -251,5 +292,115 @@ public class TeamAgentSequentialTest {
 
         // 3. 验证“格式规范”：HTML 标签是否存在
         Assertions.assertTrue(result.contains("<html") || result.contains("</div>"), "最终环节未能完成格式化职责");
+
+        // 4. 验证数据脱敏（合规性）
+        Assertions.assertTrue(result.contains("SOLON_***"), "合规环节未能对 Ticker 进行脱敏");
+
+        // 5. 验证风险评分逻辑（数据穿透质量）
+        // 因为 45 > 25 * 1.5，所以 RiskScore 应该是 8，建议应该是观望
+        Assertions.assertTrue(result.contains("估值过高") || result.contains("观望"), "策略逻辑未基于量化分值执行");
+
+        // 6. 验证免责声明（业务合规）
+        Assertions.assertTrue(result.contains("投资需谨慎"), "缺少法定风险提示语");
+    }
+
+    @Test
+    @DisplayName("生产级 Sequential：模拟链条中断后的状态保持")
+    public void testSequentialResumption() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        Agent step1 = SimpleAgent.of(chatModel).name("Step1")
+                .systemPrompt(SimpleSystemPrompt.builder().instruction("输出：Alpha").build()).build();
+        Agent step2 = SimpleAgent.of(chatModel).name("Step2")
+                .systemPrompt(SimpleSystemPrompt.builder().instruction("基于上游，输出：Beta").build()).build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.SEQUENTIAL)
+                .agentAdd(step1, step2)
+                .build();
+
+        // 第一次调用：只让它跑第一步（模拟环境）
+        AgentSession session = InMemoryAgentSession.of("resumption_session");
+        team.call(Prompt.of("开始"), session);
+
+        // 获取当前轨迹，确认 Step1 已完成
+        TeamTrace traceFirst = team.getTrace(session);
+        Assertions.assertTrue(traceFirst.getSteps().stream().anyMatch(s -> "Step1".equals(s.getSource())));
+
+        // 第二次调用：验证系统是否能识别 Session 状态继续推进，而不是从 Step1 重头开始
+        // 注意：这取决于 Solon AI 的 Session 内部 offset 逻辑
+        String finalResult = team.call(Prompt.of("继续"), session).getContent();
+        Assertions.assertTrue(finalResult.contains("Beta"), "未能从中断处恢复并完成 Step2");
+    }
+
+    @Test
+    @DisplayName("生产级 Sequential：验证上下文变量的外部注入")
+    public void testSequentialContextInjection() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 提取器：确保输出结构化，方便下游定位
+        Agent analyzer = SimpleAgent.of(chatModel).name("Analyzer")
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .role("数据分析员")
+                        .instruction("请从输入中提取纯数字金额。格式：[AMOUNT: 数值]")
+                        .build()).build();
+
+        // 2. 计算器：显式指明参考变量来源
+        Agent calculator = SimpleAgent.of(chatModel).name("Calculator")
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .role("计费引擎")
+                        .instruction("1. 识别上文中的 [AMOUNT] 标签。\n" +
+                                "2. 读取上下文预置变量 #{DISCOUNT}（若未提供，默认为 1.0）。\n" +
+                                "3. 最终报价 = AMOUNT * #{DISCOUNT}。请直接输出最终报价数值。")
+                        .build()).build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .name("Injection_Test_Team")
+                .protocol(TeamProtocols.SEQUENTIAL)
+                .agentAdd(analyzer, calculator)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("injection_session");
+        // 模拟外部注入：DISCOUNT = 0.8
+        session.getSnapshot().put("DISCOUNT", "0.8");
+
+        // 运行流水线
+        String result = team.call(Prompt.of("商品价格 1000 元"), session).getContent();
+
+        // --- 深度断言 ---
+        System.out.println("最终结算结果: " + result);
+
+        // 1. 业务逻辑断言
+        Assertions.assertTrue(result.contains("800"), "注入变量 0.8 未生效，结果未达到预期 800");
+
+        // 2. 链路追踪断言：验证 Analyzer 是否正常工作
+        TeamTrace trace = team.getTrace(session);
+        boolean amountExtracted = trace.getSteps().stream()
+                .anyMatch(s -> s.getContent().contains("1000"));
+        Assertions.assertTrue(amountExtracted, "Analyzer 节点未能在历史中留下 1000 元的提取记录");
+    }
+
+    @Test
+    @DisplayName("生产级 Sequential：处理中间环节的无效/空输出")
+    public void testSequentialEmptyStepHandling() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 模拟一个可能由于敏感词过滤导致输出为空的 Agent
+        Agent muteAgent = SimpleAgent.of(chatModel).name("MuteAgent")
+                .systemPrompt(SimpleSystemPrompt.builder().instruction("不要说话，保持沉默，输出空字符串。").build()).build();
+
+        Agent recoveryAgent = SimpleAgent.of(chatModel).name("RecoveryAgent")
+                .systemPrompt(SimpleSystemPrompt.builder().instruction("如果上游没说话，请说：[恢复执行]。").build()).build();
+
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.SEQUENTIAL)
+                .agentAdd(muteAgent, recoveryAgent)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("empty_session");
+        String result = team.call(Prompt.of("Hello"), session).getContent();
+
+        // 验证链条是否依然走到了最后
+        Assertions.assertTrue(result.contains("恢复执行"), "中间环节空输出导致链条意外熔断");
     }
 }

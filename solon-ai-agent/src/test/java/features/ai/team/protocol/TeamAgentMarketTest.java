@@ -14,6 +14,9 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * MarketBased 策略测试：基于能力描述的竞争指派
  * <p>
@@ -215,5 +218,76 @@ public class TeamAgentMarketTest {
         System.out.println(">>> 多云任务最终结果预览: " + resC);
         // 在 Market 协议下，这类任务通常由 Mediator 选出一个“主专家”来领头，或者触发接力
         Assertions.assertTrue(resC.contains("EKS") || resC.contains("OSS"), "复杂任务执行失败");
+    }
+
+    @Test
+    @DisplayName("生产级 Market：硬技能过滤（Skills Filtering）")
+    public void testMarketWithHardSkillConstraints() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 定义两个描述极其相似，但 Skill 标签不同的专家
+        Agent oldJavaDev = ReActAgent.of(chatModel).name("legacy_coder")
+                .description("资深 Java 开发者，熟悉后端开发。")
+                .profile(p -> p.skillAdd("JDK8").skillAdd("Struts2")) // 旧栈
+                .build();
+
+        Agent modernJavaDev = ReActAgent.of(chatModel).name("modern_coder")
+                .description("资深 Java 开发者，熟悉后端开发。")
+                .profile(p -> p.skillAdd("JDK21").skillAdd("SpringBoot3")) // 新栈
+                .build();
+
+        TeamAgent market = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.MARKET_BASED)
+                .agentAdd(oldJavaDev, modernJavaDev)
+                .build();
+
+        // 场景：明确要求 JDK21 特性。
+        // 验证：Mediator 能否识别 Profile 中的 Skill 差异，而不仅仅是看 Description 文本。
+        AgentSession session = InMemoryAgentSession.of("skill_check");
+        String query = "请使用 JDK21 的虚拟线程（Virtual Threads）特性写一个并发 Demo。";
+        market.call(Prompt.of(query), session);
+
+        TeamTrace trace = market.getTrace(session);
+        System.out.println("硬技能匹配结果: " + trace.getLastAgentName());
+
+        Assertions.assertEquals("modern_coder", trace.getLastAgentName(),
+                "应根据 Profile 中的 Skill 标签精准指派到新一代开发者");
+    }
+
+    @Test
+    @DisplayName("生产级 Market：多专家接力竞标（Sequence in Market）")
+    public void testMarketMultiStepProcurement() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. 定义市场中的不同工种
+        Agent designer = ReActAgent.of(chatModel).name("UI_Designer")
+                .description("负责输出页面原型和 CSS 样式。").build();
+
+        Agent coder = ReActAgent.of(chatModel).name("Web_Coder")
+                .description("负责将设计稿转换为 React 代码。").build();
+
+        TeamAgent market = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.MARKET_BASED)
+                .agentAdd(designer, coder)
+                .maxTotalIterations(5)
+                .build();
+
+        // 场景：一个包含“先设计、后实现”两个阶段的任务
+        AgentSession session = InMemoryAgentSession.of("procurement_flow");
+        String query = "请帮我先设计一个深色模式的登录框 UI，然后用 React 代码实现它。";
+
+        market.call(Prompt.of(query), session);
+
+        TeamTrace trace = market.getTrace(session);
+        List<String> executors = trace.getSteps().stream()
+                .filter(TeamTrace.TeamStep::isAgent)
+                .map(TeamTrace.TeamStep::getSource)
+                .distinct().collect(Collectors.toList());
+
+        System.out.println("市场协作链: " + executors);
+
+        // 验证：市场调解器是否能在任务不同阶段选出对应的专家
+        Assertions.assertTrue(executors.contains("UI_Designer"), "应首先雇佣设计师");
+        Assertions.assertTrue(executors.contains("Web_Coder"), "设计完成后应雇佣开发者");
     }
 }

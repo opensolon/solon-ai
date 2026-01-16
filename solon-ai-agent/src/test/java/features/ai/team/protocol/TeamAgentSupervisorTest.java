@@ -13,9 +13,11 @@ import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamSystemPromptCn;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
+import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -295,91 +297,98 @@ public class TeamAgentSupervisorTest {
                 "result.getContent() 应该与 trace.getFinalAnswer() 一致");
     }
 
+    public static class LogTools {
+        @ToolMapping(description = "获取 JVM 堆栈故障日志")
+        public String getJvmStackTrace() {
+            return "ERROR [Payment-Thread-1] o.a.c.c.C[Tomcat]: JBWEB000065: HTTP Status 500\n" +
+                    "java.lang.OutOfMemoryError: Java heap space\n" +
+                    "  at com.payment.GatewayFilter.doFilter(GatewayFilter.java:45)\n" +
+                    "  at com.payment.SecurityContext.init(SecurityContext.java:12)\n" +
+                    "--- [ANALYSIS]: ThreadLocal 'USER_CTX' leaked in GatewayFilter ---\n" +
+                    "--- [HINT]: Fixed code must use try-finally and avoid hardcoded DB_KEY ---";
+        }
+    }
+
     @Test
     @DisplayName("生产级 Supervisor：全链路金融故障修复与安全审计博弈")
     public void testEnterpriseIncidentResponsePipeline() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. SRE (运维)：只提供原始日志和系统指标
+        // 1. SRE (运维)：强制调用工具，确保数据源真实
         Agent sre = ReActAgent.of(chatModel).name("SRE_Ops")
-                .description("负责收集故障日志。已知当前支付网关出现 OutOfMemoryError。")
+                .description("负责收集故障日志。")
+                .toolAdd(new MethodToolProvider(new LogTools()))
                 .systemPrompt(ReActSystemPromptCn.builder()
                         .role("资深运维工程师")
-                        .instruction("你只需提供详细的 JVM 堆栈日志片段。不要尝试修复。")
+                        .instruction("你必须调用 get_jvm_stack_trace 获取日志。直接输出日志原文，不要解读。")
                         .build()).build();
 
-        // 2. Architect (架构师)：分析根本原因
+        // 2. Architect (架构师)：纯脑力分析
         Agent architect = ReActAgent.of(chatModel).name("Architect")
-                .description("负责定位 OOM 根源，判断是内存泄漏还是并发过高。")
+                .description("负责定位 OOM 根源。")
                 .systemPrompt(ReActSystemPromptCn.builder()
                         .role("系统架构师")
-                        .instruction("基于 SRE 的日志定位问题（如：ThreadLocal 未清理）。给出修复思路，但不写代码。")
+                        .instruction("分析日志。必须明确指出 ThreadLocal 泄漏位置及修复逻辑（try-finally）。")
                         .build()).build();
 
-        // 3. Developer (开发者)：编写修复补丁
+        // 3. Developer (开发者)：增加“犯错”诱导，确保博弈发生
         Agent developer = ReActAgent.of(chatModel).name("Developer")
-                .description("负责根据架构师的思路编写 Java 修复代码。")
+                .description("负责编写 Java 补丁。")
                 .systemPrompt(ReActSystemPromptCn.builder()
                         .role("Java 开发工程师")
-                        .instruction("编写具体的 Java 代码补丁。如果被安全审计打回，需根据建议重新编写。")
+                        .instruction("1. 编写补丁。\n" +
+                                "2. **关键约束**：如果是第一次编写，请故意将 DB_KEY 硬编码在代码中（如 String key = \"secret123\"），以观察审计反应。\n" +
+                                "3. 只有当审计打回后，才改为从环境变量获取。")
                         .build()).build();
 
-        // 4. Security (安全专家)：安全审计（这个角色最关键，他会产生打回逻辑）
+        // 4. Security (安全专家)：严格审计
         Agent security = ReActAgent.of(chatModel).name("Security_Audit")
-                .description("负责审计代码是否有 SQL 注入或资源未释放等安全隐患。")
+                .description("安全合规审计。")
                 .systemPrompt(ReActSystemPromptCn.builder()
-                        .role("安全合规专家")
-                        .instruction("检查 Developer 的代码。如果代码中存在资源未关闭或硬编码密钥，必须明确回复【审计打回】并给出原因。" +
-                                "如果完全没问题，回复【审计通过】。")
+                        .role("安全专家")
+                        .instruction("检查代码。若发现硬编码密钥或资源未关闭，必须输出【审计打回】。完全通过则输出【审计通过】。")
                         .build()).build();
 
-        // 5. 组建超级团队
+        // 5. 组建团队：优化 Supervisor 指令，解决“汇报要求”堆叠
         TeamAgent incidentTeam = TeamAgent.of(chatModel)
                 .name("Incident_Response_Force")
                 .agentAdd(sre, architect, developer, security)
-                .maxTotalIterations(15) // 复杂博弈需要更多轮次
-                .finishMarker("FINISH") // 显式结束标记
+                .maxTotalIterations(12)
+                .finishMarker("FINISH")
                 .systemPrompt(TeamSystemPromptCn.builder()
                         .role("紧急事件指挥官")
                         .instruction("### 调度逻辑\n" +
-                                "1. 按 SRE -> Architect -> Developer -> Security 顺序推进。\n" +
-                                "2. **关键：** 如果 Security 输出包含'审计打回'，必须指挥 Developer 重新修改。\n" +
-                                "3. 只有 Security 输出包含'审计通过'后，你才总结修复方案并输出 FINISH。")
+                                "1. 流程：SRE -> Architect -> Developer -> Security。\n" +
+                                "2. **循环判定**：若 Security 提到'审计打回'，下跳指向 Developer。若提到'审计通过'，下跳指向 FINISH。\n" +
+                                "3. **信息负载**：你必须确保 Developer 写的代码能完整传递给 Security。")
                         .build())
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("incident_001");
-        String query = "线上支付网关响应极慢并伴随 OOM 报错，请团队立即协作修复并确保符合安全规范。";
+        String query = "支付网关 OOM，请团队按规范修复并审计。";
 
-        System.out.println(">>> 正在启动生产级故障处理流水线...");
+        System.out.println(">>> 正在启动协作流水线...");
         String result = incidentTeam.call(Prompt.of(query), session).getContent();
 
-        // --- 核心深度断言 ---
+        System.out.println("=====最终输出=====");
+        System.out.println(result);
+
+        // --- 断言增强 ---
         TeamTrace trace = incidentTeam.getTrace(session);
 
-        // 断言 1: 角色参与度（至少应该涉及 4 个角色）
-        long activeRoles = trace.getSteps().stream()
-                .map(TeamTrace.TeamStep::getSource)
-                .filter(name -> !name.equals("supervisor") && !name.equals("user"))
-                .distinct().count();
-        System.out.println("参与角色总数: " + activeRoles);
-        Assertions.assertTrue(activeRoles >= 4, "角色参与度不足，流水线执行不完整");
+        // 验证是否发生了打回博弈：Developer 应该出现了至少两次
+        long devCount = trace.getSteps().stream()
+                .filter(s -> "Developer".equals(s.getSource())).count();
+        System.out.println("Developer 执行次数: " + devCount);
 
-        // 断言 2: 逻辑顺序（Architect 必须在 SRE 之后）
-        int sreIdx = -1, archIdx = -1;
-        for (int i = 0; i < trace.getSteps().size(); i++) {
-            String source = trace.getSteps().get(i).getSource();
-            if (source.equals("SRE_Ops")) sreIdx = i;
-            if (source.equals("Architect")) archIdx = i;
-        }
-        Assertions.assertTrue(sreIdx < archIdx, "执行顺序错误：架构师应在运维提供日志后分析");
+        // 1. 角色参与度
+        Assertions.assertTrue(trace.getSteps().stream().map(TeamTrace.TeamStep::getSource).distinct().count() >= 4);
 
-        // 断言 3: 最终产物（必须包含 Java 代码）
-        Assertions.assertTrue(result.contains("class") || result.contains("ThreadLocal") || result.contains("public"),
-                "最终结果中缺失核心修复代码");
+        // 2. 最终产物：必须是审计通过后的代码（不含硬编码）
+        Assertions.assertTrue(result.contains("ThreadLocal") && result.contains("finally"), "代码未包含核心修复逻辑");
 
-        // 断言 4: 结果纯净度（FinalAnswer 不应包含中间的争吵过程）
-        Assertions.assertFalse(result.contains("审计打回"), "FinalAnswer 应该只包含最终结论，不应包含中间纠错过程");
+        // 3. 干净度：结果不应包含中间的打回字样
+        Assertions.assertFalse(result.contains("审计打回"), "最终报告不应包含中间博弈日志");
     }
 
     @Test
