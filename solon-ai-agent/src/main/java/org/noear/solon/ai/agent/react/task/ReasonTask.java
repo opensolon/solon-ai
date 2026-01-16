@@ -141,11 +141,11 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         // [逻辑 6: 决策分流]
-        if (rawContent.contains(config.getFinishMarker())) {
+        if (rawContent.contains("Action:")) {
+            trace.setRoute(Agent.ID_ACTION);
+        } else if (rawContent.contains(config.getFinishMarker())) {
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(clearContent));
-        } else if (rawContent.contains("Action:")) {
-            trace.setRoute(Agent.ID_ACTION);
         } else {
             // 兜底：未匹配到协议标识则默认视为最终答案
             trace.setRoute(Agent.ID_END);
