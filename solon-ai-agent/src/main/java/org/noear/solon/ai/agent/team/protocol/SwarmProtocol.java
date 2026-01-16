@@ -116,7 +116,7 @@ public class SwarmProtocol extends TeamProtocolBase {
 
         if (trace != null) {
             SwarmState state = getSwarmState(trace);
-            FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_EMERGE);
+            FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_EMERGE).returnDirect(true);
             boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
             if (isZh) {
