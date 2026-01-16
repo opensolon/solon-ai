@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent;
 
+import org.noear.snack4.Feature;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -132,6 +134,11 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
             return call(effectivePrompt, session);
         });
 
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("Agent [{}] return message: {}",
+                    name(),
+                    ONode.serialize(msg, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
+        }
 
         long duration = System.currentTimeMillis() - start;
 

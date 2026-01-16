@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent.simple;
 
+import org.noear.snack4.Feature;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentHandler;
@@ -159,6 +161,12 @@ public class SimpleAgent implements Agent {
      * 实现带指数延迟的自动重试调用
      */
     private AssistantMessage callWithRetry(AgentSession session, List<ChatMessage> messages, Consumer<ChatOptions> chatOptionsAdjustor) throws Throwable {
+        if(LOG.isTraceEnabled()){
+            LOG.trace("SimpleAgent [{}] calling model... messages: {}",
+                    config.getName(),
+                    ONode.serialize(messages, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
+        }
+
         Prompt finalPrompt = Prompt.of(messages);
         ChatRequestDesc chatReq   = null;
 
