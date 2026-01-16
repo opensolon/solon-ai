@@ -38,6 +38,10 @@ public class Prompt implements ChatPrompt, Serializable {
         return messageList;
     }
 
+    public ChatMessage getLastMessage(){
+        return messageList.isEmpty() ? null : messageList.get(messageList.size() - 1);
+    }
+
     public Prompt addMessage(String... messages) {
         for (String m : messages) {
             if (Assert.isNotEmpty(m)) {
