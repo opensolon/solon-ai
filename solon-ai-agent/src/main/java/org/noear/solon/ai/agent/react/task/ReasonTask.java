@@ -163,14 +163,8 @@ public class ReasonTask implements NamedTaskComponent {
         ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o -> {
-                    if (config.getTools().size() > 0) {
-                        o.toolsAdd(config.getTools());
-                        //o.optionPut("stop", Utils.asList("Observation:")); // 物理截断保证流程控制权 //不用加了
-                    }
-
-                    if (!trace.getProtocolTools().isEmpty()) {
-                        o.toolsAdd(trace.getProtocolTools());
-                    }
+                    o.toolsAdd(config.getTools());
+                    o.toolsAdd(trace.getProtocolTools());
 
                     if(trace.getConfig().getOutputSchema() != null){
                         o.optionPut("response_format", Utils.asMap("type", "json_object"));
@@ -181,6 +175,8 @@ public class ReasonTask implements NamedTaskComponent {
                     for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                         o.interceptorAdd(item.target);
                     }
+
+                    o.toolsContextPut(trace.getOptions().getToolsContext());
 
                     if (config.getChatOptions() != null) {
                         config.getChatOptions().accept(o);

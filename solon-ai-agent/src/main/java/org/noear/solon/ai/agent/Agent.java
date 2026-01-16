@@ -104,7 +104,7 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
 
         if (trace != null) {
             trace.setLastAgentName(this.name());
-            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()) {
+            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
                 if (item.target.shouldAgentContinue(trace, this) == false) {
                     trace.addStep(ChatRole.ASSISTANT, name(),
                             "[Skipped] Cancelled by " + item.target.getClass().getSimpleName(), 0);
@@ -155,7 +155,7 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
 
             // 执行后置回调
             trace.getProtocol().onAgentEnd(trace, this);
-            trace.getOptions().getInterceptorList().forEach(item -> item.target.onAgentEnd(trace, this));
+            trace.getOptions().getInterceptors().forEach(item -> item.target.onAgentEnd(trace, this));
         }
 
         if (LOG.isDebugEnabled()) {

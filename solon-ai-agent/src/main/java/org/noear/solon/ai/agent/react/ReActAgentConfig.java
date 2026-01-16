@@ -38,7 +38,7 @@ import java.util.function.Consumer;
  */
 @Preview("3.8.1")
 public class ReActAgentConfig {
-    private static final Logger log = LoggerFactory.getLogger(ReActAgentConfig.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ReActAgentConfig.class);
 
     /** 智能体唯一标识名 */
     private String name;
@@ -52,10 +52,10 @@ public class ReActAgentConfig {
     private AgentProfile profile;
     /** 执行推理的基础模型 */
     private final ChatModel chatModel;
-    /** 挂载的可调用工具集 */
-    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     /** 模型推理选项（温度、TopP 等） */
     private Consumer<ChatOptions> chatOptions;
+    /** 挂载的可调用工具集 */
+    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     /** 计算图微调器（自定义执行链路） */
     private Consumer<GraphSpec> graphAdjuster;
     /** 提示词模板（默认中文） */
@@ -98,7 +98,7 @@ public class ReActAgentConfig {
     /** 注册工具 */
     protected void addTool(FunctionTool... tools) {
         for (FunctionTool tool : tools) {
-            if (log.isDebugEnabled()) log.debug("Agent [{}] add tool: {}", name, tool.name());
+            if (LOG.isDebugEnabled()) LOG.debug("ReActAgent [{}] register tool: {}", name, tool.name());
             this.tools.put(tool.name(), tool);
         }
     }

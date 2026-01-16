@@ -20,9 +20,7 @@ import org.noear.solon.lang.NonSerializable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * 团队协作配置选项 (Runtime Options)
@@ -44,21 +42,34 @@ public class TeamOptions implements NonSerializable {
     /** 重试规避延迟（毫秒） */
     private long retryDelayMs = 1000L;
 
+
+    /** 工具调用上下文（透传给 FunctionTool） */
+    private final Map<String, Object> toolsContext = new LinkedHashMap<>();
     /** 团队协作拦截器链（支持排序，用于审计、监控或干预） */
-    private final List<RankEntity<TeamInterceptor>> interceptorList = new ArrayList<>();
+    private final List<RankEntity<TeamInterceptor>> interceptors = new ArrayList<>();
 
 
     public TeamOptions copy(){
         TeamOptions tmp = new TeamOptions();
+        tmp.interceptors.addAll(this.interceptors);
+        tmp.toolsContext.putAll(this.toolsContext);
         tmp.maxTotalIterations = this.maxTotalIterations;
         tmp.maxRetries = this.maxRetries;
         tmp.retryDelayMs = this.retryDelayMs;
-        tmp.interceptorList.addAll(this.interceptorList);
         return tmp;
     }
 
 
     // --- 配置注入 (Protected) ---
+
+    protected void putToolsContext(Map<String, Object> toolsContext) {
+        this.toolsContext.putAll(toolsContext);
+    }
+
+    protected void putToolsContext(String key, Object value) {
+        this.toolsContext.put(key, value);
+    }
+
 
     /**
      * 配置异常调度时的重试策略
@@ -85,16 +96,27 @@ public class TeamOptions implements NonSerializable {
      * @param index       权重索引（数值越小优先级越高）
      */
     protected void addInterceptor(TeamInterceptor interceptor, int index) {
-        this.interceptorList.add(new RankEntity<>(interceptor, index));
+        this.interceptors.add(new RankEntity<>(interceptor, index));
 
-        if (interceptorList.size() > 1) {
-            Collections.sort(interceptorList);
+        if (interceptors.size() > 1) {
+            Collections.sort(interceptors);
         }
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamOptions register interceptor: {}, index: {}",
                     interceptor.getClass().getSimpleName(), index);
         }
+    }
+
+
+    // --- 参数获取 (Public) ---
+
+    public Map<String, Object> getToolsContext() {
+        return toolsContext;
+    }
+
+    public List<RankEntity<TeamInterceptor>> getInterceptors() {
+        return interceptors;
     }
 
     public int getMaxTotalIterations() {
@@ -109,8 +131,6 @@ public class TeamOptions implements NonSerializable {
         return retryDelayMs;
     }
 
-    public List<RankEntity<TeamInterceptor>> getInterceptorList() {
-        return interceptorList;
-    }
+
 
 }

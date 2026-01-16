@@ -300,12 +300,12 @@ public class ReActAgent implements Agent {
         }
 
         public Builder defaultToolsContextPut(String key, Object value) {
-            config.getDefaultOptions().getToolsContext().put(key, value);
+            config.getDefaultOptions().putToolsContext(key, value);
             return this;
         }
 
-        public Builder defaultToolsContextPut(Map<String, Objects> objectsMap) {
-            config.getDefaultOptions().getToolsContext().putAll(objectsMap);
+        public Builder defaultToolsContextPut(Map<String, Object> objectsMap) {
+            config.getDefaultOptions().putToolsContext(objectsMap);
             return this;
         }
 

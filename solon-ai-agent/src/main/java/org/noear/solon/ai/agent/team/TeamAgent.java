@@ -23,6 +23,8 @@ import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.*;
@@ -31,6 +33,8 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -142,7 +146,7 @@ public class TeamAgent implements Agent {
         }
 
         // 触发团队启动拦截
-        options.getInterceptorList().forEach(item -> item.target.onTeamStart(trace));
+        options.getInterceptors().forEach(item -> item.target.onTeamStart(trace));
 
         try {
             // 2. 消息归档：用户输入存入 Session
@@ -151,8 +155,8 @@ public class TeamAgent implements Agent {
             }
 
             final FlowOptions flowOptions = new FlowOptions();
-            if (!options.getInterceptorList().isEmpty()) {
-                for (RankEntity<TeamInterceptor> item : options.getInterceptorList()) {
+            if (!options.getInterceptors().isEmpty()) {
+                for (RankEntity<TeamInterceptor> item : options.getInterceptors()) {
                     flowOptions.interceptorAdd(item.target, item.index);
                 }
             }
@@ -187,7 +191,7 @@ public class TeamAgent implements Agent {
             session.updateSnapshot(context);
 
             // 触发完成拦截
-            options.getInterceptorList().forEach(item -> item.target.onTeamEnd(trace));
+            options.getInterceptors().forEach(item -> item.target.onTeamEnd(trace));
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("TeamAgent [{}] collaboration completed.", name());
@@ -306,6 +310,22 @@ public class TeamAgent implements Agent {
          */
         public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
             config.setChatOptions(chatOptions);
+            return this;
+        }
+
+        public Builder toolAdd(FunctionTool tool) { config.addTool(tool); return this; }
+
+        public Builder toolAdd(Collection<FunctionTool> tools) { config.addTool(tools); return this; }
+
+        public Builder toolAdd(ToolProvider toolProvider) { config.addTool(toolProvider); return this; }
+
+        public Builder defaultToolsContextPut(String key, Object value) {
+            config.getDefaultOptions().putToolsContext(key, value);
+            return this;
+        }
+
+        public Builder defaultToolsContextPut(Map<String, Object> objectsMap) {
+            config.getDefaultOptions().putToolsContext(objectsMap);
             return this;
         }
 

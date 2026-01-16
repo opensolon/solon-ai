@@ -103,6 +103,10 @@ public class ReActOptions implements NonSerializable {
         return toolsContext;
     }
 
+    public List<RankEntity<ReActInterceptor>> getInterceptors() {
+        return interceptors;
+    }
+
     public int getMaxSteps() {
         return maxSteps;
     }
@@ -119,7 +123,5 @@ public class ReActOptions implements NonSerializable {
         return historyWindowSize;
     }
 
-    public List<RankEntity<ReActInterceptor>> getInterceptors() {
-        return interceptors;
-    }
+
 }

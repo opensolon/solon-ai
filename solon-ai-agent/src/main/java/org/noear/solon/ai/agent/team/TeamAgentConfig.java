@@ -19,6 +19,8 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.IgnoreCaseMap;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
@@ -56,6 +58,8 @@ public class TeamAgentConfig implements NonSerializable {
     private final ChatModel chatModel;
     /** 调度中心推理参数（控制采样随机性、Token 等） */
     private Consumer<ChatOptions> chatOptions;
+    /** 挂载的可调用工具集 */
+    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
 
     /** 成员名录（有序不计大小写存储专家 Agent） */
     private final Map<String, Agent> agentMap = new IgnoreCaseMap<>();
@@ -90,6 +94,22 @@ public class TeamAgentConfig implements NonSerializable {
     protected void setTeamSystem(TeamSystemPrompt promptProvider) { this.systemPrompt = promptProvider; }
     protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
 
+    /** 注册工具 */
+    protected void addTool(FunctionTool... tools) {
+        for (FunctionTool tool : tools) {
+            if (LOG.isDebugEnabled()) LOG.debug("TeamAgent [{}] register tool: {}", name, tool.name());
+            this.tools.put(tool.name(), tool);
+        }
+    }
+
+    protected void addTool(Collection<FunctionTool> tools) {
+        for (FunctionTool tool : tools) addTool(tool);
+    }
+
+    protected void addTool(ToolProvider toolProvider) {
+        addTool(toolProvider.getTools());
+    }
+
     /**
      * 注册团队成员（专家）
      * @param agent 具备明确职责描述的智能体实例
@@ -99,7 +119,7 @@ public class TeamAgentConfig implements NonSerializable {
         Objects.requireNonNull(agent.description(), "agent.description is required");
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamAgentConfig [{}] register agent: {}", name, agent.name());
+            LOG.debug("TeamAgent [{}] register agent: {}", name, agent.name());
         }
         agentMap.put(agent.name(), agent);
     }
@@ -112,7 +132,7 @@ public class TeamAgentConfig implements NonSerializable {
         this.protocol = protocolFactory.create(this);
 
         if (LOG.isInfoEnabled()) {
-            LOG.info("TeamAgentConfig [{}] switched protocol to: {}", name, protocol.getClass().getSimpleName());
+            LOG.info("TeamAgent [{}] switched protocol to: {}", name, protocol.getClass().getSimpleName());
         }
     }
 
@@ -141,6 +161,9 @@ public class TeamAgentConfig implements NonSerializable {
 
     public ChatModel getChatModel() { return chatModel; }
     public Consumer<ChatOptions> getChatOptions() { return chatOptions; }
+    public Collection<FunctionTool> getTools() { return tools.values(); }
+
+    public FunctionTool getTool(String name) { return tools.get(name); }
     public Map<String, Agent> getAgentMap() { return agentMap; }
     public TeamProtocol getProtocol() { return protocol; }
     public Consumer<GraphSpec> getGraphAdjuster() { return graphAdjuster; }

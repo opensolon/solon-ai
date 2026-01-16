@@ -65,7 +65,7 @@ public class SupervisorTask implements NamedTaskComponent {
             }
 
             // 1. 拦截器准入检查
-            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptorList()) {
+            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
                 if (!item.target.shouldSupervisorContinue(trace)) {
                     trace.addStep(ChatRole.SYSTEM, Agent.ID_SUPERVISOR, "[Skipped] Intercepted by " + item.target.getClass().getSimpleName(), 0);
                     if (Agent.ID_SUPERVISOR.equals(trace.getRoute())) {
@@ -147,12 +147,12 @@ public class SupervisorTask implements NamedTaskComponent {
         );
 
         ChatResponse response = callWithRetry(trace, messages);
-        trace.getOptions().getInterceptorList().forEach(item -> item.target.onModelEnd(trace, response));
+        trace.getOptions().getInterceptors().forEach(item -> item.target.onModelEnd(trace, response));
 
         String clearContent = response.hasContent() ? response.getResultContent() : "";
         String decision = clearContent.trim();
         trace.setLastDecision(decision);
-        trace.getOptions().getInterceptorList().forEach(item -> item.target.onSupervisorDecision(trace, decision));
+        trace.getOptions().getInterceptors().forEach(item -> item.target.onSupervisorDecision(trace, decision));
 
         commitRoute(trace, decision, context);
     }
@@ -234,14 +234,20 @@ public class SupervisorTask implements NamedTaskComponent {
      */
     private ChatResponse callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
-            //尝试添加协议工具
+            o.toolsAdd(config.getTools());
             config.getProtocol().injectSupervisorTools(trace.getContext(), o::toolsAdd);
+
+            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
+                o.interceptorAdd(item.target);
+            }
+
+            o.toolsContextPut(trace.getOptions().getToolsContext());
 
             if (config.getChatOptions() != null) {
                 config.getChatOptions().accept(o);
             }
         });
-        trace.getOptions().getInterceptorList().forEach(item -> item.target.onModelStart(trace, req));
+        trace.getOptions().getInterceptors().forEach(item -> item.target.onModelStart(trace, req));
 
         int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
