@@ -181,4 +181,5 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
     static String ID_SYSTEM = "system";
     static String ID_SUPERVISOR = "supervisor";
     static String ID_BIDDING = "bidding";
+    static String ID_HANDOVER = "handover";
 }
