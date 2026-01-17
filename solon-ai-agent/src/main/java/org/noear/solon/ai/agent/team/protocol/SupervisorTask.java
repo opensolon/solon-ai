@@ -7,7 +7,7 @@
  *
  * https://www.apache.org/licenses/LICENSE-2.0
  */
-package org.noear.solon.ai.agent.team.task;
+package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
@@ -41,8 +41,8 @@ import java.util.stream.Collectors;
  */
 @Preview("3.8.1")
 public class SupervisorTask implements NamedTaskComponent {
-    private static final Logger LOG = LoggerFactory.getLogger(SupervisorTask.class);
-    private final TeamAgentConfig config;
+    protected static final Logger LOG = LoggerFactory.getLogger(SupervisorTask.class);
+    protected final TeamAgentConfig config;
 
     public SupervisorTask(TeamAgentConfig config) {
         this.config = config;
@@ -101,7 +101,7 @@ public class SupervisorTask implements NamedTaskComponent {
     /**
      * 构建 Prompt 并调用模型进行调度决策
      */
-    private void dispatch(FlowContext context, TeamTrace trace) throws Exception {
+    protected void dispatch(FlowContext context, TeamTrace trace) throws Exception {
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
         // 组装系统提示词 (基础模版 + 协议扩展)
@@ -161,7 +161,7 @@ public class SupervisorTask implements NamedTaskComponent {
     /**
      * 将决策文本解析为物理路由目标
      */
-    private void commitRoute(TeamTrace trace, String decision, FlowContext context) {
+    protected void commitRoute(TeamTrace trace, String decision, FlowContext context) {
         if (Assert.isEmpty(decision)) {
             routeTo(context, trace, Agent.ID_END);
             return;
@@ -198,7 +198,7 @@ public class SupervisorTask implements NamedTaskComponent {
             return;
         }
 
-        if(LOG.isDebugEnabled()){
+        if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] unable to extract agent name from LLM response: [{}]", config.getName(), decision);
         }
         routeTo(context, trace, Agent.ID_END);
@@ -207,7 +207,7 @@ public class SupervisorTask implements NamedTaskComponent {
     /**
      * 模糊匹配文本中的 Agent 名称
      */
-    private boolean matchAgentRoute(FlowContext context, TeamTrace trace, String text) {
+    protected boolean matchAgentRoute(FlowContext context, TeamTrace trace, String text) {
         // 移除 Markdown 格式字符（加粗/斜体的 * 和代码的 `），保留下划线，避免agent 名称的合法字符被误删，如agent1_extractor
         String cleanText = text.replaceAll("[\\*\\`]", "").trim();
 
@@ -233,7 +233,7 @@ public class SupervisorTask implements NamedTaskComponent {
     /**
      * 带重试机制的模型调用
      */
-    private ChatResponse callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
+    protected ChatResponse callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
             o.toolsAdd(config.getTools());
             config.getProtocol().injectSupervisorTools(trace.getContext(), o::toolsAdd);
@@ -254,14 +254,18 @@ public class SupervisorTask implements NamedTaskComponent {
             } catch (Exception e) {
                 if (i == maxRetries - 1) throw new RuntimeException("Supervisor call failed", e);
                 LOG.warn("Supervisor call failed, retrying ({}/{})...", i + 1, maxRetries);
-                try { Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1)); }
-                catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw new RuntimeException(ie); }
+                try {
+                    Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(ie);
+                }
             }
         }
         throw new RuntimeException("Unreachable");
     }
 
-    private void routeTo(FlowContext context, TeamTrace trace, String targetName) {
+    protected void routeTo(FlowContext context, TeamTrace trace, String targetName) {
         trace.setRoute(targetName);
         config.getProtocol().onSupervisorRouting(context, trace, targetName);
         if (LOG.isDebugEnabled()) {
@@ -269,7 +273,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
     }
 
-    private void handleError(FlowContext context, Exception e) {
+    protected void handleError(FlowContext context, Exception e) {
         LOG.error("TeamAgent [{}] supervisor fatal error", config.getName(), e);
         String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
         TeamTrace trace = context.getAs(traceKey);
