@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentInterceptor;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
@@ -30,7 +31,7 @@ import org.noear.solon.lang.Preview;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public interface TeamInterceptor extends FlowInterceptor, ChatInterceptor {
+public interface TeamInterceptor extends AgentInterceptor, FlowInterceptor, ChatInterceptor {
 
     // --- [维度 1：团队级 (Team Level)] ---
 

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.AgentInterceptor;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
@@ -31,7 +32,7 @@ import java.util.Map;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public interface ReActInterceptor extends FlowInterceptor, ChatInterceptor {
+public interface ReActInterceptor extends AgentInterceptor, FlowInterceptor, ChatInterceptor {
 
     /**
      * 智能体生命周期：开始执行前

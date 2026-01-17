@@ -13,18 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.simple;
-
-import org.noear.solon.ai.agent.AgentInterceptor;
-import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
-import org.noear.solon.lang.Preview;
+package org.noear.solon.ai.agent;
 
 /**
- * 简单智能体拦截器
+ * 智能体拦截器
  *
  * @author noear
  * @since 3.8.4
  */
-@Preview("3.8.4")
-public interface SimpleInterceptor extends AgentInterceptor, ChatInterceptor {
+public interface AgentInterceptor {
 }
