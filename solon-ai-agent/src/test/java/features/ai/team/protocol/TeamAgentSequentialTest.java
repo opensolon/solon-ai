@@ -309,9 +309,12 @@ public class TeamAgentSequentialTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         Agent step1 = SimpleAgent.of(chatModel).name("Step1")
-                .systemPrompt(SimpleSystemPrompt.builder().instruction("输出：Alpha").build()).build();
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .instruction("输出：Alpha").build()).build();
+
         Agent step2 = SimpleAgent.of(chatModel).name("Step2")
-                .systemPrompt(SimpleSystemPrompt.builder().instruction("基于上游，输出：Beta").build()).build();
+                .systemPrompt(SimpleSystemPrompt.builder()
+                        .instruction("基于上游，输出：Beta").build()).build();
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.SEQUENTIAL)
@@ -320,7 +323,10 @@ public class TeamAgentSequentialTest {
 
         // 第一次调用：只让它跑第一步（模拟环境）
         AgentSession session = InMemoryAgentSession.of("resumption_session");
-        team.call(Prompt.of("开始"), session);
+        team.prompt("开始")
+                .session(session)
+                .options(o->o.maxTurns(1))
+                .call();
 
         // 获取当前轨迹，确认 Step1 已完成
         TeamTrace traceFirst = team.getTrace(session);
@@ -328,7 +334,7 @@ public class TeamAgentSequentialTest {
 
         // 第二次调用：验证系统是否能识别 Session 状态继续推进，而不是从 Step1 重头开始
         // 注意：这取决于 Solon AI 的 Session 内部 offset 逻辑
-        String finalResult = team.call(Prompt.of("继续"), session).getContent();
+        String finalResult = team.prompt("继续").session(session).call().getContent();
         Assertions.assertTrue(finalResult.contains("Beta"), "未能从中断处恢复并完成 Step2");
     }
 
