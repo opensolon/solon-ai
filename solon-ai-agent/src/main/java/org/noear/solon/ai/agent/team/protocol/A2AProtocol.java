@@ -28,9 +28,6 @@ import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -41,26 +38,17 @@ import java.util.stream.Collectors;
  */
 @Preview("3.8.1")
 public class A2AProtocol extends TeamProtocolBase {
-    private static final Logger LOG = LoggerFactory.getLogger(A2AProtocol.class);
-
-    private static final String TOOL_TRANSFER = "__transfer_to__";
     private static final String KEY_A2A_STATE = "a2a_state_obj";
+    private static final String TOOL_TRANSFER = "__transfer_to__";
+    private final int maxTransferRounds = 5;
 
-    private final int maxTransferRounds = 5; // 强制熔断阈值
+    public A2AProtocol(TeamAgentConfig config) { super(config); }
 
-    /**
-     * A2A 协作状态看板（结构化状态类）
-     */
     public static class A2AState {
-        private String globalState = "";           // 累积业务状态
-        private int transferCount = 0;             // 接力次数
-        private String lastInstruction = "";       // 待处理的接力指令
-        private String lastTempTarget = "";        // 待处理的接力目标
-
-        public String getGlobalState() { return globalState; }
-        public int getTransferCount() { return transferCount; }
-        public String getLastInstruction() { return lastInstruction; }
-        public String getLastTempTarget() { return lastTempTarget; }
+        private String globalState = "";
+        private int transferCount = 0;
+        private String lastInstruction = "";
+        private String lastTempTarget = "";
 
         public void setTransferRequest(String target, String instruction, String state) {
             this.lastTempTarget = target;
@@ -72,16 +60,18 @@ public class A2AProtocol extends TeamProtocolBase {
 
         public void confirmTransfer() {
             this.transferCount++;
-            this.lastTempTarget = ""; // 消费掉目标标记
+            this.lastTempTarget = "";
         }
 
-        public void consumeInstruction() {
-            this.lastInstruction = ""; // 消费掉指令
-        }
+        public void consumeInstruction() { this.lastInstruction = ""; }
+        public String getGlobalState() { return globalState; }
+        public int getTransferCount() { return transferCount; }
+        public String getLastInstruction() { return lastInstruction; }
+        public String getLastTempTarget() { return lastTempTarget; }
     }
 
-    public A2AProtocol(TeamAgentConfig config) {
-        super(config);
+    public A2AState getA2AState(TeamTrace trace) {
+        return (A2AState) trace.getProtocolContext().computeIfAbsent(KEY_A2A_STATE, k -> new A2AState());
     }
 
     @Override
@@ -93,7 +83,12 @@ public class A2AProtocol extends TeamProtocolBase {
         spec.addStart(Agent.ID_START).linkAdd(firstAgent);
 
         config.getAgentMap().values().forEach(a ->
-                spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
+                spec.addActivity(a).linkAdd(Agent.ID_HANDOVER));
+
+        spec.addActivity(new A2AHandoverTask(config, this)).then(ns -> {
+            linkAgents(ns);
+            ns.linkAdd(Agent.ID_SUPERVISOR);
+        });
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
             linkAgents(ns);
@@ -105,60 +100,57 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
         TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+        if (trace == null) return;
 
-        if (trace != null) {
-            A2AState stateObj = (A2AState) trace.getProtocolContext()
-                    .computeIfAbsent(KEY_A2A_STATE, k -> new A2AState());
+        A2AState stateObj = getA2AState(trace);
+        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-            FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER).returnDirect(true);
-            boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+        String expertsDescription = config.getAgentMap().entrySet().stream()
+                .filter(e -> !e.getKey().equals(agent.name()))
+                .map(e -> {
+                    Agent expert = e.getValue();
+                    String skills = String.join(",", expert.profile().getSkills());
+                    String modes = String.join(",", expert.profile().getInputModes());
+                    String desc = expert.description();
 
-            String expertsDescription = config.getAgentMap().entrySet().stream()
-                    .filter(e -> !e.getKey().equals(agent.name()))
-                    .map(e -> {
-                        Agent expert = e.getValue();
-                        String skills = String.join(",", expert.profile().getSkills());
-                        String modes = String.join(",", expert.profile().getInputModes());
-                        String desc = expert.description();
+                    if (isZh) {
+                        return String.format("%s(%s) [技能:%s | 模态:%s]", e.getKey(), desc, skills, modes);
+                    } else {
+                        return String.format("%s(%s) [Skills:%s | Modes:%s]", e.getKey(), desc, skills, modes);
+                    }
+                })
+                .collect(Collectors.joining(" | "));
 
-                        if (isZh) {
-                            return String.format("%s(%s) [技能:%s | 模态:%s]", e.getKey(), desc, skills, modes);
-                        } else {
-                            return String.format("%s(%s) [Skills:%s | Modes:%s]", e.getKey(), desc, skills, modes);
-                        }
-                    })
-                    .collect(Collectors.joining(" | "));
+        FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER).returnDirect(true);
+        tool.doHandle(args -> {
+            String target = (String) args.get("target");
+            String instruction = (String) args.get("instruction");
+            String state = (String) args.get("state");
 
-            tool.doHandle(args -> {
-                String target = (String) args.get("target");
-                String instruction = (String) args.get("instruction");
-                String state = (String) args.get("state");
-
-                stateObj.setTransferRequest(target, instruction, state);
-
-                if (isZh) {
-                    return "已发起向 [" + target + "] 的接力请求。";
-                } else {
-                    return "Transfer to [" + target + "] requested.";
-                }
-            });
+            stateObj.setTransferRequest(target, instruction, state);
 
             if (isZh) {
-                tool.title("任务移交")
-                        .description("当你无法完成当前任务时，将其移交给更合适的专家。")
-                        .stringParamAdd("target", "目标专家名。必选范围: [" + expertsDescription + "]")
-                        .stringParamAdd("instruction", "给接棒专家的具体执行指令。")
-                        .stringParamAdd("state", "业务状态 JSON。");
+                return "已发起向 [" + target + "] 的接力请求。";
             } else {
-                tool.title("Transfer")
-                        .description("When you are unable to complete the current task, hand it over to a more appropriate expert.")
-                        .stringParamAdd("target", "Expert name. Options: [" + expertsDescription + "]")
-                        .stringParamAdd("instruction", "Specific instruction for the next expert.")
-                        .stringParamAdd("state", "Persistent JSON state.");
+                return "Transfer to [" + target + "] requested.";
             }
+        });
 
-            receiver.accept(tool);
+        if (isZh) {
+            tool.title("任务移交")
+                    .description("当你无法完成当前任务时，将其移交给更合适的专家。")
+                    .stringParamAdd("target", "目标专家名。必选范围: [" + expertsDescription + "]")
+                    .stringParamAdd("instruction", "给接棒专家的具体执行指令。")
+                    .stringParamAdd("state", "业务状态 JSON。");
+        } else {
+            tool.title("Transfer")
+                    .description("When you are unable to complete the current task, hand it over to a more appropriate expert.")
+                    .stringParamAdd("target", "Expert name. Options: [" + expertsDescription + "]")
+                    .stringParamAdd("instruction", "Specific instruction for the next expert.")
+                    .stringParamAdd("state", "Persistent JSON state.");
         }
+
+        receiver.accept(tool);
     }
 
     @Override
@@ -175,9 +167,7 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
-        A2AState stateObj = (A2AState) trace.getProtocolContext().get(KEY_A2A_STATE);
-        if (stateObj == null) return originalPrompt;
-
+        A2AState stateObj = getA2AState(trace);
         String instruction = stateObj.getLastInstruction();
         String state = stateObj.getGlobalState();
 
@@ -204,9 +194,7 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        A2AState stateObj = (A2AState) trace.getProtocolContext().get(KEY_A2A_STATE);
-        if (stateObj == null) return super.resolveSupervisorRoute(context, trace, decision);
-
+        A2AState stateObj = getA2AState(trace);
         String target = stateObj.getLastTempTarget();
 
         if (Utils.isNotEmpty(target)) {
@@ -223,9 +211,10 @@ public class A2AProtocol extends TeamProtocolBase {
                 return null;
             }
 
-            // 2. 核心校验
             Agent targetAgent = config.getAgentMap().get(target);
             if (targetAgent == null || !checkModality(trace, target)) {
+                stateObj.confirmTransfer();
+
                 String feedback;
                 if (isZh) {
                     feedback = "【系统通知】移交失败：专家 [" + target + "] 不存在或能力不匹配（如无法处理图片）。请重新选择或尝试自行解决。";
@@ -264,7 +253,7 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
-        A2AState stateObj = (A2AState) trace.getProtocolContext().get(KEY_A2A_STATE);
+        A2AState stateObj = getA2AState(trace);
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
         if (stateObj != null) {
@@ -295,8 +284,8 @@ public class A2AProtocol extends TeamProtocolBase {
             sb.append("2. **流转审计**：若专家间接力流转超过 3 次仍无实质进展，请立即介入并强制收尾。");
         } else {
             sb.append("\n### A2A Collaboration Rules:\n");
-            sb.append("1. **Direct Delivery**: Output `" + config.getFinishMarker() + "` directly upon completion. **DO NOT** summarize or refine the expert's output.\n");
-            sb.append("2. **Handover Audit**: Intervene and force termination if more than 3 handovers occur without progress.");
+            sb.append("1. **Direct Delivery**: Output `" + config.getFinishMarker() + "` directly. **DO NOT** summarize.\n");
+            sb.append("2. **Handover Audit**: Force termination if more than 3 handovers occur.");
         }
     }
 
