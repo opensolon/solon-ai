@@ -84,7 +84,7 @@ public class TeamAgentSwarmTest {
                 .name("swarm_pheromone_test")
                 .protocol(TeamProtocols.SWARM)
                 .agentAdd(workerA, workerB, workerC)
-                .maxTotalIterations(6)  // 允许多轮执行
+                .maxTurns(6)  // 允许多轮执行
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_pheromone");
@@ -204,7 +204,7 @@ public class TeamAgentSwarmTest {
                 .name("swarm_task_emergence_test")
                 .protocol(TeamProtocols.SWARM)
                 .agentAdd(researcher, dataCollector, analyzer)
-                .maxTotalIterations(15)
+                .maxTurns(15)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_task_emergence");
@@ -518,7 +518,7 @@ public class TeamAgentSwarmTest {
                 .name("Swarm_Defense_Team")
                 .protocol(TeamProtocols.SWARM) // Swarm 协议会自动根据使用频率计算惩罚分（Pheromone）
                 .agentAdd(agentA, agentB, cleaner)
-                .maxTotalIterations(10) // 给予足够的空间观察避障行为
+                .maxTurns(10) // 给予足够的空间观察避障行为
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("swarm_robust_001");
@@ -587,7 +587,7 @@ public class TeamAgentSwarmTest {
                 .name("Swarm_Protocol_Team")
                 .protocol(TeamProtocols.SWARM)
                 .agentAdd(lead, worker)
-                .maxTotalIterations(5)
+                .maxTurns(5)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_protocol_emergence");
@@ -682,7 +682,7 @@ public class TeamAgentSwarmTest {
                 .name("SupplyChain_Crisis_Swarm")
                 .protocol(TeamProtocols.SWARM)
                 .agentAdd(riskOfficer, logistics, finance, prExpert)
-                .maxTotalIterations(12)
+                .maxTurns(12)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("crisis_001");

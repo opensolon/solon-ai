@@ -71,7 +71,7 @@ public class TeamAgentBoundaryTest {
                 .name("loop_team")
                 .agentAdd(agentA)
                 .agentAdd(agentB)
-                .maxTotalIterations(3) // 强制限制迭代次数
+                .maxTurns(3) // 强制限制迭代次数
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_loop");
@@ -149,7 +149,7 @@ public class TeamAgentBoundaryTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .agentAdd(agentA).agentAdd(agentB)
-                .maxTotalIterations(2)
+                .maxTurns(2)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_hard_limit");

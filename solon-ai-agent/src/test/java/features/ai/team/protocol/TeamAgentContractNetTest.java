@@ -398,7 +398,7 @@ public class TeamAgentContractNetTest {
                 .name("Risk_Engine_Task_Force")
                 .protocol(TeamProtocols.BLACKBOARD)
                 .agentAdd(architect, dataEng, security, compliance, reviewer)
-                .maxTotalIterations(12)
+                .maxTurns(12)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("fin_test_001");
@@ -483,7 +483,7 @@ public class TeamAgentContractNetTest {
                 .name("Conflict_Resolution_Team")
                 .protocol(TeamProtocols.BLACKBOARD)
                 .agentAdd(expertA, expertB)
-                .maxTotalIterations(6) // 预留 A 提案、B 修正、最后总结的轮次
+                .maxTurns(6) // 预留 A 提案、B 修正、最后总结的轮次
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("s_conflict_v2");

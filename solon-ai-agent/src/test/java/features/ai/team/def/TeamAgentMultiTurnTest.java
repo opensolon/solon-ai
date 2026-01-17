@@ -71,7 +71,7 @@ public class TeamAgentMultiTurnTest {
         TeamAgent conciergeTeam = TeamAgent.of(chatModel)
                 .name("travel_concierge_team")
                 .agentAdd(searcher, planner)
-                .maxTotalIterations(6)
+                .maxTurns(6)
                 .build();
 
         // 3. 创建持久化 Session

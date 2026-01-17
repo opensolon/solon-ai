@@ -42,7 +42,7 @@ public class TeamAgentResilienceTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.A2A)
                 .agentAdd(a, b, c)
-                .maxTotalIterations(10)
+                .maxTurns(10)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("resilience_01");
@@ -137,7 +137,7 @@ public class TeamAgentResilienceTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .agentAdd(looper)
-                .maxTotalIterations(2)
+                .maxTurns(2)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("resilience_02");
@@ -213,7 +213,7 @@ public class TeamAgentResilienceTest {
         TeamAgent emergencyTeam = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.BLACKBOARD) // 开启黑板协议
                 .agentAdd(dbExpert, netExpert)
-                .maxTotalIterations(5)
+                .maxTurns(5)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_blackboard_prod");

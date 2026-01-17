@@ -56,7 +56,7 @@ public class TeamAgentA2ATest {
                 .name("dev_squad")
                 .protocol(TeamProtocols.A2A) // 使用 A2A 接力协议
                 .agentAdd(designer, developer)
-                .maxTotalIterations(10)
+                .maxTurns(10)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_a2a_02");
@@ -176,7 +176,7 @@ public class TeamAgentA2ATest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.A2A)
                 .agentAdd(agentA, agentB)
-                .maxTotalIterations(5) // 设置一个较小的阈值
+                .maxTurns(5) // 设置一个较小的阈值
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_loop_test");
@@ -230,7 +230,7 @@ public class TeamAgentA2ATest {
                 .name("Global_Marketing_Squad")
                 .protocol(TeamProtocols.A2A)
                 .agentAdd(analyst, copywriter, legal, designer)
-                .maxTotalIterations(15)
+                .maxTurns(15)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("prod_test_001");

@@ -59,7 +59,7 @@ public class Issue_IDJQ95_3 {
                 .name("DevTeam")
                 .protocol(TeamProtocols.HIERARCHICAL) // 开启自主接力模式
                 .agentAdd(coder, reviewer)
-                .maxTotalIterations(6)
+                .maxTurns(6)
                 .build();
 
         // 4. 执行

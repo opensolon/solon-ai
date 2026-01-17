@@ -62,7 +62,7 @@ public class TeamAgentBlackboardTest {
                 .protocol(TeamProtocols.BLACKBOARD)
                 .agentAdd(databaseDesigner)
                 .agentAdd(apiDesigner)
-                .maxTotalIterations(5)
+                .maxTurns(5)
                 .build();
 
         //
@@ -110,7 +110,7 @@ public class TeamAgentBlackboardTest {
                 .protocol(TeamProtocols.BLACKBOARD)
                 .agentAdd(dbDesigner)
                 .agentAdd(reviewer)
-                .maxTotalIterations(6)
+                .maxTurns(6)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_loop_01");
@@ -154,7 +154,7 @@ public class TeamAgentBlackboardTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.BLACKBOARD)
                 .agentAdd(dbDesigner, apiDesigner)
-                .maxTotalIterations(10)
+                .maxTurns(10)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_" + randomTableName);
@@ -207,7 +207,7 @@ public class TeamAgentBlackboardTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.BLACKBOARD)
                 .agentAdd(a, b)
-                .maxTotalIterations(maxTeamRounds) // 限制 Supervisor 只准点名 3 次
+                .maxTurns(maxTeamRounds) // 限制 Supervisor 只准点名 3 次
                 .build();
 
         // 3. 使用全新的 Session，防止被日志中出现的 "Maximum iterations reached" 历史污染
@@ -268,7 +268,7 @@ public class TeamAgentBlackboardTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.BLACKBOARD)
                 .agentAdd(frontend, backend)
-                .maxTotalIterations(10) // 限制迭代防止无限死循环
+                .maxTurns(10) // 限制迭代防止无限死循环
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("gap_fill_test_" + System.currentTimeMillis());
@@ -356,7 +356,7 @@ public class TeamAgentBlackboardTest {
                 .name("High_Availability_Squad")
                 .protocol(TeamProtocols.BLACKBOARD) // 启用黑板协议
                 .agentAdd(architect, dba, security, reviewer)
-                .maxTotalIterations(12)
+                .maxTurns(12)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("enterprise_prod_001");
@@ -458,7 +458,7 @@ public class TeamAgentBlackboardTest {
                 .name("Core_Settlement_Squad")
                 .protocol(TeamProtocols.BLACKBOARD)
                 .agentAdd(cto, dba, security) // 示例中省略其他
-                .maxTotalIterations(15)
+                .maxTurns(15)
                 .finishMarker("FINISH_ARCH")
                 .systemPrompt(TeamSystemPrompt.builder()
                         .instruction("## 调度算法优先级\n" +

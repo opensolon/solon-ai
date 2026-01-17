@@ -51,7 +51,7 @@ public class TeamAgentDemo {
                 .name("dev_team")
                 .agentAdd(coder)
                 .agentAdd(writer)
-                .maxTotalIterations(10)
+                .maxTurns(10)
                 .build();
 
         // 3. 创建 AgentSession (内部自动维护 FlowContext 状态)

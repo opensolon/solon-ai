@@ -46,7 +46,7 @@ public class TeamAgentTravelTest {
                                 .instruction("核心禁令：必须优先阅读历史天气！如果下雨，禁止安排：浅草寺（户外）、晴空塔（观景）、隅田川。必须改为：博物馆、美术馆或商场。")
                                 .build())
                         .build())
-                .maxTotalIterations(8) // 增加迭代上限，确保团队有足够空间完成“搜索-规划-校验”循环
+                .maxTurns(8) // 增加迭代上限，确保团队有足够空间完成“搜索-规划-校验”循环
                 .build();
 
         // 2. 使用 AgentSession 替代 FlowContext

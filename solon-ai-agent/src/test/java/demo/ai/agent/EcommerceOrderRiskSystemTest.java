@@ -148,7 +148,7 @@ public class EcommerceOrderRiskSystemTest {
                 .description("全流程自动化订单风险评审系统")
                 .protocol(TeamProtocols.SEQUENTIAL)
                 .defaultInterceptorAdd(new LoopingTeamInterceptor())
-                .maxTotalIterations(15)
+                .maxTurns(15)
                 .finishMarker("[ORDER_REVIEW_COMPLETE]")
                 .outputKey("final_decision")
                 .agentAdd(orderReceiver, riskAnalyst, customerValidator,

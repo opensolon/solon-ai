@@ -29,7 +29,7 @@ public class TeamAgentHumanInTheLoopTest {
         // 1. 定义团队：通过 graphAdjuster 自定义 DAG 流程
         TeamAgent auditTeam = TeamAgent.of(chatModel)
                 .name(teamName)
-                .maxTotalIterations(10)
+                .maxTurns(10)
                 .graphAdjuster(spec -> {
                     // 移除默认的 Supervisor（管家模式），构建线性审批流
                     spec.removeNode(Agent.ID_SUPERVISOR);

@@ -37,7 +37,7 @@ public class TeamAgentRecursiveTest {
                 .name("dev_team")
                 .description("研发小组。输入需求，直接给出代码实现。完成后必须回复：[FINISH] 研发已完成")
                 .agentAdd(createSimpleAgent("Coder", "负责写代码"))
-                .maxTotalIterations(2) // 严格限制子团队迭代次数
+                .maxTurns(2) // 严格限制子团队迭代次数
                 .build();
 
         // 2. 顶层团队：项目管理组 (project_team)
@@ -51,7 +51,7 @@ public class TeamAgentRecursiveTest {
                         .build())
                 .agentAdd(createSimpleAgent("Analyst", "需求分析师"))
                 .agentAdd(devTeam) // 嵌套子团队
-                .maxTotalIterations(5)
+                .maxTurns(5)
                 .build();
 
         // 可视化结构：打印图定义的 YAML
@@ -125,7 +125,7 @@ public class TeamAgentRecursiveTest {
                         return ChatMessage.ofAssistant("审核通过，表现完美。[FINISH]");
                     }
                 })
-                .maxTotalIterations(10)
+                .maxTurns(10)
                 .build();
 
         // 4. 执行任务

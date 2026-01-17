@@ -60,7 +60,7 @@ public class TeamAgentProfileConsumerTest {
                                 .metaPut("engine", "Nano Banana")
                                 .style("极简主义"))
                         .build())
-                .maxTotalIterations(5)
+                .maxTurns(5)
                 .build();
 
         // 3. 验证动态描述渲染逻辑
@@ -138,7 +138,7 @@ public class TeamAgentProfileConsumerTest {
 
         TeamAgent secureTeam = TeamAgent.of(chatModel)
                 .name("secure_team")
-                .maxTotalIterations(2) // 关键：限制最大迭代次数，防止死循环导致资损
+                .maxTurns(2) // 关键：限制最大迭代次数，防止死循环导致资损
                 .agentAdd(ReActAgent.of(chatModel)
                         .name("data_analyst")
                         // 给它一个具体的技能，让它觉得自己能行

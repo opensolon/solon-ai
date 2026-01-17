@@ -67,7 +67,7 @@ public class CrosstalkDemo {
                                         "3. **即兴约束**：台词要精炼，单次不超过 50 字。")
                                 .build())
                         .build())
-                .maxTotalIterations(8) // 稍微增加轮数，让吵架更精彩
+                .maxTurns(8) // 稍微增加轮数，让吵架更精彩
                 .build();
 
         // 2. 初始化会话记录 (自动承载 TeamTrace)

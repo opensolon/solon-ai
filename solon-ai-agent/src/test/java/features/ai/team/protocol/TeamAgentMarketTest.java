@@ -269,7 +269,7 @@ public class TeamAgentMarketTest {
         TeamAgent market = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.MARKET_BASED)
                 .agentAdd(designer, coder)
-                .maxTotalIterations(5)
+                .maxTurns(5)
                 .build();
 
         // 场景：一个包含“先设计、后实现”两个阶段的任务

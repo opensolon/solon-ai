@@ -55,7 +55,7 @@ public class TeamAgentSupervisorTest {
                 .name("decision_team")
                 .agentAdd(dataCollector)
                 .agentAdd(analyzer)
-                .maxTotalIterations(10)
+                .maxTurns(10)
                 .build();
 
         // 打印团队图结构的 YAML（包含节点与连接关系）
@@ -142,7 +142,7 @@ public class TeamAgentSupervisorTest {
         TeamAgent team = TeamAgent.of(chatModel)
                 .agentAdd(searcher)
                 .agentAdd(summarizer)
-                .maxTotalIterations(5)
+                .maxTurns(5)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_chain_test");
@@ -176,7 +176,7 @@ public class TeamAgentSupervisorTest {
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .agentAdd(javaDev)
-                .maxTotalIterations(3) // 设小一点，防止死循环
+                .maxTurns(3) // 设小一点，防止死循环
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_no_match");
@@ -243,7 +243,7 @@ public class TeamAgentSupervisorTest {
         TeamAgent devTeam = TeamAgent.of(chatModel)
                 .name("DevTeam")
                 .agentAdd(coder, reviewer)
-                .maxTotalIterations(8)
+                .maxTurns(8)
                 .finishMarker("FINISH")
                 .systemPrompt(TeamSystemPromptCn.builder()
                         .role("团队指挥")
@@ -353,7 +353,7 @@ public class TeamAgentSupervisorTest {
         TeamAgent incidentTeam = TeamAgent.of(chatModel)
                 .name("Incident_Response_Force")
                 .agentAdd(sre, architect, developer, security)
-                .maxTotalIterations(12)
+                .maxTurns(12)
                 .finishMarker("FINISH")
                 .systemPrompt(TeamSystemPromptCn.builder()
                         .role("紧急事件指挥官")
