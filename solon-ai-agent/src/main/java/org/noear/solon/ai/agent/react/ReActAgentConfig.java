@@ -41,7 +41,7 @@ public class ReActAgentConfig {
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgentConfig.class);
 
     /** 智能体唯一标识名 */
-    private String name;
+    private String name = "react_agent";
     /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
     private volatile String traceKey;
     /** 智能体标题 */

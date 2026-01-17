@@ -38,7 +38,7 @@ public class SimpleAgentConfig {
     private static final Logger log = LoggerFactory.getLogger(SimpleAgentConfig.class);
 
     /** 唯一标识名 */
-    private String name;
+    private String name = "simple_agent";
     /** 显示标题 */
     private String title;
     /** 功能描述 */

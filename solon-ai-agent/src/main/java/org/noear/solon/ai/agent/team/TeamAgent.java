@@ -137,6 +137,7 @@ public class TeamAgent implements Agent {
             context.trace().recordNode(graph, null);
             trace.setPrompt(prompt);
             trace.setRoute(null);
+            trace.getProtocolContext().clear();
             trace.resetTurnCount();
         } else {
             if (Prompt.isEmpty(trace.getPrompt())) {

@@ -44,7 +44,7 @@ public class TeamAgentConfig implements NonSerializable {
     private static final Logger LOG = LoggerFactory.getLogger(TeamAgentConfig.class);
 
     /** 团队唯一标识 */
-    private String name;
+    private String name = "team_agent";
     /** 状态跟踪键（用于隔离 Session 中的轨迹数据） */
     private volatile String traceKey;
     /** 显示标题 */
