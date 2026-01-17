@@ -31,10 +31,10 @@ public class TeamOptionsAmend {
     }
 
     /**
-     * 修正最大迭代轮数
+     * 修正最大回合数
      */
-    public TeamOptionsAmend maxTotalIterations(int maxTotalIterations) {
-        options.setMaxTurns(maxTotalIterations);
+    public TeamOptionsAmend maxTurns(int maxTurns) {
+        options.setMaxTurns(maxTurns);
         return this;
     }
 

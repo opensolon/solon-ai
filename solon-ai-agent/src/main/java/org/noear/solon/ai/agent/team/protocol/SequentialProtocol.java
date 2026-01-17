@@ -86,29 +86,22 @@ public class SequentialProtocol extends TeamProtocolBase {
     public void onAgentEnd(TeamTrace trace, Agent agent) {
         SequenceState state = getSequenceState(trace);
         String content = trace.getLastAgentContent();
-
-        // 质量评估
         boolean isSuccess = assessQuality(content);
         StageInfo info = state.stages.get(agent.name());
 
         if (isSuccess) {
             state.markCurrent("COMPLETED", content);
             state.next();
-            // 成功后，强制路由到中转 Task 寻找下一个
             trace.setRoute(Agent.ID_HANDOVER);
         } else {
             if (info != null && info.retries < maxRetriesPerStage) {
                 info.retries++;
                 state.markCurrent("RETRYING", "Quality check failed");
-                trace.setRoute(agent.name()); // 触发重试
+                trace.setRoute(agent.name());
             } else {
-                state.markCurrent("FAILED", "Quality check failed after retries");
-                if (stopOnFailure) {
-                    trace.setRoute(Agent.ID_END);
-                } else {
-                    state.next(); // 跳过，继续走
-                    trace.setRoute(Agent.ID_HANDOVER);
-                }
+                state.markCurrent("FAILED", "Quality check failed");
+                state.next();
+                trace.setRoute(Agent.ID_HANDOVER);
             }
         }
         super.onAgentEnd(trace, agent);
@@ -139,19 +132,21 @@ public class SequentialProtocol extends TeamProtocolBase {
         private final Map<String, StageInfo> stages = new LinkedHashMap<>();
 
         public void init(TeamTrace trace) {
+            if (this.pipeline.size() > 0) return;
+
             Collection<String> agentNames = trace.getConfig().getAgentMap().keySet();
-            this.pipeline.clear();
             this.pipeline.addAll(agentNames);
             agentNames.forEach(name -> stages.put(name, new StageInfo()));
 
             if (trace != null && trace.getRecords() != null) {
-                long completedCount = trace.getRecords().stream()
-                        .filter(r -> r.isAgent() && pipeline.contains(r.getSource()))
-                        .map(TeamTrace.TeamRecord::getSource)
-                        .distinct()
-                        .count();
+                Set<String> finished = new HashSet<>();
+                for (TeamTrace.TeamRecord r : trace.getRecords()) {
+                    if (r.isAgent() && pipeline.contains(r.getSource())) {
+                        finished.add(r.getSource());
+                    }
+                }
 
-                this.currentIndex = (int) completedCount;
+                this.currentIndex = finished.size();
             }
         }
 
