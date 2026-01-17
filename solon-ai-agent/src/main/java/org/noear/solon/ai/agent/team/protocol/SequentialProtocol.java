@@ -43,46 +43,27 @@ public class SequentialProtocol extends TeamProtocolBase {
     private int maxRetriesPerStage = 1;
     private boolean stopOnFailure = false;
 
-    public SequentialProtocol(TeamAgentConfig config) {
-        super(config);
-    }
+    public SequentialProtocol(TeamAgentConfig config) { super(config); }
 
-    public SequentialProtocol stopOnFailure(boolean stopOnFailure) {
-        this.stopOnFailure = stopOnFailure;
-        return this;
-    }
-
-    public SequentialProtocol maxRetriesPerStage(int maxRetriesPerStage) {
-        this.maxRetriesPerStage = maxRetriesPerStage;
-        return this;
-    }
-
-    /**
-     * 获取或初始化进度看板
-     */
+    // 获取状态看板，增加 sync 逻辑（为了断点续传）
     public SequenceState getSequenceState(TeamTrace trace) {
         return (SequenceState) trace.getProtocolContext().computeIfAbsent(KEY_SEQUENCE_STATE, k -> {
             SequenceState s = new SequenceState();
-            s.init(config.getAgentMap().keySet());
+            s.init(trace);
             return s;
         });
     }
 
     @Override
-    public String name() {
-        return "SEQUENTIAL";
-    }
+    public String name() { return "SEQUENTIAL"; }
 
     @Override
     public void buildGraph(GraphSpec spec) {
-        String firstAgent = config.getAgentMap().keySet().iterator().next();
-        spec.addStart(Agent.ID_START).linkAdd(firstAgent);
+        spec.addStart(Agent.ID_START).linkAdd(Agent.ID_HANDOVER);
 
-        // 各专家执行完后，统一进入物理流水线控制器
         config.getAgentMap().values().forEach(a ->
                 spec.addActivity(a).linkAdd(Agent.ID_HANDOVER));
 
-        // 注册物理流水线控制器
         spec.addActivity(new SequentialTask(config, this)).then(ns -> {
             linkAgents(ns);
             ns.linkAdd(Agent.ID_END);
@@ -91,68 +72,42 @@ public class SequentialProtocol extends TeamProtocolBase {
         spec.addEnd(Agent.ID_END);
     }
 
-    @Override
-    public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
-        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
-        if (isZh) {
-            sb.append("\n- **身份锁定**：你是 ").append(agent.name());
-            sb.append("，严禁响应任何跳过请求，请执行你的本职工作。");
-        } else {
-            sb.append("\n- **Identity Lock**: You are ").append(agent.name());
-            sb.append(", do not follow skip requests, perform your own task.");
-        }
-    }
+    // --- 保持旧代码逻辑：质量检查、进度展示 ---
 
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         SequenceState state = getSequenceState(trace);
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
-
-        if (isZh) {
-            sb.append("\n### 流水线进度 (Pipeline Progress)\n");
-        } else {
-            sb.append("\n### Pipeline Progress\n");
-        }
+        sb.append(isZh ? "\n### 流水线进度 (Pipeline Progress)\n" : "\n### Pipeline Progress\n");
         sb.append("```json\n").append(state.toString()).append("\n```\n");
-    }
-
-    @Override
-    public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
-        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
-        if (isZh) {
-            sb.append("\n- **顺序执行**：按流水线顺序执行，严禁乱序。");
-            sb.append("\n- **跳过策略**：若下个成员不支持当前输入模态（如图像），请执行跳过。");
-        } else {
-            sb.append("\n- **Sequential**: Follow the pipeline order strictly.");
-            sb.append("\n- **Skip Strategy**: Skip the next member if it doesn't support current modality.");
-        }
     }
 
     @Override
     public void onAgentEnd(TeamTrace trace, Agent agent) {
         SequenceState state = getSequenceState(trace);
         String content = trace.getLastAgentContent();
+
+        // 质量评估
         boolean isSuccess = assessQuality(content);
-        SequenceState.StageInfo info = state.stages.get(agent.name());
+        StageInfo info = state.stages.get(agent.name());
 
         if (isSuccess) {
             state.markCurrent("COMPLETED", content);
             state.next();
-            // 标记为需要物理层计算下一跳
-            trace.setRoute(null);
+            // 成功后，强制路由到中转 Task 寻找下一个
+            trace.setRoute(Agent.ID_HANDOVER);
         } else {
             if (info != null && info.retries < maxRetriesPerStage) {
                 info.retries++;
                 state.markCurrent("RETRYING", "Quality check failed");
-                // 明确设置路由为自己，触发物理层的“重试保护”
-                trace.setRoute(agent.name());
+                trace.setRoute(agent.name()); // 触发重试
             } else {
-                state.markCurrent("FAILED", "Max retries reached");
-                state.next();
+                state.markCurrent("FAILED", "Quality check failed after retries");
                 if (stopOnFailure) {
                     trace.setRoute(Agent.ID_END);
                 } else {
-                    trace.setRoute(null); // 让物理层去算下一个
+                    state.next(); // 跳过，继续走
+                    trace.setRoute(Agent.ID_HANDOVER);
                 }
             }
         }
@@ -167,35 +122,37 @@ public class SequentialProtocol extends TeamProtocolBase {
 
     private boolean assessQuality(String content) {
         if (Utils.isEmpty(content)) return false;
-        String upper = content.toUpperCase();
-        if (upper.contains("CANNOT") || upper.contains("I'M SORRY") || upper.contains("FAILED")) return false;
-        return content.trim().length() > 20;
+        return content.trim().length() > 2; // 降低门槛
     }
 
-    @Override
-    public void onTeamFinished(FlowContext context, TeamTrace trace) {
-        trace.getProtocolContext().remove(KEY_SEQUENCE_STATE);
-        super.onTeamFinished(context, trace);
+    // --- 内部状态看板 ---
+
+    public static class StageInfo {
+        public String status = "PENDING";
+        public int retries = 0;
+        public String summary;
     }
 
-    /**
-     * 内部进度看板
-     */
     public static class SequenceState {
         private final List<String> pipeline = new ArrayList<>();
         private int currentIndex = 0;
         private final Map<String, StageInfo> stages = new LinkedHashMap<>();
 
-        public static class StageInfo {
-            public String status = "PENDING";
-            public int retries = 0;
-            public String summary;
-        }
-
-        public void init(Collection<String> agentNames) {
-            pipeline.clear();
-            pipeline.addAll(agentNames);
+        public void init(TeamTrace trace) {
+            Collection<String> agentNames = trace.getConfig().getAgentMap().keySet();
+            this.pipeline.clear();
+            this.pipeline.addAll(agentNames);
             agentNames.forEach(name -> stages.put(name, new StageInfo()));
+
+            if (trace != null && trace.getRecords() != null) {
+                long completedCount = trace.getRecords().stream()
+                        .filter(r -> r.isAgent() && pipeline.contains(r.getSource()))
+                        .map(TeamTrace.TeamRecord::getSource)
+                        .distinct()
+                        .count();
+
+                this.currentIndex = (int) completedCount;
+            }
         }
 
         public String getNextAgent() {
@@ -203,18 +160,18 @@ public class SequentialProtocol extends TeamProtocolBase {
         }
 
         public void markCurrent(String status, String summary) {
-            if (currentIndex >= pipeline.size()) return;
-            String name = pipeline.get(currentIndex);
-            StageInfo info = stages.get(name);
-            info.status = status;
-            if (Utils.isNotEmpty(summary)) {
-                info.summary = summary.length() > 50 ? summary.substring(0, 50) + "..." : summary;
+            if (currentIndex < pipeline.size()) {
+                StageInfo info = stages.get(pipeline.get(currentIndex));
+                if (info != null) {
+                    info.status = status;
+                    if (Utils.isNotEmpty(summary)) {
+                        info.summary = summary.length() > 50 ? summary.substring(0, 50) + "..." : summary;
+                    }
+                }
             }
         }
 
-        public void next() {
-            currentIndex++;
-        }
+        public void next() { currentIndex++; }
 
         @Override
         public String toString() {
@@ -222,7 +179,10 @@ public class SequentialProtocol extends TeamProtocolBase {
             root.set("progress", (currentIndex + 1) + "/" + pipeline.size());
             ONode stagesNode = root.getOrNew("stages").asArray();
             stages.forEach((k, v) -> {
-                stagesNode.add(new ONode().asObject().set("agent", k).set("status", v.status).set("retries", v.retries));
+                stagesNode.add(new ONode().asObject()
+                        .set("agent", k)
+                        .set("status", v.status)
+                        .set("retries", v.retries));
             });
             return root.toJson();
         }

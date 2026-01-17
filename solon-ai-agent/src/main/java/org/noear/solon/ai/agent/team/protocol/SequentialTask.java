@@ -22,8 +22,6 @@ import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * 顺序协作协议 - 物理流水线控制器
@@ -31,9 +29,8 @@ import org.slf4j.LoggerFactory;
  * @author noear
  * @since 3.8.1
  */
-@Preview("3.8.4")
+@Preview("3.8.1")
 public class SequentialTask implements NamedTaskComponent {
-    private static final Logger LOG = LoggerFactory.getLogger(SequentialTask.class);
     private final TeamAgentConfig config;
     private final SequentialProtocol protocol;
 
@@ -43,34 +40,27 @@ public class SequentialTask implements NamedTaskComponent {
     }
 
     @Override
-    public String name() {
-        return Agent.ID_HANDOVER;
-    }
+    public String name() { return Agent.ID_HANDOVER; }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         TeamTrace trace = context.getAs(config.getTraceKey());
         if (trace == null) return;
 
+        // 获取并同步状态
         SequentialProtocol.SequenceState state = protocol.getSequenceState(trace);
+
+        // 核心逻辑：获取下一个应该执行的 Agent
         String next = state.getNextAgent();
 
-        // 1. 物理检查与模态跳过 (复刻旧版 shouldSupervisorExecute 逻辑)
+        // 模态检查逻辑（保留旧代码细节）
         while (!Agent.ID_END.equals(next)) {
             Agent nextAgent = config.getAgentMap().get(next);
-            if (nextAgent == null) {
-                state.next();
-                next = state.getNextAgent();
-                continue;
-            }
-
             boolean hasImage = protocol.detectMediaPresence(trace);
+
             if (hasImage && nextAgent.profile() != null) {
                 boolean supportImage = nextAgent.profile().getInputModes().contains("image");
                 if (!supportImage) {
-                    if (LOG.isWarnEnabled()) {
-                        LOG.warn("Sequential Protocol: Skipping Agent [{}] - Incompatible modality", next);
-                    }
                     state.markCurrent("SKIPPED", "Incompatible modality");
                     state.next();
                     next = state.getNextAgent();
@@ -80,7 +70,7 @@ public class SequentialTask implements NamedTaskComponent {
             break;
         }
 
-        // 2. 设置物理路由
+        // 物理重定向路由
         trace.setRoute(next);
     }
 }
