@@ -7,7 +7,7 @@
  *
  * https://www.apache.org/licenses/LICENSE-2.0
  */
-package org.noear.solon.ai.agent.team.protocol;
+package org.noear.solon.ai.agent.team.task;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgent;
