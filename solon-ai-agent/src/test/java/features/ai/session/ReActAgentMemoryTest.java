@@ -2,7 +2,6 @@ package features.ai.session;
 
 import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -29,7 +28,7 @@ public class ReActAgentMemoryTest {
         ReActAgent agent = ReActAgent.of(chatModel)
                 .name("MemoryAgent")
                 .description("一个有记忆的推理助手")
-                .historyWindowSize(10) // 启用历史窗口
+                .sessionWindowSize(10) // 启用历史窗口
                 .build();
 
         // 2. 创建模拟会话
