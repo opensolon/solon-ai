@@ -30,17 +30,17 @@ import org.noear.solon.lang.Preview;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class SequentialTask implements NamedTaskComponent {
+public class SequentialRoutingTask implements NamedTaskComponent {
     private final TeamAgentConfig config;
     private final SequentialProtocol protocol;
 
-    public SequentialTask(TeamAgentConfig config, SequentialProtocol protocol) {
+    public SequentialRoutingTask(TeamAgentConfig config, SequentialProtocol protocol) {
         this.config = config;
         this.protocol = protocol;
     }
 
     @Override
-    public String name() { return Agent.ID_HANDOVER; }
+    public String name() { return SequentialProtocol.ID_ROUTING; }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {

@@ -38,10 +38,10 @@ import java.util.*;
  */
 @Preview("3.8.1")
 public class SequentialProtocol extends TeamProtocolBase {
-    private static final Logger LOG = LoggerFactory.getLogger(SequentialProtocol.class);
+    public final static String ID_ROUTING = "routing";
+
     private static final String KEY_SEQUENCE_STATE = "sequence_state_obj";
     private int maxRetriesPerStage = 1;
-    private boolean stopOnFailure = false;
 
     public SequentialProtocol(TeamAgentConfig config) { super(config); }
 
@@ -59,12 +59,12 @@ public class SequentialProtocol extends TeamProtocolBase {
 
     @Override
     public void buildGraph(GraphSpec spec) {
-        spec.addStart(Agent.ID_START).linkAdd(Agent.ID_HANDOVER);
+        spec.addStart(Agent.ID_START).linkAdd(ID_ROUTING);
 
         config.getAgentMap().values().forEach(a ->
-                spec.addActivity(a).linkAdd(Agent.ID_HANDOVER));
+                spec.addActivity(a).linkAdd(ID_ROUTING));
 
-        spec.addActivity(new SequentialTask(config, this)).then(ns -> {
+        spec.addActivity(new SequentialRoutingTask(config, this)).then(ns -> {
             linkAgents(ns);
             ns.linkAdd(Agent.ID_END);
         });
@@ -92,7 +92,7 @@ public class SequentialProtocol extends TeamProtocolBase {
         if (isSuccess) {
             state.markCurrent("COMPLETED", content);
             state.next();
-            trace.setRoute(Agent.ID_HANDOVER);
+            trace.setRoute(ID_ROUTING);
         } else {
             if (info != null && info.retries < maxRetriesPerStage) {
                 info.retries++;
@@ -101,7 +101,7 @@ public class SequentialProtocol extends TeamProtocolBase {
             } else {
                 state.markCurrent("FAILED", "Quality check failed");
                 state.next();
-                trace.setRoute(Agent.ID_HANDOVER);
+                trace.setRoute(ID_ROUTING);
             }
         }
         super.onAgentEnd(trace, agent);

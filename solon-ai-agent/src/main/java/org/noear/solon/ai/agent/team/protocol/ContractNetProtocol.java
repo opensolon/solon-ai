@@ -40,6 +40,8 @@ import java.util.function.Consumer;
 
 @Preview("3.8.1")
 public class ContractNetProtocol extends TeamProtocolBase {
+    public final static String ID_BIDDING = "bidding";
+
     private static final Logger LOG = LoggerFactory.getLogger(ContractNetProtocol.class);
 
     private static final String KEY_CONTRACT_STATE = "contract_state_obj";
@@ -87,9 +89,9 @@ public class ContractNetProtocol extends TeamProtocolBase {
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
             // 路由控制：优先处理来自工具或决策的招标请求
-            ns.linkAdd(Agent.ID_BIDDING, l -> l.when(ctx -> {
+            ns.linkAdd(ID_BIDDING, l -> l.when(ctx -> {
                 TeamTrace trace = ctx.getAs(config.getTraceKey());
-                return Agent.ID_BIDDING.equals(trace.getRoute());
+                return ID_BIDDING.equals(trace.getRoute());
             }));
             linkAgents(ns);
         }).linkAdd(Agent.ID_END);
@@ -116,7 +118,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
             }
 
             TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
-            if(trace != null) trace.setRoute(Agent.ID_BIDDING);
+            if(trace != null) trace.setRoute(ID_BIDDING);
             return isZh ? "已进入招标流程。" : "Bidding phase initiated.";
         });
         receiver.accept(tool);
@@ -126,7 +128,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
         TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
 
-        if (trace != null && Agent.ID_BIDDING.equals(trace.getRoute())) {
+        if (trace != null && ID_BIDDING.equals(trace.getRoute())) {
             FunctionToolDesc tool = new FunctionToolDesc(TOOL_SUBMIT_BID).returnDirect(true);
             boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
@@ -160,8 +162,8 @@ public class ContractNetProtocol extends TeamProtocolBase {
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        if (Agent.ID_BIDDING.equals(trace.getRoute())) {
-            return Agent.ID_BIDDING;
+        if (ID_BIDDING.equals(trace.getRoute())) {
+            return ID_BIDDING;
         }
 
         if (Utils.isNotEmpty(decision)) {
@@ -170,7 +172,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
                 Integer round = (Integer) trace.getProtocolContext().getOrDefault(KEY_BIDDING_ROUND, 0);
                 if (round < maxBiddingRounds) {
                     trace.getProtocolContext().put(KEY_BIDDING_ROUND, round + 1);
-                    return Agent.ID_BIDDING;
+                    return ID_BIDDING;
                 }
             }
         }
@@ -182,7 +184,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
                     LOG.debug("ContractNet: Agent [{}] attempted to assign '{}' without bidding. Forcing bidding phase.",
                             config.getName(), decision);
                 }
-                return Agent.ID_BIDDING;
+                return ID_BIDDING;
             }
             return decision;
         }

@@ -14,6 +14,8 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.8.1")
 public class A2AHandoverTask implements NamedTaskComponent {
+    public final static String ID_HANDOVER = "handover";
+
     private final TeamAgentConfig config;
     private final A2AProtocol protocol;
 
@@ -23,7 +25,7 @@ public class A2AHandoverTask implements NamedTaskComponent {
     }
 
     @Override
-    public String name() { return Agent.ID_HANDOVER; }
+    public String name() { return ID_HANDOVER; }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {

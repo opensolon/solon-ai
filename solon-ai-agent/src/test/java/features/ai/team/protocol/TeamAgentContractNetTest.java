@@ -13,6 +13,7 @@ import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.team.protocol.ContractNetProtocol;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -211,7 +212,7 @@ public class TeamAgentContractNetTest {
         steps.forEach(s -> System.out.println("[" + s.getSource() + "] -> " + s.getContent()));
 
         // 1. 断言：轨迹中必须包含招标节点 (ID_BIDDING)
-        boolean hasBidding = steps.stream().anyMatch(s -> Agent.ID_BIDDING.equals(s.getSource()));
+        boolean hasBidding = steps.stream().anyMatch(s -> ContractNetProtocol.ID_BIDDING.equals(s.getSource()));
         Assertions.assertTrue(hasBidding, "协议保护失效：即便被诱导，也必须强制触发招标逻辑");
 
         // 2. 断言：顺序合规性
@@ -219,7 +220,7 @@ public class TeamAgentContractNetTest {
         int workerIdx = -1;
         for (int i = 0; i < steps.size(); i++) {
             String source = steps.get(i).getSource();
-            if (Agent.ID_BIDDING.equals(source)) biddingIdx = i;
+            if (ContractNetProtocol.ID_BIDDING.equals(source)) biddingIdx = i;
             if ("worker".equals(source)) workerIdx = i;
         }
 

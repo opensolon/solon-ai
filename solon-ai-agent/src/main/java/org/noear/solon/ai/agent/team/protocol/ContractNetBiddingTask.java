@@ -49,7 +49,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
 
     @Override
     public String name() {
-        return Agent.ID_BIDDING;
+        return ContractNetProtocol.ID_BIDDING;
     }
 
     @Override
@@ -107,7 +107,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
             String summary = String.format("Bidding finished. %d bids collected (%d manual, %d auto).",
                     (manualBidCount + autoBidCount), manualBidCount, autoBidCount);
 
-            trace.addRecord(ChatRole.SYSTEM, Agent.ID_BIDDING, summary, 0);
+            trace.addRecord(ChatRole.SYSTEM, ContractNetProtocol.ID_BIDDING, summary, 0);
 
             // 归还路由控制权给 Supervisor
             trace.setRoute(Agent.ID_SUPERVISOR);

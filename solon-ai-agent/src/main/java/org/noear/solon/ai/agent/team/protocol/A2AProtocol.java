@@ -83,7 +83,7 @@ public class A2AProtocol extends TeamProtocolBase {
         spec.addStart(Agent.ID_START).linkAdd(firstAgent);
 
         config.getAgentMap().values().forEach(a ->
-                spec.addActivity(a).linkAdd(Agent.ID_HANDOVER));
+                spec.addActivity(a).linkAdd(A2AHandoverTask.ID_HANDOVER));
 
         spec.addActivity(new A2AHandoverTask(config, this)).then(ns -> {
             linkAgents(ns);
