@@ -27,7 +27,6 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -263,11 +262,11 @@ public class SimpleAgent implements Agent {
         public Builder toolAdd(ToolProvider toolProvider) { config.addTool(toolProvider); return this; }
         public Builder defaultToolsContextPut(String key, Object value) { config.getToolsContext().put(key, value); return this; }
         public Builder defaultToolsContextPut(Map<String,Object> objectMap) { config.getToolsContext().putAll(objectMap); return this; }
-        public Builder defaultInterceptorAdd(ChatInterceptor... vals) {
-            for (ChatInterceptor val : vals) config.addInterceptor(val, 0);
+        public Builder defaultInterceptorAdd(SimpleInterceptor... vals) {
+            for (SimpleInterceptor val : vals) config.addInterceptor(val, 0);
             return this;
         }
-        public Builder defaultInterceptorAdd(ChatInterceptor val, int index) { config.addInterceptor(val, index); return this; }
+        public Builder defaultInterceptorAdd(SimpleInterceptor val, int index) { config.addInterceptor(val, index); return this; }
 
         public SimpleAgent build() {
             if (config.getHandler() == null && config.getChatModel() == null)

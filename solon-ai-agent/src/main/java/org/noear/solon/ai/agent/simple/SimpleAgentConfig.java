@@ -19,7 +19,6 @@ import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.RankEntity;
@@ -32,7 +31,8 @@ import java.util.function.Consumer;
 /**
  * 简单智能体配置类
  *
- * @author noear 2026/1/12 created
+ * @author noear
+ * @since 3.8.1
  */
 public class SimpleAgentConfig {
     private static final Logger log = LoggerFactory.getLogger(SimpleAgentConfig.class);
@@ -58,7 +58,7 @@ public class SimpleAgentConfig {
     /** 工具调用的共享上下文数据 */
     private final Map<String, Object> toolsContext = new LinkedHashMap<>();
     /** 生命周期拦截器队列（支持监控、审计、Thought 记录等） */
-    private final List<RankEntity<ChatInterceptor>> interceptors = new ArrayList<>();
+    private final List<RankEntity<SimpleInterceptor>> interceptors = new ArrayList<>();
 
     /** 模型调用失败后的最大重试次数 */
     private int maxRetries = 3;
@@ -100,7 +100,7 @@ public class SimpleAgentConfig {
     }
 
     /** 注册并重排拦截器 */
-    public void addInterceptor(ChatInterceptor interceptor, int index) {
+    public void addInterceptor(SimpleInterceptor interceptor, int index) {
         interceptors.add(new RankEntity<>(interceptor, index));
         Collections.sort(interceptors);
     }
@@ -133,7 +133,7 @@ public class SimpleAgentConfig {
     public Collection<FunctionTool> getTools() { return tools.values(); }
     public Consumer<ChatOptions> getChatOptions() { return chatOptions; }
     public Map<String, Object> getToolsContext() { return toolsContext; }
-    public List<RankEntity<ChatInterceptor>> getInterceptors() { return interceptors; }
+    public List<RankEntity<SimpleInterceptor>> getInterceptors() { return interceptors; }
     public AgentHandler getHandler() { return handler; }
     public int getMaxRetries() { return maxRetries; }
     public long getRetryDelayMs() { return retryDelayMs; }
