@@ -55,7 +55,7 @@ public class TeamTrace implements AgentTrace {
     /** 当前任务提示词（随协作阶段动态变化） */
     private Prompt prompt;
     /** 协作流水账：按时间轴记录执行详情 */
-    private final List<TeamStep> steps = new CopyOnWriteArrayList<>();
+    private final List<TeamRecord> records = new CopyOnWriteArrayList<>();
 
     /** 路由决策：指向下一个 Agent 或 ID_END */
     private volatile String route;
@@ -83,28 +83,22 @@ public class TeamTrace implements AgentTrace {
 
     /** 是否为初始状态 */
     public boolean isInitial() {
-        return steps.isEmpty();
-    }
-
-    /** 提取最近一轮产出 */
-    public String getLastStepContent() {
-        if (steps.isEmpty()) return "";
-        return steps.get(steps.size() - 1).getContent();
+        return records.isEmpty();
     }
 
     /** 提取最近一位专家 Agent（非 Supervisor）的内容 */
     public String getLastAgentContent() {
-        for (int i = steps.size() - 1; i >= 0; i--) {
-            TeamStep step = steps.get(i);
-            if (step.isAgent()) return step.getContent();
+        for (int i = records.size() - 1; i >= 0; i--) {
+            TeamRecord record = records.get(i);
+            if (record.isAgent()) return record.getContent();
         }
         return "";
     }
 
     public long getLastAgentDuration() {
-        for (int i = steps.size() - 1; i >= 0; i--) {
-            TeamStep step = steps.get(i);
-            if (step.isAgent()) return step.getDuration();
+        for (int i = records.size() - 1; i >= 0; i--) {
+            TeamRecord record = records.get(i);
+            if (record.isAgent()) return record.getDuration();
         }
         return 0L;
     }
@@ -156,14 +150,14 @@ public class TeamTrace implements AgentTrace {
         return (T) protocolContext.get(key);
     }
 
-    public int getStepCount() { return steps.size(); }
+    public int getRecordCount() { return records.size(); }
 
     /** 记录执行足迹 */
-    public void addStep(ChatRole role, String source, String content, long duration) {
-        steps.add(new TeamStep(role, source, content, duration));
+    public void addRecord(ChatRole role, String source, String content, long duration) {
+        records.add(new TeamRecord(role, source, content, duration));
 
         if (LOG.isDebugEnabled() && config != null) {
-            LOG.debug("TeamTrace [{}] step added: role={}, source={}, duration={}ms",
+            LOG.debug("TeamTrace [{}] record added: role={}, source={}, duration={}ms",
                     config.getName(), role, source, duration);
         }
     }
@@ -179,37 +173,37 @@ public class TeamTrace implements AgentTrace {
      * @param includeSystem 是否包含调度器决策逻辑
      */
     public String getFormattedHistory(int windowSize, boolean includeSystem) {
-        if (steps.isEmpty()) return "No progress yet.";
+        if (records.isEmpty()) return "No progress yet.";
 
-        List<TeamStep> filteredSteps = steps;
+        List<TeamRecord> recordList = records;
         if (!includeSystem) {
-            filteredSteps = steps.stream().filter(TeamStep::isAgent).collect(Collectors.toList());
+            recordList = records.stream().filter(TeamRecord::isAgent).collect(Collectors.toList());
         }
 
-        if (windowSize > 0 && filteredSteps.size() > windowSize) {
-            filteredSteps = filteredSteps.subList(filteredSteps.size() - windowSize, filteredSteps.size());
+        if (windowSize > 0 && recordList.size() > windowSize) {
+            recordList = recordList.subList(recordList.size() - windowSize, recordList.size());
         }
 
-        return filteredSteps.stream()
-                .map(step -> {
-                    String title = step.isAgent() ? "Expert Output" : "System Instruction";
-                    return String.format("### %s from [%s]:\n%s", title, step.getSource(), step.getContent());
+        return recordList.stream()
+                .map(record -> {
+                    String title = record.isAgent() ? "Expert Output" : "System Instruction";
+                    return String.format("### %s from [%s]:\n%s", title, record.getSource(), record.getContent());
                 })
                 .collect(Collectors.joining("\n\n"));
     }
 
-    public List<TeamStep> getSteps() { return Collections.unmodifiableList(steps); }
+    public List<TeamRecord> getRecords() { return Collections.unmodifiableList(records); }
     public String getFinalAnswer() { return finalAnswer; }
     public void setFinalAnswer(String finalAnswer) { this.finalAnswer = finalAnswer; }
 
     /** 协作足迹详情 */
-    public static class TeamStep {
+    public static class TeamRecord {
         private final ChatRole role;
         private final String source;
         private final String content;
         private final long duration;
 
-        public TeamStep(ChatRole role, String source, String content, long duration) {
+        public TeamRecord(ChatRole role, String source, String content, long duration) {
             this.role = role;
             this.source = source;
             this.content = content;

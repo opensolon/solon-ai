@@ -20,7 +20,6 @@ import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * ContractNet 协议优化测试集
@@ -83,7 +82,7 @@ public class TeamAgentContractNetTest {
         String dashboard = trace.getProtocolDashboardSnapshot();
 
         // 1. 过程断言：是否调用了匹配度验证工具
-        boolean toolCalled = trace.getSteps().stream()
+        boolean toolCalled = trace.getRecords().stream()
                 .anyMatch(s -> s.getContent().contains("validate_expert_fit"));
         Assertions.assertTrue(toolCalled, "决策过程应包含显式的能力验证");
 
@@ -153,7 +152,7 @@ public class TeamAgentContractNetTest {
         // --- 核心断言 ---
 
         // 1. 验证过程：检查是否有审计得分的动作
-        boolean hasScoreReport = trace.getSteps().stream()
+        boolean hasScoreReport = trace.getRecords().stream()
                 .anyMatch(s -> s.getContent().contains("report_bidding_scores"));
         Assertions.assertTrue(hasScoreReport, "Manager 应显式报告竞标分值");
 
@@ -206,7 +205,7 @@ public class TeamAgentContractNetTest {
 
         // --- 核心断言：验证协议拦截 ---
         TeamTrace trace = team.getTrace(session);
-        List<TeamTrace.TeamStep> steps = trace.getSteps();
+        List<TeamTrace.TeamRecord> steps = trace.getRecords();
 
         // 打印轨迹辅助调试
         steps.forEach(s -> System.out.println("[" + s.getSource() + "] -> " + s.getContent()));
@@ -233,7 +232,7 @@ public class TeamAgentContractNetTest {
         // 3. 语义断言：检查 Supervisor 是否识别并拒绝了“跳过”请求
         String supervisorResponse = steps.stream()
                 .filter(s -> Agent.ID_SUPERVISOR.equals(s.getSource()))
-                .map(TeamTrace.TeamStep::getContent)
+                .map(TeamTrace.TeamRecord::getContent)
                 .findFirst().orElse("");
 
         // 这一步验证 LLM 是否在口头上也维持了合规性
@@ -312,8 +311,8 @@ public class TeamAgentContractNetTest {
         TeamTrace trace = securityTeam.getTrace(session);
 
         // 1. 验证协作深度（招标流程至少包含：招标-各专家投标-评标-执行）
-        System.out.println("协作总步数: " + trace.getStepCount());
-        Assertions.assertTrue(trace.getStepCount() >= 5, "ContractNet 流程不完整");
+        System.out.println("协作总步数: " + trace.getRecordCount());
+        Assertions.assertTrue(trace.getRecordCount() >= 5, "ContractNet 流程不完整");
 
         // 2. 验证黑板分值快照
         String dashboard = trace.getProtocolDashboardSnapshot();
@@ -412,7 +411,7 @@ public class TeamAgentContractNetTest {
         String dashboard = trace.getProtocolDashboardSnapshot();
 
         // 断言 1: 验证是否通过工具进行了有效的黑板更新
-        boolean toolCalled = trace.getSteps().stream()
+        boolean toolCalled = trace.getRecords().stream()
                 .anyMatch(s -> s.getContent().contains("register_spec"));
         Assertions.assertTrue(toolCalled, "Agent 未能通过工具在黑板上沉淀结构化数据");
 
@@ -496,7 +495,7 @@ public class TeamAgentContractNetTest {
         String dashboard = trace.getProtocolDashboardSnapshot();
 
         // 断言 1: 验证 ExpertB 是否真的行使了“修正权” (通过工具调用链路验证)
-        boolean bCalledUpdate = trace.getSteps().stream()
+        boolean bCalledUpdate = trace.getRecords().stream()
                 .anyMatch(s -> "ExpertB".equals(s.getSource()) && s.getContent().contains("update_arch_decision"));
         Assertions.assertTrue(bCalledUpdate, "ExpertB 未能通过工具行使修正权");
 
@@ -560,7 +559,7 @@ public class TeamAgentContractNetTest {
         TeamTrace trace = team.getTrace(session);
 
         // 1. 验证是否调用了状态检查工具
-        boolean toolCalled = trace.getSteps().stream()
+        boolean toolCalled = trace.getRecords().stream()
                 .anyMatch(s -> s.getContent().contains("check_availability"));
         Assertions.assertTrue(toolCalled, "Manager 未能执行资格预审工具检查");
 
@@ -633,7 +632,7 @@ public class TeamAgentContractNetTest {
         System.out.println(">>> 评标看板：\n" + dashboard);
 
         // 1. 验证：是否进行了成本查询动作
-        boolean checkedCost = trace.getSteps().stream()
+        boolean checkedCost = trace.getRecords().stream()
                 .anyMatch(s -> s.getContent().contains("get_node_cost_rate"));
         Assertions.assertTrue(checkedCost, "Manager 应该有成本查询的动作");
 

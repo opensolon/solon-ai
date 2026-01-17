@@ -69,8 +69,8 @@ public class TddCodeReviewGraphTest {
 
         // 3. 结果验证 (Agent 走 Trace，Activity 走 Context)
         TeamTrace trace = team.getTrace(session);
-        List<String> agentSteps = trace.getSteps().stream()
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> agentSteps = trace.getRecords().stream()
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(Collectors.toList());
 
         System.out.println("TDD 协作流水线: " + String.join(" -> ", agentSteps));
@@ -92,7 +92,7 @@ public class TddCodeReviewGraphTest {
         Assertions.assertTrue(session.getSnapshot().<Boolean>getAs("quality_verified"), "质量检查 Activity 未被触发");
 
         // 检测点 3: 最终审查报告验证
-        String finalReport = trace.getSteps().get(trace.getStepCount() - 1).getContent();
+        String finalReport = trace.getRecords().get(trace.getRecordCount() - 1).getContent();
         Assertions.assertNotNull(finalReport, "最终代码审查报告不应为空");
 
         System.out.println("单元测试成功：TDD 协作链路完整。");

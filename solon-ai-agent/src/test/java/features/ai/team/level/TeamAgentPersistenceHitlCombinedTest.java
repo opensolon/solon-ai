@@ -95,13 +95,13 @@ public class TeamAgentPersistenceHitlCombinedTest {
         TeamTrace trace = projectTeam.getTrace(session2);
 
         // 获取历史步骤
-        List<TeamTrace.TeamStep> steps = trace.getSteps();
+        List<TeamTrace.TeamRecord> steps = trace.getRecords();
 
         // 修正点：从 Steps 列表中【倒序】查找第一个非主管的专家消息
         // 之前的 reduce 在某些 List 实现或反序列化集合中可能指向了错误位置
         String finalResult = "";
         for (int i = steps.size() - 1; i >= 0; i--) {
-            TeamTrace.TeamStep step = steps.get(i);
+            TeamTrace.TeamRecord step = steps.get(i);
             if (!Agent.ID_SUPERVISOR.equalsIgnoreCase(step.getSource())) {
                 finalResult = step.getContent();
                 break;

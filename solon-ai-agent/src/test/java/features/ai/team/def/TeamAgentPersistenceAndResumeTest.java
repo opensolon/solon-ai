@@ -44,7 +44,7 @@ public class TeamAgentPersistenceAndResumeTest {
 
         // 手动模拟 Trace 状态：已经完成了天气搜索
         TeamTrace snapshot = new TeamTrace(Prompt.of("帮我规划上海行程并给穿衣建议"));
-        snapshot.addStep(ChatRole.ASSISTANT,"searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
+        snapshot.addRecord(ChatRole.ASSISTANT,"searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
         // 设置当前路由断点为 Supervisor，准备让它恢复后进行决策
         snapshot.setRoute(Agent.ID_SUPERVISOR);
 
@@ -70,7 +70,7 @@ public class TeamAgentPersistenceAndResumeTest {
 
         // 验证 1：状态恢复完整性
         Assertions.assertNotNull(finalTrace, "恢复后的轨迹不应为空");
-        Assertions.assertTrue(finalTrace.getStepCount() >= 2, "轨迹应包含预设的 searcher 步及后续生成步");
+        Assertions.assertTrue(finalTrace.getRecordCount() >= 2, "轨迹应包含预设的 searcher 步及后续生成步");
 
         // 验证 2：历史记忆持久性（Agent 是否还记得 searcher 提供的数据）
         boolean remembersWeather = finalTrace.getFormattedHistory().contains("上海明日天气");
@@ -96,7 +96,7 @@ public class TeamAgentPersistenceAndResumeTest {
         team.call(Prompt.of("你好"), session);
         TeamTrace trace1 = team.getTrace(session);
         Assertions.assertNotNull(trace1);
-        int initialSteps = trace1.getStepCount();
+        int initialSteps = trace1.getRecordCount();
 
         // 第二次调用：传入完全不同的 Prompt
         // 框架应识别出这是一个新任务，并根据业务需要决定是否重置或追加

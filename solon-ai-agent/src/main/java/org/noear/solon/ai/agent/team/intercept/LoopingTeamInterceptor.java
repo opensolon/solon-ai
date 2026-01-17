@@ -62,32 +62,32 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
      * 多策略循环检测逻辑
      */
     public boolean isLooping(TeamTrace trace) {
-        List<TeamTrace.TeamStep> allSteps = trace.getSteps();
+        List<TeamTrace.TeamRecord> allRecords = trace.getRecords();
 
         // 仅针对 Agent 产出进行审计，排除系统开销步骤
-        List<TeamTrace.TeamStep> agentSteps = allSteps.stream()
-                .filter(TeamTrace.TeamStep::isAgent)
+        List<TeamTrace.TeamRecord> agentRecords = allRecords.stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
                 .collect(Collectors.toList());
 
-        int n = agentSteps.size();
+        int n = agentRecords.size();
         // 步数不足以判定循环（至少需要 A-B-A-B 四步）
         if (n < 4) return false;
 
-        TeamTrace.TeamStep lastStep = agentSteps.get(n - 1);
+        TeamTrace.TeamRecord lastRecord = agentRecords.get(n - 1);
 
-        if (lastStep.getContent() == null || lastStep.getContent().length() < minContentLength) {
+        if (lastRecord.getContent() == null || lastRecord.getContent().length() < minContentLength) {
             return false;
         }
 
         // 策略 A：检测 Agent 自我复读
-        if (checkSelfLoop(agentSteps, n)) {
-            LOG.debug("Self-loop detected on agent: {}", lastStep.getSource());
+        if (checkSelfLoop(agentRecords, n)) {
+            LOG.debug("Self-loop detected on agent: {}", lastRecord.getSource());
             return true;
         }
 
         // 策略 B：检测多步协同死锁 (A-B-A-B 或 A-B-C-A-B-C)
-        if (checkSequenceLoop(agentSteps, n)) {
-            LOG.debug("Sequence-loop detected ending with: {}", lastStep.getSource());
+        if (checkSequenceLoop(agentRecords, n)) {
+            LOG.debug("Sequence-loop detected ending with: {}", lastRecord.getSource());
             return true;
         }
 
@@ -97,13 +97,13 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
     /**
      * 检测同一 Agent 是否在原地踏步
      */
-    private boolean checkSelfLoop(List<TeamTrace.TeamStep> steps, int n) {
-        TeamTrace.TeamStep last = steps.get(n - 1);
+    private boolean checkSelfLoop(List<TeamTrace.TeamRecord> records, int n) {
+        TeamTrace.TeamRecord last = records.get(n - 1);
         int repeatCount = 0;
         int limit = Math.max(0, n - scanWindowSize);
 
         for (int i = n - 2; i >= limit; i--) {
-            TeamTrace.TeamStep prev = steps.get(i);
+            TeamTrace.TeamRecord prev = records.get(i);
             if (prev.getSource().equals(last.getSource())) {
                 if (calculateSimilarity(prev.getContent(), last.getContent()) >= similarityThreshold) {
                     repeatCount++;
@@ -120,15 +120,15 @@ public class LoopingTeamInterceptor implements TeamInterceptor {
     /**
      * 检测协作序列是否进入循环节
      */
-    private boolean checkSequenceLoop(List<TeamTrace.TeamStep> steps, int n) {
+    private boolean checkSequenceLoop(List<TeamTrace.TeamRecord> records, int n) {
         // len 为检测的循环节长度（2=AB型, 3=ABC型）
         for (int len = 2; len <= 3; len++) {
             if (n < len * 2) continue;
 
             boolean match = true;
             for (int i = 0; i < len; i++) {
-                TeamTrace.TeamStep current = steps.get(n - 1 - i);
-                TeamTrace.TeamStep previous = steps.get(n - 1 - i - len);
+                TeamTrace.TeamRecord current = records.get(n - 1 - i);
+                TeamTrace.TeamRecord previous = records.get(n - 1 - i - len);
 
                 // 节点名与内容需双重匹配
                 if (!current.getSource().equals(previous.getSource()) ||

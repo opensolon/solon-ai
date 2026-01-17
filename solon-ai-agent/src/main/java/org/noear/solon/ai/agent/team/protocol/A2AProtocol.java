@@ -234,7 +234,7 @@ public class A2AProtocol extends TeamProtocolBase {
                     feedback = "[System] Transfer failed: Expert [" + target + "] is invalid or lacks required capabilities. Please re-select or resolve yourself.";
                 }
 
-                trace.addStep(ChatRole.SYSTEM, "Supervisor", feedback, 0);
+                trace.addRecord(ChatRole.SYSTEM, "Supervisor", feedback, 0);
 
                 List<ChatMessage> messages = new ArrayList<>(trace.getPrompt().getMessages());
                 messages.add(ChatMessage.ofUser(feedback));

@@ -144,12 +144,12 @@ public class BlackboardProtocol extends HierarchicalProtocol {
             if (isZh) {
                 toolDesc.title("同步黑板").description("同步你的结论和后续待办。建议在完成任务前调用。")
                         .stringParamAdd("result", "本阶段的确切结论")
-                        .stringParamAdd("todo", "建议后续待办事项")
+                        .stringParamAdd("todo", "建议后续协作回合的任务（TODOs）")
                         .stringParamAdd("state", "JSON 格式的详细业务数据");
             } else {
                 toolDesc.title("Sync Blackboard").description("Sync findings and future todos.")
                         .stringParamAdd("result", "Key findings")
-                        .stringParamAdd("todo", "Suggested next steps")
+                        .stringParamAdd("todo", "Suggested tasks for next turns")
                         .stringParamAdd("state", "Detailed JSON state");
             }
 
@@ -179,12 +179,12 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         if (isZh) {
             sb.append("\n## 黑板协作规范\n");
             sb.append("- **主动同步**：在得出阶段性结论或发现新待办（TODO）时，必须调用 `").append(TOOL_SYNC).append("` 工具。\n");
-            sb.append("- **数据导向**：决策前请先查阅“当前协作黑板内容”，避免重复劳动。\n");
+            sb.append("- **数据导向**：决策前请先查阅“当前协作黑板内容”，避免产生冗余的协作回合（Redundant Turns）。\n");
             sb.append("- **闭环意识**：如果你完成了黑板上的某个 TODO，请在 result 中明确说明，以便 Supervisor 更新状态。\n");
         } else {
             sb.append("\n## Blackboard Guidelines\n");
             sb.append("- **Proactive Sync**: You must call `").append(TOOL_SYNC).append("` when you reach a conclusion or identify new tasks (TODOs).\n");
-            sb.append("- **Data-Driven**: Check the \"Current blackboard content\" before acting to avoid redundant work.\n");
+            sb.append("- **Data-Driven**: Check the \\\"Current blackboard content\\\" before acting to avoid redundant turns.\n");
             sb.append("- **Closure**: If you complete a TODO from the board, clearly state it in your result for the Supervisor to update.\n");
         }
     }
@@ -251,7 +251,8 @@ public class BlackboardProtocol extends HierarchicalProtocol {
             BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
             if (state != null && !state.todos.isEmpty()) {
                 if (trace.getTurnCount() < 5) {
-                    LOG.warn("Blackboard Protocol: Blocking finish! Pending todos exist: {}", state.todos);
+                    LOG.warn("Blackboard Protocol: Blocking finish! Pending todos exist: {}. Current turn: {}",
+                            state.todos, trace.getTurnCount());
                     return false;
                 }
             }

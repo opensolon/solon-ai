@@ -13,7 +13,6 @@ import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.flow.NodeSpec;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -96,8 +95,8 @@ public class CustomerServiceGraphTest {
 
         // 3. 验证 Agent 路径（使用 trace）
         TeamTrace trace = team.getTrace(session);
-        List<String> agentPath = trace.getSteps().stream()
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> agentPath = trace.getRecords().stream()
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(Collectors.toList());
 
         System.out.println("AI 专家路径: " + agentPath);

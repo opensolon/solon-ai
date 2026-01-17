@@ -100,8 +100,8 @@ public class ABTestingDecisionGraphTest {
 
         // B. 验证 Agent 参与轨迹：Trace 记录 AI 专家的交互足迹
         TeamTrace trace = team.getTrace(session);
-        List<String> agentFootprints = trace.getSteps().stream()
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> agentFootprints = trace.getRecords().stream()
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(Collectors.toList());
 
         System.out.println("AI 执行足迹: " + agentFootprints);

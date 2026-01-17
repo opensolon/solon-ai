@@ -86,7 +86,7 @@ public class TeamAgentResilienceTest {
         String result = team.call(Prompt.of(query), session).getContent();
 
         TeamTrace trace = team.getTrace(session);
-        Assertions.assertTrue(trace.getStepCount() > 0);
+        Assertions.assertTrue(trace.getRecordCount() > 0);
         Assertions.assertFalse(result.isEmpty());
     }
 
@@ -118,7 +118,7 @@ public class TeamAgentResilienceTest {
         System.out.println("=== 优雅拒绝回复 ===\n" + result);
 
         TeamTrace trace = team.getTrace(session);
-        Assertions.assertTrue(trace.getStepCount() >= 1);
+        Assertions.assertTrue(trace.getRecordCount() >= 1);
     }
 
     /**
@@ -249,11 +249,11 @@ public class TeamAgentResilienceTest {
         // 测试点 1：简单任务
         AgentSession s1 = InMemoryAgentSession.of("m1");
         team.call(Prompt.of("把这段话精简到 20 字以内：AI 技术正在深刻改变人类的生产力。"), s1);
-        Assertions.assertEquals("cheap_summarizer", team.getTrace(s1).getSteps().get(0).getSource(), "简单任务未能路由到低成本节点");
+        Assertions.assertEquals("cheap_summarizer", team.getTrace(s1).getRecords().get(0).getSource(), "简单任务未能路由到低成本节点");
 
         // 测试点 2：复杂任务
         AgentSession s2 = InMemoryAgentSession.of("m2");
         team.call(Prompt.of("请审计这份合同中的潜在法律风险，并对比 2026 年最新的跨境贸易法案。"), s2);
-        Assertions.assertEquals("expensive_auditor", team.getTrace(s2).getSteps().get(0).getSource(), "复杂任务未能路由到专业高成本节点");
+        Assertions.assertEquals("expensive_auditor", team.getTrace(s2).getRecords().get(0).getSource(), "复杂任务未能路由到专业高成本节点");
     }
 }

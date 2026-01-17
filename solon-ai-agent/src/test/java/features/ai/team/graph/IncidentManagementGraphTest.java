@@ -92,8 +92,8 @@ public class IncidentManagementGraphTest {
 
         // 3. 结果验证 (Agent 走 Trace，Activity 走 Context)
         TeamTrace trace = team.getTrace(session);
-        List<String> agentSteps = trace.getSteps().stream()
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> agentSteps = trace.getRecords().stream()
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(Collectors.toList());
 
         System.out.println("AI 专家足迹: " + String.join(" -> ", agentSteps));

@@ -39,7 +39,7 @@ public class TeamAgentPersistenceHitlTest {
                     public void onNodeStart(FlowContext ctx, Node n) {
                         // 逻辑：只要检测到已有阶段性产出（StepCount > 0），且没有审批信号，则挂起
                         TeamTrace trace = ctx.getAs("__" + teamId);
-                        if (trace != null && trace.getStepCount() > 0) {
+                        if (trace != null && trace.getRecordCount() > 0) {
                             if (!ctx.model().containsKey("manager_ok")) {
                                 System.out.println("[HITL] 拦截器触发：检测到 worker 已产出初稿，挂起流程等待人工审批...");
                                 ctx.stop();
@@ -63,7 +63,7 @@ public class TeamAgentPersistenceHitlTest {
         // 模拟持久化：将 Context 序列化为 JSON 字符串
         String jsonState = context1.toJson();
         TeamTrace trace1 = context1.getAs("__" + teamId);
-        System.out.println(">>> 流程已挂起并持久化。当前执行步骤数: " + trace1.getStepCount());
+        System.out.println(">>> 流程已挂起并持久化。当前执行步骤数: " + trace1.getRecordCount());
 
 
         // --- 阶段 B: 从持久化快照恢复并注入审批信号 ---
@@ -87,6 +87,6 @@ public class TeamAgentPersistenceHitlTest {
         Assertions.assertTrue(finalResult.contains("周") && finalResult.contains("报"), "结果应包含周报核心内容");
 
         TeamTrace finalTrace = teamAgent.getTrace(session2);
-        Assertions.assertTrue(finalTrace.getStepCount() > trace1.getStepCount(), "恢复执行后应产生更多的执行轨迹");
+        Assertions.assertTrue(finalTrace.getRecordCount() > trace1.getRecordCount(), "恢复执行后应产生更多的执行轨迹");
     }
 }

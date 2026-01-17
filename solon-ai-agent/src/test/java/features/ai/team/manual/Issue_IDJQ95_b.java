@@ -5,8 +5,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
@@ -77,7 +75,7 @@ public class Issue_IDJQ95_b {
         // 5. 轨迹解析
         TeamTrace trace = devTeam.getTrace(agentSession);
         System.out.println("\n--- 协作轨迹 ---");
-        List<String> order = trace.getSteps().stream()
+        List<String> order = trace.getRecords().stream()
                 .map(s -> s.getSource())
                 .filter(n -> !"supervisor".equalsIgnoreCase(n))
                 .collect(Collectors.toList());

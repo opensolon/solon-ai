@@ -67,7 +67,7 @@ public class SupervisorTask implements NamedTaskComponent {
             // 1. 拦截器准入检查
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
                 if (!item.target.shouldSupervisorContinue(trace)) {
-                    trace.addStep(ChatRole.SYSTEM, Agent.ID_SUPERVISOR, "[Skipped] Intercepted by " + item.target.getClass().getSimpleName(), 0);
+                    trace.addRecord(ChatRole.SYSTEM, Agent.ID_SUPERVISOR, "[Skipped] Intercepted by " + item.target.getClass().getSimpleName(), 0);
                     if (Agent.ID_SUPERVISOR.equals(trace.getRoute())) {
                         routeTo(context, trace, Agent.ID_END);
                     }
@@ -78,7 +78,7 @@ public class SupervisorTask implements NamedTaskComponent {
             // 2. 协作熔断检查：达到最大迭代次数或已标记结束则退出
             if (Agent.ID_END.equals(trace.getRoute()) ||
                     trace.getTurnCount() >= trace.getOptions().getMaxTurns()) {
-                trace.addStep(ChatRole.SYSTEM, Agent.ID_SYSTEM, "[Terminated] Max iterations reached", 0);
+                trace.addRecord(ChatRole.SYSTEM, Agent.ID_SYSTEM, "[Terminated] Max iterations reached", 0);
                 routeTo(context, trace, Agent.ID_END);
                 return;
             }
@@ -127,8 +127,8 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         // 过滤已参与成员，提示待命专家
-        Set<String> participatedAgentNames = trace.getSteps().stream()
-                .filter(TeamTrace.TeamStep::isAgent)
+        Set<String> participatedAgentNames = trace.getRecords().stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
                 .map(s -> s.getSource().toLowerCase())
                 .collect(Collectors.toSet());
 
@@ -207,7 +207,7 @@ public class SupervisorTask implements NamedTaskComponent {
      * 模糊匹配文本中的 Agent 名称
      */
     private boolean matchAgentRoute(FlowContext context, TeamTrace trace, String text) {
-        // 移除 Markdown 格式字符（加粗/斜体的 * 和代码的 `），保留下划线，避免agent 名称的合法字符被误删，如step1_extractor
+        // 移除 Markdown 格式字符（加粗/斜体的 * 和代码的 `），保留下划线，避免agent 名称的合法字符被误删，如agent1_extractor
         String cleanText = text.replaceAll("[\\*\\`]", "").trim();
 
         if (config.getAgentMap().containsKey(cleanText)) {
@@ -274,7 +274,7 @@ public class SupervisorTask implements NamedTaskComponent {
         TeamTrace trace = context.getAs(traceKey);
         if (trace != null) {
             trace.setRoute(Agent.ID_END);
-            trace.addStep(ChatRole.SYSTEM, Agent.ID_SUPERVISOR, "Runtime Error: " + e.getMessage(), 0);
+            trace.addRecord(ChatRole.SYSTEM, Agent.ID_SUPERVISOR, "Runtime Error: " + e.getMessage(), 0);
         }
     }
 }

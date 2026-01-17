@@ -100,14 +100,14 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
 
         // D. Output Specification: 强制格式化响应，确保下游解析成功
         sb.append("\n## Output Specification\n")
-                .append("1. **Progress Analysis**: Evaluate current progress and decide the next step.\n")
+                .append("1. **Progress Analysis**: Evaluate current progress and decide the next turn.\n")
                 .append("2. **Termination**: If the task is finished, output: ").append(config.getFinishMarker())
                 .append(" followed by the final result.\n")
                 .append("3. **Routing**: Otherwise, output **ONLY** the name of the next Agent to execute.\n");
 
         // E. Guidelines: 防止死循环及过度协作
         sb.append("\n## History Analysis & Guidelines\n")
-                .append("- Reference collaboration history to avoid redundant steps.\n")
+                .append("- Reference collaboration history to avoid redundant turns.\n")
                 .append("- Task Finish Marker: ").append(config.getFinishMarker()).append(".\n")
                 .append("- Note: Do not terminate prematurely; ensure necessary expert input is obtained.\n");
 

@@ -81,8 +81,8 @@ public class TeamAgentBoundaryTest {
         Assertions.assertNotNull(result);
 
         TeamTrace trace = team.getTrace(session);
-        System.out.println("实际迭代次数: " + trace.getIterationsCount());
-        Assertions.assertTrue(trace.getIterationsCount() > 0, "应记录执行过程");
+        System.out.println("实际迭代次数: " + trace.getTurnCount());
+        Assertions.assertTrue(trace.getTurnCount() > 0, "应记录执行过程");
     }
 
     @Test
@@ -136,7 +136,7 @@ public class TeamAgentBoundaryTest {
         System.out.println("执行耗时: " + duration + "ms");
 
         TeamTrace trace = team.getTrace(session);
-        Assertions.assertTrue(trace.getStepCount() > 0, "至少应有一个 Agent 被调用");
+        Assertions.assertTrue(trace.getRecordCount() > 0, "至少应有一个 Agent 被调用");
     }
 
     @Test
@@ -158,7 +158,7 @@ public class TeamAgentBoundaryTest {
         String result = team.call(Prompt.of("请详细论述量子计算对全球金融加密体系的每一步具体影响"), session).getContent();
 
         TeamTrace trace = team.getTrace(session);
-        System.out.println("最终迭代次数: " + trace.getIterationsCount());
+        System.out.println("最终迭代次数: " + trace.getTurnCount());
         Assertions.assertNotNull(result);
     }
 
@@ -181,7 +181,7 @@ public class TeamAgentBoundaryTest {
         String result = team.call(Prompt.of(prompt), session).getContent();
 
         TeamTrace trace = team.getTrace(session);
-        long distinctAgents = trace.getSteps().stream().map(s -> s.getSource()).distinct().count();
+        long distinctAgents = trace.getRecords().stream().map(s -> s.getSource()).distinct().count();
 
         System.out.println("参与的专家数量: " + distinctAgents);
         Assertions.assertTrue(distinctAgents >= 1, "应该至少有专家参与");

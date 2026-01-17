@@ -76,7 +76,7 @@ public class Issue_IDJQ95_2 {
         // 5. 轨迹解析
         TeamTrace trace = devTeam.getTrace(agentSession);
         System.out.println("\n--- 协作轨迹 ---");
-        List<String> order = trace.getSteps().stream()
+        List<String> order = trace.getRecords().stream()
                 .map(s -> s.getSource())
                 .filter(n -> !"supervisor".equalsIgnoreCase(n))
                 .collect(Collectors.toList());

@@ -97,7 +97,7 @@ public class TeamAgentMultiTurnTest {
 
         // 策略：优先从 FinalAnswer 取，如果 Supervisor 总结太短，则回溯到 Planner 的原始 Step
         String finalOutput = trace2.getFinalAnswer();
-        String plannerStepContent = trace2.getSteps().stream()
+        String plannerStepContent = trace2.getRecords().stream()
                 .filter(s -> "planner".equalsIgnoreCase(s.getSource()))
                 .reduce((first, second) -> second) // 获取该轮次最后一个 planner 的输出
                 .map(s -> s.getContent())

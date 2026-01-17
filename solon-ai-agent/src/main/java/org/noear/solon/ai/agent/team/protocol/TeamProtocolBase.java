@@ -89,7 +89,10 @@ public abstract class TeamProtocolBase implements TeamProtocol {
      * SOP 完备性检查：默认保护最后一位 Agent 必须参与过（防止跳步）
      */
     protected boolean isLogicFinished(TeamTrace trace) {
-        if (trace.getSteps().isEmpty()) return false;
+        if (trace.getRecords().isEmpty()) return false;
+
+        if (trace.getTurnCount() < 1) return false;
+
         return isLastNAgentsParticipated(trace, 1);
     }
 
@@ -102,7 +105,7 @@ public abstract class TeamProtocolBase implements TeamProtocol {
         if (size <= 1) return true;
 
         List<String> requiredTail = agentNames.subList(Math.max(size - n, 0), size);
-        Set<String> participated = trace.getSteps().stream()
+        Set<String> participated = trace.getRecords().stream()
                 .map(s -> s.getSource().toLowerCase())
                 .collect(Collectors.toSet());
 
@@ -123,13 +126,13 @@ public abstract class TeamProtocolBase implements TeamProtocol {
         if (isZh) {
             sb.append("# 任务上下文 (SYSTEM CONTEXT)\n");
             sb.append("## 你的身份\n").append(profileDesc).append("\n\n");
-            sb.append("## 协作进度 (最近 5 轮)\n");
+            sb.append("## 协作进度 (最近 5 条)\n");
             sb.append(trace.getFormattedHistory(5, false)).append("\n\n");
             sb.append("---\n请根据上述进度完成你的任务。");
         } else {
             sb.append("# SYSTEM CONTEXT\n");
             sb.append("## Your Identity\n").append(profileDesc).append("\n\n");
-            sb.append("## Collaboration Progress (Last 5 steps)\n");
+            sb.append("## Collaboration Records (Last 5 entries)\n");
             sb.append(trace.getFormattedHistory(5, false)).append("\n\n");
             sb.append("---\nPlease complete your task based on the progress.");
         }

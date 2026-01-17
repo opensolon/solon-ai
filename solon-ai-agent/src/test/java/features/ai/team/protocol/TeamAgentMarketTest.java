@@ -68,8 +68,8 @@ public class TeamAgentMarketTest {
         Assertions.assertFalse(result.isEmpty(), "结果不应该为空");
 
         // 检查首位执行者
-        if (trace.getStepCount() > 0) {
-            String firstAgentName = trace.getSteps().get(0).getSource();
+        if (trace.getRecordCount() > 0) {
+            String firstAgentName = trace.getRecords().get(0).getSource();
             System.out.println("调解器(Mediator)在市场中选择的专家: " + firstAgentName);
 
             // 语义期望：Java 专家应处理高并发支付网关
@@ -77,7 +77,7 @@ public class TeamAgentMarketTest {
             System.out.println("符合预期选择: " + selectedJavaExpert);
         }
 
-        System.out.println("总步数: " + trace.getStepCount());
+        System.out.println("总步数: " + trace.getRecordCount());
         System.out.println("详细协作轨迹:\n" + trace.getFormattedHistory());
     }
 
@@ -114,8 +114,8 @@ public class TeamAgentMarketTest {
         TeamTrace trace = team.getTrace(session);
         Assertions.assertNotNull(trace);
 
-        if (trace.getStepCount() > 0) {
-            String selectedAgent = trace.getSteps().get(0).getSource();
+        if (trace.getRecordCount() > 0) {
+            String selectedAgent = trace.getRecords().get(0).getSource();
             System.out.println("市场指派的专家: " + selectedAgent);
 
             boolean selectedPythonExpert = "python_data_scientist".equals(selectedAgent);
@@ -123,7 +123,7 @@ public class TeamAgentMarketTest {
         }
 
         System.out.println("协作轨迹:\n" + trace.getFormattedHistory());
-        Assertions.assertTrue(trace.getStepCount() > 0);
+        Assertions.assertTrue(trace.getRecordCount() > 0);
     }
 
     @Test
@@ -279,9 +279,9 @@ public class TeamAgentMarketTest {
         market.call(Prompt.of(query), session);
 
         TeamTrace trace = market.getTrace(session);
-        List<String> executors = trace.getSteps().stream()
-                .filter(TeamTrace.TeamStep::isAgent)
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> executors = trace.getRecords().stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
+                .map(TeamTrace.TeamRecord::getSource)
                 .distinct().collect(Collectors.toList());
 
         System.out.println("市场协作链: " + executors);

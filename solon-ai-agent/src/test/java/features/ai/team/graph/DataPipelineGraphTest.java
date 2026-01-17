@@ -83,8 +83,8 @@ public class DataPipelineGraphTest {
         TeamTrace trace = team.getTrace(session);
 
         // 关键点：从 Trace 中提取 Agent 的执行顺序
-        List<String> agentSteps = trace.getSteps().stream()
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> agentSteps = trace.getRecords().stream()
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(Collectors.toList());
 
         System.out.println("AI 专家执行足迹: " + String.join(" -> ", agentSteps));
@@ -109,7 +109,7 @@ public class DataPipelineGraphTest {
         Assertions.assertEquals("FINISHED", session.getSnapshot().get("pipeline_status"), "最终报告节点未执行");
 
         // 检测点 3: 验证最后一步 Agent 输出内容非空
-        String lastAgentOutput = trace.getSteps().get(trace.getStepCount() - 1).getContent();
+        String lastAgentOutput = trace.getRecords().get(trace.getRecordCount() - 1).getContent();
         Assertions.assertNotNull(lastAgentOutput, "最后一步 Agent 输出不应为空");
 
         System.out.println("单元测试成功。ETL 流水线完整走通。");

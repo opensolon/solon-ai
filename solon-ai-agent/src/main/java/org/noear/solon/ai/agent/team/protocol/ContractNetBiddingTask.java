@@ -107,7 +107,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
             String summary = String.format("Bidding finished. %d bids collected (%d manual, %d auto).",
                     (manualBidCount + autoBidCount), manualBidCount, autoBidCount);
 
-            trace.addStep(ChatRole.SYSTEM, Agent.ID_BIDDING, summary, 0);
+            trace.addRecord(ChatRole.SYSTEM, Agent.ID_BIDDING, summary, 0);
 
             // 归还路由控制权给 Supervisor
             trace.setRoute(Agent.ID_SUPERVISOR);
@@ -129,7 +129,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
         TeamTrace trace = context.getAs(config.getTraceKey());
         if (trace != null) {
             trace.setRoute(Agent.ID_END);
-            trace.addStep(ChatRole.SYSTEM, Agent.ID_SYSTEM, "Bidding interrupted: " + e.getMessage(), 0);
+            trace.addRecord(ChatRole.SYSTEM, Agent.ID_SYSTEM, "Bidding interrupted: " + e.getMessage(), 0);
         }
     }
 }

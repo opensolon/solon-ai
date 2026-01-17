@@ -66,7 +66,7 @@ public class TeamAgentTravelTest {
         Assertions.assertNotNull(trace, "未生成协作轨迹");
 
         System.out.println("--- 协作步骤摘要 ---");
-        trace.getSteps().forEach(s -> System.out.println("[" + s.getSource() + "]: " + s.getContent()));
+        trace.getRecords().forEach(s -> System.out.println("[" + s.getSource() + "]: " + s.getContent()));
 
         // 核心逻辑断言：检测 Planner 是否针对 WeatherService 返回的“特大暴雨”做出了规避动作
         boolean isLogicCorrect = result.contains("室内") ||

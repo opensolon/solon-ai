@@ -8,7 +8,6 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActSystemPrompt;
-import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
@@ -71,8 +70,8 @@ public class TeamAgentSequentialTest {
 
         // 【优化】检测点 1: 验证逻辑环节数量（去重物理重试）
         // 物理步骤可能因重试变为 4 或更多，但逻辑 Source 必须是这 3 个
-        List<String> executedSources = trace.getSteps().stream()
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> executedSources = trace.getRecords().stream()
+                .map(TeamTrace.TeamRecord::getSource)
                 .distinct()
                 .collect(Collectors.toList());
 
@@ -83,18 +82,18 @@ public class TeamAgentSequentialTest {
 
         // 检测点 2: 验证首尾产出质量
         // 提取第一个环节的产出
-        String content1 = trace.getSteps().get(0).getContent();
+        String content1 = trace.getRecords().get(0).getContent();
         Assertions.assertTrue(content1.contains("{") && content1.contains("}"), "Step1 未能产出 JSON");
 
         // 提取最后一个环节（可能是重试后的）的产出
-        String finalContent = trace.getSteps().get(trace.getStepCount() - 1).getContent();
+        String finalContent = trace.getRecords().get(trace.getRecordCount() - 1).getContent();
         Assertions.assertTrue(finalContent.contains("class") || finalContent.contains("def") || finalContent.contains("login"),
                 "最终环节未能产出代码产物");
 
         // 检测点 3: 验证 FinalAnswer 正确性
         String finalAnswer = trace.getFinalAnswer();
         String resultContent = result.getContent();
-        String lastAgentOutput = trace.getSteps().get(2).getContent();
+        String lastAgentOutput = trace.getRecords().get(2).getContent();
 
         Assertions.assertNotNull(finalAnswer, "finalAnswer 不应为空");
         Assertions.assertNotNull(resultContent, "result.getContent() 不应为空");
@@ -140,8 +139,8 @@ public class TeamAgentSequentialTest {
         TeamTrace trace = team.getTrace(session);
 
         // 【优化】检测点 1：通过去重后的逻辑路径验证刚性
-        List<String> rigitSources = trace.getSteps().stream()
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> rigitSources = trace.getRecords().stream()
+                .map(TeamTrace.TeamRecord::getSource)
                 .distinct()
                 .collect(Collectors.toList());
 
@@ -149,12 +148,12 @@ public class TeamAgentSequentialTest {
         Assertions.assertEquals("Agent_B", rigitSources.get(1), "顺序流转失效：A 执行后未能流转至 B");
 
         // 检测点 2：内容真实性检测
-        String contentA = trace.getSteps().stream()
+        String contentA = trace.getRecords().stream()
                 .filter(s -> "Agent_A".equals(s.getSource()))
                 .findFirst().get().getContent();
         Assertions.assertTrue(contentA.contains("[A 已处理]"), "Agent_A 产出内容不正确");
 
-        String finalResult = trace.getSteps().get(trace.getStepCount() - 1).getContent();
+        String finalResult = trace.getRecords().get(trace.getRecordCount() - 1).getContent();
         Assertions.assertTrue(finalResult.contains("[B 已处理]"), "最终结果未包含 B 的处理标识");
     }
 
@@ -199,8 +198,8 @@ public class TeamAgentSequentialTest {
         TeamTrace trace = devOpsTeam.getTrace(session);
 
         // 验证顺序完整性
-        List<String> order = trace.getSteps().stream()
-                .map(TeamTrace.TeamStep::getSource).distinct().collect(Collectors.toList());
+        List<String> order = trace.getRecords().stream()
+                .map(TeamTrace.TeamRecord::getSource).distinct().collect(Collectors.toList());
         Assertions.assertEquals(Arrays.asList("Analyzer", "Changelog", "Translator", "Formatter"), order);
 
         // 验证数据穿透能力：最初输入的 "1.1.0" 必须穿透 4 层 Agent 到达最终结果
@@ -281,7 +280,7 @@ public class TeamAgentSequentialTest {
         TeamTrace trace = reportTeam.getTrace(session);
 
         // 1. 验证“传声筒”效应：从 DataMiner 的历史产出中寻找原始 Ticker
-        boolean originalTickerCaptured = trace.getSteps().stream()
+        boolean originalTickerCaptured = trace.getRecords().stream()
                 .filter(s -> "DataMiner".equals(s.getSource()))
                 .anyMatch(s -> s.getContent().contains("SOLON_TECH"));
         Assertions.assertTrue(originalTickerCaptured, "DataMiner 未能正确识别原始 Ticker");
@@ -325,7 +324,7 @@ public class TeamAgentSequentialTest {
 
         // 获取当前轨迹，确认 Step1 已完成
         TeamTrace traceFirst = team.getTrace(session);
-        Assertions.assertTrue(traceFirst.getSteps().stream().anyMatch(s -> "Step1".equals(s.getSource())));
+        Assertions.assertTrue(traceFirst.getRecords().stream().anyMatch(s -> "Step1".equals(s.getSource())));
 
         // 第二次调用：验证系统是否能识别 Session 状态继续推进，而不是从 Step1 重头开始
         // 注意：这取决于 Solon AI 的 Session 内部 offset 逻辑
@@ -375,7 +374,7 @@ public class TeamAgentSequentialTest {
 
         // 2. 链路追踪断言：验证 Analyzer 是否正常工作
         TeamTrace trace = team.getTrace(session);
-        boolean amountExtracted = trace.getSteps().stream()
+        boolean amountExtracted = trace.getRecords().stream()
                 .anyMatch(s -> s.getContent().contains("1000"));
         Assertions.assertTrue(amountExtracted, "Analyzer 节点未能在历史中留下 1000 元的提取记录");
     }

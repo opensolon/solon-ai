@@ -94,9 +94,9 @@ public class TeamAgentSwarmTest {
         TeamTrace trace = team.getTrace(session);
 
         // 获取所有 Agent 的执行顺序
-        List<String> executionOrder = trace.getSteps().stream()
-                .filter(TeamTrace.TeamStep::isAgent)
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> executionOrder = trace.getRecords().stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(java.util.stream.Collectors.toList());
 
         System.out.println("Agent 执行顺序: " + executionOrder);
@@ -136,8 +136,8 @@ public class TeamAgentSwarmTest {
 
         // 获取最后一个 Agent 的输出
         String lastAgentOutput = "";
-        for (int i = trace.getSteps().size() - 1; i >= 0; i--) {
-            TeamTrace.TeamStep step = trace.getSteps().get(i);
+        for (int i = trace.getRecords().size() - 1; i >= 0; i--) {
+            TeamTrace.TeamRecord step = trace.getRecords().get(i);
             if (step.isAgent()) {
                 lastAgentOutput = step.getContent();
                 break;
@@ -211,9 +211,9 @@ public class TeamAgentSwarmTest {
         AssistantMessage result = team.call(Prompt.of("请分析电动汽车在未来十年的发展趋势，包括技术发展、市场前景和政策影响"), session);
 
         TeamTrace trace = team.getTrace(session);
-        List<String> executionOrder = trace.getSteps().stream()
-                .filter(TeamTrace.TeamStep::isAgent)
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> executionOrder = trace.getRecords().stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(java.util.stream.Collectors.toList());
 
         System.out.println("任务涌现测试 - Agent 执行顺序: " + executionOrder);
@@ -279,21 +279,21 @@ public class TeamAgentSwarmTest {
         TeamTrace trace = team.getTrace(session);
         Assertions.assertNotNull(trace, "应该有轨迹记录");
         Assertions.assertNotNull(result, "任务应该有结果");
-        Assertions.assertTrue(trace.getStepCount() > 0, "至少应该执行一步");
+        Assertions.assertTrue(trace.getRecordCount() > 0, "至少应该执行一步");
 
         // 6. 验证执行过程
-        System.out.println("第一步执行者: " + trace.getSteps().get(0).getSource());
-        System.out.println("总步数: " + trace.getStepCount());
+        System.out.println("第一步执行者: " + trace.getRecords().get(0).getSource());
+        System.out.println("总步数: " + trace.getRecordCount());
 
-        long uniqueAgents = trace.getSteps().stream()
+        long uniqueAgents = trace.getRecords().stream()
                 .map(step -> step.getSource())
                 .distinct()
                 .count();
         System.out.println("实际参与 Agent 数: " + uniqueAgents + " (期望参与: 2)");
 
         // 检查接力参与情况
-        boolean hasTranslator = trace.getSteps().stream().anyMatch(s -> "ChineseTranslator".equals(s.getSource()));
-        boolean hasPolisher = trace.getSteps().stream().anyMatch(s -> "Polisher".equals(s.getSource()));
+        boolean hasTranslator = trace.getRecords().stream().anyMatch(s -> "ChineseTranslator".equals(s.getSource()));
+        boolean hasPolisher = trace.getRecords().stream().anyMatch(s -> "Polisher".equals(s.getSource()));
         System.out.println("是否包含翻译器: " + hasTranslator);
         System.out.println("是否包含润色器: " + hasPolisher);
 
@@ -367,12 +367,12 @@ public class TeamAgentSwarmTest {
 
         TeamTrace trace = team.getTrace(session);
         Assertions.assertNotNull(trace);
-        Assertions.assertTrue(trace.getStepCount() > 0);
+        Assertions.assertTrue(trace.getRecordCount() > 0);
 
-        System.out.println("协作总步数: " + trace.getStepCount());
+        System.out.println("协作总步数: " + trace.getRecordCount());
 
         // 统计参与 Agent 种类
-        long uniqueAgents = trace.getSteps().stream()
+        long uniqueAgents = trace.getRecords().stream()
                 .map(step -> step.getSource())
                 .distinct()
                 .count();
@@ -380,7 +380,7 @@ public class TeamAgentSwarmTest {
 
         // 打印每个步骤的简要摘要
         System.out.println("执行链路快照:");
-        trace.getSteps().forEach(step -> {
+        trace.getRecords().forEach(step -> {
             String summary = step.getContent().trim().replace("\n", " ");
             System.out.println("  - [" + step.getSource() + "]: " +
                     summary.substring(0, Math.min(50, summary.length())) + "...");
@@ -441,9 +441,9 @@ public class TeamAgentSwarmTest {
         System.out.println("=== Swarm 动态分发结果 ===");
         TeamTrace trace = team.getTrace(session);
 
-        List<String> executionOrder = trace.getSteps().stream()
-                .filter(TeamTrace.TeamStep::isAgent)
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> executionOrder = trace.getRecords().stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(java.util.stream.Collectors.toList());
 
         System.out.println("Agent 执行顺序: " + executionOrder);
@@ -529,9 +529,9 @@ public class TeamAgentSwarmTest {
 
         // --- 生产级深度断言 ---
         TeamTrace trace = team.getTrace(session);
-        List<String> order = trace.getSteps().stream()
-                .filter(TeamTrace.TeamStep::isAgent)
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> order = trace.getRecords().stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(java.util.stream.Collectors.toList());
 
         System.out.println("==== 最终执行链 ====");
@@ -597,9 +597,9 @@ public class TeamAgentSwarmTest {
 
         // --- 生产级深度断言 ---
         TeamTrace trace = team.getTrace(session);
-        List<String> order = trace.getSteps().stream()
-                .filter(TeamTrace.TeamStep::isAgent)
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> order = trace.getRecords().stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(Collectors.toList());
 
         System.out.println("Swarm 执行路径: " + String.join(" -> ", order));
@@ -693,9 +693,9 @@ public class TeamAgentSwarmTest {
 
         // --- 深度生产断言 ---
         TeamTrace trace = crisisTeam.getTrace(session);
-        List<String> order = trace.getSteps().stream()
-                .filter(TeamTrace.TeamStep::isAgent)
-                .map(TeamTrace.TeamStep::getSource)
+        List<String> order = trace.getRecords().stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
+                .map(TeamTrace.TeamRecord::getSource)
                 .collect(Collectors.toList());
 
         System.out.println("执行链路: " + String.join(" -> ", order));

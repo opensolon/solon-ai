@@ -72,7 +72,7 @@ public class TeamAgentParallelAgentTest {
                     spec.addParallel("aggregate_node").title("结果汇聚").task((ctx, n) -> {
                         TeamTrace trace = ctx.getAs("__" + teamId);
                         if (trace != null) {
-                            String summary = trace.getSteps().stream()
+                            String summary = trace.getRecords().stream()
                                     .map(s -> String.format("[%s]: %s", s.getSource(), s.getContent().trim()))
                                     .collect(Collectors.joining("\n"));
                             trace.setFinalAnswer("多语言翻译处理完成：\n" + summary);
@@ -94,7 +94,7 @@ public class TeamAgentParallelAgentTest {
 
         TeamTrace trace = team.getTrace(session);
         Assertions.assertNotNull(trace);
-        Assertions.assertTrue(trace.getStepCount() >= 2);
+        Assertions.assertTrue(trace.getRecordCount() >= 2);
         Assertions.assertTrue(result.contains("Hello") || result.contains("world"));
         Assertions.assertTrue(result.contains("Monde") || result.contains("Bonjour"));
     }

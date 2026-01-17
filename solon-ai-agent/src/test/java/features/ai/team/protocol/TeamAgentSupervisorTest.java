@@ -75,7 +75,7 @@ public class TeamAgentSupervisorTest {
         TeamTrace trace = team.getTrace(session);
 
         Assertions.assertNotNull(trace, "轨迹记录不应为空");
-        Assertions.assertTrue(trace.getStepCount() > 0, "协作步骤应大于0");
+        Assertions.assertTrue(trace.getRecordCount() > 0, "协作步骤应大于0");
 
         // 打印决策历史
         System.out.println("决策历史:\n" + trace.getFormattedHistory());
@@ -154,7 +154,7 @@ public class TeamAgentSupervisorTest {
         TeamTrace trace = team.getTrace(session);
 
         // 核心断言：验证是否至少涉及了两个不同的 Agent
-        long workerCount = trace.getSteps().stream()
+        long workerCount = trace.getRecords().stream()
                 .map(s -> s.getSource())
                 .filter(name -> !name.equals(Agent.ID_SUPERVISOR)) // 排除主管自身
                 .distinct().count();
@@ -187,7 +187,7 @@ public class TeamAgentSupervisorTest {
         System.out.println("无法处理时的结果: " + result);
 
         TeamTrace trace = team.getTrace(session);
-        Assertions.assertTrue(trace.getStepCount() <= 3, "应该在有限步数内停止");
+        Assertions.assertTrue(trace.getRecordCount() <= 3, "应该在有限步数内停止");
     }
 
     /**
@@ -272,7 +272,7 @@ public class TeamAgentSupervisorTest {
 
         // 6. 打印执行轨迹
         System.out.println("\n--- 执行轨迹 ---");
-        for (TeamTrace.TeamStep step : trace.getSteps()) {
+        for (TeamTrace.TeamRecord step : trace.getRecords()) {
             String content = step.getContent();
             int len = Math.min(100, content.length());
             System.out.println("[" + step.getSource() + "] " + content.substring(0, len) + "...");
@@ -377,12 +377,12 @@ public class TeamAgentSupervisorTest {
         TeamTrace trace = incidentTeam.getTrace(session);
 
         // 验证是否发生了打回博弈：Developer 应该出现了至少两次
-        long devCount = trace.getSteps().stream()
+        long devCount = trace.getRecords().stream()
                 .filter(s -> "Developer".equals(s.getSource())).count();
         System.out.println("Developer 执行次数: " + devCount);
 
         // 1. 角色参与度
-        Assertions.assertTrue(trace.getSteps().stream().map(TeamTrace.TeamStep::getSource).distinct().count() >= 4);
+        Assertions.assertTrue(trace.getRecords().stream().map(TeamTrace.TeamRecord::getSource).distinct().count() >= 4);
 
         // 2. 最终产物：必须是审计通过后的代码（不含硬编码）
         Assertions.assertTrue(result.contains("ThreadLocal") && result.contains("finally"), "代码未包含核心修复逻辑");
@@ -417,7 +417,7 @@ public class TeamAgentSupervisorTest {
         TeamTrace trace = team.getTrace(session);
 
         // 断言：逻辑必须经过 [Strategist -> Implementer]
-        List<String> sources = trace.getSteps().stream()
+        List<String> sources = trace.getRecords().stream()
                 .map(s -> s.getSource())
                 .filter(n -> !n.equals("supervisor"))
                 .collect(Collectors.toList());

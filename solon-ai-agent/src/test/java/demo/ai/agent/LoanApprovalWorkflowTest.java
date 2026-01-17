@@ -145,14 +145,14 @@ public class LoanApprovalWorkflowTest {
         Assertions.assertNotNull(trace);
 
         System.out.println("--- 审批决策链路 ---");
-        trace.getSteps().forEach(step -> System.out.println("执行节点 [" + step.getSource() + "]"));
+        trace.getRecords().forEach(step -> System.out.println("执行节点 [" + step.getSource() + "]"));
 
         // 断言：高风险订单必须击中风控中心
-        Assertions.assertTrue(trace.getSteps().stream().anyMatch(s -> "risk_control_center".equals(s.getSource())),
+        Assertions.assertTrue(trace.getRecords().stream().anyMatch(s -> "risk_control_center".equals(s.getSource())),
                 "高风险资产未通过风控中心审计");
 
         // 断言：路径决策正确
-        Assertions.assertTrue(trace.getSteps().stream().anyMatch(s -> "canary_disburser".equals(s.getSource())),
+        Assertions.assertTrue(trace.getRecords().stream().anyMatch(s -> "canary_disburser".equals(s.getSource())),
                 "未匹配预期的灰度放款路径");
 
         System.out.println("最终审批报告：\n" + result);

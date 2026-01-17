@@ -83,8 +83,8 @@ public class CrosstalkDemo {
         TeamTrace trace = crosstalkTeam.getTrace(session);
 
         if (trace != null) {
-            System.out.println("\n=== 舞台实时剧本记录 (总步数: " + trace.getStepCount() + ") ===");
-            trace.getSteps().forEach(step -> {
+            System.out.println("\n=== 舞台实时剧本记录 (总步数: " + trace.getRecordCount() + ") ===");
+            trace.getRecords().forEach(step -> {
                 String actor = "afei".equals(step.getSource()) ? "【逗哏·阿飞】" : "【捧哏·阿紫】";
                 System.out.printf("%s: %s\n", actor, step.getContent().trim());
             });
