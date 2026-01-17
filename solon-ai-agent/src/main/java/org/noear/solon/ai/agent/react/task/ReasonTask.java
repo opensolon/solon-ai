@@ -101,7 +101,7 @@ public class ReasonTask implements NamedTaskComponent {
         // [逻辑 3: 模型交互] 执行物理请求与拦截器生命周期
         ChatResponse response = callWithRetry(trace, messages);
 
-        if(response.getUsage() != null) {
+        if (response.getUsage() != null) {
             trace.getMetrics().addTokenUsage(response.getUsage().totalTokens());
         }
 
@@ -141,16 +141,26 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         // [逻辑 6: 决策分流]
-        if (rawContent.contains("Action:")) {
-            trace.setRoute(Agent.ID_ACTION);
-        } else if (rawContent.contains(config.getFinishMarker())) {
+
+        // 1. 优先判断是否完成（防止 Action 标识被误触发）
+        if (rawContent.contains(config.getFinishMarker())) {
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(clearContent));
-        } else {
-            // 兜底：未匹配到协议标识则默认视为最终答案
-            trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer(extractFinalAnswer(clearContent));
+            return;
         }
+
+        // 2. 其次判断文本形式的 Action（使用更严格的正则：Action: 后必须跟 {）
+        if (rawContent.contains("Action:")) {
+            String actionPart = rawContent.substring(rawContent.indexOf("Action:"));
+            if (actionPart.matches("(?s)Action:\\s*\\{.*")) {
+                trace.setRoute(Agent.ID_ACTION);
+                return;
+            }
+        }
+
+        // 3. 兜底：既没有明确 Action，也没有明确 Finish，视为直接回答
+        trace.setRoute(Agent.ID_END);
+        trace.setFinalAnswer(extractFinalAnswer(clearContent));
     }
 
     private ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) {
