@@ -250,7 +250,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
             BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
             if (state != null && !state.todos.isEmpty()) {
-                if (trace.getIterationsCount() < 5) {
+                if (trace.getTurnCount() < 5) {
                     LOG.warn("Blackboard Protocol: Blocking finish! Pending todos exist: {}", state.todos);
                     return false;
                 }

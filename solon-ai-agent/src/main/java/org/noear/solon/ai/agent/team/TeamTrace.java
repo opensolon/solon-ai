@@ -64,7 +64,7 @@ public class TeamTrace implements AgentTrace {
     /** 最后运行的专家 Agent 名字 */
     private volatile String lastAgentName;
     /** 迭代安全计数器（防止无限循环） */
-    private final AtomicInteger iterationCounter;
+    private final AtomicInteger turnCounter;
 
     /** 协议私有存储空间（供 TeamProtocol 存储私有状态） */
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
@@ -73,7 +73,7 @@ public class TeamTrace implements AgentTrace {
     private String finalAnswer;
 
     public TeamTrace() {
-        this.iterationCounter = new AtomicInteger(0);
+        this.turnCounter = new AtomicInteger(0);
     }
 
     public TeamTrace(Prompt prompt) {
@@ -140,9 +140,9 @@ public class TeamTrace implements AgentTrace {
     public void setLastDecision(String decision) { this.lastDecision = decision; }
     public String getLastAgentName() { return lastAgentName; }
     public void setLastAgentName(String agentName) { this.lastAgentName = agentName; }
-    public int getIterationsCount() { return iterationCounter.get(); }
-    public void resetIterationsCount() { iterationCounter.set(0); }
-    public int nextIterations() { return iterationCounter.incrementAndGet(); }
+    public int getTurnCount() { return turnCounter.get(); }
+    public void resetTurnCount() { turnCounter.set(0); }
+    public int nextTurn() { return turnCounter.incrementAndGet(); }
 
     /** 获取协议私有上下文 */
     public Map<String, Object> getProtocolContext() { return protocolContext; }
@@ -204,10 +204,10 @@ public class TeamTrace implements AgentTrace {
 
     /** 协作足迹详情 */
     public static class TeamStep {
+        private final ChatRole role;
         private final String source;
         private final String content;
         private final long duration;
-        private final ChatRole role;
 
         public TeamStep(ChatRole role, String source, String content, long duration) {
             this.role = role;

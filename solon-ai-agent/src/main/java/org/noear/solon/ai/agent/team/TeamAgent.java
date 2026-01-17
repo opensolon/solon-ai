@@ -137,7 +137,7 @@ public class TeamAgent implements Agent {
             context.trace().recordNode(graph, null);
             trace.setPrompt(prompt);
             trace.setRoute(null);
-            trace.resetIterationsCount();
+            trace.resetTurnCount();
         } else {
             if (Prompt.isEmpty(trace.getPrompt())) {
                 LOG.warn("Prompt is empty!");
@@ -285,7 +285,7 @@ public class TeamAgent implements Agent {
          * 设置最大迭代轮次，防止死循环
          */
         public Builder maxTotalIterations(int maxTotalIterations) {
-            config.getDefaultOptions().setMaxTotalIterations(maxTotalIterations);
+            config.getDefaultOptions().setMaxTurns(maxTotalIterations);
             return this;
         }
 

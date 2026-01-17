@@ -77,7 +77,7 @@ public class SupervisorTask implements NamedTaskComponent {
 
             // 2. 协作熔断检查：达到最大迭代次数或已标记结束则退出
             if (Agent.ID_END.equals(trace.getRoute()) ||
-                    trace.getIterationsCount() >= trace.getOptions().getMaxTotalIterations()) {
+                    trace.getTurnCount() >= trace.getOptions().getMaxTurns()) {
                 trace.addStep(ChatRole.SYSTEM, Agent.ID_SYSTEM, "[Terminated] Max iterations reached", 0);
                 routeTo(context, trace, Agent.ID_END);
                 return;
@@ -117,12 +117,12 @@ public class SupervisorTask implements NamedTaskComponent {
         if (isZh) {
             userContent.append("## 协作进度 (最近 5 轮历史)\n").append(trace.getFormattedHistory(5)).append("\n\n");
             userContent.append("---\n");
-            userContent.append("当前迭代轮次: ").append(trace.nextIterations()).append("\n");
+            userContent.append("当前迭代轮次: ").append(trace.nextTurn()).append("\n");
             userContent.append("指令：请指派下一位执行者。已完成则输出 ").append(config.getFinishMarker());
         } else {
             userContent.append("## Collaboration Progress (Last 5 rounds)\n").append(trace.getFormattedHistory(5)).append("\n\n");
             userContent.append("---\n");
-            userContent.append("Current Iteration: ").append(trace.nextIterations()).append("\n");
+            userContent.append("Current Iteration: ").append(trace.nextTurn()).append("\n");
             userContent.append("Command: Assign next agent or output ").append(config.getFinishMarker()).append(" to finish.");
         }
 

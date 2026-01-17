@@ -33,27 +33,37 @@ import java.util.*;
 public class TeamOptions implements NonSerializable {
     private static final Logger LOG = LoggerFactory.getLogger(TeamOptions.class);
 
-    /** 最大迭代轮数（熔断阈值，防止由于模型幻觉导致的无限循环） */
-    private int maxTotalIterations = 8;
+    /**
+     * 最大协作回合数（指团队中 Supervisor 指派专家的次数上限）
+     */
+    private int maxTurns = 8;
 
-    /** 最大重试次数（针对调度解析失败或网络抖动） */
+    /**
+     * 最大重试次数（针对调度解析失败或网络抖动）
+     */
     private int maxRetries = 3;
 
-    /** 重试规避延迟（毫秒） */
+    /**
+     * 重试规避延迟（毫秒）
+     */
     private long retryDelayMs = 1000L;
 
 
-    /** 工具调用上下文（透传给 FunctionTool） */
+    /**
+     * 工具调用上下文（透传给 FunctionTool）
+     */
     private final Map<String, Object> toolsContext = new LinkedHashMap<>();
-    /** 团队协作拦截器链（支持排序，用于审计、监控或干预） */
+    /**
+     * 团队协作拦截器链（支持排序，用于审计、监控或干预）
+     */
     private final List<RankEntity<TeamInterceptor>> interceptors = new ArrayList<>();
 
 
-    public TeamOptions copy(){
+    public TeamOptions copy() {
         TeamOptions tmp = new TeamOptions();
         tmp.interceptors.addAll(this.interceptors);
         tmp.toolsContext.putAll(this.toolsContext);
-        tmp.maxTotalIterations = this.maxTotalIterations;
+        tmp.maxTurns = this.maxTurns;
         tmp.maxRetries = this.maxRetries;
         tmp.retryDelayMs = this.retryDelayMs;
         return tmp;
@@ -85,8 +95,8 @@ public class TeamOptions implements NonSerializable {
     /**
      * 设置协作轮次上限（安全熔断机制）
      */
-    protected void setMaxTotalIterations(int maxTotalIterations) {
-        this.maxTotalIterations = Math.max(1, maxTotalIterations);
+    protected void setMaxTurns(int maxTurns) {
+        this.maxTurns = Math.max(1, maxTurns);
     }
 
     /**
@@ -119,8 +129,8 @@ public class TeamOptions implements NonSerializable {
         return interceptors;
     }
 
-    public int getMaxTotalIterations() {
-        return maxTotalIterations;
+    public int getMaxTurns() {
+        return maxTurns;
     }
 
     public int getMaxRetries() {
@@ -130,7 +140,4 @@ public class TeamOptions implements NonSerializable {
     public long getRetryDelayMs() {
         return retryDelayMs;
     }
-
-
-
 }

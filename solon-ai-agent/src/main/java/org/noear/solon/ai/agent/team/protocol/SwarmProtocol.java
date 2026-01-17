@@ -155,7 +155,7 @@ public class SwarmProtocol extends TeamProtocolBase {
     public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         if (decision.contains(config.getFinishMarker())) {
             SwarmState state = getSwarmState(trace);
-            if (!state.getTaskPool().isEmpty() && trace.getIterationsCount() < 5) {
+            if (!state.getTaskPool().isEmpty() && trace.getTurnCount() < 5) {
                 LOG.warn("Swarm: Finish blocked! Emergent tasks pending in pool.");
                 return false;
             }
