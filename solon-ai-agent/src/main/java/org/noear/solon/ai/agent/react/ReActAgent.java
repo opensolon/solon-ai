@@ -149,8 +149,8 @@ public class ReActAgent implements Agent {
         }
 
         // 1. 加载历史上下文（短期记忆）
-        if (trace.getMessagesSize() == 0 && options.getHistoryWindowSize() > 0) {
-            Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getHistoryWindowSize());
+        if (trace.getMessagesSize() == 0 && options.getSessionWindowSize() > 0) {
+            Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getSessionWindowSize());
             trace.appendMessages(history);
         }
 
@@ -294,8 +294,8 @@ public class ReActAgent implements Agent {
             return this;
         }
 
-        public Builder historyWindowSize(int val) {
-            config.getDefaultOptions().setHistoryWindowSize(val);
+        public Builder sessionWindowSize(int val) {
+            config.getDefaultOptions().setSessionWindowSize(val);
             return this;
         }
 

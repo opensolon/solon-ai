@@ -44,8 +44,8 @@ public class ReActOptions implements NonSerializable {
     private int maxRetries = 3;
     /** 重试延迟基础时间（毫秒） */
     private long retryDelayMs = 1000L;
-    /** 历史记忆回溯窗口大小 */
-    private int historyWindowSize = 5;
+    /** 会话回溯窗口大小 */
+    private int sessionWindowSize = 5;
 
 
     /** 浅拷贝选项实例 */
@@ -56,7 +56,7 @@ public class ReActOptions implements NonSerializable {
         tmp.maxSteps = maxSteps;
         tmp.maxRetries = maxRetries;
         tmp.retryDelayMs = retryDelayMs;
-        tmp.historyWindowSize = historyWindowSize;
+        tmp.sessionWindowSize = sessionWindowSize;
         return tmp;
     }
 
@@ -78,8 +78,8 @@ public class ReActOptions implements NonSerializable {
     }
 
     /** 设置短期记忆回溯深度 */
-    protected void setHistoryWindowSize(int historyWindowSize) {
-        this.historyWindowSize = Math.max(0, historyWindowSize);
+    protected void setSessionWindowSize(int sessionWindowSize) {
+        this.sessionWindowSize = Math.max(0, sessionWindowSize);
     }
 
     protected void setMaxSteps(int val) {
@@ -119,9 +119,7 @@ public class ReActOptions implements NonSerializable {
         return retryDelayMs;
     }
 
-    public int getHistoryWindowSize() {
-        return historyWindowSize;
+    public int getSessionWindowSize() {
+        return sessionWindowSize;
     }
-
-
 }

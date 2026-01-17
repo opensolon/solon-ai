@@ -66,7 +66,7 @@ public class ReActOptionsAmend {
      * 设置消息回溯窗口大小（控制短期记忆深度）
      */
     public ReActOptionsAmend historyWindowSize(int historyWindowSize) {
-        options.setHistoryWindowSize(historyWindowSize);
+        options.setSessionWindowSize(historyWindowSize);
         return this;
     }
 
