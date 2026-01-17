@@ -34,7 +34,7 @@ public class TeamOptions implements NonSerializable {
     private static final Logger LOG = LoggerFactory.getLogger(TeamOptions.class);
 
     /**
-     * 最大协作回合数（指团队中 Supervisor 指派专家的次数上限）
+     * 最大协作回合数（指团队中 Supervisor 指派专家的次数上限，防止死循环）
      */
     private int maxTurns = 8;
 
@@ -47,6 +47,8 @@ public class TeamOptions implements NonSerializable {
      * 重试规避延迟（毫秒）
      */
     private long retryDelayMs = 1000L;
+    /** 记录回溯窗口大小 */
+    private int recordWindowSize = 5;
 
 
     /**
@@ -66,6 +68,8 @@ public class TeamOptions implements NonSerializable {
         tmp.maxTurns = this.maxTurns;
         tmp.maxRetries = this.maxRetries;
         tmp.retryDelayMs = this.retryDelayMs;
+        tmp.recordWindowSize = this.recordWindowSize;
+
         return tmp;
     }
 
@@ -90,6 +94,10 @@ public class TeamOptions implements NonSerializable {
     protected void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(1000, retryDelayMs);
+    }
+
+    protected void setRecordWindowSize(int recordWindowSize) {
+        this.recordWindowSize = recordWindowSize;
     }
 
     /**
@@ -139,5 +147,9 @@ public class TeamOptions implements NonSerializable {
 
     public long getRetryDelayMs() {
         return retryDelayMs;
+    }
+
+    public int getRecordWindowSize() {
+        return recordWindowSize;
     }
 }

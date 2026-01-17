@@ -281,11 +281,13 @@ public class TeamAgent implements Agent {
             return this;
         }
 
-        /**
-         * 设置最大迭代轮次，防止死循环
-         */
-        public Builder maxTotalIterations(int maxTotalIterations) {
-            config.getDefaultOptions().setMaxTurns(maxTotalIterations);
+        public Builder maxTurns(int maxTurns) {
+            config.getDefaultOptions().setMaxTurns(maxTurns);
+            return this;
+        }
+
+        public Builder recordWindowSize(int recordWindowSize) {
+            config.getDefaultOptions().setRecordWindowSize(recordWindowSize);
             return this;
         }
 

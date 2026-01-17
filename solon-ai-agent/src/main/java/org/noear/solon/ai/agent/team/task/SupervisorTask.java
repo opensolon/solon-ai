@@ -113,14 +113,15 @@ public class SupervisorTask implements NamedTaskComponent {
         // 组装用户输入 (包含协作历史、当前轮次、候选成员)
         StringBuilder userContent = new StringBuilder();
         config.getProtocol().prepareSupervisorContext(context, trace, userContent);
+        int windowSize = trace.getOptions().getRecordWindowSize();
 
         if (isZh) {
-            userContent.append("## 协作进度 (最近 5 轮历史)\n").append(trace.getFormattedHistory(5)).append("\n\n");
+            userContent.append("## 协作进度 (最近 ").append(windowSize).append(" 轮历史)\n").append(trace.getFormattedHistory(windowSize)).append("\n\n");
             userContent.append("---\n");
             userContent.append("当前迭代轮次: ").append(trace.nextTurn()).append("\n");
             userContent.append("指令：请指派下一位执行者。已完成则输出 ").append(config.getFinishMarker());
         } else {
-            userContent.append("## Collaboration Progress (Last 5 rounds)\n").append(trace.getFormattedHistory(5)).append("\n\n");
+            userContent.append("## Collaboration Progress (Last ").append(windowSize).append(" rounds)\n").append(trace.getFormattedHistory(windowSize)).append("\n\n");
             userContent.append("---\n");
             userContent.append("Current Iteration: ").append(trace.nextTurn()).append("\n");
             userContent.append("Command: Assign next agent or output ").append(config.getFinishMarker()).append(" to finish.");
