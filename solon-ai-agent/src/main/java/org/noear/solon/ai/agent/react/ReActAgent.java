@@ -49,6 +49,13 @@ import java.util.function.Consumer;
  */
 @Preview("3.8.1")
 public class ReActAgent implements Agent {
+    public final static String ID_REASON = "reason";
+    public final static String ID_REASON_BEF = "reason_bef";
+    public final static String ID_REASON_AFT = "reason_aft";
+    public final static String ID_ACTION = "action";
+    public final static String ID_ACTION_BEF = "action_bef";
+    public final static String ID_ACTION_AFT = "action_aft";
+
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
     private final ReActAgentConfig config;
@@ -68,23 +75,23 @@ public class ReActAgent implements Agent {
      */
     protected Graph buildGraph() {
         return Graph.create(config.getTraceKey(), spec -> {
-            spec.addStart(Agent.ID_START).linkAdd(Agent.ID_REASON_BEF);
+            spec.addStart(Agent.ID_START).linkAdd(ID_REASON_BEF);
 
-            spec.addActivity(Agent.ID_REASON_BEF).title("Pre-Reasoning").linkAdd(Agent.ID_REASON);
+            spec.addActivity(ID_REASON_BEF).title("Pre-Reasoning").linkAdd(ID_REASON);
 
             // 推理节点：通过 LLM 决定是执行动作（Action）还是给出最终回答（End）
             spec.addExclusive(new ReasonTask(config, this))
-                    .linkAdd(Agent.ID_REASON_AFT, l -> l.title("route = ACTION").when(ctx ->
-                            Agent.ID_ACTION.equals(ctx.<ReActTrace>getAs(config.getTraceKey()).getRoute())))
+                    .linkAdd(ID_REASON_AFT, l -> l.title("route = ACTION").when(ctx ->
+                            ID_ACTION.equals(ctx.<ReActTrace>getAs(config.getTraceKey()).getRoute())))
                     .linkAdd(Agent.ID_END);
 
-            spec.addActivity(Agent.ID_REASON_AFT).title("Post-Reasoning").linkAdd(Agent.ID_ACTION_BEF);
+            spec.addActivity(ID_REASON_AFT).title("Post-Reasoning").linkAdd(ID_ACTION_BEF);
 
-            spec.addActivity(Agent.ID_ACTION_BEF).title("Pre-Action").linkAdd(Agent.ID_ACTION);
+            spec.addActivity(ID_ACTION_BEF).title("Pre-Action").linkAdd(ID_ACTION);
 
             // 执行节点：调用工具，产生观察结果（Observation），然后返回推理节点
-            spec.addActivity(new ActionTask(config)).linkAdd(Agent.ID_ACTION_AFT);
-            spec.addActivity(Agent.ID_ACTION_AFT).title("Post-Action").linkAdd(Agent.ID_REASON_BEF);
+            spec.addActivity(new ActionTask(config)).linkAdd(ID_ACTION_AFT);
+            spec.addActivity(ID_ACTION_AFT).title("Post-Action").linkAdd(ID_REASON_BEF);
 
             spec.addEnd(Agent.ID_END);
 
@@ -94,30 +101,48 @@ public class ReActAgent implements Agent {
         });
     }
 
-    public Graph getGraph() { return graph; }
+    public Graph getGraph() {
+        return graph;
+    }
 
-    public ReActAgentConfig getConfig() { return config; }
+    public ReActAgentConfig getConfig() {
+        return config;
+    }
 
-    /** 获取会话中的执行轨迹 */
+    /**
+     * 获取会话中的执行轨迹
+     */
     public @Nullable ReActTrace getTrace(AgentSession session) {
         return session.getSnapshot().getAs(config.getTraceKey());
     }
 
     @Override
-    public String name() { return config.getName(); }
+    public String name() {
+        return config.getName();
+    }
 
     @Override
-    public String title() { return config.getTitle(); }
+    public String title() {
+        return config.getTitle();
+    }
 
     @Override
-    public String description() { return config.getDescription(); }
+    public String description() {
+        return config.getDescription();
+    }
 
     @Override
-    public AgentProfile profile() { return config.getProfile(); }
+    public AgentProfile profile() {
+        return config.getProfile();
+    }
 
-    public ReActRequest prompt(Prompt prompt) { return new ReActRequest(this, prompt); }
+    public ReActRequest prompt(Prompt prompt) {
+        return new ReActRequest(this, prompt);
+    }
 
-    public ReActRequest prompt(String prompt) { return new ReActRequest(this, Prompt.of(prompt)); }
+    public ReActRequest prompt(String prompt) {
+        return new ReActRequest(this, Prompt.of(prompt));
+    }
 
     @Override
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
@@ -145,7 +170,7 @@ public class ReActAgent implements Agent {
         trace.prepare(config, options, session, protocol);
 
         if (protocol != null) {
-            protocol.injectAgentTools(session.getSnapshot(),this, trace::addProtocolTool);
+            protocol.injectAgentTools(session.getSnapshot(), this, trace::addProtocolTool);
         }
 
         // 1. 加载历史上下文（短期记忆）
@@ -158,7 +183,7 @@ public class ReActAgent implements Agent {
             //可能是旧问题（之前中断的）
             prompt = trace.getPrompt();
 
-            if(Prompt.isEmpty(prompt)){
+            if (Prompt.isEmpty(prompt)) {
                 LOG.warn("Prompt is empty!");
                 return ChatMessage.ofAssistant("");
             }
@@ -191,7 +216,7 @@ public class ReActAgent implements Agent {
             trace.getMetrics().setTokenUsage(0L);
 
             // 核心执行：基于计算图进行循环推理
-            context.with(Agent.KEY_CURRENT_TRACE_KEY, config.getTraceKey(), () -> {
+            context.with(KEY_CURRENT_UNIT_TRACE_KEY, config.getTraceKey(), () -> {
                 flowEngine.eval(graph, -1, context, flowOptions);
             });
         } finally {
@@ -228,7 +253,9 @@ public class ReActAgent implements Agent {
 
     /// //////////// Builder 模式 ////////////
 
-    public static Builder of(ChatModel chatModel) { return new Builder(chatModel); }
+    public static Builder of(ChatModel chatModel) {
+        return new Builder(chatModel);
+    }
 
     public static class Builder {
         private ReActAgentConfig config;
@@ -242,52 +269,94 @@ public class ReActAgent implements Agent {
             return this;
         }
 
-        public Builder name(String val) { config.setName(val); return this; }
+        public Builder name(String val) {
+            config.setName(val);
+            return this;
+        }
 
-        public Builder title(String val) { config.setTitle(val); return this; }
+        public Builder title(String val) {
+            config.setTitle(val);
+            return this;
+        }
 
-        public Builder description(String val) { config.setDescription(val); return this; }
+        public Builder description(String val) {
+            config.setDescription(val);
+            return this;
+        }
 
-        public Builder profile(AgentProfile profile) { config.setProfile(profile); return this; }
+        public Builder profile(AgentProfile profile) {
+            config.setProfile(profile);
+            return this;
+        }
 
         public Builder profile(Consumer<AgentProfile> profileConsumer) {
             profileConsumer.accept(config.getProfile());
             return this;
         }
 
-        /** 微调推理图结构 */
+        /**
+         * 微调推理图结构
+         */
         public Builder graphAdjuster(Consumer<GraphSpec> graphBuilder) {
             config.setGraphAdjuster(graphBuilder);
             return this;
         }
 
-        /** 定义 LLM 输出中的任务结束标识符 */
-        public Builder finishMarker(String val) { config.setFinishMarker(val); return this; }
+        /**
+         * 定义 LLM 输出中的任务结束标识符
+         */
+        public Builder finishMarker(String val) {
+            config.setFinishMarker(val);
+            return this;
+        }
 
-        public Builder systemPrompt(ReActSystemPrompt val) { config.setSystemPrompt(val); return this; }
+        public Builder systemPrompt(ReActSystemPrompt val) {
+            config.setSystemPrompt(val);
+            return this;
+        }
 
-        public Builder chatOptions(Consumer<ChatOptions> chatOptions) { config.setChatOptions(chatOptions); return this; }
+        public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
+            config.setChatOptions(chatOptions);
+            return this;
+        }
 
-        public Builder toolAdd(FunctionTool tool) { config.addTool(tool); return this; }
+        public Builder toolAdd(FunctionTool tool) {
+            config.addTool(tool);
+            return this;
+        }
 
-        public Builder toolAdd(Collection<FunctionTool> tools) { config.addTool(tools); return this; }
+        public Builder toolAdd(Collection<FunctionTool> tools) {
+            config.addTool(tools);
+            return this;
+        }
 
-        public Builder toolAdd(ToolProvider toolProvider) { config.addTool(toolProvider); return this; }
+        public Builder toolAdd(ToolProvider toolProvider) {
+            config.addTool(toolProvider);
+            return this;
+        }
 
         public Builder retryConfig(int maxRetries, long retryDelayMs) {
             config.getDefaultOptions().setRetryConfig(maxRetries, retryDelayMs);
             return this;
         }
 
-        /** 单次任务允许的最大推理步数（防止死循环） */
+        /**
+         * 单次任务允许的最大推理步数（防止死循环）
+         */
         public Builder maxSteps(int val) {
             config.getDefaultOptions().setMaxSteps(val);
             return this;
         }
 
-        public Builder outputKey(String val) { config.setOutputKey(val); return this; }
+        public Builder outputKey(String val) {
+            config.setOutputKey(val);
+            return this;
+        }
 
-        public Builder outputSchema(String val) { config.setOutputSchema(val); return this; }
+        public Builder outputSchema(String val) {
+            config.setOutputSchema(val);
+            return this;
+        }
 
         public Builder outputSchema(Type type) {
             config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));

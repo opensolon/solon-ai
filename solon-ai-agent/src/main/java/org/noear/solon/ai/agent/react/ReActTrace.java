@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.team.TeamProtocol;
@@ -76,7 +75,7 @@ public class ReActTrace implements AgentTrace {
     private final ReActMetrics metrics = new ReActMetrics();
 
     public ReActTrace() {
-        this.route = Agent.ID_REASON;
+        this.route = ReActAgent.ID_REASON;
     }
 
     public ReActTrace(Prompt prompt) {

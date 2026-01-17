@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRole;
@@ -92,14 +93,14 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     @Override
     public void buildGraph(GraphSpec spec) {
         // 固定拓扑：Start -> Supervisor <-> Agents -> End
-        spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
+        spec.addStart(Agent.ID_START).linkAdd(TeamAgent.ID_SUPERVISOR);
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
             linkAgents(ns);
         }).linkAdd(Agent.ID_END);
 
         config.getAgentMap().values().forEach(a ->
-                spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
+                spec.addActivity(a).linkAdd(TeamAgent.ID_SUPERVISOR));
 
         spec.addEnd(Agent.ID_END);
     }

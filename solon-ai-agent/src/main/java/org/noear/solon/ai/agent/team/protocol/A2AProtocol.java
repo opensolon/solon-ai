@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRole;
@@ -87,7 +88,7 @@ public class A2AProtocol extends TeamProtocolBase {
 
         spec.addActivity(new A2AHandoverTask(config, this)).then(ns -> {
             linkAgents(ns);
-            ns.linkAdd(Agent.ID_SUPERVISOR);
+            ns.linkAdd(TeamAgent.ID_SUPERVISOR);
         });
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
@@ -99,7 +100,7 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
-        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
         if (trace == null) return;
 
         A2AState stateObj = getA2AState(trace);

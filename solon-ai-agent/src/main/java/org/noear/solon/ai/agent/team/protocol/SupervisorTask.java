@@ -10,6 +10,7 @@
 package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -50,13 +51,13 @@ public class SupervisorTask implements NamedTaskComponent {
 
     @Override
     public String name() {
-        return Agent.ID_SUPERVISOR;
+        return TeamAgent.ID_SUPERVISOR;
     }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         try {
-            String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
+            String traceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
             TeamTrace trace = context.getAs(traceKey);
 
             if (trace == null) {
@@ -67,8 +68,8 @@ public class SupervisorTask implements NamedTaskComponent {
             // 1. 拦截器准入检查
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
                 if (!item.target.shouldSupervisorContinue(trace)) {
-                    trace.addRecord(ChatRole.SYSTEM, Agent.ID_SUPERVISOR, "[Skipped] Intercepted by " + item.target.getClass().getSimpleName(), 0);
-                    if (Agent.ID_SUPERVISOR.equals(trace.getRoute())) {
+                    trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SUPERVISOR, "[Skipped] Intercepted by " + item.target.getClass().getSimpleName(), 0);
+                    if (TeamAgent.ID_SUPERVISOR.equals(trace.getRoute())) {
                         routeTo(context, trace, Agent.ID_END);
                     }
                     return;
@@ -78,14 +79,14 @@ public class SupervisorTask implements NamedTaskComponent {
             // 2. 协作熔断检查：达到最大迭代次数或已标记结束则退出
             if (Agent.ID_END.equals(trace.getRoute()) ||
                     trace.getTurnCount() >= trace.getOptions().getMaxTurns()) {
-                trace.addRecord(ChatRole.SYSTEM, Agent.ID_SYSTEM, "[Terminated] Max iterations reached", 0);
+                trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SYSTEM, "[Terminated] Max iterations reached", 0);
                 routeTo(context, trace, Agent.ID_END);
                 return;
             }
 
             // 3. 协议逻辑检查：由特定协议决定是否继续执行 Supervisor
             if (!config.getProtocol().shouldSupervisorExecute(context, trace)) {
-                if (Agent.ID_SUPERVISOR.equals(trace.getRoute())) {
+                if (TeamAgent.ID_SUPERVISOR.equals(trace.getRoute())) {
                     routeTo(context, trace, Agent.ID_END);
                 }
                 return;
@@ -275,11 +276,11 @@ public class SupervisorTask implements NamedTaskComponent {
 
     protected void handleError(FlowContext context, Exception e) {
         LOG.error("TeamAgent [{}] supervisor fatal error", config.getName(), e);
-        String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
+        String traceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
         TeamTrace trace = context.getAs(traceKey);
         if (trace != null) {
             trace.setRoute(Agent.ID_END);
-            trace.addRecord(ChatRole.SYSTEM, Agent.ID_SUPERVISOR, "Runtime Error: " + e.getMessage(), 0);
+            trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SUPERVISOR, "Runtime Error: " + e.getMessage(), 0);
         }
     }
 }

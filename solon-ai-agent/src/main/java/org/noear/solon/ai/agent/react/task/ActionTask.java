@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.react.task;
 
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActAgentConfig;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
@@ -66,12 +65,12 @@ public class ActionTask implements NamedTaskComponent {
 
     @Override
     public String name() {
-        return Agent.ID_ACTION;
+        return ReActAgent.ID_ACTION;
     }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        String traceKey = context.getAs(ReActAgent.KEY_CURRENT_TRACE_KEY);
+        String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
 
         if (LOG.isDebugEnabled()) {

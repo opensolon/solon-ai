@@ -99,7 +99,7 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
         AgentSession session = context.computeIfAbsent(KEY_SESSION, k -> new InMemoryAgentSession("tmp"));
 
         // 2. 处理团队协作轨迹与拦截
-        String traceKey = context.getAs(KEY_CURRENT_TRACE_KEY);
+        String traceKey = context.getAs(KEY_CURRENT_TEAM_TRACE_KEY);
         TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
 
         if (trace != null) {
@@ -130,9 +130,7 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
         }
 
         long start = System.currentTimeMillis();
-        AssistantMessage msg = context.with(KEY_CURRENT_TEAM_KEY, trace, () -> {
-            return call(effectivePrompt, session);
-        });
+        AssistantMessage msg = call(effectivePrompt, session);
 
         if (LOG.isTraceEnabled()) {
             LOG.trace("Agent [{}] return message: {}",
@@ -164,20 +162,12 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
     }
 
     // --- Context Keys ---
-    static String KEY_CURRENT_TRACE_KEY = "_current_trace_key_";
-    static String KEY_CURRENT_TEAM_KEY = "_current_team_key_";
+    static String KEY_CURRENT_UNIT_TRACE_KEY = "_current_unit_trace_key_";
+    static String KEY_CURRENT_TEAM_TRACE_KEY = "_current_team_trace_key_";
     static String KEY_SESSION = "_SESSION_";
     static String KEY_PROTOCOL = "_PROTOCOL_";
 
     // --- Node IDs ---
     static String ID_START = "start";
     static String ID_END = "end";
-    static String ID_REASON = "reason";
-    static String ID_REASON_BEF = "reason_bef";
-    static String ID_REASON_AFT = "reason_aft";
-    static String ID_ACTION = "action";
-    static String ID_ACTION_BEF = "action_bef";
-    static String ID_ACTION_AFT = "action_aft";
-    static String ID_SYSTEM = "system";
-    static String ID_SUPERVISOR = "supervisor";
 }

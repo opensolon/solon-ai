@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -98,7 +99,7 @@ public class SwarmProtocol extends TeamProtocolBase {
         spec.addStart(Agent.ID_START).linkAdd(firstAgent);
 
         config.getAgentMap().values().forEach(a ->
-                spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
+                spec.addActivity(a).linkAdd(TeamAgent.ID_SUPERVISOR));
 
         spec.addExclusive(new SupervisorTask(config)).then(this::linkAgents).linkAdd(Agent.ID_END);
         spec.addEnd(Agent.ID_END);
@@ -111,7 +112,7 @@ public class SwarmProtocol extends TeamProtocolBase {
 
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
-        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
 
         if (trace != null) {
             SwarmState state = getSwarmState(trace);

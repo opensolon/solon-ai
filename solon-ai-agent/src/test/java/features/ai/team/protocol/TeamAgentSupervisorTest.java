@@ -156,7 +156,7 @@ public class TeamAgentSupervisorTest {
         // 核心断言：验证是否至少涉及了两个不同的 Agent
         long workerCount = trace.getRecords().stream()
                 .map(s -> s.getSource())
-                .filter(name -> !name.equals(Agent.ID_SUPERVISOR)) // 排除主管自身
+                .filter(name -> !name.equals(TeamAgent.ID_SUPERVISOR)) // 排除主管自身
                 .distinct().count();
 
         System.out.println("实际参与工作的专家数: " + workerCount);

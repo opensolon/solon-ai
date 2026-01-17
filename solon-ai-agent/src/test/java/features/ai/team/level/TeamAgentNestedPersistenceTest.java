@@ -65,14 +65,14 @@ public class TeamAgentNestedPersistenceTest {
         // 模拟父团队 (quality_project) 的执行轨迹：已调用过子团队
         TeamTrace projectTrace = new TeamTrace(Prompt.of("开发登录功能"));
         projectTrace.addRecord(ChatRole.ASSISTANT,"dev_team", "开发环节已交付成果", 200);
-        projectTrace.setRoute(Agent.ID_SUPERVISOR); // 断点设在父团队的决策中心
+        projectTrace.setRoute(TeamAgent.ID_SUPERVISOR); // 断点设在父团队的决策中心
 
         // 注入状态到上下文
         context1.put("__dev_team", devTrace);
         context1.put("__quality_project", projectTrace);
 
         // 记录断点位置，方便恢复后 Flow 引擎定位
-        context1.trace().recordNodeId(projectTeam.getGraph(), Agent.ID_SUPERVISOR);
+        context1.trace().recordNodeId(projectTeam.getGraph(), TeamAgent.ID_SUPERVISOR);
 
         // 模拟落库序列化
         String jsonState = context1.toJson();

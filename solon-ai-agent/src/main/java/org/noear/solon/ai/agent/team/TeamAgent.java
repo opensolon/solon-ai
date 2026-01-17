@@ -52,6 +52,9 @@ import java.util.function.Consumer;
  */
 @Preview("3.8.1")
 public class TeamAgent implements Agent {
+    public final static String ID_SYSTEM = "system";
+    public final static String ID_SUPERVISOR = "supervisor";
+
     private static final Logger LOG = LoggerFactory.getLogger(TeamAgent.class);
 
     private final TeamAgentConfig config;
@@ -83,9 +86,13 @@ public class TeamAgent implements Agent {
         });
     }
 
-    public Graph getGraph() { return graph; }
+    public Graph getGraph() {
+        return graph;
+    }
 
-    public TeamAgentConfig getConfig() { return config; }
+    public TeamAgentConfig getConfig() {
+        return config;
+    }
 
     /**
      * 获取当前会话中的团队协作踪迹（Trace）
@@ -94,10 +101,25 @@ public class TeamAgent implements Agent {
         return session.getSnapshot().getAs(config.getTraceKey());
     }
 
-    @Override public String name() { return config.getName(); }
-    @Override public String title() { return config.getTitle(); }
-    @Override public String description() { return config.getDescription(); }
-    @Override public AgentProfile profile() { return config.getProfile(); }
+    @Override
+    public String name() {
+        return config.getName();
+    }
+
+    @Override
+    public String title() {
+        return config.getTitle();
+    }
+
+    @Override
+    public String description() {
+        return config.getDescription();
+    }
+
+    @Override
+    public AgentProfile profile() {
+        return config.getProfile();
+    }
 
     /**
      * 创建团队请求（支持后续流式或异步处理）
@@ -126,7 +148,7 @@ public class TeamAgent implements Agent {
         // 初始化或获取本次协作的轨迹快照
         TeamTrace trace = context.computeIfAbsent(config.getTraceKey(), k -> new TeamTrace(prompt));
 
-        if(options == null){
+        if (options == null) {
             options = config.getDefaultOptions();
         }
 
@@ -167,7 +189,7 @@ public class TeamAgent implements Agent {
                 LOG.debug("TeamAgent [{}] starting collaboration flow...", name());
             }
 
-            context.with(Agent.KEY_CURRENT_TRACE_KEY, config.getTraceKey(), () -> {
+            context.with(Agent.KEY_CURRENT_TEAM_TRACE_KEY, config.getTraceKey(), () -> {
                 context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
                     flowEngine.eval(graph, -1, context, flowOptions);
                 });
@@ -316,11 +338,20 @@ public class TeamAgent implements Agent {
             return this;
         }
 
-        public Builder toolAdd(FunctionTool tool) { config.addTool(tool); return this; }
+        public Builder toolAdd(FunctionTool tool) {
+            config.addTool(tool);
+            return this;
+        }
 
-        public Builder toolAdd(Collection<FunctionTool> tools) { config.addTool(tools); return this; }
+        public Builder toolAdd(Collection<FunctionTool> tools) {
+            config.addTool(tools);
+            return this;
+        }
 
-        public Builder toolAdd(ToolProvider toolProvider) { config.addTool(toolProvider); return this; }
+        public Builder toolAdd(ToolProvider toolProvider) {
+            config.addTool(toolProvider);
+            return this;
+        }
 
         public Builder defaultToolsContextPut(String key, Object value) {
             config.getDefaultOptions().putToolsContext(key, value);

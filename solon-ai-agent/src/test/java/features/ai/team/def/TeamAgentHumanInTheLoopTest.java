@@ -32,7 +32,7 @@ public class TeamAgentHumanInTheLoopTest {
                 .maxTurns(10)
                 .graphAdjuster(spec -> {
                     // 移除默认的 Supervisor（管家模式），构建线性审批流
-                    spec.removeNode(Agent.ID_SUPERVISOR);
+                    spec.removeNode(TeamAgent.ID_SUPERVISOR);
 
                     // 入口：开始 -> 规划师
                     spec.addStart(Agent.ID_START).linkAdd("planner");
@@ -118,7 +118,7 @@ public class TeamAgentHumanInTheLoopTest {
             } else {
                 System.out.println(">>> [放行]：检测到审批信号，准备进入确认节点...");
                 // 获取当前团队轨迹，并手动指定下一个路由目标
-                String traceKey = context.getAs(Agent.KEY_CURRENT_TRACE_KEY);
+                String traceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
                 TeamTrace trace = context.getAs(traceKey);
                 if (trace != null) {
                     trace.setRoute("confirmer");

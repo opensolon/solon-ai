@@ -35,7 +35,7 @@ public class TeamAgentPersistenceAndResumeTest {
                                     .name("searcher")
                                     .description("天气搜索员，负责提供实时气候数据")
                                     .build())
-                            .linkAdd(Agent.ID_SUPERVISOR);
+                            .linkAdd(TeamAgent.ID_SUPERVISOR);
                 }).build();
 
         // --- 阶段 A：模拟第一阶段执行并手动构建持久化快照 ---
@@ -46,7 +46,7 @@ public class TeamAgentPersistenceAndResumeTest {
         TeamTrace snapshot = new TeamTrace(Prompt.of("帮我规划上海行程并给穿衣建议"));
         snapshot.addRecord(ChatRole.ASSISTANT,"searcher", "上海明日天气：大雨转雷阵雨，气温 12 度。", 800L);
         // 设置当前路由断点为 Supervisor，准备让它恢复后进行决策
-        snapshot.setRoute(Agent.ID_SUPERVISOR);
+        snapshot.setRoute(TeamAgent.ID_SUPERVISOR);
 
         // 将轨迹存入上下文，key 遵循框架规范 "__" + teamName
         contextStep1.put("__" + teamName, snapshot);

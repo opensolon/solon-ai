@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -85,7 +86,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
 
     @Override
     public void buildGraph(GraphSpec spec) {
-        spec.addStart(Agent.ID_START).linkAdd(Agent.ID_SUPERVISOR);
+        spec.addStart(Agent.ID_START).linkAdd(TeamAgent.ID_SUPERVISOR);
 
         spec.addExclusive(new SupervisorTask(config)).then(ns -> {
             // 路由控制：优先处理来自工具或决策的招标请求
@@ -96,8 +97,8 @@ public class ContractNetProtocol extends TeamProtocolBase {
             linkAgents(ns);
         }).linkAdd(Agent.ID_END);
 
-        spec.addActivity(new ContractNetBiddingTask(config, this)).linkAdd(Agent.ID_SUPERVISOR);
-        config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(Agent.ID_SUPERVISOR));
+        spec.addActivity(new ContractNetBiddingTask(config, this)).linkAdd(TeamAgent.ID_SUPERVISOR);
+        config.getAgentMap().values().forEach(a -> spec.addActivity(a).linkAdd(TeamAgent.ID_SUPERVISOR));
         spec.addEnd(Agent.ID_END);
     }
 
@@ -117,7 +118,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
                 LOG.debug("ContractNet: Supervisor initiated bidding tool. Requirement: {}", args.get("requirement"));
             }
 
-            TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+            TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
             if(trace != null) trace.setRoute(ID_BIDDING);
             return isZh ? "已进入招标流程。" : "Bidding phase initiated.";
         });
@@ -126,7 +127,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
 
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
-        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
 
         if (trace != null && ID_BIDDING.equals(trace.getRoute())) {
             FunctionToolDesc tool = new FunctionToolDesc(TOOL_SUBMIT_BID).returnDirect(true);

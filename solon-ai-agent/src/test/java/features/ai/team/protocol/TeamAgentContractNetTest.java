@@ -232,7 +232,7 @@ public class TeamAgentContractNetTest {
 
         // 3. 语义断言：检查 Supervisor 是否识别并拒绝了“跳过”请求
         String supervisorResponse = steps.stream()
-                .filter(s -> Agent.ID_SUPERVISOR.equals(s.getSource()))
+                .filter(s -> TeamAgent.ID_SUPERVISOR.equals(s.getSource()))
                 .map(TeamTrace.TeamRecord::getContent)
                 .findFirst().orElse("");
 

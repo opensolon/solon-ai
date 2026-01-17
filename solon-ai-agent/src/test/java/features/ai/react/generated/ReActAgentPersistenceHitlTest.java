@@ -33,7 +33,7 @@ public class ReActAgentPersistenceHitlTest {
             @Override
             public void onNodeEnd(FlowContext ctx, Node node) {
                 // 仅对 Action（工具调用）节点进行敏感操作拦截
-                if (Agent.ID_ACTION.equals(node.getId())) {
+                if (ReActAgent.ID_ACTION_AFT.equals(node.getId())) {
                     // 检查上下文中是否存在审批标记
                     if (!ctx.model().containsKey("is_approved")) {
                         System.out.println("[拦截器] 发现敏感退款申请，当前未审批。中断流程以待持久化...");
@@ -63,7 +63,7 @@ public class ReActAgentPersistenceHitlTest {
         // 获取快照进行状态验证
         FlowContext context1 = session1.getSnapshot();
         Assertions.assertTrue(context1.isStopped(), "流程应在 Action 节点被拦截");
-        Assertions.assertEquals(Agent.ID_ACTION, context1.lastNodeId());
+        Assertions.assertEquals(ReActAgent.ID_ACTION_AFT, context1.lastNodeId());
 
         // 执行持久化序列化（模拟将当前状态存入数据库）
         String jsonState = context1.toJson();

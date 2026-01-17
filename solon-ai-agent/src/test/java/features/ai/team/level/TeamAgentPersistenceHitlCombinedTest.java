@@ -53,7 +53,7 @@ public class TeamAgentPersistenceHitlCombinedTest {
                 .defaultInterceptorAdd(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
-                        if (Agent.ID_SUPERVISOR.equals(n.getId())) {
+                        if (TeamAgent.ID_SUPERVISOR.equals(n.getId())) {
                             TeamTrace trace = ctx.getAs("__" + teamName);
                             if (trace == null) return;
 
@@ -102,7 +102,7 @@ public class TeamAgentPersistenceHitlCombinedTest {
         String finalResult = "";
         for (int i = steps.size() - 1; i >= 0; i--) {
             TeamTrace.TeamRecord step = steps.get(i);
-            if (!Agent.ID_SUPERVISOR.equalsIgnoreCase(step.getSource())) {
+            if (!TeamAgent.ID_SUPERVISOR.equalsIgnoreCase(step.getSource())) {
                 finalResult = step.getContent();
                 break;
             }

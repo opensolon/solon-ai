@@ -22,7 +22,7 @@ public class ReActHitlDemo {
         ReActInterceptor hitlInterceptor = new ReActInterceptor() {
             @Override
             public void onNodeStart(FlowContext ctx, Node node) {
-                if (Agent.ID_ACTION.equals(node.getId())) {
+                if (ReActAgent.ID_ACTION.equals(node.getId())) {
                     if (ctx.get("approved") == null) {
                         System.out.println("[拦截器] 发现敏感操作，需要人工审批...");
                         ctx.stop(); // 挂起流程

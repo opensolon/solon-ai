@@ -135,7 +135,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
      */
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
-        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_KEY);
+        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
 
         if (trace != null) {
             FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_SYNC).returnDirect(true);

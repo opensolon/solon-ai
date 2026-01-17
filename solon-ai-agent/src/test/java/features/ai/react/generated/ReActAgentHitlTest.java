@@ -51,7 +51,7 @@ public class ReActAgentHitlTest {
             @Override
             public void onNodeEnd(FlowContext ctx, Node node) {
                 // 当进入工具执行节点时，检查是否已获得人工批准
-                if (Agent.ID_ACTION.equals(node.getId())) {
+                if (ReActAgent.ID_ACTION.equals(node.getId())) {
                     Boolean approved = ctx.getAs("is_approved");
                     if (approved == null) {
                         System.out.println("[拦截器] 检测到敏感工具调用，等待人工审批...");
@@ -84,7 +84,7 @@ public class ReActAgentHitlTest {
 
         // 验证：流程应该被拦截并停止，最后停留在工具节点
         Assertions.assertTrue(context.isStopped(), "流程应该被拦截并停止");
-        Assertions.assertEquals(Agent.ID_ACTION, context.lastNodeId(), "最后应停留在工具节点");
+        Assertions.assertEquals(ReActAgent.ID_ACTION, context.lastNodeId(), "最后应停留在工具节点");
 
         // 获取执行状态追踪，验证已有执行步骤
         ReActTrace state = context.getAs("__" + agent.name());

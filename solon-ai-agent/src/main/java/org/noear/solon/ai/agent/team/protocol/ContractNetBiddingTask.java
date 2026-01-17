@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRole;
@@ -73,7 +74,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
             // 迭代执行成员竞标逻辑
             for (Agent agent : config.getAgentMap().values()) {
                 // 排除主管节点
-                if (Agent.ID_SUPERVISOR.equals(agent.name())) {
+                if (TeamAgent.ID_SUPERVISOR.equals(agent.name())) {
                     continue;
                 }
 
@@ -110,7 +111,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
             trace.addRecord(ChatRole.SYSTEM, ContractNetProtocol.ID_BIDDING, summary, 0);
 
             // 归还路由控制权给 Supervisor
-            trace.setRoute(Agent.ID_SUPERVISOR);
+            trace.setRoute(TeamAgent.ID_SUPERVISOR);
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("TeamAgent [{}] bidding finalized. {}", config.getName(), summary);
@@ -129,7 +130,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
         TeamTrace trace = context.getAs(config.getTraceKey());
         if (trace != null) {
             trace.setRoute(Agent.ID_END);
-            trace.addRecord(ChatRole.SYSTEM, Agent.ID_SYSTEM, "Bidding interrupted: " + e.getMessage(), 0);
+            trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SYSTEM, "Bidding interrupted: " + e.getMessage(), 0);
         }
     }
 }

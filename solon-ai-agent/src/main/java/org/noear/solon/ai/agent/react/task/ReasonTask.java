@@ -58,12 +58,12 @@ public class ReasonTask implements NamedTaskComponent {
 
     @Override
     public String name() {
-        return Agent.ID_REASON;
+        return ReActAgent.ID_REASON;
     }
 
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
-        String traceKey = context.getAs(ReActAgent.KEY_CURRENT_TRACE_KEY);
+        String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
 
         if (LOG.isDebugEnabled()) {
@@ -112,14 +112,14 @@ public class ReasonTask implements NamedTaskComponent {
         // 容错处理：模型响应为空时引导其重试
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
             trace.appendMessage(ChatMessage.ofUser("Your last response was empty. Please provide Action or Final Answer."));
-            trace.setRoute(Agent.ID_REASON);
+            trace.setRoute(ReActAgent.ID_REASON);
             return;
         }
 
         // [逻辑 4: 路由判断 - 原生工具调用协议]
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
             trace.appendMessage(response.getMessage());
-            trace.setRoute(Agent.ID_ACTION);
+            trace.setRoute(ReActAgent.ID_ACTION);
             return;
         }
 
@@ -153,7 +153,7 @@ public class ReasonTask implements NamedTaskComponent {
         if (rawContent.contains("Action:")) {
             String actionPart = rawContent.substring(rawContent.indexOf("Action:"));
             if (actionPart.matches("(?s)Action:\\s*\\{.*")) {
-                trace.setRoute(Agent.ID_ACTION);
+                trace.setRoute(ReActAgent.ID_ACTION);
                 return;
             }
         }

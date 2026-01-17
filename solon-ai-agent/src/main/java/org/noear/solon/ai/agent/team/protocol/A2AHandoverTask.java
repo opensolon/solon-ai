@@ -2,6 +2,7 @@ package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.flow.FlowContext;
@@ -39,7 +40,7 @@ public class A2AHandoverTask implements NamedTaskComponent {
         // 1. 专家根本没调工具
         // 2. 上一轮失败后已经被 Protocol 清理了
         if (Utils.isEmpty(target)) {
-            trace.setRoute(Agent.ID_SUPERVISOR);
+            trace.setRoute(TeamAgent.ID_SUPERVISOR);
             return;
         }
 
