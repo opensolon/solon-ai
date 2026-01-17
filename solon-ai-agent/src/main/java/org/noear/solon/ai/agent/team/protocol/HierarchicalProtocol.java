@@ -216,12 +216,4 @@ public class HierarchicalProtocol extends TeamProtocolBase {
             sb.append("3. **Load Balance**: Use `agent_usage` for efficient distribution.");
         }
     }
-
-    @Override
-    public void onTeamFinished(FlowContext context, TeamTrace trace) {
-        // 协作结束，清理内存上下文
-        trace.getProtocolContext().remove(KEY_HIERARCHY_STATE);
-        trace.getProtocolContext().remove(KEY_AGENT_USAGE);
-        super.onTeamFinished(context, trace);
-    }
 }

@@ -195,10 +195,4 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
             sb.append("\n### Guidelines: Price for simple tasks; Score/ROI for critical challenges.");
         }
     }
-
-    @Override
-    public void onTeamFinished(FlowContext context, TeamTrace trace) {
-        trace.getProtocolContext().remove(KEY_MARKET_STATE);
-        super.onTeamFinished(context, trace);
-    }
 }

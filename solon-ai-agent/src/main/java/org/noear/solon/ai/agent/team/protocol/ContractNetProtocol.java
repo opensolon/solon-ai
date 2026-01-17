@@ -240,14 +240,6 @@ public class ContractNetProtocol extends TeamProtocolBase {
         }
     }
 
-    @Override
-    public void onTeamFinished(FlowContext context, TeamTrace trace) {
-        // 清理协议状态，防止长上下文干扰
-        trace.getProtocolContext().remove(KEY_CONTRACT_STATE);
-        trace.getProtocolContext().remove(KEY_BIDDING_ROUND);
-        super.onTeamFinished(context, trace);
-    }
-
     /**
      * 算法兜底打分：基于关键词匹配
      */

@@ -140,6 +140,9 @@ public class TeamTrace implements AgentTrace {
 
     /** 获取协议私有上下文 */
     public Map<String, Object> getProtocolContext() { return protocolContext; }
+    public void resetProtocolContext(){
+        protocolContext.clear();
+    }
 
     /** 获取协议状态快照（JSON 格式，供 Agent 感知全局进度） */
     public String getProtocolDashboardSnapshot() {

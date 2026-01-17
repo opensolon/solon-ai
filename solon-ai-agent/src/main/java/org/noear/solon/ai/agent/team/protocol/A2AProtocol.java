@@ -289,10 +289,4 @@ public class A2AProtocol extends TeamProtocolBase {
             sb.append("2. **Handover Audit**: Force termination if more than 3 handovers occur.");
         }
     }
-
-    @Override
-    public void onTeamFinished(FlowContext context, TeamTrace trace) {
-        trace.getProtocolContext().remove(KEY_A2A_STATE);
-        super.onTeamFinished(context, trace);
-    }
 }

@@ -208,10 +208,4 @@ public class SwarmProtocol extends TeamProtocolBase {
             sb.append("> 2. **Skill Match**: Ensure emergent tasks in task_pool align with Agent's Skills.");
         }
     }
-
-    @Override
-    public void onTeamFinished(FlowContext context, TeamTrace trace) {
-        trace.getProtocolContext().remove(KEY_SWARM_STATE);
-        super.onTeamFinished(context, trace);
-    }
 }

@@ -43,6 +43,69 @@ public class SequentialProtocol extends TeamProtocolBase {
     private static final String KEY_SEQUENCE_STATE = "sequence_state_obj";
     private int maxRetriesPerStage = 1;
 
+    public static class StageInfo {
+        public String status = "PENDING";
+        public int retries = 0;
+        public String summary;
+    }
+
+    public static class SequenceState {
+        private final List<String> pipeline = new ArrayList<>();
+        private int currentIndex = 0;
+        private final Map<String, StageInfo> stages = new LinkedHashMap<>();
+
+        public void init(TeamTrace trace) {
+            if (this.pipeline.size() > 0) return;
+
+            Collection<String> agentNames = trace.getConfig().getAgentMap().keySet();
+            this.pipeline.addAll(agentNames);
+            agentNames.forEach(name -> stages.put(name, new StageInfo()));
+
+            if (trace != null && trace.getRecords() != null) {
+                Set<String> finished = new HashSet<>();
+                for (TeamTrace.TeamRecord r : trace.getRecords()) {
+                    if (r.isAgent() && pipeline.contains(r.getSource())) {
+                        finished.add(r.getSource());
+                    }
+                }
+
+                this.currentIndex = finished.size();
+            }
+        }
+
+        public String getNextAgent() {
+            return currentIndex < pipeline.size() ? pipeline.get(currentIndex) : Agent.ID_END;
+        }
+
+        public void markCurrent(String status, String summary) {
+            if (currentIndex < pipeline.size()) {
+                StageInfo info = stages.get(pipeline.get(currentIndex));
+                if (info != null) {
+                    info.status = status;
+                    if (Utils.isNotEmpty(summary)) {
+                        info.summary = summary.length() > 50 ? summary.substring(0, 50) + "..." : summary;
+                    }
+                }
+            }
+        }
+
+        public void next() { currentIndex++; }
+
+        @Override
+        public String toString() {
+            ONode root = new ONode().asObject();
+            root.set("progress", (currentIndex + 1) + "/" + pipeline.size());
+            ONode stagesNode = root.getOrNew("stages").asArray();
+            stages.forEach((k, v) -> {
+                stagesNode.add(new ONode().asObject()
+                        .set("agent", k)
+                        .set("status", v.status)
+                        .set("retries", v.retries));
+            });
+            return root.toJson();
+        }
+    }
+
     public SequentialProtocol(TeamAgentConfig config) { super(config); }
 
     // 获取状态看板，增加 sync 逻辑（为了断点续传）
@@ -116,70 +179,5 @@ public class SequentialProtocol extends TeamProtocolBase {
     private boolean assessQuality(String content) {
         if (Utils.isEmpty(content)) return false;
         return content.trim().length() > 2; // 降低门槛
-    }
-
-    // --- 内部状态看板 ---
-
-    public static class StageInfo {
-        public String status = "PENDING";
-        public int retries = 0;
-        public String summary;
-    }
-
-    public static class SequenceState {
-        private final List<String> pipeline = new ArrayList<>();
-        private int currentIndex = 0;
-        private final Map<String, StageInfo> stages = new LinkedHashMap<>();
-
-        public void init(TeamTrace trace) {
-            if (this.pipeline.size() > 0) return;
-
-            Collection<String> agentNames = trace.getConfig().getAgentMap().keySet();
-            this.pipeline.addAll(agentNames);
-            agentNames.forEach(name -> stages.put(name, new StageInfo()));
-
-            if (trace != null && trace.getRecords() != null) {
-                Set<String> finished = new HashSet<>();
-                for (TeamTrace.TeamRecord r : trace.getRecords()) {
-                    if (r.isAgent() && pipeline.contains(r.getSource())) {
-                        finished.add(r.getSource());
-                    }
-                }
-
-                this.currentIndex = finished.size();
-            }
-        }
-
-        public String getNextAgent() {
-            return currentIndex < pipeline.size() ? pipeline.get(currentIndex) : Agent.ID_END;
-        }
-
-        public void markCurrent(String status, String summary) {
-            if (currentIndex < pipeline.size()) {
-                StageInfo info = stages.get(pipeline.get(currentIndex));
-                if (info != null) {
-                    info.status = status;
-                    if (Utils.isNotEmpty(summary)) {
-                        info.summary = summary.length() > 50 ? summary.substring(0, 50) + "..." : summary;
-                    }
-                }
-            }
-        }
-
-        public void next() { currentIndex++; }
-
-        @Override
-        public String toString() {
-            ONode root = new ONode().asObject();
-            root.set("progress", (currentIndex + 1) + "/" + pipeline.size());
-            ONode stagesNode = root.getOrNew("stages").asArray();
-            stages.forEach((k, v) -> {
-                stagesNode.add(new ONode().asObject()
-                        .set("agent", k)
-                        .set("status", v.status)
-                        .set("retries", v.retries));
-            });
-            return root.toJson();
-        }
     }
 }
