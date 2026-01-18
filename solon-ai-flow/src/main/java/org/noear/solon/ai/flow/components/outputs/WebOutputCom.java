@@ -119,7 +119,7 @@ public class WebOutputCom extends AbsAiComponent implements AiIoComponent {
 
             setOutput(context, node, data);
 
-            String formatted = SnEL.evalTmpl(format, context.model());
+            String formatted = SnEL.evalTmpl(format, context.vars());
             ctx.render(formatted);
             ctx.output("\n");
             ctx.flush();

@@ -104,7 +104,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
             if (Utils.isEmpty(chatSession.getMessages())) {
                 String systemPrompt = node.getMetaAsString(META_SYSTEM_PROMPT);
                 if (Utils.isNotEmpty(systemPrompt)) {
-                    String systemPromptStr = SnEL.evalTmpl(systemPrompt, context.model());
+                    String systemPromptStr = SnEL.evalTmpl(systemPrompt, context.vars());
                     chatSession.addMessage(ChatMessage.ofSystem(systemPromptStr));
                 }
             }

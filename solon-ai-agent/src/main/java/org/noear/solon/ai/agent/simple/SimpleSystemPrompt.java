@@ -54,7 +54,7 @@ public class SimpleSystemPrompt {
         }
 
         // 动态渲染模板（如解析 ${user_name}）
-        String rendered = SnelUtil.render(rawPrompt, context.model());
+        String rendered = SnelUtil.render(rawPrompt, context.vars());
 
         if (LOG.isTraceEnabled()) {
             LOG.trace("Simple SystemPrompt rendered: {}", rendered);

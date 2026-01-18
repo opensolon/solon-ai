@@ -55,7 +55,7 @@ public interface TeamSystemPrompt {
         }
 
         // 基于 Snel 模板引擎注入业务变量
-        String finalPrompt = SnelUtil.render(template, context.model());
+        String finalPrompt = SnelUtil.render(template, context.vars());
 
         if (LOG.isTraceEnabled()) {
             LOG.trace("Team SystemPrompt rendered for agent [{}]:\n{}", trace.getAgentName(), finalPrompt);

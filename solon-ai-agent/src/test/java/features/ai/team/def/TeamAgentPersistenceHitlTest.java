@@ -40,7 +40,7 @@ public class TeamAgentPersistenceHitlTest {
                         // 逻辑：只要检测到已有阶段性产出（StepCount > 0），且没有审批信号，则挂起
                         TeamTrace trace = ctx.getAs("__" + teamId);
                         if (trace != null && trace.getRecordCount() > 0) {
-                            if (!ctx.model().containsKey("manager_ok")) {
+                            if (!ctx.containsKey("manager_ok")) {
                                 System.out.println("[HITL] 拦截器触发：检测到 worker 已产出初稿，挂起流程等待人工审批...");
                                 ctx.stop();
                             }

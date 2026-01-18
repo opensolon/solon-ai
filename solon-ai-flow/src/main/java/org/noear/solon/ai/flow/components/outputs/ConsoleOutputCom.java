@@ -42,7 +42,7 @@ public class ConsoleOutputCom extends VarOutputCom implements AiIoComponent {
         if (Utils.isEmpty(format)) {
             System.out.println(data);
         } else {
-            String formatted = SnEL.evalTmpl(format, context.model());
+            String formatted = SnEL.evalTmpl(format, context.vars());
             System.out.println(formatted);
         }
     }

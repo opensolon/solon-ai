@@ -55,7 +55,7 @@ public interface ReActSystemPrompt {
         }
 
         // 基于 FlowContext 模型进行变量替换
-        String rendered = SnelUtil.render(raw, context.model());
+        String rendered = SnelUtil.render(raw, context.vars());
 
         if (log.isTraceEnabled()) {
             log.trace("ReAct SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), rendered);

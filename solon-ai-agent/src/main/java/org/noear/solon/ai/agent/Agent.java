@@ -69,7 +69,7 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
             return description();
         }
 
-        return SnelUtil.render(description(), context.model());
+        return SnelUtil.render(description(), context.vars());
     }
 
     /**

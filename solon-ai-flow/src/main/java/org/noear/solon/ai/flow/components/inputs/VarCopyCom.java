@@ -35,7 +35,7 @@ public class VarCopyCom extends AbsAiComponent implements AiIoComponent {
         //用元信息，复制上下文变量(支后表达式)
         node.getMetas().forEach((newKey, oldKey) -> {
             String oldKeyExpr = String.valueOf(oldKey);
-            context.put(newKey, SnEL.eval(oldKeyExpr, context.model()));
+            context.put(newKey, SnEL.eval(oldKeyExpr, context.vars()));
         });
     }
 }

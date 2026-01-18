@@ -35,7 +35,7 @@ public class ReActAgentPersistenceHitlTest {
                 // 仅对 Action（工具调用）节点进行敏感操作拦截
                 if (ReActAgent.ID_ACTION_AFT.equals(node.getId())) {
                     // 检查上下文中是否存在审批标记
-                    if (!ctx.model().containsKey("is_approved")) {
+                    if (!ctx.containsKey("is_approved")) {
                         System.out.println("[拦截器] 发现敏感退款申请，当前未审批。中断流程以待持久化...");
                         ctx.stop(); // 触发流程中断
                     }
