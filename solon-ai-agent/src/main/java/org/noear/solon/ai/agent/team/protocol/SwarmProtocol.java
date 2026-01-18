@@ -113,30 +113,31 @@ public class SwarmProtocol extends TeamProtocolBase {
 
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
-        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
+        String traceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
+        TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
+        if (trace == null) return;
 
-        if (trace != null) {
-            SwarmState state = getSwarmState(trace);
-            FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_EMERGE).returnDirect(true);
-            boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-            if (isZh) {
-                toolDesc.title("涌现任务").description("当你发现需要拆解子任务或建议其他专家介入时调用。")
-                        .stringParamAdd("tasks", "待办任务描述，多个用分号分隔")
-                        .stringParamAdd("agents", "建议执行的专家名，多个用分号分隔");
-            } else {
-                toolDesc.title("Emerge Tasks").description("Call this to decompose tasks or suggest other experts.")
-                        .stringParamAdd("tasks", "Task descriptions, separated by semicolons")
-                        .stringParamAdd("agents", "Suggested agent names, separated by semicolons");
-            }
+        SwarmState state = getSwarmState(trace);
+        FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_EMERGE).returnDirect(true);
+        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-            toolDesc.doHandle(args -> {
-                state.emerge((String) args.get("tasks"), (String) args.get("agents"));
-                return isZh ? "系统：子任务已加入任务池。" : "System: Tasks added to pool.";
-            });
-
-            receiver.accept(toolDesc);
+        if (isZh) {
+            toolDesc.title("涌现任务").description("当你发现需要拆解子任务或建议其他专家介入时调用。")
+                    .stringParamAdd("tasks", "待办任务描述，多个用分号分隔")
+                    .stringParamAdd("agents", "建议执行的专家名，多个用分号分隔");
+        } else {
+            toolDesc.title("Emerge Tasks").description("Call this to decompose tasks or suggest other experts.")
+                    .stringParamAdd("tasks", "Task descriptions, separated by semicolons")
+                    .stringParamAdd("agents", "Suggested agent names, separated by semicolons");
         }
+
+        toolDesc.doHandle(args -> {
+            state.emerge((String) args.get("tasks"), (String) args.get("agents"));
+            return isZh ? "系统：子任务已加入任务池。" : "System: Tasks added to pool.";
+        });
+
+        receiver.accept(toolDesc);
     }
 
     @Override

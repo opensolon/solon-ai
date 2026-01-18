@@ -287,6 +287,7 @@ public class SupervisorTask implements NamedTaskComponent {
         LOG.error("TeamAgent [{}] supervisor fatal error", config.getName(), e);
         String traceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
         TeamTrace trace = context.getAs(traceKey);
+
         if (trace != null) {
             trace.setRoute(Agent.ID_END);
             trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SUPERVISOR, "Runtime Error: " + e.getMessage(), 0);

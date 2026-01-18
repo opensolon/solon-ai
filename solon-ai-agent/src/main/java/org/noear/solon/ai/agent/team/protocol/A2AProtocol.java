@@ -101,7 +101,8 @@ public class A2AProtocol extends TeamProtocolBase {
 
     @Override
     public void injectAgentTools(FlowContext context, Agent agent, Consumer<FunctionTool> receiver) {
-        TeamTrace trace = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
+        String traceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
+        TeamTrace trace = (traceKey != null) ? context.getAs(traceKey) : null;
         if (trace == null) return;
 
         A2AState stateObj = getA2AState(trace);
