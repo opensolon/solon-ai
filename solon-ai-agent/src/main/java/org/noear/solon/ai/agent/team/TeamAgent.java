@@ -226,9 +226,11 @@ public class TeamAgent implements Agent {
             // 5. 资源清理与协议后置处理
             config.getProtocol().onTeamFinished(context, trace);
 
-            if (context.isStopped() == false) {
-                //如果是正常完成的，则重置协议上下文（可能会重新再进来）
-                trace.resetProtocolContext();
+            if(context.containsKey(Agent.KEY_CURRENT_TEAM_TRACE_KEY)) {
+                //说明有嵌套，需要清空协议上下文（可能会重新再进来）
+                if (context.isStopped() == false) {
+                    trace.resetProtocolContext();
+                }
             }
         }
     }

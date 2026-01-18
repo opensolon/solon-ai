@@ -68,6 +68,11 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
 
             ContractNetProtocol.ContractState state = protocol.getContractState(trace);
 
+            // 兜底：如果没有 rounds（说明是隐式路由进来的），补一次初始化
+            if (state.getRounds() == 0) {
+                state.incrementRound();
+            }
+
             int manualBidCount = 0;
             int autoBidCount = 0;
 
