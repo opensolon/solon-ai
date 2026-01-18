@@ -217,17 +217,26 @@ public class SupervisorTask implements NamedTaskComponent {
             return true;
         }
 
-        List<String> sortedNames = config.getAgentMap().keySet().stream()
-                .sorted((a, b) -> b.length() - a.length())
-                .collect(Collectors.toList());
+        List<String> agentNames = new ArrayList<>(config.getAgentMap().keySet());
+        String lastFoundAgent = null;
+        int lastIndex = -1;
 
-        for (String name : sortedNames) {
+        for (String name : agentNames) {
             Pattern p = Pattern.compile("(?i)(?<=^|[^a-zA-Z0-9])" + Pattern.quote(name) + "(?=[^a-zA-Z0-9]|$)");
-            if (p.matcher(cleanText).find()) {
-                routeTo(context, trace, name);
-                return true;
+            Matcher m = p.matcher(cleanText);
+            while (m.find()) {
+                if (m.start() > lastIndex) {
+                    lastIndex = m.start();
+                    lastFoundAgent = name;
+                }
             }
         }
+
+        if (lastFoundAgent != null) {
+            routeTo(context, trace, lastFoundAgent);
+            return true;
+        }
+
         return false;
     }
 

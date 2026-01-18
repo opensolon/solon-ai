@@ -16,6 +16,9 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * TeamAgent 递归与循环协作测试
  * * <p>场景 1: 测试嵌套团队（Team in Team），验证 Trace 轨迹在父子团队间的正确记录。</p>
@@ -91,25 +94,23 @@ public class TeamAgentRecursiveTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. 简单的开发子团队
+        // 确保子团队有明确的完成标记，以便 HierarchicalProtocol 清除看板错误
         TeamAgent devTeam = TeamAgent.of(chatModel).name("dev_team")
                 .description("代码实现小组")
                 .agentAdd(createSimpleAgent("Coder", "程序员"))
                 .build();
 
-        // 2. 构造团队系统提示词逻辑 (通过 instruction 注入红线)
-        TeamSystemPrompt customPrompt = TeamSystemPrompt.builder()
-                .role("你是一个严谨的代码项目主管。")
-                .instruction(trace ->
-                        "## 协作红线：\n" +
-                                "1. 所有的开发工作（dev_team）完成后，必须指派 Reviewer 进行审核。\n" +
-                                "2. 严禁直接结束任务，除非 Reviewer 给出确认通过的结论。\n" +
-                                "3. 如果 Reviewer 指出问题，你必须重新指派 dev_team 修复。")
-                .build();
-
         // 3. 带有审核逻辑的顶层团队
         TeamAgent projectTeam = TeamAgent.of(chatModel).name("quality_project")
                 .description("带质检的项目组。如果结果不满意，Reviewer 会要求重写。")
-                .systemPrompt(customPrompt) // 正确注入系统提示词
+                .systemPrompt(TeamSystemPrompt.builder()
+                        .role("你是一个严谨的代码项目主管。")
+                        .instruction(trace ->
+                                "## 协作红线：\n" +
+                                        "1. 所有的开发工作（dev_team）完成后，必须指派 Reviewer 进行审核。\n" +
+                                        "2. 严禁直接结束任务，除非 Reviewer 给出确认通过的结论。\n" +
+                                        "3. 如果 Reviewer 指出问题，你必须重新指派 dev_team 修复并说明审核意见。")
+                        .build())
                 .agentAdd(devTeam)
                 .agentAdd(new Agent() {
                     private int reviewCount = 0;
@@ -119,8 +120,9 @@ public class TeamAgentRecursiveTest {
                     @Override
                     public AssistantMessage call(Prompt prompt, AgentSession session) {
                         // 第一次调用打回，第二次调用通过
+                        // 注意：必须带上 [FINISH] 标记，否则 HierarchicalProtocol 会将其记为 _meta.errors
                         if (reviewCount++ == 0) {
-                            return ChatMessage.ofAssistant("代码发现安全漏洞，请 dev_team 重新修复！");
+                            return ChatMessage.ofAssistant("代码发现安全漏洞，请 dev_team 重新修复！[FINISH]");
                         }
                         return ChatMessage.ofAssistant("审核通过，表现完美。[FINISH]");
                     }
@@ -132,26 +134,40 @@ public class TeamAgentRecursiveTest {
         AgentSession session = InMemoryAgentSession.of("sn_feedback_loop_2026");
         projectTeam.call(Prompt.of("请开发一个登录模块。"), session);
 
-        // 5. 关键检测点：验证反馈循环是否生效
-        // 修正：使用 getTraceKey() 获取动态生成的键名
+        // 5. 获取执行轨迹
         TeamTrace rootTrace = session.getSnapshot().getAs(projectTeam.getConfig().getTraceKey());
         Assertions.assertNotNull(rootTrace, "执行轨迹丢失");
 
-        // 验证 1：验证是否出现了打回重做的路径
-        long devTeamCalls = rootTrace.getRecords().stream()
-                .filter(s -> "dev_team".equalsIgnoreCase(s.getSource())).count();
+        // 打印历史日志供分析
+        System.out.println("--- Collaboration History Log ---");
+        System.out.println(rootTrace.getFormattedHistory());
+        System.out.println("--- End History Log ---");
+
+        // 验证 1：验证是否出现了打回重做的路径（dev_team 被激活至少 2 次）
+        List<String> routeHistory = rootTrace.getRecords().stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
+                .map(s -> s.getSource())
+                .collect(Collectors.toList());
+
+        long devTeamCalls = routeHistory.stream()
+                .filter(name -> "dev_team".equalsIgnoreCase(name)).count();
 
         log.info("反馈循环中 dev_team 被激活次数: {}", devTeamCalls);
-        System.out.println("History Log:\n" + rootTrace.getFormattedHistory());
+        Assertions.assertTrue(devTeamCalls >= 2, "当审核未通过时，应重新指派 dev_team 修复");
 
-        // 预期：dev_team(1) -> Reviewer(打回) -> dev_team(2)
-        Assertions.assertTrue(devTeamCalls >= 2, "当审核打回时，Supervisor 应该重新路由回 dev_team");
+        // 验证 2：验证执行序列的合理性
+        // 预期的最小序列应该是：dev_team -> Reviewer -> dev_team -> Reviewer
+        Assertions.assertTrue(routeHistory.size() >= 4, "完整的反馈循环至少需要 4 个步骤");
+        Assertions.assertEquals("dev_team", routeHistory.get(0), "首位执行者应该是 dev_team");
 
-        // 验证 2：验证最终 Trace 是否捕获到了审核通过的终态消息
+        // 验证 3：验证最终是否包含 Reviewer 的确认
         boolean hasApproval = rootTrace.getRecords().stream()
                 .anyMatch(s -> "Reviewer".equals(s.getSource()) && s.getContent().contains("表现完美"));
 
-        Assertions.assertTrue(hasApproval, "Trace 中应包含 Reviewer 的最终确认记录");
+        Assertions.assertTrue(hasApproval, "最终结果应包含 Reviewer 的通过确认");
+
+        // 验证 4：验证最终答案是否存在
+        Assertions.assertNotNull(rootTrace.getFinalAnswer(), "任务结束时应有最终答案产出");
     }
 
     /**
