@@ -35,6 +35,8 @@ import java.util.*;
 @Preview("3.4")
 public class InMemoryChatSession implements ChatSession {
     protected final String sessionId;
+    protected final Map<String, Object> attrs = new HashMap<>();
+
     protected final List<ChatMessage> messages = new ArrayList<>();
     protected final int maxMessages;
 
@@ -72,6 +74,17 @@ public class InMemoryChatSession implements ChatSession {
     public String getSessionId() {
         return sessionId;
     }
+
+    @Override
+    public void attrSet(String name, Object value) {
+        attrs.put(name, value);
+    }
+
+    @Override
+    public <T> T attrGet(String name) {
+        return (T) attrs.get(name);
+    }
+
 
     /**
      * 获取最大消息数
