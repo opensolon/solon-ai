@@ -216,6 +216,23 @@ public class ChatOptions {
      */
     public ChatOptions interceptorAdd(int index, ChatInterceptor interceptor) {
         interceptors.add(new RankEntity<>(interceptor, index));
+
+        if(interceptors.size() > 0){
+            Collections.sort(interceptors);
+        }
+
+        return this;
+    }
+
+    public ChatOptions interceptorAdd(List<RankEntity<ChatInterceptor>> interceptors0) {
+        if (interceptors0 != null) {
+            interceptors.addAll(interceptors0);
+
+            if (interceptors.size() > 0) {
+                Collections.sort(interceptors);
+            }
+        }
+
         return this;
     }
 

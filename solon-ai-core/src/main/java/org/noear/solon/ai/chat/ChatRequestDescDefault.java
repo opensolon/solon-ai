@@ -87,6 +87,14 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         if (Utils.isNotEmpty(config.getDefaultSkills())) {
             this.options.skillAdd(config.getDefaultSkills());
         }
+
+        if(Utils.isNotEmpty(config.getDefaultTools())){
+            this.options.toolsAdd(config.getDefaultTools());
+        }
+
+        if(Utils.isNotEmpty(config.getDefaultInterceptors())){
+            this.options.interceptorAdd(config.getDefaultInterceptors());
+        }
     }
 
     public ChatRequestDesc session(ChatSession session) {
@@ -133,7 +141,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
 
 
-        CallChain chain = new CallChain(req.getInterceptorList(), this::doCall);
+        CallChain chain = new CallChain(options.interceptors(), this::doCall);
 
         return chain.doIntercept(req);
     }
@@ -198,7 +206,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             session = req.getSession();
         }
 
-        StreamChain chain = new StreamChain(req.getInterceptorList(), this::doStream);
+        StreamChain chain = new StreamChain(options.interceptors(), this::doStream);
 
         return chain.doIntercept(req);
     }

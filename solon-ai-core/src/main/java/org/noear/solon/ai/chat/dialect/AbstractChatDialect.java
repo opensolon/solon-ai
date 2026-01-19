@@ -149,7 +149,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
      * 构建请求工具节点
      */
     protected void buildReqToolsNode(ONode n, ChatConfig config, ChatOptions options, ChatMessage lastMessage) {
-        buildReqToolsNodeDo(n, config.getDefaultTools());
+        //buildReqToolsNodeDo(n, config.getDefaultTools());
         buildReqToolsNodeDo(n, options.tools());
     }
 

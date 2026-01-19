@@ -47,7 +47,6 @@ public class ChatRequest implements NonSerializable {
     private final ChatOptions options;
     private final ChatSession session;
     private final boolean stream;
-    private final List<RankEntity<ChatInterceptor>> interceptorList;
     private List<ChatMessage> messages;
 
     public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session0, List<ChatMessage> prompt, boolean stream) {
@@ -58,14 +57,6 @@ public class ChatRequest implements NonSerializable {
 
         this.session = session0;
 
-
-        //收集拦截器
-        this.interceptorList = new ArrayList<>();
-        interceptorList.addAll(config.getDefaultInterceptors());
-        interceptorList.addAll(options.interceptors());
-        if (interceptorList.size() > 1) {
-            Collections.sort(interceptorList);
-        }
 
         List<Skill> activeSkills = options.skills().stream()
                 .map(s -> s.target)
@@ -114,10 +105,6 @@ public class ChatRequest implements NonSerializable {
         this.options = options;
         this.stream = stream;
         this.messages = Collections.unmodifiableList(session.getMessages());
-    }
-
-    protected List<RankEntity<ChatInterceptor>> getInterceptorList() {
-        return interceptorList;
     }
 
     /**

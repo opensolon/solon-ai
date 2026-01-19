@@ -195,36 +195,14 @@ public class GeminiRequestBuilder {
      * @param options 聊天选项
      */
     public void buildToolsNode(ONode root, ChatConfig config, ChatOptions options) {
-        Collection<FunctionTool> defaultTools = config.getDefaultTools();
+        //Collection<FunctionTool> defaultTools = config.getDefaultTools();
         Collection<FunctionTool> tools = options.tools();
 
-        if (Utils.isEmpty(defaultTools) && Utils.isEmpty(tools)) {
+        if (Utils.isEmpty(tools)) {
             return;
         }
 
         root.getOrNew("tools").asArray().then(toolsNode -> {
-            if (Utils.isNotEmpty(defaultTools)) {
-                for (FunctionTool func : defaultTools) {
-                    toolsNode.addNew().then(toolNode -> {
-                        toolNode.getOrNew("functionDeclarations").asArray().addNew().then(funcNode -> {
-                            funcNode.set("name", func.name());
-                            funcNode.set("description", func.descriptionAndMeta());
-                            String inputSchema = func.inputSchema();
-                            if (Utils.isNotEmpty(inputSchema)) {
-                                try {
-                                    ONode schemaNode = ONode.ofJson(inputSchema);
-                                    funcNode.set("parameters", schemaNode);
-                                } catch (Exception e) {
-                                    funcNode.getOrNew("parameters").asArray();
-                                }
-                            } else {
-                                funcNode.getOrNew("parameters").asArray();
-                            }
-                        });
-                    });
-                }
-            }
-
             if (Utils.isNotEmpty(tools)) {
                 for (FunctionTool func : tools) {
                     toolsNode.addNew().then(toolNode -> {
