@@ -78,9 +78,9 @@ public class TeamAgentMarketTest {
 
         // 描述相似，技能标签不同
         Agent old = ReActAgent.of(chatModel).name("legacy").description("Java 开发者")
-                .profile(p -> p.skillAdd("JDK8")).build();
+                .profile(p -> p.capabilityAdd("JDK8")).build();
         Agent modern = ReActAgent.of(chatModel).name("modern").description("Java 开发者")
-                .profile(p -> p.skillAdd("JDK21")).build();
+                .profile(p -> p.capabilityAdd("JDK21")).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.MARKET_BASED).agentAdd(old, modern).build();
         AgentSession s = InMemoryAgentSession.of("m3");

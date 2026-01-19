@@ -20,7 +20,7 @@ public class SimpleAgentTest {
         public String name;
         public int age;
         public String email;
-        public String[] skills;
+        public String[] capabilities;
     }
 
     @Test

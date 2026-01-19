@@ -112,14 +112,14 @@ public class A2AProtocol extends TeamProtocolBase {
                 .filter(e -> !e.getKey().equals(agent.name()))
                 .map(e -> {
                     Agent expert = e.getValue();
-                    String skills = String.join(",", expert.profile().getSkills());
+                    String capabilities = String.join(",", expert.profile().getCapabilities());
                     String modes = String.join(",", expert.profile().getInputModes());
                     String desc = expert.description();
 
                     if (isZh) {
-                        return String.format("%s(%s) [技能:%s | 模态:%s]", e.getKey(), desc, skills, modes);
+                        return String.format("%s(%s) [核心能力:%s | 模态:%s]", e.getKey(), desc, capabilities, modes);
                     } else {
-                        return String.format("%s(%s) [Skills:%s | Modes:%s]", e.getKey(), desc, skills, modes);
+                        return String.format("%s(%s) [Capabilities:%s | Modes:%s]", e.getKey(), desc, capabilities, modes);
                     }
                 })
                 .collect(Collectors.joining(" | "));
@@ -161,10 +161,10 @@ public class A2AProtocol extends TeamProtocolBase {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         if (isZh) {
             sb.append("\n## 专家协作指引\n");
-            sb.append("- 必须根据各专家的 [技能] 和 [模态] 标签精准选择目标，严禁向不支持相关模态的专家移交任务。\n");
+            sb.append("- 必须根据各专家的 [核心能力] 和 [模态] 标签精准选择目标，严禁向不支持相关模态的专家移交任务。\n");
         } else {
             sb.append("\n## Collaboration Guidelines\n");
-            sb.append("- You must choose the target precisely based on [Skills] and [Modes] tags. Never transfer to an agent that lacks the required modality.\n");
+            sb.append("- You must choose the target precisely based on [Capabilities] and [Modes] tags. Never transfer to an agent that lacks the required modality.\n");
         }
     }
 

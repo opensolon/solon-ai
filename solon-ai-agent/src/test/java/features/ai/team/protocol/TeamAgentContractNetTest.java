@@ -10,7 +10,6 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
-import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.protocol.ContractNetProtocol;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
@@ -62,8 +61,8 @@ public class TeamAgentContractNetTest {
     @DisplayName("自动竞标：验证 Profile 技能匹配")
     public void testAutoBiddingWeight() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-        Agent java = ReActAgent.of(chatModel).name("java_dev").profile(p -> p.skillAdd("Java")).build();
-        Agent python = ReActAgent.of(chatModel).name("py_dev").profile(p -> p.skillAdd("Python")).build();
+        Agent java = ReActAgent.of(chatModel).name("java_dev").profile(p -> p.capabilityAdd("Java")).build();
+        Agent python = ReActAgent.of(chatModel).name("py_dev").profile(p -> p.capabilityAdd("Python")).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.CONTRACT_NET).agentAdd(java, python)
                 .systemPrompt(p->p.instruction("对比任务关键词与 Profile。匹配加 10 分。指派高分者。")).build();

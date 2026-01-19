@@ -317,7 +317,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
         config.getAgentMap().forEach((name, ag) -> {
             sb.append("- **").append(name).append("** (")
                     .append(ag.description()).append("): ")
-                    .append("Skills").append(ag.profile().getSkills())
+                    .append("Capabilities").append(ag.profile().getCapabilities())
                     .append(", Modes").append(ag.profile().getInputModes())
                     .append("\n");
         });
@@ -348,7 +348,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
         int score = 60;
 
         if (agent.profile() != null) {
-            for (String skill : agent.profile().getSkills()) {
+            for (String skill : agent.profile().getCapabilities()) {
                 if (taskDesc.contains(skill.toLowerCase())) {
                     score += 15;
                     break;
@@ -356,7 +356,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
             }
         }
 
-        String autoPlan = "Auto-matched by skills: " + agent.profile().getSkills();
+        String autoPlan = "Auto-matched by capabilities: " + agent.profile().getCapabilities();
 
         ONode bidNode = new ONode().asObject();
         bidNode.set("score", Math.min(95, score));

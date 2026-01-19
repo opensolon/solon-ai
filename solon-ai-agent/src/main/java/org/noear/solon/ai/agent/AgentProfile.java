@@ -23,16 +23,16 @@ import java.util.*;
 /**
  * 智能体档案 (Agent Profile)
  *
- * <p>核心职责：定义 Agent 的身份标识、能力边界（Skills）、模态约束（Modes）与交互风格。</p>
- * <p>它是智能体路由（Routing）与协作选型的重要元数据载体。</p>
+ * <p>核心职责：定义 Agent 的身份标识、能力边界 (Capabilities)、模态约束 (Modes) 与交互风格。</p>
+ * <p>它是智能体路由 (Routing) 与协作选型的重要元数据载体。</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 public class AgentProfile implements Serializable {
-    /** 技能集：决定 Agent 能处理什么业务（如：代码审计、数据绘图） */
-    private final Set<String> skills = new HashSet<>();
+    /** 核心能力：决定 Agent 能处理什么业务（如：code_audit, data_viz） */
+    private final Set<String> capabilities = new HashSet<>();
     /** 行为约束：定义 Agent 不能做什么（如：禁止输出隐私信息） */
     private final List<String> constraints = new ArrayList<>();
     /** 交互风格：定义回复的语调（如：专业严谨、幽默风趣） */
@@ -65,32 +65,47 @@ public class AgentProfile implements Serializable {
         // 初始化基础技术与模态（确保不空）
         this.inputModes.add("text");
         this.outputModes.add("text");
-        this.skills.add("assistant");
+        this.capabilities.add("assistant");
     }
 
     // --- Fluent API (链式配置) ---
 
-    public AgentProfile skillAdd(String... skills) {
-        if (skills != null) this.skills.addAll(Arrays.asList(skills));
+    /**
+     * 添加能力项
+     */
+    public AgentProfile capabilityAdd(String... capabilities) {
+        if (capabilities != null) this.capabilities.addAll(Arrays.asList(capabilities));
         return this;
     }
 
+    /**
+     * 添加约束项
+     */
     public AgentProfile constraintAdd(String... constraints) {
         if (constraints != null) this.constraints.addAll(Arrays.asList(constraints));
         return this;
     }
 
+    /**
+     * 设置交互风格
+     */
     public AgentProfile style(String style) {
         this.style = style;
         return this;
     }
 
+    /**
+     * 添加模态支持
+     */
     public AgentProfile modeAdd(String input, String output) {
         if (input != null) this.inputModes.add(input);
         if (output != null) this.outputModes.add(output);
         return this;
     }
 
+    /**
+     * 设置元数据
+     */
     public AgentProfile metaPut(String key, Object value) {
         this.metadata.put(key, value);
         return this;
@@ -98,7 +113,7 @@ public class AgentProfile implements Serializable {
 
     // --- Getters (只读包装) ---
 
-    public Set<String> getSkills() { return Collections.unmodifiableSet(skills); }
+    public Set<String> getCapabilities() { return Collections.unmodifiableSet(capabilities); }
     public List<String> getConstraints() { return Collections.unmodifiableList(constraints); }
     public String getStyle() { return style; }
     public List<String> getInputModes() { return Collections.unmodifiableList(inputModes); }
@@ -125,9 +140,9 @@ public class AgentProfile implements Serializable {
             segments.add(isZh ? "产出: 包含图像" : "Outputs: Images");
         }
 
-        // 2. 技能部分
-        if (!skills.isEmpty()) {
-            segments.add((isZh ? "擅长技能: " : "Skills: ") + String.join(", ", skills));
+        // 2. 能力部分
+        if (!capabilities.isEmpty()) {
+            segments.add((isZh ? "核心能力: " : "Capabilities: ") + String.join(", ", capabilities));
         }
 
         // 3. 约束部分
@@ -146,7 +161,7 @@ public class AgentProfile implements Serializable {
     @Override
     public String toString() {
         return "AgentProfile{" +
-                "skills=" + skills +
+                "capabilities=" + capabilities +
                 ", constraints=" + constraints +
                 ", style='" + style + '\'' +
                 ", inputModes=" + inputModes +

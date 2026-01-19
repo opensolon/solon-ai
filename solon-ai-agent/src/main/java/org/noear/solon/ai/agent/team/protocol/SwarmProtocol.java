@@ -203,11 +203,11 @@ public class SwarmProtocol extends TeamProtocolBase {
         if (isZh) {
             sb.append("> **调度指引**：\n");
             sb.append("> 1. **负载均衡**：优先指派 pheromones 值较低的成员。\n");
-            sb.append("> 2. **能力匹配**：确保 task_pool 中的任务描述与 Agent 的 Skills 一致。\n");
+            sb.append("> 2. **能力匹配**：确保 task_pool 中的任务描述与 Agent 的 Capabilities 一致。\n");
         } else {
             sb.append("> **Instruction**:\n");
             sb.append("> 1. **Load Balancing**: Prioritize agents with lower pheromone values.\n");
-            sb.append("> 2. **Skill Match**: Ensure emergent tasks in task_pool align with Agent's Skills.");
+            sb.append("> 2. **Skill Match**: Ensure emergent tasks in task_pool align with Agent's Capabilities.");
         }
     }
 }

@@ -46,7 +46,7 @@ public class TeamAgentProfileConsumerTest {
                 .agentAdd(ReActAgent.of(chatModel)
                         .name("copywriter")
                         .description("负责 [#{platform}] 平台的文案调优") // 动态占位符
-                        .profile(p -> p.skillAdd("爆款标题制作", "情绪共鸣写作")
+                        .profile(p -> p.capabilityAdd("爆款标题制作", "情绪共鸣写作")
                                 .constraintAdd("严禁使用感叹号", "字数控制在 50 字内")
                                 .style("亲切、多用 Emoji"))
                         .build())
@@ -55,7 +55,7 @@ public class TeamAgentProfileConsumerTest {
                 .agentAdd(ReActAgent.of(chatModel)
                         .name("illustrator")
                         .description("负责视觉风格定义")
-                        .profile(p -> p.skillAdd("矢量插画", "色彩心理学")
+                        .profile(p -> p.capabilityAdd("矢量插画", "色彩心理学")
                                 .modeAdd("text", "image") // 标注具备图像输出潜能
                                 .metaPut("engine", "Nano Banana")
                                 .style("极简主义"))
@@ -109,14 +109,14 @@ public class TeamAgentProfileConsumerTest {
                         .name("text_editor")
                         .description("处理文字校对")
                         .profile(p -> p.modeAdd("text", "text") // 声明仅支持文本
-                                .skillAdd("语法检查"))
+                                .capabilityAdd("语法检查"))
                         .build())
                 .agentAdd(ReActAgent.of(chatModel)
                         .name("vision_analyst")
                         .description("处理图像内容提取")
                         .profile(p -> p.modeAdd("text", "text")
                                 .modeAdd("image", "text") // 声明支持图片
-                                .skillAdd("视觉分析"))
+                                .capabilityAdd("视觉分析"))
                         .build())
                 .build();
 
@@ -142,7 +142,7 @@ public class TeamAgentProfileConsumerTest {
                 .agentAdd(ReActAgent.of(chatModel)
                         .name("data_analyst")
                         // 给它一个具体的技能，让它觉得自己能行
-                        .profile(p -> p.skillAdd("财务报表分析")
+                        .profile(p -> p.capabilityAdd("财务报表分析")
                                 .metaPut("sensitive", true))
                         .build())
                 .defaultInterceptorAdd(new TeamInterceptor() {
@@ -170,7 +170,7 @@ public class TeamAgentProfileConsumerTest {
 
     @Test
     public void testProfileI18n() {
-        AgentProfile profile = new AgentProfile().skillAdd("Coding");
+        AgentProfile profile = new AgentProfile().capabilityAdd("Coding");
 
         // 验证中文输出
         String zhStr = profile.toFormatString(Locale.CHINESE);
@@ -178,6 +178,6 @@ public class TeamAgentProfileConsumerTest {
 
         // 验证英文输出
         String enStr = profile.toFormatString(Locale.ENGLISH);
-        Assertions.assertTrue(enStr.contains("Skills"));
+        Assertions.assertTrue(enStr.contains("Capabilities"));
     }
 }
