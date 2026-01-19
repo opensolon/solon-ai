@@ -167,10 +167,9 @@ FunctionTool calculator = new FunctionTool("calculator")
 ReActAgent mathAgent = ReActAgent.of(chatModel)
     .name("math_assistant")
     .addTool(calculator)
-    .systemPrompt(ReActSystemPrompt.builder()
+    .systemPrompt(p->p
         .role("你是专业的数学助手")
-        .instruction("请帮助用户解决数学问题")
-        .build())
+        .instruction("请帮助用户解决数学问题"))
     .build();
 ```
 
