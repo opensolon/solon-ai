@@ -23,9 +23,11 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -44,7 +46,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @Preview("3.8.1")
 public class ReActTrace implements AgentTrace {
-    private static final Logger log = LoggerFactory.getLogger(ReActTrace.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ReActTrace.class);
 
     /** 运行配置 */
     private transient ReActAgentConfig config;
@@ -96,6 +98,34 @@ public class ReActTrace implements AgentTrace {
         this.options = options;
         this.session = session;
         this.protocol = protocol;
+
+        if (options.getSkills().size() > 0) {
+            StringBuilder instruction = new StringBuilder();
+            for (RankEntity<Skill> item : options.getSkills()) {
+                Skill skill = item.target;
+                if (skill.isSupported(session)) {
+                    try {
+                        // 挂载
+                        skill.onAttach(session);
+                    } catch (Throwable e) {
+                        LOG.error("Skill active failed: {}", skill.getClass().getName(), e);
+                        throw e;
+                    }
+
+                    //聚合提示词
+                    String skillInstr = skill.getInstruction(session);
+                    if (Assert.isNotEmpty(skillInstr)) {
+                        instruction.append(skillInstr).append("\n");
+                    }
+
+                    //部署工具
+                    options.addTool(item.target.getTools());
+                }
+            }
+
+            //设置指令
+            options.setSkillInstruction(instruction.toString());
+        }
     }
 
     public ReActAgentConfig getConfig() {
@@ -161,8 +191,8 @@ public class ReActTrace implements AgentTrace {
      */
     public int nextStep() {
         int step = stepCounter.incrementAndGet();
-        if (log.isDebugEnabled()) {
-            log.debug("Agent [{}] proceed to step: {}", getAgentName(), step);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Agent [{}] proceed to step: {}", getAgentName(), step);
         }
         return step;
     }
@@ -175,8 +205,8 @@ public class ReActTrace implements AgentTrace {
      * 更新路由状态
      */
     public void setRoute(String route) {
-        if (log.isTraceEnabled()) {
-            log.trace("Agent [{}] route changed: {} -> {}", getAgentName(), this.route, route);
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("Agent [{}] route changed: {} -> {}", getAgentName(), this.route, route);
         }
         this.route = route;
     }
@@ -255,8 +285,8 @@ public class ReActTrace implements AgentTrace {
         if (newMessages == null) {
             throw new IllegalArgumentException("messages cannot be null");
         }
-        if (log.isDebugEnabled()) {
-            log.debug("Agent [{}] messages replaced, size: {} -> {}", getAgentName(), messages.size(), newMessages.size());
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Agent [{}] messages replaced, size: {} -> {}", getAgentName(), messages.size(), newMessages.size());
         }
         this.messages.clear();
         this.messages.addAll(newMessages);
@@ -334,8 +364,8 @@ public class ReActTrace implements AgentTrace {
                         .forEach(this.plans::add);
             }
 
-            if (log.isDebugEnabled()) {
-                log.debug("Agent [{}] plans updated, total steps: {}", getAgentName(), plans.size());
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Agent [{}] plans updated, total steps: {}", getAgentName(), plans.size());
             }
         }
     }

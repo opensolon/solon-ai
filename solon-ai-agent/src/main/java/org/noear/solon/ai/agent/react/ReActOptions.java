@@ -43,6 +43,8 @@ public class ReActOptions implements NonSerializable {
     /** 工具调用上下文（透传给 FunctionTool） */
     private final Map<String, Object> toolsContext = new LinkedHashMap<>();
     private final List<RankEntity<Skill>> skills = new ArrayList<>();
+    private String skillInstruction;
+
     /** 生命周期拦截器（监控 Thought, Action, Observation） */
     private final List<RankEntity<ReActInterceptor>> interceptors = new ArrayList<>();
     /** 最大推理步数（防止死循环） */
@@ -127,13 +129,16 @@ public class ReActOptions implements NonSerializable {
     protected void setOutputSchema(String val) { this.outputSchema = val; }
 
 
-    public void addSkill(Skill skill, int index) {
+    protected void addSkill(Skill skill, int index) {
         this.skills.add(new RankEntity<>(skill, index));
         if (skills.size() > 1) {
             Collections.sort(skills);
         }
     }
 
+    protected void setSkillInstruction(String skillInstruction) {
+        this.skillInstruction = skillInstruction;
+    }
 
     /** 添加拦截器并自动重排序 */
     protected void addInterceptor(ReActInterceptor val, int index) {
@@ -161,6 +166,10 @@ public class ReActOptions implements NonSerializable {
 
     public List<RankEntity<Skill>> getSkills() {
         return skills;
+    }
+
+    public String getSkillInstruction() {
+        return skillInstruction;
     }
 
     public List<RankEntity<ReActInterceptor>> getInterceptors() {

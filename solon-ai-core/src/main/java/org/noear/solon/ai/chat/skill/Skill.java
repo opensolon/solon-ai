@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.chat.skill;
 
-import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.lang.Preview;
 
@@ -39,20 +38,20 @@ public interface Skill {
     /**
      * 准入检查：决定该技能在当前环境下是否可用
      */
-    default boolean isSupported(ChatSession session) {
+    default boolean isSupported(Object ctx) {
         return true;
     }
 
     /**
      * 挂载钩子：技能被激活时触发，可用于初始化 Session
      */
-    default void onAttach(ChatSession session) {
+    default void onAttach(Object ctx) {
     }
 
     /**
      * 指令注入：转化并注入到 System Message
      */
-    default String getInstruction(ChatSession session) {
+    default String getInstruction(Object ctx) {
         return null;
     }
 

@@ -121,7 +121,18 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         // D. 业务指令注入
         if (instructionProvider != null) {
             sb.append("## 核心任务指令\n");
-            sb.append(instructionProvider.apply(trace)).append("\n\n");
+
+            // Agent 级指令
+            if (instructionProvider != null) {
+                sb.append(instructionProvider.apply(trace)).append("\n");
+            }
+
+            // Skill 级指令（增加一个子标题，强化感知）
+            if (trace.getOptions().getSkillInstruction() != null) {
+                sb.append("### 补充业务准则\n");
+                sb.append(trace.getOptions().getSkillInstruction()).append("\n");
+            }
+            sb.append("\n");
         }
 
         // E. 少样本引导 (Few-shot)

@@ -20,7 +20,7 @@ public class DynamicGatewaySkill implements Skill {
     }
 
     @Override
-    public String getInstruction(ChatSession session) {
+    public String getInstruction(Object ctx) {
         return "你是一个具备无限扩展能力的 Agent。\n" +
                 "1. 当你发现现有工具无法解决问题时，请先调用 'search_tools' 搜索工具。\n" +
                 "2. 搜索结果会返回工具的详细使用说明（Schema）。\n" +

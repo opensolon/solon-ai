@@ -500,19 +500,21 @@ public abstract class AbsChatTest {
         // 1. 定义一个简单的技能
         Skill timeSkill = new Skill() {
             @Override
-            public boolean isSupported(ChatSession session) {
+            public boolean isSupported(Object ctx) {
                 // 只有 session 中有 "use_time_skill" 属性时才支持
+                ChatSession session = (ChatSession) ctx;
                 return "true".equals(session.attr("use_time_skill"));
             }
 
             @Override
-            public void onAttach(ChatSession session) {
+            public void onAttach(Object ctx) {
                 // 挂载时注入一个标识
+                ChatSession session = (ChatSession) ctx;
                 session.attrSet("skill_attached", "time_v1");
             }
 
             @Override
-            public String getInstruction(ChatSession session) {
+            public String getInstruction(Object ctx) {
                 return "当前时间是 2026-01-19，请基于此日期回答。";
             }
         };
@@ -548,7 +550,7 @@ public abstract class AbsChatTest {
             }
 
             @Override
-            public String getInstruction(ChatSession session) {
+            public String getInstruction(Object ctx) {
                 return "你是一个气象专家。";
             }
         };

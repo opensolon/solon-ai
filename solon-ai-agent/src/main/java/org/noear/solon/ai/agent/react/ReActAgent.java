@@ -164,6 +164,7 @@ public class ReActAgent implements Agent {
 
         trace.prepare(config, options, session, protocol);
 
+
         if (protocol != null) {
             protocol.injectAgentTools(session.getSnapshot(), this, trace::addProtocolTool);
         }
