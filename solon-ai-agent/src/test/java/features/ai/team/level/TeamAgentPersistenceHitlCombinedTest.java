@@ -89,7 +89,7 @@ public class TeamAgentPersistenceHitlCombinedTest {
         context2.put("signed", true);
 
         // 恢复执行
-        projectTeam.call(session2);
+        projectTeam.call(null, session2);
 
         // --- 阶段 3：精准结果提取与最终验证 ---
         TeamTrace trace = projectTeam.getTrace(session2);

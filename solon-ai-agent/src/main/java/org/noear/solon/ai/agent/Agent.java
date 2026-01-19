@@ -28,6 +28,7 @@ import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,21 +74,12 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
     }
 
     /**
-     * 响应式任务执行（继续上次的任务）
-     *
-     * @param session 会话上下文
-     */
-    default AssistantMessage call(AgentSession session) throws Throwable {
-        return call(null, session);
-    }
-
-    /**
      * 指定指令的任务执行（开始新任务）
      *
-     * @param prompt  显式指令
+     * @param prompt  显式指令（如果为 null；则继续之前的话题）
      * @param session 会话上下文
      */
-    AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable;
+    AssistantMessage call(@Nullable Prompt prompt, AgentSession session) throws Throwable;
 
     /**
      * Solon Flow 节点运行实现

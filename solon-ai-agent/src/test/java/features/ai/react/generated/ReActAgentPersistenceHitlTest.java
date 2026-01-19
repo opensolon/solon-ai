@@ -89,7 +89,7 @@ public class ReActAgentPersistenceHitlTest {
         // --- 阶段 C：恢复执行并获取最终结果 ---
         System.out.println("\n--- 阶段 C：继续执行 ---");
         // 继续执行时无需重传 Prompt，Agent 会从 session 的快照中自动寻址
-        String finalResult = agent.call(session2).getContent();
+        String finalResult = agent.call(null, session2).getContent();
 
         System.out.println("最终回复内容: " + finalResult);
 

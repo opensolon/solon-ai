@@ -86,7 +86,7 @@ public class TeamAgentNestedPersistenceTest {
         AgentSession session = InMemoryAgentSession.of(context2);
 
         // 触发调用（不传 Prompt，系统自动从 Trace 恢复）
-        String result = projectTeam.call(session).getContent();
+        String result = projectTeam.call(null, session).getContent();
 
         // --- 验证点 ---
         TeamTrace finalTrace = projectTeam.getTrace(session);

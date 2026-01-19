@@ -98,7 +98,7 @@ public class SimpleAgentTest {
         Assertions.assertTrue(message.getContent().contains("阿飞"), "记忆失败了");
 
 
-        message = agent.call(session);
+        message = agent.call(null, session);
 
         Assertions.assertTrue(Utils.isEmpty(message.getContent()));
     }
