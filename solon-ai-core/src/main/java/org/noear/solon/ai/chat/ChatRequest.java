@@ -20,6 +20,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
@@ -49,7 +50,15 @@ public class ChatRequest implements NonSerializable {
     private final List<RankEntity<ChatInterceptor>> interceptorList;
     private List<ChatMessage> messages;
 
-    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session, boolean stream) {
+    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session0, List<ChatMessage> prompt, boolean stream) {
+        if (session0 == null) {
+            session0 = InMemoryChatSession.builder().build();
+        }
+
+
+        this.session = session0;
+
+
         //收集拦截器
         this.interceptorList = new ArrayList<>();
         interceptorList.addAll(config.getDefaultInterceptors());
@@ -90,11 +99,16 @@ public class ChatRequest implements NonSerializable {
         }
 
 
+
+        if (prompt != null) {
+            this.session.addMessage(prompt);
+        }
+
+
         this.config = config;
         this.configReadonly = new ChatConfigReadonly(config);
         this.dialect = dialect;
         this.options = options;
-        this.session = session;
         this.stream = stream;
         this.messages = Collections.unmodifiableList(session.getMessages());
     }

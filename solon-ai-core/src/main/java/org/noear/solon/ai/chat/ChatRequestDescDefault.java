@@ -20,6 +20,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -56,14 +57,17 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
     private final ChatConfig config;
     private final ChatDialect dialect;
-    private final ChatSession session;
+    private final List<ChatMessage> prompt;
 
+    private ChatSession session;
     private ChatOptions options;
 
-    public ChatRequestDescDefault(ChatConfig config, ChatDialect dialect, ChatSession session) {
+    public ChatRequestDescDefault(ChatConfig config, ChatDialect dialect, ChatSession session, List<ChatMessage> prompt) {
         this.config = config;
         this.dialect = dialect;
         this.session = session;
+        this.prompt = prompt;
+
         this.options = new ChatOptions();
 
         //是否自动高用工具执行
@@ -83,6 +87,11 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         if (Utils.isNotEmpty(config.getDefaultSkills())) {
             this.options.skillAdd(config.getDefaultSkills());
         }
+    }
+
+    public ChatRequestDesc session(ChatSession session) {
+        this.session = session;
+        return this;
     }
 
     /**
@@ -118,7 +127,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     @Override
     public ChatResponse call() throws IOException {
         //构建请求数据
-        ChatRequest req = new ChatRequest(config, dialect, options, session, false);
+        ChatRequest req = new ChatRequest(config, dialect, options, session, prompt, false);
 
         CallChain chain = new CallChain(req.getInterceptorList(), this::doCall);
 
@@ -180,7 +189,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     @Override
     public Publisher<ChatResponse> stream() {
         //构建请求数据
-        ChatRequest req = new ChatRequest(config, dialect, options, session, true);
+        ChatRequest req = new ChatRequest(config, dialect, options, session, prompt,true);
 
         StreamChain chain = new StreamChain(req.getInterceptorList(), this::doStream);
 

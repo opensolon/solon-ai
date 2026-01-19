@@ -31,6 +31,11 @@ import java.util.function.Consumer;
 @Preview("3.1")
 public interface ChatRequestDesc {
     /**
+     * 会话设置
+     */
+    ChatRequestDesc session(ChatSession session);
+
+    /**
      * 选项设置
      *
      * @param options 选项

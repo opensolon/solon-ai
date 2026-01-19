@@ -65,9 +65,19 @@ public class ChatModel implements AiModel {
 
     /**
      * 提示语
+     *
+     * @deprecated 3.8.4 {@link ChatRequestDesc#session(ChatSession)}
      */
-    public ChatRequestDesc prompt(ChatSession prompt) {
-        return new ChatRequestDescDefault(config, dialect, prompt);
+    @Deprecated
+    public ChatRequestDesc prompt(ChatSession session) {
+        return new ChatRequestDescDefault(config, dialect, session, null);
+    }
+
+    /**
+     * 提示语
+     */
+    public ChatRequestDesc prompt(List<ChatMessage> messages) {
+        return new ChatRequestDescDefault(config, dialect, null, messages);
     }
 
     /**
@@ -75,13 +85,6 @@ public class ChatModel implements AiModel {
      */
     public ChatRequestDesc prompt(ChatPrompt prompt) {
         return prompt(prompt.getMessages());
-    }
-
-    /**
-     * 提示语
-     */
-    public ChatRequestDesc prompt(List<ChatMessage> messages) {
-        return prompt(InMemoryChatSession.builder().messages(messages).build());
     }
 
     /**
