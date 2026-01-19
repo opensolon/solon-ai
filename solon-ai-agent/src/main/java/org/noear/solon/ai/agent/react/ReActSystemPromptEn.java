@@ -145,16 +145,16 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
     }
 
     public static class Builder implements ReActSystemPrompt.Builder{
-        private String roleProvider;
+        private String roleDesc;
         private Function<ReActTrace, String> instructionProvider;
 
         public Builder() {
-            this.roleProvider = null;
+            this.roleDesc = null;
             this.instructionProvider = null;
         }
 
         public Builder role(String role) {
-            this.roleProvider = role;
+            this.roleDesc = role;
             return this;
         }
 
@@ -171,9 +171,9 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         public ReActSystemPrompt build() {
             if (log.isDebugEnabled()) {
                 log.debug("Building ReActSystemPromptEn (Custom Role: {}, Custom Instruction: {})",
-                        roleProvider != null, instructionProvider != null);
+                        roleDesc != null, instructionProvider != null);
             }
-            return new ReActSystemPromptEn(roleProvider, instructionProvider);
+            return new ReActSystemPromptEn(roleDesc, instructionProvider);
         }
     }
 }
