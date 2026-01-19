@@ -1,6 +1,5 @@
 package demo.ai.core;
 
-
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.skill.Skill;
@@ -15,17 +14,6 @@ import java.util.stream.Collectors;
 public class DynamicGatewaySkill implements Skill {
     // 隐藏在后台的巨大工具库，不占用初始上下文
     private final Map<String, FunctionTool> lazyLibrary = new HashMap<>();
-
-    public DynamicGatewaySkill() {
-        // 模拟各种专业工具
-//        register(new FunctionTool("order_refund_api", "执行订单退款操作",
-//                "{ \"type\": \"object\", \"properties\": { \"order_id\": { \"type\": \"string\" }, \"reason\": { \"type\": \"string\" } } }",
-//                args -> "退款成功（ID: " + args.get("order_id") + "）"));
-//
-//        register(new FunctionTool("complex_math_solver", "解复杂的微积分方程",
-//                "{ \"type\": \"object\", \"properties\": { \"formula\": { \"type\": \"string\" } } }",
-//                args -> "结果是: 42"));
-    }
 
     private void register(FunctionTool tool) {
         lazyLibrary.put(tool.name(), tool);
