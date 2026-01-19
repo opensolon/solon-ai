@@ -25,7 +25,7 @@ public class ToolSchemaUtilTest2 {
         for (FunctionTool tool : provider.getTools()) {
             System.out.println(tool.outputSchema());
             Assertions.assertEquals(
-                    "{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"用户名\"},\"user_id\":{\"type\":\"integer\",\"description\":\"用户ID\"}},\"required\":[\"user_id\",\"name\"]},\"description\":\"数据列表\"},\"total\":{\"type\":\"integer\",\"description\":\"总数\"}},\"required\":[\"items\",\"total\"]}",
+                    "{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"user_id\":{\"type\":\"integer\",\"description\":\"用户ID\"},\"user_name\":{\"type\":\"string\",\"description\":\"用户名\"}},\"required\":[\"user_id\",\"user_name\"]},\"description\":\"数据列表\"},\"total\":{\"type\":\"integer\",\"description\":\"总数\"}},\"required\":[\"items\",\"total\"]}",
                     tool.outputSchema());
             break;
         }
@@ -52,7 +52,7 @@ public class ToolSchemaUtilTest2 {
         @Param(name = "user_id", description = "用户ID", required = true)
         private Long id;
 
-        @Param(description = "用户名", required = true)
+        @Param(value = "user_name", description = "用户名", required = true)
         private String name;
     }
 }

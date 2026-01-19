@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.eggg.FieldEggg;
+import org.noear.eggg.ParamEggg;
 import org.noear.eggg.TypeEggg;
 import org.noear.snack4.ONode;
 import org.noear.snack4.annotation.ONodeAttrHolder;
@@ -135,16 +136,6 @@ public class ToolSchemaUtil {
     }
 
     /**
-     * 构建参数申明
-     *
-     * @deprecated 3.7 {@link #getParamDesc(AnnotatedElement, TypeEggg)}
-     */
-    @Deprecated
-    public static @Nullable ParamDesc paramOf(AnnotatedElement ae, TypeEggg typeEggg) {
-        return getParamDesc(ae, typeEggg);
-    }
-
-    /**
      * 构建参数申明（支持 @Param 和 @Body 注解）
      */
     public static @Nullable Map<String, ParamDesc> buildInputParams(AnnotatedElement ae, TypeEggg typeEggg) {
@@ -160,7 +151,7 @@ public class ToolSchemaUtil {
                     pd1 = getParamDesc(fg1.getField(), fg1.getTypeEggg());
 
                     if (pd1 == null) {
-                        pd1 = new ParamDesc(fg1.getName(), fg1.getGenericType(), false, "");
+                        pd1 = new ParamDesc(fg1.getAlias(), fg1.getGenericType(), false, "");
                     }
 
                     paramMap.put(pd1.name(), pd1);
