@@ -37,11 +37,15 @@ public interface Skill {
         return this.getClass().getSimpleName();
     }
 
+    default String description(){
+        return null;
+    }
+
     /**
      * 技能元信息
      */
     default SkillMetadata metadata() {
-        return new SkillMetadata(this.name());
+        return new SkillMetadata(this.name(), this.description());
     }
 
     /**
@@ -88,8 +92,8 @@ public interface Skill {
                 // 将所属 Skill 的名字注入工具的 meta
                 tool.metaPut("skill", name());
                 // 如果需要，也可以把 Skill 的描述或其它元数据注入
-                if (Utils.isNotEmpty(metadata().getDescription())) {
-                    tool.metaPut("skill_desc", metadata().getDescription());
+                if (Utils.isNotEmpty(description())) {
+                    tool.metaPut("skill_desc", description());
                 }
             }
         }
