@@ -13,10 +13,16 @@
 ### v3.8.4
 
 * 添加 `solon-ai-core` defaultToolsContextPut 方法
+* 添加 `solon-ai-core` ChatModel Skill（技能）机制支持
+* 添加 `solon-ai-core` ChatSession attrSet, attr 方法（可以在拦截时控制权限）
 * 添加 `solon-ai-agent` NoneProtocol（无协议模式）
+* 添加 `solon-ai-agent` ReActAgent Plan 支持（默认为关闭）。
+* 添加 `solon-ai-agent`  SimpleInterceptor 替代 ChatInterceptor，方便后续扩展
 * 优化 `solon-ai-core` Gemini 方言适配
 * 优化 `solon-ai-agent` A2AProtocol 协议代码
 * 优化 `solon-ai-agent` SwarmProtocol 协议代码
+* 优化 `solon-ai-agent` HierarchicalProtocol 协议代码
+* 优化 `solon-ai-agent` SequentialProtocol 协议代码，添加专属任务（可节省 token）
 * 修复 `solon-ai-core` ToolSchemaUtil `Param` 注解别名没有生效的问题
 * 修复 `solon-ai-agent` ReActAgent 没有拦截器时 ReActAgent 不能传递 toolsContext 的问题
 
