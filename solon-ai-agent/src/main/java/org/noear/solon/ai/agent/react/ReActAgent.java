@@ -19,16 +19,13 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.task.ActionTask;
+import org.noear.solon.ai.agent.react.task.PlanTask;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
-import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.*;
@@ -37,11 +34,8 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Type;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Objects;
-import java.util.function.Consumer;
 
 /**
  * ReAct (Reason + Act) 协同推理智能体
@@ -52,6 +46,7 @@ public class ReActAgent implements Agent {
     public final static String ID_REASON = "reason";
     public final static String ID_REASON_BEF = "reason_bef";
     public final static String ID_REASON_AFT = "reason_aft";
+    public final static String ID_PLAN = "plan";
     public final static String ID_ACTION = "action";
     public final static String ID_ACTION_BEF = "action_bef";
     public final static String ID_ACTION_AFT = "action_aft";
@@ -75,11 +70,15 @@ public class ReActAgent implements Agent {
      */
     protected Graph buildGraph() {
         return Graph.create(config.getTraceKey(), spec -> {
-            spec.addStart(Agent.ID_START).linkAdd(ID_REASON_BEF);
+            if (config.isEnablePlanning()) {
+                spec.addStart(Agent.ID_START).linkAdd(ReActAgent.ID_PLAN);
+                spec.addActivity(new PlanTask(config)).linkAdd(ID_REASON_BEF);
+            } else {
+                spec.addStart(Agent.ID_START).linkAdd(ID_REASON_BEF);
+            }
 
             spec.addActivity(ID_REASON_BEF).title("Pre-Reasoning").linkAdd(ID_REASON);
 
-            // 推理节点：通过 LLM 决定是执行动作（Action）还是给出最终回答（End）
             spec.addExclusive(new ReasonTask(config, this))
                     .linkAdd(ID_REASON_AFT, l -> l.title("route = ACTION").when(ctx ->
                             ID_ACTION.equals(ctx.<ReActTrace>getAs(config.getTraceKey()).getRoute())))
@@ -194,6 +193,9 @@ public class ReActAgent implements Agent {
                 trace.appendMessage(message);
             }
 
+            if (config.isEnablePlanning()) {
+                trace.setPlans(null);
+            }
             context.trace().recordNode(graph, null);
             trace.setPrompt(prompt);
         }
@@ -253,149 +255,7 @@ public class ReActAgent implements Agent {
 
     /// //////////// Builder 模式 ////////////
 
-    public static Builder of(ChatModel chatModel) {
-        return new Builder(chatModel);
-    }
-
-    public static class Builder {
-        private ReActAgentConfig config;
-
-        public Builder(ChatModel chatModel) {
-            this.config = new ReActAgentConfig(chatModel);
-        }
-
-        public Builder then(Consumer<Builder> consumer) {
-            consumer.accept(this);
-            return this;
-        }
-
-        public Builder name(String val) {
-            config.setName(val);
-            return this;
-        }
-
-        public Builder title(String val) {
-            config.setTitle(val);
-            return this;
-        }
-
-        public Builder description(String val) {
-            config.setDescription(val);
-            return this;
-        }
-
-        public Builder profile(AgentProfile profile) {
-            config.setProfile(profile);
-            return this;
-        }
-
-        public Builder profile(Consumer<AgentProfile> profileConsumer) {
-            profileConsumer.accept(config.getProfile());
-            return this;
-        }
-
-        /**
-         * 微调推理图结构
-         */
-        public Builder graphAdjuster(Consumer<GraphSpec> graphBuilder) {
-            config.setGraphAdjuster(graphBuilder);
-            return this;
-        }
-
-        /**
-         * 定义 LLM 输出中的任务结束标识符
-         */
-        public Builder finishMarker(String val) {
-            config.setFinishMarker(val);
-            return this;
-        }
-
-        public Builder systemPrompt(ReActSystemPrompt val) {
-            config.setSystemPrompt(val);
-            return this;
-        }
-
-        public Builder systemPrompt(Consumer<ReActSystemPrompt.Builder> promptBuilder) {
-            ReActSystemPrompt.Builder builder = ReActSystemPrompt.builder();
-            promptBuilder.accept(builder);
-            config.setSystemPrompt(builder.build());
-            return this;
-        }
-
-        public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
-            config.setChatOptions(chatOptions);
-            return this;
-        }
-
-        public Builder toolAdd(FunctionTool tool) {
-            config.addTool(tool);
-            return this;
-        }
-
-        public Builder toolAdd(Collection<FunctionTool> tools) {
-            config.addTool(tools);
-            return this;
-        }
-
-        public Builder toolAdd(ToolProvider toolProvider) {
-            config.addTool(toolProvider);
-            return this;
-        }
-
-        public Builder retryConfig(int maxRetries, long retryDelayMs) {
-            config.getDefaultOptions().setRetryConfig(maxRetries, retryDelayMs);
-            return this;
-        }
-
-        /**
-         * 单次任务允许的最大推理步数（防止死循环）
-         */
-        public Builder maxSteps(int val) {
-            config.getDefaultOptions().setMaxSteps(val);
-            return this;
-        }
-
-        public Builder outputKey(String val) {
-            config.setOutputKey(val);
-            return this;
-        }
-
-        public Builder outputSchema(String val) {
-            config.setOutputSchema(val);
-            return this;
-        }
-
-        public Builder outputSchema(Type type) {
-            config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
-            return this;
-        }
-
-        public Builder sessionWindowSize(int val) {
-            config.getDefaultOptions().setSessionWindowSize(val);
-            return this;
-        }
-
-        public Builder defaultToolsContextPut(String key, Object value) {
-            config.getDefaultOptions().putToolsContext(key, value);
-            return this;
-        }
-
-        public Builder defaultToolsContextPut(Map<String, Object> objectsMap) {
-            config.getDefaultOptions().putToolsContext(objectsMap);
-            return this;
-        }
-
-        public Builder defaultInterceptorAdd(ReActInterceptor... vals) {
-            for (ReActInterceptor val : vals) config.getDefaultOptions().addInterceptor(val, 0);
-            return this;
-        }
-
-        public ReActAgent build() {
-            if (config.getName() == null) config.setName("react_agent");
-            if (config.getDescription() == null) {
-                config.setDescription(config.getTitle() != null ? config.getTitle() : config.getName());
-            }
-            return new ReActAgent(config);
-        }
+    public static ReActAgentBuilder of(ChatModel chatModel) {
+        return new ReActAgentBuilder(chatModel);
     }
 }

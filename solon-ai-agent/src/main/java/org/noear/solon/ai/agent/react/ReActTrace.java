@@ -73,6 +73,9 @@ public class ReActTrace implements AgentTrace {
     private volatile String lastResult;
     /** 度量指标 */
     private final ReActMetrics metrics = new ReActMetrics();
+    /** 计划 */
+    private final List<String> plans = new CopyOnWriteArrayList<>();
+
 
     public ReActTrace() {
         this.route = ReActAgent.ID_REASON;
@@ -296,5 +299,64 @@ public class ReActTrace implements AgentTrace {
      */
     public int getToolCallCount() {
         return toolCounter.get();
+    }
+
+    //------------------
+
+    /**
+     * 获取当前执行计划
+     */
+    public List<String> getPlans() {
+        return Collections.unmodifiableList(plans);
+    }
+
+    /**
+     * 判断是否存在计划
+     */
+    public boolean hasPlans() {
+        return !plans.isEmpty();
+    }
+
+    /**
+     * 设置或重置计划
+     * @param newPlans 计划列表
+     */
+    public void setPlans(Collection<String> newPlans) {
+        this.plans.clear();
+        if (Assert.isNotEmpty(newPlans)) {
+            // 过滤空行并修剪
+            newPlans.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .forEach(this.plans::add);
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Agent [{}] plans updated, total steps: {}", getAgentName(), plans.size());
+        }
+    }
+
+    /**
+     * 添加单条计划步骤
+     */
+    public void addPlan(String step) {
+        if (Assert.isNotEmpty(step)) {
+            plans.add(step.trim());
+        }
+    }
+
+    /**
+     * 获取格式化的计划文本 (用于注入 System Prompt)
+     */
+    public String getFormattedPlans() {
+        if (plans.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < plans.size(); i++) {
+            sb.append(i + 1).append(". ").append(plans.get(i)).append("\n");
+        }
+        return sb.toString();
     }
 }

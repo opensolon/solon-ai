@@ -1,0 +1,88 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.noear.solon.ai.agent.react.task;
+
+import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActAgentConfig;
+import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.NamedTaskComponent;
+import org.noear.solon.flow.Node;
+import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Locale;
+import java.util.stream.Collectors;
+
+/**
+ * ReAct 规划任务节点
+ * <p>在正式推理开始前，引导模型将复杂目标拆解为结构化的执行计划（Plans）。</p>
+ *
+ * @author noear
+ * @since 3.8.1
+ */
+@Preview("3.8.1")
+public class PlanTask implements NamedTaskComponent {
+    private static final Logger LOG = LoggerFactory.getLogger(PlanTask.class);
+
+    private final ReActAgentConfig config;
+
+    public PlanTask(ReActAgentConfig config) { this.config = config; }
+
+    @Override
+    public String name() { return ReActAgent.ID_PLAN; }
+
+    @Override
+    public void run(FlowContext context, Node node) throws Throwable {
+        String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
+        ReActTrace trace = context.getAs(traceKey);
+
+        // 1. 根据配置的语言环境确定“目标”标签
+        boolean isZh = Locale.CHINA.getLanguage().equals(trace.getConfig().getLocale().getLanguage());
+        String targetLabel = isZh ? "目标：" : "Target: ";
+
+        // 2. 构建规划请求
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.ofSystem(config.getPlanInstruction(trace)));
+        // 动态拼接引导词
+        messages.add(ChatMessage.ofUser(targetLabel + trace.getPrompt().getUserContent()));
+
+        // 3. 调用模型生成计划
+        ChatResponse response = config.getChatModel()
+                .prompt(messages)
+                .call();
+
+        String planContent = response.getResultContent();
+
+        // 4. 清洗计划内容（移除数字序号和 Markdown 符号）
+        List<String> cleanedPlans = Arrays.stream(planContent.split("\n"))
+                .map(line -> line.replaceAll("^[\\d\\.\\-\\s*]+", "").trim())
+                .filter(line -> !line.isEmpty())
+                .collect(Collectors.toList());
+
+        trace.setPlans(cleanedPlans);
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("ReActAgent [{}] Plan generated: \n{}", config.getName(), planContent);
+        }
+    }
+}

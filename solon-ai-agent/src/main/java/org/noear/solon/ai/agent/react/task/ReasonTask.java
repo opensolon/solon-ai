@@ -82,6 +82,11 @@ public class ReasonTask implements NamedTaskComponent {
         // [逻辑 2: 系统提示词构建] 融合业务角色、ReAct协议与输出格式约束
         String systemPrompt = config.getSystemPromptFor(trace, context);
 
+        if (config.isEnablePlanning() && trace.getPlans() != null) {
+            systemPrompt += "\n\n[执行计划]\n" + String.join("\n", trace.getPlans()) +
+                    "\n请参考以上计划执行，当前已进行到第 " + (trace.getStepCount() + 1) + " 轮推理。";
+        }
+
         if (Assert.isNotEmpty(trace.getConfig().getOutputSchema())) {
             systemPrompt += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
                     "Please provide the Final Answer strictly following this schema:\n" +
