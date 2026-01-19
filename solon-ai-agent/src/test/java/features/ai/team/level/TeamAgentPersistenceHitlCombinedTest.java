@@ -8,7 +8,6 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
-import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -32,10 +31,9 @@ public class TeamAgentPersistenceHitlCombinedTest {
         // 1. 构建团队
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name(teamName)
-                .systemPrompt(TeamSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是一个财务合规主管。")
-                        .instruction(trace -> "规则：Worker 提交后流程挂起；收到 signed 信号后指派 Approver。任务结束时请复述 Approver 的结论。")
-                        .build())
+                        .instruction(trace -> "规则：Worker 提交后流程挂起；收到 signed 信号后指派 Approver。任务结束时请复述 Approver 的结论。"))
                 .agentAdd(new Agent() {
                     @Override public String name() { return "Worker"; }
                     @Override public String description() { return "处理业务逻辑"; }

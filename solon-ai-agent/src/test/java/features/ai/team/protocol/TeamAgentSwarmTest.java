@@ -8,7 +8,6 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
@@ -68,9 +67,9 @@ public class TeamAgentSwarmTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         Agent lead = ReActAgent.of(chatModel).name("Lead").description("拆解者")
-                .systemPrompt(ReActSystemPrompt.builder().instruction(
+                .systemPrompt(p->p.instruction(
                                 "分析输入并在末尾输出 JSON：{\"sub_tasks\": [{\"task\": \"work\", \"agent\": \"Worker\"}]}" + SHORT)
-                        .build()).build();
+                        ).build();
 
         Agent worker = ReActAgent.of(chatModel).name("Worker").description("执行者").build();
 
@@ -95,9 +94,9 @@ public class TeamAgentSwarmTest {
 
         // A 和 B 互相踢皮球
         Agent a = ReActAgent.of(chatModel).name("AgentA").description("踢给 B")
-                .systemPrompt(ReActSystemPrompt.builder().instruction("遇到任务必须 transfer_to AgentB" + SHORT).build()).build();
+                .systemPrompt(p->p.instruction("遇到任务必须 transfer_to AgentB" + SHORT)).build();
         Agent b = ReActAgent.of(chatModel).name("AgentB").description("踢给 A")
-                .systemPrompt(ReActSystemPrompt.builder().instruction("遇到任务必须 transfer_to AgentA" + SHORT).build()).build();
+                .systemPrompt(p->p.instruction("遇到任务必须 transfer_to AgentA" + SHORT)).build();
         // Cleaner 作为低频率补位者
         Agent cleaner = SimpleAgent.of(chatModel)
                 .name("Cleaner")

@@ -10,7 +10,6 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -75,20 +74,20 @@ public class TeamAgentSupervisorTest {
 
         // 开发者：第一次故意犯错（写 secret），审计后改正
         Agent coder = ReActAgent.of(chatModel).name("Coder").description("写代码")
-                .systemPrompt(ReActSystemPromptCn.builder()
-                        .instruction("写一个登录函数。初次编写请硬编码 'key=123'；若被审计打回，则改为从 env 读取。" + LIMIT)
-                        .build()).build();
+                .systemPrompt(p -> p
+                        .instruction("写一个登录函数。初次编写请硬编码 'key=123'；若被审计打回，则改为从 env 读取。" + LIMIT))
+                .build();
 
         // 审计员：发现硬编码就打回
         Agent reviewer = ReActAgent.of(chatModel).name("Reviewer").description("审计代码")
-                .systemPrompt(ReActSystemPromptCn.builder()
-                        .instruction("检查硬编码。发现 '123' 则输出 'REJECT'；否则输出 'PASS'。" + LIMIT)
-                        .build()).build();
+                .systemPrompt(p -> p
+                        .instruction("检查硬编码。发现 '123' 则输出 'REJECT'；否则输出 'PASS'。" + LIMIT))
+                .build();
 
         TeamAgent team = TeamAgent.of(chatModel).name("DevTeam").agentAdd(coder, reviewer).maxTurns(10)
-                .systemPrompt(TeamSystemPrompt.builder()
+                .systemPrompt(p -> p
                         .instruction("流程：Coder -> Reviewer。若 Reviewer 返回 REJECT，必须再次指派 Coder 重写。")
-                        .build()).build();
+                ).build();
 
         AgentSession session = InMemoryAgentSession.of("s3");
         String result = team.call(Prompt.of("实现安全登录"), session).getContent();

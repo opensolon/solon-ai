@@ -8,7 +8,6 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
-import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -44,13 +43,12 @@ public class TeamAgentNestedHitlTest {
         // 2. 构建父团队：注入 SystemPrompt 确保结果收敛
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name(parentTeamId)
-                .systemPrompt(TeamSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是一个严谨的研发主管。")
                         .instruction(trace ->
                                 "协作规则：\n" +
                                         "1. dev_team 提交后，必须指派 Reviewer 审核。\n" +
-                                        "2. 当任务完成时，请务必汇总 Reviewer 的最终评价作为回复内容。")
-                        .build())
+                                        "2. 当任务完成时，请务必汇总 Reviewer 的最终评价作为回复内容。"))
                 .agentAdd(devTeam)
                 .agentAdd(new Agent() {
                     @Override public String name() { return "Reviewer"; }

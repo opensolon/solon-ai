@@ -20,10 +20,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
-import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.chat.ChatModel;
@@ -50,20 +48,18 @@ public class TeamAgentTransferTest {
         ReActAgent translator = ReActAgent.of(chatModel)
                 .name("translator")
                 .description("专业翻译官")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是一个专业翻译专家")
-                        .instruction("将输入的中文翻译为英文，直接给出译文。")
-                        .build())
+                        .instruction("将输入的中文翻译为英文，直接给出译文。"))
                 .outputKey("translate_result") // 自动存入 session
                 .build();
 
         ReActAgent polisher = ReActAgent.of(chatModel)
                 .name("polisher")
                 .description("润色专家")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是一个英文润色润色大师")
-                        .instruction("对上一步 translator 产出的译文进行学术化处理。")
-                        .build())
+                        .instruction("对上一步 translator 产出的译文进行学术化处理。"))
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
@@ -97,18 +93,17 @@ public class TeamAgentTransferTest {
         ReActAgent translator = ReActAgent.of(chatModel)
                 .name("translator")
                 .outputKey("translate_result")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("翻译官")
-                        .instruction("直接输出译文，不要任何前缀解释。").build())
+                        .instruction("直接输出译文，不要任何前缀解释。"))
                 .build();
 
         ReActAgent polisher = ReActAgent.of(chatModel)
                 .name("polisher")
                 // 核心：框架自动解析 #{translate_result} 并替换为 Session 中的值
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("润色专家")
-                        .instruction("请对这段译文进行优化：#{translate_result}")
-                        .build())
+                        .instruction("请对这段译文进行优化：#{translate_result}"))
                 .outputKey("final_result")
                 .build();
 

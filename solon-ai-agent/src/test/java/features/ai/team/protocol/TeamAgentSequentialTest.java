@@ -34,15 +34,15 @@ public class TeamAgentSequentialTest {
 
         // 步骤 1：格式化 JSON
         SimpleAgent a1 = SimpleAgent.of(chatModel).name("step1")
-                .systemPrompt(SimpleSystemPrompt.builder().instruction("将输入转为 JSON {val:x}。" + SHORT).build()).build();
+                .systemPrompt(p->p.instruction("将输入转为 JSON {val:x}。" + SHORT)).build();
         // 步骤 2：加后缀
         SimpleAgent a2 = SimpleAgent.of(chatModel).name("step2")
-                .systemPrompt(SimpleSystemPrompt.builder().instruction("在 JSON 后加备注 '+MOD'。" + SHORT).build()).build();
+                .systemPrompt(p->p.instruction("在 JSON 后加备注 '+MOD'。" + SHORT)).build();
         // 步骤 3：转大写
         SimpleAgent a3 = SimpleAgent.of(chatModel).name("step3")
-                .systemPrompt(SimpleSystemPrompt.builder()
-                        .instruction("参考协作进度中 [step2] 的输出，将其全文转为大写。严禁只处理用户的原始输入。")
-                        .build()).build();
+                .systemPrompt(p->p
+                        .instruction("参考协作进度中 [step2] 的输出，将其全文转为大写。严禁只处理用户的原始输入。") )
+                .build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.SEQUENTIAL).agentAdd(a1, a2, a3).build();
         AgentSession session = InMemoryAgentSession.of("s1");
@@ -69,8 +69,8 @@ public class TeamAgentSequentialTest {
     @Test
     public void testSequentialRigidity() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-        SimpleAgent a = SimpleAgent.of(chatModel).name("A").systemPrompt(SimpleSystemPrompt.builder().instruction("输出 'A'。").build()).build();
-        SimpleAgent b = SimpleAgent.of(chatModel).name("B").systemPrompt(SimpleSystemPrompt.builder().instruction("输出 'B'。").build()).build();
+        SimpleAgent a = SimpleAgent.of(chatModel).name("A").systemPrompt(p->p.instruction("输出 'A'。")).build();
+        SimpleAgent b = SimpleAgent.of(chatModel).name("B").systemPrompt(p->p.instruction("输出 'B'。")).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.SEQUENTIAL).agentAdd(a, b).build();
         AgentSession session = InMemoryAgentSession.of("s2");
@@ -87,10 +87,10 @@ public class TeamAgentSequentialTest {
     @Test
     public void testSequentialDataPenetration() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-        SimpleAgent a1 = SimpleAgent.of(chatModel).name("Analyzer").systemPrompt(SimpleSystemPrompt.builder().instruction("提取版本号。").build()).build();
-        SimpleAgent a2 = SimpleAgent.of(chatModel).name("Writer").systemPrompt(SimpleSystemPrompt.builder().instruction("写摘要。").build()).build();
-        SimpleAgent a3 = SimpleAgent.of(chatModel).name("Translator").systemPrompt(SimpleSystemPrompt.builder().instruction("翻成英文。").build()).build();
-        SimpleAgent a4 = SimpleAgent.of(chatModel).name("Formatter").systemPrompt(SimpleSystemPrompt.builder().instruction("输出 HTML <div>。").build()).build();
+        SimpleAgent a1 = SimpleAgent.of(chatModel).name("Analyzer").systemPrompt(p->p.instruction("提取版本号。")).build();
+        SimpleAgent a2 = SimpleAgent.of(chatModel).name("Writer").systemPrompt(p->p.instruction("写摘要。")).build();
+        SimpleAgent a3 = SimpleAgent.of(chatModel).name("Translator").systemPrompt(p->p.instruction("翻成英文。")).build();
+        SimpleAgent a4 = SimpleAgent.of(chatModel).name("Formatter").systemPrompt(p->p.instruction("输出 HTML <div>。")).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.SEQUENTIAL).agentAdd(a1, a2, a3, a4).build();
         String res = team.call(Prompt.of("Update version 2.0.1"), InMemoryAgentSession.of("s3")).getContent();
@@ -105,7 +105,7 @@ public class TeamAgentSequentialTest {
     public void testSequentialContextInjection() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
         SimpleAgent calculator = SimpleAgent.of(chatModel).name("Calc")
-                .systemPrompt(SimpleSystemPrompt.builder().instruction("识别金额，乘以变量 #{RATE} 并输出数字。").build()).build();
+                .systemPrompt(p->p.instruction("识别金额，乘以变量 #{RATE} 并输出数字。")).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.SEQUENTIAL).agentAdd(calculator).build();
         AgentSession session = InMemoryAgentSession.of("s5");

@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -31,26 +30,24 @@ public class TeamAgentParallelAgentTest {
         Agent enTranslator = ReActAgent.of(chatModel)
                 .name("en_translator")
                 .description("负责中英高保真翻译")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是一个资深的中英同声传译专家")
                         .instruction("### 任务要求\n" +
                                 "1. 将输入内容翻译为地道的英语。\n" +
                                 "2. **禁止**输出任何解释、引导词或标点说明。\n" +
-                                "3. **直接**返回译文文本。")
-                        .build())
+                                "3. **直接**返回译文文本。"))
                 .build();
 
         // 法语翻译专家：引入语境深度
         Agent frTranslator = ReActAgent.of(chatModel)
                 .name("fr_translator")
                 .description("负责中法地道表达翻译")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是一个精通法语文化的翻译专家")
                         .instruction("### 任务要求\n" +
                                 "1. 将输入内容翻译为准确的法语。\n" +
                                 "2. 确保用词符合当地表达习惯。\n" +
-                                "3. **仅**输出翻译结果，不要回复除译文外的任何内容。")
-                        .build())
+                                "3. **仅**输出翻译结果，不要回复除译文外的任何内容。"))
                 .build();
 
         // ============== 2. 自定义 Team 图结构 (逻辑不变) ==============

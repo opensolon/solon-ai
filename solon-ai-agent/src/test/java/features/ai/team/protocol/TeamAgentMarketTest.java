@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
@@ -99,9 +98,9 @@ public class TeamAgentMarketTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         Agent designer = ReActAgent.of(chatModel).name("designer").description("UI 设计师")
-                .systemPrompt(ReActSystemPrompt.builder().instruction("描述登录框设计。"+SHORT_LIMIT).build()).build();
+                .systemPrompt(p->p.instruction("描述登录框设计。"+SHORT_LIMIT)).build();
         Agent coder = ReActAgent.of(chatModel).name("coder").description("前端开发员")
-                .systemPrompt(ReActSystemPrompt.builder().instruction("根据设计出 HTML。"+SHORT_LIMIT).build()).build();
+                .systemPrompt(p->p.instruction("根据设计出 HTML。"+SHORT_LIMIT)).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.MARKET_BASED).agentAdd(designer, coder).maxTurns(5).build();
         AgentSession s = InMemoryAgentSession.of("m4");

@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -48,22 +47,20 @@ public class TeamAgentMultiTurnTest {
         Agent searcher = ReActAgent.of(chatModel)
                 .name("searcher")
                 .description("旅游百科搜素员")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是一个专业的目的地常识专家")
-                        .instruction("只需提供目的地的核心特色、人文地理等基础信息。不要发散，直接给出结构化文本。")
-                        .build())
+                        .instruction("只需提供目的地的核心特色、人文地理等基础信息。不要发散，直接给出结构化文本。"))
                 .defaultInterceptorAdd(new SummarizationInterceptor())
                 .build();
 
         Agent planner = ReActAgent.of(chatModel)
                 .name("planner")
                 .description("私人行程规划师")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你负责制定具体的旅行方案")
                         .instruction("### 核心准则\n" +
                                 "1. 必须优先检索历史记录中的目的地信息。\n" +
-                                "2. 严格遵循用户在当前轮次提出的预算、偏好等新约束。")
-                        .build())
+                                "2. 严格遵循用户在当前轮次提出的预算、偏好等新约束。"))
                 .defaultInterceptorAdd(new SummarizationInterceptor())
                 .build();
 

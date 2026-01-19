@@ -17,7 +17,6 @@ package demo.ai.agent;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.intercept.LoopingTeamInterceptor;
@@ -46,62 +45,57 @@ public class EcommerceOrderRiskSystemTest {
         ReActAgent orderReceiver = ReActAgent.of(chatModel)
                 .name("order_receiver")
                 .description("负责订单信息的结构化提取与初步分拣")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是一个严谨的电商订单分检员")
                         .instruction("### 核心任务\n" +
                                 "1. 提取订单核心参数：金额、地址、支付方式。\n" +
-                                "2. 判断是否触发风险初筛：单笔金额 > 5000 或 配送地址异常，请标记为 `high_risk`。")
-                        .build())
+                                "2. 判断是否触发风险初筛：单笔金额 > 5000 或 配送地址异常，请标记为 `high_risk`。"))
                 .build();
 
         // 风控分析师：深度行为建模专家
         ReActAgent riskAnalyst = ReActAgent.of(chatModel)
                 .name("risk_analyst")
                 .description("资深风险控制分析师")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是首席风险分析官，擅长识别潜在的资损风险")
                         .instruction("### 分析维度\n" +
                                 "1. **客户生命周期**：新客首单且金额巨大是核心红色信号。\n" +
                                 "2. **地域风险**：核对收货地址是否在已知的物流黑名单区域。\n" +
-                                "3. **评分机制**：请给出一个 0-100 的风险评分（risk_score）。")
-                        .build())
+                                "3. **评分机制**：请给出一个 0-100 的风险评分（risk_score）。"))
                 .build();
 
         // 客户验证专员：身份真实性核查
         ReActAgent customerValidator = ReActAgent.of(chatModel)
                 .name("customer_validator")
                 .description("身份验证与行为分析专家")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你负责验证用户身份的真实性与一致性")
                         .instruction("### 验证规则\n" +
                                 "1. 检查实名认证状态。\n" +
                                 "2. 对比收货地址与注册地址的偏移度。\n" +
-                                "3. 如果是代收货人，需提高警惕级别。")
-                        .build())
+                                "3. 如果是代收货人，需提高警惕级别。"))
                 .build();
 
         // 物流评估员：成本与履约分析
         ReActAgent logisticsEvaluator = ReActAgent.of(chatModel)
                 .name("logistics_evaluator")
                 .description("配送成本与高价值商品物流评估员")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你负责评估配送链路的安全与成本")
                         .instruction("### 评估重点\n" +
                                 "1. **商品价值**：针对 3C 电子等高价易损品建议使用顺丰加保。\n" +
-                                "2. **配送时效**：对于反常的加急需求，需警惕这是否是为了在发现欺诈前完成收货。")
-                        .build())
+                                "2. **配送时效**：对于反常的加急需求，需警惕这是否是为了在发现欺诈前完成收货。"))
                 .build();
 
         // 财务审核员：资金安全与反洗钱
         ReActAgent financialAuditor = ReActAgent.of(chatModel)
                 .name("financial_auditor")
                 .description("财务反欺诈与支付审计专家")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是财务合规专家，专注于支付链路安全")
                         .instruction("### 审计任务\n" +
                                 "1. **支付模式**：检测是否存在多张信用卡拆分支付（常见洗钱或盗刷手法）。\n" +
-                                "2. **退款记录**：分析历史退货率，警惕恶意套利。")
-                        .build())
+                                "2. **退款记录**：分析历史退货率，警惕恶意套利。"))
                 .build();
 
         // ============== 2. 构建最终决策委员会 (Nested Team) ==============
@@ -114,29 +108,26 @@ public class EcommerceOrderRiskSystemTest {
                 .agentAdd(
                         ReActAgent.of(chatModel)
                                 .name("senior_risk_manager")
-                                .systemPrompt(ReActSystemPrompt.builder()
+                                .systemPrompt(p->p
                                         .role("你是风险评审主席，拥有最高裁决权")
                                         .instruction("### 裁决准则\n" +
                                                 "综合财务、物流、风控三方意见，输出最终状态：\n" +
-                                                "- APPROVE (批准), REJECT (拒绝), HOLD (人工介入手动审核), REQUIRE_VERIFICATION (补充验证)。")
-                                        .build())
+                                                "- APPROVE (批准), REJECT (拒绝), HOLD (人工介入手动审核), REQUIRE_VERIFICATION (补充验证)。"))
                                 .build(),
                         ReActAgent.of(chatModel)
                                 .name("compliance_officer")
-                                .systemPrompt(ReActSystemPrompt.builder()
+                                .systemPrompt(p->p
                                         .role("你负责合规性否决权")
-                                        .instruction("确保决策不违反反洗钱法和数据隐私保护法。")
-                                        .build())
+                                        .instruction("确保决策不违反反洗钱法和数据隐私保护法。"))
                                 .build()
                 ).build();
 
         // 通知与日志执行员
         ReActAgent notificationExecutor = ReActAgent.of(chatModel)
                 .name("notification_executor")
-                .systemPrompt(ReActSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("负责业务流程收尾工作")
-                        .instruction("记录评审摘要，并生成发送给用户的决策通知文案。")
-                        .build())
+                        .instruction("记录评审摘要，并生成发送给用户的决策通知文案。"))
                 .build();
 
         // ============== 3. 构建评审系统主流程 (Workflow Graph) ==============

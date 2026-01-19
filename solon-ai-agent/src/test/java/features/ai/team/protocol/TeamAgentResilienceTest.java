@@ -45,7 +45,8 @@ public class TeamAgentResilienceTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.MARKET_BASED)
                 .agentAdd(ReActAgent.of(chatModel).name("JavaEx").description("处理 Java 后端代码").build())
-                .agentAdd(ReActAgent.of(chatModel).name("PyEx").description("处理 Python 脚本").build()).build();
+                .agentAdd(ReActAgent.of(chatModel).name("PyEx").description("处理 Python 脚本").build())
+                .build();
 
         AgentSession s = InMemoryAgentSession.of("s2");
         // 核心是 Java，Python 是顺便。验证 Market 是否能选出 JavaEx
@@ -60,8 +61,12 @@ public class TeamAgentResilienceTest {
     public void testMarketWithNoMatchingExpert() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.MARKET_BASED)
-                .agentAdd(ReActAgent.of(chatModel).name("Coder").description("只懂代码")
-                        .systemPrompt(ReActSystemPrompt.builder().instruction("非技术请求回复'NO'。" + SHORT).build()).build()).build();
+                .agentAdd(ReActAgent.of(chatModel)
+                        .name("Coder")
+                        .description("只懂代码")
+                        .systemPrompt(p -> p.instruction("非技术请求回复'NO'。" + SHORT))
+                        .build())
+                .build();
 
         String res = team.call(Prompt.of("怎么做烤鸭？"), InMemoryAgentSession.of("s3")).getContent();
         Assertions.assertTrue(res.contains("NO") || res.contains("专业"), "当无匹配专家时，应触发优雅拒绝而非胡编乱造");
@@ -76,10 +81,10 @@ public class TeamAgentResilienceTest {
         TeamAgent subTeam = TeamAgent.of(chatModel).name("SubTeam").protocol(TeamProtocols.SEQUENTIAL)
                 .agentAdd(ReActAgent.of(chatModel).name("Dev").description("写代码").build())
                 .agentAdd(ReActAgent.of(chatModel).name("Tester").description("负责输出测试结果")
-                        .systemPrompt(ReActSystemPrompt.builder()
-                                .instruction("你只需输出：'测试结论: PASS'。不要输出其他解释。")
-                                .build())
-                        .build()).build();
+                        .systemPrompt(p -> p
+                                .instruction("你只需输出：'测试结论: PASS'。不要输出其他解释。"))
+                        .build()
+                ).build();
 
         // 主团队：主管模式
         TeamAgent mainTeam = TeamAgent.of(chatModel).name("MainTeam")
@@ -137,7 +142,8 @@ public class TeamAgentResilienceTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.MARKET_BASED)
                 .agentAdd(ReActAgent.of(chatModel).name("Cheap").description("处理简单总结").build())
-                .agentAdd(ReActAgent.of(chatModel).name("Heavy").description("处理深度审计").build()).build();
+                .agentAdd(ReActAgent.of(chatModel).name("Heavy").description("处理深度审计").build())
+                .build();
 
         AgentSession s1 = InMemoryAgentSession.of("m1");
         team.call(Prompt.of("总结这句话"), s1);

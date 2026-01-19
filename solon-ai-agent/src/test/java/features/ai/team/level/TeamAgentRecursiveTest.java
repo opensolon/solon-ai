@@ -7,7 +7,6 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.TeamSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -46,7 +45,7 @@ public class TeamAgentRecursiveTest {
         // 2. 顶层团队：项目管理组 (project_team)
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name("project_team")
-                .systemPrompt(TeamSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是一个严谨的项目主管。")
                         .instruction("1. 先指派 Analyst 进行分析；" +
                                      "2. 拿到分析结果后指派 dev_team 执行；" +
@@ -103,7 +102,7 @@ public class TeamAgentRecursiveTest {
         // 3. 带有审核逻辑的顶层团队
         TeamAgent projectTeam = TeamAgent.of(chatModel).name("quality_project")
                 .description("带质检的项目组。如果结果不满意，Reviewer 会要求重写。")
-                .systemPrompt(TeamSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role("你是一个严谨的代码项目主管。")
                         .instruction(trace ->
                                 "## 协作红线：\n" +
