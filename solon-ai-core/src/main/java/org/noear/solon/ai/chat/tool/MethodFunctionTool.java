@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.eggg.MethodEggg;
 import org.noear.eggg.ParamEggg;
+import org.noear.snack4.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -78,6 +79,11 @@ public class MethodFunctionTool implements FunctionTool {
         this.description = mapping.description();
         this.returnDirect = mapping.returnDirect();
         this.params = new LinkedHashMap<>();
+
+        if(Assert.isNotEmpty(mapping.meta())) {
+            Map<String, Object> tmp = ONode.deserialize(mapping.meta(), Map.class);
+            meta.putAll(tmp);
+        }
 
         if (mapping.resultConverter() == ToolCallResultConverter.class
                 || mapping.resultConverter() == ToolCallResultConverterDefault.class) {

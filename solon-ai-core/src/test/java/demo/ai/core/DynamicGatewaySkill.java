@@ -1,11 +1,14 @@
 package demo.ai.core;
 
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.skill.SkillMetadata;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.annotation.Param;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -15,8 +18,31 @@ public class DynamicGatewaySkill implements Skill {
     // 隐藏在后台的巨大工具库，不占用初始上下文
     private final Map<String, FunctionTool> lazyLibrary = new HashMap<>();
 
+    private ToolProvider toolProvider = new MethodToolProvider(this);
+    private SkillMetadata metadata = new SkillMetadata("dynamic_gateway", "动态工具网关");
+
     private void register(FunctionTool tool) {
         lazyLibrary.put(tool.name(), tool);
+    }
+
+    @Override
+    public String name() {
+        return metadata.getName();
+    }
+
+    @Override
+    public String description() {
+        return metadata.getDescription();
+    }
+
+    @Override
+    public SkillMetadata metadata() {
+        return metadata;
+    }
+
+    @Override
+    public Collection<FunctionTool> getTools() {
+        return toolProvider.getTools();
     }
 
     @Override
@@ -27,7 +53,7 @@ public class DynamicGatewaySkill implements Skill {
                 "3. 请根据返回的 Schema，使用 'call_tool' 发起真正的请求。";
     }
 
-    @ToolMapping(name = "search_tools", description = "根据关键词搜索潜在的工具能力，返回工具详情和 Schema")
+    @ToolMapping(name = "search_tools", description = "搜索工具库。当你不知道如何操作时，请务必先搜一下。")
     public String searchTools(@Param("keywords") String keywords) {
         // 模拟模糊搜索
         List<FunctionTool> results = lazyLibrary.values().stream()
