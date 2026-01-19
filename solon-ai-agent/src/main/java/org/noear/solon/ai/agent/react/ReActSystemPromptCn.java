@@ -68,12 +68,12 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         sb.append(instruction);
 
         // 3. 工具集动态注入
-        if (trace.getConfig().getTools().isEmpty()) {
+        if (trace.getOptions().getTools().isEmpty()) {
             sb.append("\n注意：当前没有可用工具。请直接给出 Final Answer。\n");
         } else {
             sb.append("\n## 可用工具\n");
             sb.append("你也可以通过模型内置的函数调用工具（Function Calling）使用以下工具：\n");
-            trace.getConfig().getTools().forEach(t -> {
+            trace.getOptions().getTools().forEach(t -> {
                 sb.append("- ").append(t.name()).append(": ").append(t.description());
                 // 必须告知模型参数 Schema 以便生成正确的 JSON
                 if (Assert.isNotEmpty(t.inputSchema())) {

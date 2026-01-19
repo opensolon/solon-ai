@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
@@ -108,17 +109,27 @@ public class ReActAgentBuilder {
     }
 
     public ReActAgentBuilder toolAdd(FunctionTool tool) {
-        config.addTool(tool);
+        config.getDefaultOptions().addTool(tool);
         return this;
     }
 
     public ReActAgentBuilder toolAdd(Collection<FunctionTool> tools) {
-        config.addTool(tools);
+        config.getDefaultOptions().addTool(tools);
         return this;
     }
 
     public ReActAgentBuilder toolAdd(ToolProvider toolProvider) {
-        config.addTool(toolProvider);
+        config.getDefaultOptions().addTool(toolProvider);
+        return this;
+    }
+
+    public ReActAgentBuilder skillAdd(Skill skill) {
+        config.getDefaultOptions().addSkill(skill, 0);
+        return this;
+    }
+
+    public ReActAgentBuilder skillAdd(Skill skill, int index) {
+        config.getDefaultOptions().addSkill(skill, index);
         return this;
     }
 
@@ -167,6 +178,11 @@ public class ReActAgentBuilder {
 
     public ReActAgentBuilder defaultInterceptorAdd(ReActInterceptor... vals) {
         for (ReActInterceptor val : vals) config.getDefaultOptions().addInterceptor(val, 0);
+        return this;
+    }
+
+    public ReActAgentBuilder defaultInterceptorAdd(ReActInterceptor val, int index) {
+        config.getDefaultOptions().addInterceptor(val, index);
         return this;
     }
 

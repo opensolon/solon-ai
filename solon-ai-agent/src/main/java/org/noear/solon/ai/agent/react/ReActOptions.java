@@ -15,6 +15,9 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
@@ -33,10 +36,13 @@ import java.util.function.Function;
  */
 @Preview("3.8.1")
 public class ReActOptions implements NonSerializable {
-    private static final Logger log = LoggerFactory.getLogger(ReActOptions.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ReActOptions.class);
 
+    /** 挂载的可调用工具集 */
+    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     /** 工具调用上下文（透传给 FunctionTool） */
     private final Map<String, Object> toolsContext = new LinkedHashMap<>();
+    private final List<RankEntity<Skill>> skills = new ArrayList<>();
     /** 生命周期拦截器（监控 Thought, Action, Observation） */
     private final List<RankEntity<ReActInterceptor>> interceptors = new ArrayList<>();
     /** 最大推理步数（防止死循环） */
@@ -54,12 +60,12 @@ public class ReActOptions implements NonSerializable {
     private Function<ReActTrace, String> planInstructionProvider; // 规划专用指令
 
 
-
-
     /** 浅拷贝选项实例 */
     protected ReActOptions copy() {
         ReActOptions tmp = new ReActOptions();
+        tmp.tools.putAll(tools);
         tmp.toolsContext.putAll(toolsContext);
+        tmp.skills.addAll(skills);
         tmp.interceptors.addAll(interceptors);
         tmp.maxSteps = maxSteps;
         tmp.maxRetries = maxRetries;
@@ -75,6 +81,22 @@ public class ReActOptions implements NonSerializable {
 
 
     // --- 配置注入 (Protected) ---
+
+
+    /** 注册工具 */
+    protected void addTool(FunctionTool... tools) {
+        for (FunctionTool tool : tools) {
+            this.tools.put(tool.name(), tool);
+        }
+    }
+
+    protected void addTool(Collection<FunctionTool> tools) {
+        for (FunctionTool tool : tools) addTool(tool);
+    }
+
+    protected void addTool(ToolProvider toolProvider) {
+        addTool(toolProvider.getTools());
+    }
 
     protected void putToolsContext(Map<String, Object> toolsContext) {
         this.toolsContext.putAll(toolsContext);
@@ -96,13 +118,21 @@ public class ReActOptions implements NonSerializable {
     }
 
     protected void setMaxSteps(int val) {
-        if (log.isDebugEnabled() && val > 20) {
-            log.debug("High maxSteps ({}) might increase token costs.", val);
+        if (LOG.isDebugEnabled() && val > 20) {
+            LOG.debug("High maxSteps ({}) might increase token costs.", val);
         }
         this.maxSteps = val;
     }
 
     protected void setOutputSchema(String val) { this.outputSchema = val; }
+
+
+    public void addSkill(Skill skill, int index) {
+        this.skills.add(new RankEntity<>(skill, index));
+        if (skills.size() > 1) {
+            Collections.sort(skills);
+        }
+    }
 
 
     /** 添加拦截器并自动重排序 */
@@ -121,8 +151,16 @@ public class ReActOptions implements NonSerializable {
 
     // --- 参数获取 (Public) ---
 
+    public Collection<FunctionTool> getTools() { return tools.values(); }
+
+    public FunctionTool getTool(String name) { return tools.get(name); }
+
     public Map<String, Object> getToolsContext() {
         return toolsContext;
+    }
+
+    public List<RankEntity<Skill>> getSkills() {
+        return skills;
     }
 
     public List<RankEntity<ReActInterceptor>> getInterceptors() {

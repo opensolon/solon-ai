@@ -174,7 +174,7 @@ public class ActionTask implements NamedTaskComponent {
      * @return 工具输出的字符串结果
      */
     private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
-        FunctionTool tool = config.getTool(name);
+        FunctionTool tool = trace.getOptions().getTool(name);
 
         // 如果配置中没有，尝试从协议工具集查找（如 __transfer_to__）
         if (tool == null) {

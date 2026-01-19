@@ -15,8 +15,13 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Collection;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -84,6 +89,31 @@ public class ReActOptionsAmend {
 
     public ReActOptionsAmend outputSchema(String val) {
         options.setOutputSchema(val);
+        return this;
+    }
+
+    public ReActOptionsAmend toolAdd(FunctionTool val) {
+        options.addTool(val);
+        return this;
+    }
+
+    public ReActOptionsAmend toolAdd(Collection<FunctionTool> val) {
+        options.addTool(val);
+        return this;
+    }
+
+    public ReActOptionsAmend toolAdd(ToolProvider val) {
+        options.addTool(val);
+        return this;
+    }
+
+    public ReActOptionsAmend skillAdd(Skill val) {
+        options.addSkill(val, 0);
+        return this;
+    }
+
+    public ReActOptionsAmend skillAdd(Skill val, int index) {
+        options.addSkill(val, index);
         return this;
     }
 

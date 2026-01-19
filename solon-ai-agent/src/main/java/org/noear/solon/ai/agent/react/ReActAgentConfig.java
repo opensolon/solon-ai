@@ -55,8 +55,6 @@ public class ReActAgentConfig {
     private final ChatModel chatModel;
     /** 模型推理选项（温度、TopP 等） */
     private Consumer<ChatOptions> chatOptions;
-    /** 挂载的可调用工具集 */
-    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     /** 计算图微调器（自定义执行链路） */
     private Consumer<GraphSpec> graphAdjuster;
     /** 提示词模板（默认中文） */
@@ -102,22 +100,6 @@ public class ReActAgentConfig {
 
     protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
 
-    /** 注册工具 */
-    protected void addTool(FunctionTool... tools) {
-        for (FunctionTool tool : tools) {
-            if (LOG.isDebugEnabled()) LOG.debug("ReActAgent [{}] register tool: {}", name, tool.name());
-            this.tools.put(tool.name(), tool);
-        }
-    }
-
-    protected void addTool(Collection<FunctionTool> tools) {
-        for (FunctionTool tool : tools) addTool(tool);
-    }
-
-    protected void addTool(ToolProvider toolProvider) {
-        addTool(toolProvider.getTools());
-    }
-
     protected void setOutputKey(String val) { this.outputKey = val; }
 
 
@@ -145,10 +127,6 @@ public class ReActAgentConfig {
     public ChatModel getChatModel() { return chatModel; }
 
     public Consumer<ChatOptions> getChatOptions() { return chatOptions; }
-
-    public Collection<FunctionTool> getTools() { return tools.values(); }
-
-    public FunctionTool getTool(String name) { return tools.get(name); }
 
     public Consumer<GraphSpec> getGraphAdjuster() { return graphAdjuster; }
 
