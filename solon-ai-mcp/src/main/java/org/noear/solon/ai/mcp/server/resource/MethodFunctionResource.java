@@ -16,6 +16,7 @@
 package org.noear.solon.ai.mcp.server.resource;
 
 import org.noear.eggg.MethodEggg;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.chat.tool.MethodExecuteHandler;
@@ -33,9 +34,7 @@ import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 
@@ -54,6 +53,8 @@ public class MethodFunctionResource implements FunctionResource {
     private final String name;
     private final String title;
     private final ResourceMapping mapping;
+    private final Map<String, Object> meta = new HashMap<>();
+
     private final String mimeType;
 
     //path 分析器
@@ -74,6 +75,11 @@ public class MethodFunctionResource implements FunctionResource {
 
         //断言
         Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
+
+        if(Assert.isNotEmpty(mapping.meta())) {
+            Map<String, Object> tmp = ONode.deserialize(mapping.meta(), Map.class);
+            meta.putAll(tmp);
+        }
 
         this.title = mapping.title();
 
@@ -116,6 +122,16 @@ public class MethodFunctionResource implements FunctionResource {
     @Override
     public String description() {
         return mapping.description();
+    }
+
+    @Override
+    public Map<String, Object> meta() {
+        return meta;
+    }
+
+    @Override
+    public void metaPut(String key, Object value) {
+        meta.put(key, value);
     }
 
     @Override

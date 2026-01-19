@@ -45,6 +45,17 @@ public interface FunctionPrompt {
     String description();
 
     /**
+     * 元信息
+     */
+    default Map<String, Object> meta(){
+        return null;
+    }
+
+    default void metaPut(String key, Object value){
+
+    }
+
+    /**
      * 参数
      */
     Collection<ParamDesc> params();

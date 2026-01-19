@@ -48,6 +48,11 @@ public @interface ResourceMapping {
     String description() default "";
 
     /**
+     * 元数据（json）
+     */
+    String meta() default "";
+
+    /**
      * 媒体类型
      */
     String mimeType() default "";

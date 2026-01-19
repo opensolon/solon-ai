@@ -94,7 +94,9 @@ public class StatelessResourceRegistry implements McpPrimitivesRegistry<Function
                     McpSchema.Resource.builder()
                             .uri(functionResource.uri())
                             .name(functionResource.name()).title(functionResource.title()).description(functionResource.description())
-                            .mimeType(functionResource.mimeType()).build(),
+                            .meta(functionResource.meta())
+                            .mimeType(functionResource.mimeType())
+                            .build(),
                     (exchange, request) -> {
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(null, exchange), () -> {

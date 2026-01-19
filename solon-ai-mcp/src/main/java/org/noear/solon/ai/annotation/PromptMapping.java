@@ -41,4 +41,9 @@ public @interface PromptMapping {
      * 描述
      */
     String description();
+
+    /**
+     * 元数据（json）
+     */
+    String meta() default "";
 }

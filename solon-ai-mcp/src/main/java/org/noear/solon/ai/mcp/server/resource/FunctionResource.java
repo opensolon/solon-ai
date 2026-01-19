@@ -17,6 +17,7 @@ package org.noear.solon.ai.mcp.server.resource;
 
 import org.noear.solon.ai.media.Text;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -45,6 +46,17 @@ public interface FunctionResource {
      * 描述
      */
     String description();
+
+    /**
+     * 元信息
+     */
+    default Map<String, Object> meta(){
+        return null;
+    }
+
+    default void metaPut(String key, Object value){
+
+    }
 
     /**
      * 媒体类型

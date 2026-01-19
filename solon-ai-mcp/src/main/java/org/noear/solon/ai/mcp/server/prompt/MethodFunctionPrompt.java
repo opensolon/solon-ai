@@ -17,6 +17,7 @@ package org.noear.solon.ai.mcp.server.prompt;
 
 import org.noear.eggg.MethodEggg;
 import org.noear.eggg.ParamEggg;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -50,6 +51,8 @@ public class MethodFunctionPrompt implements FunctionPrompt {
 
     private final String name;
     private final PromptMapping mapping;
+    private final Map<String, Object> meta = new HashMap<>();
+
     private final Map<String, ParamDesc> params;
 
     public MethodFunctionPrompt(BeanWrap beanWrap, MethodEggg methodEggg) {
@@ -67,6 +70,11 @@ public class MethodFunctionPrompt implements FunctionPrompt {
         //检查返回类型
         if (Collection.class.isAssignableFrom(methodEggg.getReturnTypeEggg().getType()) == false) {
             throw new IllegalArgumentException("@PromptMapping return type is not Collection");
+        }
+
+        if(Assert.isNotEmpty(mapping.meta())) {
+            Map<String, Object> tmp = ONode.deserialize(mapping.meta(), Map.class);
+            meta.putAll(tmp);
         }
 
         this.params = new LinkedHashMap<>();
@@ -92,6 +100,16 @@ public class MethodFunctionPrompt implements FunctionPrompt {
     @Override
     public String description() {
         return mapping.description();
+    }
+
+    @Override
+    public Map<String, Object> meta() {
+        return meta;
+    }
+
+    @Override
+    public void metaPut(String key, Object value) {
+        meta.put(key, value);
     }
 
     @Override

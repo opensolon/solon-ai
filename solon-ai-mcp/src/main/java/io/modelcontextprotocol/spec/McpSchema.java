@@ -1708,23 +1708,30 @@ public final class McpSchema {
 	 * A prompt or prompt template that the server offers.
 	 *
 	 */
+	@Builder
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class Prompt  implements Identifier { // @formatter:on
-		@JsonProperty("name") private String name;
-		@JsonProperty("title") private String title;
-		@JsonProperty("description") private String description;
-		@JsonProperty("arguments") private List<PromptArgument> arguments;
-		@JsonProperty("_meta") private Map<String, Object> meta;
+		@JsonProperty("name")
+		private String name;
+		@JsonProperty("title")
+		private String title;
+		@JsonProperty("description")
+		private String description;
+		@JsonProperty("arguments")
+		private List<PromptArgument> arguments;
+		@JsonProperty("_meta")
+		private Map<String, Object> meta;
 
 		/**
-		 * @param name The name of the prompt or prompt template.
-		 * @param title An optional title for the prompt.
+		 * @param name        The name of the prompt or prompt template.
+		 * @param title       An optional title for the prompt.
 		 * @param description An optional description of what this prompt provides.
-		 * @param arguments A list of arguments to use for templating the prompt.
-		 * @param meta See specification for notes on _meta usage
-		 * */
+		 * @param arguments   A list of arguments to use for templating the prompt.
+		 * @param meta        See specification for notes on _meta usage
+		 *
+		 */
 		public Prompt(String name, String title, String description, List<PromptArgument> arguments, Map<String, Object> meta) {
 			this.name = name;
 			this.title = title;
@@ -1766,21 +1773,28 @@ public final class McpSchema {
 	 * Describes an argument that a prompt can accept.
 	 *
 	 */
-	@NoArgsConstructor @EqualsAndHashCode @ToString
+	@NoArgsConstructor
+	@EqualsAndHashCode
+	@ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class PromptArgument implements Identifier { // @formatter:on
-		@JsonProperty("name") private String name;
-		@JsonProperty("title") private String title;
-		@JsonProperty("description") private String description;
-		@JsonProperty("required") private Boolean required;
+		@JsonProperty("name")
+		private String name;
+		@JsonProperty("title")
+		private String title;
+		@JsonProperty("description")
+		private String description;
+		@JsonProperty("required")
+		private Boolean required;
 
 		/**
-		 * @param name The name of the argument.
-		 * @param title An optional title for the argument, which can be used in UI
+		 * @param name        The name of the argument.
+		 * @param title       An optional title for the argument, which can be used in UI
 		 * @param description A human-readable description of the argument.
-		 * @param required Whether this argument must be provided.
-		 * */
+		 * @param required    Whether this argument must be provided.
+		 *
+		 */
 		public PromptArgument(String name, String title, String description, Boolean required) {
 			this.name = name;
 			this.title = title;
@@ -1811,22 +1825,28 @@ public final class McpSchema {
 
 	/**
 	 * Describes a message returned as part of a prompt.
-	 *
+	 * <p>
 	 * This is similar to `SamplingMessage`, but also supports the embedding of resources
 	 * from the MCP server.
 	 *
 	 */
-	@NoArgsConstructor @EqualsAndHashCode @ToString
+	@NoArgsConstructor
+	@EqualsAndHashCode
+	@ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public static class PromptMessage { // @formatter:on
-		@JsonProperty("role") private Role role;
-		@JsonProperty("content") private Content content;
+		@JsonProperty("role")
+		private Role role;
+		@JsonProperty("content")
+		private Content content;
 
 		/**
-		 * @param role The sender or recipient of messages and data in a conversation.
+		 * @param role    The sender or recipient of messages and data in a conversation.
 		 * @param content The content of the message of type {@link Content}.
-		 * */
+
+         *
+ */
 		public PromptMessage(Role role, Content content) {
 			this.role = role;
 			this.content = content;
@@ -1842,9 +1862,10 @@ public final class McpSchema {
 	}
 
 	/**
-	 * The server's response to a prompts/list request from the client.
-	 *
-	 */
+     * The server's response to a prompts/list request from the client.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1854,11 +1875,13 @@ public final class McpSchema {
 		@JsonProperty("_meta") private Map<String, Object> meta;
 
 		/**
-		 * @param prompts A list of prompts that the server provides.
-		 * @param nextCursor An optional cursor for pagination. If present, indicates there
-		 * are more prompts available.
-		 * @param meta See specification for notes on _meta usage
-		 * */
+         * @param prompts    A list of prompts that the server provides.
+         * @param nextCursor An optional cursor for pagination. If present, indicates there
+         *                   are more prompts available.
+         * @param meta       See specification for notes on _meta usage
+
+         *
+ */
 		public ListPromptsResult(List<Prompt> prompts, String nextCursor, Map<String, Object> meta) {
 			this.prompts = prompts;
 			this.nextCursor = nextCursor;
@@ -1883,9 +1906,10 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Used by the client to get a prompt provided by the server.
-	 *
-	 */
+     * Used by the client to get a prompt provided by the server.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1895,10 +1919,12 @@ public final class McpSchema {
 		@JsonProperty("_meta") private Map<String, Object> meta;
 
 		/**
-		 * @param name The name of the prompt or prompt template.
-		 * @param arguments Arguments to use for templating the prompt.
-		 * @param meta See specification for notes on _meta usage
-		 * */
+         * @param name      The name of the prompt or prompt template.
+         * @param arguments Arguments to use for templating the prompt.
+         * @param meta      See specification for notes on _meta usage
+
+         *
+ */
 		public GetPromptRequest(String name, Map<String, Object> arguments, Map<String, Object> meta) {
 			this.name = name;
 			this.arguments = arguments;
@@ -1923,9 +1949,10 @@ public final class McpSchema {
 	}
 
 	/**
-	 * The server's response to a prompts/get request from the client.
-	 *
-	 */
+     * The server's response to a prompts/get request from the client.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1935,10 +1962,12 @@ public final class McpSchema {
 		@JsonProperty("_meta") private Map<String, Object> meta;
 
 		/**
-		 * @param description An optional description for the prompt.
-		 * @param messages A list of messages to display as part of the prompt.
-		 * @param meta See specification for notes on _meta usage
-		 * */
+         * @param description An optional description for the prompt.
+         * @param messages    A list of messages to display as part of the prompt.
+         * @param meta        See specification for notes on _meta usage
+
+         *
+ */
 		public GetPromptResult(String description, List<PromptMessage> messages, Map<String, Object> meta) {
 			this.description = description;
 			this.messages = messages;
@@ -1966,9 +1995,10 @@ public final class McpSchema {
 	// Tool Interfaces
 	// ---------------------------
 	/**
-	 * The server's response to a tools/list request from the client.
-	 *
-	 */
+     * The server's response to a tools/list request from the client.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1978,11 +2008,13 @@ public final class McpSchema {
 		@JsonProperty("_meta") private Map<String, Object> meta;
 
 		/**
-		 * @param tools A list of tools that the server provides.
-		 * @param nextCursor An optional cursor for pagination. If present, indicates there
-		 * are more tools available.
-		 * @param meta See specification for notes on _meta usage
-		 * */
+         * @param tools      A list of tools that the server provides.
+         * @param nextCursor An optional cursor for pagination. If present, indicates there
+         *                   are more tools available.
+         * @param meta       See specification for notes on _meta usage
+
+         *
+ */
 		public ListToolsResult(List<Tool> tools, String nextCursor, Map<String, Object> meta) {
 			this.tools = tools;
 			this.nextCursor = nextCursor;
@@ -2007,9 +2039,10 @@ public final class McpSchema {
 	}
 
 	/**
-	 * A JSON Schema object that describes the expected structure of arguments or output.
-	 *
-	 */
+     * A JSON Schema object that describes the expected structure of arguments or output.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -2022,13 +2055,15 @@ public final class McpSchema {
 		@JsonProperty("definitions") private Map<String, Object> definitions;
 
 		/**
-		 * @param type The type of the schema (e.g., "object")
-		 * @param properties The properties of the schema object
-		 * @param required List of required property names
-		 * @param additionalProperties Whether additional properties are allowed
-		 * @param defs Schema definitions using the newer $defs keyword
-		 * @param definitions Schema definitions using the legacy definitions keyword
-		 * */
+         * @param type                 The type of the schema (e.g., "object")
+         * @param properties           The properties of the schema object
+         * @param required             List of required property names
+         * @param additionalProperties Whether additional properties are allowed
+         * @param defs                 Schema definitions using the newer $defs keyword
+         * @param definitions          Schema definitions using the legacy definitions keyword
+
+         *
+ */
 		public JsonSchema(String type, Map<String, Object> properties, List<String> required, Boolean additionalProperties, Map<String, Object> defs, Map<String, Object> definitions) {
 			this.type = type;
 			this.properties = properties;
@@ -2064,15 +2099,15 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Additional properties describing a Tool to clients.
-	 *
-	 * NOTE: all properties in ToolAnnotations are **hints**. They are not guaranteed to
-	 * provide a faithful description of tool behavior (including descriptive properties
-	 * like `title`).
-	 *
-	 * Clients should never make tool use decisions based on ToolAnnotations received from
-	 * untrusted servers.
-	 */
+     * Additional properties describing a Tool to clients.
+     * <p>
+     * NOTE: all properties in ToolAnnotations are **hints**. They are not guaranteed to
+     * provide a faithful description of tool behavior (including descriptive properties
+     * like `title`).
+     * <p>
+     * Clients should never make tool use decisions based on ToolAnnotations received from
+     * untrusted servers.
+     */
 	@Builder
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
@@ -2120,11 +2155,12 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Represents a tool that the server provides. Tools enable servers to expose
-	 * executable functionality to the system. Through these tools, you can interact with
-	 * external systems, perform computations, and take actions in the real world.
-	 *
-	 */
+     * Represents a tool that the server provides. Tools enable servers to expose
+     * executable functionality to the system. Through these tools, you can interact with
+     * external systems, perform computations, and take actions in the real world.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -2138,18 +2174,20 @@ public final class McpSchema {
 		@JsonProperty("_meta") private Map<String, Object> meta;
 
 		/**
-		 * @param name A unique identifier for the tool. This name is used when calling the
-		 * tool.
-		 * @param title A human-readable title for the tool.
-		 * @param description A human-readable description of what the tool does. This can be
-		 * used by clients to improve the LLM's understanding of available tools.
-		 * @param inputSchema A JSON Schema object that describes the expected structure of
-		 * the arguments when calling this tool. This allows clients to validate tool
-		 * @param outputSchema An optional JSON Schema object defining the structure of the
-		 * tool's output returned in the structuredContent field of a CallToolResult.
-		 * @param annotations Optional additional tool information.
-		 * @param meta See specification for notes on _meta usage
-		 * */
+         * @param name         A unique identifier for the tool. This name is used when calling the
+         *                     tool.
+         * @param title        A human-readable title for the tool.
+         * @param description  A human-readable description of what the tool does. This can be
+         *                     used by clients to improve the LLM's understanding of available tools.
+         * @param inputSchema  A JSON Schema object that describes the expected structure of
+         *                     the arguments when calling this tool. This allows clients to validate tool
+         * @param outputSchema An optional JSON Schema object defining the structure of the
+         *                     tool's output returned in the structuredContent field of a CallToolResult.
+         * @param annotations  Optional additional tool information.
+         * @param meta         See specification for notes on _meta usage
+
+         *
+ */
 		public Tool(String name, String title, String description, JsonSchema inputSchema, Map<String, Object> outputSchema, ToolAnnotations annotations, Map<String, Object> meta) {
 			this.name = name;
 			this.title = title;
@@ -2280,9 +2318,10 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Used by the client to call a tool provided by the server.
-	 *
-	 */
+     * Used by the client to call a tool provided by the server.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -2292,13 +2331,15 @@ public final class McpSchema {
 		@JsonProperty("_meta") private Map<String, Object> meta;
 
 		/**
-		 * @param name The name of the tool to call. This must match a tool name from
-		 * tools/list.
-		 * @param arguments Arguments to pass to the tool. These must conform to the tool's
-		 * input schema.
-		 * @param meta Optional metadata about the request. This can include additional
-		 * information like `progressToken`
-		 * */
+         * @param name      The name of the tool to call. This must match a tool name from
+         *                  tools/list.
+         * @param arguments Arguments to pass to the tool. These must conform to the tool's
+         *                  input schema.
+         * @param meta      Optional metadata about the request. This can include additional
+         *                  information like `progressToken`
+
+         *
+ */
 		public CallToolRequest(String name, Map<String, Object> arguments, Map<String, Object> meta) {
 			this.name = name;
 			this.arguments = arguments;
@@ -2383,9 +2424,10 @@ public final class McpSchema {
 	}
 
 	/**
-	 * The server's response to a tools/call request from the client.
-	 *
-	 */
+     * The server's response to a tools/call request from the client.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -2396,14 +2438,16 @@ public final class McpSchema {
 		@JsonProperty("_meta") private Map<String, Object> meta;
 
 		/**
-		 * @param content A list of content items representing the tool's output. Each item
-		 * can be text, an image, or an embedded resource.
-		 * @param isError If true, indicates that the tool execution failed and the content
-		 * contains error information. If false or absent, indicates successful execution.
-		 * @param structuredContent An optional JSON object that represents the structured
-		 * result of the tool call.
-		 * @param meta See specification for notes on _meta usage
-		 * */
+         * @param content           A list of content items representing the tool's output. Each item
+         *                          can be text, an image, or an embedded resource.
+         * @param isError           If true, indicates that the tool execution failed and the content
+         *                          contains error information. If false or absent, indicates successful execution.
+         * @param structuredContent An optional JSON object that represents the structured
+         *                          result of the tool call.
+         * @param meta              See specification for notes on _meta usage
+
+         *
+ */
 		public CallToolResult(List<Content> content, Boolean isError, Object structuredContent, Map<String, Object> meta) {
 			this.content = content;
 			this.isError = isError;
@@ -2428,46 +2472,48 @@ public final class McpSchema {
 		}
 
 		/**
-		 * @deprecated use the builder instead.
-		 */
+         * @deprecated use the builder instead.
+         */
 		@Deprecated
 		public CallToolResult(List<Content> content, Boolean isError) {
 			this(content, isError, (Object) null, null);
 		}
 
 		/**
-		 * @deprecated use the builder instead.
-		 */
+         * @deprecated use the builder instead.
+         */
 		@Deprecated
 		public CallToolResult(List<Content> content, Boolean isError, Map<String, Object> structuredContent) {
 			this(content, isError, structuredContent, null);
 		}
 
 		/**
-		 * Creates a new instance of {@link CallToolResult} with a string containing the
-		 * tool result.
-		 * @param content The content of the tool result. This will be mapped to a
-		 * one-sized list with a {@link TextContent} element.
-		 * @param isError If true, indicates that the tool execution failed and the
-		 * content contains error information. If false or absent, indicates successful
-		 * execution.
-		 */
+         * Creates a new instance of {@link CallToolResult} with a string containing the
+         * tool result.
+         *
+         * @param content The content of the tool result. This will be mapped to a
+         *                one-sized list with a {@link TextContent} element.
+         * @param isError If true, indicates that the tool execution failed and the
+         *                content contains error information. If false or absent, indicates successful
+         *                execution.
+         */
 		@Deprecated
 		public CallToolResult(String content, Boolean isError) {
 			this(Arrays.asList(new TextContent(content)), isError, null);
 		}
 
 		/**
-		 * Creates a builder for {@link CallToolResult}.
-		 * @return a new builder instance
-		 */
+         * Creates a builder for {@link CallToolResult}.
+         *
+         * @return a new builder instance
+         */
 		public static Builder builder() {
 			return new Builder();
 		}
 
 		/**
-		 * Builder for {@link CallToolResult}.
-		 */
+         * Builder for {@link CallToolResult}.
+         */
 		public static class Builder {
 
 			private List<Content> content = new ArrayList<>();
@@ -2479,10 +2525,11 @@ public final class McpSchema {
 			private Map<String, Object> meta;
 
 			/**
-			 * Sets the content list for the tool result.
-			 * @param content the content list
-			 * @return this builder
-			 */
+             * Sets the content list for the tool result.
+             *
+             * @param content the content list
+             * @return this builder
+             */
 			public Builder content(List<Content> content) {
 				Assert.notNull(content, "content must not be null");
 				this.content = content;
@@ -2507,10 +2554,11 @@ public final class McpSchema {
 			}
 
 			/**
-			 * Sets the text content for the tool result.
-			 * @param textContent the text content
-			 * @return this builder
-			 */
+             * Sets the text content for the tool result.
+             *
+             * @param textContent the text content
+             * @return this builder
+             */
 			public Builder textContent(List<String> textContent) {
 				Assert.notNull(textContent, "textContent must not be null");
 				textContent.stream().map(TextContent::new).forEach(this.content::add);
@@ -2518,10 +2566,11 @@ public final class McpSchema {
 			}
 
 			/**
-			 * Adds a content item to the tool result.
-			 * @param contentItem the content item to add
-			 * @return this builder
-			 */
+             * Adds a content item to the tool result.
+             *
+             * @param contentItem the content item to add
+             * @return this builder
+             */
 			public Builder addContent(Content contentItem) {
 				Assert.notNull(contentItem, "contentItem must not be null");
 				if (this.content == null) {
@@ -2532,20 +2581,22 @@ public final class McpSchema {
 			}
 
 			/**
-			 * Adds a text content item to the tool result.
-			 * @param text the text content
-			 * @return this builder
-			 */
+             * Adds a text content item to the tool result.
+             *
+             * @param text the text content
+             * @return this builder
+             */
 			public Builder addTextContent(String text) {
 				Assert.notNull(text, "text must not be null");
 				return addContent(new TextContent(text));
 			}
 
 			/**
-			 * Sets whether the tool execution resulted in an error.
-			 * @param isError true if the tool execution failed, false otherwise
-			 * @return this builder
-			 */
+             * Sets whether the tool execution resulted in an error.
+             *
+             * @param isError true if the tool execution failed, false otherwise
+             * @return this builder
+             */
 			public Builder isError(Boolean isError) {
 				Assert.notNull(isError, "isError must not be null");
 				this.isError = isError;
@@ -2553,19 +2604,21 @@ public final class McpSchema {
 			}
 
 			/**
-			 * Sets the metadata for the tool result.
-			 * @param meta metadata
-			 * @return this builder
-			 */
+             * Sets the metadata for the tool result.
+             *
+             * @param meta metadata
+             * @return this builder
+             */
 			public Builder meta(Map<String, Object> meta) {
 				this.meta = meta;
 				return this;
 			}
 
 			/**
-			 * Builds a new {@link CallToolResult} instance.
-			 * @return a new CallToolResult instance
-			 */
+             * Builds a new {@link CallToolResult} instance.
+             *
+             * @return a new CallToolResult instance
+             */
 			public CallToolResult build() {
 				return new CallToolResult(content, isError, structuredContent, meta);
 			}
@@ -2578,10 +2631,11 @@ public final class McpSchema {
 	// Sampling Interfaces
 	// ---------------------------
 	/**
-	 * The server's preferences for model selection, requested of the client during
-	 * sampling.
-	 *
-	 */
+     * The server's preferences for model selection, requested of the client during
+     * sampling.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -2592,20 +2646,22 @@ public final class McpSchema {
 		@JsonProperty("intelligencePriority") private Double intelligencePriority;
 
 		/**
-		 * @param hints Optional hints to use for model selection. If multiple hints are
-		 * specified, the client MUST evaluate them in order (such that the first match is
-		 * taken). The client SHOULD prioritize these hints over the numeric priorities, but
-		 * MAY still use the priorities to select from ambiguous matches
-		 * @param costPriority How much to prioritize cost when selecting a model. A value of
-		 * 0 means cost is not important, while a value of 1 means cost is the most important
-		 * factor
-		 * @param speedPriority How much to prioritize sampling speed (latency) when selecting
-		 * a model. A value of 0 means speed is not important, while a value of 1 means speed
-		 * is the most important factor
-		 * @param intelligencePriority How much to prioritize intelligence and capabilities
-		 * when selecting a model. A value of 0 means intelligence is not important, while a
-		 * value of 1 means intelligence is the most important factor
-		 * */
+         * @param hints                Optional hints to use for model selection. If multiple hints are
+         *                             specified, the client MUST evaluate them in order (such that the first match is
+         *                             taken). The client SHOULD prioritize these hints over the numeric priorities, but
+         *                             MAY still use the priorities to select from ambiguous matches
+         * @param costPriority         How much to prioritize cost when selecting a model. A value of
+         *                             0 means cost is not important, while a value of 1 means cost is the most important
+         *                             factor
+         * @param speedPriority        How much to prioritize sampling speed (latency) when selecting
+         *                             a model. A value of 0 means speed is not important, while a value of 1 means speed
+         *                             is the most important factor
+         * @param intelligencePriority How much to prioritize intelligence and capabilities
+         *                             when selecting a model. A value of 0 means intelligence is not important, while a
+         *                             value of 1 means intelligence is the most important factor
+
+         *
+ */
 		public ModelPreferences(List<ModelHint> hints, Double costPriority, Double speedPriority, Double intelligencePriority) {
 			this.hints = hints;
 			this.costPriority = costPriority;
@@ -2680,9 +2736,10 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Hints to use for model selection.
-	 *
-	 */
+     * Hints to use for model selection.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -2690,13 +2747,15 @@ public final class McpSchema {
 		@JsonProperty("name") private String name;
 
 		/**
-		 * @param name A hint for a model name. The client SHOULD treat this as a substring of
-		 * a model name; for example: `claude-3-5-sonnet` should match
-		 * `claude-3-5-sonnet-20241022`, `sonnet` should match `claude-3-5-sonnet-20241022`,
-		 * `claude-3-sonnet-20240229`, etc., `claude` should match any Claude model. The
-		 * client MAY also map the string to a different provider's model name or a different
-		 * model family, as long as it fills a similar niche
-		 * */
+         * @param name A hint for a model name. The client SHOULD treat this as a substring of
+         *             a model name; for example: `claude-3-5-sonnet` should match
+         *             `claude-3-5-sonnet-20241022`, `sonnet` should match `claude-3-5-sonnet-20241022`,
+         *             `claude-3-sonnet-20240229`, etc., `claude` should match any Claude model. The
+         *             client MAY also map the string to a different provider's model name or a different
+         *             model family, as long as it fills a similar niche
+
+         *
+ */
 		public ModelHint(String name) {
 			this.name = name;
 		}
@@ -2707,9 +2766,10 @@ public final class McpSchema {
 	}
 
 	/**
-	 * Describes a message issued to or received from an LLM API.
-	 *
-	 */
+     * Describes a message issued to or received from an LLM API.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -2718,9 +2778,11 @@ public final class McpSchema {
 		@JsonProperty("content") private Content content;
 
 		/**
-		 * @param role The sender or recipient of messages and data in a conversation
-		 * @param content The content of the message
-		 * */
+         * @param role    The sender or recipient of messages and data in a conversation
+         * @param content The content of the message
+
+         *
+ */
 		public SamplingMessage(Role role, Content content) {
 			this.role = role;
 			this.content = content;
@@ -2735,12 +2797,13 @@ public final class McpSchema {
 	}
 
 	/**
-	 * A request from the server to sample an LLM via the client. The client has full
-	 * discretion over which model to select. The client should also inform the user
-	 * before beginning sampling, to allow them to inspect the request (human in the loop)
-	 * and decide whether to approve it.
-	 *
-	 */
+     * A request from the server to sample an LLM via the client. The client has full
+     * discretion over which model to select. The client should also inform the user
+     * before beginning sampling, to allow them to inspect the request (human in the loop)
+     * and decide whether to approve it.
+
+     *
+ */
 	@NoArgsConstructor @EqualsAndHashCode @ToString
 	@JsonInclude(JsonInclude.Include.NON_ABSENT)
 	@JsonIgnoreProperties(ignoreUnknown = true)
