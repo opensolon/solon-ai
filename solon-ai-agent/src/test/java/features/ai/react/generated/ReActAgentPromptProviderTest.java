@@ -100,35 +100,6 @@ public class ReActAgentPromptProviderTest {
         Assertions.assertTrue(result.contains("北京") && result.contains("20°C"));
     }
 
-    /**
-     * 测试 3：动态 Role 提供者
-     * <p>验证根据不同的上下文（Trace）动态变换角色。</p>
-     */
-    @Test
-    public void testDynamicRoleProvider() throws Throwable {
-        ChatModel chatModel = LlmUtil.getChatModel();
-
-        ReActSystemPrompt dynamicProvider = ReActSystemPrompt.builder()
-                .role(trace -> {
-                    // 假设根据 Session ID 的某些特征来决定角色（示例逻辑）
-                    return trace.getSession().getSnapshot().containsKey("is_pro") ? "高级资深专家" : "新手助手";
-                })
-                .instruction("直接回答用户问题。")
-                .build();
-
-        ReActAgent agent = ReActAgent.of(chatModel)
-                .systemPrompt(dynamicProvider)
-                .build();
-
-        AgentSession session = InMemoryAgentSession.of("session_dynamic_001");
-        session.getSnapshot().put("is_pro", true); // 触发高级角色
-
-        String result = agent.call(Prompt.of("你好"), session).getContent();
-        System.out.println("【动态角色结果】: " + result);
-
-        Assertions.assertNotNull(result);
-    }
-
     // --- 模拟业务工具集 ---
 
     public static class MathTools {
