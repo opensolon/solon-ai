@@ -29,10 +29,17 @@ import java.util.Collection;
 @Preview("3.8.4")
 public interface Skill {
     /**
+     * 名字
+     */
+    default String name() {
+        return this.getClass().getSimpleName();
+    }
+
+    /**
      * 技能元信息
      */
     default SkillMetadata metadata() {
-        return new SkillMetadata(this.getClass().getSimpleName());
+        return new SkillMetadata(this.name());
     }
 
     /**

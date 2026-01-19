@@ -116,6 +116,11 @@ public class ReActTrace implements AgentTrace {
                     //聚合提示词
                     String skillInstr = skill.getInstruction(session);
                     if (Assert.isNotEmpty(skillInstr)) {
+                        if (combinedInstruction.length() > 0) {
+                            combinedInstruction.append("\n");
+                        }
+
+                        combinedInstruction.append("**Skill**: ").append(skill.name()).append("\n");
                         combinedInstruction.append(skillInstr).append("\n");
                     }
 
