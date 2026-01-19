@@ -65,13 +65,6 @@ public class ReActAgentConfig {
     private String finishMarker;
     /** 结果回填 Key */
     private String outputKey;
-    /** 输出格式约束 (JSON Schema) */
-    private String outputSchema;
-
-
-    private boolean enablePlanning = false; // 是否启用规划环节
-    private Function<ReActTrace, String> planInstructionProvider; // 规划专用指令
-
 
     /** 默认运行选项（限流、重试、窗口等） */
     private final ReActOptions defaultOptions = new ReActOptions();
@@ -127,13 +120,7 @@ public class ReActAgentConfig {
 
     protected void setOutputKey(String val) { this.outputKey = val; }
 
-    protected void setOutputSchema(String val) { this.outputSchema = val; }
 
-    protected void setEnablePlanning(boolean enablePlanning) { this.enablePlanning = enablePlanning; }
-
-    public void setPlanInstructionProvider(Function<ReActTrace, String> provider) {
-        this.planInstructionProvider = provider;
-    }
 
     // --- 参数获取 (Public) ---
 
@@ -188,22 +175,4 @@ public class ReActAgentConfig {
 
     public String getOutputKey() { return outputKey; }
 
-    public String getOutputSchema() { return outputSchema; }
-
-    public boolean isEnablePlanning() { return enablePlanning; }
-
-    public String getPlanInstruction(ReActTrace trace) {
-        if (planInstructionProvider != null) {
-            return planInstructionProvider.apply(trace);
-        }
-
-        // 默认规划指令
-        if (Locale.CHINESE.getLanguage().equals(getLocale().getLanguage())) {
-            return "请根据用户目标，将其拆解为 3-5 个逻辑清晰的待办步骤（Plans）。\n" +
-                    "输出要求：每行一个步骤，以数字开头。不要输出任何多余的解释。";
-        } else {
-            return "Please break down the user's goal into 3-5 logical steps (Plans).\n" +
-                    "Requirements: One step per line, starting with a number. Do not output any extra explanation.";
-        }
-    }
 }

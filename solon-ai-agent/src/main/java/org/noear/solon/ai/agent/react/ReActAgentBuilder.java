@@ -141,12 +141,12 @@ public class ReActAgentBuilder {
     }
 
     public ReActAgentBuilder outputSchema(String val) {
-        config.setOutputSchema(val);
+        config.getDefaultOptions().setOutputSchema(val);
         return this;
     }
 
     public ReActAgentBuilder outputSchema(Type type) {
-        config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
+        config.getDefaultOptions().setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
         return this;
     }
 
@@ -171,12 +171,12 @@ public class ReActAgentBuilder {
     }
 
     public ReActAgentBuilder enablePlanning(boolean val) {
-        config.setEnablePlanning(val);
+        config.getDefaultOptions().setEnablePlanning(val);
         return this;
     }
 
     public ReActAgentBuilder planInstruction(Function<ReActTrace, String> provider) {
-        config.setPlanInstructionProvider(provider);
+        config.getDefaultOptions().setPlanInstructionProvider(provider);
         return this;
     }
 

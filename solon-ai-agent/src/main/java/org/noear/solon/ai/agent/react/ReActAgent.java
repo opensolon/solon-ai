@@ -70,12 +70,8 @@ public class ReActAgent implements Agent {
      */
     protected Graph buildGraph() {
         return Graph.create(config.getTraceKey(), spec -> {
-            if (config.isEnablePlanning()) {
-                spec.addStart(Agent.ID_START).linkAdd(ReActAgent.ID_PLAN);
-                spec.addActivity(new PlanTask(config)).linkAdd(ID_REASON_BEF);
-            } else {
-                spec.addStart(Agent.ID_START).linkAdd(ID_REASON_BEF);
-            }
+            spec.addStart(Agent.ID_START).linkAdd(ReActAgent.ID_PLAN);
+            spec.addActivity(new PlanTask(config)).linkAdd(ID_REASON_BEF);
 
             spec.addActivity(ID_REASON_BEF).title("Pre-Reasoning").linkAdd(ID_REASON);
 
@@ -193,7 +189,7 @@ public class ReActAgent implements Agent {
                 trace.appendMessage(message);
             }
 
-            if (config.isEnablePlanning()) {
+            if (trace.getOptions().isEnablePlanning()) {
                 trace.setPlans(null);
             }
             context.trace().recordNode(graph, null);

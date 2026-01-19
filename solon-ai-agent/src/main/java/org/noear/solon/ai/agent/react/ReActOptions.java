@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * ReAct 智能体运行选项
@@ -46,6 +47,13 @@ public class ReActOptions implements NonSerializable {
     private long retryDelayMs = 1000L;
     /** 会话回溯窗口大小 */
     private int sessionWindowSize = 5;
+    /** 输出格式约束 (JSON Schema) */
+    private String outputSchema;
+
+    private boolean enablePlanning = false; // 是否启用规划环节
+    private Function<ReActTrace, String> planInstructionProvider; // 规划专用指令
+
+
 
 
     /** 浅拷贝选项实例 */
@@ -57,6 +65,11 @@ public class ReActOptions implements NonSerializable {
         tmp.maxRetries = maxRetries;
         tmp.retryDelayMs = retryDelayMs;
         tmp.sessionWindowSize = sessionWindowSize;
+        tmp.outputSchema = outputSchema;
+
+        tmp.enablePlanning = enablePlanning;
+        tmp.planInstructionProvider = planInstructionProvider;
+
         return tmp;
     }
 
@@ -89,12 +102,21 @@ public class ReActOptions implements NonSerializable {
         this.maxSteps = val;
     }
 
+    protected void setOutputSchema(String val) { this.outputSchema = val; }
+
+
     /** 添加拦截器并自动重排序 */
     protected void addInterceptor(ReActInterceptor val, int index) {
         this.interceptors.add(new RankEntity<>(val, index));
         if (interceptors.size() > 1) {
             Collections.sort(interceptors);
         }
+    }
+
+    protected void setEnablePlanning(boolean enablePlanning) { this.enablePlanning = enablePlanning; }
+
+    protected void setPlanInstructionProvider(Function<ReActTrace, String> provider) {
+        this.planInstructionProvider = provider;
     }
 
     // --- 参数获取 (Public) ---
@@ -121,5 +143,24 @@ public class ReActOptions implements NonSerializable {
 
     public int getSessionWindowSize() {
         return sessionWindowSize;
+    }
+
+    public String getOutputSchema() { return outputSchema; }
+
+    public boolean isEnablePlanning() { return enablePlanning; }
+
+    public String getPlanInstruction(ReActTrace trace) {
+        if (planInstructionProvider != null) {
+            return planInstructionProvider.apply(trace);
+        }
+
+        // 默认规划指令
+        if (Locale.CHINESE.getLanguage().equals(trace.getConfig().getLocale().getLanguage())) {
+            return "请根据用户目标，将其拆解为 3-5 个逻辑清晰的待办步骤（Plans）。\n" +
+                    "输出要求：每行一个步骤，以数字开头。不要输出任何多余的解释。";
+        } else {
+            return "Please break down the user's goal into 3-5 logical steps (Plans).\n" +
+                    "Requirements: One step per line, starting with a number. Do not output any extra explanation.";
+        }
     }
 }

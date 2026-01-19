@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.react.ReActAgentConfig;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
@@ -56,13 +57,20 @@ public class PlanTask implements NamedTaskComponent {
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
 
+        if(trace.getOptions().isEnablePlanning() == false){
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("ReActAgent [{}] Plan is disabled, skipping...", config.getName());
+            }
+            return;
+        }
+
         // 1. 根据配置的语言环境确定“目标”标签
         boolean isZh = Locale.CHINA.getLanguage().equals(trace.getConfig().getLocale().getLanguage());
         String targetLabel = isZh ? "目标：" : "Target: ";
 
         // 2. 构建规划请求
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.ofSystem(config.getPlanInstruction(trace)));
+        messages.add(ChatMessage.ofSystem(trace.getOptions().getPlanInstruction(trace)));
         // 动态拼接引导词
         messages.add(ChatMessage.ofUser(targetLabel + trace.getPrompt().getUserContent()));
 
@@ -72,6 +80,11 @@ public class PlanTask implements NamedTaskComponent {
                 .call();
 
         String planContent = response.getResultContent();
+
+        if (Assert.isEmpty(planContent)) {
+            LOG.warn("ReActAgent [{}] Plan generated empty content, using default goal.", config.getName());
+            return;
+        }
 
         // 4. 清洗计划内容（移除数字序号和 Markdown 符号）
         List<String> cleanedPlans = Arrays.stream(planContent.split("\n"))
