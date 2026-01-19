@@ -100,7 +100,8 @@ public class ReActTrace implements AgentTrace {
         this.protocol = protocol;
 
         if (options.getSkills().size() > 0) {
-            StringBuilder instruction = new StringBuilder();
+            StringBuilder combinedInstruction = new StringBuilder();
+
             for (RankEntity<Skill> item : options.getSkills()) {
                 Skill skill = item.target;
                 if (skill.isSupported(session)) {
@@ -115,7 +116,7 @@ public class ReActTrace implements AgentTrace {
                     //聚合提示词
                     String skillInstr = skill.getInstruction(session);
                     if (Assert.isNotEmpty(skillInstr)) {
-                        instruction.append(skillInstr).append("\n");
+                        combinedInstruction.append(skillInstr).append("\n");
                     }
 
                     //部署工具
@@ -124,7 +125,7 @@ public class ReActTrace implements AgentTrace {
             }
 
             //设置指令
-            options.setSkillInstruction(instruction.toString());
+            options.setSkillInstruction(combinedInstruction.toString());
         }
     }
 

@@ -79,26 +79,35 @@ public class ChatRequest implements NonSerializable {
                 }) // 1. 过滤
                 .collect(Collectors.toList());
 
-        for (Skill skill : activeSkills) {
-            try {
-                // 3. 挂载
-                skill.onAttach(session);
-            } catch (Throwable e) {
-                LOG.error("Skill active failed: {}", skill.getClass().getName(), e);
-                throw e;
+        if(activeSkills.size() > 0) {
+            StringBuilder combinedInstruction = new StringBuilder();
+
+            for (Skill skill : activeSkills) {
+                try {
+                    // 3. 挂载
+                    skill.onAttach(session);
+                } catch (Throwable e) {
+                    LOG.error("Skill active failed: {}", skill.getClass().getName(), e);
+                    throw e;
+                }
+
+                // 4. 收集指令
+                String ins = skill.getInstruction(session);
+                if (Utils.isNotEmpty(ins)) {
+                    if (combinedInstruction.length() > 0) {
+                        combinedInstruction.append("\n\n");
+                    }
+                    combinedInstruction.append(ins);
+                }
+
+                // 5. 收集工具
+                options.toolsAdd(skill.getTools());
             }
 
-            // 4. 收集指令
-            String ins = skill.getInstruction(session);
-            if (Utils.isNotEmpty(ins)) {
-                session.addMessage(ChatMessage.ofSystem(ins));
+            if (combinedInstruction.length() > 0) {
+                session.addMessage(ChatMessage.ofSystem(combinedInstruction.toString()));
             }
-
-            // 5. 收集工具
-            options.toolsAdd(skill.getTools());
         }
-
-
 
         if (prompt != null) {
             this.session.addMessage(prompt);
