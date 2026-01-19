@@ -101,10 +101,9 @@ public class TddCodeReviewGraphTest {
     private Agent createTddAgent(ChatModel chatModel, String name, String role, String instruction) {
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(SimpleSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role(role)
-                        .instruction("你是" + role + "。" + instruction + " 请直接输出结果，不要有额外解释。")
-                        .build())
+                        .instruction("你是" + role + "。" + instruction + " 请直接输出结果，不要有额外解释。"))
                 .build();
     }
 }

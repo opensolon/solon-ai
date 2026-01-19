@@ -117,10 +117,9 @@ public class IncidentManagementGraphTest {
     private Agent createSupportAgent(ChatModel chatModel, String name, String role, String mockMsg) {
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(SimpleSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role(role)
-                        .instruction("你是" + role + "。请简要回复结论。参考内容：" + mockMsg)
-                        .build())
+                        .instruction("请简要回复结论。参考内容：" + mockMsg))
                 .build();
     }
 }

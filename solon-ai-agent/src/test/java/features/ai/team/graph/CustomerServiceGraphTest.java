@@ -114,10 +114,9 @@ public class CustomerServiceGraphTest {
     private Agent createServiceAgent(ChatModel chatModel, String name, String role, String reply) {
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(SimpleSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role(role)
-                        .instruction("你是" + role + "。请基于用户问题提供服务。回复示例：" + reply)
-                        .build())
+                        .instruction("你是" + role + "。请基于用户问题提供服务。回复示例：" + reply))
                 .build();
     }
 }

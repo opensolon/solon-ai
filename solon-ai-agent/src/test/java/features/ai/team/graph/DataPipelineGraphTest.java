@@ -121,10 +121,9 @@ public class DataPipelineGraphTest {
     private Agent createETLAgent(ChatModel chatModel, String name, String role, String mockOutput) {
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(SimpleSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role(role)
-                        .instruction("你是" + role + "。请基于输入数据进行处理。处理结果示例：" + mockOutput)
-                        .build())
+                        .instruction("请基于输入数据进行处理。处理结果示例：" + mockOutput))
                 .build();
     }
 }

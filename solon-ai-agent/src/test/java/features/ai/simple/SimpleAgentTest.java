@@ -32,10 +32,9 @@ public class SimpleAgentTest {
                 .name("ResumeExtractor")
                 .title("简历信息提取器")
                 // 配置系统提示词模板
-                .systemPrompt(SimpleSystemPrompt.builder()
+                .systemPrompt(p -> p
                         .role("你是一个专业的人事助理")
-                        .instruction("请从用户提供的文本中提取关键信息")
-                        .build())
+                        .instruction("请从用户提供的文本中提取关键信息"))
                 // 配置输出格式（自动将 POJO 转为 JSON Schema）
                 .outputSchema(ResumeInfo.class)
                 // 配置结果存储到 Context 中的键名

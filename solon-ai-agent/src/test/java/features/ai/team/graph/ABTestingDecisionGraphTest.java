@@ -119,10 +119,9 @@ public class ABTestingDecisionGraphTest {
     private Agent createExpert(ChatModel chatModel, String name, String role, String outputKey) {
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(SimpleSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role(role)
-                        .instruction("你负责评估 A/B 测试。如果 B 优于 A，回复 'approve'，否则回复 'reject'。只输出单词。")
-                        .build())
+                        .instruction("你负责评估 A/B 测试。如果 B 优于 A，回复 'approve'，否则回复 'reject'。只输出单词。"))
                 .outputKey(outputKey) // 重要：Agent 执行完后会自动将 Content 写入 Context[outputKey]
                 .chatOptions(o -> o.temperature(0.1F))
                 .build();

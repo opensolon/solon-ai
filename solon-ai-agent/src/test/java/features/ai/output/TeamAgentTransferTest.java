@@ -143,10 +143,9 @@ public class TeamAgentTransferTest {
         SimpleAgent extractor = SimpleAgent.of(chatModel)
                 .name("extractor")
                 .description("实体关系提取器")
-                .systemPrompt(SimpleSystemPrompt.builder()
+                .systemPrompt(p -> p
                         .role("你是一个高精度信息提取专家")
-                        .instruction("从文本中提取关键实体，严格遵守 JSON Schema 规范。")
-                        .build())
+                        .instruction("从文本中提取关键实体，严格遵守 JSON Schema 规范。"))
                 .outputSchema(Personnel.class)//"{\"entity_name\": \"string\", \"birth_year\": \"integer\", \"title\": \"string\"}")
                 .outputKey("structured_data")
                 .build();

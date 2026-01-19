@@ -110,10 +110,9 @@ public class MultiLevelApprovalGraphTest {
     private Agent createApprover(ChatModel chatModel, String name, String role, String opinion) {
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(SimpleSystemPrompt.builder()
+                .systemPrompt(p->p
                         .role(role)
-                        .instruction("你是" + role + "。请基于报销事由给出简短审批意见。参考回复：" + opinion)
-                        .build())
+                        .instruction("你是" + role + "。请基于报销事由给出简短审批意见。参考回复：" + opinion))
                 .build();
     }
 }

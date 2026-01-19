@@ -102,9 +102,8 @@ public class TeamAgentSwarmTest {
         Agent cleaner = SimpleAgent.of(chatModel)
                 .name("Cleaner")
                 .description("处理 A 和 B 无法解决的死循环")
-                .systemPrompt(SimpleSystemPrompt.builder()
-                        .instruction("你是熔断器。不要拆解任务！不要调用工具！必须且仅能回复三个字：'人工介入'。")
-                        .build())
+                .systemPrompt(p->p
+                        .instruction("你是熔断器。不要拆解任务！不要调用工具！必须且仅能回复三个字：'人工介入'。"))
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.SWARM).agentAdd(a, b, cleaner).maxTurns(8).build();
