@@ -108,7 +108,7 @@ public class SupervisorTask implements NamedTaskComponent {
         // 组装系统提示词 (基础模版 + 协议扩展)
         StringBuilder protocolExt = new StringBuilder();
         config.getProtocol().prepareSupervisorInstruction(context, trace, protocolExt);
-        String basePrompt = config.getTeamSystem(trace, context);
+        String basePrompt = config.getSystemPromptFor(trace, context);
         String finalSystemPrompt = (protocolExt.length() > 0) ? basePrompt + "\n\n" + protocolExt : basePrompt;
 
         // 组装用户输入 (包含协作历史、当前轮次、候选成员)

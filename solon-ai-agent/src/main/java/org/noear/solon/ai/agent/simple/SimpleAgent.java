@@ -22,6 +22,8 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
@@ -61,21 +63,33 @@ public class SimpleAgent implements Agent {
     }
 
     @Override
-    public String name() { return config.getName(); }
+    public String name() {
+        return config.getName();
+    }
 
     @Override
-    public String title() { return config.getTitle(); }
+    public String title() {
+        return config.getTitle();
+    }
 
     @Override
-    public String description() { return config.getDescription(); }
+    public String description() {
+        return config.getDescription();
+    }
 
     @Override
-    public AgentProfile profile() { return config.getProfile(); }
+    public AgentProfile profile() {
+        return config.getProfile();
+    }
 
 
-    public SimpleRequest prompt(Prompt prompt) { return new SimpleRequest(this, prompt); }
+    public SimpleRequest prompt(Prompt prompt) {
+        return new SimpleRequest(this, prompt);
+    }
 
-    public SimpleRequest prompt(String prompt) { return new SimpleRequest(this, Prompt.of(prompt)); }
+    public SimpleRequest prompt(String prompt) {
+        return new SimpleRequest(this, Prompt.of(prompt));
+    }
 
     @Override
     public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
@@ -83,7 +97,7 @@ public class SimpleAgent implements Agent {
     }
 
     protected AssistantMessage call(Prompt prompt, AgentSession session, Consumer<ChatOptions> chatOptionsAdjustor) throws Throwable {
-        if(Prompt.isEmpty(prompt)){
+        if (Prompt.isEmpty(prompt)) {
             LOG.warn("Prompt is empty!");
             return ChatMessage.ofAssistant("");
         }
@@ -110,17 +124,11 @@ public class SimpleAgent implements Agent {
     }
 
 
-
     /**
      * 组装完整的 Prompt 消息列表（含 SystemPrompt、OutputSchema 及历史窗口）
      */
     private List<ChatMessage> buildMessages(AgentSession session, Prompt prompt) {
-        String spText = "";
-
-        // 注入基础系统指令
-        if (config.getSystemPrompt() != null) {
-            spText = config.getSystemPrompt().getSystemPromptFor(session.getSnapshot());
-        }
+        String spText = config.getSystemPromptFor(session.getSnapshot());
 
         // 注入 JSON Schema 指令（强制格式输出）
         if (Assert.isNotEmpty(config.getOutputSchema())) {
@@ -160,14 +168,14 @@ public class SimpleAgent implements Agent {
      * 实现带指数延迟的自动重试调用
      */
     private AssistantMessage callWithRetry(AgentSession session, List<ChatMessage> messages, Consumer<ChatOptions> chatOptionsAdjustor) throws Throwable {
-        if(LOG.isTraceEnabled()){
+        if (LOG.isTraceEnabled()) {
             LOG.trace("SimpleAgent [{}] calling model... messages: {}",
                     config.getName(),
                     ONode.serialize(messages, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }
 
         Prompt finalPrompt = Prompt.of(messages);
-        ChatRequestDesc chatReq   = null;
+        ChatRequestDesc chatReq = null;
 
         if (config.getChatModel() != null) {
             //构建 chatModel 请求
@@ -178,8 +186,8 @@ public class SimpleAgent implements Agent {
                         o.toolsAdd(config.getTools());
 
                         //协议工具
-                        if(protocol != null){
-                            protocol.injectAgentTools(session.getSnapshot(),this, o::toolsAdd);
+                        if (protocol != null) {
+                            protocol.injectAgentTools(session.getSnapshot(), this, o::toolsAdd);
                         }
 
                         o.toolsContextPut(config.getToolsContext());
@@ -233,40 +241,128 @@ public class SimpleAgent implements Agent {
     }
 
     // Builder 静态方法与内部类保持不变...
-    public static Builder of() { return new Builder(); }
-    public static Builder of(ChatModel chatModel) { return new Builder().chatModel(chatModel); }
+    public static Builder of() {
+        return new Builder();
+    }
+
+    public static Builder of(ChatModel chatModel) {
+        return new Builder().chatModel(chatModel);
+    }
 
     public static class Builder {
         private SimpleAgentConfig config = new SimpleAgentConfig();
 
-        public Builder then(Consumer<Builder> consumer) { consumer.accept(this); return this; }
-        public Builder name(String name) { config.setName(name); return this; }
-        public Builder title(String title) { config.setTitle(title); return this; }
-        public Builder description(String description) { config.setDescription(description); return this; }
-        public Builder profile(AgentProfile profile) { config.setProfile(profile); return this; }
-        public Builder chatModel(ChatModel chatModel) { config.setChatModel(chatModel); return this; }
-        public Builder systemPrompt(SimpleSystemPrompt systemPrompt) { config.setSystemPrompt(systemPrompt); return this; }
-        public Builder handler(AgentHandler handler) { config.setHandler(handler); return this; }
-        public Builder chatOptions(Consumer<ChatOptions> chatOptions) { config.setChatOptions(chatOptions); return this; }
-        public Builder retryConfig(int maxRetries, long retryDelayMs) { config.setRetryConfig(maxRetries, retryDelayMs); return this; }
-        public Builder historyWindowSize(int historyWindowSize){
+        public Builder then(Consumer<Builder> consumer) {
+            consumer.accept(this);
+            return this;
+        }
+
+        public Builder name(String name) {
+            config.setName(name);
+            return this;
+        }
+
+        public Builder title(String title) {
+            config.setTitle(title);
+            return this;
+        }
+
+        public Builder description(String description) {
+            config.setDescription(description);
+            return this;
+        }
+
+        public Builder profile(AgentProfile profile) {
+            config.setProfile(profile);
+            return this;
+        }
+
+        public Builder chatModel(ChatModel chatModel) {
+            config.setChatModel(chatModel);
+            return this;
+        }
+
+        public Builder systemPrompt(SimpleSystemPrompt systemPrompt) {
+            config.setSystemPrompt(systemPrompt);
+            return this;
+        }
+
+        public Builder systemPrompt(Consumer<SimpleSystemPrompt.Builder> promptBuilder) {
+            SimpleSystemPrompt.Builder builder = SimpleSystemPrompt.builder();
+            promptBuilder.accept(builder);
+            config.setSystemPrompt(builder.build());
+            return this;
+        }
+
+        public Builder handler(AgentHandler handler) {
+            config.setHandler(handler);
+            return this;
+        }
+
+        public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
+            config.setChatOptions(chatOptions);
+            return this;
+        }
+
+        public Builder retryConfig(int maxRetries, long retryDelayMs) {
+            config.setRetryConfig(maxRetries, retryDelayMs);
+            return this;
+        }
+
+        public Builder historyWindowSize(int historyWindowSize) {
             config.setHistoryWindowSize(historyWindowSize);
             return this;
         }
 
-        public Builder outputKey(String val) { config.setOutputKey(val); return this; }
-        public Builder outputSchema(String val) { config.setOutputSchema(val); return this; }
-        public Builder outputSchema(Type type) { config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(type)); return this; }
-        public Builder toolAdd(FunctionTool... tools) { config.addTool(tools); return this; }
-        public Builder toolAdd(Collection<FunctionTool> tools) { config.addTool(tools); return this; }
-        public Builder toolAdd(ToolProvider toolProvider) { config.addTool(toolProvider); return this; }
-        public Builder defaultToolsContextPut(String key, Object value) { config.getToolsContext().put(key, value); return this; }
-        public Builder defaultToolsContextPut(Map<String,Object> objectMap) { config.getToolsContext().putAll(objectMap); return this; }
+        public Builder outputKey(String val) {
+            config.setOutputKey(val);
+            return this;
+        }
+
+        public Builder outputSchema(String val) {
+            config.setOutputSchema(val);
+            return this;
+        }
+
+        public Builder outputSchema(Type type) {
+            config.setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
+            return this;
+        }
+
+        public Builder toolAdd(FunctionTool... tools) {
+            config.addTool(tools);
+            return this;
+        }
+
+        public Builder toolAdd(Collection<FunctionTool> tools) {
+            config.addTool(tools);
+            return this;
+        }
+
+        public Builder toolAdd(ToolProvider toolProvider) {
+            config.addTool(toolProvider);
+            return this;
+        }
+
+        public Builder defaultToolsContextPut(String key, Object value) {
+            config.getToolsContext().put(key, value);
+            return this;
+        }
+
+        public Builder defaultToolsContextPut(Map<String, Object> objectMap) {
+            config.getToolsContext().putAll(objectMap);
+            return this;
+        }
+
         public Builder defaultInterceptorAdd(SimpleInterceptor... vals) {
             for (SimpleInterceptor val : vals) config.addInterceptor(val, 0);
             return this;
         }
-        public Builder defaultInterceptorAdd(SimpleInterceptor val, int index) { config.addInterceptor(val, index); return this; }
+
+        public Builder defaultInterceptorAdd(SimpleInterceptor val, int index) {
+            config.addInterceptor(val, index);
+            return this;
+        }
 
         public SimpleAgent build() {
             if (config.getHandler() == null && config.getChatModel() == null)

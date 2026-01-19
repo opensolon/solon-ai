@@ -315,6 +315,13 @@ public class ReActAgent implements Agent {
             return this;
         }
 
+        public Builder systemPrompt(Consumer<ReActSystemPrompt.Builder> promptBuilder) {
+            ReActSystemPrompt.Builder builder = ReActSystemPrompt.builder();
+            promptBuilder.accept(builder);
+            config.setSystemPrompt(builder.build());
+            return this;
+        }
+
         public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
             config.setChatOptions(chatOptions);
             return this;

@@ -226,7 +226,7 @@ public class TeamAgent implements Agent {
             // 5. 资源清理与协议后置处理
             config.getProtocol().onTeamFinished(context, trace);
 
-            if(context.containsKey(Agent.KEY_CURRENT_TEAM_TRACE_KEY)) {
+            if (context.containsKey(Agent.KEY_CURRENT_TEAM_TRACE_KEY)) {
                 //说明有嵌套，需要清空协议上下文（可能会重新再进来）
                 if (context.isStopped() == false) {
                     trace.resetProtocolContext();
@@ -289,7 +289,14 @@ public class TeamAgent implements Agent {
         }
 
         public Builder systemPrompt(TeamSystemPrompt promptProvider) {
-            config.setTeamSystem(promptProvider);
+            config.setSystemPrompt(promptProvider);
+            return this;
+        }
+
+        public Builder systemPrompt(Consumer<TeamSystemPrompt.Builder> promptBuilder) {
+            TeamSystemPrompt.Builder builder = TeamSystemPrompt.builder();
+            promptBuilder.accept(builder);
+            config.setSystemPrompt(builder.build());
             return this;
         }
 

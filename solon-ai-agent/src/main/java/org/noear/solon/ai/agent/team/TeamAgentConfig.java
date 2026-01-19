@@ -91,7 +91,7 @@ public class TeamAgentConfig implements NonSerializable {
     protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) { this.graphAdjuster = graphAdjuster; }
     protected void setFinishMarker(String finishMarker) { this.finishMarker = finishMarker; }
     protected void setOutputKey(String outputKey) { this.outputKey = outputKey; }
-    protected void setTeamSystem(TeamSystemPrompt promptProvider) {
+    protected void setSystemPrompt(TeamSystemPrompt promptProvider) {
         this.systemPrompt = promptProvider;
 
         String role = systemPrompt.getRole();
@@ -187,7 +187,7 @@ public class TeamAgentConfig implements NonSerializable {
 
     public String getOutputKey() { return outputKey; }
 
-    public String getTeamSystem(TeamTrace trace, FlowContext context) {
+    public String getSystemPromptFor(TeamTrace trace, FlowContext context) {
         return systemPrompt.getSystemPromptFor(trace, context);
     }
 
