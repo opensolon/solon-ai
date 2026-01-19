@@ -135,4 +135,45 @@ public class ReActPlanningTest {
             return "订单 " + orderId + " 已进入发货流程，操作成功。";
         }
     }
+
+    @Test
+    public void testDynamicPlanningToggle() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 1. Builder 默认关闭
+        ReActAgent agent = ReActAgent.of(chatModel).enablePlanning(false).build();
+        AgentSession session = InMemoryAgentSession.of("dynamic_001");
+
+        // 2. 在 call 级别动态开启
+        agent.prompt("计算 1+2+3")
+                .session(session)
+                .options( o -> o.enablePlanning(true))
+                .call();
+
+        // 3. 验证是否有计划
+        Assertions.assertTrue(agent.getTrace(session).hasPlans(), "动态开启后应该有计划");
+
+        // 4. 下一次调用不传 options（回归默认关闭）
+        agent.call(Prompt.of("再计算一次"), session);
+        Assertions.assertFalse(agent.getTrace(session).hasPlans(), "回归默认后计划应被清空且不再生成");
+    }
+
+    @Test
+    public void testCustomPlanInstruction() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+        ReActAgent agent = ReActAgent.of(chatModel).enablePlanning(true).build();
+        AgentSession session = InMemoryAgentSession.of("custom_plan_001");
+
+        // 注入一个极简的指令，强制模型只输出一步
+        String customInstruction = "不管用户说什么，你的计划只能有一行：'Just do it'";
+
+        agent.prompt("帮我写个简历")
+                .session(session)
+                .options(o -> o.planInstruction(t -> customInstruction))
+                .call();
+
+        List<String> plans = agent.getTrace(session).getPlans();
+        Assertions.assertTrue(plans.stream().anyMatch(p -> p.toLowerCase().contains("just do it")),
+                "应该采用了自定义的规划指令");
+    }
 }

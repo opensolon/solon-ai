@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * ReAct 运行选项修正器（提供链式调用支持）
@@ -81,6 +82,11 @@ public class ReActOptionsAmend {
         return this;
     }
 
+    public ReActOptionsAmend outputSchema(String val) {
+        options.setOutputSchema(val);
+        return this;
+    }
+
     /**
      * 添加生命周期拦截器
      */
@@ -94,6 +100,16 @@ public class ReActOptionsAmend {
      */
     public ReActOptionsAmend interceptorAdd(ReActInterceptor val, int index) {
         options.addInterceptor(val, index);
+        return this;
+    }
+
+    public ReActOptionsAmend enablePlanning(boolean enablePlanning) {
+        options.setEnablePlanning(enablePlanning);
+        return this;
+    }
+
+    public ReActOptionsAmend planInstruction(Function<ReActTrace, String> provider) {
+        options.setPlanInstructionProvider(provider);
         return this;
     }
 }

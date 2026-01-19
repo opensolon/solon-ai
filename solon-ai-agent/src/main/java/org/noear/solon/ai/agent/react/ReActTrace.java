@@ -323,17 +323,20 @@ public class ReActTrace implements AgentTrace {
      */
     public void setPlans(Collection<String> newPlans) {
         this.plans.clear();
-        if (Assert.isNotEmpty(newPlans)) {
-            // 过滤空行并修剪
-            newPlans.stream()
-                    .filter(Objects::nonNull)
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .forEach(this.plans::add);
-        }
 
-        if (log.isDebugEnabled()) {
-            log.debug("Agent [{}] plans updated, total steps: {}", getAgentName(), plans.size());
+        if (options.isEnablePlanning()) {
+            if (Assert.isNotEmpty(newPlans)) {
+                // 过滤空行并修剪
+                newPlans.stream()
+                        .filter(Objects::nonNull)
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .forEach(this.plans::add);
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug("Agent [{}] plans updated, total steps: {}", getAgentName(), plans.size());
+            }
         }
     }
 

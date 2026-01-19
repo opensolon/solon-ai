@@ -189,9 +189,7 @@ public class ReActAgent implements Agent {
                 trace.appendMessage(message);
             }
 
-            if (trace.getOptions().isEnablePlanning()) {
-                trace.setPlans(null);
-            }
+            trace.setPlans(null);
             context.trace().recordNode(graph, null);
             trace.setPrompt(prompt);
         }
