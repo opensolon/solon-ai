@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.AiConfig;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
+import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
 
@@ -32,6 +33,7 @@ public class ChatConfig extends AiConfig {
     private boolean defaultAutoToolCall = true;
     private final Map<String, FunctionTool> defaultTools = new LinkedHashMap<>();
     private final Map<String, Object> defaultToolsContext = new LinkedHashMap<>();
+    private final List<RankEntity<Skill>> defaultSkills = new ArrayList<>();
     private final List<RankEntity<ChatInterceptor>> defaultInterceptors = new ArrayList<>();
     private final Map<String, Object> defaultOptions = new LinkedHashMap<>();
 
@@ -109,6 +111,17 @@ public class ChatConfig extends AiConfig {
      */
     public Map<String, Object> getDefaultToolsContext() {
         return defaultToolsContext;
+    }
+
+
+    public void addDefaultSkill(int index, Skill skill) {
+        if (skill != null) {
+            defaultSkills.add(new RankEntity<>(skill, index));
+        }
+    }
+
+    public List<RankEntity<Skill>> getDefaultSkills() {
+        return defaultSkills;
     }
 
     /**

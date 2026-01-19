@@ -20,6 +20,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -42,6 +43,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * 聊天请求描述实现
@@ -72,9 +74,14 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             this.options.toolsContext().putAll(config.getDefaultToolsContext());
         }
 
-        //黑认工具选项
+        //默认工具选项
         if (Utils.isNotEmpty(config.getDefaultOptions())) {
             this.options.options().putAll(config.getDefaultOptions());
+        }
+
+        //默认技能选项
+        if (Utils.isNotEmpty(config.getDefaultSkills())) {
+            this.options.skillAdd(config.getDefaultSkills());
         }
     }
 
@@ -110,18 +117,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     @Override
     public ChatResponse call() throws IOException {
-        //收集拦截器
-        List<RankEntity<ChatInterceptor>> interceptorList = new ArrayList<>();
-        interceptorList.addAll(config.getDefaultInterceptors());
-        interceptorList.addAll(options.interceptors());
-        if (interceptorList.size() > 1) {
-            Collections.sort(interceptorList);
-        }
-
         //构建请求数据
-        ChatRequest req = new ChatRequest(config, dialect, options, false, session.getMessages());
+        ChatRequest req = new ChatRequest(config, dialect, options, session, false);
 
-        CallChain chain = new CallChain(interceptorList, this::doCall);
+        CallChain chain = new CallChain(req.getInterceptorList(), this::doCall);
 
         return chain.doIntercept(req);
     }
@@ -180,18 +179,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     @Override
     public Publisher<ChatResponse> stream() {
-        //收集拦截器
-        List<RankEntity<ChatInterceptor>> interceptorList = new ArrayList<>();
-        interceptorList.addAll(config.getDefaultInterceptors());
-        interceptorList.addAll(options.interceptors());
-        if (interceptorList.size() > 1) {
-            Collections.sort(interceptorList);
-        }
-
         //构建请求数据
-        ChatRequest req = new ChatRequest(config, dialect, options, true, session.getMessages());
+        ChatRequest req = new ChatRequest(config, dialect, options, session, true);
 
-        StreamChain chain = new StreamChain(interceptorList, this::doStream);
+        StreamChain chain = new StreamChain(req.getInterceptorList(), this::doStream);
 
         return chain.doIntercept(req);
     }

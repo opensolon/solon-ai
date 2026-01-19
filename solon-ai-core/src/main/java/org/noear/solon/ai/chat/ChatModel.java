@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.dialect.ChatDialectManager;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
+import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.Props;
@@ -274,6 +275,15 @@ public class ChatModel implements AiModel {
          */
         public Builder defaultToolsContextPut(Map<String, Object> toolsContext) {
             config.addDefaultToolsContext(toolsContext);
+            return this;
+        }
+
+        public Builder skillAdd(Skill skill) {
+           return skillAdd(0, skill);
+        }
+
+        public Builder skillAdd(int index, Skill skill) {
+            config.addDefaultSkill(index, skill);
             return this;
         }
 

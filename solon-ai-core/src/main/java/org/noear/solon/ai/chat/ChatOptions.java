@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
+import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
@@ -52,6 +53,7 @@ public class ChatOptions {
     private boolean autoToolCall = true;
     private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     private final Map<String, Object> toolsContext = new LinkedHashMap<>();
+    private final List<RankEntity<Skill>> skills = new ArrayList<>();
     private final List<RankEntity<ChatInterceptor>> interceptors = new ArrayList<>();
     private final Map<String, Object> options = new LinkedHashMap<>();
 
@@ -166,6 +168,31 @@ public class ChatOptions {
         toolBuilder.accept(decl);
         tools.put(decl.name(), decl);
         return this;
+    }
+
+    /// ///////////////////////////////////
+
+    protected ChatOptions skillAdd(Collection<RankEntity<Skill>> skills2) {
+        skills.addAll(skills2);
+
+        if(skills.size() > 0){
+            Collections.sort(skills);
+        }
+
+        return this;
+    }
+
+    public ChatOptions skillAdd(Skill skill) {
+        return skillAdd(0, skill);
+    }
+
+    public ChatOptions skillAdd(int index, Skill skill) {
+        skills.add(new RankEntity<>(skill, index));
+        return this;
+    }
+
+    public List<RankEntity<Skill>> skills() {
+        return skills;
     }
 
     /// ///////////////////////////////////

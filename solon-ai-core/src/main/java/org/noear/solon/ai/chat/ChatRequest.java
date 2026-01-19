@@ -16,12 +16,20 @@
 package org.noear.solon.ai.chat;
 
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
+import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 聊天请求持有者
@@ -30,20 +38,69 @@ import java.util.List;
  * @since 3.3
  */
 public class ChatRequest implements NonSerializable {
+    private final static Logger LOG = LoggerFactory.getLogger(ChatRequest.class);
+
     private final ChatConfig config;
     private final ChatConfigReadonly configReadonly;
     private final ChatDialect dialect;
     private final ChatOptions options;
+    private final ChatSession session;
     private final boolean stream;
+    private final List<RankEntity<ChatInterceptor>> interceptorList;
     private List<ChatMessage> messages;
 
-    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, boolean stream, List<ChatMessage> messages) {
+    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session, boolean stream) {
+        //收集拦截器
+        this.interceptorList = new ArrayList<>();
+        interceptorList.addAll(config.getDefaultInterceptors());
+        interceptorList.addAll(options.interceptors());
+        if (interceptorList.size() > 1) {
+            Collections.sort(interceptorList);
+        }
+
+        List<Skill> activeSkills = options.skills().stream()
+                .map(s -> s.target)
+                .filter(s -> {
+                    try {
+                        return s.isSupported(session);
+                    } catch (Throwable e) {
+                        LOG.error("Skill support check failed: {}", s.getClass().getName(), e);
+                        return false;
+                    }
+                }) // 1. 过滤
+                .collect(Collectors.toList());
+
+        for (Skill skill : activeSkills) {
+            try {
+                // 3. 挂载
+                skill.onAttach(session);
+            } catch (Throwable e) {
+                LOG.error("Skill active failed: {}", skill.getClass().getName(), e);
+                throw e;
+            }
+
+            // 4. 收集指令
+            String ins = skill.getInstruction(session);
+            if (Utils.isNotEmpty(ins)) {
+                session.addMessage(ChatMessage.ofSystem(ins));
+            }
+
+            // 5. 收集工具
+            options.toolsAdd(skill.getTools());
+        }
+
+
         this.config = config;
         this.configReadonly = new ChatConfigReadonly(config);
         this.dialect = dialect;
         this.options = options;
+        this.session = session;
         this.stream = stream;
-        this.messages = Collections.unmodifiableList(messages);
+        this.messages = Collections.unmodifiableList(session.getMessages());
+    }
+
+    protected List<RankEntity<ChatInterceptor>> getInterceptorList() {
+        return interceptorList;
     }
 
     /**
@@ -61,11 +118,19 @@ public class ChatRequest implements NonSerializable {
     }
 
     /**
+     * 获取会话
+     */
+    public ChatSession getSession() {
+        return session;
+    }
+
+    /**
      * 是否为流请求
      */
     public boolean isStream() {
         return stream;
     }
+
 
     /**
      * 获取消息
