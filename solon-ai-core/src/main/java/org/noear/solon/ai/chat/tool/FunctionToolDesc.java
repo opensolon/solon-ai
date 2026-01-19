@@ -36,6 +36,7 @@ public class FunctionToolDesc implements FunctionTool {
     private final String name;
     private String title;
     private String description;
+    private Map<String, Object> meta = new HashMap<>();
 
     private final List<ParamDesc> params = new ArrayList<>();
     private Type returnType;
@@ -212,6 +213,16 @@ public class FunctionToolDesc implements FunctionTool {
     @Override
     public String description() {
         return description;
+    }
+
+    @Override
+    public Map<String, Object> meta() {
+        return meta;
+    }
+
+    @Override
+    public void metaPut(String key, Object value) {
+        meta.put(key,value);
     }
 
     /**

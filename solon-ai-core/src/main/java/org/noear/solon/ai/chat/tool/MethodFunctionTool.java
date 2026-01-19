@@ -52,6 +52,8 @@ public class MethodFunctionTool implements FunctionTool {
     private final String name;
     private final String title;
     private final String description;
+    private final Map<String, Object> meta = new HashMap<>();
+
     private final boolean returnDirect;
     private final Map<String, ParamDesc> params;
     private final ToolCallResultConverter resultConverter;
@@ -131,6 +133,16 @@ public class MethodFunctionTool implements FunctionTool {
     @Override
     public String description() {
         return description;
+    }
+
+    @Override
+    public Map<String, Object> meta() {
+        return meta;
+    }
+
+    @Override
+    public void metaPut(String key, Object value) {
+        meta.put(key,value);
     }
 
     @Override

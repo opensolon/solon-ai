@@ -48,6 +48,17 @@ public interface FunctionTool extends ChatTool {
     String description();
 
     /**
+     * 元信息
+     */
+    default Map<String, Object> meta(){
+        return null;
+    }
+
+    default void metaPut(String key, Object value){
+
+    }
+
+    /**
      * 是否直接返回给调用者
      */
      boolean returnDirect();
