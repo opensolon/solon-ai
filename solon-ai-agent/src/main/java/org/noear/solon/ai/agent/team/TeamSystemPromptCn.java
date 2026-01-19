@@ -39,12 +39,12 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
     public static TeamSystemPrompt getDefault() { return _DEFAULT; }
 
-    private final Function<TeamTrace, String> roleProvider;
+    private final String roleDesc;
     private final Function<TeamTrace, String> instructionProvider;
 
-    protected TeamSystemPromptCn(Function<TeamTrace, String> roleProvider,
+    protected TeamSystemPromptCn(String roleDesc,
                                  Function<TeamTrace, String> instructionProvider) {
-        this.roleProvider = roleProvider;
+        this.roleDesc = roleDesc;
         this.instructionProvider = instructionProvider;
     }
 
@@ -58,16 +58,16 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
     public String getSystemPrompt(TeamTrace trace) {
         StringBuilder sb = new StringBuilder();
         // 1. 注入角色定义
-        sb.append("## 角色定义\n").append(getRole(trace)).append("\n\n");
+        sb.append("## 角色定义\n").append(getRole()).append("\n\n");
         // 2. 注入综合指令（成员、任务、协议、规范）
         sb.append(getInstruction(trace));
         return sb.toString();
     }
 
     @Override
-    public String getRole(TeamTrace trace) {
-        if (roleProvider != null) {
-            return roleProvider.apply(trace);
+    public String getRole() {
+        if (roleDesc != null) {
+            return roleDesc;
         }
         return "你是一个团队协作主管 (Supervisor)，负责协调成员完成任务";
     }
@@ -127,16 +127,11 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
     public static Builder builder() { return new Builder(); }
 
     public static class Builder implements TeamSystemPrompt.Builder {
-        private Function<TeamTrace, String> roleProvider;
+        private String roleDesc;
         private Function<TeamTrace, String> instructionProvider;
 
         public Builder role(String role) {
-            this.roleProvider = (t) -> role;
-            return this;
-        }
-
-        public Builder role(Function<TeamTrace, String> roleProvider) {
-            this.roleProvider = roleProvider;
+            this.roleDesc = role;
             return this;
         }
 
@@ -151,7 +146,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
         }
 
         public TeamSystemPrompt build() {
-            return new TeamSystemPromptCn(roleProvider, instructionProvider);
+            return new TeamSystemPromptCn(roleDesc, instructionProvider);
         }
     }
 }

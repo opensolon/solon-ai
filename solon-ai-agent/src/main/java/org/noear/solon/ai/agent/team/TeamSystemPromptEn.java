@@ -34,12 +34,12 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
 
     public static TeamSystemPrompt getDefault() { return _DEFAULT; }
 
-    private final Function<TeamTrace, String> roleProvider;
+    private final String roleDesc;
     private final Function<TeamTrace, String> instructionProvider;
 
-    protected TeamSystemPromptEn(Function<TeamTrace, String> roleProvider,
+    protected TeamSystemPromptEn(String roleDesc,
                                  Function<TeamTrace, String> instructionProvider) {
-        this.roleProvider = roleProvider;
+        this.roleDesc = roleDesc;
         this.instructionProvider = instructionProvider;
     }
 
@@ -51,7 +51,7 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
         StringBuilder sb = new StringBuilder();
 
         // 1. Role Section
-        sb.append("## Role Definition\n").append(getRole(trace)).append("\n\n");
+        sb.append("## Role Definition\n").append(getRole()).append("\n\n");
 
         // 2. Comprehensive Instructions
         sb.append(getInstruction(trace));
@@ -60,9 +60,9 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
     }
 
     @Override
-    public String getRole(TeamTrace trace) {
-        if (roleProvider != null) {
-            return roleProvider.apply(trace);
+    public String getRole() {
+        if (roleDesc != null) {
+            return roleDesc;
         }
         return "You are the Team Supervisor, responsible for coordinating agents to complete the task";
     }
@@ -123,16 +123,11 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
     public static Builder builder() { return new Builder(); }
 
     public static class Builder implements TeamSystemPrompt.Builder{
-        private Function<TeamTrace, String> roleProvider;
+        private String roleDesc;
         private Function<TeamTrace, String> instructionProvider;
 
         public Builder role(String role) {
-            this.roleProvider = (t) -> role;
-            return this;
-        }
-
-        public Builder role(Function<TeamTrace, String> roleProvider) {
-            this.roleProvider = roleProvider;
+            this.roleDesc = role;
             return this;
         }
 
@@ -147,7 +142,7 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
         }
 
         public TeamSystemPrompt build() {
-            return new TeamSystemPromptEn(roleProvider, instructionProvider);
+            return new TeamSystemPromptEn(roleDesc, instructionProvider);
         }
     }
 }

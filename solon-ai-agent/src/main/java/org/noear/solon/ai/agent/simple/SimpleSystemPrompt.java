@@ -35,12 +35,12 @@ public class SimpleSystemPrompt {
     private static final Logger LOG = LoggerFactory.getLogger(SimpleSystemPrompt.class);
 
     /** 角色设定提供者 */
-    private final Function<FlowContext, String> roleProvider;
+    private final String roleDesc;
     /** 执行指令提供者 */
     private final Function<FlowContext, String> instructionProvider;
 
-    public SimpleSystemPrompt(Function<FlowContext, String> roleProvider, Function<FlowContext, String> instructionProvider) {
-        this.roleProvider = roleProvider;
+    public SimpleSystemPrompt(String roleDesc, Function<FlowContext, String> instructionProvider) {
+        this.roleDesc = roleDesc;
         this.instructionProvider = instructionProvider;
     }
 
@@ -68,7 +68,7 @@ public class SimpleSystemPrompt {
      */
     public String getSystemPrompt(FlowContext context) {
         StringBuilder sb = new StringBuilder();
-        String role = getRole(context);
+        String role = getRole();
         String inst = getInstruction(context);
 
         if (role != null) {
@@ -81,8 +81,8 @@ public class SimpleSystemPrompt {
     }
 
     /** 获取角色文本 */
-    public String getRole(FlowContext context) {
-        return roleProvider != null ? roleProvider.apply(context) : null;
+    public String getRole() {
+        return roleDesc != null ? roleDesc : null;
     }
 
     /** 获取指令文本 */
@@ -98,23 +98,18 @@ public class SimpleSystemPrompt {
      * 系统提示词构建器
      */
     public static class Builder {
-        private Function<FlowContext, String> roleProvider;
+        private String roleDesc;
         private Function<FlowContext, String> instructionProvider;
 
         /** 设置静态角色文本 */
         public Builder role(String role) {
-            return role(ctx -> role);
+            this.roleDesc = role;
+            return this;
         }
 
         /** 设置静态指令文本 */
         public Builder instruction(String instruction) {
             return instruction(ctx -> instruction);
-        }
-
-        /** 设置动态角色提供逻辑 */
-        public Builder role(Function<FlowContext, String> roleProvider) {
-            this.roleProvider = roleProvider;
-            return this;
         }
 
         /** 设置动态指令提供逻辑 */
@@ -124,7 +119,7 @@ public class SimpleSystemPrompt {
         }
 
         public SimpleSystemPrompt build() {
-            return new SimpleSystemPrompt(roleProvider, instructionProvider);
+            return new SimpleSystemPrompt(roleDesc, instructionProvider);
         }
     }
 }

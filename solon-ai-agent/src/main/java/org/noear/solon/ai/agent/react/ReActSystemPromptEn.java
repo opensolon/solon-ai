@@ -41,12 +41,12 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         return _DEFAULT;
     }
 
-    private final Function<ReActTrace, String> roleProvider;
+    private final String roleDesc;
     private final Function<ReActTrace, String> instructionProvider;
 
-    protected ReActSystemPromptEn(Function<ReActTrace, String> roleProvider,
+    protected ReActSystemPromptEn(String roleDesc,
                                   Function<ReActTrace, String> instructionProvider) {
-        this.roleProvider = roleProvider;
+        this.roleDesc = roleDesc;
         this.instructionProvider = instructionProvider;
     }
 
@@ -57,7 +57,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
     @Override
     public String getSystemPrompt(ReActTrace trace) {
-        final String role = getRole(trace);
+        final String role = getRole();
         final String instruction = getInstruction(trace);
 
         StringBuilder sb = new StringBuilder();
@@ -91,9 +91,9 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
     }
 
     @Override
-    public String getRole(ReActTrace trace) {
-        if (roleProvider != null) {
-            return roleProvider.apply(trace);
+    public String getRole() {
+        if (roleDesc != null) {
+            return roleDesc;
         }
         return "You are a professional Task Solver";
     }
@@ -145,7 +145,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
     }
 
     public static class Builder implements ReActSystemPrompt.Builder{
-        private Function<ReActTrace, String> roleProvider;
+        private String roleProvider;
         private Function<ReActTrace, String> instructionProvider;
 
         public Builder() {
@@ -154,12 +154,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         }
 
         public Builder role(String role) {
-            this.roleProvider = (trace) -> role;
-            return this;
-        }
-
-        public Builder role(Function<ReActTrace, String> roleProvider) {
-            this.roleProvider = roleProvider;
+            this.roleProvider = role;
             return this;
         }
 

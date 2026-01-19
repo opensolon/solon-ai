@@ -91,7 +91,14 @@ public class TeamAgentConfig implements NonSerializable {
     protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) { this.graphAdjuster = graphAdjuster; }
     protected void setFinishMarker(String finishMarker) { this.finishMarker = finishMarker; }
     protected void setOutputKey(String outputKey) { this.outputKey = outputKey; }
-    protected void setTeamSystem(TeamSystemPrompt promptProvider) { this.systemPrompt = promptProvider; }
+    protected void setTeamSystem(TeamSystemPrompt promptProvider) {
+        this.systemPrompt = promptProvider;
+
+        String role = systemPrompt.getRole();
+        if (role != null && description == null) {
+            description = role;
+        }
+    }
     protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
 
     /** 注册工具 */

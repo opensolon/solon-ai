@@ -91,7 +91,14 @@ public class ReActAgentConfig {
 
     protected void setFinishMarker(String val) { this.finishMarker = val; }
 
-    protected void setSystemPrompt(ReActSystemPrompt val) { this.systemPrompt = val; }
+    protected void setSystemPrompt(ReActSystemPrompt val) {
+        this.systemPrompt = val;
+
+        String role = systemPrompt.getRole();
+        if (role != null && description == null) {
+            description = role;
+        }
+    }
 
     protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
 

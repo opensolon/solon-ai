@@ -45,6 +45,7 @@ public interface TeamSystemPrompt {
     /**
      * 为当前上下文生成并渲染最终的系统提示词
      * * @param trace   协作轨迹（包含成员与状态）
+     *
      * @param context 流程上下文（提供渲染模版的业务变量）
      */
     default String getSystemPromptFor(TeamTrace trace, FlowContext context) {
@@ -73,7 +74,7 @@ public interface TeamSystemPrompt {
      * 获取身份定义片段 (Role)
      * <p>描述 Supervisor 的人格设定与管理风格。</p>
      */
-    String getRole(TeamTrace trace);
+    String getRole();
 
     /**
      * 获取核心指令片段 (Instruction)
@@ -96,9 +97,7 @@ public interface TeamSystemPrompt {
         /**
          * 设置角色设定
          */
-        default Builder role(String role) {
-            return role(trace -> role);
-        }
+        Builder role(String role);
 
         /**
          * 设置业务指令
@@ -106,11 +105,6 @@ public interface TeamSystemPrompt {
         default Builder instruction(String instruction) {
             return instruction(trace -> instruction);
         }
-
-        /**
-         * 设置动态角色提供逻辑
-         */
-        Builder role(Function<TeamTrace, String> roleProvider);
 
         /**
          * 设置动态指令提供逻辑

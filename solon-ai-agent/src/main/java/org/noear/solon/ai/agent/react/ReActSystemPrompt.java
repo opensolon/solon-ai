@@ -72,7 +72,7 @@ public interface ReActSystemPrompt {
     /**
      * 获取角色设定 (Personality)
      */
-    String getRole(ReActTrace trace);
+    String getRole();
 
     /**
      * 获取执行指令 (Rules & Constraints)
@@ -93,17 +93,12 @@ public interface ReActSystemPrompt {
      */
     interface Builder {
         /** 设置静态角色 */
-        default Builder role(String role) {
-            return role(trace -> role);
-        }
+        Builder role(String role);
 
         /** 设置静态指令 */
         default Builder instruction(String instruction) {
             return instruction(trace -> instruction);
         }
-
-        /** 设置动态角色逻辑 (可根据步数动态调整) */
-        Builder role(Function<ReActTrace, String> roleProvider);
 
         /** 设置动态指令逻辑 (如：接近最大步数时提示收敛) */
         Builder instruction(Function<ReActTrace, String> instructionProvider);

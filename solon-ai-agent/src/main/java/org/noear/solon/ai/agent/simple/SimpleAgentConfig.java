@@ -78,7 +78,15 @@ public class SimpleAgentConfig {
     protected void setTitle(String title) { this.title = title; }
     protected void setDescription(String description) { this.description = description; }
     protected void setProfile(AgentProfile profile) { this.profile = profile; }
-    protected void setSystemPrompt(SimpleSystemPrompt systemPrompt) { this.systemPrompt = systemPrompt; }
+    protected void setSystemPrompt(SimpleSystemPrompt systemPrompt) {
+        this.systemPrompt = systemPrompt;
+
+        String role = systemPrompt.getRole();
+        if (role != null && description == null) {
+            description = role;
+        }
+    }
+
     protected void setChatModel(ChatModel chatModel) { this.chatModel = chatModel; }
     protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
     protected void setHandler(AgentHandler handler) { this.handler = handler; }
