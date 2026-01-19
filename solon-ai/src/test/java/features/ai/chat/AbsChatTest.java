@@ -233,11 +233,11 @@ public abstract class AbsChatTest {
                 .build();
 
         ChatSession chatSession = InMemoryChatSession.builder().build();
-        chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
 
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
-                .prompt(chatSession)
+                .prompt("今天杭州的天气情况？")
+                .session(chatSession)
                 .options(o -> o.toolsAdd(new Tools()))
                 .stream();
 
@@ -276,11 +276,11 @@ public abstract class AbsChatTest {
                 .build();
 
         ChatSession chatSession = InMemoryChatSession.builder().build();
-        chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
 
         //流返回(sse)
         Publisher<ChatResponse> publisher = chatModel
-                .prompt(chatSession)
+                .prompt("今天杭州的天气情况？")
+                .session(chatSession)
                 .options(o -> o.toolsAdd(new Tools()))
                 .stream();
 
@@ -304,11 +304,11 @@ public abstract class AbsChatTest {
 
         System.out.println("-----------------------------------");
 
-        chatSession.addMessage(ChatMessage.ofUser("搜索网络： solon 框架的作者是谁？"));
 
         //流返回(sse)
         publisher = chatModel
-                .prompt(chatSession)
+                .prompt("搜索网络： solon 框架的作者是谁？")
+                .session(chatSession)
                 .options(o -> o.toolsAdd(new Tools()))
                 .stream();
 
@@ -381,10 +381,11 @@ public abstract class AbsChatTest {
         AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
         ChatSession chatSession = InMemoryChatSession.builder().build();
-        chatSession.addMessage(ChatMessage.ofUser("今天杭州的天气情况？"));
 
         //测试与 reactor 的兼容性
-        Flux.from(chatModel.prompt(chatSession).stream())
+        Flux.from(chatModel.prompt("今天杭州的天气情况？")
+                        .session(chatSession)
+                        .stream())
                 .doOnNext(resp -> {
                     respHolder.set(resp);
                 })
@@ -415,10 +416,11 @@ public abstract class AbsChatTest {
         AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
         ChatSession chatSession = InMemoryChatSession.builder().build();
-        chatSession.addMessage(ChatMessage.ofUser("杭州天气和北京降雨量如何？"));
 
         //测试与 reactor 的兼容性
-        Flux.from(chatModel.prompt(chatSession).stream())
+        Flux.from(chatModel.prompt("杭州天气和北京降雨量如何？")
+                        .session(chatSession)
+                        .stream())
                 .doOnNext(resp -> {
                     respHolder.set(resp);
                 })

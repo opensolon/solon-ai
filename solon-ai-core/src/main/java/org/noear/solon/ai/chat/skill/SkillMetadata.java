@@ -71,6 +71,7 @@ public class SkillMetadata implements Serializable {
         if (Utils.isEmpty(keywords)) return false;
         String kv = keywords.toLowerCase();
         return (name != null && name.toLowerCase().contains(kv)) ||
-                (description != null && description.toLowerCase().contains(kv));
+                (description != null && description.toLowerCase().contains(kv)) ||
+                (category != null && category.toLowerCase().contains(kv)); // 增加分类匹配
     }
 }
