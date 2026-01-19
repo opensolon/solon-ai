@@ -17,6 +17,7 @@
 * 优化 `solon-ai-core` Gemini 方言适配
 * 优化 `solon-ai-agent` A2AProtocol 协议代码
 * 优化 `solon-ai-agent` SwarmProtocol 协议代码
+* 修复 `solon-ai-core` ToolSchemaUtil `Param` 注解别名没有生效的问题
 * 修复 `solon-ai-agent` ReActAgent 没有拦截器时 ReActAgent 不能传递 toolsContext 的问题
 
 ### v3.8.3

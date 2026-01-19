@@ -58,7 +58,7 @@ public class ToolSchemaUtil {
 
     static {
         EgggUtil.addDigestAddin(Param.class, (EgggDigestAddin<Param>) (ce, ae, anno) -> {
-            String name = Utils.annoAlias(anno.value(), anno.value());
+            String name = Utils.annoAlias(anno.value(), anno.name());
 
             if (Utils.isEmpty(name)) {
                 if (ae instanceof FieldEggg) {

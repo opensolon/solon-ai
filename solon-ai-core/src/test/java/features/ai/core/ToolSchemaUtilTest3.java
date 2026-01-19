@@ -24,7 +24,7 @@ public class ToolSchemaUtilTest3 {
         for (FunctionTool tool : provider.getTools()) {
             System.out.println(tool.outputSchema());
             Assertions.assertEquals(
-                    "{\"type\":\"object\",\"properties\":{\"success\":{\"type\":\"boolean\"},\"data\":{\"type\":\"object\"},\"message\":{\"type\":\"string\"}},\"required\":[\"success\",\"data\",\"message\"]}",
+                    "{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"object\",\"properties\":{},\"required\":[],\"description\":\"执行成功的结果\"},\"message\":{\"type\":\"string\",\"description\":\"执行错误的信息\"},\"success\":{\"type\":\"boolean\",\"description\":\"是否执行成功\"}},\"required\":[\"success\",\"data\",\"message\"]}",
                     tool.outputSchema());
             break;
         }
@@ -33,13 +33,13 @@ public class ToolSchemaUtilTest3 {
     @AllArgsConstructor
     @Data
     public static class ToolResult<T> {
-        @Param(value = "是否执行成功", required = true)
+        @Param(description = "是否执行成功", required = true)
         private Boolean success;
 
-        @Param(value = "执行成功的结果")
+        @Param(description = "执行成功的结果")
         private T data;
 
-        @Param(value = "执行错误的信息")
+        @Param(description = "执行错误的信息")
         private String message;
 
         public static ToolResult SUCCESS = new ToolResult<>(true, null, null);

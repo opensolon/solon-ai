@@ -31,7 +31,7 @@ public class TeamAgentContractNetTest {
     // --- 极简工具类 ---
     public static class BiddingTools {
         @ToolMapping(name = "get_score", description = "获取专家匹配分(1-10)")
-        public int getScore(@Param("name") String name, @Param("topic") String topic) {
+        public int getScore(@Param("language_name") String name, @Param("topic") String topic) {
             if (name.contains("python") && topic.contains("Python")) return 10;
             if (name.contains("java") && topic.contains("Java")) return 10;
             return 1;
