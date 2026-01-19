@@ -92,7 +92,7 @@ AssistantMessage result = team.prompt("设计一个用户登录页面，包含�
 Profile 是 Agent 的“身份证”，用于结构化地定义智能体的行为边界：
 
 * 动态描述：支持占位符（如 `#{platform}`），根据会话上下文动态渲染 Agent 的职责。
-* 能力标记：显式声明智能体擅长的技能（Skills）及支持的模态（如 Text、Image）。
+* 能力标记：显式声明智能体擅长的核心能力（Capabilities）及支持的模态（如 Text、Image）。
 * 硬性约束：通过 constraintAdd 注入必须遵守的准则（如“严禁使用感叹号”、“回复不超过50字”）。
 * 风格定义：统一 Agent 的语言风格（如“极简主义”、“充满亲和力”）。
 
