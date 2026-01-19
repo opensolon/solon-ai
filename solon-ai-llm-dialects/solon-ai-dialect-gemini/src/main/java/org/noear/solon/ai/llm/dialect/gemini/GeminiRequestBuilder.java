@@ -208,7 +208,7 @@ public class GeminiRequestBuilder {
                     toolsNode.addNew().then(toolNode -> {
                         toolNode.getOrNew("functionDeclarations").asArray().addNew().then(funcNode -> {
                             funcNode.set("name", func.name());
-                            funcNode.set("description", func.description());
+                            funcNode.set("description", func.descriptionAndMeta());
                             String inputSchema = func.inputSchema();
                             if (Utils.isNotEmpty(inputSchema)) {
                                 try {
@@ -230,7 +230,7 @@ public class GeminiRequestBuilder {
                     toolsNode.addNew().then(toolNode -> {
                         toolNode.getOrNew("functionDeclarations").asArray().addNew().then(funcNode -> {
                             funcNode.set("name", func.name());
-                            funcNode.set("description", func.description());
+                            funcNode.set("description", func.descriptionAndMeta());
                             String inputSchema = func.inputSchema();
                             if (Utils.isNotEmpty(inputSchema)) {
                                 try {

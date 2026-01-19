@@ -39,7 +39,7 @@ public class DynamicGatewaySkill implements Skill {
         StringBuilder sb = new StringBuilder("发现以下工具，请根据其 Schema 进行调用：\n");
         for (FunctionTool tool : results) {
             sb.append("--- 工具名: ").append(tool.name()).append(" ---\n");
-            sb.append("描述: ").append(tool.description()).append("\n");
+            sb.append("描述: ").append(tool.descriptionAndMeta()).append("\n");
             sb.append("输入Schema: ").append(tool.inputSchema()).append("\n");
         }
         return sb.toString();

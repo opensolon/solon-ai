@@ -164,7 +164,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                     n2.set("type", "function");
                     n2.getOrNew("function").then(toolNode -> {
                         toolNode.set("name", func.name());
-                        toolNode.set("description", func.description());
+                        toolNode.set("description", func.descriptionAndMeta());
                         toolNode.set("parameters", ONode.ofJson(func.inputSchema()));
                     });
                 });

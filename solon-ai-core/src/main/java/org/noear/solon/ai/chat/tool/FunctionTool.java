@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.chat.tool;
 
+import org.noear.solon.core.util.Assert;
+
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -48,6 +50,40 @@ public interface FunctionTool extends ChatTool {
     String description();
 
     /**
+     * 带有元信息的描述（用于注入到模型）
+     */
+    default String descriptionAndMeta() {
+        Map<String, Object> meta = meta();
+
+        // 1. 如果没有 meta，直接返回原描述
+        if (Assert.isEmpty(meta)) {
+            return description();
+        }
+
+        // 2. 提取关键元信息并包装
+        StringBuilder buf = new StringBuilder();
+
+        // 借鉴 MCP 的标识
+        if (Boolean.TRUE.equals(meta.get("readOnly"))) {
+            buf.append("[ReadOnly] ");
+        }
+
+        if (Boolean.TRUE.equals(meta.get("destructive"))) {
+            buf.append("[Destructive] ");
+        }
+
+        // 如果有关联的 Skill，也可以带上，增强模型的上下文感知
+        String skill = (String) meta.get("skill");
+        if (Assert.isNotEmpty(skill)) {
+            buf.append("(").append(skill).append(") ");
+        }
+
+        buf.append(description());
+
+        return buf.toString();
+    }
+
+    /**
      * 元信息
      */
     default Map<String, Object> meta(){
@@ -57,6 +93,7 @@ public interface FunctionTool extends ChatTool {
     default void metaPut(String key, Object value){
 
     }
+
 
     /**
      * 是否直接返回给调用者

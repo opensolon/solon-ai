@@ -91,6 +91,7 @@ public class StatefulToolRegistry implements McpPrimitivesRegistry<FunctionTool>
 
             McpSchema.Tool.Builder toolBuilder = McpSchema.Tool.builder()
                     .name(functionTool.name()).title(functionTool.title()).description(functionTool.description())
+                    .meta(functionTool.meta())
                     .annotations(toolAnnotations)
                     .inputSchema(McpJsonMapper.getDefault(), inSchemaJson);
 

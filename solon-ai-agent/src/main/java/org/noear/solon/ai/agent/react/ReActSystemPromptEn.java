@@ -79,7 +79,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             // 同步中文版：明确使用内置函数调用
             sb.append("You can also use the following tools, preferably via the model's built-in Function Calling feature:\n");
             trace.getOptions().getTools().forEach(t -> {
-                sb.append("- ").append(t.name()).append(": ").append(t.description());
+                sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
                 if (Assert.isNotEmpty(t.inputSchema())) {
                     sb.append(" Input Schema: ").append(t.inputSchema());
                 }

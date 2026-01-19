@@ -75,25 +75,46 @@ public interface Skill {
     /**
      * 注入指令
      */
+    /**
+     * 注入指令并对工具进行“染色”
+     */
     default void injectInstruction(Object ctx, StringBuilder combinedInstruction) {
         String ins = getInstruction(ctx);
         Collection<FunctionTool> tools = getTools();
 
-        // 只有当“有话要说”或者“有事能做”时，才注入这个 Skill 块
+        // 1. 如果有工具，进行元信息染色（借鉴 MCP 思想）
+        if (tools != null && !tools.isEmpty()) {
+            for (FunctionTool tool : tools) {
+                // 将所属 Skill 的名字注入工具的 meta
+                tool.metaPut("skill", name());
+                // 如果需要，也可以把 Skill 的描述或其它元数据注入
+                if (Utils.isNotEmpty(metadata().getDescription())) {
+                    tool.metaPut("skill_desc", metadata().getDescription());
+                }
+            }
+        }
+
+        // 2. 构建 System Prompt 指令块
         if (Utils.isNotEmpty(ins) || (tools != null && !tools.isEmpty())) {
             if (combinedInstruction.length() > 0) {
                 combinedInstruction.append("\n");
             }
 
             // 统一头部
-            combinedInstruction.append("**Skill**: ").append(name()).append("\n");
+            combinedInstruction.append("**Skill**: ").append(name());
 
-            // 注入指令
+            // 补充 Skill 描述（如果有）
+            if (Utils.isNotEmpty(metadata().getDescription()) && !name().equals(metadata().getDescription())) {
+                combinedInstruction.append(" (").append(metadata().getDescription()).append(")");
+            }
+            combinedInstruction.append("\n");
+
+            // 注入具体指令
             if (Utils.isNotEmpty(ins)) {
                 combinedInstruction.append(ins).append("\n");
             }
 
-            // 注入工具关联（如果有）
+            // 注入工具关联说明（告知模型这些工具受此 Skill 指令约束）
             if (tools != null && !tools.isEmpty()) {
                 String toolNames = tools.stream().map(t -> t.name()).collect(Collectors.joining(", "));
                 combinedInstruction.append("- **Supported Tools**: ").append(toolNames).append("\n");

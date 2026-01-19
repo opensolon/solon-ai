@@ -74,7 +74,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
             sb.append("\n## 可用工具\n");
             sb.append("你也可以通过模型内置的函数调用工具（Function Calling）使用以下工具：\n");
             trace.getOptions().getTools().forEach(t -> {
-                sb.append("- ").append(t.name()).append(": ").append(t.description());
+                sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
                 // 必须告知模型参数 Schema 以便生成正确的 JSON
                 if (Assert.isNotEmpty(t.inputSchema())) {
                     sb.append(" 参数定义: ").append(t.inputSchema());
