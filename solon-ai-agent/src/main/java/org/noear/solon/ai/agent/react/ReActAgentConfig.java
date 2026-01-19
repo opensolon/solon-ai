@@ -196,8 +196,14 @@ public class ReActAgentConfig {
         if (planInstructionProvider != null) {
             return planInstructionProvider.apply(trace);
         }
+
         // 默认规划指令
-        return "请根据用户目标，将其拆解为 3-5 个逻辑清晰的待办步骤（Plans）。" +
-                "\n输出要求：每行一个步骤，以数字开头。不要输出任何多余的解释。";
+        if (Locale.CHINESE.getLanguage().equals(getLocale().getLanguage())) {
+            return "请根据用户目标，将其拆解为 3-5 个逻辑清晰的待办步骤（Plans）。\n" +
+                    "输出要求：每行一个步骤，以数字开头。不要输出任何多余的解释。";
+        } else {
+            return "Please break down the user's goal into 3-5 logical steps (Plans).\n" +
+                    "Requirements: One step per line, starting with a number. Do not output any extra explanation.";
+        }
     }
 }

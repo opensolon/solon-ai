@@ -359,4 +359,15 @@ public class ReActTrace implements AgentTrace {
         }
         return sb.toString();
     }
+
+    /**
+     * 获取当前的执行进度描述
+     */
+    public String getPlanProgress() {
+        if (plans.isEmpty()) {
+            return "";
+        }
+        // 基于当前已执行的步数（stepCount）推测进度（仅作为模型参考）
+        return String.format("Total Steps: %d, Current Logic Step: %d", plans.size(), getStepCount());
+    }
 }
