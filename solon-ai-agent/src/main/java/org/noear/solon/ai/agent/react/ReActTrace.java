@@ -104,6 +104,7 @@ public class ReActTrace implements AgentTrace {
 
             for (RankEntity<Skill> item : options.getSkills()) {
                 Skill skill = item.target;
+
                 if (skill.isSupported(session)) {
                     try {
                         // 挂载
@@ -114,18 +115,10 @@ public class ReActTrace implements AgentTrace {
                     }
 
                     //聚合提示词
-                    String skillInstr = skill.getInstruction(session);
-                    if (Assert.isNotEmpty(skillInstr)) {
-                        if (combinedInstruction.length() > 0) {
-                            combinedInstruction.append("\n");
-                        }
-
-                        combinedInstruction.append("**Skill**: ").append(skill.name()).append("\n");
-                        combinedInstruction.append(skillInstr).append("\n");
-                    }
+                    skill.injectInstruction(session, combinedInstruction);
 
                     //部署工具
-                    options.addTool(item.target.getTools());
+                    options.addTool(skill.getTools());
                 }
             }
 

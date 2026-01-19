@@ -15,10 +15,12 @@
  */
 package org.noear.solon.ai.chat.skill;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.lang.Preview;
 
 import java.util.Collection;
+import java.util.stream.Collectors;
 
 /**
  * 技能
@@ -67,5 +69,35 @@ public interface Skill {
      */
     default Collection<FunctionTool> getTools() {
         return null;
+    }
+
+
+    /**
+     * 注入指令
+     */
+    default void injectInstruction(Object ctx, StringBuilder combinedInstruction) {
+        String ins = getInstruction(ctx);
+        Collection<FunctionTool> tools = getTools();
+
+        // 只有当“有话要说”或者“有事能做”时，才注入这个 Skill 块
+        if (Utils.isNotEmpty(ins) || (tools != null && !tools.isEmpty())) {
+            if (combinedInstruction.length() > 0) {
+                combinedInstruction.append("\n");
+            }
+
+            // 统一头部
+            combinedInstruction.append("**Skill**: ").append(name()).append("\n");
+
+            // 注入指令
+            if (Utils.isNotEmpty(ins)) {
+                combinedInstruction.append(ins).append("\n");
+            }
+
+            // 注入工具关联（如果有）
+            if (tools != null && !tools.isEmpty()) {
+                String toolNames = tools.stream().map(t -> t.name()).collect(Collectors.joining(", "));
+                combinedInstruction.append("- **Supported Tools**: ").append(toolNames).append("\n");
+            }
+        }
     }
 }

@@ -92,14 +92,7 @@ public class ChatRequest implements NonSerializable {
                 }
 
                 // 4. 收集指令
-                String ins = skill.getInstruction(session);
-                if (Utils.isNotEmpty(ins)) {
-                    if (combinedInstruction.length() > 0) {
-                        combinedInstruction.append("\n");
-                    }
-                    combinedInstruction.append("**Skill**: ").append(skill.name()).append("\n");
-                    combinedInstruction.append(ins).append("\n");
-                }
+                skill.injectInstruction(session, combinedInstruction);
 
                 // 5. 收集工具
                 options.toolsAdd(skill.getTools());
