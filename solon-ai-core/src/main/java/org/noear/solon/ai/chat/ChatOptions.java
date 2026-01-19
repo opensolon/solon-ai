@@ -134,8 +134,10 @@ public class ChatOptions {
      * 工具添加
      */
     public ChatOptions toolsAdd(Iterable<FunctionTool> toolColl) {
-        for (FunctionTool f : toolColl) {
-            tools.put(f.name(), f);
+        if(toolColl != null) {
+            for (FunctionTool f : toolColl) {
+                tools.put(f.name(), f);
+            }
         }
 
         return this;

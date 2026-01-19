@@ -10,9 +10,14 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
@@ -22,6 +27,7 @@ import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -485,5 +491,96 @@ public abstract class AbsChatTest {
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
         assert response.contains("西湖");
+    }
+
+    @Test
+    public void case11_skill_call() throws IOException {
+        // 1. 定义一个简单的技能
+        Skill timeSkill = new Skill() {
+            @Override
+            public boolean isSupported(ChatSession session) {
+                // 只有 session 中有 "use_time_skill" 属性时才支持
+                return "true".equals(session.attr("use_time_skill"));
+            }
+
+            @Override
+            public void onAttach(ChatSession session) {
+                // 挂载时注入一个标识
+                session.attrSet("skill_attached", "time_v1");
+            }
+
+            @Override
+            public String getInstruction(ChatSession session) {
+                return "当前时间是 2026-01-19，请基于此日期回答。";
+            }
+        };
+
+        ChatModel chatModel = getChatModelBuilder().build();
+        ChatSession chatSession = InMemoryChatSession.builder().build();
+
+        // 设置支持条件
+        chatSession.attrSet("use_time_skill", "true");
+
+        // 执行调用
+        ChatResponse resp = chatModel.prompt("今天几号？")
+                .session(chatSession)
+                .options(o -> o.skillAdd(timeSkill))
+                .call();
+
+        log.info("case11 response: {}", resp.getMessage().getContent());
+
+        // 验证：1. 属性是否成功注入 2. 系统消息是否自动添加（1个User + 1个Skill生成的System + 1个Assistant）
+        Assertions.assertEquals("time_v1", chatSession.attr("skill_attached"));
+        Assertions.assertTrue(chatSession.getMessages().stream().anyMatch(m -> m instanceof SystemMessage));
+        Assertions.assertTrue(resp.getMessage().getContent().contains("2026"));
+    }
+
+    @Test
+    public void case12_skill_stream() throws Exception {
+        // 1. 定义一个带工具的技能
+        ToolProvider toolProvider = new MethodToolProvider(new Tools());
+        Skill weatherSkill = new Skill() {
+            @Override
+            public Collection<FunctionTool> getTools() {
+                return toolProvider.getTools(); // 复用已有的天气工具
+            }
+
+            @Override
+            public String getInstruction(ChatSession session) {
+                return "你是一个气象专家。";
+            }
+        };
+
+        ChatModel chatModel = getChatModelBuilder().build();
+        ChatSession chatSession = InMemoryChatSession.builder().build();
+
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<ChatResponse> lastResp = new AtomicReference<>();
+
+        // 流式调用
+        chatModel.prompt("杭州天气？")
+                .session(chatSession)
+                .options(o -> o.skillAdd(weatherSkill))
+                .stream()
+                .subscribe(new SimpleSubscriber<ChatResponse>()
+                        .doOnNext(resp -> {
+                            if (resp.isFinished()) {
+                                lastResp.set(resp);
+                            }
+                        })
+                        .doOnComplete(latch::countDown)
+                        .doOnError(err -> {
+                            err.printStackTrace();
+                            latch.countDown();
+                        }));
+
+        latch.await();
+
+        log.info("case12 final content: {}", lastResp.get().getAggregationMessage().getContent());
+
+        // 验证：1. 消息数量是否包含（User + System + ToolCall + ToolResult + Assistant）
+        // 自动工具调用通常会产生至少 5 条消息
+        Assertions.assertTrue(chatSession.getMessages().size() >= 4);
+        Assertions.assertTrue(lastResp.get().getAggregationMessage().getContent().contains("晴"));
     }
 }

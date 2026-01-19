@@ -128,6 +128,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     public ChatResponse call() throws IOException {
         //构建请求数据
         ChatRequest req = new ChatRequest(config, dialect, options, session, prompt, false);
+        if(session == null){
+            session = req.getSession();
+        }
+
 
         CallChain chain = new CallChain(req.getInterceptorList(), this::doCall);
 
@@ -190,6 +194,9 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     public Publisher<ChatResponse> stream() {
         //构建请求数据
         ChatRequest req = new ChatRequest(config, dialect, options, session, prompt,true);
+        if(session == null){
+            session = req.getSession();
+        }
 
         StreamChain chain = new StreamChain(req.getInterceptorList(), this::doStream);
 
