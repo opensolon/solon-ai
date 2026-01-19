@@ -48,8 +48,16 @@ public interface ChatSession extends NonSerializable {
     /**
      * 获取属性
      */
-    default <T> T attrGet(String name) {
+    default <T> T attr(String name) {
         return null;
+    }
+
+    /**
+     * 获取属性
+     */
+    default <T> T attrOrDefault(String name, T def) {
+        T val = attr(name);
+        return val == null ? def : val;
     }
 
 

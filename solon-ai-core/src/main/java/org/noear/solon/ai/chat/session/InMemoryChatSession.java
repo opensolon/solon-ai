@@ -81,7 +81,7 @@ public class InMemoryChatSession implements ChatSession {
     }
 
     @Override
-    public <T> T attrGet(String name) {
+    public <T> T attr(String name) {
         return (T) attrs.get(name);
     }
 
