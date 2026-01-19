@@ -25,6 +25,7 @@ import org.noear.solon.core.util.EgggUtil;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * 方法构建的工具提供者
@@ -60,6 +61,11 @@ public class MethodToolProvider implements ToolProvider {
                 tools.add(t1);
             }
         }
+    }
+
+    public MethodToolProvider then(Consumer<MethodToolProvider> consumer) {
+        consumer.accept(this);
+        return this;
     }
 
     @Override

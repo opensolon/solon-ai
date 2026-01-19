@@ -123,7 +123,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
                 .append("4. Completion is signaled ONLY by ").append(config.getFinishMarker()).append(".\n\n");
 
         // D. Business instructions
-        if (instructionProvider != null) {
+        if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
             sb.append("## Core Task Instructions\n");
 
             // Agent-level instructions

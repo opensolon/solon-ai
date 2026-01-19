@@ -119,7 +119,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
                 .append("4. 最终回答未带上 ").append(config.getFinishMarker()).append(" 将被视为无效。\n\n");
 
         // D. 业务指令注入
-        if (instructionProvider != null) {
+        if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
             sb.append("## 核心任务指令\n");
 
             // Agent 级指令
