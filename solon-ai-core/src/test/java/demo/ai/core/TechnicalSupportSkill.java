@@ -54,7 +54,11 @@ public class TechnicalSupportSkill implements Skill {
         return "在线文档显示：3.8.4 版本后，Skill 接口新增了 injectInstruction 方法。";
     }
 
-    @ToolMapping(description = "创建人工支持工单 (仅限紧急故障)", meta = "{'Destructive':true}")
+    @ToolMapping(
+            description = "创建人工支持工单",
+            // 增加确认话术和操作等级
+            meta = "{'danger':3, 'confirm_msg':'确定要转接到人工座席吗？可能会产生额外费用。'}"
+    )
     public String createHumanTicket(@Param("issue") String issue, @Param("urgency") String urgency) {
         // 标记为敏感/破坏性操作，会触发你在 ReActSystemPrompt 里的安全约束
         return "工单已提交成功，工单号：TICK-" + System.currentTimeMillis();

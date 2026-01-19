@@ -54,32 +54,21 @@ public interface FunctionTool extends ChatTool {
      */
     default String descriptionAndMeta() {
         Map<String, Object> meta = meta();
+        if (Assert.isEmpty(meta)) return description();
 
-        // 1. 如果没有 meta，直接返回原描述
-        if (Assert.isEmpty(meta)) {
-            return description();
-        }
-
-        // 2. 提取关键元信息并包装
         StringBuilder buf = new StringBuilder();
 
-        // 借鉴 MCP 的标识
-        if (Boolean.TRUE.equals(meta.get("readOnly"))) {
-            buf.append("[ReadOnly] ");
-        }
-
-        if (Boolean.TRUE.equals(meta.get("destructive"))) {
-            buf.append("[Destructive] ");
-        }
-
-        // 如果有关联的 Skill，也可以带上，增强模型的上下文感知
-        String skill = (String) meta.get("skill");
-        if (Assert.isNotEmpty(skill)) {
-            buf.append("(").append(skill).append(") ");
-        }
+        meta.forEach((k, v) -> {
+            if (v instanceof Boolean) {
+                if ((Boolean) v) {
+                    buf.append("[").append(k).append("] ");
+                }
+            } else {
+                buf.append("[").append(k).append(":").append(v).append("] ");
+            }
+        });
 
         buf.append(description());
-
         return buf.toString();
     }
 
