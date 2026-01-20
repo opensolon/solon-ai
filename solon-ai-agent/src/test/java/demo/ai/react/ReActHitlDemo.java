@@ -1,7 +1,6 @@
 package demo.ai.react;
 
-import demo.ai.agent.LlmUtil;
-import org.noear.solon.ai.agent.Agent;
+import demo.ai.llm.LlmUtil;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;

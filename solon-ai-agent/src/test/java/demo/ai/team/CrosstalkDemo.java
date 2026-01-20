@@ -15,7 +15,7 @@
  */
 package demo.ai.team;
 
-import demo.ai.agent.LlmUtil;
+import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;

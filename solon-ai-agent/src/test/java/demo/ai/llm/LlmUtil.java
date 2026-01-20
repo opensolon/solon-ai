@@ -1,4 +1,4 @@
-package demo.ai.agent;
+package demo.ai.llm;
 
 import org.noear.solon.ai.chat.ChatModel;
 

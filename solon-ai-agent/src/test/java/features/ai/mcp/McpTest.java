@@ -1,6 +1,6 @@
 package features.ai.mcp;
 
-import demo.ai.agent.LlmUtil;
+import demo.ai.llm.LlmUtil;
 import demo.ai.mcp.McpServerTool2;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

@@ -1,6 +1,6 @@
 package features.ai.team.graph;
 
-import demo.ai.agent.LlmUtil;
+import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -8,7 +8,6 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
-import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;

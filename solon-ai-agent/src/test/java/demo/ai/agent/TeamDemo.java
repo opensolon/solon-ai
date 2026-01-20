@@ -1,5 +1,6 @@
 package demo.ai.agent;
 
+import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.team.TeamAgent;

@@ -1,6 +1,6 @@
 package demo.ai.team;
 
-import demo.ai.agent.LlmUtil;
+import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.liquor.eval.Scripts;
 import org.noear.solon.ai.agent.Agent;

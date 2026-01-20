@@ -1,7 +1,5 @@
 package demo.ai.llm;
 
-import demo.ai.agent.LlmUtil;
-import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;

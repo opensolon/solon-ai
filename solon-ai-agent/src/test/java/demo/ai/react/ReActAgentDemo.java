@@ -1,6 +1,6 @@
 package demo.ai.react;
 
-import demo.ai.agent.LlmUtil;
+import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;

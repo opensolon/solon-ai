@@ -1,13 +1,12 @@
 package features.ai.simple;
 
-import demo.ai.agent.LlmUtil;
+import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
-import org.noear.solon.ai.agent.simple.SimpleSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;

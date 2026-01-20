@@ -1,6 +1,5 @@
 package demo.ai.llm;
 
-import demo.ai.agent.LlmUtil;
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.react.ReActAgent;
