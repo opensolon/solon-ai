@@ -31,6 +31,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
@@ -190,6 +191,8 @@ public class SimpleAgent implements Agent {
                         }
 
                         o.toolsContextPut(config.getToolsContext());
+
+                        config.getSkills().forEach(item -> o.skillAdd(item.index, item.target));
                         config.getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
 
                         if (Assert.isNotEmpty(config.getOutputSchema())) {
@@ -343,6 +346,18 @@ public class SimpleAgent implements Agent {
             return this;
         }
 
+        public Builder skillAdd(Skill... skills) {
+            for (Skill skill : skills) {
+                config.addSkill(skill, 0);
+            }
+            return this;
+        }
+
+        public Builder skillAdd(Skill skill, int index) {
+            config.addSkill(skill, index);
+            return this;
+        }
+
         public Builder defaultToolsContextPut(String key, Object value) {
             config.getToolsContext().put(key, value);
             return this;
@@ -366,10 +381,15 @@ public class SimpleAgent implements Agent {
         public SimpleAgent build() {
             if (config.getHandler() == null && config.getChatModel() == null)
                 throw new IllegalStateException("Handler or ChatModel must be provided");
-            if (config.getName() == null) config.setName("simple_agent");
+
+            if (config.getName() == null) {
+                config.setName("simple_agent");
+            }
+
             if (config.getDescription() == null) {
                 config.setDescription(config.getTitle() != null ? config.getTitle() : config.getName());
             }
+
             return new SimpleAgent(config);
         }
     }

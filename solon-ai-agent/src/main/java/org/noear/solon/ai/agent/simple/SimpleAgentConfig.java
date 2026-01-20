@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.RankEntity;
@@ -66,6 +67,10 @@ public class SimpleAgentConfig {
      * 挂载的本地/远程功能工具集
      */
     private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
+    /**
+     * 挂载的技能
+     */
+    private final List<RankEntity<Skill>> skills = new ArrayList<>();
     /**
      * 推理阶段的特定 ChatOptions 配置（如温度、TopP 等）
      */
@@ -162,12 +167,23 @@ public class SimpleAgentConfig {
         addTool(toolProvider.getTools());
     }
 
+
+    protected void addSkill(Skill skill, int index) {
+        skills.add(new RankEntity<>(skill, index));
+        if (skills.size() > 1) {
+            Collections.sort(skills);
+        }
+    }
+
+
     /**
      * 注册并重排拦截器
      */
-    public void addInterceptor(SimpleInterceptor interceptor, int index) {
+    protected void addInterceptor(SimpleInterceptor interceptor, int index) {
         interceptors.add(new RankEntity<>(interceptor, index));
-        Collections.sort(interceptors);
+        if (interceptors.size() > 1) {
+            Collections.sort(interceptors);
+        }
     }
 
     /**
@@ -234,6 +250,10 @@ public class SimpleAgentConfig {
 
     public Map<String, Object> getToolsContext() {
         return toolsContext;
+    }
+
+    public List<RankEntity<Skill>> getSkills() {
+        return skills;
     }
 
     public List<RankEntity<SimpleInterceptor>> getInterceptors() {
