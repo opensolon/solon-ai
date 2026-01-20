@@ -52,11 +52,11 @@ Solon-AI
 
 ## 简介
 
-Solon AI 是 Solon 项目核心子项目之一。它是一个全场景的 Java AI 开发框架，旨在将 LLM 推理、RAG 知识库、MCP 协议以及 Agent 协作编排进行深度整合。
+Solon AI 是 Solon 项目核心子项目之一。它是一个全场景的 Java AI 开发框架，旨在将 LLM 大模型、RAG 知识库、MCP 协议以及 Agent 协作编排进行深度整合。
 
 * 全场景支持：完美契合 Solon 生态，亦可无缝嵌入 SpringBoot、Vert.X、Quarkus 等框架。
-* 多模型方言：通过 ChatModel 统一接口，屏蔽不同模型供应商（OpenAI, Ollama, DeepSeek, Gemini 等）的协议差异。
-* 图驱动编排：支持将 AI 推理转化为可观测、可治理的计算流图。
+* 多模型方言：采用 ChatModel 统一接口，通过方言适配模型差异（OpenAI, Ollama, DeepSeek, Gemini 等）。
+* 图驱动编排：支持将 Agent 推理转化为可观测、可治理的计算流图。
 
 
 其中 solon-ai 的嵌入（包括第三方框架）示例：
@@ -69,7 +69,7 @@ Solon AI 是 Solon 项目核心子项目之一。它是一个全场景的 Java A
 
 * ChatModel（通用大语言模型 LLM 调用接口）
 
-支持同步、流式（Reactive）调用，内置方言适配，工具调用，会话记忆等能力。
+支持同步、流式（Reactive）调用，内置方言适配，工具（Tool），技能（Skill），会话记忆（ChatSession）等能力。
 
 ```java
 ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
@@ -141,7 +141,7 @@ McpClientProvider clientProvider = McpClientProvider.builder()
 
 * Agent (基于计算流图的智能体体验)
 
-Solon AI 将推理逻辑转化为图驱动的协作流，支持ReAct 自省推理与多专家 Team 协作。
+Solon AI Agent 将推理逻辑转化为图驱动的协作流，支持 ReAct 自省推理和多智能体 Team 协作。
 
 
 ```java
