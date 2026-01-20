@@ -691,16 +691,19 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             String inputSchema = ONode.serialize(tool.inputSchema());
             String outputSchema = (tool.outputSchema() == null ? null : ONode.serialize(tool.outputSchema()));
 
-            FunctionToolDesc functionRefer = new FunctionToolDesc(
-                    name,
-                    title,
-                    description,
-                    returnDirect,
-                    inputSchema,
-                    outputSchema,
-                    args -> callToolAsText(name, args).getContent());
+            FunctionToolDesc functionDesc = new FunctionToolDesc(name);
+            functionDesc.title(title);
+            functionDesc.description(description);
+            functionDesc.returnDirect(returnDirect);
+            functionDesc.inputSchema(inputSchema);
+            functionDesc.outputSchema(outputSchema);
+            functionDesc.doHandle((args) -> callToolAsText(name, args).getContent());
 
-            toolList.add(functionRefer);
+            if (Assert.isNotEmpty(tool.meta())) {
+                functionDesc.meta().putAll(tool.meta());
+            }
+
+            toolList.add(functionDesc);
         }
 
         return toolList;
@@ -740,6 +743,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             functionDesc.mimeType(resource.mimeType());
             functionDesc.doHandle((reqUri) -> readResourceAsText(reqUri));
 
+            if (Assert.isNotEmpty(resource.meta())) {
+                functionDesc.meta().putAll(resource.meta());
+            }
 
             resourceList.add(functionDesc);
         }
@@ -779,6 +785,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             functionDesc.mimeType(resource.mimeType());
             functionDesc.doHandle((reqUri) -> readResourceAsText(reqUri));
 
+            if (Assert.isNotEmpty(resource.meta())) {
+                functionDesc.meta().putAll(resource.meta());
+            }
 
             resourceList.add(functionDesc);
         }
@@ -820,6 +829,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
             functionDesc.doHandle((args) -> getPromptAsMessages(name, args));
 
+            if (Assert.isNotEmpty(prompt.meta())) {
+                functionDesc.meta().putAll(prompt.meta());
+            }
 
             promptList.add(functionDesc);
         }
