@@ -4,7 +4,7 @@
 Solon-AI
 </h1>
 <p align="center">
-	<strong>Java LLM(tool, skill) & RAG & MCP & Agent(ReAct, Team) 应用开发框架（支持已知 AI 开发的各种能力）</strong>
+	<strong>Java LLM(tool, skill) & RAG & MCP & Agent(ReAct, Team) 应用开发框架</strong>
     <br/>
     <strong>克制、高效、开放</strong>
 </p>
