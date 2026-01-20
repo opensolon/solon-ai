@@ -174,6 +174,11 @@ public class ChatOptions {
 
     /// ///////////////////////////////////
 
+    /**
+     * 技能添加
+     *
+     * @since 3.8.4
+     */
     protected ChatOptions skillAdd(Collection<RankEntity<Skill>> skills2) {
         skills.addAll(skills2);
 
@@ -184,15 +189,28 @@ public class ChatOptions {
         return this;
     }
 
+    /**
+     * 技能添加
+     *
+     * @since 3.8.4
+     */
     public ChatOptions skillAdd(Skill skill) {
         return skillAdd(0, skill);
     }
 
+    /**
+     * 技能添加
+     *
+     * @since 3.8.4
+     */
     public ChatOptions skillAdd(int index, Skill skill) {
         skills.add(new RankEntity<>(skill, index));
         return this;
     }
 
+    /**
+     * 获取所有技能
+     */
     public List<RankEntity<Skill>> skills() {
         return skills;
     }
