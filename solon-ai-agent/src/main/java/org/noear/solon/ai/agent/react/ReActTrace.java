@@ -60,7 +60,7 @@ public class ReActTrace implements AgentTrace {
     /** 协议注入的专用工具映射表 */
     private transient final Map<String, FunctionTool> protocolToolMap = new LinkedHashMap<>();
 
-    /** 任务提示词 */
+    /** 任务提示词（因为要反序列化，所以不用接口形式） */
     private Prompt prompt;
     /** 迭代步数计数器 */
     private AtomicInteger stepCounter = new AtomicInteger(0);
