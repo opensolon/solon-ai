@@ -30,7 +30,7 @@ public class A2ALocalTest {
                 .model("qwen2.5:latest")
                 .provider("ollama")
                 .timeout(Duration.ofMinutes(10))
-                .defaultToolsAdd(agentAssistant)
+                .defaultToolAdd(agentAssistant)
                 .build();
 
         InMemoryChatSession chatSession = InMemoryChatSession.builder()
@@ -71,7 +71,7 @@ public class A2ALocalTest {
                 .model("qwen2.5:latest")
                 .provider("ollama")
                 .timeout(Duration.ofMinutes(10))
-                .defaultToolsAdd(new Tools1())
+                .defaultToolAdd(new Tools1())
                 .build();
 
         return new FunctionToolDesc("weather_agent")
@@ -88,7 +88,7 @@ public class A2ALocalTest {
                 .model("qwen2.5:latest")
                 .provider("ollama")
                 .timeout(Duration.ofMinutes(10))
-                .defaultToolsAdd(new Tools2())
+                .defaultToolAdd(new Tools2())
                 .build();
 
         return new FunctionToolDesc("spot_agent")

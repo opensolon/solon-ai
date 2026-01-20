@@ -190,7 +190,7 @@ public class ChatModel implements AiModel {
          *
          * @param tool 工具对象
          */
-        public Builder defaultToolsAdd(FunctionTool tool) {
+        public Builder defaultToolAdd(FunctionTool tool) {
             config.addDefaultTools(tool);
             return this;
         }
@@ -200,7 +200,7 @@ public class ChatModel implements AiModel {
          *
          * @param toolColl 工具集合
          */
-        public Builder defaultToolsAdd(Iterable<FunctionTool> toolColl) {
+        public Builder defaultToolAdd(Iterable<FunctionTool> toolColl) {
             for (FunctionTool f : toolColl) {
                 config.addDefaultTools(f);
             }
@@ -213,8 +213,8 @@ public class ChatModel implements AiModel {
          *
          * @param toolProvider 工具提供者
          */
-        public Builder defaultToolsAdd(ToolProvider toolProvider) {
-            return defaultToolsAdd(toolProvider.getTools());
+        public Builder defaultToolAdd(ToolProvider toolProvider) {
+            return defaultToolAdd(toolProvider.getTools());
         }
 
         /**
@@ -222,8 +222,8 @@ public class ChatModel implements AiModel {
          *
          * @param toolObj 工具对象
          */
-        public Builder defaultToolsAdd(Object toolObj) {
-            return defaultToolsAdd(new MethodToolProvider(toolObj));
+        public Builder defaultToolAdd(Object toolObj) {
+            return defaultToolAdd(new MethodToolProvider(toolObj));
         }
 
         /**
@@ -232,7 +232,7 @@ public class ChatModel implements AiModel {
          * @param name        名字
          * @param toolBuilder 工具构建器
          */
-        public Builder defaultToolsAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
+        public Builder defaultToolAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
             FunctionToolDesc decl = new FunctionToolDesc(name);
             toolBuilder.accept(decl);
             config.addDefaultTools(decl);
@@ -242,31 +242,9 @@ public class ChatModel implements AiModel {
         /**
          * 默认工具上下文添加
          *
-         * @deprecated  3.8.4 {@link #defaultToolsContextPut(String, Object)}
-         */
-        @Deprecated
-        public Builder defaultToolsContextAdd(String key, Object value) {
-            config.addDefaultToolsContext(key, value);
-            return this;
-        }
-
-        /**
-         * 默认工具上下文添加
-         *
-         * @deprecated  3.8.4 {@link #defaultToolsContextPut(Map)}
-         */
-        @Deprecated
-        public Builder defaultToolsContextAdd(Map<String, Object> toolsContext) {
-            config.addDefaultToolsContext(toolsContext);
-            return this;
-        }
-
-        /**
-         * 默认工具上下文添加
-         *
          * @since 3.8.4
          */
-        public Builder defaultToolsContextPut(String key, Object value) {
+        public Builder defaultToolContextPut(String key, Object value) {
             config.addDefaultToolsContext(key, value);
             return this;
         }
@@ -276,7 +254,7 @@ public class ChatModel implements AiModel {
          *
          * @since 3.8.4
          */
-        public Builder defaultToolsContextPut(Map<String, Object> toolsContext) {
+        public Builder defaultToolContextPut(Map<String, Object> toolsContext) {
             config.addDefaultToolsContext(toolsContext);
             return this;
         }
@@ -287,7 +265,7 @@ public class ChatModel implements AiModel {
          * @since 3.8.4
          */
         public Builder defaultSkillAdd(Skill skill) {
-           return defaultSkillAdd(0, skill);
+            return defaultSkillAdd(0, skill);
         }
 
         /**
@@ -358,6 +336,88 @@ public class ChatModel implements AiModel {
          */
         public ChatModel build() {
             return new ChatModel(config);
+        }
+
+        //----------------
+
+
+        /**
+         * 默认工具添加（即每次请求都会带上）
+         *
+         * @param tool 工具对象
+         * @deprecated 3.8.4 {@link #defaultToolAdd(FunctionTool)}
+         */
+        @Deprecated
+        public Builder defaultToolsAdd(FunctionTool tool) {
+            return defaultToolAdd(tool);
+        }
+
+        /**
+         * 默认工具添加（即每次请求都会带上）
+         *
+         * @param toolColl 工具集合
+         * @deprecated 3.8.4 {@link #defaultToolAdd(Iterable)}
+         */
+        @Deprecated
+        public Builder defaultToolsAdd(Iterable<FunctionTool> toolColl) {
+            return defaultToolAdd(toolColl);
+        }
+
+        /**
+         * 默认工具添加（即每次请求都会带上）
+         *
+         * @param toolProvider 工具提供者
+         * @deprecated 3.8.4 {@link #defaultToolAdd(ToolProvider)}
+         */
+        @Deprecated
+        public Builder defaultToolsAdd(ToolProvider toolProvider) {
+            return defaultToolAdd(toolProvider.getTools());
+        }
+
+        /**
+         * 默认工具添加（即每次请求都会带上）
+         *
+         * @param toolObj 工具对象
+         * @deprecated 3.8.4 {@link #defaultToolAdd(Object)}
+         */
+        @Deprecated
+        public Builder defaultToolsAdd(Object toolObj) {
+            return defaultToolAdd(new MethodToolProvider(toolObj));
+        }
+
+        /**
+         * 默认工具添加（即每次请求都会带上）
+         *
+         * @param name        名字
+         * @param toolBuilder 工具构建器
+         * @deprecated 3.8.4 {@link #defaultToolAdd(String, Consumer)}
+         */
+        @Deprecated
+        public Builder defaultToolsAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
+            return defaultToolAdd(name, toolBuilder);
+        }
+
+
+        /**
+         * 默认工具上下文添加
+         *
+         * @deprecated 3.8.4 {@link #defaultToolContextPut(String, Object)}
+         */
+        @Deprecated
+        public Builder defaultToolsContextAdd(String key, Object value) {
+            config.addDefaultToolsContext(key, value);
+            return this;
+        }
+
+        /**
+         * 默认工具上下文添加
+         *
+         * @deprecated 3.8.4 {@link #defaultToolContextPut(Map)}
+         */
+        @Deprecated
+        public Builder defaultToolsContextAdd(Map<String, Object> toolsContext) {
+            config.addDefaultToolsContext(toolsContext);
+            return this;
         }
     }
 }

@@ -70,7 +70,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
                 for (String toolProvider : toolProviders) {
                     Object tmp = ClassUtil.tryInstance(toolProvider);
                     if (tmp != null) {
-                        chatModelBuilder.defaultToolsAdd(new MethodToolProvider(tmp));
+                        chatModelBuilder.defaultToolAdd(new MethodToolProvider(tmp));
                     }
                 }
             }
@@ -81,7 +81,7 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
                 ONode mcpServersNode = ONode.ofBean(mcpServers);
                 McpProviders mcpProviders = McpProviders.fromMcpServers(mcpServersNode);
                 if (mcpProviders != null) {
-                    chatModelBuilder.defaultToolsAdd(mcpProviders);
+                    chatModelBuilder.defaultToolAdd(mcpProviders);
                 }
             }
 

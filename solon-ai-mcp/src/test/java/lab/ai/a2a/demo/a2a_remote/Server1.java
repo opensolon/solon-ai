@@ -15,7 +15,7 @@ public class Server1 implements AgentTaskHandler {
     ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
             .model("qwen2.5:1.5b")
             .provider("ollama")
-            .defaultToolsAdd(new Tools1())
+            .defaultToolAdd(new Tools1())
             .build();
 
     @ToolMapping(name = "weather_agent", description = "专业的天气预报助手。主要任务是利用所提供的工具获取并传递天气信息")

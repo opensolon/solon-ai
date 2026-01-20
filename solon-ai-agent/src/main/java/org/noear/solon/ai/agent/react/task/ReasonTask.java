@@ -178,11 +178,11 @@ public class ReasonTask implements NamedTaskComponent {
         ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o -> {
-                    o.toolsAdd(trace.getOptions().getTools());
-                    o.toolsAdd(trace.getProtocolTools());
+                    o.toolAdd(trace.getOptions().getTools());
+                    o.toolAdd(trace.getProtocolTools());
 
                     o.autoToolCall(false); // 强制由 Agent 框架管理工具链路
-                    o.toolsContextPut(trace.getOptions().getToolsContext());
+                    o.toolContextPut(trace.getOptions().getToolsContext());
 
                     //trace.getOptions().getSkills().forEach(item -> o.skillAdd(item.index, item.target));
                     trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));

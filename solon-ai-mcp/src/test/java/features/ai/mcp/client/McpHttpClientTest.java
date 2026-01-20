@@ -6,11 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.mcp.server.McpServerEndpointProvider;
-import org.noear.solon.annotation.Inject;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.noear.solon.test.SolonTest;
 
@@ -93,8 +90,8 @@ public class McpHttpClientTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .provider(provider)
                 .model(model)
-                .defaultToolsAdd(toolProvider)
-                .defaultToolsAdd(toolProvider2)
+                .defaultToolAdd(toolProvider)
+                .defaultToolAdd(toolProvider2)
                 .build();
 
         ChatResponse resp = chatModel
@@ -123,8 +120,8 @@ public class McpHttpClientTest {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .provider(provider)
                 .model(model)
-                .defaultToolsAdd(toolProvider)
-                .defaultToolsAdd(toolProvider2)
+                .defaultToolAdd(toolProvider)
+                .defaultToolAdd(toolProvider2)
                 .build();
 
         AtomicReference<ChatResponse> respHolder = new AtomicReference<>();

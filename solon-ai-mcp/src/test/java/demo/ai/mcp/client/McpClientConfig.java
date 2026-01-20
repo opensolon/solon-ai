@@ -17,7 +17,7 @@ public class McpClientConfig {
     @Bean
     public ChatModel chatModel(@Inject("${solon.ai.chat.demo}") ChatConfig chatConfig, McpClientProvider toolProvider) {
         return ChatModel.of(chatConfig)
-                .defaultToolsAdd(toolProvider)
+                .defaultToolAdd(toolProvider)
                 .build();
     }
 }

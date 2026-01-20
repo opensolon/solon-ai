@@ -28,7 +28,7 @@ public class GiteeaiDsTest {
     public void case10() throws Exception {
         //没有参数的工具
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new Case10Tools())
+                .defaultToolAdd(new Case10Tools())
                 .build();
 
         String response = chatModel.prompt("杭州的假日景点介绍。要求用 tool 查")

@@ -61,7 +61,7 @@ public class McpTest {
                 .build();
 
         String tmp = agent.prompt("杭州今天天气怎么样？")
-                .options(options -> options.toolsContextPut("userId", "aaa"))
+                .options(options -> options.toolContextPut("userId", "aaa"))
                 .call()
                 .getContent();
 

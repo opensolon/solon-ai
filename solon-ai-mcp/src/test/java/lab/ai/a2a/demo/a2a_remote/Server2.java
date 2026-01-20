@@ -15,7 +15,7 @@ public class Server2 implements AgentTaskHandler {
     ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
             .model("qwen2.5:latest")
             .provider("ollama")
-            .defaultToolsAdd(new Tools2())
+            .defaultToolAdd(new Tools2())
             .build();
 
     @ToolMapping(name = "spot_agent", description = "专业的景区推荐助手。主要任务是推荐景点信息")

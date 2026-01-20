@@ -30,7 +30,7 @@ public class McpClientDemo {
                         .prompt("今天杭州的天气情况？")
                         .options(options -> {
                             //转为工具集合用于绑定
-                            options.toolsAdd(mcpClient.getTools());
+                            options.toolAdd(mcpClient.getTools());
                         })
                         .stream())
                 .map(resp -> resp.getMessage());

@@ -21,8 +21,6 @@ import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
-import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -45,7 +43,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
  * 聊天请求描述实现
@@ -76,7 +73,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         //默认工具上下文
         if (Utils.isNotEmpty(config.getDefaultToolsContext())) {
-            this.options.toolsContext().putAll(config.getDefaultToolsContext());
+            this.options.toolContext().putAll(config.getDefaultToolsContext());
         }
 
         //默认工具选项
@@ -90,7 +87,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
 
         if(Utils.isNotEmpty(config.getDefaultTools())){
-            this.options.toolsAdd(config.getDefaultTools());
+            this.options.toolAdd(config.getDefaultTools());
         }
 
         if(Utils.isNotEmpty(config.getDefaultInterceptors())){
@@ -472,7 +469,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             Collections.sort(interceptorList);
         }
 
-        ToolRequest req = new ToolRequest(resp.getRequest(), resp.getOptions().toolsContext(), args);
+        ToolRequest req = new ToolRequest(resp.getRequest(), resp.getOptions().toolContext(), args);
 
         //构建请求数据
         ToolChain chain = new ToolChain(interceptorList, func);

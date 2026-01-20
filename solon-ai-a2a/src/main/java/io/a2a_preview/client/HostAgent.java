@@ -75,7 +75,7 @@ public class HostAgent {
     public ChatResponse chatCall(String prompt) throws IOException {
         return chatModel.prompt(buildSystemMessage(),
                         ChatMessage.ofUser(prompt))
-                .options(o -> o.toolsAdd(agentTools))
+                .options(o -> o.toolAdd(agentTools))
                 .call();
     }
 
@@ -83,14 +83,14 @@ public class HostAgent {
         session.addMessage(buildSystemMessage());
 
         return chatModel.prompt(session)
-                .options(o -> o.toolsAdd(agentTools))
+                .options(o -> o.toolAdd(agentTools))
                 .call();
     }
 
     public Publisher<ChatResponse> chatStream(String prompt) {
         return chatModel.prompt(buildSystemMessage(),
                         ChatMessage.ofUser(prompt))
-                .options(o -> o.toolsAdd(agentTools))
+                .options(o -> o.toolAdd(agentTools))
                 .stream();
     }
 
@@ -98,7 +98,7 @@ public class HostAgent {
         session.addMessage(buildSystemMessage());
 
         return chatModel.prompt(session)
-                .options(o -> o.toolsAdd(agentTools))
+                .options(o -> o.toolAdd(agentTools))
                 .stream();
     }
 

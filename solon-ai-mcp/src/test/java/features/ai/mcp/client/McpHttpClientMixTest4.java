@@ -47,7 +47,7 @@ public class McpHttpClientMixTest4 {
 
 
         ChatModel chatModel = LlmUtil.getChatModel()
-                .defaultToolsAdd(mcpClient)
+                .defaultToolAdd(mcpClient)
                 .build();
 
         response = chatModel.prompt("杭州的假日景点介绍。要求用 tool 查")

@@ -62,7 +62,7 @@ public class McpHttpClientMixTest9_stateless {
     @Test
     public void tool9_model() throws Exception {
         ChatModel chatModel = LlmUtil.getChatModel()
-                .defaultToolsAdd(mcpClient)
+                .defaultToolAdd(mcpClient)
                 .build();
 
         ChatResponse resp = chatModel

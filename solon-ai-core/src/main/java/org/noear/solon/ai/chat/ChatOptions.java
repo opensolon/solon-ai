@@ -52,7 +52,7 @@ public class ChatOptions {
 
     private boolean autoToolCall = true;
     private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
-    private final Map<String, Object> toolsContext = new LinkedHashMap<>();
+    private final Map<String, Object> toolContext = new LinkedHashMap<>();
     private final List<RankEntity<Skill>> skills = new ArrayList<>();
     private final List<RankEntity<ChatInterceptor>> interceptors = new ArrayList<>();
     private final Map<String, Object> options = new LinkedHashMap<>();
@@ -66,7 +66,8 @@ public class ChatOptions {
 
     /**
      * 是否自动执行工具调用
-     * */
+     *
+     */
     public boolean isAutoToolCall() {
         return autoToolCall;
     }
@@ -74,24 +75,17 @@ public class ChatOptions {
     /**
      * 工具上下文（附加参数）
      */
-    public Map<String, Object> toolsContext() {
-        return toolsContext;
+    public Map<String, Object> toolContext() {
+        return toolContext;
     }
 
-    /**
-     * @deprecated 3.8.4 {@link #toolsContextPut(Map)}
-     */
-    @Deprecated
-    public ChatOptions toolsContext(Map<String, Object> toolsContext) {
-       return toolsContextPut(toolsContext);
-    }
 
     /**
      * @since 3.8.4
      */
-    public ChatOptions toolsContextPut(Map<String, Object> toolsContext) {
+    public ChatOptions toolContextPut(Map<String, Object> toolsContext) {
         if (Assert.isNotEmpty(toolsContext)) {
-            this.toolsContext.putAll(toolsContext);
+            this.toolContext.putAll(toolsContext);
         }
         return this;
     }
@@ -99,8 +93,8 @@ public class ChatOptions {
     /**
      * @since 3.8.4
      */
-    public ChatOptions toolsContextPut(String key, String val) {
-        this.toolsContext.put(key, val);
+    public ChatOptions toolContextPut(String key, String val) {
+        this.toolContext.put(key, val);
         return this;
     }
 
@@ -125,7 +119,7 @@ public class ChatOptions {
     /**
      * 添加函数工具
      */
-    public ChatOptions toolsAdd(FunctionTool tool) {
+    public ChatOptions toolAdd(FunctionTool tool) {
         tools.put(tool.name(), tool);
         return this;
     }
@@ -133,8 +127,8 @@ public class ChatOptions {
     /**
      * 添加函数工具
      */
-    public ChatOptions toolsAdd(Iterable<FunctionTool> toolColl) {
-        if(toolColl != null) {
+    public ChatOptions toolAdd(Iterable<FunctionTool> toolColl) {
+        if (toolColl != null) {
             for (FunctionTool f : toolColl) {
                 tools.put(f.name(), f);
             }
@@ -146,8 +140,8 @@ public class ChatOptions {
     /**
      * 添加函数工具
      */
-    public ChatOptions toolsAdd(ToolProvider toolProvider) {
-        return toolsAdd(toolProvider.getTools());
+    public ChatOptions toolAdd(ToolProvider toolProvider) {
+        return toolAdd(toolProvider.getTools());
     }
 
     /**
@@ -155,8 +149,8 @@ public class ChatOptions {
      *
      * @param toolObj 工具对象
      */
-    public ChatOptions toolsAdd(Object toolObj) {
-        return toolsAdd(new MethodToolProvider(toolObj));
+    public ChatOptions toolAdd(Object toolObj) {
+        return toolAdd(new MethodToolProvider(toolObj));
     }
 
     /**
@@ -165,7 +159,7 @@ public class ChatOptions {
      * @param name        名字
      * @param toolBuilder 工具构建器
      */
-    public ChatOptions toolsAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
+    public ChatOptions toolAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
         FunctionToolDesc decl = new FunctionToolDesc(name);
         toolBuilder.accept(decl);
         tools.put(decl.name(), decl);
@@ -182,7 +176,7 @@ public class ChatOptions {
     protected ChatOptions skillAdd(Collection<RankEntity<Skill>> skills2) {
         skills.addAll(skills2);
 
-        if(skills.size() > 0){
+        if (skills.size() > 0) {
             Collections.sort(skills);
         }
 
@@ -235,7 +229,7 @@ public class ChatOptions {
     public ChatOptions interceptorAdd(int index, ChatInterceptor interceptor) {
         interceptors.add(new RankEntity<>(interceptor, index));
 
-        if(interceptors.size() > 0){
+        if (interceptors.size() > 0) {
             Collections.sort(interceptors);
         }
 
@@ -296,7 +290,7 @@ public class ChatOptions {
 
     /**
      * 选项添加
-     * 
+     *
      * @deprecated 3.8.1 {@link #optionPut(String, Object)}
      */
     @Deprecated
@@ -410,5 +404,78 @@ public class ChatOptions {
     @Nullable
     public String user() {
         return (String) option("user");
+    }
+
+    //---------
+
+    /**
+     * 添加函数工具
+     *
+     * @deprecated 3.8.4 {@link #toolAdd(FunctionTool)}
+     */
+    @Deprecated
+    public ChatOptions toolsAdd(FunctionTool tool) {
+        return toolAdd(tool);
+    }
+
+    /**
+     * 添加函数工具
+     *
+     * @deprecated 3.8.4 {@link #toolAdd(Iterable)}
+     */
+    @Deprecated
+    public ChatOptions toolsAdd(Iterable<FunctionTool> toolColl) {
+        return toolAdd(toolColl);
+    }
+
+    /**
+     * 添加函数工具
+     *
+     * @deprecated 3.8.4 {@link #toolAdd(ToolProvider)}
+     */
+    @Deprecated
+    public ChatOptions toolsAdd(ToolProvider toolProvider) {
+        return toolAdd(toolProvider);
+    }
+
+    /**
+     * 添加函数工具
+     *
+     * @param toolObj 工具对象
+     * @deprecated 3.8.4 {@link #toolAdd(Object)}
+     */
+    @Deprecated
+    public ChatOptions toolsAdd(Object toolObj) {
+        return toolAdd(toolObj);
+    }
+
+    /**
+     * 添加函数工具（构建形式）
+     *
+     * @param name        名字
+     * @param toolBuilder 工具构建器
+     * @deprecated 3.8.4 {@link #toolAdd(String, Consumer)}
+     */
+    @Deprecated
+    public ChatOptions toolsAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
+        return toolAdd(name, toolBuilder);
+    }
+
+    /**
+     * 工具上下文（附加参数）
+     *
+     * @deprecated 3.8.4 {@link #toolContext()}
+     */
+    @Deprecated
+    public Map<String, Object> toolsContext() {
+        return toolContext;
+    }
+
+    /**
+     * @deprecated 3.8.4 {@link #toolContextPut(Map)}
+     */
+    @Deprecated
+    public ChatOptions toolsContext(Map<String, Object> toolsContext) {
+        return toolContextPut(toolsContext);
     }
 }

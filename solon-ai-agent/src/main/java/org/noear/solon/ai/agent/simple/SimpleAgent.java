@@ -183,14 +183,14 @@ public class SimpleAgent implements Agent {
             chatReq = config.getChatModel().prompt(messages)
                     .options(o -> {
                         //配置工具
-                        o.toolsAdd(config.getTools());
+                        o.toolAdd(config.getTools());
 
                         //协议工具
                         if (protocol != null) {
-                            protocol.injectAgentTools(session.getSnapshot(), this, o::toolsAdd);
+                            protocol.injectAgentTools(session.getSnapshot(), this, o::toolAdd);
                         }
 
-                        o.toolsContextPut(config.getToolsContext());
+                        o.toolContextPut(config.getToolsContext());
 
                         config.getSkills().forEach(item -> o.skillAdd(item.index, item.target));
                         config.getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));

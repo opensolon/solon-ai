@@ -67,7 +67,7 @@ public class McpHttpClientMixTest2 {
         ChatModel chatModel = ChatModel.of(apiUrl)
                 .provider(provider)
                 .model(model)
-                .defaultToolsAdd(mcpClient)
+                .defaultToolAdd(mcpClient)
                 .build();
 
         ChatResponse resp = chatModel

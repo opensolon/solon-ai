@@ -29,7 +29,7 @@ public class A2ARemoteTest {
                 .model("qwen2.5:latest")
                 .provider("ollama")
                 .timeout(Duration.ofMinutes(10))
-                .defaultToolsAdd(agentAssistant)
+                .defaultToolAdd(agentAssistant)
                 .build();
 
         InMemoryChatSession chatSession = InMemoryChatSession.builder()

@@ -11,14 +11,12 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.SystemMessage;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillDesc;
-import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.rag.Document;
@@ -30,7 +28,6 @@ import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -85,7 +82,7 @@ public abstract class AbsChatTest {
     @Test
     public void case3_wather_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -101,7 +98,7 @@ public abstract class AbsChatTest {
     @Test
     public void case3_wather_stream() throws Exception {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         AtomicReference<ChatResponse> respRef = new AtomicReference<>();
@@ -132,7 +129,7 @@ public abstract class AbsChatTest {
     @Test
     public void case3_wather_stream_finished() throws Exception {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         AtomicInteger atomicInteger = new AtomicInteger();
@@ -155,7 +152,7 @@ public abstract class AbsChatTest {
     @Test
     public void case3_wather_rainfall_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -172,7 +169,7 @@ public abstract class AbsChatTest {
     @Test
     public void case3_wather_rainfall_stream() throws Exception {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
@@ -202,7 +199,7 @@ public abstract class AbsChatTest {
     @Test
     public void case3_www_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new Tools())
+                .defaultToolAdd(new Tools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -241,7 +238,7 @@ public abstract class AbsChatTest {
         Publisher<ChatResponse> publisher = chatModel
                 .prompt("今天杭州的天气情况？")
                 .session(chatSession)
-                .options(o -> o.toolsAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
@@ -284,7 +281,7 @@ public abstract class AbsChatTest {
         Publisher<ChatResponse> publisher = chatModel
                 .prompt("今天杭州的天气情况？")
                 .session(chatSession)
-                .options(o -> o.toolsAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder = new AtomicReference<>();
@@ -312,7 +309,7 @@ public abstract class AbsChatTest {
         publisher = chatModel
                 .prompt("搜索网络： solon 框架的作者是谁？")
                 .session(chatSession)
-                .options(o -> o.toolsAdd(new Tools()))
+                .options(o -> o.toolAdd(new Tools()))
                 .stream();
 
         AtomicReference<AssistantMessage> msgHolder2 = new AtomicReference<>();
@@ -348,7 +345,7 @@ public abstract class AbsChatTest {
     @Test
     public void case6_wather_return_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new ReturnTools())
+                .defaultToolAdd(new ReturnTools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -363,7 +360,7 @@ public abstract class AbsChatTest {
     @Test
     public void case6_wather_rainfall_return_call() throws IOException {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new ReturnTools())
+                .defaultToolAdd(new ReturnTools())
                 .build();
 
         ChatResponse resp = chatModel
@@ -378,7 +375,7 @@ public abstract class AbsChatTest {
     @Test
     public void case6_wather_return_stream() throws Exception {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new ReturnTools())
+                .defaultToolAdd(new ReturnTools())
                 .build();
 
         AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
@@ -413,7 +410,7 @@ public abstract class AbsChatTest {
     @Test
     public void case6_wather_rainfall_return_stream() throws Exception {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new ReturnTools())
+                .defaultToolAdd(new ReturnTools())
                 .build();
 
         AtomicReference<ChatResponse> respHolder = new AtomicReference<>();
@@ -447,7 +444,7 @@ public abstract class AbsChatTest {
     @Test
     public void case8_tool_stream() throws Exception {
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new Case8Tools())
+                .defaultToolAdd(new Case8Tools())
                 .timeout(Duration.ofSeconds(600))
                 .build();
 
@@ -485,7 +482,7 @@ public abstract class AbsChatTest {
     public void case10_tool_call() throws Exception {
         //没有参数的工具
         ChatModel chatModel = getChatModelBuilder()
-                .defaultToolsAdd(new Case10Tools())
+                .defaultToolAdd(new Case10Tools())
                 .build();
 
         String response = chatModel.prompt("杭州的假日景点介绍。要求用 tool 查")

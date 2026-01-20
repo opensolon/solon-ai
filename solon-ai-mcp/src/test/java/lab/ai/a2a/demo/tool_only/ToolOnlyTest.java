@@ -22,8 +22,8 @@ public class ToolOnlyTest {
                 .model("qwen2.5:latest")
                 .provider("ollama")
                 .timeout(Duration.ofMinutes(10))
-                .defaultToolsAdd(new Tools1())
-                .defaultToolsAdd(new Tools2())
+                .defaultToolAdd(new Tools1())
+                .defaultToolAdd(new Tools2())
                 .build();
 
         InMemoryChatSession chatSession = InMemoryChatSession.builder()

@@ -16,20 +16,15 @@
 package org.noear.solon.ai.chat;
 
 
-import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
-import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.skill.Skill;
-import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -88,7 +83,7 @@ public class ChatRequest implements NonSerializable {
                 skill.injectInstruction(prompt, combinedInstruction);
 
                 // 5. 收集工具
-                options.toolsAdd(skill.getTools());
+                options.toolAdd(skill.getTools());
             }
 
             if (combinedInstruction.length() > 0) {
