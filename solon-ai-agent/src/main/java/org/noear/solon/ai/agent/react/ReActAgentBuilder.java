@@ -108,31 +108,6 @@ public class ReActAgentBuilder {
         return this;
     }
 
-    public ReActAgentBuilder toolAdd(FunctionTool tool) {
-        config.getDefaultOptions().addTool(tool);
-        return this;
-    }
-
-    public ReActAgentBuilder toolAdd(Collection<FunctionTool> tools) {
-        config.getDefaultOptions().addTool(tools);
-        return this;
-    }
-
-    public ReActAgentBuilder toolAdd(ToolProvider toolProvider) {
-        config.getDefaultOptions().addTool(toolProvider);
-        return this;
-    }
-
-    public ReActAgentBuilder skillAdd(Skill skill) {
-        config.getDefaultOptions().addSkill(skill, 0);
-        return this;
-    }
-
-    public ReActAgentBuilder skillAdd(Skill skill, int index) {
-        config.getDefaultOptions().addSkill(skill, index);
-        return this;
-    }
-
     public ReActAgentBuilder retryConfig(int maxRetries, long retryDelayMs) {
         config.getDefaultOptions().setRetryConfig(maxRetries, retryDelayMs);
         return this;
@@ -166,13 +141,40 @@ public class ReActAgentBuilder {
         return this;
     }
 
-    public ReActAgentBuilder defaultToolsContextPut(String key, Object value) {
-        config.getDefaultOptions().putToolsContext(key, value);
+
+
+    public ReActAgentBuilder defaultToolAdd(FunctionTool tool) {
+        config.getDefaultOptions().addTool(tool);
         return this;
     }
 
-    public ReActAgentBuilder defaultToolsContextPut(Map<String, Object> objectsMap) {
-        config.getDefaultOptions().putToolsContext(objectsMap);
+    public ReActAgentBuilder defaultToolAdd(Collection<FunctionTool> tools) {
+        config.getDefaultOptions().addTool(tools);
+        return this;
+    }
+
+    public ReActAgentBuilder defaultToolAdd(ToolProvider toolProvider) {
+        config.getDefaultOptions().addTool(toolProvider);
+        return this;
+    }
+
+    public ReActAgentBuilder defaultSkillAdd(Skill skill) {
+        config.getDefaultOptions().addSkill(skill, 0);
+        return this;
+    }
+
+    public ReActAgentBuilder defaultSkillAdd(Skill skill, int index) {
+        config.getDefaultOptions().addSkill(skill, index);
+        return this;
+    }
+
+    public ReActAgentBuilder defaultToolContextPut(String key, Object value) {
+        config.getDefaultOptions().putToolContext(key, value);
+        return this;
+    }
+
+    public ReActAgentBuilder defaultToolContextPut(Map<String, Object> objectsMap) {
+        config.getDefaultOptions().putToolContext(objectsMap);
         return this;
     }
 

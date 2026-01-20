@@ -32,7 +32,7 @@ public class ReActPlanningTest {
         ReActAgent agent = ReActAgent.of(chatModel)
                 .name("planner_agent")
                 .enablePlanning(true) // 开启规划
-                .toolAdd(new MethodToolProvider(new InfoTools()))
+                .defaultToolAdd(new MethodToolProvider(new InfoTools()))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("plan_001");
@@ -66,7 +66,7 @@ public class ReActPlanningTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .enablePlanning(true)
-                .toolAdd(new MethodToolProvider(new OrderTools()))
+                .defaultToolAdd(new MethodToolProvider(new OrderTools()))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("plan_002");

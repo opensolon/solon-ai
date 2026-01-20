@@ -29,14 +29,14 @@ public class ReActAgentConfigTest {
 
         // 1. 低温配置：注重确定性和逻辑严谨性
         ReActAgent lowTempAgent = ReActAgent.of(chatModel)
-                .toolAdd(new MethodToolProvider(new CreativeTools()))
+                .defaultToolAdd(new MethodToolProvider(new CreativeTools()))
                 .chatOptions(o -> o.temperature(0.1F))
                 .name("low_temp_agent")
                 .build();
 
         // 2. 高温配置：注重创造性和词汇多样性
         ReActAgent highTempAgent = ReActAgent.of(chatModel)
-                .toolAdd(new MethodToolProvider(new CreativeTools()))
+                .defaultToolAdd(new MethodToolProvider(new CreativeTools()))
                 .chatOptions(o -> o.temperature(0.9F))
                 .name("high_temp_agent")
                 .build();
@@ -66,14 +66,14 @@ public class ReActAgentConfigTest {
 
         // 限制短输出
         ReActAgent shortAgent = ReActAgent.of(chatModel)
-                .toolAdd(new MethodToolProvider(new StoryTools()))
+                .defaultToolAdd(new MethodToolProvider(new StoryTools()))
                 .chatOptions(o -> o.max_tokens(50))
                 .name("short_agent")
                 .build();
 
         // 允许长输出
         ReActAgent longAgent = ReActAgent.of(chatModel)
-                .toolAdd(new MethodToolProvider(new StoryTools()))
+                .defaultToolAdd(new MethodToolProvider(new StoryTools()))
                 .chatOptions(o -> o.max_tokens(500))
                 .name("long_agent")
                 .build();
@@ -101,7 +101,7 @@ public class ReActAgentConfigTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .toolAdd(new MethodToolProvider(new BasicTools()))
+                .defaultToolAdd(new MethodToolProvider(new BasicTools()))
                 .name("diagnostic_agent")
                 .build();
 
@@ -125,7 +125,7 @@ public class ReActAgentConfigTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .toolAdd(new MethodToolProvider(new BasicTools()))
+                .defaultToolAdd(new MethodToolProvider(new BasicTools()))
                 .finishMarker("[COMPLETED]") // 自定义推理终结符
                 .name("marker_agent")
                 .build();

@@ -25,7 +25,7 @@ public class UseDemo {
         // 1. 构建智能体：注入天气工具，设置推理温度
         ReActAgent agent = ReActAgent.of(chatModel)
                 .chatOptions(o -> o.temperature(0.1F)) // 低温度保证推理逻辑的一致性
-                .toolAdd(new MethodToolProvider(new SearchTools()))
+                .defaultToolAdd(new MethodToolProvider(new SearchTools()))
                 .build();
 
         String rst = agent.prompt("帮我查一下今年诺贝尔经济学奖得主的最新公开演讲，然后告诉我他演讲中提到的那个中国经济学家（关于债务问题）的主要观点是什么，最后用中文总结一下。")

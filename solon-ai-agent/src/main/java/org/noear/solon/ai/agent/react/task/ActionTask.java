@@ -188,7 +188,7 @@ public class ActionTask implements NamedTaskComponent {
                 }
 
                 //合并工具上个文和参数，形成请求
-                final ToolRequest toolReq = new ToolRequest(null, trace.getOptions().getToolsContext(), args);
+                final ToolRequest toolReq = new ToolRequest(null, trace.getOptions().getToolContext(), args);
                 final String result;
                 if (trace.getOptions().getInterceptors().isEmpty()) {
                     result = tool.handle(toolReq.getArgs());

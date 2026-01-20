@@ -104,7 +104,7 @@ public class TeamAgentContractNetTest {
         Agent normal = ReActAgent.of(chatModel).name("java_expert").description("普通开发").build();
         Agent kernel = ReActAgent.of(chatModel).name("python_expert").description("内核算法专家").build();
 
-        TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.CONTRACT_NET).agentAdd(normal, kernel).toolAdd(tools)
+        TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.CONTRACT_NET).agentAdd(normal, kernel).defaultToolAdd(tools)
                 .systemPrompt(p->p.instruction("调 get_score 评估 Python 匹配度。指派最高分。")).build();
 
         AgentSession session = InMemoryAgentSession.of("c4");

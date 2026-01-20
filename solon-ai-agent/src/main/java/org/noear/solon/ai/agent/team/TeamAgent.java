@@ -353,28 +353,28 @@ public class TeamAgent implements Agent {
             return this;
         }
 
-        public Builder toolAdd(FunctionTool tool) {
-            config.addTool(tool);
+        public Builder defaultToolAdd(FunctionTool tool) {
+            config.getDefaultOptions().addTool(tool);
             return this;
         }
 
-        public Builder toolAdd(Collection<FunctionTool> tools) {
-            config.addTool(tools);
+        public Builder defaultToolAdd(Collection<FunctionTool> tools) {
+            config.getDefaultOptions().addTool(tools);
             return this;
         }
 
-        public Builder toolAdd(ToolProvider toolProvider) {
-            config.addTool(toolProvider);
+        public Builder defaultToolAdd(ToolProvider toolProvider) {
+            config.getDefaultOptions().addTool(toolProvider);
             return this;
         }
 
-        public Builder defaultToolsContextPut(String key, Object value) {
-            config.getDefaultOptions().putToolsContext(key, value);
+        public Builder defaultToolContextPut(String key, Object value) {
+            config.getDefaultOptions().putToolContext(key, value);
             return this;
         }
 
-        public Builder defaultToolsContextPut(Map<String, Object> objectsMap) {
-            config.getDefaultOptions().putToolsContext(objectsMap);
+        public Builder defaultToolContextPut(Map<String, Object> objectsMap) {
+            config.getDefaultOptions().putToolContext(objectsMap);
             return this;
         }
 

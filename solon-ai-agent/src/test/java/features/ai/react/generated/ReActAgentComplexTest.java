@@ -32,9 +32,9 @@ public class ReActAgentComplexTest {
 
         // 1. 构建配置了领域工具集的 ReActAgent
         ReActAgent agent = ReActAgent.of(chatModel)
-                .toolAdd(new MethodToolProvider(new OrderTools()))
-                .toolAdd(new MethodToolProvider(new LogisticTools()))
-                .toolAdd(new MethodToolProvider(new MarketingTools()))
+                .defaultToolAdd(new MethodToolProvider(new OrderTools()))
+                .defaultToolAdd(new MethodToolProvider(new LogisticTools()))
+                .defaultToolAdd(new MethodToolProvider(new MarketingTools()))
                 .chatOptions(o -> o.temperature(0.0F)) // 设置 0 温度以确保逻辑推导的确定性
                 .maxSteps(10) // 给予充足的思考步数以支持复杂的链式调用
                 .build();

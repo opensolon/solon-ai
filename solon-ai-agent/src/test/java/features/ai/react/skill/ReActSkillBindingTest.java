@@ -32,7 +32,7 @@ public class ReActSkillBindingTest {
         // 2. 构建 Agent 并注入 Skill
         // 场景：OrderSkill 提供了查询和删除工具，但指令要求删除前必须说明原因
         ReActAgent agent = ReActAgent.of(chatModel)
-                .skillAdd(new OrderSkill())
+                .defaultSkillAdd(new OrderSkill())
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();
 

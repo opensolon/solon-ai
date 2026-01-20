@@ -34,7 +34,7 @@ public class TeamAgentTravelTest {
                         .systemPrompt(p->p
                                 .role("天气查询专家")
                                 .instruction("必须基于 query 工具的 Observation 给出明确结论。"))
-                        .toolAdd(new MethodToolProvider(new WeatherService()))
+                        .defaultToolAdd(new MethodToolProvider(new WeatherService()))
                         .build())
                 .agentAdd(ReActAgent.of(chatModel)
                         .name("planner")

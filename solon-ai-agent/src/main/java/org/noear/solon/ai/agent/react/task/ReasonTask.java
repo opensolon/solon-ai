@@ -182,7 +182,7 @@ public class ReasonTask implements NamedTaskComponent {
                     o.toolAdd(trace.getProtocolTools());
 
                     o.autoToolCall(false); // 强制由 Agent 框架管理工具链路
-                    o.toolContextPut(trace.getOptions().getToolsContext());
+                    o.toolContextPut(trace.getOptions().getToolContext());
 
                     //trace.getOptions().getSkills().forEach(item -> o.skillAdd(item.index, item.target));
                     trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));

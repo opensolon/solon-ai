@@ -45,7 +45,7 @@ public class ReActOptionsAmend {
      * 批量注入工具调用上下文
      */
     public ReActOptionsAmend toolsContextPut(Map<String, Object> toolsContext) {
-        options.putToolsContext(toolsContext);
+        options.putToolContext(toolsContext);
         return this;
     }
 
@@ -53,7 +53,7 @@ public class ReActOptionsAmend {
      * 注入单个工具调用上下文
      */
     public ReActOptionsAmend toolsContextPut(String key, Object value) {
-        options.putToolsContext(key, value);
+        options.putToolContext(key, value);
         return this;
     }
 

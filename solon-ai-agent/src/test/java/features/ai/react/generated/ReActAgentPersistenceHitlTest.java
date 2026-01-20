@@ -45,7 +45,7 @@ public class ReActAgentPersistenceHitlTest {
         // 2. 构建 Agent 并注入拦截器
         ReActAgent agent = ReActAgent.of(chatModel)
                 .name(agentName)
-                .toolAdd(new MethodToolProvider(new RefundTools()))
+                .defaultToolAdd(new MethodToolProvider(new RefundTools()))
                 .defaultInterceptorAdd(hitlInterceptor)
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();

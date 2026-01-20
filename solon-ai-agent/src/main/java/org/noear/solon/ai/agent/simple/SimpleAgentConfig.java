@@ -82,7 +82,7 @@ public class SimpleAgentConfig {
     /**
      * 工具调用的共享上下文数据
      */
-    private final Map<String, Object> toolsContext = new LinkedHashMap<>();
+    private final Map<String, Object> toolContext = new LinkedHashMap<>();
     /**
      * 生命周期拦截器队列（支持监控、审计、Thought 记录等）
      */
@@ -240,16 +240,16 @@ public class SimpleAgentConfig {
         return chatModel;
     }
 
-    public Collection<FunctionTool> getTools() {
-        return tools.values();
-    }
-
     public Consumer<ChatOptions> getChatOptions() {
         return chatOptions;
     }
 
-    public Map<String, Object> getToolsContext() {
-        return toolsContext;
+    public Collection<FunctionTool> getTools() {
+        return tools.values();
+    }
+
+    public Map<String, Object> getToolContext() {
+        return toolContext;
     }
 
     public List<RankEntity<Skill>> getSkills() {

@@ -41,7 +41,7 @@ public class ReActOptions implements NonSerializable {
     /** 挂载的可调用工具集 */
     private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     /** 工具调用上下文（透传给 FunctionTool） */
-    private final Map<String, Object> toolsContext = new LinkedHashMap<>();
+    private final Map<String, Object> toolContext = new LinkedHashMap<>();
     private final List<RankEntity<Skill>> skills = new ArrayList<>();
     private String skillInstruction;
 
@@ -66,7 +66,7 @@ public class ReActOptions implements NonSerializable {
     protected ReActOptions copy() {
         ReActOptions tmp = new ReActOptions();
         tmp.tools.putAll(tools);
-        tmp.toolsContext.putAll(toolsContext);
+        tmp.toolContext.putAll(toolContext);
         tmp.skills.addAll(skills);
         tmp.interceptors.addAll(interceptors);
         tmp.maxSteps = maxSteps;
@@ -84,29 +84,6 @@ public class ReActOptions implements NonSerializable {
 
     // --- 配置注入 (Protected) ---
 
-
-    /** 注册工具 */
-    protected void addTool(FunctionTool... tools) {
-        for (FunctionTool tool : tools) {
-            this.tools.put(tool.name(), tool);
-        }
-    }
-
-    protected void addTool(Collection<FunctionTool> tools) {
-        for (FunctionTool tool : tools) addTool(tool);
-    }
-
-    protected void addTool(ToolProvider toolProvider) {
-        addTool(toolProvider.getTools());
-    }
-
-    protected void putToolsContext(Map<String, Object> toolsContext) {
-        this.toolsContext.putAll(toolsContext);
-    }
-
-    protected void putToolsContext(String key, Object value) {
-        this.toolsContext.put(key, value);
-    }
 
     /** 设置容错策略 */
     protected void setRetryConfig(int maxRetries, long retryDelayMs) {
@@ -128,6 +105,28 @@ public class ReActOptions implements NonSerializable {
 
     protected void setOutputSchema(String val) { this.outputSchema = val; }
 
+    /** 注册工具 */
+    protected void addTool(FunctionTool... tools) {
+        for (FunctionTool tool : tools) {
+            this.tools.put(tool.name(), tool);
+        }
+    }
+
+    protected void addTool(Collection<FunctionTool> tools) {
+        for (FunctionTool tool : tools) addTool(tool);
+    }
+
+    protected void addTool(ToolProvider toolProvider) {
+        addTool(toolProvider.getTools());
+    }
+
+    protected void putToolContext(Map<String, Object> toolsContext) {
+        this.toolContext.putAll(toolsContext);
+    }
+
+    protected void putToolContext(String key, Object value) {
+        this.toolContext.put(key, value);
+    }
 
     protected void addSkill(Skill skill, int index) {
         this.skills.add(new RankEntity<>(skill, index));
@@ -160,8 +159,8 @@ public class ReActOptions implements NonSerializable {
 
     public FunctionTool getTool(String name) { return tools.get(name); }
 
-    public Map<String, Object> getToolsContext() {
-        return toolsContext;
+    public Map<String, Object> getToolContext() {
+        return toolContext;
     }
 
     public List<RankEntity<Skill>> getSkills() {

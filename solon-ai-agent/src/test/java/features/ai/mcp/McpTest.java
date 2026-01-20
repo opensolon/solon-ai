@@ -26,7 +26,7 @@ public class McpTest {
     @Test
     public void case11() throws Throwable {
         ReActAgent agent = ReActAgent.of(LlmUtil.getChatModel())
-                .toolAdd(mcpClient)
+                .defaultToolAdd(mcpClient)
                 .build();
 
         String tmp = agent.prompt("杭州今天天气怎么样？")
@@ -42,7 +42,7 @@ public class McpTest {
     @Test
     public void case12() throws Throwable {
         ReActAgent agent = ReActAgent.of(LlmUtil.getChatModel())
-                .toolAdd(mcpClient)
+                .defaultToolAdd(mcpClient)
                 .build();
 
         String tmp = agent.prompt("杭州今天天气怎么样？")
@@ -57,7 +57,7 @@ public class McpTest {
     @Test
     public void case21() throws Throwable {
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
-                .toolAdd(mcpClient)
+                .defaultToolAdd(mcpClient)
                 .build();
 
         String tmp = agent.prompt("杭州今天天气怎么样？")
@@ -73,7 +73,7 @@ public class McpTest {
     @Test
     public void case22() throws Throwable {
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
-                .toolAdd(mcpClient)
+                .defaultToolAdd(mcpClient)
                 .build();
 
         String tmp = agent.prompt("杭州今天天气怎么样？")

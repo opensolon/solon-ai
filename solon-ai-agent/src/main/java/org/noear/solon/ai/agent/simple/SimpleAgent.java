@@ -190,7 +190,7 @@ public class SimpleAgent implements Agent {
                             protocol.injectAgentTools(session.getSnapshot(), this, o::toolAdd);
                         }
 
-                        o.toolContextPut(config.getToolsContext());
+                        o.toolContextPut(config.getToolContext());
 
                         config.getSkills().forEach(item -> o.skillAdd(item.index, item.target));
                         config.getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
@@ -331,40 +331,40 @@ public class SimpleAgent implements Agent {
             return this;
         }
 
-        public Builder toolAdd(FunctionTool... tools) {
+        public Builder defaultToolAdd(FunctionTool... tools) {
             config.addTool(tools);
             return this;
         }
 
-        public Builder toolAdd(Collection<FunctionTool> tools) {
+        public Builder defaultToolAdd(Collection<FunctionTool> tools) {
             config.addTool(tools);
             return this;
         }
 
-        public Builder toolAdd(ToolProvider toolProvider) {
+        public Builder defaultToolAdd(ToolProvider toolProvider) {
             config.addTool(toolProvider);
             return this;
         }
 
-        public Builder skillAdd(Skill... skills) {
+        public Builder defaultSkillAdd(Skill... skills) {
             for (Skill skill : skills) {
                 config.addSkill(skill, 0);
             }
             return this;
         }
 
-        public Builder skillAdd(Skill skill, int index) {
+        public Builder defaultSkillAdd(Skill skill, int index) {
             config.addSkill(skill, index);
             return this;
         }
 
-        public Builder defaultToolsContextPut(String key, Object value) {
-            config.getToolsContext().put(key, value);
+        public Builder defaultToolContextPut(String key, Object value) {
+            config.getToolContext().put(key, value);
             return this;
         }
 
-        public Builder defaultToolsContextPut(Map<String, Object> objectMap) {
-            config.getToolsContext().putAll(objectMap);
+        public Builder defaultToolContextPut(Map<String, Object> objectMap) {
+            config.getToolContext().putAll(objectMap);
             return this;
         }
 

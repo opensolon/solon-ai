@@ -62,7 +62,7 @@ public class ReActAgentHitlTest {
 
         // 2. 构建 ReActAgent 并配置拦截器
         ReActAgent agent = ReActAgent.of(chatModel)
-                .toolAdd(new MethodToolProvider(new RefundTools()))
+                .defaultToolAdd(new MethodToolProvider(new RefundTools()))
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();
 
@@ -189,7 +189,7 @@ public class ReActAgentHitlTest {
 
         // 构建带完整拦截器的 ReActAgent
         ReActAgent agent = ReActAgent.of(chatModel)
-                .toolAdd(new MethodToolProvider(new BasicTools()))
+                .defaultToolAdd(new MethodToolProvider(new BasicTools()))
                 .defaultInterceptorAdd(fullInterceptor)
                 .chatOptions(o -> o.temperature(0.0F))
                 .build();

@@ -42,12 +42,12 @@ public class TeamAgentBlackboardTest {
         MethodToolProvider tools = new MethodToolProvider(new BoardTools());
 
         // 后端：观察到没 api 就写 api
-        Agent backend = ReActAgent.of(chatModel).name("Backend").toolAdd(tools)
+        Agent backend = ReActAgent.of(chatModel).name("Backend").defaultToolAdd(tools)
                 .systemPrompt(p->p
                         .instruction("若看板无'api'，调用 write(k='api', v='ok')。" + LIMIT)).build();
 
         // 前端：观察到有 api 才写 ui
-        Agent frontend = ReActAgent.of(chatModel).name("Frontend").toolAdd(tools)
+        Agent frontend = ReActAgent.of(chatModel).name("Frontend").defaultToolAdd(tools)
                 .systemPrompt(p->p
                         .instruction("若看板有'api'，调用 write(k='ui', v='done') 并回复 FINISH。" + LIMIT)).build();
 
@@ -73,11 +73,11 @@ public class TeamAgentBlackboardTest {
         MethodToolProvider tools = new MethodToolProvider(new BoardTools());
 
         // 初级工：设定一个低分
-        Agent junior = ReActAgent.of(chatModel).name("Junior").toolAdd(tools)
+        Agent junior = ReActAgent.of(chatModel).name("Junior").defaultToolAdd(tools)
                 .systemPrompt(p->p.instruction("将'score'设为'60'。" + LIMIT)).build();
 
         // 资深工：看到低分就修正为高分
-        Agent senior = ReActAgent.of(chatModel).name("Senior").toolAdd(tools)
+        Agent senior = ReActAgent.of(chatModel).name("Senior").defaultToolAdd(tools)
                 .description("资深专家，负责对评分进行最终核准和修正（尤其是当分数为60时）")
                 .systemPrompt(p->p
                         .instruction("若看板'score'为'60'，将其覆盖写为'99'。" + LIMIT)).build();
@@ -109,11 +109,11 @@ public class TeamAgentBlackboardTest {
         MethodToolProvider tools = new MethodToolProvider(new BoardTools());
 
         // 编写者：反复尝试
-        Agent writer = ReActAgent.of(chatModel).name("Writer").toolAdd(tools)
+        Agent writer = ReActAgent.of(chatModel).name("Writer").defaultToolAdd(tools)
                 .systemPrompt(p->p.instruction("写一个含'A'的词并写入'data'。" + LIMIT)).build();
 
         // 审计者：不含'A'就报错，含'A'才通过
-        Agent auditor = ReActAgent.of(chatModel).name("Auditor").toolAdd(tools)
+        Agent auditor = ReActAgent.of(chatModel).name("Auditor").defaultToolAdd(tools)
                 .systemPrompt(p->p
                         .instruction("若'data'不含'A'，写'status'为'FAIL'；若含'A'，写'status'为'PASS'并回复 FINISH。" + LIMIT)).build();
 
@@ -142,9 +142,9 @@ public class TeamAgentBlackboardTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         MethodToolProvider tools = new MethodToolProvider(new BoardTools());
 
-        Agent a = ReActAgent.of(chatModel).name("A").toolAdd(tools)
+        Agent a = ReActAgent.of(chatModel).name("A").defaultToolAdd(tools)
                 .systemPrompt(p->p.instruction("将'x'设为'1'。" + LIMIT)).build();
-        Agent b = ReActAgent.of(chatModel).name("B").toolAdd(tools)
+        Agent b = ReActAgent.of(chatModel).name("B").defaultToolAdd(tools)
                 .systemPrompt(p->p.instruction("将'x'设为'2'。" + LIMIT)).build();
 
         // 设置极小的 maxTurns 验证框架截断能力

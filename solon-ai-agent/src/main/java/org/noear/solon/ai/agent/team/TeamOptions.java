@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
 import org.slf4j.Logger;
@@ -51,10 +53,13 @@ public class TeamOptions implements NonSerializable {
     private int recordWindowSize = 5;
 
 
+
+    /** 挂载的可调用工具集 */
+    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     /**
      * 工具调用上下文（透传给 FunctionTool）
      */
-    private final Map<String, Object> toolsContext = new LinkedHashMap<>();
+    private final Map<String, Object> toolContext = new LinkedHashMap<>();
     /**
      * 团队协作拦截器链（支持排序，用于审计、监控或干预）
      */
@@ -64,7 +69,8 @@ public class TeamOptions implements NonSerializable {
     public TeamOptions copy() {
         TeamOptions tmp = new TeamOptions();
         tmp.interceptors.addAll(this.interceptors);
-        tmp.toolsContext.putAll(this.toolsContext);
+        tmp.tools.putAll(this.tools);
+        tmp.toolContext.putAll(this.toolContext);
         tmp.maxTurns = this.maxTurns;
         tmp.maxRetries = this.maxRetries;
         tmp.retryDelayMs = this.retryDelayMs;
@@ -76,12 +82,28 @@ public class TeamOptions implements NonSerializable {
 
     // --- 配置注入 (Protected) ---
 
-    protected void putToolsContext(Map<String, Object> toolsContext) {
-        this.toolsContext.putAll(toolsContext);
+    /** 注册工具 */
+    protected void addTool(FunctionTool... tools) {
+        for (FunctionTool tool : tools) {
+            this.tools.put(tool.name(), tool);
+        }
     }
 
-    protected void putToolsContext(String key, Object value) {
-        this.toolsContext.put(key, value);
+    protected void addTool(Collection<FunctionTool> tools) {
+        for (FunctionTool tool : tools) addTool(tool);
+    }
+
+    protected void addTool(ToolProvider toolProvider) {
+        addTool(toolProvider.getTools());
+    }
+
+
+    protected void putToolContext(Map<String, Object> toolsContext) {
+        this.toolContext.putAll(toolsContext);
+    }
+
+    protected void putToolContext(String key, Object value) {
+        this.toolContext.put(key, value);
     }
 
 
@@ -129,8 +151,12 @@ public class TeamOptions implements NonSerializable {
 
     // --- 参数获取 (Public) ---
 
-    public Map<String, Object> getToolsContext() {
-        return toolsContext;
+    public Collection<FunctionTool> getTools() { return tools.values(); }
+
+    public FunctionTool getTool(String name) { return tools.get(name); }
+
+    public Map<String, Object> getToolContext() {
+        return toolContext;
     }
 
     public List<RankEntity<TeamInterceptor>> getInterceptors() {

@@ -58,8 +58,6 @@ public class TeamAgentConfig implements NonSerializable {
     private final ChatModel chatModel;
     /** 调度中心推理参数（控制采样随机性、Token 等） */
     private Consumer<ChatOptions> chatOptions;
-    /** 挂载的可调用工具集 */
-    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
 
     /** 成员名录（有序不计大小写存储专家 Agent） */
     private final Map<String, Agent> agentMap = new IgnoreCaseMap<>();
@@ -100,22 +98,6 @@ public class TeamAgentConfig implements NonSerializable {
         }
     }
     protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
-
-    /** 注册工具 */
-    protected void addTool(FunctionTool... tools) {
-        for (FunctionTool tool : tools) {
-            if (LOG.isDebugEnabled()) LOG.debug("TeamAgent [{}] register tool: {}", name, tool.name());
-            this.tools.put(tool.name(), tool);
-        }
-    }
-
-    protected void addTool(Collection<FunctionTool> tools) {
-        for (FunctionTool tool : tools) addTool(tool);
-    }
-
-    protected void addTool(ToolProvider toolProvider) {
-        addTool(toolProvider.getTools());
-    }
 
     /**
      * 注册团队成员（专家）
@@ -168,9 +150,7 @@ public class TeamAgentConfig implements NonSerializable {
 
     public ChatModel getChatModel() { return chatModel; }
     public Consumer<ChatOptions> getChatOptions() { return chatOptions; }
-    public Collection<FunctionTool> getTools() { return tools.values(); }
 
-    public FunctionTool getTool(String name) { return tools.get(name); }
     public Map<String, Agent> getAgentMap() { return agentMap; }
     public TeamProtocol getProtocol() { return protocol; }
     public Consumer<GraphSpec> getGraphAdjuster() { return graphAdjuster; }

@@ -29,7 +29,7 @@ public class ReActAgentDemo {
         // 1. 构建智能体：注入天气工具，设置推理温度
         ReActAgent agent = ReActAgent.of(chatModel)
                 .chatOptions(o -> o.temperature(0.1F)) // 低温度保证推理逻辑的一致性
-                .toolAdd(new MethodToolProvider(new WeatherTools()))
+                .defaultToolAdd(new MethodToolProvider(new WeatherTools()))
                 .build();
 
         System.out.println("--- Agent 开始工作 ---");
