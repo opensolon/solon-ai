@@ -29,6 +29,7 @@ import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
@@ -95,7 +96,7 @@ public class SimpleAgent implements Agent {
     }
 
     protected AssistantMessage call(Prompt prompt, AgentSession session, Consumer<ChatOptions> chatOptionsAdjustor) throws Throwable {
-        if (Prompt.isEmpty(prompt)) {
+        if (ChatPrompt.isEmpty(prompt)) {
             LOG.warn("Prompt is empty!");
             return ChatMessage.ofAssistant("");
         }
@@ -153,7 +154,7 @@ public class SimpleAgent implements Agent {
 
 
         // 消息归档：同步当前用户请求到 Session 历史
-        if (!Prompt.isEmpty(prompt)) {
+        if (!ChatPrompt.isEmpty(prompt)) {
             for (ChatMessage message : prompt.getMessages()) {
                 session.addHistoryMessage(config.getName(), message);
             }

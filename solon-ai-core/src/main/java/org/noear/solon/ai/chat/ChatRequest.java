@@ -20,6 +20,8 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.core.util.RankEntity;
@@ -49,7 +51,7 @@ public class ChatRequest implements NonSerializable {
     private final boolean stream;
     private List<ChatMessage> messages;
 
-    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session0, List<ChatMessage> prompt, boolean stream) {
+    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session0, ChatPrompt prompt, boolean stream) {
         if (session0 == null) {
             session0 = InMemoryChatSession.builder().build();
         }
@@ -62,7 +64,7 @@ public class ChatRequest implements NonSerializable {
                 .map(s -> s.target)
                 .filter(s -> {
                     try {
-                        return s.isSupported(session);
+                        return s.isSupported(prompt);
                     } catch (Throwable e) {
                         LOG.error("Skill support check failed: {}", s.getClass().getName(), e);
                         return false;
@@ -76,14 +78,14 @@ public class ChatRequest implements NonSerializable {
             for (Skill skill : activeSkills) {
                 try {
                     // 3. 挂载
-                    skill.onAttach(session);
+                    skill.onAttach(prompt);
                 } catch (Throwable e) {
                     LOG.error("Skill active failed: {}", skill.getClass().getName(), e);
                     throw e;
                 }
 
                 // 4. 收集指令
-                skill.injectInstruction(session, combinedInstruction);
+                skill.injectInstruction(prompt, combinedInstruction);
 
                 // 5. 收集工具
                 options.toolsAdd(skill.getTools());

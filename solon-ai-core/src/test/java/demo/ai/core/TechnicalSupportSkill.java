@@ -1,6 +1,7 @@
 package demo.ai.core;
 
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillMetadata;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -32,7 +33,14 @@ public class TechnicalSupportSkill implements Skill {
     }
 
     @Override
-    public String getInstruction(Object ctx) {
+    public String getInstruction(ChatPrompt prompt) {
+        String userMessage = prompt.getUserMessageContent();
+
+        // 如果用户直接贴了代码或错误栈，调整 SOP 优先级
+        if (userMessage.contains("StackOverflow") || userMessage.contains("Exception")) {
+            return "检测到具体异常，请跳过基础搜索，优先调用 'search_online_docs' 查找最新补丁。";
+        }
+
         return "处理技术咨询时必须遵循以下 SOP：\n" +
                 "1. 优先调用 'search_knowledge_base' 获取标准答案。\n" +
                 "2. 如果知识库无法解决或信息过时，调用 'search_online_docs' 获取最新文档。\n" +

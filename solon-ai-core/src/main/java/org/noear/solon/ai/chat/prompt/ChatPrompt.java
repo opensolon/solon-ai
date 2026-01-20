@@ -19,6 +19,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 聊天提示语
@@ -29,21 +30,39 @@ import java.util.List;
 @Preview("3.2")
 public interface ChatPrompt {
     /**
+     * 获取元信息
+     */
+    Map<String, Object> getMeta();
+
+    /**
      * 获取消息
      */
     List<ChatMessage> getMessages();
 
     /**
-     * 构建
+     * 获取最后消息
      */
-    static ChatPrompt of(ChatMessage... messages) {
-        return new Prompt().addMessage(messages);
-    }
+    ChatMessage getLastMessage();
 
     /**
-     * 构建
+     * 获取用户消息内容
      */
-    static ChatPrompt of(String... messages) {
-        return new Prompt().addMessage(messages);
+    String getUserMessageContent();
+
+    /**
+     * 获取系统消息内容
+     */
+    String getSystemMessageContent();
+
+    /**
+     * 获取消息数量
+     */
+    int getMessagesSize();
+
+    /**
+     * 是否为空
+     */
+    static boolean isEmpty(ChatPrompt prompt) {
+        return prompt == null || prompt.getMessagesSize() == 0;
     }
 }

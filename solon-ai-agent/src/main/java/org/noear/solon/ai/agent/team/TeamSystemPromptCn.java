@@ -96,7 +96,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
         });
 
         // B. 任务背景：注入用户原始 Prompt
-        sb.append("\n## 当前任务\n").append(trace.getPrompt().getUserContent()).append("\n");
+        sb.append("\n## 当前任务\n").append(trace.getPrompt().getUserMessageContent()).append("\n");
 
         // C. 协议规则：由协作协议（如 Swarm）注入特定的流转逻辑
         config.getProtocol().injectSupervisorInstruction(Locale.CHINESE, sb);

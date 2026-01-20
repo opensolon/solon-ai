@@ -11,6 +11,8 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.SystemMessage;
+import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -500,21 +502,19 @@ public abstract class AbsChatTest {
         // 1. 定义一个简单的技能
         Skill timeSkill = new Skill() {
             @Override
-            public boolean isSupported(Object ctx) {
+            public boolean isSupported(ChatPrompt prompt) {
                 // 只有 session 中有 "use_time_skill" 属性时才支持
-                ChatSession session = (ChatSession) ctx;
-                return "true".equals(session.attr("use_time_skill"));
+                return "true".equals(prompt.getMeta().get("use_time_skill"));
             }
 
             @Override
-            public void onAttach(Object ctx) {
+            public void onAttach(ChatPrompt prompt) {
                 // 挂载时注入一个标识
-                ChatSession session = (ChatSession) ctx;
-                session.attrSet("skill_attached", "time_v1");
+                prompt.getMeta().put("skill_attached", "time_v1");
             }
 
             @Override
-            public String getInstruction(Object ctx) {
+            public String getInstruction(ChatPrompt prompt) {
                 return "当前时间是 2026-01-19，请基于此日期回答。";
             }
         };
@@ -523,10 +523,11 @@ public abstract class AbsChatTest {
         ChatSession chatSession = InMemoryChatSession.builder().build();
 
         // 设置支持条件
-        chatSession.attrSet("use_time_skill", "true");
+        Prompt prompt = Prompt.of("今天几号？")
+                .metaPut("use_time_skill", "true");
 
         // 执行调用
-        ChatResponse resp = chatModel.prompt("今天几号？")
+        ChatResponse resp = chatModel.prompt(prompt)
                 .session(chatSession)
                 .options(o -> o.skillAdd(timeSkill))
                 .call();
@@ -534,7 +535,7 @@ public abstract class AbsChatTest {
         log.info("case11 response: {}", resp.getMessage().getContent());
 
         // 验证：1. 属性是否成功注入 2. 系统消息是否自动添加（1个User + 1个Skill生成的System + 1个Assistant）
-        Assertions.assertEquals("time_v1", chatSession.attr("skill_attached"));
+        Assertions.assertEquals("time_v1", prompt.getMeta().get("skill_attached"));
         Assertions.assertTrue(chatSession.getMessages().stream().anyMatch(m -> m instanceof SystemMessage));
         Assertions.assertTrue(resp.getMessage().getContent().contains("2026"));
     }
@@ -550,7 +551,7 @@ public abstract class AbsChatTest {
             }
 
             @Override
-            public String getInstruction(Object ctx) {
+            public String getInstruction(ChatPrompt prompt) {
                 return "你是一个气象专家。";
             }
         };

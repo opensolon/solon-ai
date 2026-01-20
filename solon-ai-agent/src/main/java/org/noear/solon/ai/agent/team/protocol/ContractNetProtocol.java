@@ -344,7 +344,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
      * 算法兜底打分：基于关键词匹配
      */
     protected ONode constructBid(Agent agent, Prompt prompt) {
-        String taskDesc = prompt.getUserContent().toLowerCase();
+        String taskDesc = prompt.getUserMessageContent().toLowerCase();
         int score = 60;
 
         if (agent.profile() != null) {

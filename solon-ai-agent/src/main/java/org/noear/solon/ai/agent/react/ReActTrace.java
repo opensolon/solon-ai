@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
+import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -98,24 +99,30 @@ public class ReActTrace implements AgentTrace {
         this.options = options;
         this.session = session;
         this.protocol = protocol;
+    }
 
+    protected void deploySkills(){
         if (options.getSkills().size() > 0) {
+            if(ChatPrompt.isEmpty(prompt)){
+                prompt = getPrompt();
+            }
+
             StringBuilder combinedInstruction = new StringBuilder();
 
             for (RankEntity<Skill> item : options.getSkills()) {
                 Skill skill = item.target;
 
-                if (skill.isSupported(session)) {
+                if (skill.isSupported(prompt)) {
                     try {
                         // 挂载
-                        skill.onAttach(session);
+                        skill.onAttach(prompt);
                     } catch (Throwable e) {
                         LOG.error("Skill active failed: {}", skill.getClass().getName(), e);
                         throw e;
                     }
 
                     //聚合提示词
-                    skill.injectInstruction(session, combinedInstruction);
+                    skill.injectInstruction(prompt, combinedInstruction);
 
                     //部署工具
                     options.addTool(skill.getTools());

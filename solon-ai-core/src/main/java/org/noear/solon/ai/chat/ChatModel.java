@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialectManager;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.*;
@@ -76,15 +77,15 @@ public class ChatModel implements AiModel {
     /**
      * 提示语
      */
-    public ChatRequestDesc prompt(List<ChatMessage> messages) {
-        return new ChatRequestDescDefault(config, dialect, null, messages);
+    public ChatRequestDesc prompt(ChatPrompt prompt) {
+        return new ChatRequestDescDefault(config, dialect, null, prompt);
     }
 
     /**
      * 提示语
      */
-    public ChatRequestDesc prompt(ChatPrompt prompt) {
-        return prompt(prompt.getMessages());
+    public ChatRequestDesc prompt(List<ChatMessage> messages) {
+        return prompt(Prompt.of(messages));
     }
 
     /**

@@ -39,29 +39,6 @@ public interface ChatSession extends NonSerializable {
     String getSessionId();
 
     /**
-     * 设置属性
-     */
-    default void attrSet(String name, Object value) {
-
-    }
-
-    /**
-     * 获取属性
-     */
-    default <T> T attr(String name) {
-        return null;
-    }
-
-    /**
-     * 获取属性
-     */
-    default <T> T attrOrDefault(String name, T def) {
-        T val = attr(name);
-        return val == null ? def : val;
-    }
-
-
-    /**
      * 获取消息
      */
     List<ChatMessage> getMessages();

@@ -20,9 +20,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 /**
  * 提示语
@@ -31,14 +29,50 @@ import java.util.List;
  * @since 3.2
  */
 public class Prompt implements ChatPrompt, Serializable {
+    private final Map<String, Object> meta = new HashMap<>();
     private final List<ChatMessage> messageList = new ArrayList<>();
+
+    @Override
+    public Map<String, Object> getMeta() {
+        return meta;
+    }
+
+    /**
+     * 设置元信息
+     */
+    public Prompt metaPut(String name, Object value) {
+        meta.put(name, value);
+        return this;
+    }
+
+    /**
+     * 获取元信息
+     */
+    public <T> T meta(String name) {
+        return (T) meta.get(name);
+    }
+
+    /**
+     * 获取元信息
+     */
+    public <T> T metaOrDefault(String name, T def) {
+        T val = meta(name);
+        return val == null ? def : val;
+    }
+
 
     @Override
     public List<ChatMessage> getMessages() {
         return messageList;
     }
 
-    public ChatMessage getLastMessage(){
+    @Override
+    public int getMessagesSize() {
+        return messageList.size();
+    }
+
+    @Override
+    public ChatMessage getLastMessage() {
         return messageList.isEmpty() ? null : messageList.get(messageList.size() - 1);
     }
 
@@ -65,7 +99,8 @@ public class Prompt implements ChatPrompt, Serializable {
 
     private String userContent;
 
-    public String getUserContent() {
+    @Override
+    public String getUserMessageContent() {
         if (userContent == null) {
             for (ChatMessage m : messageList) {
                 if (m.getRole() == ChatRole.USER) {
@@ -80,7 +115,8 @@ public class Prompt implements ChatPrompt, Serializable {
 
     private String systemContent;
 
-    public String getSystemContent() {
+    @Override
+    public String getSystemMessageContent() {
         if (systemContent == null) {
             for (ChatMessage m : messageList) {
                 if (m.getRole() == ChatRole.SYSTEM) {
@@ -93,21 +129,18 @@ public class Prompt implements ChatPrompt, Serializable {
         return systemContent;
     }
 
-    public static boolean isEmpty(Prompt prompt) {
-        return prompt == null || prompt.messageList.isEmpty();
-    }
 
     /**
      * 构建
      */
-    public static Prompt of(ChatMessage... messages) {
+    public static Prompt of(Collection<ChatMessage> messages) {
         return new Prompt().addMessage(messages);
     }
 
     /**
      * 构建
      */
-    public static Prompt of(Collection<ChatMessage> messages) {
+    public static Prompt of(ChatMessage... messages) {
         return new Prompt().addMessage(messages);
     }
 

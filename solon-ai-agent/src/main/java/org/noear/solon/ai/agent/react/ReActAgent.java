@@ -25,6 +25,7 @@ import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
@@ -175,11 +176,11 @@ public class ReActAgent implements Agent {
             trace.appendMessages(history);
         }
 
-        if (Prompt.isEmpty(prompt)) {
+        if (ChatPrompt.isEmpty(prompt)) {
             //可能是旧问题（之前中断的）
             prompt = trace.getPrompt();
 
-            if (Prompt.isEmpty(prompt)) {
+            if (ChatPrompt.isEmpty(prompt)) {
                 LOG.warn("Prompt is empty!");
                 return ChatMessage.ofAssistant("");
             }
@@ -195,6 +196,9 @@ public class ReActAgent implements Agent {
             trace.setPrompt(prompt);
         }
 
+        //如果提示词没问题，开始部署技能
+        trace.deploySkills();
+
 
         // 拦截器：任务开始事件
         for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
@@ -202,7 +206,7 @@ public class ReActAgent implements Agent {
         }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserContent());
+            LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserMessageContent());
         }
 
         long startTime = System.currentTimeMillis();

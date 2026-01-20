@@ -16,7 +16,9 @@
 package org.noear.solon.ai.chat.skill;
 
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.lang.Preview;
 
 import java.util.Collection;
@@ -29,7 +31,7 @@ import java.util.stream.Collectors;
  * @since 3.8.4
  */
 @Preview("3.8.4")
-public interface Skill {
+public interface Skill extends ToolProvider {
     /**
      * 名字
      */
@@ -51,20 +53,20 @@ public interface Skill {
     /**
      * 准入检查：决定该技能在当前环境下是否可用
      */
-    default boolean isSupported(Object ctx) {
+    default boolean isSupported(ChatPrompt prompt) {
         return true;
     }
 
     /**
      * 挂载钩子：技能被激活时触发，可用于初始化 Session
      */
-    default void onAttach(Object ctx) {
+    default void onAttach(ChatPrompt prompt) {
     }
 
     /**
      * 指令注入：转化并注入到 System Message
      */
-    default String getInstruction(Object ctx) {
+    default String getInstruction(ChatPrompt prompt) {
         return null;
     }
 
@@ -82,8 +84,8 @@ public interface Skill {
     /**
      * 注入指令并对工具进行“染色”
      */
-    default void injectInstruction(Object ctx, StringBuilder combinedInstruction) {
-        String ins = getInstruction(ctx);
+    default void injectInstruction(ChatPrompt prompt, StringBuilder combinedInstruction) {
+        String ins = getInstruction(prompt);
         Collection<FunctionTool> tools = getTools();
 
         // 1. 如果有工具，进行元信息染色（借鉴 MCP 思想）
