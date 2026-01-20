@@ -45,5 +45,5 @@ public @interface PromptMapping {
     /**
      * 元数据（json）
      */
-    String meta() default "";
+    String meta() default "{}";
 }

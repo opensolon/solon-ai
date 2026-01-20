@@ -48,7 +48,7 @@ public @interface ToolMapping {
     /**
      * 元数据（json）
      */
-    String meta() default "";
+    String meta() default "{}";
 
     /**
      * 是否直接返回给调用者

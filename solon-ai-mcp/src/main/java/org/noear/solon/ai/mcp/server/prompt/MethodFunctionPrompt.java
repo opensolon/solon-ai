@@ -72,7 +72,7 @@ public class MethodFunctionPrompt implements FunctionPrompt {
             throw new IllegalArgumentException("@PromptMapping return type is not Collection");
         }
 
-        if(Assert.isNotEmpty(mapping.meta())) {
+        if(Assert.isNotEmpty(mapping.meta()) && mapping.meta().length() > 3) {
             Map<String, Object> tmp = ONode.deserialize(mapping.meta(), Map.class);
             meta.putAll(tmp);
         }

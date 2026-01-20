@@ -50,7 +50,7 @@ public @interface ResourceMapping {
     /**
      * 元数据（json）
      */
-    String meta() default "";
+    String meta() default "{}";
 
     /**
      * 媒体类型
