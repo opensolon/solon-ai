@@ -17,6 +17,7 @@ import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.skill.SkillDesc;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
@@ -500,24 +501,17 @@ public abstract class AbsChatTest {
     @Test
     public void case11_skill_call() throws IOException {
         // 1. 定义一个简单的技能
-        Skill timeSkill = new Skill() {
-            @Override
-            public boolean isSupported(ChatPrompt prompt) {
-                // 只有 session 中有 "use_time_skill" 属性时才支持
-                return "true".equals(prompt.getMeta().get("use_time_skill"));
-            }
-
-            @Override
-            public void onAttach(ChatPrompt prompt) {
-                // 挂载时注入一个标识
-                prompt.getMeta().put("skill_attached", "time_v1");
-            }
-
-            @Override
-            public String getInstruction(ChatPrompt prompt) {
-                return "当前时间是 2026-01-19，请基于此日期回答。";
-            }
-        };
+        Skill timeSkill = SkillDesc.builder("time")
+                .instruction("当前时间是 2026-01-19，请基于此日期回答。")
+                .isSupported(prompt -> {
+                    // 只有 prompt 中有 "use_time_skill" 属性时才支持
+                    return "true".equals(prompt.getMeta().get("use_time_skill"));
+                })
+                .onAttach(prompt -> {
+                    // 挂载时注入一个标识
+                    prompt.getMeta().put("skill_attached", "time_v1");
+                })
+                .build();
 
         ChatModel chatModel = getChatModelBuilder().build();
         ChatSession chatSession = InMemoryChatSession.builder().build();
@@ -544,17 +538,10 @@ public abstract class AbsChatTest {
     public void case12_skill_stream() throws Exception {
         // 1. 定义一个带工具的技能
         ToolProvider toolProvider = new MethodToolProvider(new Tools());
-        Skill weatherSkill = new Skill() {
-            @Override
-            public Collection<FunctionTool> getTools() {
-                return toolProvider.getTools(); // 复用已有的天气工具
-            }
-
-            @Override
-            public String getInstruction(ChatPrompt prompt) {
-                return "你是一个气象专家。";
-            }
-        };
+        Skill weatherSkill = SkillDesc.builder("weather")
+                .instruction("你是一个气象专家。")
+                .toolAdd(toolProvider)
+                .build();
 
         ChatModel chatModel = getChatModelBuilder().build();
         ChatSession chatSession = InMemoryChatSession.builder().build();
