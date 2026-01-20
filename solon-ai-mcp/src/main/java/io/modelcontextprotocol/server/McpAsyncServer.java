@@ -81,9 +81,9 @@ public class McpAsyncServer {
 
 	private final JsonSchemaValidator jsonSchemaValidator;
 
-	private final McpSchema.ServerCapabilities serverCapabilities;
+	private final ServerCapabilities serverCapabilities;
 
-	private final McpSchema.Implementation serverInfo;
+	private final Implementation serverInfo;
 
 	private final String instructions;
 
@@ -99,7 +99,7 @@ public class McpAsyncServer {
 	// broadcasting loggingNotification.
 	private LoggingLevel minLoggingLevel = LoggingLevel.DEBUG;
 
-	private final ConcurrentHashMap<McpSchema.CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<CompleteReference, McpServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
 
 	private List<String> protocolVersions;
 
@@ -113,8 +113,8 @@ public class McpAsyncServer {
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
 	McpAsyncServer(McpServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
-			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
+				   McpServerFeatures.Async features, Duration requestTimeout,
+				   McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -138,8 +138,8 @@ public class McpAsyncServer {
 	}
 
 	McpAsyncServer(McpStreamableServerTransportProvider mcpTransportProvider, McpJsonMapper jsonMapper,
-			McpServerFeatures.Async features, Duration requestTimeout,
-			McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
+				   McpServerFeatures.Async features, Duration requestTimeout,
+				   McpUriTemplateManagerFactory uriTemplateManagerFactory, JsonSchemaValidator jsonSchemaValidator) {
 		this.mcpTransportProvider = mcpTransportProvider;
 		this.jsonMapper = jsonMapper;
 		this.serverInfo = features.serverInfo();
@@ -167,12 +167,12 @@ public class McpAsyncServer {
 
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_INITIALIZED, (exchange, params) -> Mono.empty());
 
-		List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers = features
-			.rootsChangeConsumers();
+		List<BiFunction<McpAsyncServerExchange, List<Root>, Mono<Void>>> rootsChangeConsumers = features
+				.rootsChangeConsumers();
 
 		if (Utils.isEmpty(rootsChangeConsumers)) {
 			rootsChangeConsumers = Arrays.asList((exchange, roots) -> Mono.fromRunnable(() -> logger
-				.warn("Roots list changed notification, but no consumers provided. Roots list changed: {}", roots)));
+					.warn("Roots list changed notification, but no consumers provided. Roots list changed: {}", roots)));
 		}
 
 		notificationHandlers.put(McpSchema.METHOD_NOTIFICATION_ROOTS_LIST_CHANGED,
@@ -222,8 +222,8 @@ public class McpAsyncServer {
 	// ---------------------------------------
 	// Lifecycle Management
 	// ---------------------------------------
-	private Mono<McpSchema.InitializeResult> asyncInitializeRequestHandler(
-			McpSchema.InitializeRequest initializeRequest) {
+	private Mono<InitializeResult> asyncInitializeRequestHandler(
+			InitializeRequest initializeRequest) {
 		return Mono.defer(() -> {
 			logger.info("Client initialize request - Protocol: {}, Capabilities: {}, Info: {}",
 					initializeRequest.protocolVersion(), initializeRequest.capabilities(),
@@ -246,7 +246,7 @@ public class McpAsyncServer {
 						initializeRequest.protocolVersion(), serverProtocolVersion);
 			}
 
-			return Mono.just(new McpSchema.InitializeResult(serverProtocolVersion, this.serverCapabilities,
+			return Mono.just(new InitializeResult(serverProtocolVersion, this.serverCapabilities,
 					this.serverInfo, this.instructions));
 		});
 	}
@@ -255,7 +255,7 @@ public class McpAsyncServer {
 	 * Get the server capabilities that define the supported features and functionality.
 	 * @return The server capabilities
 	 */
-	public McpSchema.ServerCapabilities getServerCapabilities() {
+	public ServerCapabilities getServerCapabilities() {
 		return this.serverCapabilities;
 	}
 
@@ -263,7 +263,7 @@ public class McpAsyncServer {
 	 * Get the server implementation information.
 	 * @return The server implementation details
 	 */
-	public McpSchema.Implementation getServerInfo() {
+	public Implementation getServerInfo() {
 		return this.serverInfo;
 	}
 
@@ -283,15 +283,15 @@ public class McpAsyncServer {
 	}
 
 	private McpNotificationHandler asyncRootsListChangedNotificationHandler(
-			List<BiFunction<McpAsyncServerExchange, List<McpSchema.Root>, Mono<Void>>> rootsChangeConsumers) {
+			List<BiFunction<McpAsyncServerExchange, List<Root>, Mono<Void>>> rootsChangeConsumers) {
 		return (exchange, params) -> exchange.listRoots()
-			.flatMap(listRootsResult -> Flux.fromIterable(rootsChangeConsumers)
-				.flatMap(consumer -> Mono.defer(() -> consumer.apply(exchange, listRootsResult.roots())))
-				.onErrorResume(error -> {
-					logger.error("Error handling roots list change notification", error);
-					return Mono.empty();
-				})
-				.then());
+				.flatMap(listRootsResult -> Flux.fromIterable(rootsChangeConsumers)
+						.flatMap(consumer -> Mono.defer(() -> consumer.apply(exchange, listRootsResult.roots())))
+						.onErrorResume(error -> {
+							logger.error("Error handling roots list change notification", error);
+							return Mono.empty();
+						})
+						.then());
 	}
 
 	// ---------------------------------------
@@ -336,17 +336,17 @@ public class McpAsyncServer {
 	}
 
 	private static class StructuredOutputCallToolHandler
-			implements BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> {
+			implements BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> {
 
-		private final BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> delegateCallToolResult;
+		private final BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> delegateCallToolResult;
 
 		private final JsonSchemaValidator jsonSchemaValidator;
 
 		private final Map<String, Object> outputSchema;
 
 		public StructuredOutputCallToolHandler(JsonSchemaValidator jsonSchemaValidator,
-				Map<String, Object> outputSchema,
-				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> delegateHandler) {
+											   Map<String, Object> outputSchema,
+											   BiFunction<McpAsyncServerExchange, CallToolRequest, Mono<CallToolResult>> delegateHandler) {
 
 			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
 			Assert.notNull(delegateHandler, "Delegate call tool result handler must not be null");
@@ -357,7 +357,7 @@ public class McpAsyncServer {
 		}
 
 		@Override
-		public Mono<CallToolResult> apply(McpAsyncServerExchange exchange, McpSchema.CallToolRequest request) {
+		public Mono<CallToolResult> apply(McpAsyncServerExchange exchange, CallToolRequest request) {
 
 			return this.delegateCallToolResult.apply(exchange, request).map(result -> {
 
@@ -384,9 +384,9 @@ public class McpAsyncServer {
 					String content = "Response missing structured content which is expected when calling tool with non-empty outputSchema";
 					logger.warn(content);
 					return CallToolResult.builder()
-						.content(Arrays.asList(new McpSchema.TextContent(content)))
-						.isError(true)
-						.build();
+							.content(Arrays.asList(new TextContent(content)))
+							.isError(true)
+							.build();
 				}
 
 				// Validate the result against the output schema
@@ -395,9 +395,9 @@ public class McpAsyncServer {
 				if (!validation.valid()) {
 					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
 					return CallToolResult.builder()
-						.content(Arrays.asList(new McpSchema.TextContent(validation.errorMessage())))
-						.isError(true)
-						.build();
+							.content(Arrays.asList(new TextContent(validation.errorMessage())))
+							.isError(true)
+							.build();
 				}
 
 				if (Utils.isEmpty(result.content())) {
@@ -408,10 +408,10 @@ public class McpAsyncServer {
 					// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content
 
 					return CallToolResult.builder()
-						.content(Arrays.asList(new McpSchema.TextContent(validation.jsonStructuredOutput())))
-						.isError(result.isError())
-						.structuredContent(result.structuredContent())
-						.build();
+							.content(Arrays.asList(new TextContent(validation.jsonStructuredOutput())))
+							.isError(result.isError())
+							.structuredContent(result.structuredContent())
+							.build();
 				}
 
 				return result;
@@ -444,10 +444,10 @@ public class McpAsyncServer {
 		}
 
 		return McpServerFeatures.AsyncToolSpecification.builder()
-			.tool(toolSpecification.tool())
-			.callHandler(new StructuredOutputCallToolHandler(jsonSchemaValidator,
-					toolSpecification.tool().outputSchema(), toolSpecification.callHandler()))
-			.build();
+				.tool(toolSpecification.tool())
+				.callHandler(new StructuredOutputCallToolHandler(jsonSchemaValidator,
+						toolSpecification.tool().outputSchema(), toolSpecification.callHandler()))
+				.build();
 	}
 
 	/**
@@ -495,29 +495,29 @@ public class McpAsyncServer {
 		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_TOOLS_LIST_CHANGED, null);
 	}
 
-	private McpRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
+	private McpRequestHandler<ListToolsResult> toolsListRequestHandler() {
 		return (exchange, params) -> {
 			List<Tool> tools = this.tools.stream().map(McpServerFeatures.AsyncToolSpecification::tool).collect(Collectors.toList());
 
-			return Mono.just(new McpSchema.ListToolsResult(tools, null));
+			return Mono.just(new ListToolsResult(tools, null));
 		};
 	}
 
 	private McpRequestHandler<CallToolResult> toolsCallRequestHandler() {
 		return (exchange, params) -> {
-			McpSchema.CallToolRequest callToolRequest = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.CallToolRequest>() {
+			CallToolRequest callToolRequest = jsonMapper.convertValue(params,
+					new TypeRef<CallToolRequest>() {
 					});
 
 			Optional<McpServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
-				.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
-				.findAny();
+					.filter(tr -> callToolRequest.name().equals(tr.tool().name()))
+					.findAny();
 
 			if (toolSpecification.isPresent() == false) {
 				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-					.message("Unknown tool: invalid_tool_name")
-					.data("Tool not found: " + callToolRequest.name())
-					.build());
+						.message("Unknown tool: invalid_tool_name")
+						.data("Tool not found: " + callToolRequest.name())
+						.build());
 			}
 
 			return toolSpecification.get().callHandler().apply(exchange, callToolRequest);
@@ -562,7 +562,7 @@ public class McpAsyncServer {
 	 * List all registered resources.
 	 * @return A Flux stream of all registered resources
 	 */
-	public Flux<McpSchema.Resource> listResources() {
+	public Flux<Resource> listResources() {
 		return Flux.fromIterable(this.resources.values()).map(McpServerFeatures.AsyncResourceSpecification::resource);
 	}
 
@@ -631,9 +631,9 @@ public class McpAsyncServer {
 	 * List all registered resource templates.
 	 * @return A Flux stream of all registered resource templates
 	 */
-	public Flux<McpSchema.ResourceTemplate> listResourceTemplates() {
+	public Flux<ResourceTemplate> listResourceTemplates() {
 		return Flux.fromIterable(this.resourceTemplates.values())
-			.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate);
+				.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate);
 	}
 
 	/**
@@ -672,34 +672,34 @@ public class McpAsyncServer {
 	 * Notifies clients that the resources have updated.
 	 * @return A Mono that completes when all clients have been notified
 	 */
-	public Mono<Void> notifyResourcesUpdated(McpSchema.ResourcesUpdatedNotification resourcesUpdatedNotification) {
+	public Mono<Void> notifyResourcesUpdated(ResourcesUpdatedNotification resourcesUpdatedNotification) {
 		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_RESOURCES_UPDATED,
 				resourcesUpdatedNotification);
 	}
 
-	private McpRequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
+	private McpRequestHandler<ListResourcesResult> resourcesListRequestHandler() {
 		return (exchange, params) -> {
 			var resourceList = this.resources.values()
-				.stream()
-				.map(McpServerFeatures.AsyncResourceSpecification::resource)
-				.collect(Collectors.toList());
-			return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
+					.stream()
+					.map(McpServerFeatures.AsyncResourceSpecification::resource)
+					.collect(Collectors.toList());
+			return Mono.just(new ListResourcesResult(resourceList, null));
 		};
 	}
 
-	private McpRequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
+	private McpRequestHandler<ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
 		return (exchange, params) -> {
 			var resourceList = this.resourceTemplates.values()
-				.stream()
-				.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate)
-				.collect(Collectors.toList());
-			return Mono.just(new McpSchema.ListResourceTemplatesResult(resourceList, null));
+					.stream()
+					.map(McpServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate)
+					.collect(Collectors.toList());
+			return Mono.just(new ListResourceTemplatesResult(resourceList, null));
 		};
 	}
 
-	private McpRequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
+	private McpRequestHandler<ReadResourceResult> resourcesReadRequestHandler() {
 		return (ex, params) -> {
-			McpSchema.ReadResourceRequest resourceRequest = jsonMapper.convertValue(params, new TypeRef<McpSchema.ReadResourceRequest>() {
+			ReadResourceRequest resourceRequest = jsonMapper.convertValue(params, new TypeRef<ReadResourceRequest>() {
 			});
 
 			var resourceUri = resourceRequest.uri();
@@ -707,31 +707,31 @@ public class McpAsyncServer {
 			// First try to find a static resource specification
 			// Static resources have exact URIs
 			return this.findResourceSpecification(resourceUri)
-				.map(spec -> spec.readHandler().apply(ex, resourceRequest))
-				.orElseGet(() -> {
-					// If not found, try to find a dynamic resource specification
-					// Dynamic resources have URI templates
-					return this.findResourceTemplateSpecification(resourceUri)
-						.map(spec -> spec.readHandler().apply(ex, resourceRequest))
-						.orElseGet(() -> Mono.error(RESOURCE_NOT_FOUND.apply(resourceUri)));
-				});
+					.map(spec -> spec.readHandler().apply(ex, resourceRequest))
+					.orElseGet(() -> {
+						// If not found, try to find a dynamic resource specification
+						// Dynamic resources have URI templates
+						return this.findResourceTemplateSpecification(resourceUri)
+								.map(spec -> spec.readHandler().apply(ex, resourceRequest))
+								.orElseGet(() -> Mono.error(RESOURCE_NOT_FOUND.apply(resourceUri)));
+					});
 		};
 	}
 
 	private Optional<McpServerFeatures.AsyncResourceSpecification> findResourceSpecification(String uri) {
 		var result = this.resources.values()
-			.stream()
-			.filter(spec -> this.uriTemplateManagerFactory.create(spec.resource().uri()).matches(uri))
-			.findFirst();
+				.stream()
+				.filter(spec -> this.uriTemplateManagerFactory.create(spec.resource().uri()).matches(uri))
+				.findFirst();
 		return result;
 	}
 
 	private Optional<McpServerFeatures.AsyncResourceTemplateSpecification> findResourceTemplateSpecification(
 			String uri) {
 		return this.resourceTemplates.values()
-			.stream()
-			.filter(spec -> this.uriTemplateManagerFactory.create(spec.resourceTemplate().uriTemplate()).matches(uri))
-			.findFirst();
+				.stream()
+				.filter(spec -> this.uriTemplateManagerFactory.create(spec.resourceTemplate().uriTemplate()).matches(uri))
+				.findFirst();
 	}
 
 	// ---------------------------------------
@@ -771,7 +771,7 @@ public class McpAsyncServer {
 	 * List all registered prompts.
 	 * @return A Flux stream of all registered prompts
 	 */
-	public Flux<McpSchema.Prompt> listPrompts() {
+	public Flux<Prompt> listPrompts() {
 		return Flux.fromIterable(this.prompts.values()).map(McpServerFeatures.AsyncPromptSpecification::prompt);
 	}
 
@@ -813,7 +813,7 @@ public class McpAsyncServer {
 		return this.mcpTransportProvider.notifyClients(McpSchema.METHOD_NOTIFICATION_PROMPTS_LIST_CHANGED, null);
 	}
 
-	private McpRequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
+	private McpRequestHandler<ListPromptsResult> promptsListRequestHandler() {
 		return (exchange, params) -> {
 			// TODO: Implement pagination
 			// McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
@@ -821,18 +821,18 @@ public class McpAsyncServer {
 			// });
 
 			var promptList = this.prompts.values()
-				.stream()
-				.map(McpServerFeatures.AsyncPromptSpecification::prompt)
-				.collect(Collectors.toList());
+					.stream()
+					.map(McpServerFeatures.AsyncPromptSpecification::prompt)
+					.collect(Collectors.toList());
 
-			return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
+			return Mono.just(new ListPromptsResult(promptList, null));
 		};
 	}
 
-	private McpRequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
+	private McpRequestHandler<GetPromptResult> promptsGetRequestHandler() {
 		return (exchange, params) -> {
-			McpSchema.GetPromptRequest promptRequest = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.GetPromptRequest>() {
+			GetPromptRequest promptRequest = jsonMapper.convertValue(params,
+					new TypeRef<GetPromptRequest>() {
 					});
 
 			// Implement prompt retrieval logic here
@@ -840,9 +840,9 @@ public class McpAsyncServer {
 
 			if (specification == null) {
 				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-					.message("Invalid prompt name")
-					.data("Prompt not found: " + promptRequest.name())
-					.build());
+						.message("Invalid prompt name")
+						.data("Prompt not found: " + promptRequest.name())
+						.build());
 			}
 
 			return Mono.defer(() -> specification.promptHandler().apply(exchange, promptRequest));
@@ -897,13 +897,13 @@ public class McpAsyncServer {
 		};
 	}
 
-	private static final Mono<McpSchema.CompleteResult> EMPTY_COMPLETION_RESULT = Mono
-		.just(new McpSchema.CompleteResult(new CompleteCompletion(Arrays.asList(), 0, false)));
+	private static final Mono<CompleteResult> EMPTY_COMPLETION_RESULT = Mono
+			.just(new CompleteResult(new CompleteCompletion(Arrays.asList(), 0, false)));
 
-	private McpRequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
+	private McpRequestHandler<CompleteResult> completionCompleteRequestHandler() {
 		return (exchange, params) -> {
 
-			McpSchema.CompleteRequest request = parseCompletionParams(params);
+			CompleteRequest request = parseCompletionParams(params);
 
 			if (request.ref() == null) {
 				return Mono.error(
@@ -912,8 +912,8 @@ public class McpAsyncServer {
 
 			if (request.ref().type() == null) {
 				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-					.message("Completion ref type must not be null")
-					.build());
+						.message("Completion ref type must not be null")
+						.build());
 			}
 
 			String type = request.ref().type();
@@ -928,15 +928,15 @@ public class McpAsyncServer {
 				McpServerFeatures.AsyncPromptSpecification promptSpec = this.prompts.get(promptReference.name());
 				if (promptSpec == null) {
 					return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-						.message("Prompt not found: " + promptReference.name())
-						.build());
+							.message("Prompt not found: " + promptReference.name())
+							.build());
 				}
 				if (!promptSpec.prompt()
-					.arguments()
-					.stream()
-					.filter(arg -> arg.name().equals(argumentName))
-					.findFirst()
-					.isPresent()) {
+						.arguments()
+						.stream()
+						.filter(arg -> arg.name().equals(argumentName))
+						.findFirst()
+						.isPresent()) {
 
 					logger.warn("Argument not found: {} in prompt: {}", argumentName, promptReference.name());
 
@@ -959,17 +959,17 @@ public class McpAsyncServer {
 				}
 
 				McpServerFeatures.AsyncResourceSpecification resourceSpec = this
-					.findResourceSpecification(resourceReference.uri())
-					.orElse(null);
+						.findResourceSpecification(resourceReference.uri())
+						.orElse(null);
 
 				if (resourceSpec != null) {
 					if (!uriTemplateManagerFactory.create(resourceSpec.resource().uri())
-						.getVariableNames()
-						.contains(argumentName)) {
+							.getVariableNames()
+							.contains(argumentName)) {
 
 						return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-							.message("Argument not found: " + argumentName + " in resource: " + resourceReference.uri())
-							.build());
+								.message("Argument not found: " + argumentName + " in resource: " + resourceReference.uri())
+								.build());
 					}
 				}
 				else {
@@ -977,13 +977,13 @@ public class McpAsyncServer {
 					if (templateSpec != null) {
 
 						if (!uriTemplateManagerFactory.create(templateSpec.resourceTemplate().uriTemplate())
-							.getVariableNames()
-							.contains(argumentName)) {
+								.getVariableNames()
+								.contains(argumentName)) {
 
 							return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-								.message("Argument not found: " + argumentName + " in resource template: "
-										+ resourceReference.uri())
-								.build());
+									.message("Argument not found: " + argumentName + " in resource template: "
+											+ resourceReference.uri())
+									.build());
 						}
 					}
 					else {
@@ -998,8 +998,8 @@ public class McpAsyncServer {
 
 			if (specification == null) {
 				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
-					.message("AsyncCompletionSpecification not found: " + request.ref())
-					.build());
+						.message("AsyncCompletionSpecification not found: " + request.ref())
+						.build());
 			}
 
 			return Mono.defer(() -> specification.completionHandler().apply(exchange, request));
@@ -1007,7 +1007,7 @@ public class McpAsyncServer {
 	}
 
 	/**
-	 * Parses the raw JSON-RPC request parameters into a {@link McpSchema.CompleteRequest}
+	 * Parses the raw JSON-RPC request parameters into a {@link CompleteRequest}
 	 * object.
 	 * <p>
 	 * This method manually extracts the `ref` and `argument` fields from the input map,
@@ -1015,12 +1015,12 @@ public class McpAsyncServer {
 	 * fully-typed {@code CompleteRequest} instance.
 	 * @param object the raw request parameters, expected to be a Map containing "ref" and
 	 * "argument" entries.
-	 * @return a {@link McpSchema.CompleteRequest} representing the structured completion
+	 * @return a {@link CompleteRequest} representing the structured completion
 	 * request.
 	 * @throws IllegalArgumentException if the "ref" type is not recognized.
 	 */
 	@SuppressWarnings("unchecked")
-	private McpSchema.CompleteRequest parseCompletionParams(Object object) {
+	private CompleteRequest parseCompletionParams(Object object) {
 		Map<String, Object> params = (Map<String, Object>) object;
 		Map<String, Object> refMap = (Map<String, Object>) params.get("ref");
 		Map<String, Object> argMap = (Map<String, Object>) params.get("argument");
@@ -1029,7 +1029,7 @@ public class McpAsyncServer {
 
 		String refType = (String) refMap.get("type");
 
-		McpSchema.CompleteReference ref;
+		CompleteReference ref;
 
 		if (PromptReference.TYPE.equals(refType)){
 			ref = new PromptReference(refType, (String) refMap.get("name"),
@@ -1042,16 +1042,16 @@ public class McpAsyncServer {
 
 		String argName = (String) argMap.get("name");
 		String argValue = (String) argMap.get("value");
-		McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument(argName,
+		CompleteRequest.CompleteArgument argument = new CompleteRequest.CompleteArgument(argName,
 				argValue);
 
-		McpSchema.CompleteRequest.CompleteContext context = null;
+		CompleteRequest.CompleteContext context = null;
 		if (contextMap != null) {
 			Map<String, String> arguments = (Map<String, String>) contextMap.get("arguments");
-			context = new McpSchema.CompleteRequest.CompleteContext(arguments);
+			context = new CompleteRequest.CompleteContext(arguments);
 		}
 
-		return new McpSchema.CompleteRequest(ref, argument, meta, context);
+		return new CompleteRequest(ref, argument, meta, context);
 	}
 
 	/**

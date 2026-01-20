@@ -110,7 +110,7 @@ public class McpClientSession implements McpSession {
 	 */
 	@Deprecated
 	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
-			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
+							Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers) {
 		this(requestTimeout, transport, requestHandlers, notificationHandlers, Function.identity());
 	}
 
@@ -124,8 +124,8 @@ public class McpClientSession implements McpSession {
 	 * subscribing
 	 */
 	public McpClientSession(Duration requestTimeout, McpClientTransport transport,
-			Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers,
-			Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook) {
+							Map<String, RequestHandler<?>> requestHandlers, Map<String, NotificationHandler> notificationHandlers,
+							Function<? super Mono<Void>, ? extends Publisher<Void>> connectHook) {
 
 		Assert.notNull(requestTimeout, "The requestTimeout can not be null");
 		Assert.notNull(transport, "The transport can not be null");
@@ -225,7 +225,7 @@ public class McpClientSession implements McpSession {
 			}
 
 			return handler.handle(request.params())
-				.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null));
+					.map(result -> new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null));
 		});
 	}
 

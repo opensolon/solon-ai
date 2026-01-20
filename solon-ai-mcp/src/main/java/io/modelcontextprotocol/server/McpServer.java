@@ -451,7 +451,7 @@ public interface McpServer {
 		 */
 		@Deprecated
 		public AsyncSpecification<S> tool(McpSchema.Tool tool,
-				BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
+										  BiFunction<McpAsyncServerExchange, Map<String, Object>, Mono<CallToolResult>> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
 			assertNoDuplicateTool(tool.name());
@@ -475,14 +475,14 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public AsyncSpecification<S> toolCall(McpSchema.Tool tool,
-				BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
+											  BiFunction<McpAsyncServerExchange, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
 			assertNoDuplicateTool(tool.name());
 
 			this.tools
-				.add(McpServerFeatures.AsyncToolSpecification.builder().tool(tool).callHandler(callHandler).build());
+					.add(McpServerFeatures.AsyncToolSpecification.builder().tool(tool).callHandler(callHandler).build());
 
 			return this;
 		}
@@ -1051,7 +1051,7 @@ public interface McpServer {
 		 */
 		@Deprecated
 		public SyncSpecification<S> tool(McpSchema.Tool tool,
-				BiFunction<McpSyncServerExchange, Map<String, Object>, McpSchema.CallToolResult> handler) {
+										 BiFunction<McpSyncServerExchange, Map<String, Object>, CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
 			assertNoDuplicateTool(tool.name());
@@ -1075,7 +1075,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public SyncSpecification<S> toolCall(McpSchema.Tool tool,
-				BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, McpSchema.CallToolResult> handler) {
+											 BiFunction<McpSyncServerExchange, McpSchema.CallToolRequest, CallToolResult> handler) {
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(handler, "Handler must not be null");
 			assertNoDuplicateTool(tool.name());
@@ -1580,7 +1580,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public StatelessAsyncSpecification toolCall(McpSchema.Tool tool,
-				BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
+													BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");
@@ -2042,7 +2042,7 @@ public interface McpServer {
 		 * @throws IllegalArgumentException if tool or handler is null
 		 */
 		public StatelessSyncSpecification toolCall(McpSchema.Tool tool,
-				BiFunction<McpTransportContext, McpSchema.CallToolRequest, CallToolResult> callHandler) {
+												   BiFunction<McpTransportContext, McpSchema.CallToolRequest, CallToolResult> callHandler) {
 
 			Assert.notNull(tool, "Tool must not be null");
 			Assert.notNull(callHandler, "Handler must not be null");

@@ -32,11 +32,11 @@ public class McpStatelessServerFeatures {
 	public static class Async {
 		private McpSchema.Implementation serverInfo;
 		private McpSchema.ServerCapabilities serverCapabilities;
-		private List<McpStatelessServerFeatures.AsyncToolSpecification> tools;
+		private List<AsyncToolSpecification> tools;
 		private Map<String, AsyncResourceSpecification> resources;
-		private Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates;
-		private Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts;
-		private Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions;
+		private Map<String, AsyncResourceTemplateSpecification> resourceTemplates;
+		private Map<String, AsyncPromptSpecification> prompts;
+		private Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions;
 		private String instructions;
 
 		/**
@@ -50,12 +50,12 @@ public class McpStatelessServerFeatures {
 		 * @param instructions The server instructions text
 		 */
 		Async(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-				List<McpStatelessServerFeatures.AsyncToolSpecification> tools,
-				Map<String, AsyncResourceSpecification> resources,
-				Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates,
-				Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts,
-				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions,
-				String instructions) {
+			  List<AsyncToolSpecification> tools,
+			  Map<String, AsyncResourceSpecification> resources,
+			  Map<String, AsyncResourceTemplateSpecification> resourceTemplates,
+			  Map<String, AsyncPromptSpecification> prompts,
+			  Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions,
+			  String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
@@ -84,7 +84,7 @@ public class McpStatelessServerFeatures {
 			return serverCapabilities;
 		}
 
-		public List<McpStatelessServerFeatures.AsyncToolSpecification> tools() {
+		public List<AsyncToolSpecification> tools() {
 			return tools;
 		}
 
@@ -92,15 +92,15 @@ public class McpStatelessServerFeatures {
 			return resources;
 		}
 
-		public Map<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates() {
+		public Map<String, AsyncResourceTemplateSpecification> resourceTemplates() {
 			return resourceTemplates;
 		}
 
-		public Map<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts() {
+		public Map<String, AsyncPromptSpecification> prompts() {
 			return prompts;
 		}
 
-		public Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions() {
+		public Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions() {
 			return completions;
 		}
 
@@ -119,7 +119,7 @@ public class McpStatelessServerFeatures {
 		 * user.
 		 */
 		static Async fromSync(Sync syncSpec, boolean immediateExecution) {
-			List<McpStatelessServerFeatures.AsyncToolSpecification> tools = new ArrayList<>();
+			List<AsyncToolSpecification> tools = new ArrayList<>();
 			for (var tool : syncSpec.tools()) {
 				tools.add(AsyncToolSpecification.fromSync(tool, immediateExecution));
 			}
@@ -139,7 +139,7 @@ public class McpStatelessServerFeatures {
 				prompts.put(key, AsyncPromptSpecification.fromSync(prompt, immediateExecution));
 			});
 
-			Map<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions = new HashMap<>();
+			Map<McpSchema.CompleteReference, AsyncCompletionSpecification> completions = new HashMap<>();
 			syncSpec.completions().forEach((key, completion) -> {
 				completions.put(key, AsyncCompletionSpecification.fromSync(completion, immediateExecution));
 			});
@@ -156,11 +156,11 @@ public class McpStatelessServerFeatures {
 	public static class Sync {
 		private McpSchema.Implementation serverInfo;
 		private McpSchema.ServerCapabilities serverCapabilities;
-		private List<McpStatelessServerFeatures.SyncToolSpecification> tools;
-		private Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources;
-		private Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates;
-		private Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts;
-		private Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions;
+		private List<SyncToolSpecification> tools;
+		private Map<String, SyncResourceSpecification> resources;
+		private Map<String, SyncResourceTemplateSpecification> resourceTemplates;
+		private Map<String, SyncPromptSpecification> prompts;
+		private Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions;
 		private String instructions;
 
 		/**
@@ -174,27 +174,27 @@ public class McpStatelessServerFeatures {
 		 * @param instructions The server instructions text
 		 */
 		Sync(McpSchema.Implementation serverInfo, McpSchema.ServerCapabilities serverCapabilities,
-				List<McpStatelessServerFeatures.SyncToolSpecification> tools,
-				Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources,
-				Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates,
-				Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts,
-				Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions,
-				String instructions) {
+			 List<SyncToolSpecification> tools,
+			 Map<String, SyncResourceSpecification> resources,
+			 Map<String, SyncResourceTemplateSpecification> resourceTemplates,
+			 Map<String, SyncPromptSpecification> prompts,
+			 Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions,
+			 String instructions) {
 
 			Assert.notNull(serverInfo, "Server info must not be null");
 
 			this.serverInfo = serverInfo;
 			this.serverCapabilities = (serverCapabilities != null) ? serverCapabilities
 					: new McpSchema.ServerCapabilities(null, // completions
-							null, // experimental
-							new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
-																					// logging
-																					// by
-																					// default
-							!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
-							!Utils.isEmpty(resources)
-									? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
-							!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
+					null, // experimental
+					new McpSchema.ServerCapabilities.LoggingCapabilities(), // Enable
+					// logging
+					// by
+					// default
+					!Utils.isEmpty(prompts) ? new McpSchema.ServerCapabilities.PromptCapabilities(false) : null,
+					!Utils.isEmpty(resources)
+							? new McpSchema.ServerCapabilities.ResourceCapabilities(false, false) : null,
+					!Utils.isEmpty(tools) ? new McpSchema.ServerCapabilities.ToolCapabilities(false) : null);
 
 			this.tools = (tools != null) ? tools : new ArrayList<>();
 			this.resources = (resources != null) ? resources : new HashMap<>();
@@ -213,23 +213,23 @@ public class McpStatelessServerFeatures {
 			return serverCapabilities;
 		}
 
-		public List<McpStatelessServerFeatures.SyncToolSpecification> tools() {
+		public List<SyncToolSpecification> tools() {
 			return tools;
 		}
 
-		public Map<String, McpStatelessServerFeatures.SyncResourceSpecification> resources() {
+		public Map<String, SyncResourceSpecification> resources() {
 			return resources;
 		}
 
-		public Map<String, McpStatelessServerFeatures.SyncResourceTemplateSpecification> resourceTemplates() {
+		public Map<String, SyncResourceTemplateSpecification> resourceTemplates() {
 			return resourceTemplates;
 		}
 
-		public Map<String, McpStatelessServerFeatures.SyncPromptSpecification> prompts() {
+		public Map<String, SyncPromptSpecification> prompts() {
 			return prompts;
 		}
 
-		public Map<McpSchema.CompleteReference, McpStatelessServerFeatures.SyncCompletionSpecification> completions() {
+		public Map<McpSchema.CompleteReference, SyncCompletionSpecification> completions() {
 			return completions;
 		}
 
@@ -254,7 +254,7 @@ public class McpStatelessServerFeatures {
 		 * {@link CallToolRequest} and returning the result.
 		 * */
 		public AsyncToolSpecification(McpSchema.Tool tool,
-				BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
+									  BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler) {
 			this.tool = tool;
 			this.callHandler = callHandler;
 		}
@@ -279,7 +279,7 @@ public class McpStatelessServerFeatures {
 			}
 
 			BiFunction<McpTransportContext, CallToolRequest, Mono<McpSchema.CallToolResult>> callHandler = (ctx,
-					req) -> {
+																											req) -> {
 				var toolResult = Mono.fromCallable(() -> syncToolSpec.callHandler().apply(ctx, req));
 				return immediate ? toolResult : toolResult.subscribeOn(Schedulers.boundedElastic());
 			};
@@ -363,7 +363,7 @@ public class McpStatelessServerFeatures {
 		 * argument is a {@link McpSchema.ReadResourceRequest}.
 		 * */
 		public AsyncResourceSpecification(McpSchema.Resource resource,
-				BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+										  BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
 			this.resource = resource;
 			this.readHandler = readHandler;
 		}
@@ -419,7 +419,7 @@ public class McpStatelessServerFeatures {
 		 * {@link McpSchema.ReadResourceResult}
 		 * */
 		public AsyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
-				BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
+												  BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, Mono<McpSchema.ReadResourceResult>> readHandler) {
 			this.resourceTemplate = resourceTemplate;
 			this.readHandler = readHandler;
 		}
@@ -433,7 +433,7 @@ public class McpStatelessServerFeatures {
 		}
 
 		static AsyncResourceTemplateSpecification fromSync(SyncResourceTemplateSpecification resource,
-				boolean immediateExecution) {
+														   boolean immediateExecution) {
 			// FIXME: This is temporary, proper validation should be implemented
 			if (resource == null) {
 				return null;
@@ -468,7 +468,7 @@ public class McpStatelessServerFeatures {
 		 * {@link McpSchema.GetPromptRequest}.
 		 * */
 		public AsyncPromptSpecification(McpSchema.Prompt prompt,
-				BiFunction<McpTransportContext, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
+										BiFunction<McpTransportContext, McpSchema.GetPromptRequest, Mono<McpSchema.GetPromptResult>> promptHandler) {
 			this.prompt = prompt;
 			this.promptHandler = promptHandler;
 		}
@@ -515,7 +515,7 @@ public class McpStatelessServerFeatures {
 		 * {@link McpSchema.CompleteRequest}.
 		 * */
 		public AsyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
-				BiFunction<McpTransportContext, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler) {
+											BiFunction<McpTransportContext, McpSchema.CompleteRequest, Mono<McpSchema.CompleteResult>> completionHandler) {
 			this.referenceKey = referenceKey;
 			this.completionHandler = completionHandler;
 		}
@@ -538,7 +538,7 @@ public class McpStatelessServerFeatures {
 		 * {@code null} if input is null
 		 */
 		static AsyncCompletionSpecification fromSync(SyncCompletionSpecification completion,
-				boolean immediateExecution) {
+													 boolean immediateExecution) {
 			if (completion == null) {
 				return null;
 			}
@@ -565,7 +565,7 @@ public class McpStatelessServerFeatures {
 		 * {@link CallToolRequest} and returning results.
 		 * */
 		public SyncToolSpecification(McpSchema.Tool tool,
-				BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler) {
+									 BiFunction<McpTransportContext, CallToolRequest, McpSchema.CallToolResult> callHandler) {
 			this.tool = tool;
 			this.callHandler = callHandler;
 		}
@@ -650,7 +650,7 @@ public class McpStatelessServerFeatures {
 		 * argument is a {@link McpSchema.ReadResourceRequest}.
 		 * */
 		public SyncResourceSpecification(McpSchema.Resource resource,
-				BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+										 BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
 			this.resource = resource;
 			this.readHandler = readHandler;
 		}
@@ -695,7 +695,7 @@ public class McpStatelessServerFeatures {
 		 * {@link McpSchema.ReadResourceResult}
 		 * */
 		public SyncResourceTemplateSpecification(McpSchema.ResourceTemplate resourceTemplate,
-				BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
+												 BiFunction<McpTransportContext, McpSchema.ReadResourceRequest, McpSchema.ReadResourceResult> readHandler) {
 			this.resourceTemplate = resourceTemplate;
 			this.readHandler = readHandler;
 		}
@@ -732,7 +732,7 @@ public class McpStatelessServerFeatures {
 		 * {@link McpSchema.GetPromptRequest}.
 		 * */
 		public SyncPromptSpecification(McpSchema.Prompt prompt,
-				BiFunction<McpTransportContext, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
+									   BiFunction<McpTransportContext, McpSchema.GetPromptRequest, McpSchema.GetPromptResult> promptHandler) {
 			this.prompt = prompt;
 			this.promptHandler = promptHandler;
 		}
@@ -760,7 +760,7 @@ public class McpStatelessServerFeatures {
 		 * requests and returns results. The argument is a {@link McpSchema.CompleteRequest}.
 		 * */
 		public SyncCompletionSpecification(McpSchema.CompleteReference referenceKey,
-				BiFunction<McpTransportContext, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler) {
+										   BiFunction<McpTransportContext, McpSchema.CompleteRequest, McpSchema.CompleteResult> completionHandler) {
 			this.referenceKey = referenceKey;
 			this.completionHandler = completionHandler;
 		}

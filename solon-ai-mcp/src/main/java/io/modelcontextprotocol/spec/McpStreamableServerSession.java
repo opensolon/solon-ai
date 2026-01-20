@@ -73,9 +73,9 @@ public class McpStreamableServerSession implements McpLoggableSession {
 	 * name
 	 */
 	public McpStreamableServerSession(String id, McpSchema.ClientCapabilities clientCapabilities,
-			McpSchema.Implementation clientInfo, Duration requestTimeout,
-			Map<String, McpRequestHandler<?>> requestHandlers,
-			Map<String, McpNotificationHandler> notificationHandlers) {
+									  McpSchema.Implementation clientInfo, Duration requestTimeout,
+									  Map<String, McpRequestHandler<?>> requestHandlers,
+									  Map<String, McpNotificationHandler> notificationHandlers) {
 		this.id = id;
 		this.missingMcpTransportSession = new MissingMcpTransportSession(id);
 		this.listeningStreamRef = new AtomicReference<>(this.missingMcpTransportSession);
@@ -233,15 +233,15 @@ public class McpStreamableServerSession implements McpLoggableSession {
 				var stream = this.requestIdToStream.get(response.id());
 				if (stream == null) {
 					return Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR)
-						.message("Unexpected response for unknown id " + response.id())
-						.build());
+							.message("Unexpected response for unknown id " + response.id())
+							.build());
 				}
 				// TODO: encapsulate this inside the stream itself
 				var sink = stream.pendingResponses.remove(response.id());
 				if (sink == null) {
 					return Mono.error(McpError.builder(ErrorCodes.INTERNAL_ERROR)
-						.message("Unexpected response for unknown id " + response.id())
-						.build());
+							.message("Unexpected response for unknown id " + response.id())
+							.build());
 				}
 				else {
 					sink.success(response);

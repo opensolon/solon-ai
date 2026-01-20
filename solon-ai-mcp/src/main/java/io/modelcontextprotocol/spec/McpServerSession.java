@@ -4,20 +4,12 @@
 
 package io.modelcontextprotocol.spec;
 
-import java.time.Duration;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.server.McpAsyncServerExchange;
 import io.modelcontextprotocol.server.McpInitRequestHandler;
 import io.modelcontextprotocol.server.McpNotificationHandler;
 import io.modelcontextprotocol.server.McpRequestHandler;
-import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.util.Assert;
 import lombok.var;
 import org.slf4j.Logger;
@@ -25,6 +17,14 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.MonoSink;
 import reactor.core.publisher.Sinks;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Represents a Model Context Protocol (MCP) session on the server side. It manages
@@ -72,7 +72,7 @@ public class McpServerSession implements McpLoggableSession {
 	 * @param id session id
 	 * @param transport the transport to use
 	 * @param initHandler called when a
-	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
+	 * {@link McpSchema.InitializeRequest} is received by the
 	 * server
 	 * @param requestHandlers map of request handlers to use
 	 * @param notificationHandlers map of notification handlers to use
@@ -93,10 +93,10 @@ public class McpServerSession implements McpLoggableSession {
 	 * @param id session id
 	 * @param transport the transport to use
 	 * @param initHandler called when a
-	 * {@link io.modelcontextprotocol.spec.McpSchema.InitializeRequest} is received by the
+	 * {@link McpSchema.InitializeRequest} is received by the
 	 * server
 	 * @param initNotificationHandler called when a
-	 * {@link io.modelcontextprotocol.spec.McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
+	 * {@link McpSchema#METHOD_NOTIFICATION_INITIALIZED} is
 	 * received.
 	 * @param requestHandlers map of request handlers to use
 	 * @param notificationHandlers map of notification handlers to use
@@ -195,7 +195,7 @@ public class McpServerSession implements McpLoggableSession {
 	 * specified by the MCP server implementation
 	 * ({@link io.modelcontextprotocol.server.McpAsyncServer} or
 	 * {@link io.modelcontextprotocol.server.McpSyncServer}) via
-	 * {@link McpServerSession.Factory} that the server creates.
+	 * {@link Factory} that the server creates.
 	 * @param message the incoming JSON-RPC message
 	 * @return a Mono that completes when the message is processed
 	 */

@@ -60,7 +60,7 @@ public class McpAsyncServerExchange {
 	 */
 	@Deprecated
 	public McpAsyncServerExchange(McpSession session, McpSchema.ClientCapabilities clientCapabilities,
-			McpSchema.Implementation clientInfo) {
+								  McpSchema.Implementation clientInfo) {
 		this.sessionId = null;
 		if (!(session instanceof McpLoggableSession)) {
 			throw new IllegalArgumentException("Expecting session to be a McpLoggableSession instance");
@@ -81,8 +81,8 @@ public class McpAsyncServerExchange {
 	 * transport
 	 */
 	public McpAsyncServerExchange(String sessionId, McpLoggableSession session,
-			McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
-			McpTransportContext transportContext) {
+								  McpSchema.ClientCapabilities clientCapabilities, McpSchema.Implementation clientInfo,
+								  McpTransportContext transportContext) {
 		this.sessionId = sessionId;
 		this.session = session;
 		this.clientCapabilities = clientCapabilities;
@@ -184,15 +184,15 @@ public class McpAsyncServerExchange {
 
 		// @formatter:off
 		return this.listRoots(McpSchema.FIRST_PAGE)
-			.expand(result -> (result.nextCursor() != null) ?
-					this.listRoots(result.nextCursor()) : Mono.empty())
-			.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null),
-				(allRootsResult, result) -> {
-					allRootsResult.roots().addAll(result.roots());
-					return allRootsResult;
-				})
-			.map(result -> new McpSchema.ListRootsResult(Collections.unmodifiableList(result.roots()),
-					result.nextCursor()));
+				.expand(result -> (result.nextCursor() != null) ?
+						this.listRoots(result.nextCursor()) : Mono.empty())
+				.reduce(new McpSchema.ListRootsResult(new ArrayList<>(), null),
+						(allRootsResult, result) -> {
+							allRootsResult.roots().addAll(result.roots());
+							return allRootsResult;
+						})
+				.map(result -> new McpSchema.ListRootsResult(Collections.unmodifiableList(result.roots()),
+						result.nextCursor()));
 		// @formatter:on
 	}
 

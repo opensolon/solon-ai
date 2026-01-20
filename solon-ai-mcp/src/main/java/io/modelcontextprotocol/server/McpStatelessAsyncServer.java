@@ -4,19 +4,15 @@
 
 package io.modelcontextprotocol.server;
 
-import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.json.schema.JsonSchemaValidator;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures.AsyncResourceTemplateSpecification;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.*;
 import io.modelcontextprotocol.spec.McpSchema.CompleteResult.CompleteCompletion;
-import io.modelcontextprotocol.spec.McpSchema.ErrorCodes;
-import io.modelcontextprotocol.spec.McpSchema.PromptReference;
-import io.modelcontextprotocol.spec.McpSchema.ResourceReference;
-import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpStatelessServerTransport;
 import io.modelcontextprotocol.util.Assert;
 import io.modelcontextprotocol.util.DefaultMcpUriTemplateManagerFactory;
@@ -61,7 +57,7 @@ public class McpStatelessAsyncServer {
 
 	private final CopyOnWriteArrayList<McpStatelessServerFeatures.AsyncToolSpecification> tools = new CopyOnWriteArrayList<>();
 
-	private final ConcurrentHashMap<String, McpStatelessServerFeatures.AsyncResourceTemplateSpecification> resourceTemplates = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<String, AsyncResourceTemplateSpecification> resourceTemplates = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<String, McpStatelessServerFeatures.AsyncResourceSpecification> resources = new ConcurrentHashMap<>();
 
@@ -229,9 +225,9 @@ public class McpStatelessAsyncServer {
 	}
 
 	private static class StructuredOutputCallToolHandler
-			implements BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> {
+			implements BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> {
 
-		private final BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> delegateHandler;
+		private final BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> delegateHandler;
 
 		private final JsonSchemaValidator jsonSchemaValidator;
 
@@ -239,7 +235,7 @@ public class McpStatelessAsyncServer {
 
 		public StructuredOutputCallToolHandler(JsonSchemaValidator jsonSchemaValidator,
 											   Map<String, Object> outputSchema,
-											   BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<McpSchema.CallToolResult>> delegateHandler) {
+											   BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> delegateHandler) {
 
 			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
 			Assert.notNull(delegateHandler, "Delegate call tool result handler must not be null");
@@ -401,7 +397,7 @@ public class McpStatelessAsyncServer {
 					.findAny();
 
 			if (toolSpecification.isPresent() == false) {
-				return Mono.error(McpError.builder(McpSchema.ErrorCodes.INVALID_PARAMS)
+				return Mono.error(McpError.builder(ErrorCodes.INVALID_PARAMS)
 						.message("Unknown tool: invalid_tool_name")
 						.data("Tool not found: " + callToolRequest.name())
 						.build());
@@ -481,7 +477,7 @@ public class McpStatelessAsyncServer {
 	 * @return Mono that completes when clients have been notified of the change
 	 */
 	public Mono<Void> addResourceTemplate(
-			McpStatelessServerFeatures.AsyncResourceTemplateSpecification resourceTemplateSpecification) {
+			AsyncResourceTemplateSpecification resourceTemplateSpecification) {
 
 		if (this.serverCapabilities.resources() == null) {
 			return Mono.error(new IllegalStateException(
@@ -509,7 +505,7 @@ public class McpStatelessAsyncServer {
 	 */
 	public Flux<McpSchema.ResourceTemplate> listResourceTemplates() {
 		return Flux.fromIterable(this.resourceTemplates.values())
-				.map(McpStatelessServerFeatures.AsyncResourceTemplateSpecification::resourceTemplate);
+				.map(AsyncResourceTemplateSpecification::resourceTemplate);
 	}
 
 	/**
@@ -525,7 +521,7 @@ public class McpStatelessAsyncServer {
 		}
 
 		return Mono.defer(() -> {
-			McpStatelessServerFeatures.AsyncResourceTemplateSpecification removed = this.resourceTemplates
+			AsyncResourceTemplateSpecification removed = this.resourceTemplates
 					.remove(uriTemplate);
 			if (removed != null) {
 				logger.debug("Removed resource template: {}", uriTemplate);
@@ -586,7 +582,7 @@ public class McpStatelessAsyncServer {
 		return result;
 	}
 
-	private Optional<McpStatelessServerFeatures.AsyncResourceTemplateSpecification> findResourceTemplateSpecification(
+	private Optional<AsyncResourceTemplateSpecification> findResourceTemplateSpecification(
 			String uri) {
 		return this.resourceTemplates.values()
 				.stream()
@@ -720,8 +716,8 @@ public class McpStatelessAsyncServer {
 
 			// Check if valid a Prompt exists for this completion request
 			if (type.equals(PromptReference.TYPE)
-					&& request.ref() instanceof McpSchema.PromptReference) {
-				McpSchema.PromptReference promptReference = (McpSchema.PromptReference) request.ref();
+					&& request.ref() instanceof PromptReference) {
+				PromptReference promptReference = (PromptReference) request.ref();
 
 				McpStatelessServerFeatures.AsyncPromptSpecification promptSpec = this.prompts
 						.get(promptReference.name());
@@ -746,8 +742,8 @@ public class McpStatelessAsyncServer {
 			// Check if valid Resource or ResourceTemplate exists for this completion
 			// request
 			if (type.equals(ResourceReference.TYPE)
-					&& request.ref() instanceof McpSchema.ResourceReference) {
-				McpSchema.ResourceReference resourceReference = (McpSchema.ResourceReference) request.ref();
+					&& request.ref() instanceof ResourceReference) {
+				ResourceReference resourceReference = (ResourceReference) request.ref();
 
 				var uriTemplateManager = uriTemplateManagerFactory.create(resourceReference.uri());
 
@@ -827,10 +823,10 @@ public class McpStatelessAsyncServer {
 		McpSchema.CompleteReference ref;
 
 		if (PromptReference.TYPE.equals(refType)) {
-			ref = new McpSchema.PromptReference(refType, (String) refMap.get("name"),
+			ref = new PromptReference(refType, (String) refMap.get("name"),
 					refMap.get("title") != null ? (String) refMap.get("title") : null);
 		} else if (ResourceReference.TYPE.equals(refType)) {
-			ref = new McpSchema.ResourceReference(refType, (String) refMap.get("uri"));
+			ref = new ResourceReference(refType, (String) refMap.get("uri"));
 		} else {
 			throw new IllegalArgumentException("Invalid ref type: " + refType);
 		}
