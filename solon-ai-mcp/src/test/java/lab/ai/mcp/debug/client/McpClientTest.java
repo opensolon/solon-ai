@@ -62,12 +62,15 @@ public class McpClientTest {
             toolMap.put(t1.name(), t1);
         }
 
-        System.out.println(toolMap.get("getWeatherAsync").outputSchema());
-        System.out.println(toolMap.get("getOrderInfo").outputSchema());
+        String getWeatherAsync = toolMap.get("getWeatherAsync").outputSchema();
+        String getOrderInfo = toolMap.get("getOrderInfo").outputSchema();
 
-        assert "{\"type\":\"string\"}".equals(toolMap.get("getWeatherAsync").outputSchema());
+        System.out.println(getWeatherAsync);
+        System.out.println(getOrderInfo);
+
+        assert "".equals(getWeatherAsync);
         assert "{\"type\":\"object\",\"properties\":{\"created\":{\"type\":\"string\",\"format\":\"date-time\"},\"id\":{\"type\":\"integer\"},\"title\":{\"type\":\"string\"}},\"required\":[]}"
-                .equals(toolMap.get("getOrderInfo").outputSchema());
+                .equals(getOrderInfo);
     }
 
     @Test

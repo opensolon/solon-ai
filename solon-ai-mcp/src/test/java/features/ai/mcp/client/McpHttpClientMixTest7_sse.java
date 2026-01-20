@@ -1,5 +1,6 @@
 package features.ai.mcp.client;
 
+import demo.ai.mcp.llm.LlmUtil;
 import demo.ai.mcp.server.McpServerApp;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
@@ -29,9 +30,6 @@ public class McpHttpClientMixTest7_sse {
             .cacheSeconds(30)
             .build();
 
-    private static final String apiUrl = "http://127.0.0.1:11434/api/chat";
-    private static final String provider = "ollama";
-    private static final String model = "llama3.2"; //"llama3.2";//deepseek-r1:1.5b;
 
     @AfterAll
     public static void aft(){
@@ -48,9 +46,7 @@ public class McpHttpClientMixTest7_sse {
         assert response.contains("西湖");
 
 
-        ChatModel chatModel = ChatModel.of(apiUrl)
-                .provider(provider)
-                .model(model)
+        ChatModel chatModel = LlmUtil.getChatModel()
                 .defaultToolsAdd(mcpClient)
                 .build();
 
