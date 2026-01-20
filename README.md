@@ -4,7 +4,7 @@
 Solon-AI
 </h1>
 <p align="center">
-	<strong>Java LLM & RAG & MCP & Agent 应用开发框架（支持已知 AI 开发的各种能力）</strong>
+	<strong>Java LLM(tool, skill) & RAG & MCP & Agent(ReAct, Team) 应用开发框架（支持已知 AI 开发的各种能力）</strong>
     <br/>
     <strong>克制、高效、开放</strong>
 </p>
@@ -75,7 +75,9 @@ Solon AI 是 Solon 项目核心子项目之一。它是一个全场景的 Java A
 ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama") //需要指定供应商，用于识别接口风格（也称为方言）
                 .model("qwen2.5:1.5b")
+                .defaultSkillAdd(new ToolGatewaySkill())
                 .build();
+
 //同步调用，并打印响应消息
 AssistantMessage result = ChatchatModel.prompt("今天杭州的天气情况？")
          .options(op->op.toolAdd(new WeatherTools())) //添加工具
