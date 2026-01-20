@@ -78,7 +78,7 @@ ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .build();
 //同步调用，并打印响应消息
 AssistantMessage result = ChatchatModel.prompt("今天杭州的天气情况？")
-         .options(op->op.toolsAdd(new WeatherTools())) //添加工具
+         .options(op->op.toolAdd(new WeatherTools())) //添加工具
          .call()
          .getMessage();
 System.out.println(result);
@@ -147,7 +147,7 @@ Solon AI 将推理逻辑转化为图驱动的协作流，支持ReAct 自省推�
 ReActAgent agent = ReActAgent.of(chatModel) // 或者用 SimpleAgent.of(chatModel)
     .name("weather_expert")
     .description("查询天气并提供建议")
-    .addTool(weatherTool) // 注入 MCP 或本地工具
+    .defaultToolAdd(weatherTool) // 注入 MCP 或本地工具
     .build();
 
 agent.prompt("今天北京适合穿什么？").call(); // 自动完成：思考 -> 调用工具 -> 观察 -> 总结
@@ -160,7 +160,7 @@ TeamAgent team = TeamAgent.of(chatModel)
     .agentAdd(illustratorAgent) // 视觉专家
     .build();
 
-team.prompt("策划一个深海矿泉水的推广方案").call(); // Supervisor 自动拆解任务并分发给对应专家
+team.prompt("策划一个深海矿泉水的推广方案").call(); // Supervisor 自动拆解任务并分发给对应专家    .defaultToolAdd(weatherTool) // 注入 MCP 或本地工具
 ```
 
 
