@@ -32,6 +32,9 @@ import java.util.function.Consumer;
 public interface ChatRequestDesc {
     /**
      * 会话设置
+     *
+     * @param session 会话
+     * @since 3.8.4
      */
     ChatRequestDesc session(ChatSession session);
 

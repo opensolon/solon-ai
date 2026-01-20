@@ -107,14 +107,14 @@ public class ChatOptions {
     /// ////////////
 
     /**
-     * 所有工具
+     * 获取所有函数工具
      */
     public Collection<FunctionTool> tools() {
         return tools.values();
     }
 
     /**
-     * 工具获取
+     * 添加函数工具
      *
      * @param name 名字
      */
@@ -123,7 +123,7 @@ public class ChatOptions {
     }
 
     /**
-     * 工具添加
+     * 添加函数工具
      */
     public ChatOptions toolsAdd(FunctionTool tool) {
         tools.put(tool.name(), tool);
@@ -131,7 +131,7 @@ public class ChatOptions {
     }
 
     /**
-     * 工具添加
+     * 添加函数工具
      */
     public ChatOptions toolsAdd(Iterable<FunctionTool> toolColl) {
         if(toolColl != null) {
@@ -144,14 +144,14 @@ public class ChatOptions {
     }
 
     /**
-     * 工具添加
+     * 添加函数工具
      */
     public ChatOptions toolsAdd(ToolProvider toolProvider) {
         return toolsAdd(toolProvider.getTools());
     }
 
     /**
-     * 工具添加
+     * 添加函数工具
      *
      * @param toolObj 工具对象
      */
@@ -160,7 +160,7 @@ public class ChatOptions {
     }
 
     /**
-     * 工具添加（构建形式）
+     * 添加函数工具（构建形式）
      *
      * @param name        名字
      * @param toolBuilder 工具构建器
@@ -175,7 +175,7 @@ public class ChatOptions {
     /// ///////////////////////////////////
 
     /**
-     * 技能添加
+     * 添加技能
      *
      * @since 3.8.4
      */
@@ -190,7 +190,7 @@ public class ChatOptions {
     }
 
     /**
-     * 技能添加
+     * 添加技能
      *
      * @since 3.8.4
      */
@@ -199,7 +199,7 @@ public class ChatOptions {
     }
 
     /**
-     * 技能添加
+     * 添加技能
      *
      * @since 3.8.4
      */
