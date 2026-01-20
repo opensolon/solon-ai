@@ -196,7 +196,7 @@ public class SimpleAgent implements Agent {
                         config.getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
 
                         if (Assert.isNotEmpty(config.getOutputSchema())) {
-                            o.optionPut("response_format", Utils.asMap("type", "json_object"));
+                            o.optionSet("response_format", Utils.asMap("type", "json_object"));
                         }
 
                         if (config.getChatOptions() != null) {

@@ -17,7 +17,7 @@ public class ModelscopeTest extends AbsChatTest{
         return ChatModel.of(apiUrl)
                 .apiKey(apiKey)
                 .model(model)
-                .defaultOptionAdd("enable_thinking", false)
+                .defaultOptionSet("enable_thinking", false)
                 .defaultInterceptorAdd(new ChatInterceptorTest());
     }
 }

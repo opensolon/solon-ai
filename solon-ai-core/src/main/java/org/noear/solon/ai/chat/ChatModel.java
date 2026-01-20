@@ -185,6 +185,35 @@ public class ChatModel implements AiModel {
             return this;
         }
 
+
+        /**
+         * 添加默认选项
+         */
+        public Builder defaultOptionSet(String key, Object val) {
+            config.addDefaultOption(key, val);
+            return this;
+        }
+
+        /**
+         * 默认工具上下文添加
+         *
+         * @since 3.8.4
+         */
+        public Builder defaultToolContextPut(String key, Object value) {
+            config.addDefaultToolsContext(key, value);
+            return this;
+        }
+
+        /**
+         * 默认工具上下文添加
+         *
+         * @since 3.8.4
+         */
+        public Builder defaultToolContextPut(Map<String, Object> toolsContext) {
+            config.addDefaultToolsContext(toolsContext);
+            return this;
+        }
+
         /**
          * 默认工具添加（即每次请求都会带上）
          *
@@ -239,25 +268,6 @@ public class ChatModel implements AiModel {
             return this;
         }
 
-        /**
-         * 默认工具上下文添加
-         *
-         * @since 3.8.4
-         */
-        public Builder defaultToolContextPut(String key, Object value) {
-            config.addDefaultToolsContext(key, value);
-            return this;
-        }
-
-        /**
-         * 默认工具上下文添加
-         *
-         * @since 3.8.4
-         */
-        public Builder defaultToolContextPut(Map<String, Object> toolsContext) {
-            config.addDefaultToolsContext(toolsContext);
-            return this;
-        }
 
         /**
          * 默认技能添加
@@ -299,14 +309,6 @@ public class ChatModel implements AiModel {
         }
 
         /**
-         * 添加默认选项
-         */
-        public Builder defaultOptionAdd(String key, Object val) {
-            config.addDefaultOption(key, val);
-            return this;
-        }
-
-        /**
          * 网络超时
          */
         public Builder timeout(Duration timeout) {
@@ -339,6 +341,17 @@ public class ChatModel implements AiModel {
         }
 
         //----------------
+
+        /**
+         * 添加默认选项
+         *
+         * @deprecated 3.8.4 {@link #defaultOptionSet(String, Object)}
+         */
+        @Deprecated
+        public Builder defaultOptionAdd(String key, Object val) {
+            config.addDefaultOption(key, val);
+            return this;
+        }
 
 
         /**
