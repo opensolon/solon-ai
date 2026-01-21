@@ -89,6 +89,29 @@ System.out.println(result);
 chatModel.prompt("hello").stream(); //Publisher<ChatResponse>
 ```
 
+* Skills（技能）
+
+
+```java
+Skill skill = new SkillDesc("order_expert")
+        .description("订单助手")
+        // 动态准入：只有提到“订单”时才激活
+        .isSupported(prompt -> prompt.getUserMessageContent().contains("订单"))
+        // 动态指令：根据用户是否是 VIP 注入不同 SOP
+        .instruction(prompt -> {
+            if ("VIP".equals(prompt.getMeta("user_level"))) {
+                return "这是尊贵的 VIP 客户，请优先调用 fast_track_tool。";
+            }
+            return "按常规流程处理订单查询。";
+        })
+        .toolAdd(new OrderTools());
+
+chatModel.prompt("我昨天的订单到哪了？")
+         .options(o->o.skillAdd(skill))
+         .call();
+```
+
+
 * RAG（知识库）
 
 提供从加载（DocumentLoader）、切分（DocumentSplitter）、向量化（EmbeddingModel）到检索重排（RerankingModel）的全链路支持。
