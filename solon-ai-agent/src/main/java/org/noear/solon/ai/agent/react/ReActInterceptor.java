@@ -58,7 +58,7 @@ public interface ReActInterceptor extends AgentInterceptor, FlowInterceptor, Cha
     /**
      * 推理节点：接收 LLM 返回的原始推理消息
      */
-    default void onReason(ReActTrace trace, AssistantMessage assistantMessage) {
+    default void onReason(ReActTrace trace, AssistantMessage message) {
     }
 
     /**
