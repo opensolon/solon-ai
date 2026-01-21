@@ -200,7 +200,7 @@ public class ChatModel implements AiModel {
          * @since 3.8.4
          */
         public Builder defaultToolContextPut(String key, Object value) {
-            config.addDefaultToolsContext(key, value);
+            config.addDefaultToolContext(key, value);
             return this;
         }
 
@@ -210,7 +210,7 @@ public class ChatModel implements AiModel {
          * @since 3.8.4
          */
         public Builder defaultToolContextPut(Map<String, Object> toolsContext) {
-            config.addDefaultToolsContext(toolsContext);
+            config.addDefaultToolContext(toolsContext);
             return this;
         }
 
@@ -220,7 +220,7 @@ public class ChatModel implements AiModel {
          * @param tool 工具对象
          */
         public Builder defaultToolAdd(FunctionTool tool) {
-            config.addDefaultTools(tool);
+            config.addDefaultTool(tool);
             return this;
         }
 
@@ -231,7 +231,7 @@ public class ChatModel implements AiModel {
          */
         public Builder defaultToolAdd(Iterable<FunctionTool> toolColl) {
             for (FunctionTool f : toolColl) {
-                config.addDefaultTools(f);
+                config.addDefaultTool(f);
             }
 
             return this;
@@ -264,7 +264,7 @@ public class ChatModel implements AiModel {
         public Builder defaultToolAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
             FunctionToolDesc decl = new FunctionToolDesc(name);
             toolBuilder.accept(decl);
-            config.addDefaultTools(decl);
+            config.addDefaultTool(decl);
             return this;
         }
 
@@ -418,7 +418,7 @@ public class ChatModel implements AiModel {
          */
         @Deprecated
         public Builder defaultToolsContextAdd(String key, Object value) {
-            config.addDefaultToolsContext(key, value);
+            config.addDefaultToolContext(key, value);
             return this;
         }
 
@@ -429,7 +429,7 @@ public class ChatModel implements AiModel {
          */
         @Deprecated
         public Builder defaultToolsContextAdd(Map<String, Object> toolsContext) {
-            config.addDefaultToolsContext(toolsContext);
+            config.addDefaultToolContext(toolsContext);
             return this;
         }
     }

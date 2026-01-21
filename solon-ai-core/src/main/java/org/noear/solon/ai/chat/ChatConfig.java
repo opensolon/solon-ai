@@ -32,10 +32,16 @@ import java.util.*;
 public class ChatConfig extends AiConfig {
     private boolean defaultAutoToolCall = true;
     private final Map<String, FunctionTool> defaultTools = new LinkedHashMap<>();
-    private final Map<String, Object> defaultToolsContext = new LinkedHashMap<>();
+    private final Map<String, Object> defaultToolContext = new LinkedHashMap<>();
     private final List<RankEntity<Skill>> defaultSkills = new ArrayList<>();
     private final List<RankEntity<ChatInterceptor>> defaultInterceptors = new ArrayList<>();
     private final Map<String, Object> defaultOptions = new LinkedHashMap<>();
+
+    /**
+     * @deprecated 请使用 {@link #defaultToolContext}
+     */
+    @Deprecated
+    private Map<String, Object> defaultToolsContext;
 
 
     public void setDefaultAutoToolCall(boolean defaultAutoToolCall) {
@@ -44,7 +50,8 @@ public class ChatConfig extends AiConfig {
 
     /**
      * 是否自动扩行工具调用（默认为 true）
-     * */
+     *
+     */
     public boolean isDefaultAutoToolCall() {
         return defaultAutoToolCall;
     }
@@ -61,14 +68,14 @@ public class ChatConfig extends AiConfig {
     /**
      * 添加默认工具（即每次请求都会带上）
      */
-    public void addDefaultTools(FunctionTool tool) {
+    public void addDefaultTool(FunctionTool tool) {
         defaultTools.put(tool.name(), tool);
     }
 
     /**
      * 添加默认工具（即每次请求都会带上）
      */
-    public void addDefaultTools(Collection<FunctionTool> toolColl) {
+    public void addDefaultTool(Collection<FunctionTool> toolColl) {
         for (FunctionTool f : toolColl) {
             defaultTools.put(f.name(), f);
         }
@@ -94,23 +101,29 @@ public class ChatConfig extends AiConfig {
     /**
      * 添加默认工具上下文
      */
-    public void addDefaultToolsContext(String key, Object value) {
-        defaultToolsContext.put(key, value);
+    public void addDefaultToolContext(String key, Object value) {
+        defaultToolContext.put(key, value);
     }
 
     /**
      * 添加默认工具上下文
      */
-    public void addDefaultToolsContext(Map<String, Object> toolsContext) {
-        defaultToolsContext.putAll(toolsContext);
+    public void addDefaultToolContext(Map<String, Object> toolsContext) {
+        defaultToolContext.putAll(toolsContext);
     }
 
 
     /**
      * 获取默认工具上下文
      */
-    public Map<String, Object> getDefaultToolsContext() {
-        return defaultToolsContext;
+    public Map<String, Object> getDefaultToolContext() {
+        if (defaultToolsContext != null) {
+            //变名的兼容处理
+            defaultToolContext.putAll(defaultToolsContext);
+            defaultToolsContext = null;
+        }
+
+        return defaultToolContext;
     }
 
 
@@ -164,5 +177,57 @@ public class ChatConfig extends AiConfig {
                 ", proxy=" + getProxy() +
                 ", defaultTools=" + defaultTools +
                 '}';
+    }
+
+
+    /**
+     * 添加默认工具（即每次请求都会带上）
+     *
+     * @deprecated 3.8.4 {@link #addDefaultTool(FunctionTool)}
+     */
+    @Deprecated
+    public void addDefaultTools(FunctionTool tool) {
+        addDefaultTool(tool);
+    }
+
+    /**
+     * 添加默认工具（即每次请求都会带上）
+     *
+     * @deprecated 3.8.4 {@link #addDefaultTool(Collection<FunctionTool>)}
+     */
+    @Deprecated
+    public void addDefaultTools(Collection<FunctionTool> toolColl) {
+        addDefaultTool(toolColl);
+    }
+
+    /**
+     * 添加默认工具上下文
+     *
+     * @deprecated 3.8.4 {@link #addDefaultToolContext(String, Object)}
+     */
+    @Deprecated
+    public void addDefaultToolsContext(String key, Object value) {
+        addDefaultToolContext(key, value);
+    }
+
+    /**
+     * 添加默认工具上下文
+     *
+     * @deprecated 3.8.4 {@link #addDefaultToolContext(Map<String, Object>)}
+     */
+    @Deprecated
+    public void addDefaultToolsContext(Map<String, Object> toolsContext) {
+        addDefaultToolContext(toolsContext);
+    }
+
+
+    /**
+     * 获取默认工具上下文
+     *
+     * @deprecated 3.8.4 {@link #getDefaultToolContext()}
+     */
+    @Deprecated
+    public Map<String, Object> getDefaultToolsContext() {
+        return getDefaultToolContext();
     }
 }

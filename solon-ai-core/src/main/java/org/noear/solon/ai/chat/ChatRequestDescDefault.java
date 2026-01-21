@@ -72,8 +72,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         options.autoToolCall(config.isDefaultAutoToolCall());
 
         //默认工具上下文
-        if (Utils.isNotEmpty(config.getDefaultToolsContext())) {
-            this.options.toolContext().putAll(config.getDefaultToolsContext());
+        if (Utils.isNotEmpty(config.getDefaultToolContext())) {
+            this.options.toolContext().putAll(config.getDefaultToolContext());
         }
 
         //默认工具选项
