@@ -371,7 +371,7 @@ public class ChatModel implements AiModel {
          */
         @Deprecated
         public Builder defaultToolsAdd(Object toolObj) {
-            return defaultToolAdd(new MethodToolProvider(toolObj));
+            return defaultToolAdd(toolObj);
         }
 
         /**

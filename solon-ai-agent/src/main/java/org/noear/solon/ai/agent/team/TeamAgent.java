@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
@@ -361,7 +362,7 @@ public class TeamAgent implements Agent {
             return this;
         }
 
-        public Builder defaultToolAdd(Collection<FunctionTool> tools) {
+        public Builder defaultToolAdd(Iterable<FunctionTool> tools) {
             config.getDefaultOptions().getModelOptions().toolAdd(tools);
             return this;
         }
@@ -369,6 +370,15 @@ public class TeamAgent implements Agent {
         public Builder defaultToolAdd(ToolProvider toolProvider) {
             config.getDefaultOptions().getModelOptions().toolAdd(toolProvider);
             return this;
+        }
+
+        /**
+         * 默认工具添加（即每次请求都会带上）
+         *
+         * @param toolObj 工具对象
+         */
+        public Builder defaultToolAdd(Object toolObj) {
+            return defaultToolAdd(new MethodToolProvider(toolObj));
         }
 
         public Builder defaultToolContextPut(String key, Object value) {

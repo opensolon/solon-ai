@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.flow.GraphSpec;
@@ -147,7 +148,7 @@ public class ReActAgentBuilder {
         return this;
     }
 
-    public ReActAgentBuilder defaultToolAdd(Collection<FunctionTool> tools) {
+    public ReActAgentBuilder defaultToolAdd(Iterable<FunctionTool> tools) {
         config.getDefaultOptions().getModelOptions().toolAdd(tools);
         return this;
     }
@@ -155,6 +156,10 @@ public class ReActAgentBuilder {
     public ReActAgentBuilder defaultToolAdd(ToolProvider toolProvider) {
         config.getDefaultOptions().getModelOptions().toolAdd(toolProvider);
         return this;
+    }
+
+    public ReActAgentBuilder defaultToolAdd(Object toolObj) {
+        return defaultToolAdd(new MethodToolProvider(toolObj));
     }
 
     public ReActAgentBuilder defaultSkillAdd(Skill skill) {

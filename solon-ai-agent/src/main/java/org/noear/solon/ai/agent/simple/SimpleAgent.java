@@ -30,6 +30,7 @@ import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
@@ -336,7 +337,7 @@ public class SimpleAgent implements Agent {
             return this;
         }
 
-        public Builder defaultToolAdd(Collection<FunctionTool> tools) {
+        public Builder defaultToolAdd(Iterable<FunctionTool> tools) {
             config.getDefaultOptions().toolAdd(tools);
             return this;
         }
@@ -344,6 +345,15 @@ public class SimpleAgent implements Agent {
         public Builder defaultToolAdd(ToolProvider toolProvider) {
             config.getDefaultOptions().toolAdd(toolProvider);
             return this;
+        }
+
+        /**
+         * 默认工具添加（即每次请求都会带上）
+         *
+         * @param toolObj 工具对象
+         */
+        public Builder defaultToolAdd(Object toolObj) {
+            return defaultToolAdd(new MethodToolProvider(toolObj));
         }
 
         public Builder defaultSkillAdd(Skill... skills) {
