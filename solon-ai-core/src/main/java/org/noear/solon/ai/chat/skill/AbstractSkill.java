@@ -30,11 +30,11 @@ import java.util.ArrayList;
  * @since 3.8.4
  */
 @Preview("3.8.4")
-public class AnnotatedSkill implements Skill {
+public abstract class AbstractSkill implements Skill {
     protected final SkillMetadata metadata;
     protected final List<FunctionTool> tools;
 
-    protected AnnotatedSkill() {
+    protected AbstractSkill() {
         this.tools = new ArrayList<>();
         this.tools.addAll(new MethodToolProvider(this).getTools());
 

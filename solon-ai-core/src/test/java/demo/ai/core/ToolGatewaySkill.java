@@ -3,7 +3,7 @@ package demo.ai.core;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
-import org.noear.solon.ai.chat.skill.AnnotatedSkill;
+import org.noear.solon.ai.chat.skill.AbstractSkill;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.annotation.Param;
@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 /**
  * 动态工具网关技能（隐藏在后台的巨大工具库，不占用初始上下文）
  */
-public class ToolGatewaySkill extends AnnotatedSkill implements Skill {
+public class ToolGatewaySkill extends AbstractSkill implements Skill {
     private List<FunctionTool> findRelevant(String query, int size){
         //查找相关工具
         return null;
