@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * ReAct 推理任务 (Reasoning)
@@ -71,7 +72,7 @@ public class ReasonTask implements NamedTaskComponent {
                     config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps());
         }
 
-        // [逻辑 1: 安全限流] 防止死循环，达到最大步数则强制终止
+        // [逻辑 1: 安全限流] 防止无限循环，达到最大步数则强制终止并返回错误提示
         if (trace.nextStep() > trace.getOptions().getMaxSteps()) {
             LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), trace.getOptions().getMaxSteps());
             trace.setRoute(Agent.ID_END);
@@ -79,7 +80,7 @@ public class ReasonTask implements NamedTaskComponent {
             return;
         }
 
-        // [逻辑 2: 系统提示词构建] 融合业务角色、ReAct协议与输出格式约束
+        // [逻辑 2: 提示词工程] 融合系统角色、执行计划、输出格式约束及协议指令
         String systemPrompt = config.getSystemPromptFor(trace, context);
 
         if (trace.getOptions().isEnablePlanning() && trace.hasPlans()) {
@@ -103,7 +104,7 @@ public class ReasonTask implements NamedTaskComponent {
         messages.add(ChatMessage.ofSystem(systemPrompt));
         messages.addAll(trace.getMessages());
 
-        // [逻辑 3: 模型交互] 执行物理请求与拦截器生命周期
+        // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
         ChatResponse response = callWithRetry(trace, messages);
 
         if (response.getUsage() != null) {
@@ -114,14 +115,14 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onModelEnd(trace, response);
         }
 
-        // 容错处理：模型响应为空时引导其重试
+        // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
             trace.appendMessage(ChatMessage.ofUser("Your last response was empty. Please provide Action or Final Answer."));
             trace.setRoute(ReActAgent.ID_REASON);
             return;
         }
 
-        // [逻辑 4: 路由判断 - 原生工具调用协议]
+        // [逻辑 4: 路由分发 - 基于原生工具调用协议]
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
             trace.appendMessage(response.getMessage());
             trace.setRoute(ReActAgent.ID_ACTION);
@@ -132,7 +133,7 @@ public class ReasonTask implements NamedTaskComponent {
         String rawContent = response.hasContent() ? response.getContent() : ""; // 原始（含 think）
         String clearContent = response.hasContent() ? response.getResultContent() : ""; // 干净（无 think）
 
-        // 截断防御：防止模型“分身”替系统回复 Observation 内容
+        // 截断防御：防止模型“幻觉”出 Observation 标记从而绕过系统控制
         int obsIndex = rawContent.indexOf("Observation:");
         if (obsIndex != -1) {
             rawContent = rawContent.substring(0, obsIndex).trim();
@@ -143,33 +144,37 @@ public class ReasonTask implements NamedTaskComponent {
             }
         }
 
+        // 触发推理审计事件（传递原始消息对象）
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onReason(trace, response.getMessage());
         }
 
+        // 进一步清洗协议头（如 Thought:），提取核心思维逻辑
         String thoughtContent = extractThought(clearContent);
 
         trace.appendMessage(ChatMessage.ofAssistant(rawContent));
         trace.setLastResult(thoughtContent);
 
+        // 触发思考事件（仅在存在有效思考文本时通知）
         if(Assert.isNotEmpty(thoughtContent)) {
             for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                 item.target.onThought(trace, thoughtContent);
             }
         }
 
-        // [逻辑 6: 决策分流]
+        // [逻辑 6: 决策流控]
 
-        // 1. 优先判断是否完成（防止 Action 标识被误触发）
+        // 决策基准采用 clearContent，确保不受 <think> 标签内干扰词影响
         String decisionBase = clearContent;
 
+        // 1. 优先判断任务是否结束（Finish）
         if (decisionBase.contains(config.getFinishMarker())) {
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer(extractFinalAnswer(thoughtContent));
             return;
         }
 
-        // 2. 其次判断文本形式的 Action（使用更严格的正则：Action: 后必须跟 {）
+        // 2. 其次判断文本形式的工具执行意图（Action: { ... }）
         if (decisionBase.contains("Action:")) {
             String actionPart = decisionBase.substring(decisionBase.indexOf("Action:"));
             if (actionPart.matches("(?s)Action:\\s*\\{.*")) {
@@ -178,7 +183,7 @@ public class ReasonTask implements NamedTaskComponent {
             }
         }
 
-        // 3. 兜底：既没有明确 Action，也没有明确 Finish，视为直接回答
+        // 3. 兜底逻辑：既无明确工具调用也无完成标识，视为直接回复 Final Answer
         trace.setRoute(Agent.ID_END);
         trace.setFinalAnswer(extractFinalAnswer(thoughtContent));
     }
@@ -196,10 +201,9 @@ public class ReasonTask implements NamedTaskComponent {
                     o.toolAdd(trace.getOptions().getTools());
                     o.toolAdd(trace.getProtocolTools());
 
-                    o.autoToolCall(false); // 强制由 Agent 框架管理工具链路
+                    o.autoToolCall(false); // 强制由 Agent 框架接管工具链路管理
                     o.toolContextPut(trace.getOptions().getToolContext());
 
-                    //trace.getOptions().getSkills().forEach(item -> o.skillAdd(item.index, item.target));
                     trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
 
                     if(trace.getOptions().getOutputSchema() != null){
@@ -237,30 +241,44 @@ public class ReasonTask implements NamedTaskComponent {
     }
 
     /**
-     * 专门用于移除协议标签（如 <think> 或 Thought:），获取“思考主体”
+     * 移除技术性标签（如 <think>）及协议引导词（如 Thought:），获取纯净思考主体
      */
     private String extractThought(String content) {
-        if (content == null) return "";
+        if (Utils.isEmpty(content)) {
+            return "";
+        }
 
-        return content
-                .replaceAll("(?s)<think>.*?</think>", "") // 移除推理模型内省标签
-                .replaceAll("(?m)^Thought:\\s*", "")      // 移除 ReAct 协议头
-                .trim();
+        String result;
+        int labelIndex = content.indexOf(THOUGHT_LABEL);
+        if (labelIndex != -1) {
+            result = content.substring(labelIndex + THOUGHT_LABEL.length()).trim();
+        } else {
+            result = content.trim();
+        }
+
+        return PATTERN_THINK.matcher(result).replaceAll("").trim();
     }
 
     /**
-     * 清理思考过程，提取最终业务答案
+     * 清理推理过程，从思考片段中提取最终业务答案
      */
     private String extractFinalAnswer(String thoughtContent) {
-        if (thoughtContent == null) return "";
-
-        String answer = thoughtContent;
-        if (answer.contains(config.getFinishMarker())) {
-            answer = answer.substring(answer.indexOf(config.getFinishMarker()) + config.getFinishMarker().length());
+        if (Utils.isEmpty(thoughtContent)) {
+            return "";
         }
 
-        return answer
-                .replaceAll("(?m)^(Action|Observation):\\s*", "")
-                .trim();
+        String answer = thoughtContent;
+        String marker = config.getFinishMarker();
+
+        int markerIndex = answer.indexOf(marker);
+        if (markerIndex != -1) {
+            answer = answer.substring(markerIndex + marker.length()).trim();
+        }
+
+        return PATTERN_CLEAN.matcher(answer).replaceAll("").trim();
     }
+
+    private static final String THOUGHT_LABEL = "Thought:";
+    private static final Pattern PATTERN_THINK = Pattern.compile("(?s)<think>.*?</think>");
+    private static final Pattern PATTERN_CLEAN = Pattern.compile("(?m)^(Action|Observation):\\s*");
 }
