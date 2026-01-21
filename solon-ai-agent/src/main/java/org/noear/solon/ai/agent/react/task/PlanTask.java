@@ -32,6 +32,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -44,6 +45,7 @@ import java.util.stream.Collectors;
 @Preview("3.8.1")
 public class PlanTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(PlanTask.class);
+    private static final Pattern PLAN_LINE_PREFIX_PATTERN = Pattern.compile("^[\\d\\.\\-\\s*]+");
 
     private final ReActAgentConfig config;
 
@@ -87,10 +89,15 @@ public class PlanTask implements NamedTaskComponent {
         }
 
         // 4. 清洗计划内容（移除数字序号和 Markdown 符号）
-        List<String> cleanedPlans = Arrays.stream(planContent.split("\n"))
-                .map(line -> line.replaceAll("^[\\d\\.\\-\\s*]+", "").trim())
-                .filter(line -> !line.isEmpty())
-                .collect(Collectors.toList());
+        String[] lines = planContent.split("\n");
+        List<String> cleanedPlans = new ArrayList<>(lines.length);
+
+        for (String line : lines) {
+            String cleaned = PLAN_LINE_PREFIX_PATTERN.matcher(line).replaceAll("").trim();
+            if (!cleaned.isEmpty()) {
+                cleanedPlans.add(cleaned);
+            }
+        }
 
         trace.setPlans(cleanedPlans);
 
