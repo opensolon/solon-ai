@@ -42,8 +42,8 @@ public class ReActAgentHitlTest2 {
 
         // 2. 构建 ReActAgent 并配置拦截器
         ReActAgent agent = ReActAgent.of(chatModel)
-                .defaultToolAdd(new MethodToolProvider(new ReActAgentHitlTest.RefundTools()))
-                .modelOptions(o -> o.temperature(0.0F))
+                .defaultToolAdd(new RefundTools())
+                .modelOptions(o -> o.temperature(0.0))
                 .graphAdjuster(spec-> {
                     spec.getNode(ReActAgent.ID_ACTION_AFT).task(new HumanAuditTask());
                 })

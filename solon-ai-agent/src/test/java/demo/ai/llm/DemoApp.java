@@ -12,7 +12,7 @@ public class DemoApp {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         SimpleAgent robot = SimpleAgent.of(chatModel)
-                .defaultToolAdd(new MethodToolProvider(new TimeTool()))
+                .defaultToolAdd(new TimeTool())
                 .build();
 
         String answer = robot.prompt("现在几点了？").call().getContent();

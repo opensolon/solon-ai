@@ -64,9 +64,9 @@ public class ReActAgentPromptProviderTest {
 
         // 2. 构建 Agent
         ReActAgent agent = ReActAgent.of(chatModel)
-                .defaultToolAdd(new MethodToolProvider(new MathTools()))
+                .defaultToolAdd(new MathTools())
                 .systemPrompt(mathExpertProvider)
-                .modelOptions(o -> o.temperature(0.0F)) // 降低随机性，确保严格遵循解题步骤
+                .modelOptions(o -> o.temperature(0.0)) // 降低随机性，确保严格遵循解题步骤
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_math_001");
@@ -87,7 +87,7 @@ public class ReActAgentPromptProviderTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .defaultToolAdd(new MethodToolProvider(new ChineseTools()))
+                .defaultToolAdd(new ChineseTools())
                 // 直接使用默认实现，适合通用中文场景
                 .systemPrompt(ReActSystemPromptCn.getDefault())
                 .build();

@@ -37,7 +37,7 @@ public class TeamAgentDemo {
         Agent coder = ReActAgent.of(chatModel)
                 .name("coder")
                 .description("Java 程序员，擅长编写高质量代码并能通过工具验证运行结果。")
-                .defaultToolAdd(new MethodToolProvider(new CodeExecutorTool()))
+                .defaultToolAdd(new CodeExecutorTool())
                 .build();
 
         // Writer: 负责逻辑解释与文档包装
