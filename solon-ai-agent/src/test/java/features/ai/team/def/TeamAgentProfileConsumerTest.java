@@ -174,7 +174,7 @@ public class TeamAgentProfileConsumerTest {
 
         // 验证中文输出
         String zhStr = profile.toFormatString(Locale.CHINESE);
-        Assertions.assertTrue(zhStr.contains("擅长技能"));
+        Assertions.assertTrue(zhStr.contains("核心能力"));
 
         // 验证英文输出
         String enStr = profile.toFormatString(Locale.ENGLISH);
