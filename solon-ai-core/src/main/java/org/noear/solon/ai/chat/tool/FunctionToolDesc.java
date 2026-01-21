@@ -103,11 +103,21 @@ public class FunctionToolDesc implements FunctionTool {
         return this;
     }
 
+    /**
+     * 输入架构
+     *
+     * @since 3.8.4
+     */
     public FunctionToolDesc inputSchema(String inputSchema) {
         this.inputSchema = inputSchema;
         return this;
     }
 
+    /**
+     * 输出架构
+     *
+     * @since 3.8.4
+     */
     public FunctionToolDesc outputSchema(String outputSchema) {
         this.outputSchema = outputSchema;
         return this;
