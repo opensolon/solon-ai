@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat.skill;
 
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.lang.Preview;
 
@@ -172,6 +173,10 @@ public class SkillDesc implements Skill {
         public Builder toolAdd(ToolProvider toolProvider) {
             tools.addAll(toolProvider.getTools());
             return this;
+        }
+
+        public Builder toolAdd(Object toolObj) {
+            return toolAdd(new MethodToolProvider(toolObj));
         }
 
         public SkillDesc build() {

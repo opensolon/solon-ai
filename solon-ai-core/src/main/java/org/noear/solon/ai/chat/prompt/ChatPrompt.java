@@ -35,6 +35,19 @@ public interface ChatPrompt {
     Map<String, Object> getMeta();
 
     /**
+     * 获取元信息
+     */
+    default Object getMeta(String key) {
+        return getMeta().get(key);
+    }
+    /**
+     * 获取元信息
+     */
+    default <T> T getMetaAs(String key) {
+        return (T) getMeta().get(key);
+    }
+
+    /**
      * 获取消息
      */
     List<ChatMessage> getMessages();
