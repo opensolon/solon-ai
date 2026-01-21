@@ -23,10 +23,7 @@ import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.team.TeamProtocol;
-import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatRequestDesc;
-import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
@@ -60,6 +57,10 @@ public class SimpleAgent implements Agent {
     private SimpleAgent(SimpleAgentConfig config) {
         Objects.requireNonNull(config, "Missing config!");
         this.config = config;
+    }
+
+    protected SimpleAgentConfig getConfig() {
+        return config;
     }
 
     @Override
@@ -96,10 +97,14 @@ public class SimpleAgent implements Agent {
         return call(prompt, session, null);
     }
 
-    protected AssistantMessage call(Prompt prompt, AgentSession session, Consumer<ChatOptions> chatOptionsAdjustor) throws Throwable {
+    protected AssistantMessage call(Prompt prompt, AgentSession session, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
         if (ChatPrompt.isEmpty(prompt)) {
             LOG.warn("Prompt is empty!");
             return ChatMessage.ofAssistant("");
+        }
+
+        if (options == null) {
+            options = config.getDefaultOptions();
         }
 
 
@@ -109,7 +114,7 @@ public class SimpleAgent implements Agent {
         List<ChatMessage> messages = buildMessages(session, prompt);
 
         // 2. 物理调用：执行带重试机制的 LLM 请求
-        AssistantMessage result = callWithRetry(session, messages, chatOptionsAdjustor);
+        AssistantMessage result = callWithRetry(session, messages, options);
 
         // 3. 状态回填：将输出结果自动映射到 FlowContext
         if (Assert.isNotEmpty(config.getOutputKey())) {
@@ -167,7 +172,7 @@ public class SimpleAgent implements Agent {
     /**
      * 实现带指数延迟的自动重试调用
      */
-    private AssistantMessage callWithRetry(AgentSession session, List<ChatMessage> messages, Consumer<ChatOptions> chatOptionsAdjustor) throws Throwable {
+    private AssistantMessage callWithRetry(AgentSession session, List<ChatMessage> messages, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
         if (LOG.isTraceEnabled()) {
             LOG.trace("SimpleAgent [{}] calling model... messages: {}",
                     config.getName(),
@@ -183,29 +188,24 @@ public class SimpleAgent implements Agent {
             chatReq = config.getChatModel().prompt(messages)
                     .options(o -> {
                         //配置工具
-                        o.toolAdd(config.getTools());
+                        o.toolAdd(options.tools());
 
                         //协议工具
                         if (protocol != null) {
                             protocol.injectAgentTools(session.getSnapshot(), this, o::toolAdd);
                         }
 
-                        o.toolContextPut(config.getToolContext());
+                        o.toolContextPut(options.toolContext());
+                        o.skillAdd(options.skills());
 
-                        config.getSkills().forEach(item -> o.skillAdd(item.index, item.target));
-                        config.getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
+                        options.interceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
 
                         if (Assert.isNotEmpty(config.getOutputSchema())) {
                             o.optionSet("response_format", Utils.asMap("type", "json_object"));
                         }
 
-                        if (config.getChatOptions() != null) {
-                            config.getChatOptions().accept(o);
-                        }
-
-                        if (chatOptionsAdjustor != null) {
-                            chatOptionsAdjustor.accept(o);
-                        }
+                        o.autoToolCall(options.isAutoToolCall());
+                        o.optionSet(options.options());
                     });
         }
 
@@ -301,8 +301,8 @@ public class SimpleAgent implements Agent {
             return this;
         }
 
-        public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
-            config.setChatOptions(chatOptions);
+        public Builder modelOptions(Consumer<ModelOptionsAmend<?, SimpleInterceptor>> amendConsumer) {
+            amendConsumer.accept(config.getDefaultOptions());
             return this;
         }
 
@@ -332,49 +332,51 @@ public class SimpleAgent implements Agent {
         }
 
         public Builder defaultToolAdd(FunctionTool... tools) {
-            config.addTool(tools);
+            config.getDefaultOptions().toolAdd(tools);
             return this;
         }
 
         public Builder defaultToolAdd(Collection<FunctionTool> tools) {
-            config.addTool(tools);
+            config.getDefaultOptions().toolAdd(tools);
             return this;
         }
 
         public Builder defaultToolAdd(ToolProvider toolProvider) {
-            config.addTool(toolProvider);
+            config.getDefaultOptions().toolAdd(toolProvider);
             return this;
         }
 
         public Builder defaultSkillAdd(Skill... skills) {
             for (Skill skill : skills) {
-                config.addSkill(skill, 0);
+                config.getDefaultOptions().skillAdd(0, skill);
             }
             return this;
         }
 
         public Builder defaultSkillAdd(Skill skill, int index) {
-            config.addSkill(skill, index);
+            config.getDefaultOptions().skillAdd(index, skill);
             return this;
         }
 
         public Builder defaultToolContextPut(String key, Object value) {
-            config.getToolContext().put(key, value);
+            config.getDefaultOptions().toolContextPut(key, value);
             return this;
         }
 
         public Builder defaultToolContextPut(Map<String, Object> objectMap) {
-            config.getToolContext().putAll(objectMap);
+            config.getDefaultOptions().toolContextPut(objectMap);
             return this;
         }
 
         public Builder defaultInterceptorAdd(SimpleInterceptor... vals) {
-            for (SimpleInterceptor val : vals) config.addInterceptor(val, 0);
+            for (SimpleInterceptor val : vals) {
+                config.getDefaultOptions().interceptorAdd(0, val);
+            }
             return this;
         }
 
-        public Builder defaultInterceptorAdd(SimpleInterceptor val, int index) {
-            config.addInterceptor(val, index);
+        public Builder defaultInterceptorAdd(int index, SimpleInterceptor val) {
+            config.getDefaultOptions().interceptorAdd(index, val);
             return this;
         }
 

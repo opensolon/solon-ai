@@ -191,9 +191,7 @@ public class ReasonTask implements NamedTaskComponent {
                         o.optionSet("response_format", Utils.asMap("type", "json_object"));
                     }
 
-                    if (config.getChatOptions() != null) {
-                        config.getChatOptions().accept(o);
-                    }
+                    o.optionSet(trace.getOptions().getModelOptions().options());
                 });
 
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {

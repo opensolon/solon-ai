@@ -33,7 +33,7 @@ public class SimpleSkillBindingTest {
         // 场景：OrderSkill 提供了查询和删除工具，但指令要求删除前必须说明原因
         SimpleAgent agent = SimpleAgent.of(chatModel)
                 .defaultSkillAdd(new OrderSkill())
-                .chatOptions(o -> o.temperature(0.0F))
+                .modelOptions(o -> o.temperature(0.0F))
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("order_job_001");

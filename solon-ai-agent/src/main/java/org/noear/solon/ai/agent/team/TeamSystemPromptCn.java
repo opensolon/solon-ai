@@ -116,9 +116,20 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
                 .append("- 注意：严禁过早结束，确保专家意见已被充分获取。\n");
 
         // F. 增量指令：业务侧自定义的补充约束
-        if (instructionProvider != null) {
-            sb.append("\n## 核心任务指令\n");
-            sb.append(instructionProvider.apply(trace)).append("\n");
+        if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
+            sb.append("## 核心任务指令\n");
+
+            // Agent 级指令
+            if (instructionProvider != null) {
+                sb.append(instructionProvider.apply(trace)).append("\n");
+            }
+
+            // Skill 级指令（增加一个子标题，强化感知）
+            if (trace.getOptions().getSkillInstruction() != null) {
+                sb.append("### 补充业务准则\n");
+                sb.append(trace.getOptions().getSkillInstruction()).append("\n");
+            }
+            sb.append("\n");
         }
 
         return sb.toString();

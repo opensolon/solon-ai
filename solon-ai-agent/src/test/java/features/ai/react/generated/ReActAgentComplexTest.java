@@ -35,7 +35,7 @@ public class ReActAgentComplexTest {
                 .defaultToolAdd(new MethodToolProvider(new OrderTools()))
                 .defaultToolAdd(new MethodToolProvider(new LogisticTools()))
                 .defaultToolAdd(new MethodToolProvider(new MarketingTools()))
-                .chatOptions(o -> o.temperature(0.0F)) // 设置 0 温度以确保逻辑推导的确定性
+                .modelOptions(o -> o.temperature(0.0F)) // 设置 0 温度以确保逻辑推导的确定性
                 .maxSteps(10) // 给予充足的思考步数以支持复杂的链式调用
                 .build();
 

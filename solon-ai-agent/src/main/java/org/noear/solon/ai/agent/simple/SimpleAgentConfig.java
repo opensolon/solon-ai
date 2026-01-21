@@ -18,17 +18,13 @@ package org.noear.solon.ai.agent.simple;
 import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.skill.Skill;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.function.Consumer;
 
 /**
  * 简单智能体配置类
@@ -64,29 +60,13 @@ public class SimpleAgentConfig {
      */
     private ChatModel chatModel;
     /**
-     * 挂载的本地/远程功能工具集
+     * 模型选项
      */
-    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
-    /**
-     * 挂载的技能
-     */
-    private final List<RankEntity<Skill>> skills = new ArrayList<>();
-    /**
-     * 推理阶段的特定 ChatOptions 配置（如温度、TopP 等）
-     */
-    private Consumer<ChatOptions> chatOptions;
+    private ModelOptionsAmend<?, SimpleInterceptor> defaultOptions = new ModelOptionsAmend<>();
     /**
      * 自定义处理器（与 chatModel 二选一）
      */
     private AgentHandler handler;
-    /**
-     * 工具调用的共享上下文数据
-     */
-    private final Map<String, Object> toolContext = new LinkedHashMap<>();
-    /**
-     * 生命周期拦截器队列（支持监控、审计、Thought 记录等）
-     */
-    private final List<RankEntity<SimpleInterceptor>> interceptors = new ArrayList<>();
 
     /**
      * 模型调用失败后的最大重试次数
@@ -141,49 +121,8 @@ public class SimpleAgentConfig {
         this.chatModel = chatModel;
     }
 
-    protected void setChatOptions(Consumer<ChatOptions> chatOptions) {
-        this.chatOptions = chatOptions;
-    }
-
     protected void setHandler(AgentHandler handler) {
         this.handler = handler;
-    }
-
-    /**
-     * 注册功能工具
-     */
-    protected void addTool(FunctionTool... tools) {
-        for (FunctionTool tool : tools) {
-            if (log.isDebugEnabled()) log.debug("Agent [{}] linked tool: {}", name, tool.name());
-            this.tools.put(tool.name(), tool);
-        }
-    }
-
-    protected void addTool(Collection<FunctionTool> tools) {
-        for (FunctionTool tool : tools) addTool(tool);
-    }
-
-    protected void addTool(ToolProvider toolProvider) {
-        addTool(toolProvider.getTools());
-    }
-
-
-    protected void addSkill(Skill skill, int index) {
-        skills.add(new RankEntity<>(skill, index));
-        if (skills.size() > 1) {
-            Collections.sort(skills);
-        }
-    }
-
-
-    /**
-     * 注册并重排拦截器
-     */
-    protected void addInterceptor(SimpleInterceptor interceptor, int index) {
-        interceptors.add(new RankEntity<>(interceptor, index));
-        if (interceptors.size() > 1) {
-            Collections.sort(interceptors);
-        }
     }
 
     /**
@@ -240,25 +179,10 @@ public class SimpleAgentConfig {
         return chatModel;
     }
 
-    public Consumer<ChatOptions> getChatOptions() {
-        return chatOptions;
+    public ModelOptionsAmend<?, SimpleInterceptor> getDefaultOptions() {
+        return defaultOptions;
     }
 
-    public Collection<FunctionTool> getTools() {
-        return tools.values();
-    }
-
-    public Map<String, Object> getToolContext() {
-        return toolContext;
-    }
-
-    public List<RankEntity<Skill>> getSkills() {
-        return skills;
-    }
-
-    public List<RankEntity<SimpleInterceptor>> getInterceptors() {
-        return interceptors;
-    }
 
     public AgentHandler getHandler() {
         return handler;

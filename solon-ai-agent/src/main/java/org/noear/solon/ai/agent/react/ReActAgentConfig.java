@@ -39,8 +39,6 @@ import java.util.function.Function;
  */
 @Preview("3.8.1")
 public class ReActAgentConfig {
-    private static final Logger LOG = LoggerFactory.getLogger(ReActAgentConfig.class);
-
     /** 智能体唯一标识名 */
     private String name = "react_agent";
     /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
@@ -53,8 +51,6 @@ public class ReActAgentConfig {
     private AgentProfile profile;
     /** 执行推理的基础模型 */
     private final ChatModel chatModel;
-    /** 模型推理选项（温度、TopP 等） */
-    private Consumer<ChatOptions> chatOptions;
     /** 计算图微调器（自定义执行链路） */
     private Consumer<GraphSpec> graphAdjuster;
     /** 提示词模板（默认中文） */
@@ -98,8 +94,6 @@ public class ReActAgentConfig {
         }
     }
 
-    protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
-
     protected void setOutputKey(String val) { this.outputKey = val; }
 
 
@@ -125,8 +119,6 @@ public class ReActAgentConfig {
     }
 
     public ChatModel getChatModel() { return chatModel; }
-
-    public Consumer<ChatOptions> getChatOptions() { return chatOptions; }
 
     public Consumer<GraphSpec> getGraphAdjuster() { return graphAdjuster; }
 

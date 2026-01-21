@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.skill.SkillUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -79,6 +80,14 @@ public class TeamTrace implements AgentTrace {
     public TeamTrace(Prompt prompt) {
         this();
         this.prompt = prompt;
+    }
+
+    protected void activeSkills() {
+        //设置指令
+        StringBuilder combinedInstruction = SkillUtil.activeSkills(options.getModelOptions(), prompt);
+        if (combinedInstruction.length() > 0) {
+            options.setSkillInstruction(combinedInstruction.toString());
+        }
     }
 
     /** 是否为初始状态 */

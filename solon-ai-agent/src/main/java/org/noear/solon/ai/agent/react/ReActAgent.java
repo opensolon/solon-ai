@@ -196,8 +196,8 @@ public class ReActAgent implements Agent {
             trace.setPrompt(prompt);
         }
 
-        //如果提示词没问题，开始部署技能
-        trace.deploySkills();
+        //如果提示词没问题，开始激活技能
+        trace.activeSkills();
 
 
         // 拦截器：任务开始事件

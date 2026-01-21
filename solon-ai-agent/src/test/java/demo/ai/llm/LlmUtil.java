@@ -10,20 +10,20 @@ import org.noear.solon.ai.chat.ChatModel;
 public class LlmUtil {
     public static ChatModel getChatModelReasoner() {
         return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
-                .apiKey("sk-011a4dfa2bbe4c7c8339bcaae41c949c")
+                .apiKey("sk-e289372b9c5542dba143568e96c17b33")
                 .model("deepseek-reasoner") //deepseek-reasoner//deepseek-chat
                 .build();
     }
     public static ChatModel getChatModel() {
-//        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
-//                .apiKey("sk-011a4dfa2bbe4c7c8339bcaae41c949c")
-//                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
-//                .build();
-
-        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
-                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
-                .model("Qwen3-32B") //Qwen3-32B, GLM-4.6
+        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
+                .apiKey("sk-e289372b9c5542dba143568e96c17b33")
+                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
                 .build();
+
+//        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
+//                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
+//                .model("Qwen3-32B") //Qwen3-32B, GLM-4.6
+//                .build();
 
 //        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
 //                .apiKey("THTNIFWBERJYNJJMLLAZ5B05FNAAXWBZALVAIA17")

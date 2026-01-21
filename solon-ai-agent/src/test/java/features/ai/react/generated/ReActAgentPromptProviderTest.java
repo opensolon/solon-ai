@@ -66,7 +66,7 @@ public class ReActAgentPromptProviderTest {
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new MethodToolProvider(new MathTools()))
                 .systemPrompt(mathExpertProvider)
-                .chatOptions(o -> o.temperature(0.0F)) // 降低随机性，确保严格遵循解题步骤
+                .modelOptions(o -> o.temperature(0.0F)) // 降低随机性，确保严格遵循解题步骤
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_math_001");

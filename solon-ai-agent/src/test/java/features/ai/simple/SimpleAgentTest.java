@@ -41,7 +41,7 @@ public class SimpleAgentTest {
                 // 配置重试机制（如果网络报错，重试 3 次，间隔 2 秒）
                 .retryConfig(3, 2000L)
                 // 配置模型参数
-                .chatOptions(o -> o.temperature(0.1F))
+                .modelOptions(o -> o.temperature(0.1F))
                 .build();
 
         // 3. 准备业务输入

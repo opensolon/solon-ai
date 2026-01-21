@@ -29,7 +29,7 @@ public class ReActAgentBoundaryTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new MethodToolProvider(new LoopTools()))
-                .chatOptions(o -> o.temperature(0.0F))
+                .modelOptions(o -> o.temperature(0.0F))
                 .maxSteps(3) // 限制最多 3 步迭代
                 .build();
 

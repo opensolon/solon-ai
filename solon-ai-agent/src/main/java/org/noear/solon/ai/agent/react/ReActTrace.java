@@ -22,13 +22,11 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.skill.SkillUtil;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -101,35 +99,10 @@ public class ReActTrace implements AgentTrace {
         this.protocol = protocol;
     }
 
-    protected void deploySkills(){
-        if (options.getSkills().size() > 0) {
-            if(ChatPrompt.isEmpty(prompt)){
-                prompt = getPrompt();
-            }
-
-            StringBuilder combinedInstruction = new StringBuilder();
-
-            for (RankEntity<Skill> item : options.getSkills()) {
-                Skill skill = item.target;
-
-                if (skill.isSupported(prompt)) {
-                    try {
-                        // 挂载
-                        skill.onAttach(prompt);
-                    } catch (Throwable e) {
-                        LOG.error("Skill active failed: {}", skill.getClass().getName(), e);
-                        throw e;
-                    }
-
-                    //聚合提示词
-                    skill.injectInstruction(prompt, combinedInstruction);
-
-                    //部署工具
-                    options.addTool(skill.getTools());
-                }
-            }
-
-            //设置指令
+    protected void activeSkills() {
+        //设置指令
+        StringBuilder combinedInstruction = SkillUtil.activeSkills(options.getModelOptions(), prompt);
+        if (combinedInstruction.length() > 0) {
             options.setSkillInstruction(combinedInstruction.toString());
         }
     }

@@ -15,14 +15,10 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.chat.skill.Skill;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
-import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -31,31 +27,16 @@ import java.util.function.Function;
  * @author noear
  * @since 3.8.1
  */
-public class ReActOptionsAmend {
+public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReActInterceptor> {
     private static final Logger LOG = LoggerFactory.getLogger(ReActOptionsAmend.class);
     private final ReActOptions options;
 
     public ReActOptionsAmend(ReActOptions options) {
+        super(options.getModelOptions());
         this.options = options;
     }
 
     // --- Setter Methods (Fluent) ---
-
-    /**
-     * 批量注入工具调用上下文
-     */
-    public ReActOptionsAmend toolsContextPut(Map<String, Object> toolsContext) {
-        options.putToolContext(toolsContext);
-        return this;
-    }
-
-    /**
-     * 注入单个工具调用上下文
-     */
-    public ReActOptionsAmend toolsContextPut(String key, Object value) {
-        options.putToolContext(key, value);
-        return this;
-    }
 
     /**
      * 配置容错策略
@@ -89,47 +70,6 @@ public class ReActOptionsAmend {
 
     public ReActOptionsAmend outputSchema(String val) {
         options.setOutputSchema(val);
-        return this;
-    }
-
-    public ReActOptionsAmend toolAdd(FunctionTool val) {
-        options.addTool(val);
-        return this;
-    }
-
-    public ReActOptionsAmend toolAdd(Collection<FunctionTool> val) {
-        options.addTool(val);
-        return this;
-    }
-
-    public ReActOptionsAmend toolAdd(ToolProvider val) {
-        options.addTool(val);
-        return this;
-    }
-
-    public ReActOptionsAmend skillAdd(Skill val) {
-        options.addSkill(val, 0);
-        return this;
-    }
-
-    public ReActOptionsAmend skillAdd(Skill val, int index) {
-        options.addSkill(val, index);
-        return this;
-    }
-
-    /**
-     * 添加生命周期拦截器
-     */
-    public ReActOptionsAmend interceptorAdd(ReActInterceptor val) {
-        options.addInterceptor(val, 0);
-        return this;
-    }
-
-    /**
-     * 添加生命周期拦截器（带排序优先级）
-     */
-    public ReActOptionsAmend interceptorAdd(ReActInterceptor val, int index) {
-        options.addInterceptor(val, index);
         return this;
     }
 

@@ -15,9 +15,8 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
@@ -38,15 +37,11 @@ import java.util.function.Function;
 public class ReActOptions implements NonSerializable {
     private static final Logger LOG = LoggerFactory.getLogger(ReActOptions.class);
 
-    /** 挂载的可调用工具集 */
-    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     /** 工具调用上下文（透传给 FunctionTool） */
-    private final Map<String, Object> toolContext = new LinkedHashMap<>();
-    private final List<RankEntity<Skill>> skills = new ArrayList<>();
+    private final ModelOptionsAmend<?, ReActInterceptor> modelOptions = new ModelOptionsAmend<>();
+
     private String skillInstruction;
 
-    /** 生命周期拦截器（监控 Thought, Action, Observation） */
-    private final List<RankEntity<ReActInterceptor>> interceptors = new ArrayList<>();
     /** 最大推理步数（防止死循环） */
     private int maxSteps = 10;
     /** 最大重试次数 */
@@ -65,10 +60,7 @@ public class ReActOptions implements NonSerializable {
     /** 浅拷贝选项实例 */
     protected ReActOptions copy() {
         ReActOptions tmp = new ReActOptions();
-        tmp.tools.putAll(tools);
-        tmp.toolContext.putAll(toolContext);
-        tmp.skills.addAll(skills);
-        tmp.interceptors.addAll(interceptors);
+        tmp.modelOptions.putAll(modelOptions);
         tmp.maxSteps = maxSteps;
         tmp.maxRetries = maxRetries;
         tmp.retryDelayMs = retryDelayMs;
@@ -105,46 +97,9 @@ public class ReActOptions implements NonSerializable {
 
     protected void setOutputSchema(String val) { this.outputSchema = val; }
 
-    /** 注册工具 */
-    protected void addTool(FunctionTool... tools) {
-        for (FunctionTool tool : tools) {
-            this.tools.put(tool.name(), tool);
-        }
-    }
-
-    protected void addTool(Collection<FunctionTool> tools) {
-        for (FunctionTool tool : tools) addTool(tool);
-    }
-
-    protected void addTool(ToolProvider toolProvider) {
-        addTool(toolProvider.getTools());
-    }
-
-    protected void putToolContext(Map<String, Object> toolsContext) {
-        this.toolContext.putAll(toolsContext);
-    }
-
-    protected void putToolContext(String key, Object value) {
-        this.toolContext.put(key, value);
-    }
-
-    protected void addSkill(Skill skill, int index) {
-        this.skills.add(new RankEntity<>(skill, index));
-        if (skills.size() > 1) {
-            Collections.sort(skills);
-        }
-    }
 
     protected void setSkillInstruction(String skillInstruction) {
         this.skillInstruction = skillInstruction;
-    }
-
-    /** 添加拦截器并自动重排序 */
-    protected void addInterceptor(ReActInterceptor val, int index) {
-        this.interceptors.add(new RankEntity<>(val, index));
-        if (interceptors.size() > 1) {
-            Collections.sort(interceptors);
-        }
     }
 
     protected void setEnablePlanning(boolean enablePlanning) { this.enablePlanning = enablePlanning; }
@@ -155,16 +110,14 @@ public class ReActOptions implements NonSerializable {
 
     // --- 参数获取 (Public) ---
 
-    public Collection<FunctionTool> getTools() { return tools.values(); }
+    public FunctionTool getTool(String name) { return modelOptions.tool(name); }
 
-    public FunctionTool getTool(String name) { return tools.get(name); }
+    public Collection<FunctionTool> getTools() { return modelOptions.tools(); }
 
-    public Map<String, Object> getToolContext() {
-        return toolContext;
-    }
+    public Map<String,Object> getToolContext() { return modelOptions.toolContext(); }
 
-    public List<RankEntity<Skill>> getSkills() {
-        return skills;
+    public ModelOptionsAmend<?, ReActInterceptor> getModelOptions() {
+        return modelOptions;
     }
 
     public String getSkillInstruction() {
@@ -172,7 +125,7 @@ public class ReActOptions implements NonSerializable {
     }
 
     public List<RankEntity<ReActInterceptor>> getInterceptors() {
-        return interceptors;
+        return modelOptions.interceptors();
     }
 
     public int getMaxSteps() {

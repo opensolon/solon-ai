@@ -122,7 +122,7 @@ public class ABTestingDecisionGraphTest {
                         .role(role)
                         .instruction("你负责评估 A/B 测试。如果 B 优于 A，回复 'approve'，否则回复 'reject'。只输出单词。"))
                 .outputKey(outputKey) // 重要：Agent 执行完后会自动将 Content 写入 Context[outputKey]
-                .chatOptions(o -> o.temperature(0.1F))
+                .modelOptions(o -> o.temperature(0.1F))
                 .build();
     }
 

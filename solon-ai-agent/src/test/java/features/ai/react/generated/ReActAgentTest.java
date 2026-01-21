@@ -31,7 +31,7 @@ public class ReActAgentTest {
         // 2. 构建 ReActAgent，并注册计算工具类
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new MethodToolProvider(new MathTools()))
-                .chatOptions(o -> o.temperature(0.0F)) // 设为 0 以保证逻辑计算的严谨性
+                .modelOptions(o -> o.temperature(0.0F)) // 设为 0 以保证逻辑计算的严谨性
                 .build();
 
         // 3. 使用 AgentSession 替代 FlowContext

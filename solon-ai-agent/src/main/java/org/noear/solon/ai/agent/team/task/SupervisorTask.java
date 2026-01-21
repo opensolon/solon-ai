@@ -251,9 +251,7 @@ public class SupervisorTask implements NamedTaskComponent {
             o.toolContextPut(trace.getOptions().getToolContext());
             trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.target));
 
-            if (config.getChatOptions() != null) {
-                config.getChatOptions().accept(o);
-            }
+            o.optionSet(trace.getOptions().getModelOptions().options());
         });
         trace.getOptions().getInterceptors().forEach(item -> item.target.onModelStart(trace, req));
 

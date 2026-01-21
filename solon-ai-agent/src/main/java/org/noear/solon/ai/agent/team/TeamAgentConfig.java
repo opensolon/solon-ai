@@ -56,8 +56,6 @@ public class TeamAgentConfig implements NonSerializable {
 
     /** 调度中心模型（Supervisor），负责分发任务、协调专家与审核结果 */
     private final ChatModel chatModel;
-    /** 调度中心推理参数（控制采样随机性、Token 等） */
-    private Consumer<ChatOptions> chatOptions;
 
     /** 成员名录（有序不计大小写存储专家 Agent） */
     private final Map<String, Agent> agentMap = new IgnoreCaseMap<>();
@@ -97,7 +95,6 @@ public class TeamAgentConfig implements NonSerializable {
             description = role;
         }
     }
-    protected void setChatOptions(Consumer<ChatOptions> chatOptions) { this.chatOptions = chatOptions; }
 
     /**
      * 注册团队成员（专家）
@@ -149,7 +146,6 @@ public class TeamAgentConfig implements NonSerializable {
     }
 
     public ChatModel getChatModel() { return chatModel; }
-    public Consumer<ChatOptions> getChatOptions() { return chatOptions; }
 
     public Map<String, Agent> getAgentMap() { return agentMap; }
     public TeamProtocol getProtocol() { return protocol; }

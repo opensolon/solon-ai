@@ -19,7 +19,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
@@ -168,6 +168,9 @@ public class TeamAgent implements Agent {
                 return ChatMessage.ofAssistant("");
             }
         }
+
+        //如果提示词没问题，开始部署技能
+        trace.activeSkills();
 
         // 触发团队启动拦截
         options.getInterceptors().forEach(item -> item.target.onTeamStart(trace));
@@ -348,33 +351,33 @@ public class TeamAgent implements Agent {
         /**
          * 配置主管模型的对话参数
          */
-        public Builder chatOptions(Consumer<ChatOptions> chatOptions) {
-            config.setChatOptions(chatOptions);
+        public Builder modelOptions(Consumer<ModelOptionsAmend<?,TeamInterceptor>> chatOptions) {
+            chatOptions.accept(config.getDefaultOptions().getModelOptions());
             return this;
         }
 
         public Builder defaultToolAdd(FunctionTool tool) {
-            config.getDefaultOptions().addTool(tool);
+            config.getDefaultOptions().getModelOptions().toolAdd(tool);
             return this;
         }
 
         public Builder defaultToolAdd(Collection<FunctionTool> tools) {
-            config.getDefaultOptions().addTool(tools);
+            config.getDefaultOptions().getModelOptions().toolAdd(tools);
             return this;
         }
 
         public Builder defaultToolAdd(ToolProvider toolProvider) {
-            config.getDefaultOptions().addTool(toolProvider);
+            config.getDefaultOptions().getModelOptions().toolAdd(toolProvider);
             return this;
         }
 
         public Builder defaultToolContextPut(String key, Object value) {
-            config.getDefaultOptions().putToolContext(key, value);
+            config.getDefaultOptions().getModelOptions().toolContextPut(key, value);
             return this;
         }
 
         public Builder defaultToolContextPut(Map<String, Object> objectsMap) {
-            config.getDefaultOptions().putToolContext(objectsMap);
+            config.getDefaultOptions().getModelOptions().toolContextPut(objectsMap);
             return this;
         }
 

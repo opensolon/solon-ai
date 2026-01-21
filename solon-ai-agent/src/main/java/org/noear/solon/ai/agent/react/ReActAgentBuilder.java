@@ -17,7 +17,7 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
@@ -103,8 +103,8 @@ public class ReActAgentBuilder {
         return this;
     }
 
-    public ReActAgentBuilder chatOptions(Consumer<ChatOptions> chatOptions) {
-        config.setChatOptions(chatOptions);
+    public ReActAgentBuilder modelOptions(Consumer<ModelOptionsAmend<?, ReActInterceptor>> chatOptions) {
+        chatOptions.accept(config.getDefaultOptions().getModelOptions());
         return this;
     }
 
@@ -142,49 +142,51 @@ public class ReActAgentBuilder {
     }
 
 
-
     public ReActAgentBuilder defaultToolAdd(FunctionTool tool) {
-        config.getDefaultOptions().addTool(tool);
+        config.getDefaultOptions().getModelOptions().toolAdd(tool);
         return this;
     }
 
     public ReActAgentBuilder defaultToolAdd(Collection<FunctionTool> tools) {
-        config.getDefaultOptions().addTool(tools);
+        config.getDefaultOptions().getModelOptions().toolAdd(tools);
         return this;
     }
 
     public ReActAgentBuilder defaultToolAdd(ToolProvider toolProvider) {
-        config.getDefaultOptions().addTool(toolProvider);
+        config.getDefaultOptions().getModelOptions().toolAdd(toolProvider);
         return this;
     }
 
     public ReActAgentBuilder defaultSkillAdd(Skill skill) {
-        config.getDefaultOptions().addSkill(skill, 0);
+        config.getDefaultOptions().getModelOptions().skillAdd(skill);
         return this;
     }
 
     public ReActAgentBuilder defaultSkillAdd(Skill skill, int index) {
-        config.getDefaultOptions().addSkill(skill, index);
+        config.getDefaultOptions().getModelOptions().skillAdd(index, skill);
         return this;
     }
 
     public ReActAgentBuilder defaultToolContextPut(String key, Object value) {
-        config.getDefaultOptions().putToolContext(key, value);
+        config.getDefaultOptions().getModelOptions().toolContextPut(key, value);
         return this;
     }
 
     public ReActAgentBuilder defaultToolContextPut(Map<String, Object> objectsMap) {
-        config.getDefaultOptions().putToolContext(objectsMap);
+        config.getDefaultOptions().getModelOptions().toolContextPut(objectsMap);
         return this;
     }
 
     public ReActAgentBuilder defaultInterceptorAdd(ReActInterceptor... vals) {
-        for (ReActInterceptor val : vals) config.getDefaultOptions().addInterceptor(val, 0);
+        for (ReActInterceptor val : vals) {
+            config.getDefaultOptions().getModelOptions().interceptorAdd(0, val);
+        }
+
         return this;
     }
 
-    public ReActAgentBuilder defaultInterceptorAdd(ReActInterceptor val, int index) {
-        config.getDefaultOptions().addInterceptor(val, index);
+    public ReActAgentBuilder defaultInterceptorAdd(int index, ReActInterceptor val) {
+        config.getDefaultOptions().getModelOptions().interceptorAdd(index, val);
         return this;
     }
 

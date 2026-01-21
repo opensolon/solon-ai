@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.chat.ModelOptionsAmend;
+
 /**
  * 团队协作选项修正器
  *
@@ -23,10 +25,11 @@ package org.noear.solon.ai.agent.team;
  * @author noear
  * @since 3.8.1
  */
-public class TeamOptionsAmend {
+public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamInterceptor> {
     private final TeamOptions options;
 
     public TeamOptionsAmend(TeamOptions options) {
+        super(options.getModelOptions());
         this.options = options;
     }
 

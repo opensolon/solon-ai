@@ -15,8 +15,8 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
 import org.slf4j.Logger;
@@ -52,14 +52,12 @@ public class TeamOptions implements NonSerializable {
     /** 记录回溯窗口大小 */
     private int recordWindowSize = 5;
 
+    private String skillInstruction;
 
-
-    /** 挂载的可调用工具集 */
-    private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
     /**
-     * 工具调用上下文（透传给 FunctionTool）
+     * 模型选项
      */
-    private final Map<String, Object> toolContext = new LinkedHashMap<>();
+    private final ModelOptionsAmend<?, TeamInterceptor> modelOptions = new ModelOptionsAmend<>();
     /**
      * 团队协作拦截器链（支持排序，用于审计、监控或干预）
      */
@@ -69,8 +67,7 @@ public class TeamOptions implements NonSerializable {
     public TeamOptions copy() {
         TeamOptions tmp = new TeamOptions();
         tmp.interceptors.addAll(this.interceptors);
-        tmp.tools.putAll(this.tools);
-        tmp.toolContext.putAll(this.toolContext);
+        tmp.modelOptions.putAll(this.modelOptions);
         tmp.maxTurns = this.maxTurns;
         tmp.maxRetries = this.maxRetries;
         tmp.retryDelayMs = this.retryDelayMs;
@@ -81,30 +78,6 @@ public class TeamOptions implements NonSerializable {
 
 
     // --- 配置注入 (Protected) ---
-
-    /** 注册工具 */
-    protected void addTool(FunctionTool... tools) {
-        for (FunctionTool tool : tools) {
-            this.tools.put(tool.name(), tool);
-        }
-    }
-
-    protected void addTool(Collection<FunctionTool> tools) {
-        for (FunctionTool tool : tools) addTool(tool);
-    }
-
-    protected void addTool(ToolProvider toolProvider) {
-        addTool(toolProvider.getTools());
-    }
-
-
-    protected void putToolContext(Map<String, Object> toolsContext) {
-        this.toolContext.putAll(toolsContext);
-    }
-
-    protected void putToolContext(String key, Object value) {
-        this.toolContext.put(key, value);
-    }
 
 
     /**
@@ -129,6 +102,10 @@ public class TeamOptions implements NonSerializable {
         this.maxTurns = Math.max(1, maxTurns);
     }
 
+    protected void setSkillInstruction(String skillInstruction) {
+        this.skillInstruction = skillInstruction;
+    }
+
     /**
      * 注册团队拦截器
      *
@@ -151,13 +128,18 @@ public class TeamOptions implements NonSerializable {
 
     // --- 参数获取 (Public) ---
 
-    public Collection<FunctionTool> getTools() { return tools.values(); }
 
-    public FunctionTool getTool(String name) { return tools.get(name); }
-
-    public Map<String, Object> getToolContext() {
-        return toolContext;
+    public ModelOptionsAmend<?, TeamInterceptor> getModelOptions() {
+        return modelOptions;
     }
+
+    public Map<String,Object> getToolContext(){
+        return modelOptions.toolContext();
+    }
+
+    public Collection<FunctionTool> getTools() { return modelOptions.tools(); }
+
+    public FunctionTool getTool(String name) { return modelOptions.tool(name); }
 
     public List<RankEntity<TeamInterceptor>> getInterceptors() {
         return interceptors;
@@ -177,5 +159,9 @@ public class TeamOptions implements NonSerializable {
 
     public int getRecordWindowSize() {
         return recordWindowSize;
+    }
+
+    public String getSkillInstruction() {
+        return skillInstruction;
     }
 }

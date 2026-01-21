@@ -13,44 +13,49 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 
 import java.util.Map;
 
-/**
- *
- * @author noear 2026/1/20 created
- *
- */
-public class Show {
+public class FaceShow {
     public static void main(String[] args) throws Throwable {
         ChatModel chatModel = ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama")
                 .model("qwen2.5:1.5b")
-                .defaultOptionSet("a", "b")
+                .modelOptions(o->{
+                    o.optionSet("a","b");
+                    o.top_p(12.0F);
+
+                    o.toolAdd(new Tool1());
+                    o.toolContextPut("x","y");
+                    o.skillAdd(new Skill1());
+                    o.interceptorAdd(new ChatInterceptor() {
+                    });
+                })
                 .defaultToolAdd(new Tool1())
-                .defaultToolContextPut("x", "y")
                 .defaultSkillAdd(new Skill1())
                 .defaultInterceptorAdd(new ChatInterceptor() {
                 })
                 .build();
 
+        //请求时调整
         chatModel.prompt("xxx")
                 .options(o -> {
                     o.optionSet("a","b");
+                    o.top_p(12.0F);
+
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
                     o.skillAdd(new Skill1());
                     o.interceptorAdd(new ChatInterceptor() {
                     });
                 })
-                .call();
+                .stream(); //or .call()
 
         ReActAgent reActAgent = ReActAgent.of(chatModel)
-                .chatOptions(o -> {
+                .modelOptions(o -> {
                     o.optionSet("a","b");
+                    o.top_p(12.0F);
 
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
                     o.skillAdd(new Skill1());
-                    o.interceptorAdd(new ChatInterceptor() {
-                    });
                 })
                 .defaultToolAdd(new Tool1())
                 .defaultToolContextPut("x","y")
@@ -58,25 +63,41 @@ public class Show {
                 .defaultInterceptorAdd(new ReActInterceptor(){})
                 .build();
 
+        //请求时调整
         reActAgent.prompt("xxx")
                 .options(o->{
+                    o.optionSet("a","b");
+                    o.top_p(12.0F);
+
                     o.toolAdd(new Tool1());
-                    o.toolsContextPut("x","y");
+                    o.toolContextPut("x","y");
                     o.skillAdd(new Skill1());
                     o.interceptorAdd(new ReActInterceptor(){});
                 })
                 .call();
 
         SimpleAgent simpleAgent = SimpleAgent.of(chatModel)
+                .modelOptions(o -> {
+                    o.optionSet("a","b");
+                    o.top_p(12.0F);
+
+                    o.toolAdd(new Tool1());
+                    o.toolContextPut("x","y");
+                    o.skillAdd(new Skill1());
+                    o.interceptorAdd(new SimpleInterceptor(){});
+                })
                 .defaultToolAdd(new Tool1())
                 .defaultToolContextPut("x","y")
                 .defaultSkillAdd(new Skill1())
                 .defaultInterceptorAdd(new SimpleInterceptor(){})
                 .build();
 
+        //请求时调整
         simpleAgent.prompt("xxx")
                 .options(o->{
                     o.optionSet("a","b");
+                    o.top_p(12.0F);
+
                     o.toolAdd(new Tool1());
                     o.toolContextPut("x","y");
                     o.skillAdd(new Skill1());
@@ -85,13 +106,29 @@ public class Show {
                 .call();
 
         TeamAgent teamAgent = TeamAgent.of(chatModel)
+                .modelOptions(o -> {
+                    o.optionSet("a","b");
+                    o.top_p(12.0);
+
+                    o.toolAdd(new Tool1());
+                    o.toolContextPut("x","y");
+                    o.skillAdd(new Skill1());
+                    o.interceptorAdd(new TeamInterceptor(){});
+                })
                 .defaultToolAdd(new Tool1())
                 .defaultToolContextPut("x","y")
                 .defaultInterceptorAdd(new TeamInterceptor(){})
                 .build();
 
+        //请求时调整
         teamAgent.prompt("xxx")
                 .options(o->{
+                    o.optionSet("a","b");
+                    o.top_p(12.0F);
+
+                    o.toolAdd(new Tool1());
+                    o.toolContextPut("x","y");
+                    o.skillAdd(new Skill1());
                     o.interceptorAdd(new TeamInterceptor(){});
                 }).call();
     }

@@ -37,7 +37,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new MethodToolProvider(new TestTools()))
-                .chatOptions(o -> o.temperature(0.0F))
+                .modelOptions(o -> o.temperature(0.0F))
                 .maxSteps(10)
                 .build();
 
@@ -122,7 +122,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new MethodToolProvider(new SequentialTools()))
-                .chatOptions(o -> o.temperature(0.0F))
+                .modelOptions(o -> o.temperature(0.0F))
                 .maxSteps(8)
                 .build();
 
