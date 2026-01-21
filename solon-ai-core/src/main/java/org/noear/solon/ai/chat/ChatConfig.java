@@ -39,7 +39,7 @@ public class ChatConfig extends AiConfig {
     private Map<String, Object> defaultOptions;
 
     //作为构建载体（方便转换）
-    private ChatOptions modelOptions;
+    private transient ChatOptions modelOptions;
 
     public ChatOptions getModelOptions() {
         if (modelOptions == null) {
