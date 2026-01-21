@@ -2,14 +2,14 @@ package demo.ai.core;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
-import org.noear.solon.ai.chat.skill.AbstractSkill;
+import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.annotation.Param;
 
 /**
  * 技术支持技能：展示多级决策与 RAG 结合
  */
-public class TechnicalSupportSkill extends AbstractSkill implements Skill {
+public class TechnicalSupportSkill extends AbsSkill implements Skill {
     public TechnicalSupportSkill() {
         super();
         this.metadata().category("support").tags("rag", "helpdesk").sensitive(false);
