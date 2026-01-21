@@ -15,9 +15,14 @@ public class LlmUtil {
                 .build();
     }
     public static ChatModel getChatModel() {
-        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
-                .apiKey("sk-e289372b9c5542dba143568e96c17b33")
-                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
+//        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
+//                .apiKey("sk-e289372b9c5542dba143568e96c17b33")
+//                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
+//                .build();
+
+        return ChatModel.of("https://apis.iflow.cn/v1/chat/completions")
+                .apiKey("sk-791814e8d1ec2cfdc7955580903481c9")
+                .model("qwen3-32b")
                 .build();
 
 //        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
