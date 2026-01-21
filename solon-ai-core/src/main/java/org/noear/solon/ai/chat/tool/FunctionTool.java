@@ -26,7 +26,7 @@ import java.util.concurrent.CompletableFuture;
  * @author noear
  * @since 3.1
  */
-public interface FunctionTool extends ChatTool {
+public interface FunctionTool extends Tool {
     /**
      * 工具类型
      */

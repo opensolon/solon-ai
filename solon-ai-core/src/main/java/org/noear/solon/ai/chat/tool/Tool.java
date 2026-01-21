@@ -21,7 +21,7 @@ package org.noear.solon.ai.chat.tool;
  * @author noear
  * @since 3.1
  */
-public interface ChatTool {
+public interface Tool {
     /**
      * 工具类型
      */

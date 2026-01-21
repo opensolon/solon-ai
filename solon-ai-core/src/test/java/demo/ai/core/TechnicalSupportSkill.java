@@ -2,6 +2,7 @@ package demo.ai.core;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.skill.AnnotatedSkill;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillMetadata;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -14,22 +15,20 @@ import java.util.Collection;
 /**
  * 技术支持技能：展示多级决策与 RAG 结合
  */
-public class TechnicalSupportSkill implements Skill {
-    private final SkillMetadata metadata = new SkillMetadata("tech_support", "多级技术支持与知识库检索")
-            .category("support")
-            .tags("rag", "helpdesk")
-            .sensitive(false);
-    private final ToolProvider toolProvider = new MethodToolProvider(this);
+public class TechnicalSupportSkill extends AnnotatedSkill implements Skill {
+    public TechnicalSupportSkill() {
+        super();
+        this.metadata().category("support").tags("rag", "helpdesk").sensitive(false);
+    }
 
     @Override
-    public String name() { return metadata.getName(); }
+    public String name() {
+        return "tech_support";
+    }
 
     @Override
-    public String description() { return metadata.getDescription(); }
-
-    @Override
-    public Collection<FunctionTool> getTools() {
-        return toolProvider.getTools();
+    public String description() {
+        return "多级技术支持与知识库检索";
     }
 
     @Override

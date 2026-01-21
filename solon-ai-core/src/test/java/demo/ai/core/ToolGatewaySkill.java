@@ -3,25 +3,20 @@ package demo.ai.core;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.skill.AnnotatedSkill;
 import org.noear.solon.ai.chat.skill.Skill;
-import org.noear.solon.ai.chat.skill.SkillMetadata;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
-import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.annotation.Param;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class DynamicGatewaySkill implements Skill {
-    // 隐藏在后台的巨大工具库，不占用初始上下文
-
-    private ToolProvider toolProvider = new MethodToolProvider(this);
-    private SkillMetadata metadata = new SkillMetadata("dynamic_gateway", "动态工具网关");
-
+/**
+ * 动态工具网关技能（隐藏在后台的巨大工具库，不占用初始上下文）
+ */
+public class ToolGatewaySkill extends AnnotatedSkill implements Skill {
     private List<FunctionTool> findRelevant(String query, int size){
         //查找相关工具
         return null;
@@ -32,27 +27,14 @@ public class DynamicGatewaySkill implements Skill {
         return null;
     }
 
-    //-----------------
-
-
     @Override
     public String name() {
-        return metadata.getName();
+        return "dynamic_gateway";
     }
 
     @Override
     public String description() {
-        return metadata.getDescription();
-    }
-
-    @Override
-    public SkillMetadata metadata() {
-        return metadata;
-    }
-
-    @Override
-    public Collection<FunctionTool> getTools() {
-        return toolProvider.getTools();
+        return "动态工具网关";
     }
 
     @Override

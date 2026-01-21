@@ -1,6 +1,7 @@
 package demo.ai.core;
 
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.skill.AnnotatedSkill;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -15,10 +16,10 @@ import java.util.List;
 /**
  * 意图感知的订单技能
  */
-public class OrderIntentSkill implements Skill {
+public class OrderIntentSkill extends AnnotatedSkill implements Skill {
     // 定义该技能关心的意图关键词
     private static final List<String> INTENT_KEYWORDS = Arrays.asList("订单", "买过", "物流", "发货", "退款");
-    private ToolProvider toolProvider = new MethodToolProvider(this);
+
     @Override
     public String name() {
         return "order_manager";
@@ -46,11 +47,6 @@ public class OrderIntentSkill implements Skill {
     public String getInstruction(ChatPrompt prompt) {
         return "1. 查询订单前，请确认用户是否提供了订单号或手机号。\n" +
                 "2. 如果物流状态显示为'已签收'，主动询问用户对商品的满意度。";
-    }
-
-    @Override
-    public Collection<FunctionTool> getTools() {
-        return toolProvider.getTools();
     }
 
     @ToolMapping(description = "根据订单号查询详细的物流信息")
