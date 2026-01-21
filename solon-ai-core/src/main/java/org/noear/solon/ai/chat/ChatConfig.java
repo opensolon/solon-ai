@@ -19,6 +19,7 @@ import org.noear.solon.ai.AiConfig;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 
 import java.util.*;
@@ -30,139 +31,105 @@ import java.util.*;
  * @since 3.1
  */
 public class ChatConfig extends AiConfig {
-    private boolean defaultAutoToolCall = true;
-    private final Map<String, FunctionTool> defaultTools = new LinkedHashMap<>();
-    private final Map<String, Object> defaultToolContext = new LinkedHashMap<>();
-    private final List<RankEntity<Skill>> defaultSkills = new ArrayList<>();
-    private final List<RankEntity<ChatInterceptor>> defaultInterceptors = new ArrayList<>();
-    private final Map<String, Object> defaultOptions = new LinkedHashMap<>();
-
-    /**
-     * @deprecated 请使用 {@link #defaultToolContext}
-     */
+    //用于配置注入
+    private Boolean defaultAutoToolCall;
     @Deprecated
     private Map<String, Object> defaultToolsContext;
+    private Map<String, Object> defaultToolContext;
+    private Map<String, Object> defaultOptions;
+
+    //作为构建载体（方便转换）
+    private ChatOptions modelOptions;
+
+    public ChatOptions getModelOptions() {
+        if (modelOptions == null) {
+            modelOptions = new ChatOptions();
+
+            if (defaultToolsContext != null) {
+                //已弃用
+                modelOptions.toolContextPut(defaultToolsContext);
+                defaultToolsContext = null;
+            }
+
+            if (defaultToolContext != null) {
+                modelOptions.toolContextPut(defaultToolContext);
+                defaultToolContext = null;
+            }
+
+            if (defaultOptions != null) {
+                modelOptions.optionSet(defaultOptions);
+                defaultOptions = null;
+            }
+
+            if (defaultAutoToolCall != null) {
+                modelOptions.autoToolCall(defaultAutoToolCall);
+                defaultAutoToolCall = null;
+            }
+        }
+
+        return modelOptions;
+    }
 
 
     public void setDefaultAutoToolCall(boolean defaultAutoToolCall) {
-        this.defaultAutoToolCall = defaultAutoToolCall;
+        getModelOptions().autoToolCall(defaultAutoToolCall);
     }
 
-    /**
-     * 是否自动扩行工具调用（默认为 true）
-     *
-     */
-    public boolean isDefaultAutoToolCall() {
-        return defaultAutoToolCall;
-    }
 
     /**
      * 设置默认工具（用于属性提示）
      */
-    public void setDefaultTools(Map<String, FunctionTool> tools) {
-        if (tools != null) {
-            defaultTools.putAll(tools);
-        }
+    public void setDefaultTools(Map<String, FunctionTool> items) {
+        getModelOptions().toolAdd(items);
     }
 
     /**
      * 添加默认工具（即每次请求都会带上）
      */
     public void addDefaultTool(FunctionTool tool) {
-        defaultTools.put(tool.name(), tool);
+        getModelOptions().toolAdd(tool);
     }
 
     /**
      * 添加默认工具（即每次请求都会带上）
      */
-    public void addDefaultTool(Collection<FunctionTool> toolColl) {
-        for (FunctionTool f : toolColl) {
-            defaultTools.put(f.name(), f);
-        }
+    public void addDefaultTool(Collection<FunctionTool> items) {
+        getModelOptions().toolAdd(items);
     }
-
-    /**
-     * 获取单个默认工具（即每次请求都会带上）
-     *
-     * @param name 名字
-     */
-    public FunctionTool getDefaultTool(String name) {
-        return defaultTools.get(name);
-    }
-
-    /**
-     * 获取所有默认工具（即每次请求都会带上）
-     */
-    public Collection<FunctionTool> getDefaultTools() {
-        return defaultTools.values();
-    }
-
 
     /**
      * 添加默认工具上下文
      */
     public void addDefaultToolContext(String key, Object value) {
-        defaultToolContext.put(key, value);
+        getModelOptions().toolContextPut(key, value);
     }
 
     /**
      * 添加默认工具上下文
      */
-    public void addDefaultToolContext(Map<String, Object> toolsContext) {
-        defaultToolContext.putAll(toolsContext);
-    }
-
-
-    /**
-     * 获取默认工具上下文
-     */
-    public Map<String, Object> getDefaultToolContext() {
-        if (defaultToolsContext != null) {
-            //变名的兼容处理
-            defaultToolContext.putAll(defaultToolsContext);
-            defaultToolsContext = null;
-        }
-
-        return defaultToolContext;
+    public void addDefaultToolContext(Map<String, Object> map) {
+        getModelOptions().toolContextPut(map);
     }
 
 
     public void addDefaultSkill(int index, Skill skill) {
-        if (skill != null) {
-            defaultSkills.add(new RankEntity<>(skill, index));
-        }
+        getModelOptions().skillAdd(index, skill);
     }
 
-    public List<RankEntity<Skill>> getDefaultSkills() {
-        return defaultSkills;
-    }
 
     /**
      * 添加默认拦截器
      */
     public void addDefaultInterceptor(int index, ChatInterceptor interceptor) {
-        defaultInterceptors.add(new RankEntity<>(interceptor, index));
+        getModelOptions().interceptorAdd(index, interceptor);
     }
 
-    /**
-     * 获取所有默认拦截器
-     */
-    public List<RankEntity<ChatInterceptor>> getDefaultInterceptors() {
-        return defaultInterceptors;
-    }
 
     /**
      * 添加默认选项
      */
     public void addDefaultOption(String key, Object value) {
-        defaultOptions.put(key, value);
-    }
-
-    /**
-     * 获取所有默认选项
-     */
-    public Map<String, Object> getDefaultOptions() {
-        return defaultOptions;
+        getModelOptions().optionSet(key, value);
     }
 
     @Override
@@ -175,7 +142,6 @@ public class ChatConfig extends AiConfig {
                 ", headers=" + headers +
                 ", timeout=" + timeout +
                 ", proxy=" + getProxy() +
-                ", defaultTools=" + defaultTools +
                 '}';
     }
 
@@ -196,8 +162,8 @@ public class ChatConfig extends AiConfig {
      * @deprecated 3.8.4 {@link #addDefaultTool(Collection<FunctionTool>)}
      */
     @Deprecated
-    public void addDefaultTools(Collection<FunctionTool> toolColl) {
-        addDefaultTool(toolColl);
+    public void addDefaultTools(Collection<FunctionTool> items) {
+        addDefaultTool(items);
     }
 
     /**
@@ -216,18 +182,91 @@ public class ChatConfig extends AiConfig {
      * @deprecated 3.8.4 {@link #addDefaultToolContext(Map<String, Object>)}
      */
     @Deprecated
-    public void addDefaultToolsContext(Map<String, Object> toolsContext) {
-        addDefaultToolContext(toolsContext);
+    public void addDefaultToolsContext(Map<String, Object> map) {
+        addDefaultToolContext(map);
+    }
+
+    //============
+
+
+    /**
+     * 是否自动扩行工具调用（默认为 true）
+     *
+     * @deprecated 3.8.4 {@link #getModelOptions()}
+     */
+    @Deprecated
+    public boolean isDefaultAutoToolCall() {
+        return getModelOptions().isAutoToolCall();
+    }
+
+    /**
+     * 获取所有默认拦截器
+     *
+     * @deprecated 3.8.4 {@link #getModelOptions()}
+     */
+    @Deprecated
+    public List<RankEntity<ChatInterceptor>> getDefaultInterceptors() {
+        return getModelOptions().interceptors();
+    }
+
+    /**
+     * 获取默认工具上下文
+     *
+     * @deprecated 3.8.4 {@link #getModelOptions()}
+     */
+    @Deprecated
+    public Map<String, Object> getDefaultToolContext() {
+        return getModelOptions().toolContext();
+    }
+
+    /**
+     * 获取默认的技能
+     *
+     * @deprecated 3.8.4 {@link #getModelOptions()}
+     */
+    @Deprecated
+    public List<RankEntity<Skill>> getDefaultSkills() {
+        return getModelOptions().skills();
+    }
+
+    /**
+     * 获取所有默认选项
+     *
+     * @deprecated 3.8.4 {@link #getModelOptions()}
+     */
+    @Deprecated
+    public Map<String, Object> getDefaultOptions() {
+        return getModelOptions().options();
+    }
+
+    /**
+     * 获取单个默认工具（即每次请求都会带上）
+     *
+     * @deprecated 3.8.4 {@link #getModelOptions()}
+     */
+    @Deprecated
+    public FunctionTool getDefaultTool(String name) {
+        return getModelOptions().tool(name);
+    }
+
+    /**
+     * 获取所有默认工具（即每次请求都会带上）
+     *
+     * @deprecated 3.8.4 {@link #getModelOptions()}
+     */
+    @Deprecated
+    public Collection<FunctionTool> getDefaultTools() {
+        return getModelOptions().tools();
     }
 
 
     /**
      * 获取默认工具上下文
      *
-     * @deprecated 3.8.4 {@link #getDefaultToolContext()}
+     * @deprecated 3.8.4 {@link #getModelOptions()}
      */
     @Deprecated
     public Map<String, Object> getDefaultToolsContext() {
-        return getDefaultToolContext();
+        return getModelOptions().toolContext();
     }
 }

@@ -185,32 +185,8 @@ public class ChatModel implements AiModel {
             return this;
         }
 
-
-        /**
-         * 添加默认选项
-         */
-        public Builder defaultOptionSet(String key, Object val) {
-            config.addDefaultOption(key, val);
-            return this;
-        }
-
-        /**
-         * 默认工具上下文添加
-         *
-         * @since 3.8.4
-         */
-        public Builder defaultToolContextPut(String key, Object value) {
-            config.addDefaultToolContext(key, value);
-            return this;
-        }
-
-        /**
-         * 默认工具上下文添加
-         *
-         * @since 3.8.4
-         */
-        public Builder defaultToolContextPut(Map<String, Object> toolsContext) {
-            config.addDefaultToolContext(toolsContext);
+        public Builder modelOptions(Consumer<ModelOptionsAmend<?, ChatInterceptor>> consumer) {
+            consumer.accept(config.getModelOptions());
             return this;
         }
 
@@ -345,7 +321,7 @@ public class ChatModel implements AiModel {
         /**
          * 添加默认选项
          *
-         * @deprecated 3.8.4 {@link #defaultOptionSet(String, Object)}
+         * @deprecated 3.8.4 {@link #modelOptions(Consumer)}
          */
         @Deprecated
         public Builder defaultOptionAdd(String key, Object val) {
@@ -414,22 +390,22 @@ public class ChatModel implements AiModel {
         /**
          * 默认工具上下文添加
          *
-         * @deprecated 3.8.4 {@link #defaultToolContextPut(String, Object)}
+         * @deprecated 3.8.4 {@link #modelOptions(Consumer)}
          */
         @Deprecated
         public Builder defaultToolsContextAdd(String key, Object value) {
-            config.addDefaultToolContext(key, value);
+            config.getModelOptions().toolContextPut(key, value);
             return this;
         }
 
         /**
          * 默认工具上下文添加
          *
-         * @deprecated 3.8.4 {@link #defaultToolContextPut(Map)}
+         * @deprecated 3.8.4 {@link #modelOptions(Consumer)}
          */
         @Deprecated
-        public Builder defaultToolsContextAdd(Map<String, Object> toolsContext) {
-            config.addDefaultToolContext(toolsContext);
+        public Builder defaultToolsContextAdd(Map<String, Object> map) {
+            config.getModelOptions().toolContextPut(map);
             return this;
         }
     }

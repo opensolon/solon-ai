@@ -16,13 +16,13 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
+import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 
 import java.net.Proxy;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -68,26 +68,26 @@ public class ChatConfigReadonly {
     }
 
     /**
-     * 获取单个默认工具（即每次请求都会带上）
-     *
-     * @param name 名字
-     */
-    public FunctionTool getDefaultTool(String name) {
-        return config.getDefaultTool(name);
-    }
-
-    /**
      * 获取所有默认工具（即每次请求都会带上）
      */
     public Collection<FunctionTool> getDefaultTools() {
-        return config.getDefaultTools();
+        return config.getModelOptions().tools();
+    }
+
+    /**
+     * 获取所有默认技能（即每次请求都会带上）
+     */
+    public Collection<Skill> getDefaultSkills() {
+        return config.getModelOptions().skills()
+                .stream().map(e -> e.target)
+                .collect(Collectors.toList());
     }
 
     /**
      * 获取所有默认拦截器
      */
-    public List<ChatInterceptor> getDefaultInterceptors() {
-        return config.getDefaultInterceptors()
+    public Collection<ChatInterceptor> getDefaultInterceptors() {
+        return config.getModelOptions().interceptors()
                 .stream()
                 .map(e -> e.target)
                 .collect(Collectors.toList());

@@ -21,6 +21,8 @@ import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.session.InMemoryChatSession;
+import org.noear.solon.ai.chat.skill.SkillUtil;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -67,32 +69,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         this.prompt = prompt;
 
         this.options = new ChatOptions();
-
-        //是否自动高用工具执行
-        options.autoToolCall(config.isDefaultAutoToolCall());
-
-        //默认工具上下文
-        if (Utils.isNotEmpty(config.getDefaultToolContext())) {
-            this.options.toolContext().putAll(config.getDefaultToolContext());
-        }
-
-        //默认工具选项
-        if (Utils.isNotEmpty(config.getDefaultOptions())) {
-            this.options.options().putAll(config.getDefaultOptions());
-        }
-
-        //默认技能选项
-        if (Utils.isNotEmpty(config.getDefaultSkills())) {
-            this.options.skillAdd(config.getDefaultSkills());
-        }
-
-        if(Utils.isNotEmpty(config.getDefaultTools())){
-            this.options.toolAdd(config.getDefaultTools());
-        }
-
-        if(Utils.isNotEmpty(config.getDefaultInterceptors())){
-            this.options.interceptorAdd(config.getDefaultInterceptors());
-        }
+        this.options.putAll(config.getModelOptions());
     }
 
     public ChatRequestDesc session(ChatSession session) {
@@ -127,11 +104,34 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         return this;
     }
 
+
+
+    private void prepare(){
+        if (session == null) {
+            session = InMemoryChatSession.builder().build();
+        }
+
+        StringBuilder combinedInstruction = SkillUtil.activeSkills(options, prompt);
+        if (combinedInstruction.length() > 0) {
+            session.addMessage(ChatMessage.ofSystem(combinedInstruction.toString()));
+        }
+
+        if (prompt != null) {
+            session.addMessage(prompt);
+        }
+    }
+
     /**
      * 调用
      */
     @Override
     public ChatResponse call() throws IOException {
+        prepare();
+
+        return internalCall();
+    }
+
+    protected ChatResponse internalCall() throws IOException {
         //构建请求数据
         ChatRequest req = new ChatRequest(config, dialect, options, session, prompt, false);
         if(session == null){
@@ -179,7 +179,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
                 if (Utils.isEmpty(returnDirectMessages)) {
                     //没有直接返回的消息
-                    return call();
+                    return internalCall();
                 } else {
                     //要求直接返回（转为新的响应消息）
                     choiceMessage = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
@@ -198,6 +198,12 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     @Override
     public Publisher<ChatResponse> stream() {
+        prepare();
+
+        return internalStream();
+    }
+
+    private Publisher<ChatResponse> internalStream() {
         //构建请求数据
         ChatRequest req = new ChatRequest(config, dialect, options, session, prompt,true);
         if(session == null){
@@ -368,7 +374,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
                 if (Utils.isEmpty(returnDirectMessages)) {
                     //没有要求直接返回
-                    stream().subscribe(subscriber);
+                    internalStream().subscribe(subscriber);
                     return false; //不触发外层的完成事件
                 } else {
                     //要求直接返回（转为新的响应消息）
@@ -428,11 +434,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         List<ToolMessage> toolMessages = new ArrayList<>();
         for (ToolCall call : acm.getToolCalls()) {
-            FunctionTool func = config.getDefaultTool(call.name());
-
-            if (func == null) {
-                func = options.tool(call.name());
-            }
+            FunctionTool func = options.tool(call.name());
 
             if (func != null) {
                 try {
@@ -462,12 +464,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     private String doToolCall(ChatResponseDefault resp, FunctionTool func, Map<String, Object> args) throws Throwable {
         //收集拦截器
-        List<RankEntity<ChatInterceptor>> interceptorList = new ArrayList<>();
-        interceptorList.addAll(config.getDefaultInterceptors());
-        interceptorList.addAll(options.interceptors());
-        if (interceptorList.size() > 1) {
-            Collections.sort(interceptorList);
-        }
+        List<RankEntity<ChatInterceptor>> interceptorList = options.interceptors();
 
         ToolRequest req = new ToolRequest(resp.getRequest(), resp.getOptions().toolContext(), args);
 

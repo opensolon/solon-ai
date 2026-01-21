@@ -21,6 +21,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.skill.SkillUtil;
 import org.noear.solon.lang.NonSerializable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,56 +47,8 @@ public class ChatRequest implements NonSerializable {
     private final boolean stream;
     private List<ChatMessage> messages;
 
-    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session0, ChatPrompt prompt, boolean stream) {
-        if (session0 == null) {
-            session0 = InMemoryChatSession.builder().build();
-        }
-
-
-        this.session = session0;
-
-
-        List<Skill> activeSkills = options.skills().stream()
-                .map(s -> s.target)
-                .filter(s -> {
-                    try {
-                        return s.isSupported(prompt);
-                    } catch (Throwable e) {
-                        LOG.error("Skill support check failed: {}", s.getClass().getName(), e);
-                        return false;
-                    }
-                }) // 1. 过滤
-                .collect(Collectors.toList());
-
-        if(activeSkills.size() > 0) {
-            StringBuilder combinedInstruction = new StringBuilder();
-
-            for (Skill skill : activeSkills) {
-                try {
-                    // 3. 挂载
-                    skill.onAttach(prompt);
-                } catch (Throwable e) {
-                    LOG.error("Skill active failed: {}", skill.getClass().getName(), e);
-                    throw e;
-                }
-
-                // 4. 收集指令
-                skill.injectInstruction(prompt, combinedInstruction);
-
-                // 5. 收集工具
-                options.toolAdd(skill.getTools());
-            }
-
-            if (combinedInstruction.length() > 0) {
-                session.addMessage(ChatMessage.ofSystem(combinedInstruction.toString()));
-            }
-        }
-
-        if (prompt != null) {
-            this.session.addMessage(prompt);
-        }
-
-
+    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session, ChatPrompt prompt, boolean stream) {
+        this.session = session;
         this.config = config;
         this.configReadonly = new ChatConfigReadonly(config);
         this.dialect = dialect;
