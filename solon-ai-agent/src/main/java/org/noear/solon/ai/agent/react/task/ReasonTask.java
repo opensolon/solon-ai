@@ -152,8 +152,10 @@ public class ReasonTask implements NamedTaskComponent {
         trace.appendMessage(ChatMessage.ofAssistant(rawContent));
         trace.setLastResult(thoughtContent);
 
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onThought(trace, thoughtContent);
+        if(Assert.isNotEmpty(thoughtContent)) {
+            for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+                item.target.onThought(trace, thoughtContent);
+            }
         }
 
         // [逻辑 6: 决策分流]
