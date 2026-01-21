@@ -68,14 +68,14 @@ public class ChatConfigReadonly {
     }
 
     /**
-     * 获取所有默认工具（即每次请求都会带上）
+     * 获取所有默认工具
      */
     public Collection<FunctionTool> getDefaultTools() {
         return config.getModelOptions().tools();
     }
 
     /**
-     * 获取所有默认技能（即每次请求都会带上）
+     * 获取所有默认技能
      */
     public Collection<Skill> getDefaultSkills() {
         return config.getModelOptions().skills()
