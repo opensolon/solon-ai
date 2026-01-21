@@ -53,7 +53,7 @@ public class ActionTask implements NamedTaskComponent {
 
     /** 匹配文本模式下的 Action: {JSON} 内容 */
     private static final Pattern ACTION_PATTERN = Pattern.compile(
-            "Action:\\s*(?:```json)?\\s*(\\{[\\s\\S]*\\})\\s*(?:```)?",
+            "Action:\\s*(?:```json)?\\s*(\\{[\\s\\S]*?\\})\\s*(?:```)?",
             Pattern.DOTALL
     );
 
@@ -79,7 +79,7 @@ public class ActionTask implements NamedTaskComponent {
 
         AssistantMessage lastAssistant = trace.getLastAssistantMessage();
 
-        // 优先处理 Native Tool Calls 协议
+        // 1. 优先处理原生工具调用（Native Tool Calls）
         if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
             for (ToolCall call : lastAssistant.getToolCalls()) {
                 processNativeToolCall(trace, call);
@@ -87,7 +87,7 @@ public class ActionTask implements NamedTaskComponent {
             return;
         }
 
-        // 回退处理文本解析模式 (用于小模型)
+        // 2. 文本模式：解析模型输出中的 Action 块
         processTextModeAction(trace);
     }
 
@@ -120,7 +120,7 @@ public class ActionTask implements NamedTaskComponent {
      * 解析并执行文本模式下的 Action 指令
      */
     private void processTextModeAction(ReActTrace trace) throws Throwable {
-        String lastContent = trace.getLastResult();
+        String lastContent = trace.getLastResult(); //这里的 LastResult 是经过 ReasonTask 清洗后的 Thought 主体
         if (Assert.isEmpty(lastContent)) {
             return;
         }
@@ -136,22 +136,33 @@ public class ActionTask implements NamedTaskComponent {
         while (matcher.find()) {
             foundAny = true;
             try {
-                ONode action = ONode.ofJson(matcher.group(1).trim());
-                String toolName = action.get("name").getString();
-                ONode argsNode = action.get("arguments");
+                // 1. 提取 JSON 字符串
+                String jsonContent = matcher.group(1).trim();
+                ONode actionNode = ONode.ofJson(jsonContent);
+
+                // 2. 提取纯净的工具名和参数
+                String toolName = actionNode.get("name").getString();
+                ONode argsNode = actionNode.get("arguments");
                 Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
 
+                // 3. 触发 Action 拦截 (内容是纯的)
                 for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                     item.target.onAction(trace, toolName, args);
                 }
 
+                // 4. 执行工具
                 String result = executeTool(trace, toolName, args);
 
+                // 5. 触发 Observation 拦截 (内容是纯的)
                 for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                     item.target.onObservation(trace, result);
                 }
 
-                allObservations.append("\nObservation: ").append(result);
+                // 6. 拼装回传给 LLM 的协议文本
+                if (allObservations.length() > 0) {
+                    allObservations.append("\n");
+                }
+                allObservations.append("Observation: ").append(result);
             } catch (Exception e) {
                 allObservations.append("\nObservation: Error parsing Action JSON: ").append(e.getMessage());
             }
