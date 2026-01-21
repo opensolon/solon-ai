@@ -129,34 +129,47 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         // [逻辑 5: 路由判断 - 文本 ReAct 协议解析]
-        String rawContent = response.hasContent() ? response.getContent() : "";
-        String clearContent = response.hasContent() ? response.getResultContent() : "";
+        String rawContent = response.hasContent() ? response.getContent() : ""; // 原始（含 think）
+        String clearContent = response.hasContent() ? response.getResultContent() : ""; // 干净（无 think）
 
         // 截断防御：防止模型“分身”替系统回复 Observation 内容
         int obsIndex = rawContent.indexOf("Observation:");
         if (obsIndex != -1) {
             rawContent = rawContent.substring(0, obsIndex).trim();
+
+            obsIndex = clearContent.indexOf("Observation:");
+            if (obsIndex != -1) {
+                clearContent = clearContent.substring(0, obsIndex).trim();
+            }
         }
 
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onReason(trace, response.getMessage());
+        }
+
+        String thoughtContent = extractThought(clearContent);
+
         trace.appendMessage(ChatMessage.ofAssistant(rawContent));
-        trace.setLastResult(clearContent);
+        trace.setLastResult(thoughtContent);
 
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onThought(trace, clearContent);
+            item.target.onThought(trace, thoughtContent);
         }
 
         // [逻辑 6: 决策分流]
 
         // 1. 优先判断是否完成（防止 Action 标识被误触发）
-        if (rawContent.contains(config.getFinishMarker())) {
+        String decisionBase = clearContent;
+
+        if (decisionBase.contains(config.getFinishMarker())) {
             trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer(extractFinalAnswer(clearContent));
+            trace.setFinalAnswer(extractFinalAnswer(thoughtContent));
             return;
         }
 
         // 2. 其次判断文本形式的 Action（使用更严格的正则：Action: 后必须跟 {）
-        if (rawContent.contains("Action:")) {
-            String actionPart = rawContent.substring(rawContent.indexOf("Action:"));
+        if (decisionBase.contains("Action:")) {
+            String actionPart = decisionBase.substring(decisionBase.indexOf("Action:"));
             if (actionPart.matches("(?s)Action:\\s*\\{.*")) {
                 trace.setRoute(ReActAgent.ID_ACTION);
                 return;
@@ -165,7 +178,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // 3. 兜底：既没有明确 Action，也没有明确 Finish，视为直接回答
         trace.setRoute(Agent.ID_END);
-        trace.setFinalAnswer(extractFinalAnswer(clearContent));
+        trace.setFinalAnswer(extractFinalAnswer(thoughtContent));
     }
 
     private ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) {
@@ -222,18 +235,30 @@ public class ReasonTask implements NamedTaskComponent {
     }
 
     /**
-     * 清理思考过程，提取最终业务答案
+     * 专门用于移除协议标签（如 <think> 或 Thought:），获取“思考主体”
      */
-    private String extractFinalAnswer(String content) {
+    private String extractThought(String content) {
         if (content == null) return "";
 
-        if (content.contains(config.getFinishMarker())) {
-            content = content.substring(content.indexOf(config.getFinishMarker()) + config.getFinishMarker().length());
+        return content
+                .replaceAll("(?s)<think>.*?</think>", "") // 移除推理模型内省标签
+                .replaceAll("(?m)^Thought:\\s*", "")      // 移除 ReAct 协议头
+                .trim();
+    }
+
+    /**
+     * 清理思考过程，提取最终业务答案
+     */
+    private String extractFinalAnswer(String thoughtContent) {
+        if (thoughtContent == null) return "";
+
+        String answer = thoughtContent;
+        if (answer.contains(config.getFinishMarker())) {
+            answer = answer.substring(answer.indexOf(config.getFinishMarker()) + config.getFinishMarker().length());
         }
 
-        return content
-                .replaceAll("(?s)<think>.*?</think>", "") // 移除 DeepSeek 等模型的内省标签
-                .replaceAll("(?m)^(Thought|Action|Observation):\\s*", "")
+        return answer
+                .replaceAll("(?m)^(Action|Observation):\\s*", "")
                 .trim();
     }
 }

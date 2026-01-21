@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentInterceptor;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.flow.intercept.FlowInterceptor;
 import org.noear.solon.lang.Preview;
 
@@ -52,6 +53,12 @@ public interface ReActInterceptor extends AgentInterceptor, FlowInterceptor, Cha
      * <p>常用于死循环（复读）检测或原始响应审计</p>
      */
     default void onModelEnd(ReActTrace trace, ChatResponse resp) {
+    }
+
+    /**
+     * 推理节点：接收 LLM 返回的原始推理消息
+     */
+    default void onReason(ReActTrace trace, AssistantMessage assistantMessage) {
     }
 
     /**
