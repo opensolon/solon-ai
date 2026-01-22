@@ -13,6 +13,7 @@
 ### v3.8.4
 
 * 新增 `solon-ai-core` Solon AI Skills（技能）体系
+* 新增 `solon-ai-search-bocha` 插件
 * 添加 `solon-ai-core` defaultToolsContextPut 方法
 * 添加 `solon-ai-core` ChatSession attrSet, attr 方法（可以在拦截时控制权限）
 * 添加 `solon-ai-agent` NoneProtocol（无协议模式）
