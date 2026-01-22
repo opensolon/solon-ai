@@ -48,7 +48,7 @@ public class Prompt implements ChatPrompt, Serializable {
     /**
      * 设置元信息
      */
-    public Prompt attrPut(Map<String,Object> map) {
+    public Prompt attrPut(Map<String, Object> map) {
         if (Assert.isNotEmpty(map)) {
             attrs.putAll(map);
         }
@@ -60,11 +60,6 @@ public class Prompt implements ChatPrompt, Serializable {
     @Override
     public List<ChatMessage> getMessages() {
         return messages;
-    }
-
-    @Override
-    public int getMessagesSize() {
-        return messages.size();
     }
 
     @Override
@@ -133,6 +128,10 @@ public class Prompt implements ChatPrompt, Serializable {
         return systemContent;
     }
 
+    @Override
+    public boolean isEmpty() {
+        return messages.isEmpty();
+    }
 
     /**
      * 构建

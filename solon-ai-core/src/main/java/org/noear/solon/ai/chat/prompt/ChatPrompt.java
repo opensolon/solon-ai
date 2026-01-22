@@ -31,17 +31,23 @@ import java.util.Map;
 public interface ChatPrompt {
     /**
      * 获取元信息
+     *
+     * @since 3.8.4
      */
     Map<String, Object> attrs();
 
     /**
      * 获取元信息
+     *
+     * @since 3.8.4
      */
     default Object attr(String key) {
         return attrs().get(key);
     }
     /**
      * 获取元信息
+     *
+     * @since 3.8.4
      */
     default <T> T attrAs(String key) {
         return (T) attrs().get(key);
@@ -49,6 +55,8 @@ public interface ChatPrompt {
 
     /**
      * 获取元信息
+     *
+     * @since 3.8.4
      */
     default <T> T attrOrDefault(String key, T def) {
         return (T) attrs().getOrDefault(key, def);
@@ -61,33 +69,43 @@ public interface ChatPrompt {
 
     /**
      * 获取首条消息
+     *
+     * @since 3.8.4
      */
     ChatMessage getFirstMessage();
 
     /**
      * 获取最后消息
+     *
+     * @since 3.8.4
      */
     ChatMessage getLastMessage();
 
     /**
      * 获取用户消息内容
+     *
+     * @since 3.8.4
      */
     String getUserContent();
 
     /**
      * 获取系统消息内容
+     *
+     * @since 3.8.4
      */
     String getSystemContent();
 
     /**
-     * 获取消息数量
+     * 是否为空
+     *
+     * @since 3.8.4
      */
-    int getMessagesSize();
+    boolean isEmpty();
 
     /**
      * 是否为空
      */
     static boolean isEmpty(ChatPrompt prompt) {
-        return prompt == null || prompt.getMessagesSize() == 0;
+        return prompt == null || prompt.isEmpty();
     }
 }
