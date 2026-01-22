@@ -29,7 +29,7 @@ import java.util.*;
  * @since 3.2
  */
 public class Prompt implements ChatPrompt, Serializable {
-    private final Map<String, Object> attrs = new HashMap<>();
+    private final Map<String, Object> attrs = new LinkedHashMap<>();
     private final List<ChatMessage> messages = new ArrayList<>();
 
     @Override
