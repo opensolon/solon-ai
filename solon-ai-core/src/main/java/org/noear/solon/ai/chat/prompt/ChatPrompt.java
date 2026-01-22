@@ -30,14 +30,14 @@ import java.util.Map;
 @Preview("3.2")
 public interface ChatPrompt {
     /**
-     * 获取元信息
+     * 获取属性
      *
      * @since 3.8.4
      */
     Map<String, Object> attrs();
 
     /**
-     * 获取元信息
+     * 获取属性
      *
      * @since 3.8.4
      */
@@ -45,7 +45,7 @@ public interface ChatPrompt {
         return attrs().get(key);
     }
     /**
-     * 获取元信息
+     * 获取属性
      *
      * @since 3.8.4
      */
@@ -54,7 +54,7 @@ public interface ChatPrompt {
     }
 
     /**
-     * 获取元信息
+     * 获取属性
      *
      * @since 3.8.4
      */
