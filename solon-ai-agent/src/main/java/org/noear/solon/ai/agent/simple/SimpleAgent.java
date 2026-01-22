@@ -205,7 +205,7 @@ public class SimpleAgent implements Agent {
                     ONode.serialize(messages, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }
 
-        Prompt finalPrompt = Prompt.of(messages);
+        Prompt finalPrompt = Prompt.of(messages).metaPut(trace.getPrompt().meta());
         ChatRequestDesc chatReq = null;
 
         if (config.getChatModel() != null) {

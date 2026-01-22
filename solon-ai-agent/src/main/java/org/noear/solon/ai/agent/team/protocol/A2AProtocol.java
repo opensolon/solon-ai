@@ -192,7 +192,7 @@ public class A2AProtocol extends TeamProtocolBase {
         messages.add(ChatMessage.ofUser(sb.toString()));
 
         stateObj.consumeInstruction();
-        return Prompt.of(messages);
+        return Prompt.of(messages).metaPut(originalPrompt.meta());
     }
 
     @Override
@@ -229,7 +229,7 @@ public class A2AProtocol extends TeamProtocolBase {
 
                 List<ChatMessage> messages = new ArrayList<>(trace.getPrompt().getMessages());
                 messages.add(ChatMessage.ofUser(feedback));
-                trace.setPrompt(Prompt.of(messages));
+                trace.setPrompt(Prompt.of(messages).metaPut(trace.getPrompt().meta()));
 
                 return trace.getLastAgentName();
             }

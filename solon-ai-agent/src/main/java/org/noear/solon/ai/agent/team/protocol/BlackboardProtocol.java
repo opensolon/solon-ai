@@ -200,8 +200,8 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         String info = isZh ? "当前协作黑板内容：" : "Current blackboard content: ";
 
         // 注入到消息列表顶部，作为 Agent 的上下文感知
-        messages.add(1, ChatMessage.ofSystem(info + "\n" + state.toString()));
-        return Prompt.of(messages);
+        messages.add(1, ChatMessage.ofSystem(info + "\n" + state));
+        return Prompt.of(messages).metaPut(originalPrompt.meta());
     }
 
     @Override

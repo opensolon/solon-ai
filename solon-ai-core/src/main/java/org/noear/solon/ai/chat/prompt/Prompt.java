@@ -45,6 +45,17 @@ public class Prompt implements ChatPrompt, Serializable {
         return this;
     }
 
+    /**
+     * 设置元信息
+     */
+    public Prompt metaPut(Map<String,Object> map) {
+        if (Assert.isNotEmpty(map)) {
+            meta.putAll(map);
+        }
+
+        return this;
+    }
+
 
     @Override
     public List<ChatMessage> getMessages() {
