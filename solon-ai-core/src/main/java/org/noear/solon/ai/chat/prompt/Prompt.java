@@ -68,6 +68,11 @@ public class Prompt implements ChatPrompt, Serializable {
     }
 
     @Override
+    public ChatMessage getFirstMessage() {
+        return messageList.isEmpty() ? null : messageList.get(0);
+    }
+
+    @Override
     public ChatMessage getLastMessage() {
         return messageList.isEmpty() ? null : messageList.get(messageList.size() - 1);
     }

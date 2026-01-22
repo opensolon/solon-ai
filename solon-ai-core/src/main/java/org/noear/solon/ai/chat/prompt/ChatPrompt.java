@@ -60,6 +60,11 @@ public interface ChatPrompt {
     List<ChatMessage> getMessages();
 
     /**
+     * 获取首条消息
+     */
+    ChatMessage getFirstMessage();
+
+    /**
      * 获取最后消息
      */
     ChatMessage getLastMessage();
