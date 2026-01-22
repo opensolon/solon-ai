@@ -122,7 +122,7 @@ public class SimpleAgent implements Agent {
         }
 
         // 1. 构建请求消息
-        List<ChatMessage> messages = buildMessages(session, prompt);
+        Prompt finalPrompt = prepareAgentPrompt(session, prompt);
 
         // 2. 物理调用：执行带重试机制的 LLM 请求
         AssistantMessage result = null;
@@ -130,7 +130,7 @@ public class SimpleAgent implements Agent {
         long startTime = System.currentTimeMillis();
         try {
             trace.getMetrics().setTotalDuration(0L);
-            result = callWithRetry(trace, session, messages, options);
+            result = callWithRetry(trace, session, finalPrompt, options);
         } finally {
             trace.getMetrics().setTotalDuration(System.currentTimeMillis() - startTime);
 
@@ -158,7 +158,7 @@ public class SimpleAgent implements Agent {
     /**
      * 组装完整的 Prompt 消息列表（含 SystemPrompt、OutputSchema 及历史窗口）
      */
-    private List<ChatMessage> buildMessages(AgentSession session, Prompt prompt) {
+    private Prompt prepareAgentPrompt(AgentSession session, Prompt originalPrompt) {
         String spText = config.getSystemPromptFor(session.getSnapshot());
 
         // 注入 JSON Schema 指令（强制格式输出）
@@ -182,36 +182,36 @@ public class SimpleAgent implements Agent {
             }
         }
 
-        messages.addAll(prompt.getMessages());
+        messages.addAll(originalPrompt.getMessages());
 
 
         // 消息归档：同步当前用户请求到 Session 历史
-        if (!ChatPrompt.isEmpty(prompt)) {
-            for (ChatMessage message : prompt.getMessages()) {
+        if (!ChatPrompt.isEmpty(originalPrompt)) {
+            for (ChatMessage message : originalPrompt.getMessages()) {
                 session.addHistoryMessage(config.getName(), message);
             }
         }
 
-        return messages;
+        return Prompt.of(messages).metaPut(originalPrompt.meta());
     }
 
     /**
      * 实现带指数延迟的自动重试调用
      */
-    private AssistantMessage callWithRetry(SimpleTrace trace, AgentSession session, List<ChatMessage> messages, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
+    private AssistantMessage callWithRetry(SimpleTrace trace, AgentSession session, Prompt finalPrompt, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
         if (LOG.isTraceEnabled()) {
             LOG.trace("SimpleAgent [{}] calling model... messages: {}",
                     config.getName(),
-                    ONode.serialize(messages, Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
+                    ONode.serialize(finalPrompt.getMessages(), Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }
 
-        Prompt finalPrompt = Prompt.of(messages).metaPut(trace.getPrompt().meta());
-        ChatRequestDesc chatReq = null;
+       ChatRequestDesc chatReq = null;
 
         if (config.getChatModel() != null) {
             //构建 chatModel 请求
             final TeamProtocol protocol = session.getSnapshot().getAs(Agent.KEY_PROTOCOL);
-            chatReq = config.getChatModel().prompt(messages)
+            chatReq = config.getChatModel()
+                    .prompt(finalPrompt)
                     .options(o -> {
                         //配置工具
                         o.toolAdd(options.tools());
