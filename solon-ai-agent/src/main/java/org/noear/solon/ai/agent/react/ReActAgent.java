@@ -24,10 +24,16 @@ import org.noear.solon.ai.agent.react.task.ReasonTask;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.MethodToolProvider;
+import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.*;
@@ -36,8 +42,12 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Type;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * ReAct (Reason + Act) 协同推理智能体
@@ -260,7 +270,186 @@ public class ReActAgent implements Agent {
 
     /// //////////// Builder 模式 ////////////
 
-    public static ReActAgentBuilder of(ChatModel chatModel) {
-        return new ReActAgentBuilder(chatModel);
+    public static Builder of(ChatModel chatModel) {
+        return new Builder(chatModel);
+    }
+
+    public static class Builder {
+        private ReActAgentConfig config;
+
+        public Builder(ChatModel chatModel) {
+            this.config = new ReActAgentConfig(chatModel);
+        }
+
+        public Builder then(Consumer<Builder> consumer) {
+            consumer.accept(this);
+            return this;
+        }
+
+        public Builder name(String val) {
+            config.setName(val);
+            return this;
+        }
+
+        public Builder title(String val) {
+            config.setTitle(val);
+            return this;
+        }
+
+        public Builder description(String val) {
+            config.setDescription(val);
+            return this;
+        }
+
+        public Builder profile(AgentProfile profile) {
+            config.setProfile(profile);
+            return this;
+        }
+
+        public Builder profile(Consumer<AgentProfile> profileConsumer) {
+            profileConsumer.accept(config.getProfile());
+            return this;
+        }
+
+        /**
+         * 微调推理图结构
+         */
+        public Builder graphAdjuster(Consumer<GraphSpec> graphBuilder) {
+            config.setGraphAdjuster(graphBuilder);
+            return this;
+        }
+
+        /**
+         * 定义 LLM 输出中的任务结束标识符
+         */
+        public Builder finishMarker(String val) {
+            config.setFinishMarker(val);
+            return this;
+        }
+
+        public Builder systemPrompt(ReActSystemPrompt val) {
+            config.setSystemPrompt(val);
+            return this;
+        }
+
+        public Builder systemPrompt(Consumer<ReActSystemPrompt.Builder> promptBuilder) {
+            ReActSystemPrompt.Builder builder = ReActSystemPrompt.builder();
+            promptBuilder.accept(builder);
+            config.setSystemPrompt(builder.build());
+            return this;
+        }
+
+        public Builder modelOptions(Consumer<ModelOptionsAmend<?, ReActInterceptor>> chatOptions) {
+            chatOptions.accept(config.getDefaultOptions().getModelOptions());
+            return this;
+        }
+
+        public Builder retryConfig(int maxRetries, long retryDelayMs) {
+            config.getDefaultOptions().setRetryConfig(maxRetries, retryDelayMs);
+            return this;
+        }
+
+        /**
+         * 单次任务允许的最大推理步数（防止死循环）
+         */
+        public Builder maxSteps(int val) {
+            config.getDefaultOptions().setMaxSteps(val);
+            return this;
+        }
+
+        public Builder outputKey(String val) {
+            config.setOutputKey(val);
+            return this;
+        }
+
+        public Builder outputSchema(String val) {
+            config.getDefaultOptions().setOutputSchema(val);
+            return this;
+        }
+
+        public Builder outputSchema(Type type) {
+            config.getDefaultOptions().setOutputSchema(ToolSchemaUtil.buildOutputSchema(type));
+            return this;
+        }
+
+        public Builder sessionWindowSize(int val) {
+            config.getDefaultOptions().setSessionWindowSize(val);
+            return this;
+        }
+
+
+        public Builder defaultToolAdd(FunctionTool tool) {
+            config.getDefaultOptions().getModelOptions().toolAdd(tool);
+            return this;
+        }
+
+        public Builder defaultToolAdd(Iterable<FunctionTool> tools) {
+            config.getDefaultOptions().getModelOptions().toolAdd(tools);
+            return this;
+        }
+
+        public Builder defaultToolAdd(ToolProvider toolProvider) {
+            config.getDefaultOptions().getModelOptions().toolAdd(toolProvider);
+            return this;
+        }
+
+        public Builder defaultToolAdd(Object toolObj) {
+            return defaultToolAdd(new MethodToolProvider(toolObj));
+        }
+
+        public Builder defaultSkillAdd(Skill skill) {
+            config.getDefaultOptions().getModelOptions().skillAdd(skill);
+            return this;
+        }
+
+        public Builder defaultSkillAdd(Skill skill, int index) {
+            config.getDefaultOptions().getModelOptions().skillAdd(index, skill);
+            return this;
+        }
+
+        public Builder defaultToolContextPut(String key, Object value) {
+            config.getDefaultOptions().getModelOptions().toolContextPut(key, value);
+            return this;
+        }
+
+        public Builder defaultToolContextPut(Map<String, Object> objectsMap) {
+            config.getDefaultOptions().getModelOptions().toolContextPut(objectsMap);
+            return this;
+        }
+
+        public Builder defaultInterceptorAdd(ReActInterceptor... vals) {
+            for (ReActInterceptor val : vals) {
+                config.getDefaultOptions().getModelOptions().interceptorAdd(0, val);
+            }
+
+            return this;
+        }
+
+        public Builder defaultInterceptorAdd(int index, ReActInterceptor val) {
+            config.getDefaultOptions().getModelOptions().interceptorAdd(index, val);
+            return this;
+        }
+
+        public Builder enablePlanning(boolean val) {
+            config.getDefaultOptions().setEnablePlanning(val);
+            return this;
+        }
+
+        public Builder planInstruction(Function<ReActTrace, String> provider) {
+            config.getDefaultOptions().setPlanInstructionProvider(provider);
+            return this;
+        }
+
+        public ReActAgent build() {
+            if (config.getName() == null) {
+                config.setName("react_agent");
+            }
+
+            if (config.getDescription() == null) {
+                config.setDescription(config.getTitle() != null ? config.getTitle() : config.getName());
+            }
+
+            return new ReActAgent(config);
+        }
     }
 }
