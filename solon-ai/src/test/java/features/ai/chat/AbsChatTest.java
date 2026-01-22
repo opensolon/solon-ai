@@ -502,11 +502,11 @@ public abstract class AbsChatTest {
                 .instruction("当前时间是 2026-01-19，请基于此日期回答。")
                 .isSupported(prompt -> {
                     // 只有 prompt 中有 "use_time_skill" 属性时才支持
-                    return "true".equals(prompt.getMeta("use_time_skill"));
+                    return "true".equals(prompt.meta("use_time_skill"));
                 })
                 .onAttach(prompt -> {
                     // 挂载时注入一个标识
-                    prompt.getMeta().put("skill_attached", "time_v1");
+                    prompt.meta().put("skill_attached", "time_v1");
                 })
                 .build();
 
@@ -526,7 +526,7 @@ public abstract class AbsChatTest {
         log.info("case11 response: {}", resp.getMessage().getContent());
 
         // 验证：1. 属性是否成功注入 2. 系统消息是否自动添加（1个User + 1个Skill生成的System + 1个Assistant）
-        Assertions.assertEquals("time_v1", prompt.getMeta("skill_attached"));
+        Assertions.assertEquals("time_v1", prompt.meta("skill_attached"));
         Assertions.assertTrue(chatSession.getMessages().stream().anyMatch(m -> m instanceof SystemMessage));
         Assertions.assertTrue(resp.getMessage().getContent().contains("2026"));
     }

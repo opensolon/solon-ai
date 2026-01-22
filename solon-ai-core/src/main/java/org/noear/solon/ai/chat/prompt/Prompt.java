@@ -33,7 +33,7 @@ public class Prompt implements ChatPrompt, Serializable {
     private final List<ChatMessage> messageList = new ArrayList<>();
 
     @Override
-    public Map<String, Object> getMeta() {
+    public Map<String, Object> meta() {
         return meta;
     }
 
@@ -43,21 +43,6 @@ public class Prompt implements ChatPrompt, Serializable {
     public Prompt metaPut(String name, Object value) {
         meta.put(name, value);
         return this;
-    }
-
-    /**
-     * 获取元信息
-     */
-    public <T> T meta(String name) {
-        return (T) meta.get(name);
-    }
-
-    /**
-     * 获取元信息
-     */
-    public <T> T metaOrDefault(String name, T def) {
-        T val = meta(name);
-        return val == null ? def : val;
     }
 
 
