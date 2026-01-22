@@ -29,28 +29,28 @@ import java.util.*;
  * @since 3.2
  */
 public class Prompt implements ChatPrompt, Serializable {
-    private final Map<String, Object> meta = new HashMap<>();
-    private final List<ChatMessage> messageList = new ArrayList<>();
+    private final Map<String, Object> attrs = new HashMap<>();
+    private final List<ChatMessage> messages = new ArrayList<>();
 
     @Override
-    public Map<String, Object> meta() {
-        return meta;
+    public Map<String, Object> attrs() {
+        return attrs;
     }
 
     /**
      * 设置元信息
      */
-    public Prompt metaPut(String name, Object value) {
-        meta.put(name, value);
+    public Prompt attrPut(String name, Object value) {
+        attrs.put(name, value);
         return this;
     }
 
     /**
      * 设置元信息
      */
-    public Prompt metaPut(Map<String,Object> map) {
+    public Prompt attrPut(Map<String,Object> map) {
         if (Assert.isNotEmpty(map)) {
-            meta.putAll(map);
+            attrs.putAll(map);
         }
 
         return this;
@@ -59,42 +59,42 @@ public class Prompt implements ChatPrompt, Serializable {
 
     @Override
     public List<ChatMessage> getMessages() {
-        return messageList;
+        return messages;
     }
 
     @Override
     public int getMessagesSize() {
-        return messageList.size();
+        return messages.size();
     }
 
     @Override
     public ChatMessage getFirstMessage() {
-        return messageList.isEmpty() ? null : messageList.get(0);
+        return messages.isEmpty() ? null : messages.get(0);
     }
 
     @Override
     public ChatMessage getLastMessage() {
-        return messageList.isEmpty() ? null : messageList.get(messageList.size() - 1);
+        return messages.isEmpty() ? null : messages.get(messages.size() - 1);
     }
 
-    public Prompt addMessage(String... messages) {
-        for (String m : messages) {
+    public Prompt addMessage(String... msgs) {
+        for (String m : msgs) {
             if (Assert.isNotEmpty(m)) {
-                messageList.add(ChatMessage.ofUser(m));
+                this.messages.add(ChatMessage.ofUser(m));
             }
         }
         return this;
     }
 
-    public Prompt addMessage(ChatMessage... messages) {
-        for (ChatMessage m : messages) {
-            messageList.add(m);
+    public Prompt addMessage(ChatMessage... msgs) {
+        for (ChatMessage m : msgs) {
+            this.messages.add(m);
         }
         return this;
     }
 
-    public Prompt addMessage(Collection<ChatMessage> messages) {
-        messageList.addAll(messages);
+    public Prompt addMessage(Collection<ChatMessage> msgs) {
+        this.messages.addAll(msgs);
         return this;
     }
 
@@ -104,8 +104,8 @@ public class Prompt implements ChatPrompt, Serializable {
     public String getUserContent() {
         if (userContent == null) {
             // 从后往前找，取用户最新的意图
-            for (int i = messageList.size() - 1; i >= 0; i--) {
-                ChatMessage m = messageList.get(i);
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                ChatMessage m = messages.get(i);
                 if (m.getRole() == ChatRole.USER && Assert.isNotEmpty(m.getContent())) {
                     userContent = m.getContent();
                     break;
@@ -122,7 +122,7 @@ public class Prompt implements ChatPrompt, Serializable {
     public String getSystemContent() {
         if (systemContent == null) {
             //从前往后找
-            for (ChatMessage m : messageList) {
+            for (ChatMessage m : messages) {
                 if (m.getRole() == ChatRole.SYSTEM) {
                     systemContent = m.getContent();
                     break;

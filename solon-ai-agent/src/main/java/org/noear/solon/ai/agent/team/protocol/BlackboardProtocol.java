@@ -201,7 +201,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
         // 注入到消息列表顶部，作为 Agent 的上下文感知
         messages.add(1, ChatMessage.ofSystem(info + "\n" + state));
-        return Prompt.of(messages).metaPut(originalPrompt.meta());
+        return Prompt.of(messages).attrPut(originalPrompt.attrs());
     }
 
     @Override

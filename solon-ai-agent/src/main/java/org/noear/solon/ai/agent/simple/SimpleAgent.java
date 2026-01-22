@@ -192,7 +192,7 @@ public class SimpleAgent implements Agent {
             }
         }
 
-        return Prompt.of(messages).metaPut(originalPrompt.meta());
+        return Prompt.of(messages).attrPut(originalPrompt.attrs());
     }
 
     /**

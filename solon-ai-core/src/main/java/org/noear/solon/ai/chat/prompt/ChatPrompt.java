@@ -32,26 +32,26 @@ public interface ChatPrompt {
     /**
      * 获取元信息
      */
-    Map<String, Object> meta();
+    Map<String, Object> attrs();
 
     /**
      * 获取元信息
      */
-    default Object meta(String key) {
-        return meta().get(key);
+    default Object attr(String key) {
+        return attrs().get(key);
     }
     /**
      * 获取元信息
      */
-    default <T> T metaAs(String key) {
-        return (T) meta().get(key);
+    default <T> T attrAs(String key) {
+        return (T) attrs().get(key);
     }
 
     /**
      * 获取元信息
      */
-    default <T> T metaOrDefault(String key, T def) {
-        return (T) meta().getOrDefault(key, def);
+    default <T> T attrOrDefault(String key, T def) {
+        return (T) attrs().getOrDefault(key, def);
     }
 
     /**
