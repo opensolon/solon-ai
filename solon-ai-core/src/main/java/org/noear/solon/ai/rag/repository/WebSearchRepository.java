@@ -33,7 +33,9 @@ import java.util.*;
  *
  * @author noear
  * @since 3.1
+ * @deprecated 3.8.4 {@link org.noear.solon.ai.rag.search.BochaWebSearchRepository}
  */
+@Deprecated
 public class WebSearchRepository implements Repository {
     private final AiConfig config;
     private final @Nullable EmbeddingModel embeddingModel;
