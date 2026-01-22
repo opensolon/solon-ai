@@ -89,7 +89,7 @@ System.out.println(result);
 chatModel.prompt("hello").stream(); //Publisher<ChatResponse>
 ```
 
-* Skills（技能）
+* Skills（Solon AI Skills 技能）
 
 
 ```java
