@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.team.TeamProtocol;
+import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
@@ -47,6 +48,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ReActTrace implements AgentTrace {
     private static final Logger LOG = LoggerFactory.getLogger(ReActTrace.class);
 
+    /** 度量指标 */
+    private final Metrics metrics = new Metrics();
     /** 运行配置 */
     private transient ReActAgentConfig config;
     /** 运行选项 */
@@ -72,8 +75,6 @@ public class ReActTrace implements AgentTrace {
     private volatile String finalAnswer;
     /** 模型最近一次原始思考内容 */
     private volatile String lastResult;
-    /** 度量指标 */
-    private final ReActMetrics metrics = new ReActMetrics();
     /** 计划 */
     private final List<String> plans = new CopyOnWriteArrayList<>();
 
@@ -105,6 +106,11 @@ public class ReActTrace implements AgentTrace {
         if (combinedInstruction.length() > 0) {
             options.setSkillInstruction(combinedInstruction.toString());
         }
+    }
+
+    @Override
+    public Metrics getMetrics() {
+        return metrics;
     }
 
     public ReActAgentConfig getConfig() {
@@ -155,10 +161,6 @@ public class ReActTrace implements AgentTrace {
 
     protected void setPrompt(Prompt prompt) {
         this.prompt = prompt;
-    }
-
-    public ReActMetrics getMetrics() {
-        return metrics;
     }
 
     public int getStepCount() {

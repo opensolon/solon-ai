@@ -111,11 +111,28 @@ public class SimpleAgent implements Agent {
 
         FlowContext context = session.getSnapshot();
 
+        // 初始化或恢复推理痕迹 (Trace)
+        SimpleTrace trace = context.getAs(config.getTraceKey());
+        if (trace == null) {
+            trace = new SimpleTrace(prompt);
+            context.put(config.getTraceKey(), trace);
+        } else {
+            trace.setPrompt(prompt);
+        }
+
         // 1. 构建请求消息
         List<ChatMessage> messages = buildMessages(session, prompt);
 
         // 2. 物理调用：执行带重试机制的 LLM 请求
-        AssistantMessage result = callWithRetry(session, messages, options);
+        AssistantMessage result = null;
+
+        long startTime = System.currentTimeMillis();
+        try {
+            trace.getMetrics().setTotalDuration(0L);
+            result = callWithRetry(trace, session, messages, options);
+        } finally {
+            trace.getMetrics().setTotalDuration(System.currentTimeMillis() - startTime);
+        }
 
         // 3. 状态回填：将输出结果自动映射到 FlowContext
         if (Assert.isNotEmpty(config.getOutputKey())) {
@@ -173,7 +190,7 @@ public class SimpleAgent implements Agent {
     /**
      * 实现带指数延迟的自动重试调用
      */
-    private AssistantMessage callWithRetry(AgentSession session, List<ChatMessage> messages, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
+    private AssistantMessage callWithRetry(SimpleTrace trace, AgentSession session, List<ChatMessage> messages, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
         if (LOG.isTraceEnabled()) {
             LOG.trace("SimpleAgent [{}] calling model... messages: {}",
                     config.getName(),
@@ -214,7 +231,7 @@ public class SimpleAgent implements Agent {
         int maxRetries = config.getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
-                return doCall(session, finalPrompt, chatReq);
+                return doCall(trace, session, finalPrompt, chatReq);
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
                     throw new RuntimeException("SimpleAgent [" + name() + "] failed after " + maxRetries + " retries", e);
@@ -231,10 +248,15 @@ public class SimpleAgent implements Agent {
     /**
      * 执行底层物理调用，并注入 Tools, Interceptors 与 JSON 选项
      */
-    private AssistantMessage doCall(AgentSession session, Prompt finalPrompt, ChatRequestDesc chatReq) throws Throwable {
+    private AssistantMessage doCall(SimpleTrace trace, AgentSession session, Prompt finalPrompt, ChatRequestDesc chatReq) throws Throwable {
         if (chatReq != null) {
             // chatModel 处理
             ChatResponse resp = chatReq.call();
+
+            if (resp.getUsage() != null) {
+                trace.getMetrics().addTokenUsage(resp.getUsage().totalTokens());
+            }
+
             String clearContent = resp.hasContent() ? resp.getResultContent() : "";
             return ChatMessage.ofAssistant(clearContent);
         } else {

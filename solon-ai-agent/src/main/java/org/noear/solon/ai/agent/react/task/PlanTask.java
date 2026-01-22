@@ -81,6 +81,10 @@ public class PlanTask implements NamedTaskComponent {
                 .prompt(messages)
                 .call();
 
+        if (response.getUsage() != null) {
+            trace.getMetrics().addTokenUsage(response.getUsage().totalTokens());
+        }
+
         String planContent = response.getResultContent();
 
         if (Assert.isEmpty(planContent)) {

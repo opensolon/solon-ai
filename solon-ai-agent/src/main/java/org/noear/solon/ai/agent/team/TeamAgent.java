@@ -173,32 +173,44 @@ public class TeamAgent implements Agent {
         //如果提示词没问题，开始部署技能
         trace.activeSkills();
 
+        // 2. 消息归档：用户输入存入 Session
+        if (prompt != null) {
+            prompt.getMessages().forEach(m -> session.addHistoryMessage(config.getName(), m));
+        }
+
         // 触发团队启动拦截
         options.getInterceptors().forEach(item -> item.target.onTeamStart(trace));
 
-        try {
-            // 2. 消息归档：用户输入存入 Session
-            if (prompt != null) {
-                prompt.getMessages().forEach(m -> session.addHistoryMessage(config.getName(), m));
-            }
 
-            final FlowOptions flowOptions = new FlowOptions();
-            if (!options.getInterceptors().isEmpty()) {
-                for (RankEntity<TeamInterceptor> item : options.getInterceptors()) {
-                    flowOptions.interceptorAdd(item.target, item.index);
+        // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("TeamAgent [{}] starting collaboration flow...", name());
+        }
+
+        long startTime = System.currentTimeMillis();
+
+        try {
+            try {
+                final FlowOptions flowOptions = new FlowOptions();
+                options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
+
+                trace.getMetrics().setTokenUsage(0L);
+
+                context.with(Agent.KEY_CURRENT_TEAM_TRACE_KEY, config.getTraceKey(), () -> {
+                    context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
+                        flowEngine.eval(graph, -1, context, flowOptions);
+                    });
+                });
+            }finally {
+                // 记录性能指标
+                long duration = System.currentTimeMillis() - startTime;
+                trace.getMetrics().setTotalDuration(duration);
+
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("TeamAgent [{}] finished. Duration: {}ms, turns: {}",
+                            config.getName(), duration, trace.getTurnCount());
                 }
             }
-
-            // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("TeamAgent [{}] starting collaboration flow...", name());
-            }
-
-            context.with(Agent.KEY_CURRENT_TEAM_TRACE_KEY, config.getTraceKey(), () -> {
-                context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
-                    flowEngine.eval(graph, -1, context, flowOptions);
-                });
-            });
 
             // 4. 结果收敛：从轨迹中提取最终答案
             String result = trace.getFinalAnswer();

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.react;
+package org.noear.solon.ai.agent.trace;
 
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -22,23 +22,17 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 
 /**
- * ReAct 智能体执行指标统计
+ * 智能体执行指标统计
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class ReActMetrics implements Serializable {
-    private static final Logger log = LoggerFactory.getLogger(ReActMetrics.class);
+public class Metrics implements Serializable {
+    private static final Logger log = LoggerFactory.getLogger(Metrics.class);
 
     /** 总耗时（毫秒） */
     private long totalDuration;
-
-    /** 外部工具调用总次数 */
-    private int toolCallCount;
-
-    /** 推理迭代步数 (Reasoning Loops) */
-    private int stepCount;
 
     /** 累计消耗的 Token 总量 */
     private long tokenUsage;
@@ -48,14 +42,6 @@ public class ReActMetrics implements Serializable {
 
     public void setTotalDuration(long totalDuration) {
         this.totalDuration = totalDuration;
-    }
-
-    public void setToolCallCount(int toolCallCount) {
-        this.toolCallCount = toolCallCount;
-    }
-
-    public void setStepCount(int stepCount) {
-        this.stepCount = stepCount;
     }
 
     public void setTokenUsage(long tokenUsage) {
@@ -77,14 +63,6 @@ public class ReActMetrics implements Serializable {
 
     public long getTotalDuration() {
         return totalDuration;
-    }
-
-    public int getToolCallCount() {
-        return toolCallCount;
-    }
-
-    public int getStepCount() {
-        return stepCount;
     }
 
     public long getTokenUsage() {

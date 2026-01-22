@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.team;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.SkillUtil;
@@ -66,6 +67,8 @@ public class TeamTrace implements AgentTrace {
     private volatile String lastAgentName;
     /** 迭代安全计数器（防止无限循环） */
     private final AtomicInteger turnCounter;
+    /** 度量指标 */
+    private final Metrics metrics = new Metrics();
 
     /** 协议私有存储空间（供 TeamProtocol 存储私有状态） */
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
@@ -121,6 +124,11 @@ public class TeamTrace implements AgentTrace {
     }
 
     // --- 属性访问 ---
+
+    @Override
+    public Metrics getMetrics() {
+        return metrics;
+    }
 
     public String getAgentName() { return agentName; }
     public TeamAgentConfig getConfig() { return config; }

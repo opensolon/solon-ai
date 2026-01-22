@@ -39,6 +39,8 @@ public class SimpleAgentConfig {
      * 唯一标识名
      */
     private String name = "simple_agent";
+    /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
+    private volatile String traceKey;
     /**
      * 显示标题
      */
@@ -150,8 +152,13 @@ public class SimpleAgentConfig {
 
     // --- Getter Methods (Public) ---
 
-    public String getName() {
-        return name;
+    public String getName() { return name; }
+
+    public String getTraceKey() {
+        if (traceKey == null) {
+            traceKey = "__" + this.name;
+        }
+        return traceKey;
     }
 
     public String getTitle() {

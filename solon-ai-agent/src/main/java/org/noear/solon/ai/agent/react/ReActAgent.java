@@ -224,8 +224,6 @@ public class ReActAgent implements Agent {
             // 记录性能指标
             long duration = System.currentTimeMillis() - startTime;
             trace.getMetrics().setTotalDuration(duration);
-            trace.getMetrics().setStepCount(trace.getStepCount());
-            trace.getMetrics().setToolCallCount(trace.getToolCallCount());
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("ReActAgent [{}] finished. Duration: {}ms, Steps: {}, Tools: {}",

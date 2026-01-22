@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent;
 
+import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -34,4 +35,5 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.8.1")
 public interface AgentTrace {
+    Metrics getMetrics();
 }
