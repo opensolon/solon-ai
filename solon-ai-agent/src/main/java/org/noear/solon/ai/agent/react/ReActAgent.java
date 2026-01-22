@@ -217,7 +217,7 @@ public class ReActAgent implements Agent {
         }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserMessageContent());
+            LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserContent());
         }
 
         long startTime = System.currentTimeMillis();

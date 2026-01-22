@@ -135,7 +135,7 @@ public class SkillDesc implements Skill {
 
         public Builder isSupported(String... keywords) {
             this.isSupportedHandler = (prompt) -> {
-                String content = prompt.getUserMessageContent();
+                String content = prompt.getUserContent();
                 if (content == null) return false;
                 for (String k : keywords) {
                     if (content.contains(k)) return true;

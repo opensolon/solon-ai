@@ -92,7 +92,7 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
         });
 
         // B. Context: 注入原始用户需求
-        sb.append("\n## Current Task\n").append(trace.getPrompt().getUserMessageContent()).append("\n");
+        sb.append("\n## Current Task\n").append(trace.getPrompt().getUserContent()).append("\n");
 
         // C. Protocol: 注入特定协议（如 Sequential/A2A）的调度逻辑
         config.getProtocol().injectSupervisorInstruction(Locale.ENGLISH, sb);

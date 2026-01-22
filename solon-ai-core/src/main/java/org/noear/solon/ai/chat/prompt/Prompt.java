@@ -101,10 +101,12 @@ public class Prompt implements ChatPrompt, Serializable {
     private String userContent;
 
     @Override
-    public String getUserMessageContent() {
+    public String getUserContent() {
         if (userContent == null) {
-            for (ChatMessage m : messageList) {
-                if (m.getRole() == ChatRole.USER) {
+            // 从后往前找，取用户最新的意图
+            for (int i = messageList.size() - 1; i >= 0; i--) {
+                ChatMessage m = messageList.get(i);
+                if (m.getRole() == ChatRole.USER && Assert.isNotEmpty(m.getContent())) {
                     userContent = m.getContent();
                     break;
                 }
@@ -117,8 +119,9 @@ public class Prompt implements ChatPrompt, Serializable {
     private String systemContent;
 
     @Override
-    public String getSystemMessageContent() {
+    public String getSystemContent() {
         if (systemContent == null) {
+            //从前往后找
             for (ChatMessage m : messageList) {
                 if (m.getRole() == ChatRole.SYSTEM) {
                     systemContent = m.getContent();

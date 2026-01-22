@@ -27,7 +27,7 @@ public class TechnicalSupportSkill extends AbsSkill implements Skill {
 
     @Override
     public String getInstruction(ChatPrompt prompt) {
-        String userMessage = prompt.getUserMessageContent();
+        String userMessage = prompt.getUserContent();
 
         // 如果用户直接贴了代码或错误栈，调整 SOP 优先级
         if (userMessage.contains("StackOverflow") || userMessage.contains("Exception")) {

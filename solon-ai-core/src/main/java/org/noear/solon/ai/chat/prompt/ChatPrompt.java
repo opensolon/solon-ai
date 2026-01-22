@@ -72,12 +72,12 @@ public interface ChatPrompt {
     /**
      * 获取用户消息内容
      */
-    String getUserMessageContent();
+    String getUserContent();
 
     /**
      * 获取系统消息内容
      */
-    String getSystemMessageContent();
+    String getSystemContent();
 
     /**
      * 获取消息数量

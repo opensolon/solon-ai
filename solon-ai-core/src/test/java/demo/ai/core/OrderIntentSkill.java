@@ -32,7 +32,7 @@ public class OrderIntentSkill extends AbsSkill implements Skill {
      */
     @Override
     public boolean isSupported(ChatPrompt prompt) {
-        String content = prompt.getUserMessageContent();
+        String content = prompt.getUserContent();
         if (content == null) return false;
 
         // 简单的关键词匹配（生产环境可以换成正则或微型分类模型）
