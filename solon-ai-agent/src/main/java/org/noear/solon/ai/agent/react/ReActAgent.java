@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.react.task.ActionTask;
 import org.noear.solon.ai.agent.react.task.PlanTask;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
 import org.noear.solon.ai.agent.team.TeamProtocol;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -228,6 +229,13 @@ public class ReActAgent implements Agent {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("ReActAgent [{}] finished. Duration: {}ms, Steps: {}, Tools: {}",
                         config.getName(), duration, trace.getStepCount(), trace.getToolCallCount());
+            }
+
+            // 父一级团队轨迹
+            TeamTrace teamTrace = TeamTrace.getCurrent(context);
+            if (teamTrace != null) {
+                // 汇总 token 使用情况
+                teamTrace.getMetrics().addTokenUsage(trace.getMetrics().getTokenUsage());
             }
         }
 

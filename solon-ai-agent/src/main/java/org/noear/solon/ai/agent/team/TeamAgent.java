@@ -210,6 +210,13 @@ public class TeamAgent implements Agent {
                     LOG.debug("TeamAgent [{}] finished. Duration: {}ms, turns: {}",
                             config.getName(), duration, trace.getTurnCount());
                 }
+
+                // 父一级团队轨迹
+                TeamTrace teamTrace = TeamTrace.getCurrent(context);
+                if (teamTrace != null) {
+                    // 汇总 token 使用情况
+                    teamTrace.getMetrics().addTokenUsage(trace.getMetrics().getTokenUsage());
+                }
             }
 
             // 4. 结果收敛：从轨迹中提取最终答案

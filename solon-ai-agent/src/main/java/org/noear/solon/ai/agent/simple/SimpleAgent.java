@@ -23,6 +23,7 @@ import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.team.TeamProtocol;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -132,6 +133,13 @@ public class SimpleAgent implements Agent {
             result = callWithRetry(trace, session, messages, options);
         } finally {
             trace.getMetrics().setTotalDuration(System.currentTimeMillis() - startTime);
+
+            // 父一级团队轨迹
+            TeamTrace teamTrace = TeamTrace.getCurrent(context);
+            if (teamTrace != null) {
+                // 汇总 token 使用情况
+                teamTrace.getMetrics().addTokenUsage(trace.getMetrics().getTokenUsage());
+            }
         }
 
         // 3. 状态回填：将输出结果自动映射到 FlowContext

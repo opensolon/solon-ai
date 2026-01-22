@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.trace.Metrics;
@@ -83,6 +84,15 @@ public class TeamTrace implements AgentTrace {
     public TeamTrace(Prompt prompt) {
         this();
         this.prompt = prompt;
+    }
+
+    public static TeamTrace getCurrent(FlowContext context) {
+        String teamTraceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
+        if (teamTraceKey != null) {
+            return context.getAs(teamTraceKey);
+        } else {
+            return null;
+        }
     }
 
     protected void activeSkills() {
