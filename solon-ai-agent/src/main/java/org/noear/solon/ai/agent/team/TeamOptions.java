@@ -49,6 +49,9 @@ public class TeamOptions implements NonSerializable {
      * 重试规避延迟（毫秒）
      */
     private long retryDelayMs = 1000L;
+    /** 会话回溯窗口大小 */
+    private int sessionWindowSize = 5;
+
     /** 记录回溯窗口大小 */
     private int recordWindowSize = 5;
 
@@ -90,6 +93,12 @@ public class TeamOptions implements NonSerializable {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(1000, retryDelayMs);
     }
+
+    /** 设置会话回溯深度 */
+    protected void setSessionWindowSize(int sessionWindowSize) {
+        this.sessionWindowSize = Math.max(0, sessionWindowSize);
+    }
+
 
     protected void setRecordWindowSize(int recordWindowSize) {
         this.recordWindowSize = recordWindowSize;
@@ -155,6 +164,10 @@ public class TeamOptions implements NonSerializable {
 
     public long getRetryDelayMs() {
         return retryDelayMs;
+    }
+
+    public int getSessionWindowSize() {
+        return sessionWindowSize;
     }
 
     public int getRecordWindowSize() {

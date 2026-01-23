@@ -83,7 +83,7 @@ public class ReActOptions implements NonSerializable {
         this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
-    /** 设置短期记忆回溯深度 */
+    /** 设置会话回溯深度 */
     protected void setSessionWindowSize(int sessionWindowSize) {
         this.sessionWindowSize = Math.max(0, sessionWindowSize);
     }

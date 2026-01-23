@@ -352,6 +352,11 @@ public class TeamAgent implements Agent {
             return this;
         }
 
+        public Builder sessionWindowSize(int val) {
+            config.getDefaultOptions().setSessionWindowSize(val);
+            return this;
+        }
+
         public Builder recordWindowSize(int recordWindowSize) {
             config.getDefaultOptions().setRecordWindowSize(recordWindowSize);
             return this;

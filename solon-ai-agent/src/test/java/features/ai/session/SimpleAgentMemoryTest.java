@@ -27,7 +27,7 @@ public class SimpleAgentMemoryTest {
         SimpleAgent agent = SimpleAgent.of(chatModel)
                 .name("MemoryAgent")
                 .description("一个有记忆的推理助手")
-                .historyWindowSize(10) // 启用历史窗口
+                .sessionWindowSize(10) // 启用历史窗口
                 .build();
 
         // 2. 创建模拟会话

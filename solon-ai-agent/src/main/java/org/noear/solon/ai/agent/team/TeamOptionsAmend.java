@@ -42,6 +42,14 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
     }
 
     /**
+     * 设置会话回溯窗口大小（控制短期记忆深度）
+     */
+    public TeamOptionsAmend sessionWindowSize(int sessionWindowSize) {
+        options.setSessionWindowSize(sessionWindowSize);
+        return this;
+    }
+
+    /**
      * 修正调度重试配置
      */
     public TeamOptionsAmend retryConfig(int maxRetries, long retryDelayMs) {

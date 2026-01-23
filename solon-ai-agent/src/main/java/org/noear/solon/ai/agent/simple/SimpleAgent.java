@@ -178,8 +178,8 @@ public class SimpleAgent implements Agent {
         }
 
         // 加载限定窗口大小的历史记录
-        if (parentTeamTrace == null && config.getHistoryWindowSize() > 0) {
-            Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), config.getHistoryWindowSize());
+        if (parentTeamTrace == null && config.getSessionWindowSize() > 0) {
+            Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), config.getSessionWindowSize());
             if (Assert.isNotEmpty(history)) {
                 messages.addAll(history);
             }
@@ -345,8 +345,8 @@ public class SimpleAgent implements Agent {
             return this;
         }
 
-        public Builder historyWindowSize(int historyWindowSize) {
-            config.setHistoryWindowSize(historyWindowSize);
+        public Builder sessionWindowSize(int sessionWindowSize) {
+            config.setSessionWindowSize(sessionWindowSize);
             return this;
         }
 

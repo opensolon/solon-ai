@@ -19,12 +19,9 @@ import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
-import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.*;
 
 /**
  * 简单智能体配置类
@@ -79,9 +76,9 @@ public class SimpleAgentConfig {
      */
     private long retryDelayMs = 1000L;
     /**
-     * 历史消息回溯窗口（注入到当前 Prompt 的对话轮数）
+     * 会话回溯窗口大小
      */
-    private int historyWindowSize = 5;
+    private int sessionWindowSize = 5;
 
     /**
      * 响应结果回填到 FlowContext 的键名
@@ -135,11 +132,9 @@ public class SimpleAgentConfig {
         this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
-    /**
-     * 设置短期记忆回溯深度
-     */
-    protected void setHistoryWindowSize(int historyWindowSize) {
-        this.historyWindowSize = Math.max(0, historyWindowSize);
+    /** 设置短期记忆回溯深度 */
+    protected void setSessionWindowSize(int sessionWindowSize) {
+        this.sessionWindowSize = Math.max(0, sessionWindowSize);
     }
 
     protected void setOutputKey(String val) {
@@ -203,8 +198,8 @@ public class SimpleAgentConfig {
         return retryDelayMs;
     }
 
-    public int getHistoryWindowSize() {
-        return historyWindowSize;
+    public int getSessionWindowSize() {
+        return sessionWindowSize;
     }
 
     public String getOutputKey() {

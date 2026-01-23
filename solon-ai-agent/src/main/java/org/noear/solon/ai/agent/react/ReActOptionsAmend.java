@@ -50,10 +50,10 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
     }
 
     /**
-     * 设置消息回溯窗口大小（控制短期记忆深度）
+     * 设置会话回溯窗口大小（控制短期记忆深度）
      */
-    public ReActOptionsAmend historyWindowSize(int historyWindowSize) {
-        options.setSessionWindowSize(historyWindowSize);
+    public ReActOptionsAmend sessionWindowSize(int sessionWindowSize) {
+        options.setSessionWindowSize(sessionWindowSize);
         return this;
     }
 
