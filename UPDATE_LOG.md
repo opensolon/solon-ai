@@ -15,7 +15,10 @@
 * 新增 `solon-ai-core` Solon AI Skills（技能）体系
 * 新增 `solon-ai-search-bocha` 插件
 * 添加 `solon-ai-core` defaultToolsContextPut 方法
-* 添加 `solon-ai-core` ChatSession attrSet, attr 方法（可以在拦截时控制权限）
+* 添加 `solon-ai-core` Prompt attrPut, attr 属性相关方法（可以在拦截时控制权限）
+* 添加 `solon-ai-core` FunctionTool meta 元数据相关方法（可对描述语进行染色）
+* 添加 `solon-ai-mcp` FunctionPrompt meta 元数据相关方法（可对描述语进行染色）
+* 添加 `solon-ai-mcp` FunctionResource meta 元数据相关方法（可对描述语进行染色）
 * 添加 `solon-ai-agent` NoneProtocol（无协议模式）
 * 添加 `solon-ai-agent` ReActAgent Plan 支持（默认为关闭）。
 * 添加 `solon-ai-agent`  SimpleInterceptor 替代 ChatInterceptor，方便后续扩展
@@ -27,6 +30,7 @@
 * 优化 `solon-ai-agent` SequentialProtocol 协议代码，添加专属任务（可节省 token）
 * 修复 `solon-ai-core` ToolSchemaUtil `Param` 注解别名没有生效的问题
 * 修复 `solon-ai-agent` ReActAgent 没有拦截器时 ReActAgent 不能传递 toolsContext 的问题
+* 调整 `solon-ai-agent` Agent 相关接口保持与 ChatModel 一致性
 
 ### v3.8.3
 
