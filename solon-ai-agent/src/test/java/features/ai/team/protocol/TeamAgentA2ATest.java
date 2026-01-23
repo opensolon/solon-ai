@@ -148,7 +148,7 @@ public class TeamAgentA2ATest {
         log("Result HTML", result);
 
         Assertions.assertTrue(history.contains("Legal"), "未能触发高额审计路径");
-        Assertions.assertTrue(result.contains("9999"), "业务数据在接力中丢失");
+        Assertions.assertTrue(result.replace(",", "").contains("9999"), "业务数据在接力中丢失");
         Assertions.assertTrue(result.toLowerCase().contains("html"), "最终节点未产出代码");
     }
 }
