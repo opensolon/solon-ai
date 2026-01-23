@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
  * 2. 移除禁止调用函数的限制，允许 A2A 自动注入 transfer 工具
  */
 @SolonTest
-public class Issue_IDJQ95 {
+public class Issue_IDJQ95_react {
     @Test
     public void case1() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
