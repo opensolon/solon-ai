@@ -15,20 +15,10 @@
  */
 package org.noear.solon.ai.chat;
 
-
 import org.noear.solon.ai.chat.dialect.ChatDialect;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.ChatPrompt;
-import org.noear.solon.ai.chat.session.InMemoryChatSession;
-import org.noear.solon.ai.chat.skill.Skill;
-import org.noear.solon.ai.chat.skill.SkillUtil;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.NonSerializable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * 聊天请求持有者
@@ -37,24 +27,24 @@ import java.util.stream.Collectors;
  * @since 3.3
  */
 public class ChatRequest implements NonSerializable {
-    private final static Logger LOG = LoggerFactory.getLogger(ChatRequest.class);
-
     private final ChatConfig config;
     private final ChatConfigReadonly configReadonly;
     private final ChatDialect dialect;
     private final ChatOptions options;
     private final ChatSession session;
     private final boolean stream;
-    private List<ChatMessage> messages;
+    private final ChatPrompt originalPrompt;
+    private final ChatPrompt finalPrompt;
 
-    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session, ChatPrompt prompt, boolean stream) {
+    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session, ChatPrompt originalPrompt, boolean stream) {
         this.session = session;
         this.config = config;
         this.configReadonly = new ChatConfigReadonly(config);
         this.dialect = dialect;
         this.options = options;
         this.stream = stream;
-        this.messages = Collections.unmodifiableList(session.getMessages());
+        this.finalPrompt = Prompt.of(session.getMessages());
+        this.originalPrompt = (originalPrompt == null ? finalPrompt : originalPrompt);
     }
 
     /**
@@ -78,6 +68,7 @@ public class ChatRequest implements NonSerializable {
         return session;
     }
 
+
     /**
      * 是否为流请求
      */
@@ -85,12 +76,18 @@ public class ChatRequest implements NonSerializable {
         return stream;
     }
 
+    /**
+     * 获取原始提示语
+     */
+    public ChatPrompt getOriginalPrompt() {
+        return originalPrompt;
+    }
 
     /**
-     * 获取消息
+     * 获取最终提示语（方便进行动态调整）
      */
-    public List<ChatMessage> getMessages() {
-        return messages;
+    public ChatPrompt getFinalPrompt() {
+        return finalPrompt;
     }
 
     /**
@@ -98,7 +95,7 @@ public class ChatRequest implements NonSerializable {
      */
     public String toRequestData() {
         //留个变量方便调试
-        String reqJson = dialect.buildRequestJson(config, options, messages, stream);
+        String reqJson = dialect.buildRequestJson(config, options, finalPrompt.getMessages(), stream);
         return reqJson;
     }
 }

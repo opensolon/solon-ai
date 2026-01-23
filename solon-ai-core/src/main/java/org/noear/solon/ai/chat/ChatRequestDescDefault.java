@@ -57,7 +57,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
     private final ChatConfig config;
     private final ChatDialect dialect;
-    private final ChatPrompt prompt;
+    private final ChatPrompt originalPrompt;
 
     private ChatSession session;
     private ChatOptions options;
@@ -66,7 +66,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         this.config = config;
         this.dialect = dialect;
         this.session = session;
-        this.prompt = prompt;
+        this.originalPrompt = prompt;
 
         this.options = new ChatOptions();
         this.options.putAll(config.getModelOptions());
@@ -105,19 +105,21 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
 
-
+    /**
+     * 准备
+     */
     private void prepare(){
         if (session == null) {
             session = InMemoryChatSession.builder().build();
         }
 
-        StringBuilder combinedInstruction = SkillUtil.activeSkills(options, prompt);
+        StringBuilder combinedInstruction = SkillUtil.activeSkills(options, originalPrompt);
         if (combinedInstruction.length() > 0) {
             session.addMessage(ChatMessage.ofSystem(combinedInstruction.toString()));
         }
 
-        if (prompt != null) {
-            session.addMessage(prompt);
+        if (originalPrompt != null) {
+            session.addMessage(originalPrompt);
         }
     }
 
@@ -132,12 +134,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     protected ChatResponse internalCall() throws IOException {
-        //构建请求数据
-        ChatRequest req = new ChatRequest(config, dialect, options, session, prompt, false);
-        if(session == null){
-            session = req.getSession();
-        }
-
+        //构建请求数据（每次请求重新构建 finalPrompt）
+        ChatRequest req = new ChatRequest(config, dialect, options, session, originalPrompt, false);
 
         CallChain chain = new CallChain(options.interceptors(), this::doCall);
 
@@ -204,11 +202,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private Publisher<ChatResponse> internalStream() {
-        //构建请求数据
-        ChatRequest req = new ChatRequest(config, dialect, options, session, prompt,true);
-        if(session == null){
-            session = req.getSession();
-        }
+        //构建请求数据（每次请求重新构建 finalPrompt）
+        ChatRequest req = new ChatRequest(config, dialect, options, session, originalPrompt,true);
 
         StreamChain chain = new StreamChain(options.interceptors(), this::doStream);
 

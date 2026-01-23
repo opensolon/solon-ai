@@ -28,32 +28,13 @@ import java.util.*;
  * @author noear
  * @since 3.2
  */
-public class Prompt implements ChatPrompt, Serializable {
+public class Prompt implements ChatPrompt<Prompt>, Serializable {
     private final Map<String, Object> attrs = new LinkedHashMap<>();
     private final List<ChatMessage> messages = new ArrayList<>();
 
     @Override
     public Map<String, Object> attrs() {
         return attrs;
-    }
-
-    /**
-     * 设置元信息
-     */
-    public Prompt attrPut(String name, Object value) {
-        attrs.put(name, value);
-        return this;
-    }
-
-    /**
-     * 设置元信息
-     */
-    public Prompt attrPut(Map<String, Object> map) {
-        if (Assert.isNotEmpty(map)) {
-            attrs.putAll(map);
-        }
-
-        return this;
     }
 
 
@@ -70,27 +51,6 @@ public class Prompt implements ChatPrompt, Serializable {
     @Override
     public ChatMessage getLastMessage() {
         return messages.isEmpty() ? null : messages.get(messages.size() - 1);
-    }
-
-    public Prompt addMessage(String... msgs) {
-        for (String m : msgs) {
-            if (Assert.isNotEmpty(m)) {
-                this.messages.add(ChatMessage.ofUser(m));
-            }
-        }
-        return this;
-    }
-
-    public Prompt addMessage(ChatMessage... msgs) {
-        for (ChatMessage m : msgs) {
-            this.messages.add(m);
-        }
-        return this;
-    }
-
-    public Prompt addMessage(Collection<ChatMessage> msgs) {
-        this.messages.addAll(msgs);
-        return this;
     }
 
     private String userContent;
@@ -126,6 +86,37 @@ public class Prompt implements ChatPrompt, Serializable {
         }
 
         return systemContent;
+    }
+
+    @Override
+    public Prompt addMessage(String... msgs) {
+        for (String m : msgs) {
+            if (Assert.isNotEmpty(m)) {
+                this.messages.add(ChatMessage.ofUser(m));
+            }
+        }
+        return this;
+    }
+
+    @Override
+    public Prompt addMessage(ChatMessage... msgs) {
+        for (ChatMessage m : msgs) {
+            this.messages.add(m);
+        }
+        return this;
+    }
+
+    @Override
+    public Prompt addMessage(Collection<ChatMessage> msgs) {
+        this.messages.addAll(msgs);
+        return this;
+    }
+
+    @Override
+    public Prompt replaceMessages(Collection<ChatMessage> messages) {
+        this.messages.clear();
+        this.messages.addAll(messages);
+        return this;
     }
 
     @Override

@@ -16,8 +16,10 @@
 package org.noear.solon.ai.chat.prompt;
 
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -28,7 +30,7 @@ import java.util.Map;
  * @since 3.2
  */
 @Preview("3.2")
-public interface ChatPrompt {
+public interface ChatPrompt<T extends ChatPrompt> {
     /**
      * 获取属性
      *
@@ -44,6 +46,7 @@ public interface ChatPrompt {
     default Object attr(String key) {
         return attrs().get(key);
     }
+
     /**
      * 获取属性
      *
@@ -60,6 +63,25 @@ public interface ChatPrompt {
      */
     default <T> T attrOrDefault(String key, T def) {
         return (T) attrs().getOrDefault(key, def);
+    }
+
+    /**
+     * 设置属性
+     */
+    default T attrPut(String name, Object value) {
+        attrs().put(name, value);
+        return (T) this;
+    }
+
+    /**
+     * 设置属性
+     */
+    default T attrPut(Map<String, Object> map) {
+        if (Assert.isNotEmpty(map)) {
+            attrs().putAll(map);
+        }
+
+        return (T) this;
     }
 
     /**
@@ -94,6 +116,26 @@ public interface ChatPrompt {
      * @since 3.8.4
      */
     String getSystemContent();
+
+    /*
+     * 添加消息
+     */
+    T addMessage(String... msgs);
+
+    /*
+     * 添加消息
+     */
+    T addMessage(ChatMessage... msgs);
+
+    /*
+     * 添加消息
+     */
+    T addMessage(Collection<ChatMessage> msgs);
+
+    /*
+     * 替换消息
+     */
+    T replaceMessages(Collection<ChatMessage> messages);
 
     /**
      * 是否为空
