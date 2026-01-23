@@ -151,7 +151,7 @@ public class SupervisorTask implements NamedTaskComponent {
         ChatResponse response = callWithRetry(trace, messages);
 
         if (response.getUsage() != null) {
-            trace.getMetrics().addTokenUsage(response.getUsage().totalTokens());
+            trace.getMetrics().addUsage(response.getUsage());
         }
 
         trace.getOptions().getInterceptors().forEach(item -> item.target.onModelEnd(trace, response));

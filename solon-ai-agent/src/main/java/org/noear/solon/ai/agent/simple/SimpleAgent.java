@@ -28,7 +28,6 @@ import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -130,7 +129,8 @@ public class SimpleAgent implements Agent {
 
         long startTime = System.currentTimeMillis();
         try {
-            trace.getMetrics().setTotalDuration(0L);
+            trace.getMetrics().reset();
+
             result = callWithRetry(trace, session, finalPrompt, options);
         } finally {
             trace.getMetrics().setTotalDuration(System.currentTimeMillis() - startTime);
@@ -138,7 +138,7 @@ public class SimpleAgent implements Agent {
             // 父一级团队轨迹
             if (parentTeamTrace != null) {
                 // 汇总 token 使用情况
-                parentTeamTrace.getMetrics().addTokenUsage(trace.getMetrics().getTokenUsage());
+                parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
             }
         }
 
@@ -265,7 +265,7 @@ public class SimpleAgent implements Agent {
             ChatResponse resp = chatReq.call();
 
             if (resp.getUsage() != null) {
-                trace.getMetrics().addTokenUsage(resp.getUsage().totalTokens());
+                trace.getMetrics().addUsage(resp.getUsage());
             }
 
             String clearContent = resp.hasContent() ? resp.getResultContent() : "";

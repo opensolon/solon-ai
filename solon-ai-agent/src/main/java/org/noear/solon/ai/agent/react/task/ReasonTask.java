@@ -108,7 +108,7 @@ public class ReasonTask implements NamedTaskComponent {
         ChatResponse response = callWithRetry(trace, messages);
 
         if (response.getUsage() != null) {
-            trace.getMetrics().addTokenUsage(response.getUsage().totalTokens());
+            trace.getMetrics().addUsage(response.getUsage());
         }
 
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {

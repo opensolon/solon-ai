@@ -28,7 +28,6 @@ import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -231,7 +230,7 @@ public class ReActAgent implements Agent {
             final FlowOptions flowOptions = new FlowOptions();
             options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
 
-            trace.getMetrics().setTokenUsage(0L);
+            trace.getMetrics().reset();
 
             // 核心执行：基于计算图进行循环推理
             context.with(KEY_CURRENT_UNIT_TRACE_KEY, config.getTraceKey(), () -> {
@@ -251,7 +250,7 @@ public class ReActAgent implements Agent {
             TeamTrace teamTrace = TeamTrace.getCurrent(context);
             if (teamTrace != null) {
                 // 汇总 token 使用情况
-                teamTrace.getMetrics().addTokenUsage(trace.getMetrics().getTokenUsage());
+                teamTrace.getMetrics().addMetrics(trace.getMetrics());
             }
         }
 

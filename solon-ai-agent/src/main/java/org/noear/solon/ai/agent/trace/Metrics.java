@@ -15,9 +15,8 @@
  */
 package org.noear.solon.ai.agent.trace;
 
+import org.noear.solon.ai.AiUsage;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 
@@ -29,13 +28,14 @@ import java.io.Serializable;
  */
 @Preview("3.8.1")
 public class Metrics implements Serializable {
-    private static final Logger log = LoggerFactory.getLogger(Metrics.class);
-
-    /** 总耗时（毫秒） */
+    /**
+     * 总耗时（毫秒）
+     */
     private long totalDuration;
 
-    /** 累计消耗的 Token 总量 */
-    private long tokenUsage;
+    private long promptTokens;
+    private long completionTokens;
+    private long totalTokens;
 
 
     // --- Setter & Accumulator Methods ---
@@ -44,18 +44,35 @@ public class Metrics implements Serializable {
         this.totalDuration = totalDuration;
     }
 
-    public void setTokenUsage(long tokenUsage) {
-        this.tokenUsage = tokenUsage;
+    public void setPromptTokens(long promptTokens) {
+        this.promptTokens = promptTokens;
     }
 
-    /**
-     * 累加 Token 使用量
-     */
-    public void addTokenUsage(long tokenUsage) {
-        this.tokenUsage += tokenUsage;
-        if (log.isTraceEnabled()) {
-            log.trace("Token usage incremented by {}, total: {}", tokenUsage, this.tokenUsage);
-        }
+    public void setCompletionTokens(long completionTokens) {
+        this.completionTokens = completionTokens;
+    }
+
+    public void setTotalTokens(long totalTokens) {
+        this.totalTokens = totalTokens;
+    }
+
+    public void reset(){
+        this.totalDuration = 0;
+        this.promptTokens = 0;
+        this.completionTokens = 0;
+        this.totalTokens = 0;
+    }
+
+    public void addMetrics(Metrics metrics){
+        this.promptTokens += metrics.promptTokens;
+        this.completionTokens += metrics.completionTokens;
+        this.totalTokens += metrics.totalTokens;
+    }
+
+    public void addUsage(AiUsage usage){
+        this.promptTokens += usage.promptTokens();
+        this.completionTokens += usage.completionTokens();
+        this.totalTokens += usage.totalTokens();
     }
 
 
@@ -65,7 +82,15 @@ public class Metrics implements Serializable {
         return totalDuration;
     }
 
-    public long getTokenUsage() {
-        return tokenUsage;
+    public long getPromptTokens() {
+        return promptTokens;
+    }
+
+    public long getCompletionTokens() {
+        return completionTokens;
+    }
+
+    public long getTotalTokens() {
+        return totalTokens;
     }
 }

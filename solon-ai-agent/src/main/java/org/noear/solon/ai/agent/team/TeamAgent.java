@@ -23,19 +23,16 @@ import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.*;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -198,7 +195,7 @@ public class TeamAgent implements Agent {
                 final FlowOptions flowOptions = new FlowOptions();
                 options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
 
-                trace.getMetrics().setTokenUsage(0L);
+                trace.getMetrics().reset();
 
                 context.with(Agent.KEY_CURRENT_TEAM_TRACE_KEY, config.getTraceKey(), () -> {
                     context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
@@ -219,7 +216,7 @@ public class TeamAgent implements Agent {
                 TeamTrace teamTrace = TeamTrace.getCurrent(context);
                 if (teamTrace != null) {
                     // 汇总 token 使用情况
-                    teamTrace.getMetrics().addTokenUsage(trace.getMetrics().getTokenUsage());
+                    teamTrace.getMetrics().addMetrics(trace.getMetrics());
                 }
             }
 

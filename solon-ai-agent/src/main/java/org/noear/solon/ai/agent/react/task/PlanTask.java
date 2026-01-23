@@ -80,7 +80,7 @@ public class PlanTask implements NamedTaskComponent {
                 .call();
 
         if (response.getUsage() != null) {
-            trace.getMetrics().addTokenUsage(response.getUsage().totalTokens());
+            trace.getMetrics().addUsage(response.getUsage());
         }
 
         String planContent = response.getResultContent();
