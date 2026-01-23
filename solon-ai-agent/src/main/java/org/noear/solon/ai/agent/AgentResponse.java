@@ -13,44 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.team;
+package org.noear.solon.ai.agent;
 
-import org.noear.solon.ai.agent.AgentResponse;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 
 /**
- * 团队协作响应
+ * 智能体响应
  *
  * @author noear
  * @since 3.8.4
  */
-public class TeamResponse implements AgentResponse {
-    private final TeamTrace trace;
-    private final AssistantMessage message;
+public interface AgentResponse {
+    Metrics getMetrics();
 
-    public TeamResponse(TeamTrace trace, AssistantMessage message) {
-        this.trace = trace;
-        this.message = message;
-    }
+    AssistantMessage getMessage();
 
-    public TeamTrace getTrace() {
-        return trace;
-    }
+    String getContent();
 
-    public Metrics getMetrics() {
-        return trace.getMetrics();
-    }
-
-    public AssistantMessage getMessage() {
-        return message;
-    }
-
-    public String getContent() {
-        return message.getContent();
-    }
-
-    public <T> T toBean(Class<T> type) {
-        return message.toBean(type);
-    }
+    <T> T toBean(Class<T> type);
 }

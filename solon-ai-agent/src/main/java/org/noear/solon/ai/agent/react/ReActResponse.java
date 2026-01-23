@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.AgentResponse;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 
@@ -24,7 +25,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
  * @author noear
  * @since 3.8.4
  */
-public class ReActResponse {
+public class ReActResponse implements AgentResponse {
     private final ReActTrace trace;
     private final AssistantMessage message;
 
