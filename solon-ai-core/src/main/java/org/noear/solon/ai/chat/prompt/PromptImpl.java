@@ -1,0 +1,137 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.noear.solon.ai.chat.prompt;
+
+import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.core.util.Assert;
+
+import java.io.Serializable;
+import java.util.*;
+
+/**
+ * 提示语实现
+ *
+ * @author noear
+ * @since 3.2
+ */
+public class PromptImpl implements Prompt, Serializable {
+    private final Map<String, Object> attrs = new LinkedHashMap<>();
+    private final List<ChatMessage> messages = new ArrayList<>();
+    private transient List<ChatMessage> messages_readonly;
+
+    @Override
+    public Map<String, Object> attrs() {
+        return attrs;
+    }
+
+
+    @Override
+    public List<ChatMessage> getMessages() {
+        if (messages_readonly == null) {
+            messages_readonly = Collections.unmodifiableList(messages);
+        }
+
+        return messages_readonly;
+    }
+
+    @Override
+    public ChatMessage getFirstMessage() {
+        return messages.isEmpty() ? null : messages.get(0);
+    }
+
+    @Override
+    public ChatMessage getLastMessage() {
+        return messages.isEmpty() ? null : messages.get(messages.size() - 1);
+    }
+
+    private String userContent;
+
+    @Override
+    public String getUserContent() {
+        if (userContent == null) {
+            // 从后往前找，取用户最新的意图
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                ChatMessage m = messages.get(i);
+                if (m.getRole() == ChatRole.USER && Assert.isNotEmpty(m.getContent())) {
+                    userContent = m.getContent();
+                    break;
+                }
+            }
+        }
+
+        return userContent;
+    }
+
+    private String systemContent;
+
+    @Override
+    public String getSystemContent() {
+        if (systemContent == null) {
+            //从前往后找
+            for (ChatMessage m : messages) {
+                if (m.getRole() == ChatRole.SYSTEM) {
+                    systemContent = m.getContent();
+                    break;
+                }
+            }
+        }
+
+        return systemContent;
+    }
+
+    @Override
+    public Prompt addMessage(String msg) {
+        if (Assert.isNotEmpty(msg)) {
+            this.messages.add(ChatMessage.ofUser(msg));
+            this.userContent = null;
+        }
+        return this;
+    }
+
+    @Override
+    public Prompt addMessage(ChatMessage... msgs) {
+        return addMessage(Arrays.asList(msgs));
+    }
+
+    @Override
+    public Prompt addMessage(Collection<ChatMessage> msgs) {
+        if (Assert.isNotEmpty(msgs)) {
+            this.messages.addAll(msgs);
+            this.userContent = null;
+        }
+
+        return this;
+    }
+
+    @Override
+    public Prompt replaceMessages(Collection<ChatMessage> messages) {
+        this.messages.clear();
+        this.userContent = null;
+        this.systemContent = null;
+
+        if (messages != null) {
+            this.messages.addAll(messages);
+        }
+
+        return this;
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return messages.isEmpty();
+    }
+}
