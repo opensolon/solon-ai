@@ -20,7 +20,7 @@
 * 添加 `solon-ai-agent` ReActAgent Plan 支持（默认为关闭）。
 * 添加 `solon-ai-agent`  SimpleInterceptor 替代 ChatInterceptor，方便后续扩展
 * 优化 `solon-ai-core` Gemini 方言适配
-* 优化 `solon-ai-core` ChatPrompt 接口，方法更丰富
+* 优化 `solon-ai-core` Prompt 接口，方法更丰富
 * 优化 `solon-ai-agent` A2AProtocol 协议代码
 * 优化 `solon-ai-agent` SwarmProtocol 协议代码
 * 优化 `solon-ai-agent` HierarchicalProtocol 协议代码
@@ -47,7 +47,7 @@
 * 添加 `solon-ai-core` ChatResponse:getResultContent
 * 添加 `solon-ai-core` AssistantMessage.toBean 方法。
 * 优化 `solon-ai-core` AssistantMessage.getResultContent 处理
-* 调整 `solon-ai-croe` ChatSession 不再扩展 ChatPrompt（打断两者关系，后者定位偏固定数据
+* 调整 `solon-ai-croe` ChatSession 不再扩展 Prompt（打断两者关系，后者定位偏固定数据
 
 
 新增三种模式的智能体：
@@ -363,7 +363,7 @@ public class McpServerTool {
 * 新增 solon-ai-flow 插件
 * 新增 solon-ai-load-ddl 插件
 * 添加 solon-ai-core ChatMessage:ofUser(media) 方法
-* 添加 solon-ai-core ChatSession:addMessage(ChatPrompt) 方法
+* 添加 solon-ai-core ChatSession:addMessage(Prompt) 方法
 * 添加 solon-ai-core ChatSession:addMessage(Collection) 方法
 * 添加 solon-ai-core RerankingConfig,RerankingModel toString 方法
 * 添加 solon-ai-core 模型的网络代理支持（支持简单配置，和复杂构建）

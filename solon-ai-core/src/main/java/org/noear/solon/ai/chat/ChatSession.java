@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 
@@ -60,7 +60,7 @@ public interface ChatSession extends NonSerializable {
     /**
      * 添加消息
      */
-    default void addMessage(ChatPrompt prompt) {
+    default void addMessage(Prompt prompt) {
         addMessage(prompt.getMessages());
     }
 

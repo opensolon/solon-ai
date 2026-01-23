@@ -2,7 +2,7 @@ package demo.ai.core;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -38,7 +38,7 @@ public class ToolGatewaySkill extends AbsSkill implements Skill {
     }
 
     @Override
-    public String getInstruction(ChatPrompt prompt) {
+    public String getInstruction(Prompt prompt) {
         return "你是一个具备无限扩展能力的 Agent。\n" +
                 "1. 当你发现现有工具无法解决问题时，请先调用 'search_tools' 搜索工具。\n" +
                 "2. 搜索结果会返回工具的详细使用说明（Schema）。\n" +

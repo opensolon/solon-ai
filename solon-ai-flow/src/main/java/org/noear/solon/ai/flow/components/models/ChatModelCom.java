@@ -21,7 +21,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
@@ -117,9 +117,9 @@ public class ChatModelCom extends AbsAiComponent implements AiIoComponent, AiPro
             } else if (data instanceof ChatMessage) {
                 //消息
                 chatSession.addMessage((ChatMessage) data);
-            } else if (data instanceof ChatPrompt) {
+            } else if (data instanceof Prompt) {
                 //提示语
-                chatSession.addMessage(((ChatPrompt) data).getMessages());
+                chatSession.addMessage(((Prompt) data).getMessages());
             } else {
                 throw new IllegalArgumentException("Unsupported data type: " + data.getClass());
             }

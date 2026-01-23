@@ -31,7 +31,7 @@ public class AiNodeAgent implements TaskComponent {
         String feedback = context.getAs("feedback");
         List<ChatMessage> messages = context.getAs("messages");
 
-        Prompt prompt = new Prompt();
+        Prompt prompt = Prompt.of();
         //构建 LLM 提示词
         if (revision_count.get() == 0) {
             //第一次：编写内容

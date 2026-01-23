@@ -8,7 +8,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -77,7 +77,7 @@ public class ReActSkillBindingTest {
         }
 
         @Override
-        public String getInstruction(ChatPrompt prompt) {
+        public String getInstruction(Prompt prompt) {
             // 注入核心业务指令：对高危操作的额外约束
             return "注意：执行任何带有 [Destructive] 标记的工具前，必须在 Thought 中确认用户是否提供了删除原因，若未提供则拒绝执行并询问。";
         }

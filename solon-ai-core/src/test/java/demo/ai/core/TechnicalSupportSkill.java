@@ -1,7 +1,7 @@
 package demo.ai.core;
 
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.annotation.Param;
@@ -26,7 +26,7 @@ public class TechnicalSupportSkill extends AbsSkill implements Skill {
     }
 
     @Override
-    public String getInstruction(ChatPrompt prompt) {
+    public String getInstruction(Prompt prompt) {
         String userMessage = prompt.getUserContent();
 
         // 如果用户直接贴了代码或错误栈，调整 SOP 优先级

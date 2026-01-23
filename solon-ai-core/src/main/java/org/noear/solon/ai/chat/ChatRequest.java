@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.dialect.ChatDialect;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.NonSerializable;
 
@@ -33,10 +33,10 @@ public class ChatRequest implements NonSerializable {
     private final ChatOptions options;
     private final ChatSession session;
     private final boolean stream;
-    private final ChatPrompt originalPrompt;
-    private final ChatPrompt finalPrompt;
+    private final Prompt originalPrompt;
+    private final Prompt finalPrompt;
 
-    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session, ChatPrompt originalPrompt, boolean stream) {
+    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session, Prompt originalPrompt, boolean stream) {
         this.session = session;
         this.config = config;
         this.configReadonly = new ChatConfigReadonly(config);
@@ -79,14 +79,14 @@ public class ChatRequest implements NonSerializable {
     /**
      * 获取原始提示语
      */
-    public ChatPrompt getOriginalPrompt() {
+    public Prompt getOriginalPrompt() {
         return originalPrompt;
     }
 
     /**
      * 获取最终提示语（方便进行动态调整）
      */
-    public ChatPrompt getFinalPrompt() {
+    public Prompt getFinalPrompt() {
         return finalPrompt;
     }
 

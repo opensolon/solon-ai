@@ -1,6 +1,6 @@
 package demo.ai.core;
 
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -31,7 +31,7 @@ public class OrderIntentSkill extends AbsSkill implements Skill {
      * 只有当用户提问包含相关关键词时，此技能才会被激活
      */
     @Override
-    public boolean isSupported(ChatPrompt prompt) {
+    public boolean isSupported(Prompt prompt) {
         String content = prompt.getUserContent();
         if (content == null) return false;
 
@@ -40,7 +40,7 @@ public class OrderIntentSkill extends AbsSkill implements Skill {
     }
 
     @Override
-    public String getInstruction(ChatPrompt prompt) {
+    public String getInstruction(Prompt prompt) {
         return "1. 查询订单前，请确认用户是否提供了订单号或手机号。\n" +
                 "2. 如果物流状态显示为'已签收'，主动询问用户对商品的满意度。";
     }

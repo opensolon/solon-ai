@@ -15,133 +15,160 @@
  */
 package org.noear.solon.ai.chat.prompt;
 
-import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Preview;
 
-import java.io.Serializable;
-import java.util.*;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 
 /**
- * 提示语
+ * 聊天提示语
  *
  * @author noear
  * @since 3.2
  */
-public class Prompt implements ChatPrompt<Prompt>, Serializable {
-    private final Map<String, Object> attrs = new LinkedHashMap<>();
-    private final List<ChatMessage> messages = new ArrayList<>();
+@Preview("3.2")
+public interface Prompt {
+    /**
+     * 获取属性
+     *
+     * @since 3.8.4
+     */
+    Map<String, Object> attrs();
 
-    @Override
-    public Map<String, Object> attrs() {
-        return attrs;
+    /**
+     * 获取属性
+     *
+     * @since 3.8.4
+     */
+    default Object attr(String key) {
+        return attrs().get(key);
     }
 
-
-    @Override
-    public List<ChatMessage> getMessages() {
-        return messages;
+    /**
+     * 获取属性
+     *
+     * @since 3.8.4
+     */
+    default <T> T attrAs(String key) {
+        return (T) attrs().get(key);
     }
 
-    @Override
-    public ChatMessage getFirstMessage() {
-        return messages.isEmpty() ? null : messages.get(0);
+    /**
+     * 获取属性
+     *
+     * @since 3.8.4
+     */
+    default <T> T attrOrDefault(String key, T def) {
+        return (T) attrs().getOrDefault(key, def);
     }
 
-    @Override
-    public ChatMessage getLastMessage() {
-        return messages.isEmpty() ? null : messages.get(messages.size() - 1);
-    }
-
-    private String userContent;
-
-    @Override
-    public String getUserContent() {
-        if (userContent == null) {
-            // 从后往前找，取用户最新的意图
-            for (int i = messages.size() - 1; i >= 0; i--) {
-                ChatMessage m = messages.get(i);
-                if (m.getRole() == ChatRole.USER && Assert.isNotEmpty(m.getContent())) {
-                    userContent = m.getContent();
-                    break;
-                }
-            }
-        }
-
-        return userContent;
-    }
-
-    private String systemContent;
-
-    @Override
-    public String getSystemContent() {
-        if (systemContent == null) {
-            //从前往后找
-            for (ChatMessage m : messages) {
-                if (m.getRole() == ChatRole.SYSTEM) {
-                    systemContent = m.getContent();
-                    break;
-                }
-            }
-        }
-
-        return systemContent;
-    }
-
-    @Override
-    public Prompt addMessage(String... msgs) {
-        for (String m : msgs) {
-            if (Assert.isNotEmpty(m)) {
-                this.messages.add(ChatMessage.ofUser(m));
-            }
-        }
+    /**
+     * 设置属性
+     */
+    default Prompt attrPut(String name, Object value) {
+        attrs().put(name, value);
         return this;
     }
 
-    @Override
-    public Prompt addMessage(ChatMessage... msgs) {
-        for (ChatMessage m : msgs) {
-            this.messages.add(m);
+    /**
+     * 设置属性
+     */
+    default Prompt attrPut(Map<String, Object> map) {
+        if (Assert.isNotEmpty(map)) {
+            attrs().putAll(map);
         }
+
         return this;
     }
 
-    @Override
-    public Prompt addMessage(Collection<ChatMessage> msgs) {
-        this.messages.addAll(msgs);
-        return this;
-    }
+    /**
+     * 获取消息
+     */
+    List<ChatMessage> getMessages();
 
-    @Override
-    public Prompt replaceMessages(Collection<ChatMessage> messages) {
-        this.messages.clear();
-        this.messages.addAll(messages);
-        return this;
-    }
+    /**
+     * 获取首条消息
+     *
+     * @since 3.8.4
+     */
+    ChatMessage getFirstMessage();
 
-    @Override
-    public boolean isEmpty() {
-        return messages.isEmpty();
+    /**
+     * 获取最后消息
+     *
+     * @since 3.8.4
+     */
+    ChatMessage getLastMessage();
+
+    /**
+     * 获取用户消息内容
+     *
+     * @since 3.8.4
+     */
+    String getUserContent();
+
+    /**
+     * 获取系统消息内容
+     *
+     * @since 3.8.4
+     */
+    String getSystemContent();
+
+    /*
+     * 添加消息
+     */
+    Prompt addMessage(String msg);
+
+    /*
+     * 添加消息
+     */
+    Prompt addMessage(ChatMessage... msgs);
+
+    /*
+     * 添加消息
+     */
+    Prompt addMessage(Collection<ChatMessage> msgs);
+
+    /*
+     * 替换消息
+     */
+    Prompt replaceMessages(Collection<ChatMessage> messages);
+
+    /**
+     * 是否为空
+     *
+     * @since 3.8.4
+     */
+    boolean isEmpty();
+
+    /**
+     * 是否为空
+     */
+    static boolean isEmpty(Prompt prompt) {
+        return prompt == null || prompt.isEmpty();
     }
 
     /**
      * 构建
      */
-    public static Prompt of(Collection<ChatMessage> messages) {
-        return new Prompt().addMessage(messages);
+    static Prompt of(Collection<ChatMessage> messages) {
+        return new PromptImpl().addMessage(messages);
     }
 
     /**
      * 构建
      */
-    public static Prompt of(ChatMessage... messages) {
-        return new Prompt().addMessage(messages);
+    static Prompt of(String message) {
+        return new PromptImpl().addMessage(message);
     }
 
     /**
      * 构建
      */
-    public static Prompt of(String... messages) {
-        return new Prompt().addMessage(messages);
+    static Prompt of(ChatMessage... messages) {
+        return new PromptImpl().addMessage(messages);
     }
 }

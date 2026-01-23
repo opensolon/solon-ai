@@ -22,7 +22,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -157,14 +157,14 @@ public class TeamAgent implements Agent {
         // 1. 运行时环境准备
         trace.prepare(config, options, session, config.getName());
 
-        if (ChatPrompt.isEmpty(prompt) == false) {
+        if (Prompt.isEmpty(prompt) == false) {
             context.trace().recordNode(graph, null);
             trace.setPrompt(prompt);
             trace.setRoute(null);
             trace.resetProtocolContext();
             trace.resetTurnCount();
         } else {
-            if (ChatPrompt.isEmpty(trace.getPrompt())) {
+            if (Prompt.isEmpty(trace.getPrompt())) {
                 LOG.warn("Prompt is empty!");
                 return ChatMessage.ofAssistant("");
             }

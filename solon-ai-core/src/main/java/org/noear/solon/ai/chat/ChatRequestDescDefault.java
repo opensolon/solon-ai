@@ -20,7 +20,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.message.ToolMessage;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.skill.SkillUtil;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -57,12 +57,12 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
     private final ChatConfig config;
     private final ChatDialect dialect;
-    private final ChatPrompt originalPrompt;
+    private final Prompt originalPrompt;
 
     private ChatSession session;
     private ChatOptions options;
 
-    public ChatRequestDescDefault(ChatConfig config, ChatDialect dialect, ChatSession session, ChatPrompt prompt) {
+    public ChatRequestDescDefault(ChatConfig config, ChatDialect dialect, ChatSession session, Prompt prompt) {
         this.config = config;
         this.dialect = dialect;
         this.session = session;

@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat.skill;
 
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
@@ -50,11 +50,11 @@ public class SkillDesc implements Skill {
     private final SkillMetadata metadata;
     private final List<FunctionTool> tools;
 
-    private final Function<ChatPrompt, Boolean> isSupportedHandler;
-    private final Function<ChatPrompt, String> getInstructionHandler;
-    private final Consumer<ChatPrompt> onAttachHandler;
+    private final Function<Prompt, Boolean> isSupportedHandler;
+    private final Function<Prompt, String> getInstructionHandler;
+    private final Consumer<Prompt> onAttachHandler;
 
-    public SkillDesc(SkillMetadata metadata, List<FunctionTool> tools, Function<ChatPrompt, Boolean> isSupportedHandler, Function<ChatPrompt, String> getInstructionHandler, Consumer<ChatPrompt> onAttachHandler) {
+    public SkillDesc(SkillMetadata metadata, List<FunctionTool> tools, Function<Prompt, Boolean> isSupportedHandler, Function<Prompt, String> getInstructionHandler, Consumer<Prompt> onAttachHandler) {
         this.metadata = metadata;
         this.tools = Collections.unmodifiableList(tools);
         this.isSupportedHandler = isSupportedHandler;
@@ -78,7 +78,7 @@ public class SkillDesc implements Skill {
     }
 
     @Override
-    public boolean isSupported(ChatPrompt prompt) {
+    public boolean isSupported(Prompt prompt) {
         if (isSupportedHandler != null) {
             return isSupportedHandler.apply(prompt);
         }
@@ -87,14 +87,14 @@ public class SkillDesc implements Skill {
     }
 
     @Override
-    public void onAttach(ChatPrompt prompt) {
+    public void onAttach(Prompt prompt) {
         if (onAttachHandler != null) {
             onAttachHandler.accept(prompt);
         }
     }
 
     @Override
-    public String getInstruction(ChatPrompt prompt) {
+    public String getInstruction(Prompt prompt) {
         if (getInstructionHandler != null) {
             return getInstructionHandler.apply(prompt);
         }
@@ -115,9 +115,9 @@ public class SkillDesc implements Skill {
         private final SkillMetadata metadata;
         private final List<FunctionTool> tools = new ArrayList<>();
 
-        private Function<ChatPrompt, Boolean> isSupportedHandler;
-        private Function<ChatPrompt, String> getInstructionHandler;
-        private Consumer<ChatPrompt> onAttachHandler;
+        private Function<Prompt, Boolean> isSupportedHandler;
+        private Function<Prompt, String> getInstructionHandler;
+        private Consumer<Prompt> onAttachHandler;
 
         public Builder(String name) {
             metadata = new SkillMetadata(name, null);
@@ -145,7 +145,7 @@ public class SkillDesc implements Skill {
             return this;
         }
 
-        public Builder isSupported(Function<ChatPrompt, Boolean> isSupported) {
+        public Builder isSupported(Function<Prompt, Boolean> isSupported) {
             this.isSupportedHandler = isSupported;
             return this;
         }
@@ -155,12 +155,12 @@ public class SkillDesc implements Skill {
             return this;
         }
 
-        public Builder instruction(Function<ChatPrompt, String> getInstruction) {
+        public Builder instruction(Function<Prompt, String> getInstruction) {
             this.getInstructionHandler = getInstruction;
             return this;
         }
 
-        public Builder onAttach(Consumer<ChatPrompt> onAttach) {
+        public Builder onAttach(Consumer<Prompt> onAttach) {
             this.onAttachHandler = onAttach;
             return this;
         }

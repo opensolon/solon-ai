@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat.skill;
 
 import org.noear.solon.ai.chat.ModelOptionsAmend;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.RankEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,7 +32,7 @@ public class SkillUtil {
     /**
      * 激活技能
      */
-    public static StringBuilder activeSkills(ModelOptionsAmend<?,?> modelOptions, ChatPrompt prompt) {
+    public static StringBuilder activeSkills(ModelOptionsAmend<?,?> modelOptions, Prompt prompt) {
         StringBuilder combinedInstruction = new StringBuilder();
 
         for (RankEntity<Skill> item : modelOptions.skills()) {

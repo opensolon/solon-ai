@@ -27,7 +27,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -187,11 +187,11 @@ public class ReActAgent implements Agent {
             trace.appendMessages(history);
         }
 
-        if (ChatPrompt.isEmpty(prompt)) {
+        if (Prompt.isEmpty(prompt)) {
             //可能是旧问题（之前中断的）
             prompt = trace.getPrompt();
 
-            if (ChatPrompt.isEmpty(prompt)) {
+            if (Prompt.isEmpty(prompt)) {
                 LOG.warn("Prompt is empty!");
                 return ChatMessage.ofAssistant("");
             }

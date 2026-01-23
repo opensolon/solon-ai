@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat.skill;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.prompt.ChatPrompt;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.lang.Preview;
@@ -53,20 +53,20 @@ public interface Skill extends ToolProvider {
     /**
      * 准入检查：决定该技能在当前环境下是否可用
      */
-    default boolean isSupported(ChatPrompt prompt) {
+    default boolean isSupported(Prompt prompt) {
         return true;
     }
 
     /**
      * 挂载钩子：技能被激活时触发，可用于初始化 Session
      */
-    default void onAttach(ChatPrompt prompt) {
+    default void onAttach(Prompt prompt) {
     }
 
     /**
      * 指令注入：转化并注入到 System Message
      */
-    default String getInstruction(ChatPrompt prompt) {
+    default String getInstruction(Prompt prompt) {
         return null;
     }
 
@@ -84,7 +84,7 @@ public interface Skill extends ToolProvider {
     /**
      * 注入指令并对工具进行“染色”
      */
-    default void injectInstruction(ChatPrompt prompt, StringBuilder combinedInstruction) {
+    default void injectInstruction(Prompt prompt, StringBuilder combinedInstruction) {
         String ins = getInstruction(prompt);
         Collection<FunctionTool> tools = getTools();
 

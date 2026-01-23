@@ -137,7 +137,7 @@ public abstract class TeamProtocolBase implements TeamProtocol {
             sb.append("---\nPlease complete your task based on the progress.");
         }
 
-        Prompt newPrompt = new Prompt();
+        Prompt newPrompt =  Prompt.of();
         // System 承载背景，避免 User 消息过长干扰任务理解
         newPrompt.addMessage(ChatMessage.ofSystem(sb.toString()));
 
