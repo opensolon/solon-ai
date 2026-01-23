@@ -149,6 +149,7 @@ public class TeamAgentTransferTest {
         Personnel personnel = extractor.prompt("伊隆·马斯克，1971年出生，现任特斯拉CEO。")
                 .session(session)
                 .call()
+                .getMessage()
                 .toBean(Personnel.class);
 
         String jsonData = session.getSnapshot().getAs("structured_data");

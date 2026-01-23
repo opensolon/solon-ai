@@ -199,7 +199,7 @@ public class EcommerceOrderRiskSystemTest {
 
     private void runTest(TeamAgent system, String caseName, String details) throws Throwable {
         System.out.println("\n>>> [测试场景]: " + caseName);
-        AssistantMessage result = system.prompt("请对以下订单进行全方位风险评审：\n" + details).call();
+        AssistantMessage result = system.prompt("请对以下订单进行全方位风险评审：\n" + details).call().getMessage();
         System.out.println(">>> [最终裁决]: \n" + result.getContent());
     }
 }

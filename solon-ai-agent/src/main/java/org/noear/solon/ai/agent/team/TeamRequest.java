@@ -70,7 +70,7 @@ public class TeamRequest {
      *
      * @return AI 团队协作后的最终响应消息
      */
-    public AssistantMessage call() throws Throwable {
+    public TeamResponse call() throws Throwable {
         if (session == null) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("No session provided for TeamRequest, using temporary InMemoryAgentSession.");
@@ -78,6 +78,9 @@ public class TeamRequest {
             session = InMemoryAgentSession.of();
         }
 
-        return agent.call(prompt, session, options);
+        AssistantMessage message = agent.call(prompt, session, options);
+        TeamTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+
+        return new TeamResponse(trace, message);
     }
 }

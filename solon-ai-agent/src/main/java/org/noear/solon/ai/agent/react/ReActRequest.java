@@ -68,7 +68,7 @@ public class ReActRequest implements NonSerializable {
     /**
      * 执行同步调用
      */
-    public AssistantMessage call() throws Throwable {
+    public ReActResponse call() throws Throwable {
         if (session == null) {
             if (log.isDebugEnabled()) {
                 log.debug("No session provided for ReActRequest, using temporary InMemoryAgentSession.");
@@ -76,6 +76,9 @@ public class ReActRequest implements NonSerializable {
             session = InMemoryAgentSession.of();
         }
 
-        return agent.call(prompt, session, options);
+        AssistantMessage message = agent.call(prompt, session, options);
+        ReActTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+
+        return new ReActResponse(trace, message);
     }
 }

@@ -42,13 +42,13 @@ public class SimpleRequest {
     private final SimpleAgent agent;
     private final Prompt prompt;
     private AgentSession session;
-    private ModelOptionsAmend<?, SimpleInterceptor> modelOptions;
+    private ModelOptionsAmend<?, SimpleInterceptor> options;
 
     public SimpleRequest(SimpleAgent agent, Prompt prompt) {
         this.agent = agent;
         this.prompt = prompt;
-        this.modelOptions  = new ModelOptionsAmend<>();
-        this.modelOptions.putAll(agent.getConfig().getDefaultOptions());
+        this.options = new ModelOptionsAmend<>();
+        this.options.putAll(agent.getConfig().getDefaultOptions());
     }
 
     /**
@@ -63,14 +63,14 @@ public class SimpleRequest {
      * 配置运行时选项（如调整 Temperature、MaxTokens 等参数）
      */
     public SimpleRequest options(Consumer<ModelOptionsAmend<?, SimpleInterceptor>> chatOptionsAdjustor) {
-        chatOptionsAdjustor.accept(modelOptions);
+        chatOptionsAdjustor.accept(options);
         return this;
     }
 
     /**
      * 启动智能体调用流程
      */
-    public AssistantMessage call() throws Throwable {
+    public SimpleResponse call() throws Throwable {
         if (session == null) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("No session provided for SimpleRequest, using temporary InMemoryAgentSession.");
@@ -79,6 +79,9 @@ public class SimpleRequest {
             session = InMemoryAgentSession.of();
         }
 
-        return agent.call(prompt, session, modelOptions);
+        AssistantMessage message = agent.call(prompt, session, options);
+        SimpleTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+
+        return new SimpleResponse(trace, message);
     }
 }
