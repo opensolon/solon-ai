@@ -49,12 +49,12 @@ public class A2AProtocol extends TeamProtocolBase {
     public static class A2AState {
         private String globalState = "";
         private int transferCount = 0;
-        private String lastInstruction = "";
         private String lastTempTarget = "";
+        private String lastPayload = "";
 
-        public void setTransferRequest(String target, String instruction, String state) {
+        public void setTransferRequest(String target, String state, String payload) {
             this.lastTempTarget = target;
-            this.lastInstruction = instruction;
+            this.lastPayload = payload; // 锁定 payload
             if (Utils.isNotEmpty(state)) {
                 this.globalState = state;
             }
@@ -65,10 +65,9 @@ public class A2AProtocol extends TeamProtocolBase {
             this.lastTempTarget = "";
         }
 
-        public void consumeInstruction() { this.lastInstruction = ""; }
         public String getGlobalState() { return globalState; }
+        public String getLastPayload() { return lastPayload; }
         public int getTransferCount() { return transferCount; }
-        public String getLastInstruction() { return lastInstruction; }
         public String getLastTempTarget() { return lastTempTarget; }
     }
 
@@ -127,10 +126,10 @@ public class A2AProtocol extends TeamProtocolBase {
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER).returnDirect(true);
         tool.doHandle(args -> {
             String target = (String) args.get("target");
-            String instruction = (String) args.get("instruction");
             String state = (String) args.get("state");
 
-            stateObj.setTransferRequest(target, instruction, state);
+            String currentEffectiveContent = trace.getLastAgentContent();
+            stateObj.setTransferRequest(target, state,currentEffectiveContent);
 
             if (isZh) {
                 return "已发起向 [" + target + "] 的接力请求。";
@@ -143,13 +142,11 @@ public class A2AProtocol extends TeamProtocolBase {
             tool.title("任务移交")
                     .description("当你无法完成当前任务时，将其移交给更合适的专家。")
                     .stringParamAdd("target", "目标专家名。必选范围: [" + expertsDescription + "]")
-                    .stringParamAdd("instruction", "给接棒专家的具体执行指令。")
                     .stringParamAdd("state", "业务状态 JSON。");
         } else {
             tool.title("Transfer")
                     .description("When you are unable to complete the current task, hand it over to a more appropriate expert.")
                     .stringParamAdd("target", "Expert name. Options: [" + expertsDescription + "]")
-                    .stringParamAdd("instruction", "Specific instruction for the next expert.")
                     .stringParamAdd("state", "Persistent JSON state.");
         }
 
@@ -171,30 +168,32 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
         A2AState stateObj = getA2AState(trace);
-        String lastOutput = trace.getLastAgentContent();
-        String instruction = stateObj.getLastInstruction();
+        String effectiveOutput = stateObj.getLastPayload();
+        if (Utils.isEmpty(effectiveOutput)) {
+            effectiveOutput = trace.getLastAgentContent();
+        }
+
         String state = stateObj.getGlobalState();
 
-        if (Utils.isEmpty(instruction) && Utils.isEmpty(state)) return originalPrompt;
+        if (Utils.isEmpty(effectiveOutput) && Utils.isEmpty(state)) {
+            return originalPrompt;
+        }
 
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         StringBuilder sb = new StringBuilder();
         if (isZh) {
             sb.append("\n### 接力上下文 (Handover Context)\n");
-            if (Utils.isNotEmpty(lastOutput)) sb.append("- **上一步产出**: ").append(lastOutput).append("\n");
-            if (Utils.isNotEmpty(instruction)) sb.append("- **前序指令**: ").append(instruction).append("\n");
+            if (Utils.isNotEmpty(effectiveOutput)) sb.append("- **上一步产出**: ").append(effectiveOutput).append("\n");
             if (Utils.isNotEmpty(state)) sb.append("- **累积状态**: ").append(state).append("\n");
         } else {
             sb.append("\n### Handover Context\n");
-            if (Utils.isNotEmpty(lastOutput)) sb.append("- **Prior Output**: ").append(lastOutput).append("\n");
-            if (Utils.isNotEmpty(instruction)) sb.append("- **Prior Instruction**: ").append(instruction).append("\n");
+            if (Utils.isNotEmpty(effectiveOutput)) sb.append("- **Prior Output**: ").append(effectiveOutput).append("\n");
             if (Utils.isNotEmpty(state)) sb.append("- **Global State**: ").append(state).append("\n");
         }
 
         List<ChatMessage> messages = new ArrayList<>(originalPrompt.getMessages());
         messages.add(ChatMessage.ofUser(sb.toString()));
 
-        stateObj.consumeInstruction();
         return Prompt.of(messages).attrPut(originalPrompt.attrs());
     }
 
