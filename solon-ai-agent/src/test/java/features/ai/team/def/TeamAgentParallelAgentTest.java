@@ -7,6 +7,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
+import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
@@ -56,6 +57,7 @@ public class TeamAgentParallelAgentTest {
 
         TeamAgent team = TeamAgent.of(null)
                 .name(teamId)
+                .protocol(TeamProtocols.NONE)
                 .graphAdjuster(spec -> {
                     spec.addStart(Agent.ID_START).linkAdd("dispatch_gate");
 

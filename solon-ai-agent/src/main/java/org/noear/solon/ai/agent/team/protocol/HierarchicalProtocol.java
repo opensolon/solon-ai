@@ -23,7 +23,6 @@ import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.team.task.SupervisorTask;
 import org.noear.solon.ai.chat.ChatRole;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.flow.FlowContext;
@@ -223,6 +222,12 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         usage.put(agent.name(), usage.getOrDefault(agent.name(), 0) + 1);
 
         super.onAgentEnd(trace, agent);
+    }
+
+    @Override
+    public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        trace.getProtocolContext().put("active_instruction", decision);
+        return super.resolveSupervisorRoute(context, trace, decision);
     }
 
     /**
