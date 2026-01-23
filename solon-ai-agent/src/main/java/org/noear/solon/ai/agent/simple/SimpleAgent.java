@@ -111,6 +111,7 @@ public class SimpleAgent implements Agent {
 
 
         FlowContext context = session.getSnapshot();
+        TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         // 初始化或恢复推理痕迹 (Trace)
         SimpleTrace trace = context.getAs(config.getTraceKey());
@@ -122,7 +123,7 @@ public class SimpleAgent implements Agent {
         }
 
         // 1. 构建请求消息
-        Prompt finalPrompt = prepareAgentPrompt(session, prompt);
+        Prompt finalPrompt = prepareAgentPrompt(parentTeamTrace, session, prompt);
 
         // 2. 物理调用：执行带重试机制的 LLM 请求
         AssistantMessage result = null;
@@ -135,10 +136,9 @@ public class SimpleAgent implements Agent {
             trace.getMetrics().setTotalDuration(System.currentTimeMillis() - startTime);
 
             // 父一级团队轨迹
-            TeamTrace teamTrace = TeamTrace.getCurrent(context);
-            if (teamTrace != null) {
+            if (parentTeamTrace != null) {
                 // 汇总 token 使用情况
-                teamTrace.getMetrics().addTokenUsage(trace.getMetrics().getTokenUsage());
+                parentTeamTrace.getMetrics().addTokenUsage(trace.getMetrics().getTokenUsage());
             }
         }
 
@@ -148,7 +148,10 @@ public class SimpleAgent implements Agent {
         }
 
         // 4. 更新会话状态与快照
-        session.addHistoryMessage(config.getName(), result);
+        if (parentTeamTrace == null) {
+            session.addHistoryMessage(config.getName(), result);
+        }
+
         session.updateSnapshot(context);
 
         return result;
@@ -158,7 +161,7 @@ public class SimpleAgent implements Agent {
     /**
      * 组装完整的 Prompt 消息列表（含 SystemPrompt、OutputSchema 及历史窗口）
      */
-    private Prompt prepareAgentPrompt(AgentSession session, Prompt originalPrompt) {
+    private Prompt prepareAgentPrompt(TeamTrace parentTeamTrace, AgentSession session, Prompt originalPrompt) {
         String spText = config.getSystemPromptFor(session.getSnapshot());
 
         // 注入 JSON Schema 指令（强制格式输出）
@@ -175,7 +178,7 @@ public class SimpleAgent implements Agent {
         }
 
         // 加载限定窗口大小的历史记录
-        if (config.getHistoryWindowSize() > 0) {
+        if (parentTeamTrace == null && config.getHistoryWindowSize() > 0) {
             Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), config.getHistoryWindowSize());
             if (Assert.isNotEmpty(history)) {
                 messages.addAll(history);
@@ -186,7 +189,7 @@ public class SimpleAgent implements Agent {
 
 
         // 消息归档：同步当前用户请求到 Session 历史
-        if (!Prompt.isEmpty(originalPrompt)) {
+        if (parentTeamTrace == null && Prompt.isEmpty(originalPrompt) == false) {
             for (ChatMessage message : originalPrompt.getMessages()) {
                 session.addHistoryMessage(config.getName(), message);
             }

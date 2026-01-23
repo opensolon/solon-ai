@@ -171,6 +171,7 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
         A2AState stateObj = getA2AState(trace);
+        String lastOutput = trace.getLastAgentContent();
         String instruction = stateObj.getLastInstruction();
         String state = stateObj.getGlobalState();
 
@@ -180,10 +181,12 @@ public class A2AProtocol extends TeamProtocolBase {
         StringBuilder sb = new StringBuilder();
         if (isZh) {
             sb.append("\n### 接力上下文 (Handover Context)\n");
+            if (Utils.isNotEmpty(lastOutput)) sb.append("- **上一步产出**: ").append(lastOutput).append("\n");
             if (Utils.isNotEmpty(instruction)) sb.append("- **前序指令**: ").append(instruction).append("\n");
             if (Utils.isNotEmpty(state)) sb.append("- **累积状态**: ").append(state).append("\n");
         } else {
             sb.append("\n### Handover Context\n");
+            if (Utils.isNotEmpty(lastOutput)) sb.append("- **Prior Output**: ").append(lastOutput).append("\n");
             if (Utils.isNotEmpty(instruction)) sb.append("- **Prior Instruction**: ").append(instruction).append("\n");
             if (Utils.isNotEmpty(state)) sb.append("- **Global State**: ").append(state).append("\n");
         }

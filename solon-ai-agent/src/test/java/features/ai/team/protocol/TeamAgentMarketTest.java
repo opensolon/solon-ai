@@ -41,7 +41,7 @@ public class TeamAgentMarketTest {
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.MARKET_BASED).agentAdd(py, jv).build();
         AgentSession session = InMemoryAgentSession.of("m1");
 
-        String result = team.call(Prompt.of("我需要处理大量 Python 数据字典"), session).getContent();
+        String result = team.call(Prompt.of("请帮我写一段 Python 代码，合并两个数据字典 a={'x':1} 和 b={'y':2}"), session).getContent();
 
         System.out.println("=====最终输出=====");
         System.out.println(result);

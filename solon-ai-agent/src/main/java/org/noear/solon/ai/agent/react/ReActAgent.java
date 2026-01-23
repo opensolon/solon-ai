@@ -162,6 +162,7 @@ public class ReActAgent implements Agent {
     protected AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) throws Throwable {
         FlowContext context = session.getSnapshot();
         TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL);
+        TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         // 初始化或恢复推理痕迹 (Trace)
         ReActTrace trace = context.getAs(config.getTraceKey());
@@ -183,8 +184,10 @@ public class ReActAgent implements Agent {
 
         // 1. 加载历史上下文（短期记忆）
         if (trace.getMessagesSize() == 0 && options.getSessionWindowSize() > 0) {
-            Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getSessionWindowSize());
-            trace.appendMessages(history);
+            if (parentTeamTrace == null) {
+                Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getSessionWindowSize());
+                trace.appendMessages(history);
+            }
         }
 
         if (Prompt.isEmpty(prompt)) {
@@ -198,7 +201,10 @@ public class ReActAgent implements Agent {
         } else {
             //新的问题
             for (ChatMessage message : prompt.getMessages()) {
-                session.addHistoryMessage(config.getName(), message);
+                if (parentTeamTrace == null) {
+                    session.addHistoryMessage(config.getName(), message);
+                }
+
                 trace.appendMessage(message);
             }
 
@@ -257,7 +263,10 @@ public class ReActAgent implements Agent {
         }
 
         AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-        session.addHistoryMessage(config.getName(), assistantMessage);
+        if (parentTeamTrace == null) {
+            session.addHistoryMessage(config.getName(), assistantMessage);
+        }
+
         session.updateSnapshot(context);
 
         // 拦截器：任务结束事件

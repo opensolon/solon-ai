@@ -131,7 +131,10 @@ public class TeamAgentRecursiveTest {
 
         // 4. 执行任务
         AgentSession session = InMemoryAgentSession.of("sn_feedback_loop_2026");
-        projectTeam.call(Prompt.of("请开发一个登录模块。"), session);
+        String result = projectTeam.call(Prompt.of("请使用 Java 编写一个简单的登录 Controller 接口。"), session).getContent();
+
+        System.out.println("=====最终输出=====");
+        System.out.println(result);
 
         // 5. 获取执行轨迹
         TeamTrace rootTrace = session.getSnapshot().getAs(projectTeam.getConfig().getTraceKey());

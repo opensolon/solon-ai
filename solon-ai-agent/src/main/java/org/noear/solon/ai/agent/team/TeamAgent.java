@@ -147,6 +147,8 @@ public class TeamAgent implements Agent {
      */
     protected AssistantMessage call(Prompt prompt, AgentSession session, TeamOptions options) throws Throwable {
         FlowContext context = session.getSnapshot();
+        TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
+
         // 初始化或获取本次协作的轨迹快照
         TeamTrace trace = context.computeIfAbsent(config.getTraceKey(), k -> new TeamTrace(prompt));
 
@@ -175,7 +177,9 @@ public class TeamAgent implements Agent {
 
         // 2. 消息归档：用户输入存入 Session
         if (prompt != null) {
-            prompt.getMessages().forEach(m -> session.addHistoryMessage(config.getName(), m));
+            if (parentTeamTrace == null) {
+                prompt.getMessages().forEach(m -> session.addHistoryMessage(config.getName(), m));
+            }
         }
 
         // 触发团队启动拦截
@@ -234,7 +238,10 @@ public class TeamAgent implements Agent {
             }
 
             AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-            session.addHistoryMessage(config.getName(), assistantMessage);
+            if(parentTeamTrace == null) {
+                session.addHistoryMessage(config.getName(), assistantMessage);
+            }
+
             session.updateSnapshot(context);
 
             // 触发完成拦截
