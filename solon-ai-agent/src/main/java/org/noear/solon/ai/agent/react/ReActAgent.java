@@ -78,7 +78,7 @@ public class ReActAgent implements Agent {
     }
 
     /**
-     * 构建 ReAct 执行图：Start -> [Reason <-> Action] -> End
+     * 构建 ReAct 执行图：Start -> [Plan -> Reason <-> Action] -> End
      */
     protected Graph buildGraph() {
         return Graph.create(config.getTraceKey(), spec -> {
