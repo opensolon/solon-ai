@@ -63,7 +63,7 @@ public class Issue_IDJQ95_simp {
         // 4. 执行
         AgentSession agentSession = InMemoryAgentSession.of();
         AssistantMessage result = devTeam.call(
-                Prompt.of("编写一个英文拼写 HTML 游戏，要求样式美观，写完后交给 Reviewer 审核。"),
+                Prompt.of("编写一个简单的 HTML 网页，代码不要超过20行（只是测试下）。写完后交给 Reviewer 审核。"),
                 agentSession
         );
 
