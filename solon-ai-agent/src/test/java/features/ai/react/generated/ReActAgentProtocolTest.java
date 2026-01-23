@@ -65,7 +65,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
         // 2. 验证执行步数
         Assertions.assertTrue(trace.getStepCount() >= 2, "ReAct 路径必须包含【推理+执行】");
         // 3. 验证 Token 是否被记录（防止 Metrics 漏统计）
-        Assertions.assertTrue(trace.getMetrics().getTokenUsage() > 0);
+        Assertions.assertTrue(trace.getMetrics().getTotalTokens() > 0);
         // 验证 2：必须捕获到了工具的返回结果
         Assertions.assertTrue(hasAction, "应包含 Action 环节");
         Assertions.assertTrue(hasObservation, "ReAct 循环应包含 Observation 环节（观察结果）");
