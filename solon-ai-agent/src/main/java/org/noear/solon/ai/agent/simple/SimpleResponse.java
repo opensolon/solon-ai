@@ -46,10 +46,10 @@ public class SimpleResponse {
     }
 
     public String getContent() {
-        if (message == null) {
-            return "";
-        }
-
         return message.getContent();
+    }
+
+    public <T> T toBean(Class<T> type) {
+        return message.toBean(type);
     }
 }
