@@ -49,7 +49,7 @@ public class EmbeddingOptions {
     /**
      * 选项添加
      */
-    public EmbeddingOptions optionPut(String key, Object val) {
+    public EmbeddingOptions optionSet(String key, Object val) {
         options.put(key, val);
         return this;
     }
@@ -57,11 +57,11 @@ public class EmbeddingOptions {
     /**
      * 选项添加
      *
-     * @deprecated 3.9.0 {@link #optionPut(String, Object)}
+     * @deprecated 3.9.0 {@link #optionSet(String, Object)}
      */
     @Deprecated
     public EmbeddingOptions optionAdd(String key, Object val) {
-        return optionPut(key, val);
+        return optionSet(key, val);
     }
 
     /**
@@ -70,7 +70,7 @@ public class EmbeddingOptions {
      * @param dimensions [1024、768、512]
      */
     public EmbeddingOptions dimensions(int dimensions) {
-        return optionPut("dimensions", dimensions);
+        return optionSet("dimensions", dimensions);
     }
 
 
@@ -78,6 +78,6 @@ public class EmbeddingOptions {
      * 用户
      */
     public EmbeddingOptions user(String user) {
-        return optionPut("user", user);
+        return optionSet("user", user);
     }
 }
