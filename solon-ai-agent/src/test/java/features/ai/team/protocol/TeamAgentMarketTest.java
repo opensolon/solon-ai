@@ -41,7 +41,10 @@ public class TeamAgentMarketTest {
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.MARKET_BASED).agentAdd(py, jv).build();
         AgentSession session = InMemoryAgentSession.of("m1");
 
-        team.call(Prompt.of("我需要处理大量 Python 数据字典"), session);
+        String result = team.call(Prompt.of("我需要处理大量 Python 数据字典"), session).getContent();
+
+        System.out.println("=====最终输出=====");
+        System.out.println(result);
 
         logTrace("Python Task", team.getTrace(session));
         Assertions.assertEquals("py_coder", team.getTrace(session).getLastAgentName());
@@ -60,7 +63,11 @@ public class TeamAgentMarketTest {
 
         // 场景 A：匹配跨端
         AgentSession s1 = InMemoryAgentSession.of("m2_a");
-        team.call(Prompt.of("低成本开发双端预览版"), s1);
+        String result = team.call(Prompt.of("低成本开发双端预览版"), s1).getContent();
+
+        System.out.println("=====最终输出=====");
+        System.out.println(result);
+
         Assertions.assertEquals("flutter", team.getTrace(s1).getLastAgentName());
 
         // 场景 B：无人接单（STM32 硬件）

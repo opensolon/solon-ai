@@ -85,7 +85,8 @@ public class TeamAgentSupervisorTest {
 
         TeamAgent team = TeamAgent.of(chatModel).name("DevTeam").agentAdd(coder, reviewer).maxTurns(10)
                 .systemPrompt(p -> p
-                        .instruction("流程：Coder -> Reviewer。若 Reviewer 返回 REJECT，必须再次指派 Coder 重写。")
+                        .instruction("流程：Coder -> Reviewer。若 Reviewer 返回 REJECT，必须再次指派 Coder 重写。" +
+                                "\n 不需要带出 审计结果 和 改进说明，只需要 Coder 的最终结果")
                 ).build();
 
         AgentSession session = InMemoryAgentSession.of("s3");
@@ -115,6 +116,9 @@ public class TeamAgentSupervisorTest {
         AgentSession session = InMemoryAgentSession.of("s4");
 
         String result = team.call(Prompt.of("写个冒泡排序"), session).getContent();
+
+        System.out.println("=====最终输出=====");
+        System.out.println(result);
 
         TeamTrace trace = team.getTrace(session);
         boolean usedBoth = trace.getRecords().stream().anyMatch(r -> "strategist".equals(r.getSource()))

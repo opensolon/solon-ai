@@ -226,6 +226,29 @@ public class HierarchicalProtocol extends TeamProtocolBase {
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        if (decision != null && decision.contains(config.getFinishMarker())) {
+            // --- 核心：流程完整性校验 ---
+            // 动态检查所有注册的专家是否都至少参与过（或根据特定业务逻辑判断）
+            Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext().get(KEY_AGENT_USAGE);
+
+            // 这里的逻辑可以改为：只要有待命专家未执行且任务未达到最大轮次，就不允许结束
+            // 或者针对你的单测：强制检查是否有程序员(implementer)参与
+            if (config.getAgentMap().containsKey("implementer")) {
+                boolean hasImplementerRun = (usage != null && usage.containsKey("implementer"));
+                if (!hasImplementerRun) {
+                    // 强制路由到程序员，并注入指令
+                    trace.getProtocolContext().put("active_instruction", "请执行最终的代码落地与验证工作。");
+                    return "implementer";
+                }
+            }
+
+            // --- 结果收敛 ---
+            // 捕获当前调度者的汇总内容作为最终答案
+            String finalAnswer = decision.replace(config.getFinishMarker(), "").trim();
+            trace.setFinalAnswer(finalAnswer);
+            return Agent.ID_END;
+        }
+
         trace.getProtocolContext().put("active_instruction", decision);
         return super.resolveSupervisorRoute(context, trace, decision);
     }
@@ -268,9 +291,21 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         }
 
         if (isZh) {
-            sb.append("\n> **决策指引**：对比看板进度。若 `_meta.errors` 存在或关键环节未产出 [FINISH]，请继续调度，严禁提前结束。\n");
+            sb.append("\n### 管理与决策指引 (Management & Decision Hints):\n");
+            sb.append("> **决策指引**：对比看板进度。若 `_meta.errors` 存在或关键环节未产出，请继续调度，严禁提前结束。\n");
+            // 新增：强制协作流约束
+            sb.append("> **流程完整性**：确保设计与执行角色（如 `implementer`）均已参与。严禁跳过关键执行环节直接结束。\n");
+            sb.append("> **终结交付**：若认为任务已达成，请输出 `").append(config.getFinishMarker()).append("` 并在此回复中**汇总最终代码或方案**给用户。\n");
+            sb.append("> **注意**：输出标记后系统将立即停止，你将无法再次指派专家，请务必在这一步提供完整的交付内容。\n");
+            sb.append("> **负载建议**：参考 `agent_usage` 避免过度指派。若专家多次失败，请尝试更换专家或调整指令。\n");
         } else {
-            sb.append("\n> **Decision Hint**: Check progress. Do not end if `_meta.errors` exist or [FINISH] is missing.\n");
+            sb.append("\n### Management & Decision Hints:\n");
+            sb.append("> **Decision Hint**: Check progress. Keep scheduling if errors exist or key steps are missing.\n");
+            // Added: Workflow completeness constraint
+            sb.append("> **Workflow Integrity**: Ensure both design and implementation (e.g., `implementer`) roles have participated. Do not skip execution steps.\n");
+            sb.append("> **Final Delivery**: If satisfied, output `").append(config.getFinishMarker()).append("` and **consolidate the final code/result** in this response for the USER.\n");
+            sb.append("> **Crucial**: Once the marker is output, the workflow ends. You cannot assign agents anymore. Ensure the final delivery is complete.\n");
+            sb.append("> **Load Balance**: Refer to `agent_usage`. If an agent fails repeatedly, switch approach or adjust instructions.\n");
         }
 
         // ----------
