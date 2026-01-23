@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
+import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -72,11 +73,15 @@ public class ReActAgentHitlTest {
 
         // --- 第一步：发起请求，预期会被拦截 ---
         System.out.println("--- 第一次调用 (预期拦截) ---");
-        String result1 = agent.prompt(prompt)
+        ReActResponse resp = agent.prompt(prompt)
                 .options(o -> o.interceptorAdd(hitlInterceptor)) //添加拦截器
                 .session(session)
-                .call()
-                .getContent();
+                .call();
+
+        System.out.println(resp.getMetrics());
+        Assertions.assertTrue(resp.getMetrics().getTotalTokens() > 0);
+
+        String result1 = resp.getContent();
 
         // 通过 session.getSnapshot() 获取底层的 FlowContext 进行验证
         FlowContext context = session.getSnapshot();
