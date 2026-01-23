@@ -391,6 +391,16 @@ public class ReActAgent implements Agent {
             return this;
         }
 
+        public Builder defaultSkillAdd(Skill skill) {
+            config.getDefaultOptions().getModelOptions().skillAdd(skill);
+            return this;
+        }
+
+        public Builder defaultSkillAdd(Skill skill, int index) {
+            config.getDefaultOptions().getModelOptions().skillAdd(index, skill);
+            return this;
+        }
+
         public Builder defaultToolAdd(Iterable<FunctionTool> tools) {
             config.getDefaultOptions().getModelOptions().toolAdd(tools);
             return this;
@@ -405,15 +415,6 @@ public class ReActAgent implements Agent {
             return defaultToolAdd(new MethodToolProvider(toolObj));
         }
 
-        public Builder defaultSkillAdd(Skill skill) {
-            config.getDefaultOptions().getModelOptions().skillAdd(skill);
-            return this;
-        }
-
-        public Builder defaultSkillAdd(Skill skill, int index) {
-            config.getDefaultOptions().getModelOptions().skillAdd(index, skill);
-            return this;
-        }
 
         public Builder defaultToolContextPut(String key, Object value) {
             config.getDefaultOptions().getModelOptions().toolContextPut(key, value);

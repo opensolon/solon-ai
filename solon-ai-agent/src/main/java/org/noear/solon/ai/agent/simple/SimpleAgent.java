@@ -365,6 +365,18 @@ public class SimpleAgent implements Agent {
             return this;
         }
 
+        public Builder defaultSkillAdd(Skill... skills) {
+            for (Skill skill : skills) {
+                config.getDefaultOptions().skillAdd(0, skill);
+            }
+            return this;
+        }
+
+        public Builder defaultSkillAdd(Skill skill, int index) {
+            config.getDefaultOptions().skillAdd(index, skill);
+            return this;
+        }
+
         public Builder defaultToolAdd(FunctionTool... tools) {
             config.getDefaultOptions().toolAdd(tools);
             return this;
@@ -389,17 +401,6 @@ public class SimpleAgent implements Agent {
             return defaultToolAdd(new MethodToolProvider(toolObj));
         }
 
-        public Builder defaultSkillAdd(Skill... skills) {
-            for (Skill skill : skills) {
-                config.getDefaultOptions().skillAdd(0, skill);
-            }
-            return this;
-        }
-
-        public Builder defaultSkillAdd(Skill skill, int index) {
-            config.getDefaultOptions().skillAdd(index, skill);
-            return this;
-        }
 
         public Builder defaultToolContextPut(String key, Object value) {
             config.getDefaultOptions().toolContextPut(key, value);
