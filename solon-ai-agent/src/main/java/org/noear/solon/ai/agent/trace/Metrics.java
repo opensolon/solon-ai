@@ -56,20 +56,20 @@ public class Metrics implements Serializable {
         this.totalTokens = totalTokens;
     }
 
-    public void reset(){
+    public void reset() {
         this.totalDuration = 0;
         this.promptTokens = 0;
         this.completionTokens = 0;
         this.totalTokens = 0;
     }
 
-    public void addMetrics(Metrics metrics){
+    public void addMetrics(Metrics metrics) {
         this.promptTokens += metrics.promptTokens;
         this.completionTokens += metrics.completionTokens;
         this.totalTokens += metrics.totalTokens;
     }
 
-    public void addUsage(AiUsage usage){
+    public void addUsage(AiUsage usage) {
         this.promptTokens += usage.promptTokens();
         this.completionTokens += usage.completionTokens();
         this.totalTokens += usage.totalTokens();
@@ -92,5 +92,15 @@ public class Metrics implements Serializable {
 
     public long getTotalTokens() {
         return totalTokens;
+    }
+
+    @Override
+    public String toString() {
+        return "Metrics{" +
+                "totalDuration=" + totalDuration +
+                ", promptTokens=" + promptTokens +
+                ", completionTokens=" + completionTokens +
+                ", totalTokens=" + totalTokens +
+                '}';
     }
 }
