@@ -31,7 +31,10 @@ import java.util.*;
 public class PromptImpl implements Prompt, Serializable {
     private final Map<String, Object> attrs = new LinkedHashMap<>();
     private final List<ChatMessage> messages = new ArrayList<>();
-    private transient List<ChatMessage> messages_readonly;
+
+    private transient List<ChatMessage> messagesView;
+    private transient String systemContent;
+    private transient String userContent;
 
     @Override
     public Map<String, Object> attrs() {
@@ -41,11 +44,11 @@ public class PromptImpl implements Prompt, Serializable {
 
     @Override
     public List<ChatMessage> getMessages() {
-        if (messages_readonly == null) {
-            messages_readonly = Collections.unmodifiableList(messages);
+        if (messagesView == null) {
+            messagesView = Collections.unmodifiableList(messages);
         }
 
-        return messages_readonly;
+        return messagesView;
     }
 
     @Override
@@ -57,8 +60,6 @@ public class PromptImpl implements Prompt, Serializable {
     public ChatMessage getLastMessage() {
         return messages.isEmpty() ? null : messages.get(messages.size() - 1);
     }
-
-    private String userContent;
 
     @Override
     public String getUserContent() {
@@ -75,8 +76,6 @@ public class PromptImpl implements Prompt, Serializable {
 
         return userContent;
     }
-
-    private String systemContent;
 
     @Override
     public String getSystemContent() {
