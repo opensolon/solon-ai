@@ -24,7 +24,7 @@ public class OllamaTest {
                 .build();
 
         GenerateResponse resp = generateModel.prompt("hello")
-                .options(o -> o.optionAdd("stream", false))
+                .options(o -> o.optionPut("stream", false))
                 .call();
 
         System.out.println(resp.getData());

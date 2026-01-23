@@ -49,10 +49,21 @@ public class RerankingOptions {
     /**
      * 选项添加
      */
-    public RerankingOptions optionAdd(String key, Object val) {
+    public RerankingOptions optionSet(String key, Object val) {
         options.put(key, val);
         return this;
     }
+
+    /**
+     * 选项添加
+     *
+     * @deprecated 3.9.0 {@link #optionSet(String, Object)}
+     */
+    @Deprecated
+    public RerankingOptions optionAdd(String key, Object val){
+        return optionSet(key, val);
+    }
+
 
     /**
      * 重新排序的数量
@@ -60,7 +71,7 @@ public class RerankingOptions {
      * @param top_n [1024、768、512]
      */
     public RerankingOptions top_n(int top_n) {
-        return optionAdd("top_n", top_n);
+        return optionSet("top_n", top_n);
     }
 
 
@@ -68,13 +79,13 @@ public class RerankingOptions {
      * 是否返回文档原文
      */
     public RerankingOptions return_documents(boolean return_documents) {
-        return optionAdd("return_documents", return_documents);
+        return optionSet("return_documents", return_documents);
     }
 
     /**
      * 用户
      */
     public RerankingOptions user(String user) {
-        return optionAdd("user", user);
+        return optionSet("user", user);
     }
 }

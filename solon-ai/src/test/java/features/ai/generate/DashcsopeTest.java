@@ -59,7 +59,7 @@ public class DashcsopeTest {
                         "prompt", "转换成法国绘本风格",
                         "base_image_url", "http://wanx.alicdn.com/material/20250318/stylization_all_1.jpeg")
                 )
-                .options(o -> o.optionAdd("n", 1))
+                .options(o -> o.optionPut("n", 1))
                 .call();
 
         log.warn("{}", resp.getData());
@@ -82,8 +82,8 @@ public class DashcsopeTest {
                         "prompt", "一只猫在草地上奔跑",
                         "img_url", "https://cdn.translate.alibaba.com/r/wanx-demo-1.png")
                 )
-                .options(o -> o.optionAdd("resolution", "480P")
-                        .optionAdd("prompt_extend", true))
+                .options(o -> o.optionPut("resolution", "480P")
+                        .optionPut("prompt_extend", true))
                 .call();
 
         log.warn("{}", resp.getData());

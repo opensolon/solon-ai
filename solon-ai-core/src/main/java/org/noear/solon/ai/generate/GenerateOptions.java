@@ -52,16 +52,26 @@ public class GenerateOptions {
     /**
      * 选项添加
      */
-    public GenerateOptions optionAdd(String key, Object val) {
+    public GenerateOptions optionPut(String key, Object val) {
         options.put(key, val);
         return this;
+    }
+
+    /**
+     * 选项添加
+     *
+     * @deprecated 3.9.0 {@link #optionPut(String, Object)}
+     */
+    @Deprecated
+    public GenerateOptions optionAdd(String key, Object val) {
+        return optionPut(key, val);
     }
 
     /**
      * 模型
      */
     public GenerateOptions model(String model) {
-        return optionAdd("model", model);
+        return optionPut("model", model);
     }
 
 
@@ -69,20 +79,20 @@ public class GenerateOptions {
      * 尺寸
      */
     public GenerateOptions size(String size) {
-        return optionAdd("size", size);
+        return optionPut("size", size);
     }
 
     /**
      * 质量
      */
     public GenerateOptions quality(String quality) {
-        return optionAdd("quality", quality);
+        return optionPut("quality", quality);
     }
 
     /**
      * 响应格式
      */
     public GenerateOptions response_format(String response_format) {
-        return optionAdd("response_format", response_format);
+        return optionPut("response_format", response_format);
     }
 }

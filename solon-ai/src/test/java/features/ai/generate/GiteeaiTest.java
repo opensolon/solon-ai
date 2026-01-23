@@ -78,7 +78,7 @@ public class GiteeaiTest {
 
         //一次性返回
         GenerateResponse resp = generateModel.prompt("大海的哥")
-                .options(o -> o.optionAdd("task", "text2music"))
+                .options(o -> o.optionPut("task", "text2music"))
                 .call();
 
         log.warn("{}", resp.getData());
