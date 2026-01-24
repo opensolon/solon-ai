@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
  * @since 3.8.4
  */
 @Preview("3.8.4")
-public interface Skill extends ToolProvider {
+public interface Skill {
     /**
      * 名字
      */
@@ -73,7 +73,7 @@ public interface Skill extends ToolProvider {
     /**
      * 工具注入：转化并注入到工具列表
      */
-    default Collection<FunctionTool> getTools() {
+    default Collection<FunctionTool> getTools(Prompt prompt) {
         return null;
     }
 
@@ -86,7 +86,7 @@ public interface Skill extends ToolProvider {
      */
     default void injectInstruction(Prompt prompt, StringBuilder combinedInstruction) {
         String ins = getInstruction(prompt);
-        Collection<FunctionTool> tools = getTools();
+        Collection<FunctionTool> tools = getTools(prompt);
 
         // 1. 如果有工具，进行元信息染色（借鉴 MCP 思想）
         if (tools != null && !tools.isEmpty()) {

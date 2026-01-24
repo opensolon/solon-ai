@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +32,7 @@ import java.util.Map;
  * @since 3.2
  */
 @Preview("3.2")
-public interface Prompt {
+public interface Prompt extends Serializable {
     /**
      * 获取属性
      *

@@ -83,7 +83,7 @@ public class SimpleSkillBindingTest {
         }
 
         @Override
-        public Collection<FunctionTool> getTools() {
+        public Collection<FunctionTool> getTools(Prompt prompt) {
             return toolProvider.getTools();
         }
     }

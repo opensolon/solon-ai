@@ -61,7 +61,7 @@ public class SkillUtil {
             skill.injectInstruction(prompt, combinedInstruction);
 
             //部署工具
-            modelOptions.toolAdd(skill.getTools());
+            modelOptions.toolAdd(skill.getTools(prompt));
         }
 
         return combinedInstruction;

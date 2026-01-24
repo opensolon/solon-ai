@@ -48,15 +48,15 @@ import java.util.function.Function;
 public class SkillDesc implements Skill {
 
     private final SkillMetadata metadata;
-    private final List<FunctionTool> tools;
 
     private final Function<Prompt, Boolean> isSupportedHandler;
     private final Function<Prompt, String> getInstructionHandler;
     private final Consumer<Prompt> onAttachHandler;
+    Function<Prompt, Collection<FunctionTool>> getToolsHandler;
 
-    public SkillDesc(SkillMetadata metadata, List<FunctionTool> tools, Function<Prompt, Boolean> isSupportedHandler, Function<Prompt, String> getInstructionHandler, Consumer<Prompt> onAttachHandler) {
+    public SkillDesc(SkillMetadata metadata, Function<Prompt, Boolean> isSupportedHandler, Function<Prompt, String> getInstructionHandler, Consumer<Prompt> onAttachHandler, Function<Prompt, Collection<FunctionTool>> getToolsHandler) {
         this.metadata = metadata;
-        this.tools = Collections.unmodifiableList(tools);
+        this.getToolsHandler = getToolsHandler;
         this.isSupportedHandler = isSupportedHandler;
         this.getInstructionHandler = getInstructionHandler;
         this.onAttachHandler = onAttachHandler;
@@ -103,8 +103,8 @@ public class SkillDesc implements Skill {
     }
 
     @Override
-    public Collection<FunctionTool> getTools() {
-        return tools;
+    public Collection<FunctionTool> getTools(Prompt prompt) {
+        return getToolsHandler.apply(prompt);
     }
 
     public static Builder builder(String name) {
@@ -117,6 +117,7 @@ public class SkillDesc implements Skill {
 
         private Function<Prompt, Boolean> isSupportedHandler;
         private Function<Prompt, String> getInstructionHandler;
+        private Function<Prompt, Collection<FunctionTool>> getToolsHandler;
         private Consumer<Prompt> onAttachHandler;
 
         public Builder(String name) {
@@ -165,13 +166,21 @@ public class SkillDesc implements Skill {
             return this;
         }
 
+        public Builder tools(Function<Prompt, Collection<FunctionTool>> getTools) {
+            this.getToolsHandler = getTools;
+            this.tools.clear();
+            return this;
+        }
+
         public Builder toolAdd(FunctionTool tool) {
-            tools.add(tool);
+            this.getToolsHandler = null;
+            this.tools.add(tool);
             return this;
         }
 
         public Builder toolAdd(ToolProvider toolProvider) {
-            tools.addAll(toolProvider.getTools());
+            this.getToolsHandler = null;
+            this.tools.addAll(toolProvider.getTools());
             return this;
         }
 
@@ -180,7 +189,12 @@ public class SkillDesc implements Skill {
         }
 
         public SkillDesc build() {
-            return new SkillDesc(metadata, tools, isSupportedHandler, getInstructionHandler, onAttachHandler);
+            if (getToolsHandler == null) {
+                //如果没有，返回静态的工具集
+                getToolsHandler = (prompt) -> tools;
+            }
+
+            return new SkillDesc(metadata, isSupportedHandler, getInstructionHandler, onAttachHandler, getToolsHandler);
         }
     }
 }

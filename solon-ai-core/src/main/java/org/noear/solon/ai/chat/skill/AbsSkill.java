@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.skill;
 
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.lang.Preview;
@@ -47,7 +48,7 @@ public abstract class AbsSkill implements Skill {
     }
 
     @Override
-    public Collection<FunctionTool> getTools() {
+    public Collection<FunctionTool> getTools(Prompt prompt) {
         return tools;
     }
 }
