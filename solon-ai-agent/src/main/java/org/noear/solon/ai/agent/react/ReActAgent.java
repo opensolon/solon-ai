@@ -54,7 +54,7 @@ import java.util.function.Function;
  * <p>通过 [Reasoning -> Acting -> Observation] 的闭环模式，利用工具解决复杂逻辑任务。</p>
  */
 @Preview("3.8.1")
-public class ReActAgent implements Agent<ReActRequest> {
+public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     public final static String ID_REASON = "reason";
     public final static String ID_REASON_BEF = "reason_bef";
     public final static String ID_REASON_AFT = "reason_aft";

@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public interface Agent<Req extends AgentRequest> extends AgentHandler, NamedTaskComponent {
+public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentResponse> extends AgentHandler, NamedTaskComponent {
     static final Logger LOG = LoggerFactory.getLogger(Agent.class);
 
     /**

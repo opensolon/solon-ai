@@ -32,5 +32,14 @@ import org.noear.solon.lang.NonSerializable;
  * @author noear
  * @since 3.9.0
  */
-public interface AgentRequest extends NonSerializable {
+public interface AgentRequest<Req extends AgentRequest<Req,Resp>,Resp extends AgentResponse> extends NonSerializable {
+    /**
+     * 使用会话
+     */
+    Req session(AgentSession session);
+
+    /**
+     * 调用
+     */
+    Resp call() throws Throwable;
 }

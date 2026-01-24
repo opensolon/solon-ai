@@ -53,7 +53,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class TeamAgent implements Agent<TeamRequest> {
+public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
     public final static String ID_SYSTEM = "system";
     public final static String ID_SUPERVISOR = "supervisor";
 

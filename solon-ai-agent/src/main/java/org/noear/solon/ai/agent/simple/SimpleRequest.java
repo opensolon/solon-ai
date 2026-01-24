@@ -37,7 +37,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class SimpleRequest implements AgentRequest {
+public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse> {
     private static final Logger LOG = LoggerFactory.getLogger(SimpleRequest.class);
 
     private final SimpleAgent agent;
@@ -55,6 +55,7 @@ public class SimpleRequest implements AgentRequest {
     /**
      * 关联执行会话（用于持久化短期记忆与上下文快照）
      */
+    @Override
     public SimpleRequest session(AgentSession session) {
         this.session = session;
         return this;
@@ -71,6 +72,7 @@ public class SimpleRequest implements AgentRequest {
     /**
      * 启动智能体调用流程
      */
+    @Override
     public SimpleResponse call() throws Throwable {
         if (session == null) {
             if (LOG.isDebugEnabled()) {

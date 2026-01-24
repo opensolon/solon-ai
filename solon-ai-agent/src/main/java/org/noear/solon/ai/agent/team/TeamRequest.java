@@ -35,7 +35,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class TeamRequest implements AgentRequest {
+public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
     private static final Logger LOG = LoggerFactory.getLogger(TeamRequest.class);
 
     private final TeamAgent agent;
@@ -53,6 +53,7 @@ public class TeamRequest implements AgentRequest {
     /**
      * 绑定执行会话（用于持久化记忆或上下文关联）
      */
+    @Override
     public TeamRequest session(AgentSession session) {
         this.session = session;
         return this;
@@ -71,6 +72,7 @@ public class TeamRequest implements AgentRequest {
      *
      * @return AI 团队协作后的最终响应消息
      */
+    @Override
     public TeamResponse call() throws Throwable {
         if (session == null) {
             if (LOG.isDebugEnabled()) {

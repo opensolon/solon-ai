@@ -51,7 +51,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class SimpleAgent implements Agent<SimpleRequest> {
+public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     private static final Logger LOG = LoggerFactory.getLogger(SimpleAgent.class);
     private final SimpleAgentConfig config;
 

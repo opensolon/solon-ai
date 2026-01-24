@@ -35,7 +35,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class ReActRequest implements AgentRequest {
+public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
     private static final Logger log = LoggerFactory.getLogger(ReActRequest.class);
 
     private final ReActAgent agent;
@@ -53,6 +53,7 @@ public class ReActRequest implements AgentRequest {
     /**
      * 绑定会话实例
      */
+    @Override
     public ReActRequest session(AgentSession session) {
         this.session = session;
         return this;
@@ -69,6 +70,7 @@ public class ReActRequest implements AgentRequest {
     /**
      * 执行同步调用
      */
+    @Override
     public ReActResponse call() throws Throwable {
         if (session == null) {
             if (log.isDebugEnabled()) {
