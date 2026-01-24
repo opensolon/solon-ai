@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -34,7 +35,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class TeamRequest {
+public class TeamRequest implements AgentRequest {
     private static final Logger LOG = LoggerFactory.getLogger(TeamRequest.class);
 
     private final TeamAgent agent;
@@ -81,6 +82,6 @@ public class TeamRequest {
         AssistantMessage message = agent.call(prompt, session, options);
         TeamTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
 
-        return new TeamResponse(trace, message);
+        return new TeamResponse(session, trace, message);
     }
 }

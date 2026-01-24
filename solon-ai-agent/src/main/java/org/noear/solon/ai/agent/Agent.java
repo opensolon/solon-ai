@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public interface Agent extends AgentHandler, NamedTaskComponent {
+public interface Agent<Req extends AgentRequest> extends AgentHandler, NamedTaskComponent {
     static final Logger LOG = LoggerFactory.getLogger(Agent.class);
 
     /**
@@ -71,6 +71,20 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
         }
 
         return SnelUtil.render(description(), context.vars());
+    }
+
+    /**
+     * 创建基于 Prompt 的请求构建器
+     */
+    default Req prompt(Prompt prompt) {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * 创建基于字符串指令的请求构建器
+     */
+    default Req prompt(String prompt) {
+        throw new UnsupportedOperationException();
     }
 
     /**

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.simple;
 
+import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatOptions;
@@ -36,7 +37,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class SimpleRequest {
+public class SimpleRequest implements AgentRequest {
     private static final Logger LOG = LoggerFactory.getLogger(SimpleRequest.class);
 
     private final SimpleAgent agent;

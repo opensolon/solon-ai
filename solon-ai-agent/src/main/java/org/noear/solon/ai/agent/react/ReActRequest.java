@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -34,7 +35,7 @@ import java.util.function.Consumer;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class ReActRequest implements NonSerializable {
+public class ReActRequest implements AgentRequest {
     private static final Logger log = LoggerFactory.getLogger(ReActRequest.class);
 
     private final ReActAgent agent;
