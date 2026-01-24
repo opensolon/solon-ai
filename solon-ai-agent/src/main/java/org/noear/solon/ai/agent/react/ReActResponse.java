@@ -16,8 +16,10 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentResponse;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.flow.FlowContext;
 
 /**
  * ReAct 模式推理响应
@@ -26,12 +28,22 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
  * @since 3.8.4
  */
 public class ReActResponse implements AgentResponse {
+    private final AgentSession session;
     private final ReActTrace trace;
     private final AssistantMessage message;
 
-    public ReActResponse(ReActTrace trace, AssistantMessage message) {
+    public ReActResponse(AgentSession session, ReActTrace trace, AssistantMessage message) {
+        this.session = session;
         this.trace = trace;
         this.message = message;
+    }
+
+    public AgentSession getSession() {
+        return session;
+    }
+
+    public FlowContext getContext(){
+        return session.getSnapshot();
     }
 
     public ReActTrace getTrace() {

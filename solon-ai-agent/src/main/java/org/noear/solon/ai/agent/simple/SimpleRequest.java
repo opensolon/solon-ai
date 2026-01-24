@@ -82,6 +82,6 @@ public class SimpleRequest {
         AssistantMessage message = agent.call(prompt, session, options);
         SimpleTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
 
-        return new SimpleResponse(trace, message);
+        return new SimpleResponse(session, trace, message);
     }
 }

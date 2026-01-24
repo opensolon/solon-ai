@@ -79,6 +79,6 @@ public class ReActRequest implements NonSerializable {
         AssistantMessage message = agent.call(prompt, session, options);
         ReActTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
 
-        return new ReActResponse(trace, message);
+        return new ReActResponse(session, trace, message);
     }
 }

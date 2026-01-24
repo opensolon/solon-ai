@@ -16,8 +16,10 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.AgentResponse;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.flow.FlowContext;
 
 /**
  * 团队协作响应
@@ -26,12 +28,22 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
  * @since 3.8.4
  */
 public class TeamResponse implements AgentResponse {
+    private final AgentSession session;
     private final TeamTrace trace;
     private final AssistantMessage message;
 
-    public TeamResponse(TeamTrace trace, AssistantMessage message) {
+    public TeamResponse(AgentSession session, TeamTrace trace, AssistantMessage message) {
+        this.session = session;
         this.trace = trace;
         this.message = message;
+    }
+
+    public AgentSession getSession() {
+        return session;
+    }
+
+    public FlowContext getContext(){
+        return session.getSnapshot();
     }
 
     public TeamTrace getTrace() {

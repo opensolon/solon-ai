@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.flow.FlowContext;
 
 /**
  * 智能体响应
@@ -25,6 +26,16 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
  * @since 3.8.4
  */
 public interface AgentResponse {
+    /**
+     * 获取会话
+     */
+    AgentSession getSession();
+
+    /**
+     * 获取上下文
+     * */
+    FlowContext getContext();
+
     /**
      * 获取执行指标（如 Token 消耗、耗时等）
      */

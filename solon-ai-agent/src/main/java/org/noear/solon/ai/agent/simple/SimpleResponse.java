@@ -16,8 +16,10 @@
 package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.ai.agent.AgentResponse;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.flow.FlowContext;
 
 /**
  * 简单智能体交互响应
@@ -26,12 +28,22 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
  * @since 3.8.4
  */
 public class SimpleResponse implements AgentResponse {
+    private final AgentSession session;
     private final SimpleTrace trace;
     private final AssistantMessage message;
 
-    public SimpleResponse(SimpleTrace trace, AssistantMessage message) {
+    public SimpleResponse(AgentSession session, SimpleTrace trace, AssistantMessage message) {
+        this.session = session;
         this.trace = trace;
         this.message = message;
+    }
+
+    public AgentSession getSession() {
+        return session;
+    }
+
+    public FlowContext getContext(){
+        return session.getSnapshot();
     }
 
     public SimpleTrace getTrace() {
