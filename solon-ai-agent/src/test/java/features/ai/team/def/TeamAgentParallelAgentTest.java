@@ -69,7 +69,7 @@ public class TeamAgentParallelAgentTest {
                     spec.addActivity(frTranslator).linkAdd("aggregate_node");
 
                     spec.addParallel("aggregate_node").title("结果汇聚").task((ctx, n) -> {
-                        TeamTrace trace = ctx.getAs("__" + teamId);
+                        TeamTrace trace = TeamTrace.getCurrent(ctx);
                         if (trace != null) {
                             String summary = trace.getRecords().stream()
                                     .map(s -> String.format("[%s]: %s", s.getSource(), s.getContent().trim()))
