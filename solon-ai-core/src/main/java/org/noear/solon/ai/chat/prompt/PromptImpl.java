@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.prompt;
 
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 
@@ -59,6 +60,22 @@ public class PromptImpl implements Prompt, Serializable {
     @Override
     public ChatMessage getLastMessage() {
         return messages.isEmpty() ? null : messages.get(messages.size() - 1);
+    }
+
+    @Override
+    public AssistantMessage getLastAssistantMessage() {
+        List<ChatMessage> currentMessages = this.messages;
+        for (int i = currentMessages.size() - 1; i >= 0; i--) {
+            try {
+                ChatMessage msg = currentMessages.get(i);
+                if (msg instanceof AssistantMessage) {
+                    return (AssistantMessage) msg;
+                }
+            } catch (IndexOutOfBoundsException e) {
+                return null;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -132,5 +149,10 @@ public class PromptImpl implements Prompt, Serializable {
     @Override
     public boolean isEmpty() {
         return messages.isEmpty();
+    }
+
+    @Override
+    public int size() {
+        return messages.size();
     }
 }

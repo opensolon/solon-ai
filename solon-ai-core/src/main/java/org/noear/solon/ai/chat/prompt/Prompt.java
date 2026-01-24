@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.prompt;
 
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
@@ -104,6 +105,13 @@ public interface Prompt {
     ChatMessage getLastMessage();
 
     /**
+     * 获取最后 Assistant 消息
+     *
+     * @since 3.9.0
+     */
+    AssistantMessage getLastAssistantMessage();
+
+    /**
      * 获取用户消息内容
      *
      * @since 3.8.4
@@ -143,6 +151,11 @@ public interface Prompt {
      * @since 3.8.4
      */
     boolean isEmpty();
+
+    /**
+     * 获取大小
+     */
+    int size();
 
     /**
      * 是否为空
