@@ -94,7 +94,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
 
                 try {
                     // 调用协议内置的打分/估算逻辑生成保底标书 (算法代投)
-                    ONode bidProposal = protocol.constructBid(agent, trace.getPrompt());
+                    ONode bidProposal = protocol.constructBid(agent, trace.getOriginalPrompt());
 
                     // 将保底标书持久化到协议状态中
                     state.addBid(agent.name(), bidProposal);

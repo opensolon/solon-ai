@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.prompt.PromptImpl;
 import org.noear.solon.ai.chat.skill.SkillUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
@@ -56,7 +57,9 @@ public class TeamTrace implements AgentTrace {
     /** 当前 Agent 标识 */
     private String agentName;
     /** 当前任务提示词（随协作阶段动态变化） */
-    private Prompt prompt;
+    private Prompt originalPrompt;
+    /** 工作记忆 */
+    private final Prompt workingMemory = new PromptImpl();
     /** 协作流水账：按时间轴记录执行详情 */
     private final List<TeamRecord> records = new CopyOnWriteArrayList<>();
 
@@ -81,9 +84,9 @@ public class TeamTrace implements AgentTrace {
         this.turnCounter = new AtomicInteger(0);
     }
 
-    public TeamTrace(Prompt prompt) {
+    public TeamTrace(Prompt originalPrompt) {
         this();
-        this.prompt = prompt;
+        this.originalPrompt = originalPrompt;
     }
 
     public static TeamTrace getCurrent(FlowContext context) {
@@ -97,7 +100,7 @@ public class TeamTrace implements AgentTrace {
 
     protected void activeSkills() {
         //设置指令
-        StringBuilder combinedInstruction = SkillUtil.activeSkills(options.getModelOptions(), prompt);
+        StringBuilder combinedInstruction = SkillUtil.activeSkills(options.getModelOptions(), originalPrompt);
         if (combinedInstruction.length() > 0) {
             options.setSkillInstruction(combinedInstruction.toString());
         }
@@ -150,11 +153,16 @@ public class TeamTrace implements AgentTrace {
     }
 
     public TeamProtocol getProtocol() { return config.getProtocol(); }
-    public Prompt getPrompt() { return prompt; }
-    public void setPrompt(Prompt prompt) {
-        Objects.requireNonNull(prompt, "prompt cannot be null");
-        this.prompt = prompt;
+    public Prompt getOriginalPrompt() { return originalPrompt; }
+    public void setOriginalPrompt(Prompt originalPrompt) {
+        Objects.requireNonNull(originalPrompt, "OriginalPrompt cannot be null");
+        this.originalPrompt = originalPrompt;
     }
+
+    public Prompt getWorkingMemory() {
+        return workingMemory;
+    }
+
     public String getRoute() { return route; }
     public void setRoute(String route) { this.route = route; }
     public String getLastDecision() { return lastDecision; }

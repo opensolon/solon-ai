@@ -112,7 +112,7 @@ public interface Agent extends AgentHandler, NamedTaskComponent {
         // 3. 准备提示词并执行推理
         final Prompt effectivePrompt;
         if (trace != null) {
-            effectivePrompt = trace.getProtocol().prepareAgentPrompt(trace, this, trace.getPrompt(), trace.getConfig().getLocale());
+            effectivePrompt = trace.getProtocol().prepareAgentPrompt(trace, this, trace.getOriginalPrompt(), trace.getConfig().getLocale());
         } else {
             effectivePrompt = null;
         }

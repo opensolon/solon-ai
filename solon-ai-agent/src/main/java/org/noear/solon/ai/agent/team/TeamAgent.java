@@ -159,12 +159,12 @@ public class TeamAgent implements Agent {
 
         if (Prompt.isEmpty(prompt) == false) {
             context.trace().recordNode(graph, null);
-            trace.setPrompt(prompt);
+            trace.setOriginalPrompt(prompt);
             trace.setRoute(null);
             trace.resetProtocolContext();
             trace.resetTurnCount();
         } else {
-            if (Prompt.isEmpty(trace.getPrompt())) {
+            if (Prompt.isEmpty(trace.getOriginalPrompt())) {
                 LOG.warn("Prompt is empty!");
                 return ChatMessage.ofAssistant("");
             }

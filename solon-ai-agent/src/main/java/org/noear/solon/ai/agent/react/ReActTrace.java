@@ -64,7 +64,7 @@ public class ReActTrace implements AgentTrace {
 
     /** 任务提示词 */
     private Prompt originalPrompt;
-    /** 工作记忆（驱动 Thought, Action, Observation） */
+    /** 工作记忆 */
     private final Prompt workingMemory = new PromptImpl();
 
     /** 迭代步数计数器 */
@@ -163,6 +163,8 @@ public class ReActTrace implements AgentTrace {
     }
 
     protected void setOriginalPrompt(Prompt originalPrompt) {
+        Objects.requireNonNull(originalPrompt, "OriginalPrompt cannot be null");
+
         this.originalPrompt = originalPrompt;
     }
 

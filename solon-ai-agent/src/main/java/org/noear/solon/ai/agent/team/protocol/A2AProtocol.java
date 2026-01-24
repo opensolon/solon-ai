@@ -229,9 +229,9 @@ public class A2AProtocol extends TeamProtocolBase {
 
                 trace.addRecord(ChatRole.SYSTEM, "Supervisor", feedback, 0);
 
-                List<ChatMessage> messages = new ArrayList<>(trace.getPrompt().getMessages());
+                List<ChatMessage> messages = new ArrayList<>(trace.getOriginalPrompt().getMessages());
                 messages.add(ChatMessage.ofUser(feedback));
-                trace.setPrompt(Prompt.of(messages).attrPut(trace.getPrompt().attrs()));
+                trace.setOriginalPrompt(Prompt.of(messages).attrPut(trace.getOriginalPrompt().attrs()));
 
                 return trace.getLastAgentName();
             }
@@ -248,7 +248,7 @@ public class A2AProtocol extends TeamProtocolBase {
         Agent target = config.getAgentMap().get(targetName);
         if (target == null) return false;
 
-        boolean hasMedia = trace.getPrompt().getMessages().stream()
+        boolean hasMedia = trace.getOriginalPrompt().getMessages().stream()
                 .filter(m -> m.getRole() == ChatRole.USER)
                 .map(m -> (UserMessage) m)
                 .anyMatch(UserMessage::hasMedias);
