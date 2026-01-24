@@ -38,30 +38,36 @@ public class TeamResponse implements AgentResponse {
         this.message = message;
     }
 
-    public AgentSession getSession() {
-        return session;
-    }
-
-    public FlowContext getContext(){
-        return session.getSnapshot();
-    }
-
     public TeamTrace getTrace() {
         return trace;
     }
 
+    @Override
+    public AgentSession getSession() {
+        return session;
+    }
+
+    @Override
+    public FlowContext getContext(){
+        return session.getSnapshot();
+    }
+
+    @Override
     public Metrics getMetrics() {
         return trace.getMetrics();
     }
 
+    @Override
     public AssistantMessage getMessage() {
         return message;
     }
 
+    @Override
     public String getContent() {
         return message.getContent();
     }
 
+    @Override
     public <T> T toBean(Class<T> type) {
         return message.toBean(type);
     }
