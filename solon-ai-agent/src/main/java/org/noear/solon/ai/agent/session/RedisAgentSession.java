@@ -40,6 +40,9 @@ public class RedisAgentSession implements AgentSession {
     private static final Logger LOG = LoggerFactory.getLogger(RedisAgentSession.class);
 
     private final String instanceId;
+    private final String messagesKey;
+    private final String snapshotKey;
+
     private final RedisClient redisClient;
     private volatile FlowContext snapshot;
 
@@ -48,6 +51,8 @@ public class RedisAgentSession implements AgentSession {
         Objects.requireNonNull(redisClient, "redisClient is required");
 
         this.instanceId = instanceId;
+        this.messagesKey = instanceId + ":messages";
+        this.snapshotKey = instanceId + ":snapshot";
         this.redisClient = redisClient;
 
         // 加载或初始化持久化快照
@@ -77,8 +82,6 @@ public class RedisAgentSession implements AgentSession {
 
     @Override
     public void addMessage(Collection<? extends ChatMessage> messages) {
-        String messagesKey = getMessagesKey();
-
         for (ChatMessage msg : messages) {
             if (msg.getRole() != ChatRole.SYSTEM) {
                 redisClient.getList(messagesKey).add(ChatMessage.toJson(msg));
@@ -88,8 +91,6 @@ public class RedisAgentSession implements AgentSession {
 
     @Override
     public boolean isEmpty() {
-        String messagesKey = getMessagesKey();
-
         return redisClient.getList(messagesKey).size() == 0;
     }
 
@@ -97,8 +98,6 @@ public class RedisAgentSession implements AgentSession {
      * 物理清理指定智能体的历史记忆
      */
     public void clear() {
-        String messagesKey = getMessagesKey();
-
         redisClient.getList(messagesKey).clear();
     }
 
@@ -107,8 +106,6 @@ public class RedisAgentSession implements AgentSession {
      */
     @Override
     public List<ChatMessage> getLatestMessages(int windowSize) {
-        String messagesKey = getMessagesKey();
-
         List<String> rawList = redisClient.openSession().key(messagesKey).listGetRange(0, windowSize - 1);
 
         if (rawList == null || rawList.isEmpty()) {
@@ -128,8 +125,6 @@ public class RedisAgentSession implements AgentSession {
     @Override
     public void updateSnapshot(FlowContext snapshot) {
         this.snapshot = snapshot;
-        // 实时同步快照至持久层，确保分布式节点可见性
-        String snapshotKey = getSnapshotKey();
         redisClient.getBucket().store(snapshotKey, snapshot.toJson());
 
         if (LOG.isDebugEnabled()) {
@@ -140,13 +135,5 @@ public class RedisAgentSession implements AgentSession {
     @Override
     public FlowContext getSnapshot() {
         return snapshot;
-    }
-
-    private String getSnapshotKey() {
-        return instanceId + ":snapshot";
-    }
-
-    private String getMessagesKey() {
-        return instanceId + ":messages";
     }
 }
