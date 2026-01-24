@@ -56,7 +56,7 @@ public class TeamAgentMemoryTest {
         Assertions.assertTrue(content.contains("Solon-AI-666"), "AI 应该记得第一轮提供的口令");
 
         // 验证历史消息数量：User(2) + Assistant(2) = 4
-        Collection<ChatMessage> history = session.getHistoryMessages(team.name(), 10);
+        Collection<ChatMessage> history = session.getLatestMessages(10);
         Assertions.assertEquals(4, history.size(), "会话历史条数应为 4 条");
     }
 
@@ -98,13 +98,13 @@ public class TeamAgentMemoryTest {
         AgentSession session = InMemoryAgentSession.of("limit_session", 2);
         String agentName = "test_agent";
 
-        session.addHistoryMessage(agentName, ChatMessage.ofUser("第一轮问题"));
-        session.addHistoryMessage(agentName, ChatMessage.ofAssistant("第一轮回答"));
+        session.addMessage(ChatMessage.ofUser("第一轮问题"));
+        session.addMessage(ChatMessage.ofAssistant("第一轮回答"));
 
         // 此时添加第三条，应该触发清理，删掉最旧的 "第一轮问题"
-        session.addHistoryMessage(agentName, ChatMessage.ofUser("第二轮问题"));
+        session.addMessage(ChatMessage.ofUser("第二轮问题"));
 
-        Collection<ChatMessage> history = session.getHistoryMessages(agentName, 10);
+        Collection<ChatMessage> history = session.getLatestMessages(10);
 
         // 断言：大小应维持在 2
         Assertions.assertEquals(2, history.size(), "记忆窗口应保持为 2 条");
@@ -122,11 +122,11 @@ public class TeamAgentMemoryTest {
         String agentName = "test_agent";
 
         // 存入系统消息
-        session.addHistoryMessage(agentName, ChatMessage.ofSystem("你是一个翻译官"));
+        session.addMessage(ChatMessage.ofSystem("你是一个翻译官"));
         // 存入用户消息
-        session.addHistoryMessage(agentName, ChatMessage.ofUser("你好"));
+        session.addMessage(ChatMessage.ofUser("你好"));
 
-        Collection<ChatMessage> history = session.getHistoryMessages(agentName, 10);
+        Collection<ChatMessage> history = session.getLatestMessages(10);
 
         // 断言：历史中只应该有用户消息，系统消息不应被持久化到 Session 历史
         Assertions.assertEquals(1, history.size(), "Session 应忽略 SystemMessage");

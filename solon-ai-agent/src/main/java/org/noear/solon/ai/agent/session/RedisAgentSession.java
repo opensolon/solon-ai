@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.session;
 import org.noear.redisx.RedisClient;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
@@ -70,26 +71,39 @@ public class RedisAgentSession implements AgentSession {
     }
 
     @Override
-    public void addHistoryMessage(String agentName, ChatMessage message) {
-        String key = getHistoryKey(agentName);
-        // 持久化交互记录到 Redis List
-        redisClient.getList(key).add(ChatMessage.toJson(message));
+    public List<ChatMessage> getMessages() {
+        return getLatestMessages(50);
+    }
 
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Message added to Redis history: [{}->{}]", instanceId, agentName);
+    @Override
+    public void addMessage(Collection<? extends ChatMessage> messages) {
+        // 持久化交互记录到 Redis List
+        for (ChatMessage msg : messages) {
+            if (msg.getRole() != ChatRole.SYSTEM) {
+                redisClient.getList(instanceId).add(ChatMessage.toJson(msg));
+            }
         }
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return redisClient.getList(instanceId).size() == 0;
+    }
+
+    /**
+     * 物理清理指定智能体的历史记忆
+     */
+    public void clear() {
+        redisClient.getList(instanceId).clear();
     }
 
     /**
      * 获取指定智能体的历史记忆
-     * @param last 最近的记录条数
      */
     @Override
-    public Collection<ChatMessage> getHistoryMessages(String agentName, int last) {
-        String key = getHistoryKey(agentName);
-
+    public List<ChatMessage> getLatestMessages(int windowSize) {
         // 利用 Redis 索引获取最近的消息片段
-        List<String> rawList = redisClient.openSession().key(key).listGetRange(0, last - 1);
+        List<String> rawList = redisClient.openSession().key(instanceId).listGetRange(0, windowSize - 1);
 
         if (rawList == null || rawList.isEmpty()) {
             return Collections.emptyList();
@@ -119,21 +133,5 @@ public class RedisAgentSession implements AgentSession {
     @Override
     public FlowContext getSnapshot() {
         return snapshot;
-    }
-
-    /**
-     * 构建基于实例 ID 的 Redis Key
-     */
-    private String getHistoryKey(String agentName) {
-        return "ai:session:" + instanceId + ":" + agentName;
-    }
-
-    /**
-     * 物理清理指定智能体的历史记忆
-     */
-    public void clear(String agentName) {
-        String key = getHistoryKey(agentName);
-        redisClient.getList(key).clear();
-        LOG.info("Cleared Redis history for Agent [{}] in Session [{}]", agentName, instanceId);
     }
 }

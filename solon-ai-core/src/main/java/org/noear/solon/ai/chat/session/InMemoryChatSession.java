@@ -108,7 +108,7 @@ public class InMemoryChatSession implements ChatSession {
      * 移除size个非SystemMessage
      * 当删除调用 ToolCall 的 AssistantMessage 时，需要删除后续对应的 ToolMessage，可能会导致实际删除的 size 大于传入的 size.
      */
-    private void removeNonSystemMessages(int size) {
+    protected void removeNonSystemMessages(int size) {
         Iterator<ChatMessage> iterator = messages.iterator();
         int removeNums = 0;
 

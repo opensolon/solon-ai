@@ -15,12 +15,10 @@
  */
 package org.noear.solon.ai.agent;
 
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
-
-import java.util.Collection;
 
 /**
  * 智能体会话（运行状态与记忆中心）
@@ -35,29 +33,7 @@ import java.util.Collection;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public interface AgentSession extends NonSerializable {
-    /**
-     * 获取会话唯一标识符
-     */
-    String getSessionId();
-
-    /**
-     * 追加历史消息（存入短期记忆）
-     *
-     * @param agentName 智能体标识
-     * @param message   消息内容
-     */
-    void addHistoryMessage(String agentName, ChatMessage message);
-
-    /**
-     * 提取最近历史消息（记忆加载）
-     *
-     * @param agentName 智能体标识
-     * @param last      提取最近的消息条数
-     * @return 历史消息列表
-     */
-    Collection<ChatMessage> getHistoryMessages(String agentName, int last);
-
+public interface AgentSession extends ChatSession, NonSerializable {
     /**
      * 同步/更新执行快照
      *

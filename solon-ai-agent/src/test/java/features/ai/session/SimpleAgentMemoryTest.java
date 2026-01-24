@@ -63,7 +63,7 @@ public class SimpleAgentMemoryTest {
 
         // C. 检查消息流长度：
         // Session 历史应包含：R1_User, R1_AI, R2_User, R2_AI (共4条)
-        Collection<ChatMessage> fullHistory = session.getHistoryMessages(agent.name(), 10);
+        Collection<ChatMessage> fullHistory = session.getLatestMessages(10);
         Assertions.assertEquals(4, fullHistory.size(), "Session 历史消息数量应为 4 条");
 
 

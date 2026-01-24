@@ -125,13 +125,13 @@ public class SimpleAgent implements Agent {
         Prompt finalPrompt = prepareAgentPrompt(parentTeamTrace, session, prompt);
 
         // 2. 物理调用：执行带重试机制的 LLM 请求
-        AssistantMessage result = null;
+        AssistantMessage assistantMessage = null;
 
         long startTime = System.currentTimeMillis();
         try {
             trace.getMetrics().reset();
 
-            result = callWithRetry(trace, session, finalPrompt, options);
+            assistantMessage = callWithRetry(trace, session, finalPrompt, options);
         } finally {
             trace.getMetrics().setTotalDuration(System.currentTimeMillis() - startTime);
 
@@ -144,17 +144,19 @@ public class SimpleAgent implements Agent {
 
         // 3. 状态回填：将输出结果自动映射到 FlowContext
         if (Assert.isNotEmpty(config.getOutputKey())) {
-            context.put(config.getOutputKey(), result.getContent());
+            context.put(config.getOutputKey(), assistantMessage.getContent());
         }
 
         // 4. 更新会话状态与快照
-        if (parentTeamTrace == null) {
-            session.addHistoryMessage(config.getName(), result);
+        if(Utils.isNotEmpty(assistantMessage.getToolCalls())) {
+            if (parentTeamTrace == null) {
+                session.addMessage(assistantMessage);
+            }
         }
 
         session.updateSnapshot(context);
 
-        return result;
+        return assistantMessage;
     }
 
 
@@ -179,7 +181,7 @@ public class SimpleAgent implements Agent {
 
         // 加载限定窗口大小的历史记录
         if (parentTeamTrace == null && config.getSessionWindowSize() > 0) {
-            Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), config.getSessionWindowSize());
+            Collection<ChatMessage> history = session.getLatestMessages(config.getSessionWindowSize());
             if (Assert.isNotEmpty(history)) {
                 messages.addAll(history);
             }
@@ -191,7 +193,7 @@ public class SimpleAgent implements Agent {
         // 消息归档：同步当前用户请求到 Session 历史
         if (parentTeamTrace == null && Prompt.isEmpty(originalPrompt) == false) {
             for (ChatMessage message : originalPrompt.getMessages()) {
-                session.addHistoryMessage(config.getName(), message);
+                session.addMessage(message);
             }
         }
 

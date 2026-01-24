@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
@@ -202,7 +203,7 @@ public class ReActAgent implements Agent {
             // 1. 加载历史上下文（短期记忆）
             if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
                 if (parentTeamTrace == null) {
-                    Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getSessionWindowSize());
+                    Collection<ChatMessage> history = session.getLatestMessages(options.getSessionWindowSize());
                     trace.getWorkingMemory().addMessage(history);
                 }
             }
@@ -210,7 +211,7 @@ public class ReActAgent implements Agent {
             //新的问题
             for (ChatMessage message : prompt.getMessages()) {
                 if (parentTeamTrace == null) {
-                    session.addHistoryMessage(config.getName(), message);
+                    session.addMessage(message);
                 }
 
                 trace.getWorkingMemory().addMessage(message);
@@ -270,10 +271,12 @@ public class ReActAgent implements Agent {
         }
 
         AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-        if (parentTeamTrace == null) {
-            session.addHistoryMessage(config.getName(), assistantMessage);
+        if(Utils.isNotEmpty(assistantMessage.getToolCalls())) {
+            if (parentTeamTrace == null) {
+                session.addMessage(assistantMessage);
+            }
+            trace.getWorkingMemory().addMessage(assistantMessage);
         }
-        trace.getWorkingMemory().addMessage(assistantMessage);
 
         session.updateSnapshot(context);
 
