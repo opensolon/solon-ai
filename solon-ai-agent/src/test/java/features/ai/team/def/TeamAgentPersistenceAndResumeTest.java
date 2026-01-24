@@ -63,7 +63,7 @@ public class TeamAgentPersistenceAndResumeTest {
         AgentSession session = InMemoryAgentSession.of(restoredContext);
 
         // 验证恢复：调用时不传 Prompt，触发“断点续跑”模式
-        String finalResult = tripAgent.call(null, session).getContent();
+        String finalResult = tripAgent.resume(session).getContent();
 
         // --- 阶段 C：核心验证 ---
         TeamTrace finalTrace = tripAgent.getTrace(session);

@@ -88,7 +88,7 @@ public class TeamAgentHumanInTheLoopTest {
         System.out.println(">>> [系统]：审批通过，恢复流程执行最终确认...");
 
         // 第二次调用：传入 session 即可，Agent 会从挂起点自动恢复
-        String finalOutput = auditTeam.call(null, session).getContent();
+        String finalOutput = auditTeam.resume(session).getContent();
 
         System.out.println(">>> [最终输出]：\n" + finalOutput);
 
