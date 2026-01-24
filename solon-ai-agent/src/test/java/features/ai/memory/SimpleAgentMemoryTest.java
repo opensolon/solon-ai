@@ -1,4 +1,4 @@
-package features.ai.session;
+package features.ai.memory;
 
 import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Assertions;
