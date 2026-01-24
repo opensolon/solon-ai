@@ -25,11 +25,26 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
  * @since 3.8.4
  */
 public interface AgentResponse {
+    /**
+     * 获取执行指标（如 Token 消耗、耗时等）
+     */
     Metrics getMetrics();
 
+    /**
+     * 获取消息
+     */
     AssistantMessage getMessage();
 
+    /**
+     * 获取消息内容
+     */
     String getContent();
 
+    /**
+     * 将消息内容转换为结构化对象（通常用于解析 JSON 格式的 Final Answer）
+     *
+     * @param type 目标类型
+     * @param <T>  类型泛型
+     */
     <T> T toBean(Class<T> type);
 }
