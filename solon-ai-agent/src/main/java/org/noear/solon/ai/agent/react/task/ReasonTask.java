@@ -102,7 +102,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(systemPrompt));
-        messages.addAll(trace.getMessages());
+        messages.addAll(trace.getWorkingMemory().getMessages());
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
         ChatResponse response = callWithRetry(trace, messages);
@@ -117,14 +117,14 @@ public class ReasonTask implements NamedTaskComponent {
 
         // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
-            trace.appendMessage(ChatMessage.ofUser("Your last response was empty. Please provide Action or Final Answer."));
+            trace.getWorkingMemory().addMessage(ChatMessage.ofUser("Your last response was empty. Please provide Action or Final Answer."));
             trace.setRoute(ReActAgent.ID_REASON);
             return;
         }
 
         // [逻辑 4: 路由分发 - 基于原生工具调用协议]
         if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
-            trace.appendMessage(response.getMessage());
+            trace.getWorkingMemory().addMessage(response.getMessage());
             trace.setRoute(ReActAgent.ID_ACTION);
             return;
         }
@@ -152,7 +152,7 @@ public class ReasonTask implements NamedTaskComponent {
         // 进一步清洗协议头（如 Thought:），提取核心思维逻辑
         String thoughtContent = extractThought(clearContent);
 
-        trace.appendMessage(ChatMessage.ofAssistant(rawContent));
+        trace.getWorkingMemory().addMessage(ChatMessage.ofAssistant(rawContent));
         trace.setLastResult(thoughtContent);
 
         // 触发思考事件（仅在存在有效思考文本时通知）

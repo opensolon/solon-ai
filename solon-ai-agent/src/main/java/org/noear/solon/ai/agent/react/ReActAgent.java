@@ -182,16 +182,16 @@ public class ReActAgent implements Agent {
         }
 
         // 1. 加载历史上下文（短期记忆）
-        if (trace.getMessagesSize() == 0 && options.getSessionWindowSize() > 0) {
+        if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
             if (parentTeamTrace == null) {
                 Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getSessionWindowSize());
-                trace.appendMessages(history);
+                trace.getWorkingMemory().addMessage(history);
             }
         }
 
         if (Prompt.isEmpty(prompt)) {
             //可能是旧问题（之前中断的）
-            prompt = trace.getPrompt();
+            prompt = trace.getOriginalPrompt();
 
             if (Prompt.isEmpty(prompt)) {
                 LOG.warn("Prompt is empty!");
@@ -204,12 +204,12 @@ public class ReActAgent implements Agent {
                     session.addHistoryMessage(config.getName(), message);
                 }
 
-                trace.appendMessage(message);
+                trace.getWorkingMemory().addMessage(message);
             }
 
             trace.setPlans(null);
             context.trace().recordNode(graph, null);
-            trace.setPrompt(prompt);
+            trace.setOriginalPrompt(prompt);
         }
 
         //如果提示词没问题，开始激活技能

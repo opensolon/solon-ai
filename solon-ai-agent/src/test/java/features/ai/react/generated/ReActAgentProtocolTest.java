@@ -158,7 +158,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
                 java.util.regex.Pattern.DOTALL
         );
 
-        for (ChatMessage msg : trace.getMessages()) {
+        for (ChatMessage msg : trace.getWorkingMemory().getMessages()) {
             // 1. 适配原生协议模式 (AssistantMessage 带有 ToolCalls 对象)
             if (msg instanceof AssistantMessage) {
                 AssistantMessage am = (AssistantMessage) msg;
@@ -193,7 +193,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
         String history = formatReActHistory(trace);
         if (history.contains("Thought")) return true;
 
-        for (ChatMessage msg : trace.getMessages()) {
+        for (ChatMessage msg : trace.getWorkingMemory().getMessages()) {
             if (msg instanceof AssistantMessage) {
                 String content = msg.getContent();
                 if (content != null && content.contains("Thought")) return true;
@@ -204,7 +204,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
     private boolean containsObservation(ReActTrace trace) {
         if (trace == null) return false;
-        for (ChatMessage msg : trace.getMessages()) {
+        for (ChatMessage msg : trace.getWorkingMemory().getMessages()) {
             // 1. 原生协议：检查是否是 ToolMessage 类型
             if (msg instanceof ToolMessage) {
                 return true;

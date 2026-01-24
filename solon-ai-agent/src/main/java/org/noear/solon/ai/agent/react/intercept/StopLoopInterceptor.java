@@ -59,7 +59,7 @@ public class StopLoopInterceptor implements ReActInterceptor {
         String fingerprint = content.trim();
 
         // 2. 检索历史轨迹中相同内容的出现频次
-        long repeatCount = trace.getMessages().stream()
+        long repeatCount = trace.getWorkingMemory().getMessages().stream()
                 .filter(m -> m.getContent() != null && m.getContent().trim().equals(fingerprint))
                 .count();
 

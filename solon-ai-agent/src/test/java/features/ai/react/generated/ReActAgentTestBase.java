@@ -17,7 +17,7 @@ public abstract class ReActAgentTestBase {
     protected String formatReActHistory(ReActTrace trace) {
         if (trace == null) return "";
 
-        List<ChatMessage> messages = trace.getMessages();
+        List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
         return messages.stream()
                 .map(msg -> {
                     String role = getMessageRole(msg);

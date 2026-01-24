@@ -83,7 +83,7 @@ public class ReActAgentBoundaryTest {
         ReActTrace trace = agent.getTrace(session);
         if (trace != null) {
             // 获取消息历史，验证错误是否被反馈给 LLM 或记录在轨迹中
-            List<ChatMessage> messages = trace.getMessages();
+            List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
             String history = messages.stream()
                     .map(ChatMessage::toString)
                     .collect(Collectors.joining("\n"));

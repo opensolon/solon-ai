@@ -63,8 +63,8 @@ public class ReActAgentDemo {
 
         // 6. 验证序列化前后的数据一致性
         Assertions.assertEquals(
-                record1.getMessagesSize(),
-                record2.getMessagesSize(), "消息记录数量不匹配，序列化失败");
+                record1.getWorkingMemory().size(),
+                record2.getWorkingMemory().size(), "消息记录数量不匹配，序列化失败");
 
         Assertions.assertEquals(
                 context1.lastNodeId(),

@@ -73,7 +73,7 @@ public class ReActAgentMemoryTest {
         Assertions.assertNotNull(trace, "Trace 不应为空");
         // Trace 中的消息应为：R1_User, R1_AI, R2_User (最后一条 AI 消息通常由 call 返回，不一定在 trace 最终消息列表中，视实现而定)
         System.out.println("\n--- Trace 推理上下文检查 ---");
-        trace.getMessages().forEach(m -> System.out.println("Trace [" + m.getRole() + "]: " + m.getContent()));
+        trace.getWorkingMemory().getMessages().forEach(m -> System.out.println("Trace [" + m.getRole() + "]: " + m.getContent()));
 
         System.out.println("\n--- Session 历史归档查询 ---");
         fullHistory.forEach(m -> System.out.println("Archive [" + m.getRole() + "]: " + m.getContent()));

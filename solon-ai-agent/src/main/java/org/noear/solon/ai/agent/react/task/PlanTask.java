@@ -72,7 +72,7 @@ public class PlanTask implements NamedTaskComponent {
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(trace.getOptions().getPlanInstruction(trace)));
         // 动态拼接引导词
-        messages.add(ChatMessage.ofUser(targetLabel + trace.getPrompt().getUserContent()));
+        messages.add(ChatMessage.ofUser(targetLabel + trace.getOriginalPrompt().getUserContent()));
 
         // 3. 调用模型生成计划
         ChatResponse response = config.getChatModel()

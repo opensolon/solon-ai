@@ -59,10 +59,10 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
     @Override
     public void onObservation(ReActTrace trace, String result) {
-        if (trace.getMessagesSize() < 4) return;
+        if (trace.getWorkingMemory().size() < 4) return;
 
         // 1. 触发检查：缓冲 2 条消息，避免频繁重组
-        List<ChatMessage> messages = trace.getMessages();
+        List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
         int currentTokens = estimateTokens(messages);
         if (messages.size() <= maxMessages + 2 && currentTokens <= maxTokens) {
             return;
@@ -115,7 +115,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
         }
 
         compressed.addAll(messages.subList(startIdx, messages.size()));
-        trace.replaceMessages(compressed);
+        trace.getWorkingMemory().replaceMessages(compressed);
     }
 
     /**

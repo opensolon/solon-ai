@@ -24,6 +24,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.prompt.PromptImpl;
 import org.noear.solon.ai.chat.skill.SkillUtil;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -61,14 +62,16 @@ public class ReActTrace implements AgentTrace {
     /** 协议注入的专用工具映射表 */
     private transient final Map<String, FunctionTool> protocolToolMap = new LinkedHashMap<>();
 
-    /** 任务提示词（因为要反序列化，所以不用接口形式） */
-    private Prompt prompt;
+    /** 任务提示词 */
+    private Prompt originalPrompt;
+    /** 工作记忆（驱动 Thought, Action, Observation） */
+    private final Prompt workingMemory = new PromptImpl();
+
     /** 迭代步数计数器 */
     private AtomicInteger stepCounter = new AtomicInteger(0);
     /** 工具调用计数器 */
     private AtomicInteger toolCounter = new AtomicInteger(0);
-    /** 消息历史序列 (Thought, Action, Observation) */
-    private final List<ChatMessage> messages = new CopyOnWriteArrayList<>();
+
     /** 逻辑路由标识 (REASON, ACTION, END) */
     private volatile String route;
     /** 最终回答内容 (Final Answer) */
@@ -83,9 +86,9 @@ public class ReActTrace implements AgentTrace {
         this.route = ReActAgent.ID_REASON;
     }
 
-    public ReActTrace(Prompt prompt) {
+    public ReActTrace(Prompt originalPrompt) {
         this();
-        this.prompt = prompt;
+        this.originalPrompt = originalPrompt;
     }
 
     // --- 生命周期与状态管理 ---
@@ -102,7 +105,7 @@ public class ReActTrace implements AgentTrace {
 
     protected void activeSkills() {
         //设置指令
-        StringBuilder combinedInstruction = SkillUtil.activeSkills(options.getModelOptions(), prompt);
+        StringBuilder combinedInstruction = SkillUtil.activeSkills(options.getModelOptions(), originalPrompt);
         if (combinedInstruction.length() > 0) {
             options.setSkillInstruction(combinedInstruction.toString());
         }
@@ -155,12 +158,16 @@ public class ReActTrace implements AgentTrace {
         return config.getName();
     }
 
-    public Prompt getPrompt() {
-        return prompt;
+    public Prompt getOriginalPrompt() {
+        return originalPrompt;
     }
 
-    protected void setPrompt(Prompt prompt) {
-        this.prompt = prompt;
+    protected void setOriginalPrompt(Prompt originalPrompt) {
+        this.originalPrompt = originalPrompt;
+    }
+
+    public Prompt getWorkingMemory() {
+        return workingMemory;
     }
 
     public int getStepCount() {
@@ -208,77 +215,13 @@ public class ReActTrace implements AgentTrace {
         this.lastResult = lastResult;
     }
 
-    public int getMessagesSize() {
-        return messages.size();
-    }
-
-    /**
-     * 获取只读历史消息快照
-     */
-    public List<ChatMessage> getMessages() {
-        return Collections.unmodifiableList(messages);
-    }
-
-    /**
-     * 获取末尾消息
-     */
-    public ChatMessage getLastMessage() {
-        return messages.isEmpty() ? null : messages.get(messages.size() - 1);
-    }
-
-    /**
-     * 回溯查找最近的 Assistant 消息
-     */
-    public AssistantMessage getLastAssistantMessage() {
-        List<ChatMessage> currentMessages = this.messages;
-        for (int i = currentMessages.size() - 1; i >= 0; i--) {
-            try {
-                ChatMessage msg = currentMessages.get(i);
-                if (msg instanceof AssistantMessage) {
-                    return (AssistantMessage) msg;
-                }
-            } catch (IndexOutOfBoundsException e) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 记录新消息到轨迹
-     */
-    public void appendMessage(ChatMessage message) {
-        if (message != null) {
-            messages.add(message);
-        }
-    }
-
-    public void appendMessages(Collection<ChatMessage> newMessages) {
-        if (Assert.isNotEmpty(newMessages)) {
-            messages.addAll(newMessages);
-        }
-    }
-
-    /**
-     * 替换历史消息 (用于上下文压缩或清洗)
-     */
-    public void replaceMessages(List<ChatMessage> newMessages) {
-        if (newMessages == null) {
-            throw new IllegalArgumentException("messages cannot be null");
-        }
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Agent [{}] messages replaced, size: {} -> {}", getAgentName(), messages.size(), newMessages.size());
-        }
-        this.messages.clear();
-        this.messages.addAll(newMessages);
-    }
 
     /**
      * 获取人性化历史记录格式
      */
     public String getFormattedHistory() {
         StringBuilder sb = new StringBuilder();
-        for (ChatMessage msg : messages) {
+        for (ChatMessage msg : workingMemory.getMessages()) {
             if (msg instanceof UserMessage) {
                 sb.append("[User] ").append(msg.getContent()).append("\n");
             } else if (msg instanceof AssistantMessage) {
