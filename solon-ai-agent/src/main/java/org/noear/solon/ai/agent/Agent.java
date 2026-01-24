@@ -87,6 +87,10 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
         throw new UnsupportedOperationException();
     }
 
+    default Req prompt() {
+        throw new UnsupportedOperationException();
+    }
+
     /**
      * 恢复执行
      */

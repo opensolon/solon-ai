@@ -143,12 +143,19 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         return config.getProfile();
     }
 
+    @Override
     public ReActRequest prompt(Prompt prompt) {
         return new ReActRequest(this, prompt);
     }
 
+    @Override
     public ReActRequest prompt(String prompt) {
         return new ReActRequest(this, Prompt.of(prompt));
+    }
+
+    @Override
+    public ReActRequest prompt() {
+        return new ReActRequest(this, null);
     }
 
     @Override

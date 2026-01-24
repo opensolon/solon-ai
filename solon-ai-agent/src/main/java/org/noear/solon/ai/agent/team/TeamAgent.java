@@ -126,12 +126,19 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
     /**
      * 创建团队请求（支持后续流式或异步处理）
      */
+    @Override
     public TeamRequest prompt(Prompt prompt) {
         return new TeamRequest(this, prompt);
     }
 
+    @Override
     public TeamRequest prompt(String prompt) {
-        return prompt(Prompt.of(prompt));
+        return new TeamRequest(this, Prompt.of(prompt));
+    }
+
+    @Override
+    public TeamRequest prompt() {
+        return new TeamRequest(this, null);
     }
 
     /**

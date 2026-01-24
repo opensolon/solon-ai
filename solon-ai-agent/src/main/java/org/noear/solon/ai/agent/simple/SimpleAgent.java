@@ -84,13 +84,19 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         return config.getProfile();
     }
 
-
+    @Override
     public SimpleRequest prompt(Prompt prompt) {
         return new SimpleRequest(this, prompt);
     }
 
+    @Override
     public SimpleRequest prompt(String prompt) {
         return new SimpleRequest(this, Prompt.of(prompt));
+    }
+
+    @Override
+    public SimpleRequest prompt() {
+        return new SimpleRequest(this, null);
     }
 
     @Override
@@ -98,12 +104,17 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         return call(prompt, session, null);
     }
 
-    protected AssistantMessage call(Prompt prompt, AgentSession session, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
-        if (Prompt.isEmpty(prompt)) {
-            LOG.warn("Prompt is empty!");
-            return ChatMessage.ofAssistant("");
+    protected SimpleTrace getTrace(FlowContext context, Prompt prompt) {
+        SimpleTrace trace = context.getAs(config.getTraceKey());
+        if (trace == null) {
+            trace = new SimpleTrace(prompt);
+            context.put(config.getTraceKey(), trace);
         }
 
+        return trace;
+    }
+
+    protected AssistantMessage call(Prompt prompt, AgentSession session, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
         if (options == null) {
             options = config.getDefaultOptions();
         }
@@ -113,12 +124,16 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         // 初始化或恢复推理痕迹 (Trace)
-        SimpleTrace trace = context.getAs(config.getTraceKey());
-        if (trace == null) {
-            trace = new SimpleTrace(prompt);
-            context.put(config.getTraceKey(), trace);
-        } else {
-            trace.setPrompt(prompt);
+        SimpleTrace trace = getTrace(context, prompt);
+
+        if (Prompt.isEmpty(prompt)) {
+            //可能是旧问题（之前中断的）
+            prompt = trace.getOriginalPrompt();
+
+            if (Prompt.isEmpty(prompt)) {
+                LOG.warn("Prompt is empty!");
+                return ChatMessage.ofAssistant("");
+            }
         }
 
         // 1. 构建请求消息

@@ -27,23 +27,23 @@ import org.noear.solon.ai.chat.prompt.Prompt;
  * @since 3.8.4
  */
 public class SimpleTrace implements AgentTrace {
-    private Prompt prompt;
+    private Prompt originalPrompt;
     private final Metrics metrics = new Metrics();
 
     public SimpleTrace() {
-        this.prompt = null;
+        this.originalPrompt = null;
     }
 
-    public SimpleTrace(Prompt prompt) {
-        this.prompt = prompt;
+    public SimpleTrace(Prompt originalPrompt) {
+        this.originalPrompt = originalPrompt;
     }
 
-    protected void setPrompt(Prompt prompt) {
-        this.prompt = prompt;
+    protected void setOriginalPrompt(Prompt prompt) {
+        this.originalPrompt = prompt;
     }
 
-    public Prompt getPrompt() {
-        return prompt;
+    public Prompt getOriginalPrompt() {
+        return originalPrompt;
     }
 
     @Override
