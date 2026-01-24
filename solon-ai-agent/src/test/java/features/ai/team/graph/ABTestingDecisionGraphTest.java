@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
+import org.noear.solon.ai.agent.team.TeamResponse;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -79,6 +80,10 @@ public class ABTestingDecisionGraphTest {
 
                                 String finalVerdict = (approveCount >= 2) ? "PROMOTED_B" : "RETAINED_A";
                                 ctx.put("ab_test_decision", finalVerdict);
+
+                                TeamTrace trace = TeamTrace.getCurrent(ctx);
+                                trace.setFinalAnswer(finalVerdict); //设为最终答复
+
                                 System.out.println(">>> [Decision] 赞成票: " + approveCount + ", 最终裁决: " + finalVerdict);
                             })
                             .linkAdd(Agent.ID_END);
@@ -88,18 +93,16 @@ public class ABTestingDecisionGraphTest {
                 .build();
 
         // --- 2. 运行流程 ---
-        AgentSession session = InMemoryAgentSession.of("session_ab_test_01");
         String query = "当前 A 转化率 15.2%, B 转化率 18.7%。请给出你的评估意见（approve/reject）。";
-        team.call(Prompt.of(query), session);
+        TeamResponse resp = team.prompt(query).call();
 
         // --- 3. 结果验证 ---
 
         // A. 验证业务 Activity 逻辑：数据是否成功写入上下文
-        Assertions.assertEquals(15.2, session.getSnapshot().getAs("variant_a_conv"), "数据加载节点未执行");
+        Assertions.assertEquals(15.2, resp.getContext().getAs("variant_a_conv"), "数据加载节点未执行");
 
         // B. 验证 Agent 参与轨迹：Trace 记录 AI 专家的交互足迹
-        TeamTrace trace = team.getTrace(session);
-        List<String> agentFootprints = trace.getRecords().stream()
+        List<String> agentFootprints = resp.getTrace().getRecords().stream()
                 .map(TeamTrace.TeamRecord::getSource)
                 .collect(Collectors.toList());
 
@@ -107,7 +110,7 @@ public class ABTestingDecisionGraphTest {
         Assertions.assertTrue(agentFootprints.contains("data_analyst"), "Trace 记录缺失专家节点");
 
         // C. 验证最终业务决策结果
-        String decision = session.getSnapshot().getAs("ab_test_decision");
+        String decision = resp.getContext().getAs("ab_test_decision");
         Assertions.assertNotNull(decision, "决策结果未生成");
         System.out.println("测试成功。最终结论: " + decision);
     }
