@@ -155,4 +155,9 @@ public class PromptImpl implements Prompt, Serializable {
     public int size() {
         return messages.size();
     }
+
+    @Override
+    public void clear() {
+        messages.clear();
+    }
 }

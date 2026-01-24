@@ -186,13 +186,6 @@ public class ReActAgent implements Agent {
             protocol.injectAgentTools(session.getSnapshot(), this, trace::addProtocolTool);
         }
 
-        // 1. 加载历史上下文（短期记忆）
-        if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
-            if (parentTeamTrace == null) {
-                Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getSessionWindowSize());
-                trace.getWorkingMemory().addMessage(history);
-            }
-        }
 
         if (Prompt.isEmpty(prompt)) {
             //可能是旧问题（之前中断的）
@@ -203,6 +196,17 @@ public class ReActAgent implements Agent {
                 return ChatMessage.ofAssistant("");
             }
         } else {
+            //新问题（重置相关数据）
+            trace.getWorkingMemory().clear();
+
+            // 1. 加载历史上下文（短期记忆）
+            if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
+                if (parentTeamTrace == null) {
+                    Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getSessionWindowSize());
+                    trace.getWorkingMemory().addMessage(history);
+                }
+            }
+
             //新的问题
             for (ChatMessage message : prompt.getMessages()) {
                 if (parentTeamTrace == null) {
@@ -269,6 +273,7 @@ public class ReActAgent implements Agent {
         if (parentTeamTrace == null) {
             session.addHistoryMessage(config.getName(), assistantMessage);
         }
+        trace.getWorkingMemory().addMessage(assistantMessage);
 
         session.updateSnapshot(context);
 

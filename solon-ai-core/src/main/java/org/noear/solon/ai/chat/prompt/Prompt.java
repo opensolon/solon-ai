@@ -158,6 +158,11 @@ public interface Prompt {
     int size();
 
     /**
+     * 清空
+     */
+    void clear();
+
+    /**
      * 是否为空
      */
     static boolean isEmpty(Prompt prompt) {

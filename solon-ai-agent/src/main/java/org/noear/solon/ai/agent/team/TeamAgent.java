@@ -169,14 +169,6 @@ public class TeamAgent implements Agent {
         // 1. 运行时环境准备
         trace.prepare(config, options, session, config.getName());
 
-        // 加载历史上下文（短期记忆）
-        if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
-            // 如果没有父团队（即当前是顶层团队），则从 Session 加载历史
-            if (parentTeamTrace == null) {
-                Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getSessionWindowSize());
-                trace.getWorkingMemory().addMessage(history);
-            }
-        }
 
         if (Prompt.isEmpty(prompt)) {
             //可能是旧问题（之前中断的）
@@ -187,18 +179,32 @@ public class TeamAgent implements Agent {
                 return ChatMessage.ofAssistant("");
             }
         } else {
-            context.trace().recordNode(graph, null);
-            trace.setOriginalPrompt(prompt);
-            trace.setRoute(null);
-            trace.resetProtocolContext();
-            trace.resetTurnCount();
+            //新问题（重置数据）
+            trace.getWorkingMemory().clear();
 
+
+            // 加载历史上下文（短期记忆）
+            if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
+                // 如果没有父团队（即当前是顶层团队），则从 Session 加载历史
+                if (parentTeamTrace == null) {
+                    Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getSessionWindowSize());
+                    trace.getWorkingMemory().addMessage(history);
+                }
+            }
+
+            //加载源提示词
             for (ChatMessage message : prompt.getMessages()) {
                 if (parentTeamTrace == null) {
                     session.addHistoryMessage(config.getName(), message);
                 }
                 trace.getWorkingMemory().addMessage(message);
             }
+
+            context.trace().recordNode(graph, null);
+            trace.setOriginalPrompt(prompt);
+            trace.setRoute(null);
+            trace.resetProtocolContext();
+            trace.resetTurnCount();
         }
 
         //如果提示词没问题，开始部署技能
@@ -261,8 +267,8 @@ public class TeamAgent implements Agent {
             AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
             if (parentTeamTrace == null) {
                 session.addHistoryMessage(config.getName(), assistantMessage);
-                trace.getWorkingMemory().addMessage(assistantMessage);
             }
+            trace.getWorkingMemory().addMessage(assistantMessage);
 
             session.updateSnapshot(context);
 
