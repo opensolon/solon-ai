@@ -88,14 +88,14 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     }
 
     /**
-     * 创建恢复请求构建器（用于从会话中恢复执行）
+     * 创建恢复请求构建器（用于从会话中恢复 prompt 执行）
      */
     default Req prompt() {
         throw new UnsupportedOperationException();
     }
 
     /**
-     * 恢复执行
+     * 恢复执行（用于从会话中恢复 prompt 执行）
      */
     default AssistantMessage call(AgentSession session) throws Throwable {
         return call(null, session);
