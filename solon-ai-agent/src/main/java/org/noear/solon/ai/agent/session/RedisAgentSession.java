@@ -77,24 +77,29 @@ public class RedisAgentSession implements AgentSession {
 
     @Override
     public void addMessage(Collection<? extends ChatMessage> messages) {
-        // 持久化交互记录到 Redis List
+        String messagesKey = getMessagesKey();
+
         for (ChatMessage msg : messages) {
             if (msg.getRole() != ChatRole.SYSTEM) {
-                redisClient.getList(instanceId).add(ChatMessage.toJson(msg));
+                redisClient.getList(messagesKey).add(ChatMessage.toJson(msg));
             }
         }
     }
 
     @Override
     public boolean isEmpty() {
-        return redisClient.getList(instanceId).size() == 0;
+        String messagesKey = getMessagesKey();
+
+        return redisClient.getList(messagesKey).size() == 0;
     }
 
     /**
      * 物理清理指定智能体的历史记忆
      */
     public void clear() {
-        redisClient.getList(instanceId).clear();
+        String messagesKey = getMessagesKey();
+
+        redisClient.getList(messagesKey).clear();
     }
 
     /**
@@ -102,8 +107,9 @@ public class RedisAgentSession implements AgentSession {
      */
     @Override
     public List<ChatMessage> getLatestMessages(int windowSize) {
-        // 利用 Redis 索引获取最近的消息片段
-        List<String> rawList = redisClient.openSession().key(instanceId).listGetRange(0, windowSize - 1);
+        String messagesKey = getMessagesKey();
+
+        List<String> rawList = redisClient.openSession().key(messagesKey).listGetRange(0, windowSize - 1);
 
         if (rawList == null || rawList.isEmpty()) {
             return Collections.emptyList();
@@ -123,15 +129,24 @@ public class RedisAgentSession implements AgentSession {
     public void updateSnapshot(FlowContext snapshot) {
         this.snapshot = snapshot;
         // 实时同步快照至持久层，确保分布式节点可见性
-        redisClient.getBucket().store(instanceId, snapshot.toJson());
+        String snapshotKey = getSnapshotKey();
+        redisClient.getBucket().store(snapshotKey, snapshot.toJson());
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Session [{}] snapshot persisted to Redis.", instanceId);
+            LOG.debug("Session [{}] snapshot persisted to Redis.", snapshotKey);
         }
     }
 
     @Override
     public FlowContext getSnapshot() {
         return snapshot;
+    }
+
+    private String getSnapshotKey() {
+        return instanceId + ":snapshot";
+    }
+
+    private String getMessagesKey() {
+        return instanceId + ":messages";
     }
 }
