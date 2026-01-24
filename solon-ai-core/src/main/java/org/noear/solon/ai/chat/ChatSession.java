@@ -23,6 +23,7 @@ import org.noear.solon.lang.Preview;
 import java.io.*;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -42,6 +43,26 @@ public interface ChatSession extends NonSerializable {
      * 获取消息
      */
     List<ChatMessage> getMessages();
+
+    /**
+     * 获取最近消息
+     *
+     * @param windowSize 窗口大小
+     */
+    default List<ChatMessage> getLatestMessages(int windowSize){
+        List<ChatMessage> all = getMessages();
+        if (all == null || all.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        int size = all.size();
+        if (size <= windowSize || windowSize <= 0) {
+            return all;
+        } else {
+            // 返回最后 N 条
+            return all.subList(size - windowSize, size);
+        }
+    }
 
     /**
      * 添加消息
