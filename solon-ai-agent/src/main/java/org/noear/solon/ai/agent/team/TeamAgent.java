@@ -34,6 +34,7 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -157,12 +158,27 @@ public class TeamAgent implements Agent {
         // 1. 运行时环境准备
         trace.prepare(config, options, session, config.getName());
 
+        if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
+            // 如果没有父团队（即当前是顶层团队），则从 Session 加载历史
+            if (parentTeamTrace == null) {
+                Collection<ChatMessage> history = session.getHistoryMessages(config.getName(), options.getSessionWindowSize());
+                trace.getWorkingMemory().addMessage(history);
+            }
+        }
+
         if (Prompt.isEmpty(prompt) == false) {
             context.trace().recordNode(graph, null);
             trace.setOriginalPrompt(prompt);
             trace.setRoute(null);
             trace.resetProtocolContext();
             trace.resetTurnCount();
+
+            for (ChatMessage message : prompt.getMessages()) {
+                if (parentTeamTrace == null) {
+                    session.addHistoryMessage(config.getName(), message);
+                }
+                trace.getWorkingMemory().addMessage(message);
+            }
         } else {
             if (Prompt.isEmpty(trace.getOriginalPrompt())) {
                 LOG.warn("Prompt is empty!");
@@ -238,6 +254,7 @@ public class TeamAgent implements Agent {
             AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
             if(parentTeamTrace == null) {
                 session.addHistoryMessage(config.getName(), assistantMessage);
+                trace.getWorkingMemory().addMessage(assistantMessage);
             }
 
             session.updateSnapshot(context);
