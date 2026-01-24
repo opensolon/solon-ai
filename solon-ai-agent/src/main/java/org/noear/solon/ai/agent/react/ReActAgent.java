@@ -271,7 +271,7 @@ public class ReActAgent implements Agent {
         }
 
         AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-        if(Utils.isNotEmpty(assistantMessage.getToolCalls())) {
+        if(Assert.isNotEmpty(result)) {
             if (parentTeamTrace == null) {
                 session.addMessage(assistantMessage);
             }

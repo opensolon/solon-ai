@@ -148,7 +148,7 @@ public class SimpleAgent implements Agent {
         }
 
         // 4. 更新会话状态与快照
-        if(Utils.isNotEmpty(assistantMessage.getToolCalls())) {
+        if(Assert.isNotEmpty(assistantMessage.getContent())) {
             if (parentTeamTrace == null) {
                 session.addMessage(assistantMessage);
             }
