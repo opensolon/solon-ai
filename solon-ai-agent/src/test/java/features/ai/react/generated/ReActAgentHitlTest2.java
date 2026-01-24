@@ -79,7 +79,7 @@ public class ReActAgentHitlTest2 {
         // --- 第三步：恢复执行 ---
         System.out.println("--- 第二次调用 (恢复执行) ---");
         // 恢复时传入相同的 session，prompt 会从 state 中自动获取
-        String result2 = agent.prompt(prompt)
+        String result2 = agent.prompt()
                 .session(session)
                 .call()
                 .getContent();
