@@ -11,7 +11,6 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -88,7 +87,7 @@ public class ReActAgentPersistenceHitlTest {
         // --- 阶段 C：恢复执行并获取最终结果 ---
         System.out.println("\n--- 阶段 C：继续执行 ---");
         // 继续执行时无需重传 Prompt，Agent 会从 session 的快照中自动寻址
-        String finalResult = agent.resume(session2).getContent();
+        String finalResult = agent.call(session2).getContent();
 
         System.out.println("最终回复内容: " + finalResult);
 

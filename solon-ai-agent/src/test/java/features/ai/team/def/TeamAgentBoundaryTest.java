@@ -106,7 +106,7 @@ public class TeamAgentBoundaryTest {
         team.call(Prompt.of("记住：我的幸运数字是 7"), session);
 
         // 2. 传入 null，验证 Agent 是否能根据 Session 历史找回上下文
-        String result = team.resume(session).getContent();
+        String result = team.call(session).getContent();
 
         Assertions.assertNotNull(result);
         System.out.println("上下文恢复结果: " + result);

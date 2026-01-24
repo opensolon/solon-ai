@@ -88,7 +88,7 @@ public class TeamAgentNestedHitlTest {
         // --- 阶段 C：恢复执行 ---
         System.out.println(">>> 阶段 C: 恢复执行，转交给 Reviewer...");
         // 续跑流程
-        projectTeam.resume(session);
+        projectTeam.call(session);
 
         // 关键优化：从 Trace 获取 FinalAnswer。
         // 框架逻辑中，call().getContent() 可能返回的是最后一次交互消息，

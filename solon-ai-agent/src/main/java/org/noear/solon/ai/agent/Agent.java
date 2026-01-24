@@ -97,7 +97,7 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     /**
      * 恢复执行
      */
-    default AssistantMessage resume(AgentSession session) throws Throwable {
+    default AssistantMessage call(AgentSession session) throws Throwable {
         return call(null, session);
     }
 

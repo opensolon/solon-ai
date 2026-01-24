@@ -77,7 +77,7 @@ public class TeamAgentPersistenceHitlTest {
         restoredContext.put("manager_ok", true);
 
         // 继续执行：此时不传 Prompt，系统会基于 Session 中的 Trace 自动恢复执行
-        String finalResult = teamAgent.resume(session2).getContent();
+        String finalResult = teamAgent.call(session2).getContent();
 
         System.out.println("=== 最终执行结果 ===");
         System.out.println(finalResult);
