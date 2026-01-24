@@ -141,15 +141,26 @@ public class TeamAgent implements Agent {
         return call(prompt, session, null);
     }
 
+    protected TeamTrace getTrace(FlowContext context, Prompt prompt) {
+        TeamTrace trace = context.getAs(config.getTraceKey());
+        if (trace == null) {
+            trace = new TeamTrace(prompt);
+            context.put(config.getTraceKey(), trace);
+        }
+
+        return trace;
+    }
+
+
     /**
      * 执行团队协作（核心生命周期管理）
      */
     protected AssistantMessage call(Prompt prompt, AgentSession session, TeamOptions options) throws Throwable {
-        FlowContext context = session.getSnapshot();
-        TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
+        final FlowContext context = session.getSnapshot();
+        final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         // 初始化或获取本次协作的轨迹快照
-        TeamTrace trace = context.computeIfAbsent(config.getTraceKey(), k -> new TeamTrace(prompt));
+        final TeamTrace trace = getTrace(context, prompt);
 
         if (options == null) {
             options = config.getDefaultOptions();
@@ -158,6 +169,7 @@ public class TeamAgent implements Agent {
         // 1. 运行时环境准备
         trace.prepare(config, options, session, config.getName());
 
+        // 加载历史上下文（短期记忆）
         if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
             // 如果没有父团队（即当前是顶层团队），则从 Session 加载历史
             if (parentTeamTrace == null) {
@@ -166,7 +178,15 @@ public class TeamAgent implements Agent {
             }
         }
 
-        if (Prompt.isEmpty(prompt) == false) {
+        if (Prompt.isEmpty(prompt)) {
+            //可能是旧问题（之前中断的）
+            prompt = trace.getOriginalPrompt();
+
+            if (Prompt.isEmpty(prompt)) {
+                LOG.warn("Prompt is empty!");
+                return ChatMessage.ofAssistant("");
+            }
+        } else {
             context.trace().recordNode(graph, null);
             trace.setOriginalPrompt(prompt);
             trace.setRoute(null);
@@ -179,22 +199,10 @@ public class TeamAgent implements Agent {
                 }
                 trace.getWorkingMemory().addMessage(message);
             }
-        } else {
-            if (Prompt.isEmpty(trace.getOriginalPrompt())) {
-                LOG.warn("Prompt is empty!");
-                return ChatMessage.ofAssistant("");
-            }
         }
 
         //如果提示词没问题，开始部署技能
         trace.activeSkills();
-
-        // 2. 消息归档：用户输入存入 Session
-        if (prompt != null) {
-            if (parentTeamTrace == null) {
-                prompt.getMessages().forEach(m -> session.addHistoryMessage(config.getName(), m));
-            }
-        }
 
         // 触发团队启动拦截
         options.getInterceptors().forEach(item -> item.target.onTeamStart(trace));
@@ -219,7 +227,7 @@ public class TeamAgent implements Agent {
                         flowEngine.eval(graph, -1, context, flowOptions);
                     });
                 });
-            }finally {
+            } finally {
                 // 记录性能指标
                 long duration = System.currentTimeMillis() - startTime;
                 trace.getMetrics().setTotalDuration(duration);
@@ -230,10 +238,9 @@ public class TeamAgent implements Agent {
                 }
 
                 // 父一级团队轨迹
-                TeamTrace teamTrace = TeamTrace.getCurrent(context);
-                if (teamTrace != null) {
+                if (parentTeamTrace != null) {
                     // 汇总 token 使用情况
-                    teamTrace.getMetrics().addMetrics(trace.getMetrics());
+                    parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
                 }
             }
 
@@ -252,7 +259,7 @@ public class TeamAgent implements Agent {
             }
 
             AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-            if(parentTeamTrace == null) {
+            if (parentTeamTrace == null) {
                 session.addHistoryMessage(config.getName(), assistantMessage);
                 trace.getWorkingMemory().addMessage(assistantMessage);
             }
@@ -398,7 +405,7 @@ public class TeamAgent implements Agent {
         /**
          * 配置主管模型的对话参数
          */
-        public Builder modelOptions(Consumer<ModelOptionsAmend<?,TeamInterceptor>> chatOptions) {
+        public Builder modelOptions(Consumer<ModelOptionsAmend<?, TeamInterceptor>> chatOptions) {
             chatOptions.accept(config.getDefaultOptions().getModelOptions());
             return this;
         }

@@ -155,20 +155,25 @@ public class ReActAgent implements Agent {
         return this.call(prompt, session, null);
     }
 
-    /**
-     * 智能体核心调用流程
-     */
-    protected AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) throws Throwable {
-        FlowContext context = session.getSnapshot();
-        TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL);
-        TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
-
-        // 初始化或恢复推理痕迹 (Trace)
+    protected ReActTrace getTrace(FlowContext context, Prompt prompt) {
         ReActTrace trace = context.getAs(config.getTraceKey());
         if (trace == null) {
             trace = new ReActTrace(prompt);
             context.put(config.getTraceKey(), trace);
         }
+        return trace;
+    }
+
+    /**
+     * 智能体核心调用流程
+     */
+    protected AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) throws Throwable {
+        final FlowContext context = session.getSnapshot();
+        final TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL);
+        final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
+
+        // 初始化或恢复推理痕迹 (Trace)
+        final ReActTrace trace = getTrace(context, prompt);
 
         if (options == null) {
             options = config.getDefaultOptions();
@@ -247,10 +252,9 @@ public class ReActAgent implements Agent {
             }
 
             // 父一级团队轨迹
-            TeamTrace teamTrace = TeamTrace.getCurrent(context);
-            if (teamTrace != null) {
+            if (parentTeamTrace != null) {
                 // 汇总 token 使用情况
-                teamTrace.getMetrics().addMetrics(trace.getMetrics());
+                parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
             }
         }
 
