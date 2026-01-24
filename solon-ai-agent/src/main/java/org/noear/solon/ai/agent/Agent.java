@@ -88,6 +88,13 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     }
 
     /**
+     * 恢复执行
+     */
+    default AssistantMessage resume(AgentSession session) throws Throwable {
+        return call(null, session);
+    }
+
+    /**
      * 指定指令的任务执行（开始新任务）
      *
      * @param prompt  显式指令（如果为 null；则继续之前的话题）
