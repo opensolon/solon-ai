@@ -46,5 +46,13 @@ public class McpSkillsTest {
         assert description.length() > 2;
         assert instruction.length() > 2;
         assert tools.size() == 1;
+
+        prompt = Prompt.of("这个订单：A001，请查询订单详情。")
+                .attrPut("tool", "all")
+                .attrPut("tenant_id", "1")
+                .attrPut("user_role", "user");
+
+        tools = skillClient.getTools(prompt);
+        assert tools.size() == 2;
     }
 }

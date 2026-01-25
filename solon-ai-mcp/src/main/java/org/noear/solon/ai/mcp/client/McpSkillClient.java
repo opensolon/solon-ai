@@ -24,6 +24,7 @@ import org.noear.solon.ai.chat.skill.SkillMetadata;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -114,9 +115,16 @@ public abstract class McpSkillClient implements Skill {
 
         String toolsNameJson = clientProvider.callToolAsText("getToolsMcp", Utils.asMap("promptJson", promptJson))
                 .getContent();
+
         List<String> toolsName = ONode.deserialize(toolsNameJson, List.class);
 
-       return getToolsStream().filter(tool -> toolsName.contains(tool.name()))
-                .collect(Collectors.toList());
+        if(toolsName == null){
+            return getToolsStream().collect(Collectors.toList());
+        } else if(toolsName.isEmpty()) {
+            return Collections.EMPTY_LIST;
+        } else {
+            return getToolsStream().filter(tool -> toolsName.contains(tool.name()))
+                    .collect(Collectors.toList());
+        }
     }
 }

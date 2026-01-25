@@ -36,6 +36,10 @@ public class OrderManagerSkillServer extends McpSkillServer {
 
     @Override
     protected List<String> getToolsName(Prompt prompt) {
+        if("all".equals(prompt.attr("tool"))){
+            return  null;
+        }
+
         List<String> tools = new ArrayList<>();
 
         // 基础查询工具（所有激活技能的用户都有）
