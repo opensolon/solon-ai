@@ -1,4 +1,4 @@
-package demo.ai.mcp.skills;
+package demo.ai.mcp.server.skills;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -19,7 +19,7 @@ public class OrderManagerSkillClient implements Skill {
 
     @Override
     public String description() {
-        return clientProvider.readResourceAsText("/description")
+        return clientProvider.readResourceAsText("description")
                 .getContent();
     }
 

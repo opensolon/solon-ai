@@ -54,7 +54,9 @@ public interface FunctionTool extends Tool {
      */
     default String descriptionAndMeta() {
         Map<String, Object> meta = meta();
-        if (Assert.isEmpty(meta)) return description();
+        if (Assert.isEmpty(meta)) {
+            return description();
+        }
 
         StringBuilder buf = new StringBuilder();
 
@@ -68,7 +70,10 @@ public interface FunctionTool extends Tool {
             }
         });
 
-        buf.append(description());
+        if (Assert.isNotEmpty(description())) {
+            buf.append(description());
+        }
+
         return buf.toString();
     }
 

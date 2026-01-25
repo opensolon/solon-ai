@@ -43,7 +43,7 @@ public @interface ToolMapping {
     /**
      * 描述
      */
-    String description();
+    String description() default "";
 
     /**
      * 元数据（json）

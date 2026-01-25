@@ -1,4 +1,4 @@
-package demo.ai.mcp.skills;
+package demo.ai.mcp.server.skills;
 
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -8,16 +8,16 @@ import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 
 
-@McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/mcp/skill-1")
+@McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/skill/order")
 public class OrderManagerSkillServer implements Skill {
 
-    @ResourceMapping(uri = "/description")
+    @ResourceMapping(uri = "description")
     @Override
     public String description() {
         return "订单处理技能";
     }
 
-    @ToolMapping(description = "isSupported")
+    @ToolMapping
     @Override
     public boolean isSupported(Prompt prompt) {
         // 1. 语义检查：用户当前意图是否与“订单”相关（逆序获取最新意图）
@@ -29,7 +29,7 @@ public class OrderManagerSkillServer implements Skill {
         return isOrderTask && hasTenant;
     }
 
-    @ResourceMapping(uri = "/getInstruction")
+    @ToolMapping
     @Override
     public String getInstruction(Prompt prompt) {
         String tenantName = prompt.attrOrDefault("tenant_name", "未知租户");
@@ -37,12 +37,12 @@ public class OrderManagerSkillServer implements Skill {
     }
 
     @ToolMapping(description = "订单查询", meta = "{user_role:'ALL'}")
-    public String OrderQueryTool(){
+    public String OrderQueryTool() {
         return null;
     }
 
     @ToolMapping(description = "订单取消", meta = "{user_role:'ADMIN'}")
-    public String OrderCancelTool(){
+    public String OrderCancelTool() {
         return null;
     }
 }

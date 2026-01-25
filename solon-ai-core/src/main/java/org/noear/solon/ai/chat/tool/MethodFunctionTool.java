@@ -72,7 +72,7 @@ public class MethodFunctionTool implements FunctionTool {
         //断言
         Assert.notNull(mapping, "@ToolMapping annotation is missing");
         //断言
-        Assert.notEmpty(mapping.description(), "ToolMapping description cannot be empty");
+        //Assert.notEmpty(mapping.description(), "ToolMapping description cannot be empty");
 
         this.name = Utils.annoAlias(mapping.name(), methodEggg.getName());
         this.title = mapping.title();
