@@ -1,5 +1,6 @@
 package demo.ai.mcp.server.skills;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.mcp.McpChannel;
@@ -35,9 +36,14 @@ public class OrderManagerSkillServer extends McpSkillServer {
     }
 
     @Override
+    public void onAttach(Prompt prompt) {
+        System.out.println("OrderManagerSkill onAttach: " + ONode.serialize(prompt));
+    }
+
+    @Override
     protected List<String> getToolsName(Prompt prompt) {
-        if("all".equals(prompt.attr("tool"))){
-            return  null;
+        if ("all".equals(prompt.attr("tool"))) {
+            return null;
         }
 
         List<String> tools = new ArrayList<>();

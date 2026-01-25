@@ -34,6 +34,7 @@ public class McpSkillsTest {
         OrderManagerSkillClient skillClient = new OrderManagerSkillClient(mcpClient);
         String description = skillClient.description();
         boolean isSupported = skillClient.isSupported(prompt);
+        skillClient.onAttach(prompt);
         String instruction = skillClient.getInstruction(prompt);
         Collection<FunctionTool> tools = skillClient.getTools(prompt);
 

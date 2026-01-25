@@ -26,7 +26,6 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * MCP 服务端技能适配器
@@ -71,6 +70,12 @@ public abstract class McpSkillServer implements Skill {
     public List<String> getToolsMcp(String promptJson) {
         Prompt prompt = ONode.deserialize(promptJson, PromptImpl.class, Feature.Read_AutoType);
         return this.getToolsName(prompt);
+    }
+
+    @ToolMapping(meta = "{skill_tool:1}", description = "禁用 llm 使用")
+    public void onAttachMcp(String promptJson) {
+        Prompt prompt = ONode.deserialize(promptJson, PromptImpl.class, Feature.Read_AutoType);
+        this.onAttach(prompt);
     }
 
     @Override

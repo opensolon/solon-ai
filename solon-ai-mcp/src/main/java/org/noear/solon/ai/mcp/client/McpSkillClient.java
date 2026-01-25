@@ -87,6 +87,14 @@ public abstract class McpSkillClient implements Skill {
         return "true".contains(result);
     }
 
+    @Override
+    public void onAttach(Prompt prompt) {
+        String promptJson = ONode.serialize(prompt, Feature.Write_ClassName);
+
+        clientProvider.callToolAsText("onAttachMcp",
+                        Utils.asMap("promptJson", promptJson));
+    }
+
     /**
      * 动态指令获取：从远程服务端获取针对当前上下文优化后的 System Message 指令
      */
