@@ -87,7 +87,7 @@ public abstract class McpSkillServer implements Skill {
     }
 
     public List<String> getToolsName(Prompt prompt){
-        // null 表示所有工具
+        // null 表示所有工具; 空表示无工具匹配；有表示要过滤名字
         return null;
     }
 }
