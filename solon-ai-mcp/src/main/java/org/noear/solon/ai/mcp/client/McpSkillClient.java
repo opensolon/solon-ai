@@ -125,7 +125,8 @@ public class McpSkillClient implements Skill {
     public Collection<FunctionTool> getTools(Prompt prompt) {
         String promptJson = ONode.serialize(prompt, Feature.Write_ClassName);
 
-        String toolsNameJson = clientProvider.callToolAsText("getToolsMcp", Utils.asMap("promptJson", promptJson))
+        String toolsNameJson = clientProvider.callToolAsText("getToolsMcp",
+                        Utils.asMap("promptJson", promptJson))
                 .getContent();
 
         List<String> toolsName = ONode.deserialize(toolsNameJson, List.class);
