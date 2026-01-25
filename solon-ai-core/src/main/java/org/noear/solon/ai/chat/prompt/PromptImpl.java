@@ -160,4 +160,12 @@ public class PromptImpl implements Prompt, Serializable {
     public void clear() {
         messages.clear();
     }
+
+    @Override
+    public String toString() {
+        return "Prompt{" +
+                "attrs=" + attrs +
+                "messages=" + messages +
+                '}';
+    }
 }
