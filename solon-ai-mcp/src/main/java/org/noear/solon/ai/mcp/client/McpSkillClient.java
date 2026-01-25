@@ -114,9 +114,11 @@ public class McpSkillClient implements Skill {
      * <p>
      * 过滤策略：自动剔除标记为 "hide" 的管理类工具（即元数据同步工具），仅保留业务工具
      */
-    protected Stream<FunctionTool> getToolsStream(){
+    protected Stream<FunctionTool> getToolsStream() {
         return clientProvider.getTools().stream()
-                .filter(tool -> tool.meta().containsKey("hide") == false);
+                .filter(tool -> {
+                    return tool.meta() == null || tool.meta().containsKey("hide") == false;
+                });
     }
 
     @Override
