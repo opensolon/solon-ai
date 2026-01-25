@@ -40,10 +40,11 @@ import java.util.List;
  */
 @Preview("3.9.0")
 public abstract class McpSkillServer implements Skill {
+
     /**
      * 导出技能元数据作为 MCP 资源
      */
-    @ResourceMapping(uri = "skill://metadataMcp", meta = "{skill_tool:1}")
+    @ResourceMapping(uri = "skill://metadataMcp", meta = "{hide:1}")
     public String metadataMcp() {
         return ONode.serialize(this.metadata());
     }
@@ -51,9 +52,9 @@ public abstract class McpSkillServer implements Skill {
     /**
      * 导出准入检查逻辑为 MCP 工具
      * <p>
-     * 注意：此工具标记为 skill_tool，通常由客户端代理调用，不对最终 LLM 暴露
+     * 注意：此工具标记为 hide，通常由客户端代理调用，不对最终 LLM 暴露
      */
-    @ToolMapping(meta = "{skill_tool:1}", description = "禁用 llm 使用")
+    @ToolMapping(meta = "{hide:1}", description = "禁止 llm 使用")
     public boolean isSupportedMcp(String promptJson) {
         Prompt prompt = ONode.deserialize(promptJson, PromptImpl.class, Feature.Read_AutoType);
         return this.isSupported(prompt);
@@ -62,19 +63,19 @@ public abstract class McpSkillServer implements Skill {
     /**
      * 导出指令获取逻辑为 MCP 工具
      */
-    @ToolMapping(meta = "{skill_tool:1}", description = "禁用 llm 使用")
+    @ToolMapping(meta = "{hide:1}", description = "禁止 llm 使用")
     public String getInstructionMcp(String promptJson) {
         Prompt prompt = ONode.deserialize(promptJson, PromptImpl.class, Feature.Read_AutoType);
         return this.getInstruction(prompt);
     }
 
-    @ToolMapping(meta = "{skill_tool:1}", description = "禁用 llm 使用")
+    @ToolMapping(meta = "{hide:1}", description = "禁止 llm 使用")
     public List<String> getToolsMcp(String promptJson) {
         Prompt prompt = ONode.deserialize(promptJson, PromptImpl.class, Feature.Read_AutoType);
         return this.getToolsName(prompt);
     }
 
-    @ToolMapping(meta = "{skill_tool:1}", description = "禁用 llm 使用")
+    @ToolMapping(meta = "{hide:1}", description = "禁止 llm 使用")
     public void onAttachMcp(String promptJson) {
         Prompt prompt = ONode.deserialize(promptJson, PromptImpl.class, Feature.Read_AutoType);
         this.onAttach(prompt);

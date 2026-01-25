@@ -112,11 +112,11 @@ public class McpSkillClient implements Skill {
     /**
      * 获取远程导出的工具流
      * <p>
-     * 过滤策略：自动剔除标记为 "skill_tool" 的管理类工具（即元数据同步工具），仅保留业务工具
+     * 过滤策略：自动剔除标记为 "hide" 的管理类工具（即元数据同步工具），仅保留业务工具
      */
     protected Stream<FunctionTool> getToolsStream(){
         return clientProvider.getTools().stream()
-                .filter(tool -> tool.meta().containsKey("skill_tool") == false);
+                .filter(tool -> tool.meta().containsKey("hide") == false);
     }
 
     @Override
