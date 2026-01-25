@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Preview;
 
 /**
  * 简单智能体交互响应
@@ -27,6 +28,7 @@ import org.noear.solon.flow.FlowContext;
  * @author noear
  * @since 3.8.4
  */
+@Preview("3.8.4")
 public class SimpleResponse implements AgentResponse {
     private final AgentSession session;
     private final SimpleTrace trace;

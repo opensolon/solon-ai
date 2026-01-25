@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent;
 
 import org.noear.solon.lang.NonSerializable;
+import org.noear.solon.lang.Preview;
 
 /**
  * 智能体请求构建器
@@ -32,6 +33,7 @@ import org.noear.solon.lang.NonSerializable;
  * @author noear
  * @since 3.9.0
  */
+@Preview("3.9.0")
 public interface AgentRequest<Req extends AgentRequest<Req,Resp>,Resp extends AgentResponse> extends NonSerializable {
     /**
      * 使用会话

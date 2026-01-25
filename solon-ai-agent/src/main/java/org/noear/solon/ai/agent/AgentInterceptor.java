@@ -15,11 +15,14 @@
  */
 package org.noear.solon.ai.agent;
 
+import org.noear.solon.lang.Preview;
+
 /**
  * 智能体拦截器
  *
  * @author noear
  * @since 3.8.4
  */
+@Preview("3.8.4")
 public interface AgentInterceptor {
 }

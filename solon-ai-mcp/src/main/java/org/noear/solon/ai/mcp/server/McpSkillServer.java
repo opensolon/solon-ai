@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.lang.Preview;
 
 import java.util.Collection;
 import java.util.List;
@@ -37,6 +38,7 @@ import java.util.List;
  * @author noear
  * @since 3.9.0
  */
+@Preview("3.9.0")
 public abstract class McpSkillServer implements Skill {
     /**
      * 导出技能元数据作为 MCP 资源

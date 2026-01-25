@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillMetadata;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.lang.Preview;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -38,6 +39,7 @@ import java.util.stream.Stream;
  * @author noear
  * @since 3.9.0
  */
+@Preview("3.9.0")
 public abstract class McpSkillClient implements Skill {
     /**
      * MCP 客户端提供者，负责底层的通信协议（如 Stdio, SSE）
