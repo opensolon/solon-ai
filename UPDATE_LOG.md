@@ -8,7 +8,20 @@
 ### 待定
 
 
-*  channel 概念改为 transport （并保持兼容）???
+*  mcp channel 概念改为 transport （并保持兼容）???
+
+
+### v3.9.0
+
+* 添加 solon-ai-core Prompt 更多方法（getLastAssistantMessage, size 等）
+* 添加 solon-ai-core ChatSession 更多方法（getLatestMessages 等）
+* 添加 solon-ai-agent Agent.call(session) 方法（作为恢复执行的入口）
+* 添加 solon-ai-agent Agent.prompt 方法
+* 添加 solon-ai-agent AgentResponse 接口，统一响应界面
+* 添加 solon-ai-agent Trace.workingMemory 概念
+* 优化 solon-ai-core Skill 接口设计，getTools 增加 prompt 参数
+* 优化 solon-ai-agent AgentSession 接口，改为扩展自 ChatSession （只需入口 agent 有历史消息）
+* 优化 solon-ai-agent 部分接口设计
 
 ### v3.8.4
 
