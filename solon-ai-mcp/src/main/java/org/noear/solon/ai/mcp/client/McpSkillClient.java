@@ -40,7 +40,7 @@ import java.util.stream.Stream;
  * @since 3.9.0
  */
 @Preview("3.9.0")
-public abstract class McpSkillClient implements Skill {
+public class McpSkillClient implements Skill {
     /**
      * MCP 客户端提供者，负责底层的通信协议（如 Stdio, SSE）
      */

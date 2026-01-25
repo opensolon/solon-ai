@@ -8,6 +8,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.mcp.client.McpSkillClient;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Collection;
@@ -31,7 +32,8 @@ public class McpSkillsTest {
                 .attrPut("tenant_id", "1")
                 .attrPut("user_role", "user");
 
-        OrderManagerSkillClient skillClient = new OrderManagerSkillClient(mcpClient);
+        McpSkillClient skillClient = new McpSkillClient(mcpClient);
+
         String description = skillClient.description();
         boolean isSupported = skillClient.isSupported(prompt);
         skillClient.onAttach(prompt);
