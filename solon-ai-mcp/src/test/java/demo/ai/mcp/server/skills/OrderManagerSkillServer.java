@@ -41,7 +41,7 @@ public class OrderManagerSkillServer extends McpSkillServer {
     }
 
     @Override
-    protected List<String> getToolsName(Prompt prompt) {
+    public List<String> getToolsName(Prompt prompt) {
         if ("all".equals(prompt.attr("tool"))) {
             return null;
         }
