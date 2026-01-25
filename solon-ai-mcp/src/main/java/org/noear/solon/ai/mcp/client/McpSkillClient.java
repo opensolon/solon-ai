@@ -86,7 +86,7 @@ public class McpSkillClient implements Skill {
                         Utils.asMap("promptJson", promptJson))
                 .getContent();
 
-        return "true".contains(result);
+        return "true".equals(result);
     }
 
     @Override
