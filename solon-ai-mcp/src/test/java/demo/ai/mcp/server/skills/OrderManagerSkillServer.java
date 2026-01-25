@@ -1,23 +1,19 @@
 package demo.ai.mcp.server.skills;
 
-import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.mcp.McpChannel;
+import org.noear.solon.ai.mcp.server.McpSkillServer;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 
 
 @McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/skill/order")
-public class OrderManagerSkillServer implements Skill {
-
-    @ResourceMapping(uri = "description")
+public class OrderManagerSkillServer extends McpSkillServer {
     @Override
     public String description() {
         return "订单处理技能";
     }
 
-    @ToolMapping
     @Override
     public boolean isSupported(Prompt prompt) {
         // 1. 语义检查：用户当前意图是否与“订单”相关（逆序获取最新意图）
@@ -29,7 +25,6 @@ public class OrderManagerSkillServer implements Skill {
         return isOrderTask && hasTenant;
     }
 
-    @ToolMapping
     @Override
     public String getInstruction(Prompt prompt) {
         String tenantName = prompt.attrOrDefault("tenant_name", "未知租户");

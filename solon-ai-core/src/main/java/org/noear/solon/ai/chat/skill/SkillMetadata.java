@@ -34,6 +34,10 @@ public class SkillMetadata implements Serializable {
     private String[] tags;      // 标签
     private boolean sensitive;  // 是否敏感（用于安全拦截）
 
+    public SkillMetadata(){
+        //用于反序列化
+    }
+
     public SkillMetadata(String name, String description) {
         this.name = name;
         this.description = description;

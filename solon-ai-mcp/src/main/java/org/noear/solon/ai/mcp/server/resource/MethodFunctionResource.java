@@ -74,7 +74,7 @@ public class MethodFunctionResource implements FunctionResource {
         Assert.notNull(mapping, "@ResourceMapping annotation is missing");
 
         //断言
-        Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
+        //Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
 
         if(Assert.isNotEmpty(mapping.meta()) && mapping.meta().length() > 3) {
             Map<String, Object> tmp = ONode.deserialize(mapping.meta(), Map.class);
