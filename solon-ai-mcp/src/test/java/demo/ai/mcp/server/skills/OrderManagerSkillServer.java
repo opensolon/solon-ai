@@ -6,6 +6,9 @@ import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.McpSkillServer;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
 
+import java.util.ArrayList;
+import java.util.List;
+
 
 @McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/skill/order")
 public class OrderManagerSkillServer extends McpSkillServer {
@@ -29,6 +32,21 @@ public class OrderManagerSkillServer extends McpSkillServer {
     public String getInstruction(Prompt prompt) {
         String tenantName = prompt.attrOrDefault("tenant_name", "未知租户");
         return "你现在是[" + tenantName + "]的订单主管。请只处理该租户下的订单数据，禁止跨租户查询。";
+    }
+
+    @Override
+    protected List<String> getToolsName(Prompt prompt) {
+        List<String> tools = new ArrayList<>();
+
+        // 基础查询工具（所有激活技能的用户都有）
+        tools.add("OrderQueryTool");
+
+        // 4. 权限隔离：只有属性中标记为 ADMIN 的用户，才动态挂载“取消订单”工具
+        if ("ADMIN".equals(prompt.attr("user_role"))) {
+            tools.add("OrderCancelTool");
+        }
+
+        return tools;
     }
 
     @ToolMapping(description = "订单查询", meta = "{user_role:'ALL'}")

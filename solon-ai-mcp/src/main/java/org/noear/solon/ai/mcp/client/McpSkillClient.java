@@ -23,6 +23,9 @@ import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillMetadata;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -74,8 +77,10 @@ public abstract class McpSkillClient implements Skill {
      */
     @Override
     public boolean isSupported(Prompt prompt) {
+        String promptJson = ONode.serialize(prompt, Feature.Write_ClassName);
+
         String result = clientProvider.callToolAsText("isSupportedMcp",
-                        Utils.asMap("promptJson", ONode.serialize(prompt, Feature.Write_ClassName)))
+                        Utils.asMap("promptJson", promptJson))
                 .getContent();
 
         return "true".contains(result);
@@ -86,8 +91,10 @@ public abstract class McpSkillClient implements Skill {
      */
     @Override
     public String getInstruction(Prompt prompt) {
+        String promptJson = ONode.serialize(prompt, Feature.Write_ClassName);
+
         return clientProvider.callToolAsText("getInstructionMcp",
-                        Utils.asMap("promptJson", ONode.serialize(prompt, Feature.Write_ClassName)))
+                        Utils.asMap("promptJson", promptJson))
                 .getContent();
     }
 
@@ -99,5 +106,17 @@ public abstract class McpSkillClient implements Skill {
     protected Stream<FunctionTool> getToolsStream(){
         return clientProvider.getTools().stream()
                 .filter(tool -> tool.meta().containsKey("skill_tool") == false);
+    }
+
+    @Override
+    public Collection<FunctionTool> getTools(Prompt prompt) {
+        String promptJson = ONode.serialize(prompt, Feature.Write_ClassName);
+
+        String toolsNameJson = clientProvider.callToolAsText("getToolsMcp", Utils.asMap("promptJson", promptJson))
+                .getContent();
+        List<String> toolsName = ONode.deserialize(toolsNameJson, List.class);
+
+       return getToolsStream().filter(tool -> toolsName.contains(tool.name()))
+                .collect(Collectors.toList());
     }
 }
