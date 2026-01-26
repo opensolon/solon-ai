@@ -31,10 +31,12 @@ import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
+import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serializable;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -198,6 +200,7 @@ public class ReasonTask implements NamedTaskComponent {
         ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o -> {
+                    o.toolAdd(AskTool.tool);
                     o.toolAdd(trace.getOptions().getTools());
                     o.toolAdd(trace.getProtocolTools());
 

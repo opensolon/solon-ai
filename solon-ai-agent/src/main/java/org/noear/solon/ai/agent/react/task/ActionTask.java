@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react.task;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActAgentConfig;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
@@ -83,6 +84,9 @@ public class ActionTask implements NamedTaskComponent {
         if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
             for (ToolCall call : lastAssistant.getToolCalls()) {
                 processNativeToolCall(trace, call);
+                if (Agent.ID_END.equals(trace.getRoute())) {
+                    break;
+                }
             }
             return;
         }
@@ -153,6 +157,10 @@ public class ActionTask implements NamedTaskComponent {
                 // 4. 执行工具
                 String result = executeTool(trace, toolName, args);
 
+                if (Agent.ID_END.equals(trace.getRoute())) {
+                    break;
+                }
+
                 // 5. 触发 Observation 拦截 (内容是纯的)
                 for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                     item.target.onObservation(trace, result);
@@ -185,6 +193,15 @@ public class ActionTask implements NamedTaskComponent {
      * @return 工具输出的字符串结果
      */
     private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
+        if (AskTool.tool_name.equals(name)) {
+            String reason = (String) args.get("reason");
+            trace.setFinalAnswer(reason);
+            trace.setRoute(Agent.ID_END);
+            trace.getContext().stop();
+            return reason;
+        }
+
+
         FunctionTool tool = trace.getOptions().getTool(name);
 
         // 如果配置中没有，尝试从协议工具集查找（如 __transfer_to__）
@@ -207,6 +224,8 @@ public class ActionTask implements NamedTaskComponent {
                     result = new ToolChain(trace.getOptions().getInterceptors(), tool).doIntercept(toolReq);
                 }
                 trace.incrementToolCallCount();
+
+
                 return result;
             } catch (IllegalArgumentException e) {
                 // 引导模型自愈：返回 Schema 错误提示
