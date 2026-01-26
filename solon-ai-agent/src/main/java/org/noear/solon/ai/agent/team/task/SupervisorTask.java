@@ -79,7 +79,7 @@ public class SupervisorTask implements NamedTaskComponent {
             // 2. 协作熔断检查：达到最大迭代次数或已标记结束则退出
             if (Agent.ID_END.equals(trace.getRoute()) ||
                     trace.getTurnCount() >= trace.getOptions().getMaxTurns()) {
-                trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SYSTEM, "[Terminated] Max iterations reached", 0);
+                trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SYSTEM, "[Terminated] Max turns reached", 0);
                 routeTo(context, trace, Agent.ID_END);
                 return;
             }

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.team.protocol;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -32,7 +33,6 @@ import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
  * A2A (Agent to Agent) 协作协议
@@ -86,8 +86,12 @@ public class A2AProtocol extends TeamProtocolBase {
         config.getAgentMap().values().forEach(a ->
                 spec.addActivity(a).linkAdd(A2AHandoverTask.ID_HANDOVER));
 
-        spec.addActivity(new A2AHandoverTask(config, this)).then(ns -> {
+        spec.addExclusive(new A2AHandoverTask(config, this)).then(ns -> {
             linkAgents(ns);
+            ns.linkAdd(Agent.ID_END, l -> l.title("route = end").when(ctx -> {
+                TeamTrace trace = ctx.getAs(config.getTraceKey());
+                return Agent.ID_END.equalsIgnoreCase(trace.getRoute());
+            }));
             ns.linkAdd(TeamAgent.ID_SUPERVISOR);
         });
 
@@ -107,21 +111,21 @@ public class A2AProtocol extends TeamProtocolBase {
         A2AState stateObj = getA2AState(trace);
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
-        String expertsDescription = config.getAgentMap().entrySet().stream()
+        ONode expertsNode = new ONode().asArray();
+        config.getAgentMap().entrySet().stream()
                 .filter(e -> !e.getKey().equals(agent.name()))
-                .map(e -> {
+                .forEach(e -> {
                     Agent expert = e.getValue();
                     String capabilities = String.join(",", expert.profile().getCapabilities());
                     String modes = String.join(",", expert.profile().getInputModes());
                     String desc = expert.description();
 
-                    if (isZh) {
-                        return String.format("%s(%s) [核心能力:%s | 模态:%s]", e.getKey(), desc, capabilities, modes);
-                    } else {
-                        return String.format("%s(%s) [Capabilities:%s | Modes:%s]", e.getKey(), desc, capabilities, modes);
-                    }
-                })
-                .collect(Collectors.joining(" | "));
+                    expertsNode.addNew()
+                            .set("name", e.getKey())
+                            .set("description", desc)
+                            .set("capabilities", capabilities)
+                            .set("modes", modes);
+                });
 
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER).returnDirect(true);
         tool.doHandle(args -> {
@@ -129,7 +133,7 @@ public class A2AProtocol extends TeamProtocolBase {
             String state = (String) args.get("state");
 
             String currentEffectiveContent = trace.getLastAgentContent();
-            stateObj.setTransferRequest(target, state,currentEffectiveContent);
+            stateObj.setTransferRequest(target, state, currentEffectiveContent);
 
             if (isZh) {
                 return "已发起向 [" + target + "] 的接力请求。";
@@ -141,12 +145,12 @@ public class A2AProtocol extends TeamProtocolBase {
         if (isZh) {
             tool.title("任务移交")
                     .description("当你无法完成当前任务时，将其移交给更合适的专家。")
-                    .stringParamAdd("target", "目标专家名。必选范围: [" + expertsDescription + "]")
+                    .stringParamAdd("target", "目标专家名。必选范围: " + expertsNode.toJson())
                     .stringParamAdd("state", "业务状态 JSON。");
         } else {
             tool.title("Transfer")
                     .description("When you are unable to complete the current task, hand it over to a more appropriate expert.")
-                    .stringParamAdd("target", "Expert name. Options: [" + expertsDescription + "]")
+                    .stringParamAdd("target", "Expert name. Options: " + expertsNode.toJson())
                     .stringParamAdd("state", "Persistent JSON state.");
         }
 

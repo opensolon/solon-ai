@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.agent.react.ReActSystemPrompt;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.*;
@@ -32,11 +33,14 @@ public class TeamAgentResilienceTest {
                 .agentAdd(ReActAgent.of(chatModel).name("C").description("Step 3").systemPrompt(p).build())
                 .maxTurns(6).build();
 
-        String secret = "SOLON-AI-777";
-        String res = team.call(Prompt.of("流水线处理，暗号是：" + secret), InMemoryAgentSession.of("s1")).getContent();
+        System.out.println(team.getGraph().toYaml());
 
+
+        String secret = "SOLON-AI-777";
+        TeamResponse resp = team.prompt("流水线处理，暗号是：" + secret).call();
+        System.out.println(resp.getContent());
         // 验证：最终结果必须包含初始输入的暗号，证明上下文在多级交接中未丢失
-        Assertions.assertTrue(res.contains(secret), "长链条转交导致原始约束丢失");
+        Assertions.assertTrue(resp.getContent().contains(secret), "长链条转交导致原始约束丢失");
     }
 
     // 2. 市场协议弹性：验证模糊需求下的“主矛盾”识别
