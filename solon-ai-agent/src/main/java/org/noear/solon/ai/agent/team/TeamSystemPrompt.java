@@ -35,8 +35,6 @@ import java.util.function.Function;
  */
 @Preview("3.8.1")
 public interface TeamSystemPrompt {
-    static final Logger LOG = LoggerFactory.getLogger(TeamSystemPrompt.class);
-
     /**
      * 获取提示词对应的语言环境
      */
@@ -57,10 +55,6 @@ public interface TeamSystemPrompt {
 
         // 基于 Snel 模板引擎注入业务变量
         String finalPrompt = SnelUtil.render(template, context.vars());
-
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Team SystemPrompt rendered for agent [{}]:\n{}", trace.getAgentName(), finalPrompt);
-        }
 
         return finalPrompt;
     }

@@ -33,8 +33,6 @@ import java.util.function.Function;
  */
 @Preview("3.8.1")
 public interface ReActSystemPrompt {
-    Logger log = LoggerFactory.getLogger(ReActSystemPrompt.class);
-
     /**
      * 获取语言环境 (默认中文)
      */
@@ -56,10 +54,6 @@ public interface ReActSystemPrompt {
 
         // 基于 FlowContext 模型进行变量替换
         String rendered = SnelUtil.render(raw, context.vars());
-
-        if (log.isTraceEnabled()) {
-            log.trace("ReAct SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), rendered);
-        }
 
         return rendered;
     }

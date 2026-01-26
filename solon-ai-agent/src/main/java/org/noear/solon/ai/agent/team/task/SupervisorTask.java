@@ -143,6 +143,10 @@ public class SupervisorTask implements NamedTaskComponent {
             userContent.append(isZh ? "\n> **待命专家**：[" : "\n> **Pending Experts**: [").append(agentsList).append("].");
         }
 
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("Team SystemPrompt rendered for agent [{}]:\n{}", trace.getAgentName(), finalSystemPrompt);
+        }
+
         List<ChatMessage> messages = Arrays.asList(
                 ChatMessage.ofSystem(finalSystemPrompt),
                 ChatMessage.ofUser(userContent.toString())

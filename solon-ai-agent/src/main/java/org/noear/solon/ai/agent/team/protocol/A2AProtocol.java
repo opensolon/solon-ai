@@ -31,6 +31,7 @@ import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
+
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -44,7 +45,9 @@ public class A2AProtocol extends TeamProtocolBase {
     private static final String TOOL_TRANSFER = "__transfer_to__";
     private final int maxTransferRounds = 5;
 
-    public A2AProtocol(TeamAgentConfig config) { super(config); }
+    public A2AProtocol(TeamAgentConfig config) {
+        super(config);
+    }
 
     public static class A2AState {
         private String globalState = "";
@@ -65,10 +68,21 @@ public class A2AProtocol extends TeamProtocolBase {
             this.lastTempTarget = "";
         }
 
-        public String getGlobalState() { return globalState; }
-        public String getLastPayload() { return lastPayload; }
-        public int getTransferCount() { return transferCount; }
-        public String getLastTempTarget() { return lastTempTarget; }
+        public String getGlobalState() {
+            return globalState;
+        }
+
+        public String getLastPayload() {
+            return lastPayload;
+        }
+
+        public int getTransferCount() {
+            return transferCount;
+        }
+
+        public String getLastTempTarget() {
+            return lastTempTarget;
+        }
     }
 
     public A2AState getA2AState(TeamTrace trace) {
@@ -76,7 +90,9 @@ public class A2AProtocol extends TeamProtocolBase {
     }
 
     @Override
-    public String name() { return "A2A"; }
+    public String name() {
+        return "A2A";
+    }
 
     @Override
     public void buildGraph(GraphSpec spec) {
@@ -160,6 +176,8 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+
+        // 1. 注入基础协作准则 (System Level)
         if (isZh) {
             sb.append("\n## 专家协作指引\n");
             sb.append("- 必须根据各专家的 [核心能力] 和 [模态] 标签精准选择目标，严禁向不支持相关模态的专家移交任务。\n");
@@ -167,77 +185,75 @@ public class A2AProtocol extends TeamProtocolBase {
             sb.append("\n## Collaboration Guidelines\n");
             sb.append("- You must choose the target precisely based on [Capabilities] and [Modes] tags. Never transfer to an agent that lacks the required modality.\n");
         }
-    }
 
-    @Override
-    public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
+        //---------
+
+        // 2. 提取接力数据断面
+        TeamTrace trace = TeamTrace.getCurrent(context);
+        if(trace == null){
+            return;
+        }
+
         A2AState stateObj = getA2AState(trace);
 
-        // 1. 获取最后一次有效产出（接力棒内容）
+        // 锁定最后一次有效产出（接力棒内容）
         String effectiveOutput = stateObj.getLastPayload();
         if (Utils.isEmpty(effectiveOutput)) {
             effectiveOutput = trace.getLastAgentContent();
         }
 
-        // 2. 获取全局累积状态
+        // 获取全局累积状态
         String state = stateObj.getGlobalState();
 
-        // 3. 提取协作接力轨迹（从历史记录中分析参与过的专家路径）
+        // 提取协作接力轨迹（分析参与过的专家路径）
         List<String> path = new ArrayList<>();
         trace.getRecords().stream()
-                .filter(r -> r.isAgent()) // 只统计专家的动作
+                .filter(r -> r.isAgent())
                 .map(r -> r.getSource())
                 .forEach(path::add);
 
-        // 如果没有任何历史且没有状态，直接返回原 Prompt
+        // 如果没有任何接力历史，说明是首节点，无需注入断面
         if (path.isEmpty() && Utils.isEmpty(effectiveOutput) && Utils.isEmpty(state)) {
-            return originalPrompt;
+            return;
         }
 
-        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
-        StringBuilder sb = new StringBuilder();
+        // 3. 注入当前任务断面 (Session Level - 确保模型感知其处于接力状态)
 
         if (isZh) {
-            sb.append("\n### 协作接力上下文 (Handover Context)\n");
+            sb.append("\n## 当前接力任务断面 (Active Session Context)\n");
+            sb.append("> 本部分记录了任务流转至此时的关键快照，请基于此状态继续执行，严禁编造断面之外的信息。\n\n");
 
-            // 展示流转轨迹：AgentA -> AgentB
             if (!path.isEmpty()) {
-                sb.append("- **接力轨迹**: ").append(String.join(" -> ", path)).append("\n");
-                String lastAgent = path.get(path.size() - 1);
-                sb.append("- **最后接力专家**: ").append(lastAgent).append("\n");
+                sb.append("- **协作轨迹**: ").append(String.join(" -> ", path)).append("\n");
+                sb.append("- **上一步专家**: ").append(path.get(path.size() - 1)).append("\n");
             }
 
             if (Utils.isNotEmpty(effectiveOutput)) {
-                sb.append("- **最后产出内容**: ").append(effectiveOutput).append("\n");
+                sb.append("- **待处理产出**: ").append(effectiveOutput).append("\n");
             }
 
             if (Utils.isNotEmpty(state)) {
                 sb.append("- **累积业务状态**: ").append(state).append("\n");
             }
         } else {
-            sb.append("\n### Handover Context\n");
+            sb.append("\n## Active Session Context\n");
+            sb.append("> This snapshot records the current state of the task. Continue execution based on this data.\n\n");
 
             if (!path.isEmpty()) {
                 sb.append("- **Collaboration Trail**: ").append(String.join(" -> ", path)).append("\n");
-                String lastAgent = path.get(path.size() - 1);
-                sb.append("- **Last Expert**: ").append(lastAgent).append("\n");
+                sb.append("- **Prior Expert**: ").append(path.get(path.size() - 1)).append("\n");
             }
 
             if (Utils.isNotEmpty(effectiveOutput)) {
-                sb.append("- **Last Output**: ").append(effectiveOutput).append("\n");
+                sb.append("- **Pending Output**: ").append(effectiveOutput).append("\n");
             }
 
             if (Utils.isNotEmpty(state)) {
                 sb.append("- **Global State**: ").append(state).append("\n");
             }
         }
-
-        // 将接力上下文作为 UserMessage 注入，确保模型在推理前强制感知
-        List<ChatMessage> messages = new ArrayList<>(originalPrompt.getMessages());
-        messages.add(ChatMessage.ofUser(sb.toString()));
-
-        return Prompt.of(messages).attrPut(originalPrompt.attrs());
     }
+
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {

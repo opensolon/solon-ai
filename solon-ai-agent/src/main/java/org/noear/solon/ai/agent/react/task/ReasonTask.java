@@ -99,6 +99,10 @@ public class ReasonTask implements NamedTaskComponent {
             systemPrompt = sb.toString();
         }
 
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("ReAct SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), systemPrompt);
+        }
+
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(systemPrompt));
         messages.addAll(trace.getWorkingMemory().getMessages());

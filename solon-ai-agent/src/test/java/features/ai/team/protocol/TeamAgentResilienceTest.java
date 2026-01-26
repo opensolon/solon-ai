@@ -26,7 +26,7 @@ public class TeamAgentResilienceTest {
     public void testContextPersistenceAcrossMultipleHandovers() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
         ReActSystemPrompt p = ReActSystemPrompt.builder()
-                .instruction("处理任务并 transfer_to 下一节点，务必在正文中保留用户暗号。" + SHORT)
+                .instruction("处理任务并 transfer_to 下一节点，务必在正文中保留用户暗号。每个专家只能处理一次" + SHORT)
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.A2A)
