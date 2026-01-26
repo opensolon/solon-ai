@@ -15,11 +15,16 @@
  */
 package org.noear.solon.ai.chat.skill;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Collection;
+import java.util.stream.Collectors;
 
 /**
  *
@@ -32,7 +37,7 @@ public class SkillUtil {
     /**
      * 激活技能
      */
-    public static StringBuilder activeSkills(ModelOptionsAmend<?,?> modelOptions, Prompt prompt) {
+    public static StringBuilder activeSkills(ModelOptionsAmend<?, ?> modelOptions, Prompt prompt) {
         StringBuilder combinedInstruction = new StringBuilder();
 
         for (RankEntity<Skill> item : modelOptions.skills()) {
@@ -58,12 +63,60 @@ public class SkillUtil {
             }
 
             //聚合提示词
-            skill.injectInstruction(prompt, combinedInstruction);
+            injectSkillInstruction(skill, prompt, combinedInstruction);
 
             //部署工具
             modelOptions.toolAdd(skill.getTools(prompt));
         }
 
         return combinedInstruction;
+    }
+
+
+    /**
+     * 注入指令并对工具进行“染色”
+     */
+    private static void injectSkillInstruction(Skill skill, Prompt prompt, StringBuilder combinedInstruction) {
+        String ins = skill.getInstruction(prompt);
+        Collection<FunctionTool> tools = skill.getTools(prompt);
+
+        // 1. 如果有工具，进行元信息染色（借鉴 MCP 思想）
+        if (tools != null && !tools.isEmpty()) {
+            for (FunctionTool tool : tools) {
+                // 将所属 Skill 的名字注入工具的 meta
+                tool.metaPut("skill", skill.name());
+                // 如果需要，也可以把 Skill 的描述或其它元数据注入
+                if (Utils.isNotEmpty(skill.description())) {
+                    tool.metaPut("skill_desc", skill.description());
+                }
+            }
+        }
+
+        // 2. 构建 System Prompt 指令块
+        if (Utils.isNotEmpty(ins) || (tools != null && !tools.isEmpty())) {
+            if (combinedInstruction.length() > 0) {
+                combinedInstruction.append("\n");
+            }
+
+            // 统一头部
+            combinedInstruction.append("**Skill**: ").append(skill.name());
+
+            // 补充 Skill 描述（如果有）
+            if (Utils.isNotEmpty(skill.metadata().getDescription()) && !skill.name().equals(skill.metadata().getDescription())) {
+                combinedInstruction.append(" (").append(skill.metadata().getDescription()).append(")");
+            }
+            combinedInstruction.append("\n");
+
+            // 注入具体指令
+            if (Utils.isNotEmpty(ins)) {
+                combinedInstruction.append(ins).append("\n");
+            }
+
+            // 注入工具关联说明（告知模型这些工具受此 Skill 指令约束）
+            if (tools != null && !tools.isEmpty()) {
+                String toolNames = tools.stream().map(t -> t.name()).collect(Collectors.joining(", "));
+                combinedInstruction.append("- **Supported Tools**: ").append(toolNames).append("\n");
+            }
+        }
     }
 }
