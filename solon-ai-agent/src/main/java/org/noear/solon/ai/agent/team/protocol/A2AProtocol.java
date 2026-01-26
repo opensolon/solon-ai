@@ -172,29 +172,67 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
         A2AState stateObj = getA2AState(trace);
+
+        // 1. 获取最后一次有效产出（接力棒内容）
         String effectiveOutput = stateObj.getLastPayload();
         if (Utils.isEmpty(effectiveOutput)) {
             effectiveOutput = trace.getLastAgentContent();
         }
 
+        // 2. 获取全局累积状态
         String state = stateObj.getGlobalState();
 
-        if (Utils.isEmpty(effectiveOutput) && Utils.isEmpty(state)) {
+        // 3. 提取协作接力轨迹（从历史记录中分析参与过的专家路径）
+        List<String> path = new ArrayList<>();
+        trace.getRecords().stream()
+                .filter(r -> r.isAgent()) // 只统计专家的动作
+                .map(r -> r.getSource())
+                .forEach(path::add);
+
+        // 如果没有任何历史且没有状态，直接返回原 Prompt
+        if (path.isEmpty() && Utils.isEmpty(effectiveOutput) && Utils.isEmpty(state)) {
             return originalPrompt;
         }
 
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         StringBuilder sb = new StringBuilder();
+
         if (isZh) {
-            sb.append("\n### 接力上下文 (Handover Context)\n");
-            if (Utils.isNotEmpty(effectiveOutput)) sb.append("- **上一步产出**: ").append(effectiveOutput).append("\n");
-            if (Utils.isNotEmpty(state)) sb.append("- **累积状态**: ").append(state).append("\n");
+            sb.append("\n### 协作接力上下文 (Handover Context)\n");
+
+            // 展示流转轨迹：AgentA -> AgentB
+            if (!path.isEmpty()) {
+                sb.append("- **接力轨迹**: ").append(String.join(" -> ", path)).append("\n");
+                String lastAgent = path.get(path.size() - 1);
+                sb.append("- **最后接力专家**: ").append(lastAgent).append("\n");
+            }
+
+            if (Utils.isNotEmpty(effectiveOutput)) {
+                sb.append("- **最后产出内容**: ").append(effectiveOutput).append("\n");
+            }
+
+            if (Utils.isNotEmpty(state)) {
+                sb.append("- **累积业务状态**: ").append(state).append("\n");
+            }
         } else {
             sb.append("\n### Handover Context\n");
-            if (Utils.isNotEmpty(effectiveOutput)) sb.append("- **Prior Output**: ").append(effectiveOutput).append("\n");
-            if (Utils.isNotEmpty(state)) sb.append("- **Global State**: ").append(state).append("\n");
+
+            if (!path.isEmpty()) {
+                sb.append("- **Collaboration Trail**: ").append(String.join(" -> ", path)).append("\n");
+                String lastAgent = path.get(path.size() - 1);
+                sb.append("- **Last Expert**: ").append(lastAgent).append("\n");
+            }
+
+            if (Utils.isNotEmpty(effectiveOutput)) {
+                sb.append("- **Last Output**: ").append(effectiveOutput).append("\n");
+            }
+
+            if (Utils.isNotEmpty(state)) {
+                sb.append("- **Global State**: ").append(state).append("\n");
+            }
         }
 
+        // 将接力上下文作为 UserMessage 注入，确保模型在推理前强制感知
         List<ChatMessage> messages = new ArrayList<>(originalPrompt.getMessages());
         messages.add(ChatMessage.ofUser(sb.toString()));
 
