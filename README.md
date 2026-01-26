@@ -97,15 +97,15 @@ chatModel.prompt("hello").stream(); //Publisher<ChatResponse>
 
 ```java
 Skill skill = new SkillDesc("order_expert")
-        .description("订单助手")
+        .description("Order Assistant")
         // Dynamic admission: Activated only when "order" is mentioned
-        .isSupported(prompt -> prompt.getUserMessageContent().contains("订单"))
+        .isSupported(prompt -> prompt.getUserMessageContent().contains("order"))
         // Dynamic instructions: Inject different Sops depending on whether the user is a VIP or not
         .instruction(prompt -> {
             if ("VIP".equals(prompt.getMeta("user_level"))) {
                 return "This is a VIP customer, please call fast_track_tool first.";
             }
-            return "Process the order inquiry according to the normal process。";
+            return "Process the order inquiry according to the normal process.";
         })
         .toolAdd(new OrderTools());
 
