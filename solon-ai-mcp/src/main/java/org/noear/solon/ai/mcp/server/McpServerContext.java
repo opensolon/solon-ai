@@ -21,6 +21,7 @@ import io.modelcontextprotocol.server.McpSyncServerExchange;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.handle.SessionState;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.KeyValues;
 import org.noear.solon.core.util.MultiMap;
 
@@ -59,8 +60,9 @@ public class McpServerContext extends ContextEmpty {
                     this.headerMap().add(kv.getKey(), v);
                 }
             }
+
             //传递上下文的attr
-            if(context.attrMap() != null) {
+            if(Assert.isNotEmpty(context.attrMap())) {
                 this.attrSet(context.attrMap());
             }
         } else {
