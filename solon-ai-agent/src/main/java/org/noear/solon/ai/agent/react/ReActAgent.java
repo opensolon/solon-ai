@@ -458,6 +458,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
+        public Builder enableSuspension(boolean val) {
+            config.getDefaultOptions().setEnableSuspension(val);
+            return this;
+        }
+
         public Builder enablePlanning(boolean val) {
             config.getDefaultOptions().setEnablePlanning(val);
             return this;

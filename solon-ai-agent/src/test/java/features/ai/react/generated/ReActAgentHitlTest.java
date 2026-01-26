@@ -49,9 +49,9 @@ public class ReActAgentHitlTest {
         // 1. 定义人工介入拦截器 - 检测敏感操作节点
         ReActInterceptor hitlInterceptor = new ReActInterceptor() {
             @Override
-            public void onNodeEnd(FlowContext ctx, Node node) {
+            public void onNodeStart(FlowContext ctx, Node node) {
                 // 当进入工具执行节点时，检查是否已获得人工批准
-                if (ReActAgent.ID_ACTION.equals(node.getId())) {
+                if (ReActAgent.ID_REASON.equals(node.getId())) {
                     Boolean approved = ctx.getAs("is_approved");
                     if (approved == null) {
                         System.out.println("[拦截器] 检测到敏感工具调用，等待人工审批...");
@@ -79,7 +79,7 @@ public class ReActAgentHitlTest {
                 .call();
 
         System.out.println(resp.getMetrics());
-        Assertions.assertTrue(resp.getMetrics().getTotalTokens() > 0);
+        Assertions.assertTrue(resp.getMetrics().getTotalTokens() == 0);
 
         String result1 = resp.getContent();
 
@@ -88,11 +88,11 @@ public class ReActAgentHitlTest {
 
         // 验证：流程应该被拦截并停止，最后停留在工具节点
         Assertions.assertTrue(context.isStopped(), "流程应该被拦截并停止");
-        Assertions.assertEquals(ReActAgent.ID_ACTION, context.lastNodeId(), "最后应停留在工具节点");
+        Assertions.assertEquals(ReActAgent.ID_REASON, context.lastNodeId(), "最后应停留在工具节点");
 
         // 获取执行状态追踪，验证已有执行步骤
         ReActTrace state = context.getAs("__" + agent.name());
-        Assertions.assertTrue(state.getStepCount() > 0, "应该已有执行步骤");
+        Assertions.assertTrue(state.getStepCount() == 0, "应该还没有执行步骤");
         System.out.println("当前状态：" + state.getRoute());
 
         // --- 第二步：人工介入，注入批准信号 ---

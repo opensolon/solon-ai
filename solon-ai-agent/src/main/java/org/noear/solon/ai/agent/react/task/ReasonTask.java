@@ -185,7 +185,10 @@ public class ReasonTask implements NamedTaskComponent {
         ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o -> {
-                    o.toolAdd(SuspendTool.tool);
+                    if(trace.getOptions().isEnableSuspension()) {
+                        o.toolAdd(SuspendTool.tool);
+                    }
+
                     o.toolAdd(trace.getOptions().getTools());
                     o.toolAdd(trace.getProtocolTools());
 

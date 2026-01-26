@@ -73,6 +73,11 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
         return this;
     }
 
+    public ReActOptionsAmend enableSuspension(boolean enableSuspension) {
+        options.setEnableSuspension(enableSuspension);
+        return this;
+    }
+
     public ReActOptionsAmend enablePlanning(boolean enablePlanning) {
         options.setEnablePlanning(enablePlanning);
         return this;

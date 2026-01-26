@@ -53,6 +53,7 @@ public class ReActOptions implements NonSerializable {
     /** 输出格式约束 (JSON Schema) */
     private String outputSchema;
 
+    private boolean enableSuspension = false; // 是否启用挂起环节
     private boolean enablePlanning = false; // 是否启用规划环节
     private Function<ReActTrace, String> planInstructionProvider; // 规划专用指令
 
@@ -67,6 +68,7 @@ public class ReActOptions implements NonSerializable {
         tmp.sessionWindowSize = sessionWindowSize;
         tmp.outputSchema = outputSchema;
 
+        tmp.enableSuspension = enableSuspension;
         tmp.enablePlanning = enablePlanning;
         tmp.planInstructionProvider = planInstructionProvider;
 
@@ -101,6 +103,8 @@ public class ReActOptions implements NonSerializable {
     protected void setSkillInstruction(String skillInstruction) {
         this.skillInstruction = skillInstruction;
     }
+
+    protected void setEnableSuspension(boolean enableSuspension) { this.enableSuspension = enableSuspension; }
 
     protected void setEnablePlanning(boolean enablePlanning) { this.enablePlanning = enablePlanning; }
 
@@ -145,6 +149,10 @@ public class ReActOptions implements NonSerializable {
     }
 
     public String getOutputSchema() { return outputSchema; }
+
+    public boolean isEnableSuspension() {
+        return enableSuspension;
+    }
 
     public boolean isEnablePlanning() { return enablePlanning; }
 

@@ -11,7 +11,6 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -29,6 +28,7 @@ public class ReActAgentBoundaryTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new LoopTools())
+                .enableSuspension(false)
                 .modelOptions(o -> o.temperature(0.0))
                 .maxSteps(3) // 限制最多 3 步迭代
                 .build();
@@ -38,11 +38,36 @@ public class ReActAgentBoundaryTest {
 
         // 验证结果是否包含迭代超限的错误提示
         Assertions.assertNotNull(result);
+        System.out.println(result);
         String lowResult = result.toLowerCase();
         Assertions.assertTrue(lowResult.contains("maximum") ||
                         lowResult.contains("max steps") ||
                         lowResult.contains("迭代"),
                 "未触发预期的步数限制。实际结果：" + result);
+
+        // 验证轨迹记录
+        ReActTrace trace = agent.getTrace(session);
+        Assertions.assertNotNull(trace);
+        Assertions.assertTrue(trace.getStepCount() >= 3, "追踪步骤应等于或大于最大限制值");
+    }
+
+    @Test
+    public void testMaxStepsReached_B() throws Throwable {
+        // 测试：强制达到最大步数限制（防止 AI 进入无限思考循环）
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .defaultToolAdd(new LoopTools())
+                .modelOptions(o -> o.temperature(0.0))
+                .maxSteps(3) // 限制最多 3 步迭代
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("test_max_steps");
+        String result = agent.call(Prompt.of("请通过不断思考，尽可能深入地分析这个问题"), session).getContent();
+
+        // 验证结果是否包含迭代超限的错误提示
+        Assertions.assertNotNull(result);
+        System.out.println(result);
 
         // 验证轨迹记录
         ReActTrace trace = agent.getTrace(session);
