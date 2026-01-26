@@ -25,6 +25,7 @@ import org.noear.solon.core.util.KeyValues;
 import org.noear.solon.core.util.MultiMap;
 
 import java.util.Collection;
+import java.util.Map;
 
 /**
  * Mcp 服务端请求上下文
@@ -57,6 +58,10 @@ public class McpServerContext extends ContextEmpty {
                 for (String v : kv.getValues()) {
                     this.headerMap().add(kv.getKey(), v);
                 }
+            }
+            //传递上下文的attr
+            if(context.attrMap() != null) {
+                this.attrSet(context.attrMap());
             }
         } else {
             //如果没有，则是 stdio
