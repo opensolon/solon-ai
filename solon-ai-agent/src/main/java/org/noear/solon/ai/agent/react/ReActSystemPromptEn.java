@@ -144,7 +144,6 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
                 .append("User: What is the weather in Paris?\n")
                 .append("Thought: I need to check the current weather for Paris.\n")
                 .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"Paris\"}}\n")
-                .append("Observation: 18°C, Sunny.\n")
                 .append("Thought: I have obtained the weather information.\n")
                 .append("Final Answer: ").append(config.getFinishMarker()).append("The weather in Paris is 18°C and sunny.\n");
 

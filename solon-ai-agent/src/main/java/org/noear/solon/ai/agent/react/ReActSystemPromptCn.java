@@ -140,7 +140,6 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
                 .append("用户: 北京天气怎么样？\n")
                 .append("Thought: 我需要查询北京当前的实时天气信息。\n")
                 .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"北京\"}}\n")
-                .append("Observation: 25°C，晴间多云。\n")
                 .append("Thought: 根据观察结果，北京天气良好。\n")
                 .append("Final Answer: ").append(config.getFinishMarker()).append("北京目前天气晴间多云，气温约 25°C。\n");
 

@@ -15,14 +15,14 @@ import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 
 /**
- * ReActAgent 缺失资料索要（AskTool）场景测试
+ * ReActAgent 缺失资料索要场景测试
  * * 验证流程：
  * 1. 用户下达指令，但缺少关键参数。
- * 2. Agent 自动调用 ask_for_information 并挂起。
- * 3. 业务方通过 attrs 注入缺失参数。
- * 4. Agent 再次执行，感知到 attrs，顺利完成任务。
+ * 2. Agent 正常结束。
+ * 3. 业务方通过收集新数据。
+ * 4. Agent 再次执行，顺利完成任务。
  */
-public class ReActAgentAskToolTest {
+public class ReActAgentLoopTest {
 
     @Test
     public void testAskForInformationAndResume() throws Throwable {

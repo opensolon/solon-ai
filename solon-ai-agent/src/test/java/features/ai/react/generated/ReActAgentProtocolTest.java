@@ -202,23 +202,6 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
         return false;
     }
 
-    private boolean containsObservation(ReActTrace trace) {
-        if (trace == null) return false;
-        for (ChatMessage msg : trace.getWorkingMemory().getMessages()) {
-            // 1. 原生协议：检查是否是 ToolMessage 类型
-            if (msg instanceof ToolMessage) {
-                return true;
-            }
-
-            // 2. 文本模式：检查内容是否包含 Observation 关键字
-            // ActionTask 在文本模式下会生成：Observation: [工具结果]
-            String content = msg.getContent();
-            if (content != null && content.contains("Observation:")) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     // --- 业务工具类 ---
 

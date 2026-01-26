@@ -193,7 +193,7 @@ public class ActionTask implements NamedTaskComponent {
      * @return 工具输出的字符串结果
      */
     private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
-        if (AskTool.tool_name.equals(name)) {
+        if (SuspendTool.tool_name.equals(name)) {
             String reason = (String) args.get("reason");
             trace.setFinalAnswer(reason);
             trace.setRoute(Agent.ID_END);
