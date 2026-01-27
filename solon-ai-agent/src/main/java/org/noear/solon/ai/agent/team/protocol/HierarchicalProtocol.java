@@ -115,18 +115,21 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
 
+        // 增加明显的区块分割
+        sb.append("\n\n---"); // 视觉分割线，帮助模型切分注意力
+        sb.append(isZh ? "\n## 协作与汇报规范\n" : "\n## Collaboration & Reporting\n");
 
-        // 3. 强制汇报规范
+        // 1. 强制汇报规范
         sb.append(isZh
-                ? "\n### 汇报要求：\n- 请在回复结尾使用 JSON 块反馈核心数据（例：{\"result\": \"...\", \"status\": \"done\"}）。"
-                : "\n### Reporting Requirement:\n- End response with a JSON block for key data (e.g., {\"result\": \"...\", \"status\": \"done\"}).");
+                ? "\n1. 汇报要求：\n- 请在回复结尾使用 JSON 块反馈核心数据（例：{\"result\": \"...\", \"status\": \"done\"}）。"
+                : "\n1. Reporting Requirement:\n- End response with a JSON block for key data (e.g., {\"result\": \"...\", \"status\": \"done\"}).");
 
 
-        // 5. 动态追加完成标记提醒
+        // 2. 动态追加完成标记提醒
         if (agent instanceof TeamAgent) {
             String marker = ((TeamAgent) agent).getConfig().getFinishMarker();
             if (Utils.isNotEmpty(marker)) {
-                sb.append(isZh ? "\n- [注意]：任务完成时，必须在回复中包含标记: " : "\n- [NOTE]: Upon completion, must include marker: ")
+                sb.append(isZh ? "\n2. **完成标记**：任务完成时，必须包含标记: " : "\n2. **Finish Marker**: Upon completion, must include: ")
                         .append("`").append(marker).append("`\n");
             }
         }
