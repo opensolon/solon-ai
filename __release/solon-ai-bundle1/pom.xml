@@ -30,6 +30,7 @@
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-gemini</module>
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-ollama</module>
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-openai</module>
+        <module>../../solon-ai-llm-dialects/solon-ai-dialect-claude</module>
 
         <module>../../solon-ai-rag-loaders/solon-ai-load-ddl</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-excel</module>

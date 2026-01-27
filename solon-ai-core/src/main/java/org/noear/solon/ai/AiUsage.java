@@ -29,12 +29,21 @@ public class AiUsage {
     private final long promptTokens;
     private final long completionTokens;
     private final long totalTokens;
+    private final long cacheCreationInputTokens;
+    private final long cacheReadInputTokens;
     private final ONode source;
 
     public AiUsage(long promptTokens, long completionTokens, long totalTokens, ONode source) {
+        this(promptTokens, completionTokens, totalTokens, 0L, 0L, source);
+    }
+
+    public AiUsage(long promptTokens, long completionTokens, long totalTokens,
+                   long cacheCreationInputTokens, long cacheReadInputTokens, ONode source) {
         this.promptTokens = promptTokens;
         this.completionTokens = completionTokens;
         this.totalTokens = totalTokens;
+        this.cacheCreationInputTokens = cacheCreationInputTokens;
+        this.cacheReadInputTokens = cacheReadInputTokens;
         this.source = source;
     }
 
@@ -57,6 +66,20 @@ public class AiUsage {
      */
     public long totalTokens() {
         return totalTokens;
+    }
+
+    /**
+     * 获取缓存创建输入令牌数 (Claude Prompt Caching)
+     */
+    public long cacheCreationInputTokens() {
+        return cacheCreationInputTokens;
+    }
+
+    /**
+     * 获取缓存读取输入令牌数 (Claude Prompt Caching)
+     */
+    public long cacheReadInputTokens() {
+        return cacheReadInputTokens;
     }
 
     /**
