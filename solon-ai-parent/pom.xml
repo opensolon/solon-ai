@@ -99,6 +99,12 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>solon-ai-dialect-claude</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-load-ddl</artifactId>
                 <version>${project.version}</version>
             </dependency>
