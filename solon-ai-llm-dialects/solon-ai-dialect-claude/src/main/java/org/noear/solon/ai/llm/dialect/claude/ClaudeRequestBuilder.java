@@ -402,7 +402,7 @@ public class ClaudeRequestBuilder {
      * @param toolMessages 工具消息列表
      * @return 助手消息
      */
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
+    public AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage, List<ToolMessage> toolMessages) {
         StringBuilder buf = new StringBuilder();
         for (ToolMessage toolMessage : toolMessages) {
             if (buf.length() > 0) {

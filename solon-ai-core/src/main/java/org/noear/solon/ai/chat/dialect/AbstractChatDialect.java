@@ -224,7 +224,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     @Override
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
+    public AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage, List<ToolMessage> toolMessages) {
         //要求直接返回（转为新的响应消息）
         StringBuffer buf = new StringBuffer();
         for (ToolMessage toolMessage : toolMessages) {
@@ -234,7 +234,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
             buf.append(toolMessage.getContent());
         }
 
-        return ChatMessage.ofAssistant(buf.toString());
+        return ChatMessage.ofAssistant(buf.toString())
+                .addMetadata("reason", "tool")
+                .addMetadata("source", toolCallMessage.getResultContent());
     }
 
     /**

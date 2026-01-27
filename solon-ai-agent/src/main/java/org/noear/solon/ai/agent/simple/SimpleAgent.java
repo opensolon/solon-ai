@@ -163,7 +163,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         // 4. 更新会话状态与快照
-        if(Assert.isNotEmpty(assistantMessage.getContent()) && Assert.isEmpty(assistantMessage.getToolCalls())) {
+        if (Assert.isNotEmpty(assistantMessage.getContent()) && Assert.isEmpty(assistantMessage.getToolCalls())) {
             if (parentTeamTrace == null) {
                 session.addMessage(assistantMessage);
             }
@@ -287,6 +287,13 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
             if (resp.getUsage() != null) {
                 trace.getMetrics().addUsage(resp.getUsage());
+            }
+
+            if (resp.hasChoices() && resp.getMessage().getMetadata().containsKey("source")) {
+                String source = resp.getMessage().getMetadataAs("source");
+                if (Assert.isNotEmpty(source)) {
+                    return ChatMessage.ofAssistant(source);
+                }
             }
 
             String clearContent = resp.hasContent() ? resp.getResultContent() : "";

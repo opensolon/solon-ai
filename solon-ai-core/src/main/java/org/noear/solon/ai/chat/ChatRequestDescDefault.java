@@ -180,7 +180,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     return internalCall();
                 } else {
                     //要求直接返回（转为新的响应消息）
-                    choiceMessage = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
+                    choiceMessage = dialect.buildAssistantMessageByToolMessages(choiceMessage, returnDirectMessages);
                     resp.reset();
                     resp.addChoice(new ChatChoice(0, new Date(), "tool", choiceMessage));
                     session.addMessage(choiceMessage); //添加到记忆
@@ -365,7 +365,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     return true; //触发外层的完成事件
                 }
 
-                List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
+                AssistantMessage choiceMessage = assistantMessages.get(0);
+                List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
                 if (Utils.isEmpty(returnDirectMessages)) {
                     //没有要求直接返回
@@ -373,7 +374,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     return false; //不触发外层的完成事件
                 } else {
                     //要求直接返回（转为新的响应消息）
-                    AssistantMessage message = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
+                    AssistantMessage message = dialect.buildAssistantMessageByToolMessages(choiceMessage, returnDirectMessages);
                     resp.reset();
                     resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
                     resp.aggregationMessageContent.setLength(0);

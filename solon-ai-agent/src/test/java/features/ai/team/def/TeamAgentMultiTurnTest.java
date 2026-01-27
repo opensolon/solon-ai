@@ -81,6 +81,7 @@ public class TeamAgentMultiTurnTest {
         // 第一次调用后，我们主要确认 Trace 是否生成
         TeamTrace trace1 = conciergeTeam.getTrace(session);
         Assertions.assertNotNull(trace1, "第一轮执行应产生轨迹");
+        Assertions.assertTrue(trace1.getRecords().stream().anyMatch(ag->ag.isAgent() && ag.getSource().equals("searcher")), "历史轨迹应保留第一轮 searcher 的足迹");
 
         // --- 第二轮：约束注入 (这是最容易失败的地方) ---
         System.out.println("\n>>> [Round 2] 用户：预算只有 500 元，帮我重新规划。");
@@ -112,7 +113,6 @@ public class TeamAgentMultiTurnTest {
         System.out.println("记忆验证：[地点识别: " + matchedLocation + "], [预算感知: " + matchedBudget + "]");
 
         // 核心断言
-        Assertions.assertTrue(trace2.getFormattedHistory().contains("searcher"), "历史轨迹应保留第一轮 searcher 的足迹");
         Assertions.assertTrue(matchedLocation, "Planner 遗忘了第一轮确定的地点：杭州");
         Assertions.assertTrue(matchedBudget, "Planner 忽略了第二轮注入的预算约束：500元");
 

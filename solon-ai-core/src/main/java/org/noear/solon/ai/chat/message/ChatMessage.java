@@ -51,6 +51,11 @@ public interface ChatMessage extends Serializable {
     Map<String, Object> getMetadata();
 
     /**
+     * 获取元数据
+     */
+    <T> T getMetadataAs(String key);
+
+    /**
      * 添加元数据
      */
     ChatMessage addMetadata(Map<String, Object> map);

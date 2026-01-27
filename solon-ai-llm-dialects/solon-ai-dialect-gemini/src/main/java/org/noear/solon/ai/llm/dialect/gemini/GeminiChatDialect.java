@@ -197,9 +197,9 @@ public class GeminiChatDialect extends AbstractChatDialect {
             return super.parseAssistantMessage(resp, oMessage);
         }
     }
-
-    @Override
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
-    }
+// 没有改变，不需要重写
+//    @Override
+//    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
+//        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
+//    }
 }

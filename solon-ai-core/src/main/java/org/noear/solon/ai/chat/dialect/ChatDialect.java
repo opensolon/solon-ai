@@ -91,7 +91,7 @@ public interface ChatDialect extends AiModelDialect {
      *
      * @param toolMessages 直接返回的工具消息
      */
-    AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages);
+    AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage, List<ToolMessage> toolMessages);
 
     /**
      * 分析响应数据

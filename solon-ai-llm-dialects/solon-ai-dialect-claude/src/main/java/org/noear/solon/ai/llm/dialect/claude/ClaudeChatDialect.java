@@ -121,8 +121,9 @@ public class ClaudeChatDialect extends AbstractChatDialect {
         return super.parseAssistantMessage(resp, oMessage); // 使用父类的通用解析方法
     }
 
-    @Override
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
-    }
+    //如果没有改变，不需要重写
+//    @Override
+//    public AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage,List<ToolMessage> toolMessages) {
+//        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
+//    }
 }
