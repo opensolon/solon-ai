@@ -62,8 +62,8 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
         return this;
     }
 
-    public TeamOptionsAmend enableSuspension(boolean enableSuspension){
-        options.setEnableSuspension(enableSuspension);
+    public TeamOptionsAmend enableFeedback(boolean enableFeedback){
+        options.setEnableFeedback(enableFeedback);
         return this;
     }
 

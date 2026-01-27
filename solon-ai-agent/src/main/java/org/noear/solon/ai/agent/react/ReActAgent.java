@@ -458,8 +458,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        public Builder enableSuspension(boolean val) {
-            config.getDefaultOptions().setEnableSuspension(val);
+        public Builder enableFeedback(boolean val) {
+            config.getDefaultOptions().setEnableFeedback(val);
             return this;
         }
 

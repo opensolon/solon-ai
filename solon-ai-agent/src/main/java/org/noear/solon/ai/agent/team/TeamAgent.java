@@ -414,8 +414,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder enableSuspension(boolean enableSuspension) {
-            config.getDefaultOptions().setEnableSuspension(enableSuspension);
+        public Builder enableFeedback(boolean enableSuspension) {
+            config.getDefaultOptions().setEnableFeedback(enableSuspension);
             return this;
         }
 

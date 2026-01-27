@@ -17,7 +17,7 @@ package org.noear.solon.ai.agent.react.task;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.util.SuspendTool;
+import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActAgentConfig;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
@@ -194,7 +194,7 @@ public class ActionTask implements NamedTaskComponent {
      * @return 工具输出的字符串结果
      */
     private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
-        if (SuspendTool.tool_name.equals(name)) {
+        if (FeedbackTool.tool_name.equals(name)) {
             String reason = (String) args.get("reason");
             trace.setFinalAnswer(reason);
             trace.setRoute(Agent.ID_END);

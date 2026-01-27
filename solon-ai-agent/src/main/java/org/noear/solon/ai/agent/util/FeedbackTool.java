@@ -26,8 +26,8 @@ import org.noear.solon.ai.chat.tool.FunctionToolDesc;
  * @author noear
  * @since 3.9.0
  */
-public class SuspendTool {
-    public static final String tool_name = "__suspend_task";
+public class FeedbackTool {
+    public static final String tool_name = "__ask_for_feedback";
 
     public static final FunctionTool tool = new FunctionToolDesc(tool_name).returnDirect(true)
             .description("当任务由于缺失必要参数、条件或外部反馈而无法继续时，必须调用此工具挂起流程，并向用户说明原因。")

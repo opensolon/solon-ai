@@ -11,7 +11,7 @@ package org.noear.solon.ai.agent.team.task;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.util.SuspendTool;
+import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
@@ -20,7 +20,6 @@ import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
@@ -176,7 +175,7 @@ public class SupervisorTask implements NamedTaskComponent {
      * 将决策文本解析为物理路由目标
      */
     protected void commitRoute(TeamTrace trace, String decision, FlowContext context) {
-        if (SuspendTool.isSuspend(decision)) {
+        if (FeedbackTool.isSuspend(decision)) {
             ONode oNode = ONode.ofJson(decision);
             String reason = oNode.get("reason").getString();
             trace.setFinalAnswer(reason);
@@ -267,8 +266,8 @@ public class SupervisorTask implements NamedTaskComponent {
      */
     protected ChatResponse callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
-            if(trace.getOptions().isEnableSuspension()) {
-                o.toolAdd(SuspendTool.tool);
+            if(trace.getOptions().isEnableFeedback()) {
+                o.toolAdd(FeedbackTool.tool);
             }
 
             o.toolAdd(trace.getOptions().getTools());
