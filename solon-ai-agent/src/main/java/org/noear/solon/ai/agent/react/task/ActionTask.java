@@ -198,7 +198,7 @@ public class ActionTask implements NamedTaskComponent {
             String reason = (String) args.get("reason");
             trace.setFinalAnswer(reason);
             trace.setRoute(Agent.ID_END);
-            trace.getContext().stop();
+            trace.getContext().interrupt();
             return reason;
         }
 
