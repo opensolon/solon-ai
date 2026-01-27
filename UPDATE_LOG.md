@@ -12,6 +12,7 @@
 
 ### v3.9.1
 
+* 新增 solon-ai-dialect-claude 插件
 * 优化 solon-ai-agent ReActAgent 添加主动挂机的能力（处理无法完成的任务时，可避免幻觉轮询）
 
 ### v3.9.0
