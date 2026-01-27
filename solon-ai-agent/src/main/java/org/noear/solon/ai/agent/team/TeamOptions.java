@@ -56,7 +56,7 @@ public class TeamOptions implements NonSerializable {
     private int recordWindowSize = 8;
 
     private String skillInstruction;
-    private boolean enableSuspension = true; // 是否启用挂起环节
+    private boolean enableSuspension = false; // 是否启用挂起环节
 
     /**
      * 模型选项

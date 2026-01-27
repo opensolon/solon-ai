@@ -279,8 +279,9 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             // 触发完成拦截
             options.getInterceptors().forEach(item -> item.target.onTeamEnd(trace));
 
+
             if (LOG.isDebugEnabled()) {
-                LOG.debug("TeamAgent [{}] collaboration completed.", name());
+                LOG.debug("TeamAgent [{}] completed: {}", config.getName(), assistantMessage.getContent());
             }
 
             return assistantMessage;

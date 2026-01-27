@@ -274,7 +274,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-        if(Assert.isNotEmpty(result)) {
+        if (Assert.isNotEmpty(result)) {
             if (parentTeamTrace == null) {
                 session.addMessage(assistantMessage);
             }
@@ -286,6 +286,10 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         // 拦截器：任务结束事件
         for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
             item.target.onAgentEnd(trace);
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("ReActAgent [{}] finished: {}", config.getName(), assistantMessage.getContent());
         }
 
         return assistantMessage;
