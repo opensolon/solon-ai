@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
@@ -205,7 +204,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             }
         } else {
             //新问题（重置相关数据）
-            trace.getWorkingMemory().clear();
+            trace.reset(prompt);
+            context.trace().recordNode(graph, null);
 
             // 1. 加载历史上下文（短期记忆）
             if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
@@ -223,10 +223,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
                 trace.getWorkingMemory().addMessage(message);
             }
-
-            trace.setPlans(null);
-            context.trace().recordNode(graph, null);
-            trace.setOriginalPrompt(prompt);
         }
 
         //如果提示词没问题，开始激活技能

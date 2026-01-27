@@ -111,6 +111,31 @@ public class ReActTrace implements AgentTrace {
         }
     }
 
+    protected void reset(Prompt originalPrompt) {
+        // 1. 基础计数器重置
+        stepCounter.set(0);
+        toolCounter.set(0);
+
+        // 2. 核心状态重置（非常重要，防止直接跳过推理进入上一次的 END 状态）
+        this.route = ReActAgent.ID_REASON;
+        this.finalAnswer = null;
+        this.lastResult = null;
+
+        // 3. 结构化数据重置
+        plans.clear();
+        workingMemory.clear();
+
+        // 4. 指标重置（确保单次 Prompt 的 Token 消耗和时长统计准确）
+        metrics.reset();
+
+        // 5. 更新原始提示词
+        setOriginalPrompt(originalPrompt);
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Agent [{}] trace reset for a new task.", getAgentName());
+        }
+    }
+
     @Override
     public Metrics getMetrics() {
         return metrics;
