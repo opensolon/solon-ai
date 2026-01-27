@@ -81,6 +81,12 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>solon-ai-dialect-claude</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-dialect-ollama</artifactId>
                 <version>${project.version}</version>
             </dependency>
