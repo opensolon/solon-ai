@@ -134,6 +134,33 @@ public class TeamTrace implements AgentTrace {
         }
     }
 
+    protected void reset(Prompt originalPrompt){
+        // 1. 基础状态重置
+        this.turnCounter.set(0);
+        this.route = null;            // 路由必须重置，由协议在构建图后重新计算
+        this.finalAnswer = null;
+        this.lastDecision = null;
+        this.lastAgentName = null;
+
+        // 2. 核心记忆与流水账清理
+        this.records.clear();         // 协作流水账必须清空，否则上下文注入时会包含旧任务的 Expert Output
+        this.workingMemory.clear();   // 顶层工作记忆清空
+
+        // 3. 协议私有上下文重置（关键！）
+        // 这里存储了如：当前环节索引、已完成的角色列表等，必须清空以重新开始协议逻辑
+        this.protocolContext.clear();
+
+        // 4. 指标重置
+        this.metrics.reset();
+
+        // 5. 任务绑定
+        setOriginalPrompt(originalPrompt);
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("TeamAgent [{}] trace reset. Ready for new collaboration.", agentName);
+        }
+    }
+
     /**
      * 是否为初始状态
      */

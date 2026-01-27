@@ -188,7 +188,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             }
         } else {
             //新问题（重置数据）
-            trace.getWorkingMemory().clear();
+            trace.reset(prompt);
+            context.trace().recordNode(graph, null);
 
 
             // 加载历史上下文（短期记忆）
@@ -207,12 +208,6 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                 }
                 trace.getWorkingMemory().addMessage(message);
             }
-
-            context.trace().recordNode(graph, null);
-            trace.setOriginalPrompt(prompt);
-            trace.setRoute(null);
-            trace.resetProtocolContext();
-            trace.resetTurnCount();
         }
 
         //如果提示词没问题，开始部署技能
