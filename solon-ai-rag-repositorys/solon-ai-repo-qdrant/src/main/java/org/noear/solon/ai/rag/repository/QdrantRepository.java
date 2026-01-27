@@ -19,6 +19,7 @@ import io.qdrant.client.PointIdFactory;
 import io.qdrant.client.QdrantClient;
 import io.qdrant.client.grpc.Collections.Distance;
 import io.qdrant.client.grpc.Collections.VectorParams;
+import io.qdrant.client.grpc.Common;
 import io.qdrant.client.grpc.JsonWithInt;
 import io.qdrant.client.grpc.Points.*;
 
@@ -151,8 +152,8 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
         }
 
         try {
-            List<PointId> pointIds = Arrays.stream(ids)
-                    .map(id -> PointId.newBuilder().setUuid(id).build())
+            List<Common.PointId> pointIds = Arrays.stream(ids)
+                    .map(id -> Common.PointId.newBuilder().setUuid(id).build())
                     .collect(Collectors.toList());
 
             config.client.deleteAsync(config.collectionName, pointIds).get();
@@ -186,7 +187,7 @@ public class QdrantRepository implements RepositoryStorable, RepositoryLifecycle
                     .setWithPayload(include(Arrays.asList(config.contentFieldName, config.metadataFieldName)))
                     .setWithVectors(enable(true));
 
-            Filter filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
+            Common.Filter filter = FilterTransformer.getInstance().transform(condition.getFilterExpression());
 
             if (filter != null) {
                 queryBuilder.setFilter(filter);
