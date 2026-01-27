@@ -14,6 +14,7 @@
 
 * 新增 solon-ai-dialect-claude 插件
 * 优化 solon-ai-agent ReActAgent 添加主动挂机的能力（处理无法完成的任务时，可避免幻觉轮询）
+* qdrant 升为 1.16.2
 
 ### v3.9.0
 
