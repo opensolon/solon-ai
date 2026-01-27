@@ -30,7 +30,7 @@ public class SuspendTool {
     public static final String tool_name = "__suspend_task";
 
     public static final FunctionTool tool = new FunctionToolDesc(tool_name).returnDirect(true)
-            .description("当任务由于意图不明、缺失必要参数或外部反馈而无法继续推进时，必须调用此工具挂起流程，并向用户说明原因。")
+            .description("当任务由于缺失必要参数、条件或外部反馈而无法继续时，必须调用此工具挂起流程，并向用户说明原因。")
             .stringParamAdd("reason", "向用户说明流程挂起的原因，并请求补全缺失信息")
             .doHandle((args) -> {
                 return ONode.ofBean(args).set("status", "suspended").toJson();
