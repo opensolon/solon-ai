@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 /**
  * 优化版 Supervisor 测试：验证指派逻辑与多轮博弈
  */
-public class TeamAgentSupervisorTest {
+public class TeamAgentHierarchicalTest {
 
     private static final String LIMIT = " (Constraint: Reply < 10 words)";
 

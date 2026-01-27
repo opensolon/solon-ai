@@ -132,15 +132,7 @@ public class A2AProtocol extends TeamProtocolBase {
                 .filter(e -> !e.getKey().equals(agent.name()))
                 .forEach(e -> {
                     Agent expert = e.getValue();
-                    String capabilities = String.join(",", expert.profile().getCapabilities());
-                    String modes = String.join(",", expert.profile().getInputModes());
-                    String desc = expert.description();
-
-                    expertsNode.addNew()
-                            .set("name", e.getKey())
-                            .set("description", desc)
-                            .set("capabilities", capabilities)
-                            .set("modes", modes);
+                    expertsNode.add(expert.toMetadata(context));
                 });
 
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER).returnDirect(true);

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.lang.Preview;
 import java.util.Locale;
@@ -77,19 +78,13 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
 
         // A. Team Directory: 注入成员职责与契约 (Contract)
         sb.append("## Team Members\n");
+        sb.append("```json\n");
+        ONode agentMetas = new ONode().asArray();
         config.getAgentMap().forEach((name, agent) -> {
-            sb.append("- **").append(name).append("**:\n");
-            sb.append("  - Responsibility: ").append(agent.descriptionFor(trace.getContext())).append("\n");
-
-            AgentProfile profile = agent.profile();
-            if (profile != null) {
-                String profileInfo = profile.toFormatString(getLocale());
-                if (profileInfo.length() > 0) {
-                    // 使用 code-block 强化契约信息的语义边界
-                    sb.append("  - Contract: `").append(profileInfo).append("`\n");
-                }
-            }
+            agentMetas.add(agent.toMetadata(trace.getContext()));
         });
+        sb.append(agentMetas.toJson());
+        sb.append("\n```\n");
 
         // B. Context: 注入原始用户需求
         sb.append("\n## Current Task\n").append(trace.getOriginalPrompt().getUserContent()).append("\n");

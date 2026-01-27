@@ -84,18 +84,20 @@ public class ContractNetProtocol extends TeamProtocolBase {
         @Override
         public String toString() {
             ONode root = new ONode().asObject();
+            String phase = (awardedAgent != null) ? "AWARDED" : (bids.isEmpty() ? "WAITING_FOR_BIDS" : "EVALUATING");
+            root.set("phase", phase);
             root.set("current_round", this.rounds); // 关键：让 LLM 知道当前轮次
             root.set("history_count", this.history.size());
             root.set("winner", this.awardedAgent == null ? "none" : this.awardedAgent); // <--- 关键：显式输出 winner
 
-            ONode bidsNode = root.getOrNew("all_bids").asObject();
+            ONode bidsNode = root.getOrNew("bids_board").asObject();
             bids.forEach((name, content) -> {
                 ONode item = bidsNode.getOrNew(name);
                 item.set("score", content.get("score"));
                 item.set("plan", content.get("plan"));
-                // 确保 ONode 的获取逻辑正确：auto_bid 是 boolean
+                // 语义化 source，强调数据来源（Metadata 匹配 vs 主动投标）
                 boolean isAuto = content.get("auto_bid").getBoolean();
-                item.set("match_reason", isAuto ? "Skill Match" : "Self Proposal");
+                item.set("source", isAuto ? "Capability_Match" : "Expert_Proposal");
             });
             return root.toJson();
         }
@@ -260,14 +262,18 @@ public class ContractNetProtocol extends TeamProtocolBase {
         // 3. 【路由守卫核心】：检查指派合规性
         if (config.getAgentMap().containsKey(decision)) {
             ContractState state = getContractState(trace);
+            boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
             // 如果没有标书，或者指派的人根本没投标，强制进入招标环节
-            if (state == null || !state.hasBids()) {
+            if (state == null || !state.hasAgentBid(decision)) {
                 if (LOG.isWarnEnabled()) {
-                    LOG.warn("ContractNet: Compliance violation! Supervisor tried to assign '{}' without bidding. Redirecting...", decision);
+                    LOG.warn("ContractNet: Compliance violation! Supervisor tried to assign '{}' without bidding.", decision);
                 }
-                // 可以在此处通过 trace 记录一条系统警告，反馈给 Supervisor
-                trace.addRecord(ChatRole.SYSTEM, ID_BIDDING, "System: Bidding is mandatory before assignment.", 0);
+
+                // 注入明确的系统指令，防止模型陷入死循环
+                String warnMsg = isZh ? "【系统指引】指派无效。必须先调用 " + TOOL_CALL_BIDS + " 获取标书，且只能指派已出现在 bids_board 中的专家。"
+                        : "[System] Invalid assignment. You must call " + TOOL_CALL_BIDS + " first and only assign experts listed in bids_board.";
+                trace.addRecord(ChatRole.SYSTEM, ID_BIDDING, warnMsg, 0);
                 return ID_BIDDING;
             }
 
@@ -315,11 +321,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
 
         sb.append(isZh ? "#### 成员资质表:\n" : "#### Agent Profiles:\n");
         config.getAgentMap().forEach((name, ag) -> {
-            sb.append("- **").append(name).append("** (")
-                    .append(ag.description()).append("): ")
-                    .append("Capabilities").append(ag.profile().getCapabilities())
-                    .append(", Modes").append(ag.profile().getInputModes())
-                    .append("\n");
+            sb.append("- ").append(ag.toMetadata(context).toJson()).append("\n");
         });
     }
 
@@ -345,7 +347,9 @@ public class ContractNetProtocol extends TeamProtocolBase {
      */
     protected ONode constructBid(Agent agent, Prompt prompt) {
         String taskDesc = prompt.getUserContent().toLowerCase();
-        int score = 60;
+
+        //如果专家名下没有任何能力描述，给一个较低的保底分，促使 Supervisor 寻找更合适的专家
+        int score = (agent.profile() != null && !agent.profile().getCapabilities().isEmpty()) ? 60 : 30;
 
         if (agent.profile() != null) {
             for (String skill : agent.profile().getCapabilities()) {
@@ -375,8 +379,8 @@ public class ContractNetProtocol extends TeamProtocolBase {
 
         // 方案 B：合同网专项逻辑（推荐）
         // 只要看板里出现了 "winner" 关键字，说明已经完成了定标决策，允许结项
-        String dashboard = trace.getProtocolDashboardSnapshot();
-        if (dashboard != null && dashboard.toLowerCase().contains("winner:")) {
+        ContractState state = (ContractState) trace.getProtocolContext().get(KEY_CONTRACT_STATE);
+        if (state != null && state.getAwardedAgent() != null) {
             return true;
         }
 

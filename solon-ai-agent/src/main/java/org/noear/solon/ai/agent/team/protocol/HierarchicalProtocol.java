@@ -34,6 +34,8 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static org.noear.solon.ai.agent.team.protocol.ContractNetProtocol.ID_BIDDING;
+
 /**
  * 层级化协作协议 (Hierarchical Protocol)
  *
@@ -109,6 +111,26 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         spec.addEnd(Agent.ID_END);
     }
 
+    @Override
+    public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+
+
+        // 3. 强制汇报规范
+        sb.append(isZh
+                ? "\n### 汇报要求：\n- 请在回复结尾使用 JSON 块反馈核心数据（例：{\"result\": \"...\", \"status\": \"done\"}）。"
+                : "\n### Reporting Requirement:\n- End response with a JSON block for key data (e.g., {\"result\": \"...\", \"status\": \"done\"}).");
+
+
+        // 5. 动态追加完成标记提醒
+        if (agent instanceof TeamAgent) {
+            String marker = ((TeamAgent) agent).getConfig().getFinishMarker();
+            if (Utils.isNotEmpty(marker)) {
+                sb.append(isZh ? "\n- [注意]：任务完成时，必须在回复中包含标记: " : "\n- [NOTE]: Upon completion, must include marker: ")
+                        .append("`").append(marker).append("`\n");
+            }
+        }
+    }
     /**
      * 增强专家指令：注入汇报规范与多模态提醒
      */
@@ -149,10 +171,6 @@ public class HierarchicalProtocol extends TeamProtocolBase {
             }
         }
 
-        // 3. 强制汇报规范
-        sb.append(isZh
-                ? "\n### 汇报要求：\n- 请在回复结尾使用 JSON 块反馈核心数据（例：{\"result\": \"...\", \"status\": \"done\"}）。"
-                : "\n### Reporting Requirement:\n- End response with a JSON block for key data (e.g., {\"result\": \"...\", \"status\": \"done\"}).");
 
         // 4. 多模态提醒
         if (originalPrompt.getMessages().stream()
@@ -164,16 +182,11 @@ public class HierarchicalProtocol extends TeamProtocolBase {
                     : "\n- [IMPORTANT]: Multimodal content detected. Process based on the attachments.");
         }
 
-        // 5. 动态追加完成标记提醒
-        if (agent instanceof TeamAgent) {
-            String marker = ((TeamAgent) agent).getConfig().getFinishMarker();
-            if (Utils.isNotEmpty(marker)) {
-                sb.append(isZh ? "\n- [注意]：任务完成时，必须在回复中包含标记: " : "\n- [NOTE]: Upon completion, must include marker: ")
-                        .append("`").append(marker).append("`\n");
-            }
+        if (sb.length() > 0) {
+            finalPrompt.addMessage(sb.toString());
         }
 
-        return super.prepareAgentPrompt(trace, agent, finalPrompt.addMessage(sb.toString()), locale);
+        return super.prepareAgentPrompt(trace, agent, finalPrompt, locale);
     }
 
     @Override
@@ -227,23 +240,26 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         if (decision != null && decision.contains(config.getFinishMarker())) {
-            // --- 核心：流程完整性校验 ---
-            // 动态检查所有注册的专家是否都至少参与过（或根据特定业务逻辑判断）
-            Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext().get(KEY_AGENT_USAGE);
+            //基于错误的通用阻断逻辑
+            HierarchicalState state = (HierarchicalState) trace.getProtocolContext().get(KEY_HIERARCHY_STATE);
+            if (state != null) {
+                ONode errors = ONode.ofJson(state.toString()).get("_meta").get("errors");
+                if (errors.isObject() && !errors.isEmpty()) {
+                    boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+                    String errorHint = isZh ? "【系统干预】由于看板中仍有未解决的错误，任务不能结束。请指派相关专家修复。"
+                            : "[System] Task cannot end because errors exist. Assign agents to fix them.";
 
-            // 这里的逻辑可以改为：只要有待命专家未执行且任务未达到最大轮次，就不允许结束
-            // 或者针对你的单测：强制检查是否有程序员(implementer)参与
-            if (config.getAgentMap().containsKey("implementer")) {
-                boolean hasImplementerRun = (usage != null && usage.containsKey("implementer"));
-                if (!hasImplementerRun) {
-                    // 强制路由到程序员，并注入指令
-                    trace.getProtocolContext().put("active_instruction", "请执行最终的代码落地与验证工作。");
-                    return "implementer";
+                    // 1. 注入系统反馈
+                    trace.addRecord(ChatRole.SYSTEM, ID_BIDDING, errorHint, 0);
+                    // 2. 将决策存入 active_instruction 辅助下一轮 Prompt
+                    trace.getProtocolContext().put("active_instruction", errorHint);
+
+                    // 【关键修改点】：必须返回自身 ID，形成闭环，强制 LLM 在下一轮重新决策
+                    return TeamAgent.ID_SUPERVISOR;
                 }
             }
 
-            // --- 结果收敛 ---
-            // 捕获当前调度者的汇总内容作为最终答案
+            // 正常结束逻辑
             String finalAnswer = decision.replace(config.getFinishMarker(), "").trim();
             trace.setFinalAnswer(finalAnswer);
             return Agent.ID_END;

@@ -15,11 +15,13 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.function.Function;
 
@@ -82,18 +84,13 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
         // A. 团队成员名录：基于 Agent 职责描述与契约构建知识库
         sb.append("## 团队成员\n");
+        sb.append("```json\n");
+        ONode agentMetas = new ONode().asArray();
         config.getAgentMap().forEach((name, agent) -> {
-            sb.append("- **").append(name).append("**:\n");
-            sb.append("  - 职责: ").append(agent.descriptionFor(trace.getContext())).append("\n");
-
-            AgentProfile profile = agent.profile();
-            if (profile != null) {
-                String info = profile.toFormatString(getLocale());
-                if (info.length() > 0) {
-                    sb.append("  - 契约: `").append(info).append("`\n");
-                }
-            }
+            agentMetas.add(agent.toMetadata(trace.getContext()));
         });
+        sb.append(agentMetas.toJson());
+        sb.append("\n```\n");
 
         // B. 任务背景：注入用户原始 Prompt
         sb.append("\n## 当前任务\n").append(trace.getOriginalPrompt().getUserContent()).append("\n");

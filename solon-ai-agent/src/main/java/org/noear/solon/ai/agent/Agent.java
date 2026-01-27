@@ -74,6 +74,13 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     }
 
     /**
+     * 生成动态元数据（用于协作传递）
+     */
+    default ONode toMetadata(FlowContext context){
+        return AgentUtil.toMetadataNode(this, context);
+    }
+
+    /**
      * 创建基于 Prompt 的请求构建器
      */
     default Req prompt(Prompt prompt) {
