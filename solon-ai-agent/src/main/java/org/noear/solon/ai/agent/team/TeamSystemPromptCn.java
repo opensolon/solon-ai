@@ -103,7 +103,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
         sb.append("\n## 输出规范\n")
                 .append("1. **状态分析**：分析当前执行进度，决定下一步行动。\n")
                 .append("2. **任务终止**：如果任务已完成，必须输出: ").append(config.getFinishMarker())
-                .append(" 并在其后提供最终答案。\n")
+                .append(" 并在其后提供最终答案。**严禁**包含任何状态分析或推理过程。\n")
                 .append("3. **继续执行**：若任务未完成，请**仅输出**下一个要执行的 Agent 名字，不要有额外文本。\n");
 
         // E. 治理准则：防死循环与合规性约束
