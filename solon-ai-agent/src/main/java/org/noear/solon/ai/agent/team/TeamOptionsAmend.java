@@ -49,11 +49,21 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
         return this;
     }
 
+    public TeamOptionsAmend recordWindowSize(int recordWindowSize) {
+        options.setRecordWindowSize(recordWindowSize);
+        return this;
+    }
+
     /**
      * 修正调度重试配置
      */
     public TeamOptionsAmend retryConfig(int maxRetries, long retryDelayMs) {
         options.setRetryConfig(maxRetries, retryDelayMs);
+        return this;
+    }
+
+    public TeamOptionsAmend enableSuspension(boolean enableSuspension){
+        options.setEnableSuspension(enableSuspension);
         return this;
     }
 

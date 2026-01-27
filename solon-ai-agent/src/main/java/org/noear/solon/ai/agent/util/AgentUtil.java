@@ -13,9 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent;
+package org.noear.solon.ai.agent.util;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
 
@@ -25,7 +27,7 @@ import org.noear.solon.flow.FlowContext;
  * @author noear
  * @since 3.9.0
  */
-class AgentUtil {
+public class AgentUtil {
     public static ONode toMetadataNode(Agent<?, ?> agent, FlowContext context) {
         ONode node = new ONode().asObject();
 

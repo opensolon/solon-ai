@@ -108,7 +108,7 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
 
         // F. Custom Business Logic: 注入增量业务指令
         if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
-            sb.append("## Core Task Instructions\n");
+            sb.append("\n## Core Task Instructions\n");
 
             // Agent-level instructions
             if (instructionProvider != null) {

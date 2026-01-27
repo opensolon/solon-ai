@@ -56,6 +56,7 @@ public class TeamOptions implements NonSerializable {
     private int recordWindowSize = 5;
 
     private String skillInstruction;
+    private boolean enableSuspension = true; // 是否启用挂起环节
 
     /**
      * 模型选项
@@ -75,6 +76,9 @@ public class TeamOptions implements NonSerializable {
         tmp.maxRetries = this.maxRetries;
         tmp.retryDelayMs = this.retryDelayMs;
         tmp.recordWindowSize = this.recordWindowSize;
+        tmp.skillInstruction = this.skillInstruction;
+
+        tmp.enableSuspension = this.enableSuspension;
 
         return tmp;
     }
@@ -113,6 +117,10 @@ public class TeamOptions implements NonSerializable {
 
     protected void setSkillInstruction(String skillInstruction) {
         this.skillInstruction = skillInstruction;
+    }
+
+    protected void setEnableSuspension(boolean enableSuspension) {
+        this.enableSuspension = enableSuspension;
     }
 
     /**
@@ -176,5 +184,9 @@ public class TeamOptions implements NonSerializable {
 
     public String getSkillInstruction() {
         return skillInstruction;
+    }
+
+    public boolean isEnableSuspension() {
+        return enableSuspension;
     }
 }

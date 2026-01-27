@@ -282,9 +282,9 @@ public class HierarchicalProtocol extends TeamProtocolBase {
 
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
         if (isZh) {
-            sb.append("\n### 运行看板 (Hierarchical Dashboard)\n");
+            sb.append("\n## 运行看板 (Hierarchical Dashboard)\n");
         } else {
-            sb.append("\n### Hierarchical Dashboard\n");
+            sb.append("\n## Hierarchical Dashboard\n");
         }
 
         ONode dashboard = (state != null) ? ONode.ofJson(state.toString()) : new ONode().asObject();

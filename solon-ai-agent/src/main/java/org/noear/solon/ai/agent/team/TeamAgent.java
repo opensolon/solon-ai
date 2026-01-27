@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
@@ -411,6 +410,11 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
          */
         public Builder modelOptions(Consumer<ModelOptionsAmend<?, TeamInterceptor>> chatOptions) {
             chatOptions.accept(config.getDefaultOptions().getModelOptions());
+            return this;
+        }
+
+        public Builder enableSuspension(boolean enableSuspension) {
+            config.getDefaultOptions().setEnableSuspension(enableSuspension);
             return this;
         }
 

@@ -53,7 +53,7 @@ public class ReActOptions implements NonSerializable {
     /** 输出格式约束 (JSON Schema) */
     private String outputSchema;
 
-    private boolean enableSuspension = false; // 是否启用挂起环节
+    private boolean enableSuspension = true; // 是否启用挂起环节
     private boolean enablePlanning = false; // 是否启用规划环节
     private Function<ReActTrace, String> planInstructionProvider; // 规划专用指令
 

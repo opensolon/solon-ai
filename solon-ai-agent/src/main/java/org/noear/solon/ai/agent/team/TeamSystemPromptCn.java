@@ -114,7 +114,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
         // F. 增量指令：业务侧自定义的补充约束
         if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
-            sb.append("## 核心任务指令\n");
+            sb.append("\n## 核心任务指令\n");
 
             // Agent 级指令
             if (instructionProvider != null) {

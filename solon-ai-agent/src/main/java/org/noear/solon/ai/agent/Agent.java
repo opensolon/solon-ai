@@ -20,6 +20,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.util.AgentUtil;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;

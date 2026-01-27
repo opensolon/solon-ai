@@ -19,6 +19,7 @@ import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.util.SuspendTool;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActAgentConfig;
 import org.noear.solon.ai.agent.react.ReActInterceptor;

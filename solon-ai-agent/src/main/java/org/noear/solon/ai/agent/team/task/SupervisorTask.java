@@ -10,6 +10,7 @@
 package org.noear.solon.ai.agent.team.task;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.util.SuspendTool;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
@@ -18,6 +19,7 @@ import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
@@ -165,13 +167,26 @@ public class SupervisorTask implements NamedTaskComponent {
         trace.setLastDecision(decision);
         trace.getOptions().getInterceptors().forEach(item -> item.target.onSupervisorDecision(trace, decision));
 
-        commitRoute(trace, decision, context);
+        commitRoute(response, trace, decision, context);
     }
 
     /**
      * 将决策文本解析为物理路由目标
      */
-    protected void commitRoute(TeamTrace trace, String decision, FlowContext context) {
+    protected void commitRoute(ChatResponse response, TeamTrace trace, String decision, FlowContext context) {
+        if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
+            Optional<ToolCall> toolCall = response.getMessage().getToolCalls().stream()
+                    .filter(t -> SuspendTool.tool_name.equals(t.name()))
+                    .findFirst();
+            if (toolCall.isPresent()) {
+                // 获取挂起原因并设置 FinalAnswer
+                String reason = (String) toolCall.get().arguments().get("reason");
+                trace.setFinalAnswer(reason);
+                routeTo(context, trace, Agent.ID_END);
+                return;
+            }
+        }
+
         if (Assert.isEmpty(decision)) {
             routeTo(context, trace, Agent.ID_END);
             return;
@@ -254,6 +269,10 @@ public class SupervisorTask implements NamedTaskComponent {
      */
     protected ChatResponse callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
+            if(trace.getOptions().isEnableSuspension()) {
+                o.toolAdd(SuspendTool.tool);
+            }
+
             o.toolAdd(trace.getOptions().getTools());
             config.getProtocol().injectSupervisorTools(trace.getContext(), o::toolAdd);
 
