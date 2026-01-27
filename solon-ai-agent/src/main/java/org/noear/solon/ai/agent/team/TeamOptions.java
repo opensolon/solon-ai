@@ -50,10 +50,10 @@ public class TeamOptions implements NonSerializable {
      */
     private long retryDelayMs = 1000L;
     /** 会话回溯窗口大小 */
-    private int sessionWindowSize = 5;
+    private int sessionWindowSize = 8;
 
     /** 记录回溯窗口大小 */
-    private int recordWindowSize = 5;
+    private int recordWindowSize = 8;
 
     private String skillInstruction;
     private boolean enableSuspension = true; // 是否启用挂起环节

@@ -49,7 +49,7 @@ public class ReActOptions implements NonSerializable {
     /** 重试延迟基础时间（毫秒） */
     private long retryDelayMs = 1000L;
     /** 会话回溯窗口大小 */
-    private int sessionWindowSize = 5;
+    private int sessionWindowSize = 8;
     /** 输出格式约束 (JSON Schema) */
     private String outputSchema;
 

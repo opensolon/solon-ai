@@ -9,6 +9,7 @@
  */
 package org.noear.solon.ai.agent.team.task;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.util.SuspendTool;
 import org.noear.solon.ai.agent.team.TeamAgent;
@@ -149,10 +150,11 @@ public class SupervisorTask implements NamedTaskComponent {
             LOG.trace("Team SystemPrompt rendered for agent [{}]:\n{}", trace.getAgentName(), finalSystemPrompt);
         }
 
-        List<ChatMessage> messages = Arrays.asList(
-                ChatMessage.ofSystem(finalSystemPrompt),
-                ChatMessage.ofUser(userContent.toString())
-        );
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.ofSystem(finalSystemPrompt));
+        messages.addAll(trace.getWorkingMemory().getMessages());
+        messages.add(ChatMessage.ofUser(userContent.toString()));
+
 
         ChatResponse response = callWithRetry(trace, messages);
 
@@ -167,24 +169,20 @@ public class SupervisorTask implements NamedTaskComponent {
         trace.setLastDecision(decision);
         trace.getOptions().getInterceptors().forEach(item -> item.target.onSupervisorDecision(trace, decision));
 
-        commitRoute(response, trace, decision, context);
+        commitRoute(trace, decision, context);
     }
 
     /**
      * 将决策文本解析为物理路由目标
      */
-    protected void commitRoute(ChatResponse response, TeamTrace trace, String decision, FlowContext context) {
-        if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
-            Optional<ToolCall> toolCall = response.getMessage().getToolCalls().stream()
-                    .filter(t -> SuspendTool.tool_name.equals(t.name()))
-                    .findFirst();
-            if (toolCall.isPresent()) {
-                // 获取挂起原因并设置 FinalAnswer
-                String reason = (String) toolCall.get().arguments().get("reason");
-                trace.setFinalAnswer(reason);
-                routeTo(context, trace, Agent.ID_END);
-                return;
-            }
+    protected void commitRoute(TeamTrace trace, String decision, FlowContext context) {
+        if (SuspendTool.isSuspend(decision)) {
+            ONode oNode = ONode.ofJson(decision);
+            String reason = oNode.get("reason").getString();
+            trace.setFinalAnswer(reason);
+            trace.setRoute(Agent.ID_END);
+            trace.getContext().stop();
+            return;
         }
 
         if (Assert.isEmpty(decision)) {

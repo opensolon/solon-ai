@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.util;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 
@@ -28,10 +29,14 @@ import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 public class SuspendTool {
     public static final String tool_name = "__suspend_task";
 
-    public static final FunctionTool tool = new FunctionToolDesc(tool_name)
+    public static final FunctionTool tool = new FunctionToolDesc(tool_name).returnDirect(true)
             .description("当任务由于意图不明、缺失必要参数或外部反馈而无法继续推进时，必须调用此工具挂起流程，并向用户说明原因。")
             .stringParamAdd("reason", "向用户说明流程挂起的原因，并请求补全缺失信息")
             .doHandle((args) -> {
-                return "{\"status\":\"suspended\"}";
+                return ONode.ofBean(args).set("status", "suspended").toJson();
             });
+
+    public static boolean isSuspend(String text) {
+        return text != null && text.contains("\"status\":\"suspended\"");
+    }
 }
