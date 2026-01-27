@@ -183,19 +183,32 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
      * 组装完整的 Prompt 消息列表（含 SystemPrompt、OutputSchema 及历史窗口）
      */
     private Prompt prepareAgentPrompt(TeamTrace parentTeamTrace, AgentSession session, Prompt originalPrompt) {
-        String spText = config.getSystemPromptFor(session.getSnapshot());
+        // 1. 获取基础 System Prompt
+        StringBuilder spBuf = new StringBuilder();
+        String baseSp = config.getSystemPromptFor(session.getSnapshot());
+        if (baseSp != null) {
+            spBuf.append(baseSp);
+        }
 
-        // 注入 JSON Schema 指令（强制格式输出）
+        // 2. 【核心修复】注入协议指令（断面数据：如 Coder 写的代码就在这里）
+        FlowContext context = session.getSnapshot();
+        TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL); // 从上下文获取协议
+        if (protocol != null) {
+            // 调用协议注入，它会把 "## 当前接力任务断面" 附加到 spBuf 后面
+            protocol.injectAgentInstruction(context, this, config.getLocale(), spBuf);
+        }
+
+        // 3. 注入 JSON Schema 指令
         if (Assert.isNotEmpty(config.getOutputSchema())) {
-            spText += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
-                    "Please provide the response in JSON format strictly following this schema:\n" +
-                    config.getOutputSchema();
+            spBuf.append("\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n")
+                    .append("Please provide the response in JSON format strictly following this schema:\n")
+                    .append(config.getOutputSchema());
         }
 
         List<ChatMessage> messages = new ArrayList<>();
 
-        if (Assert.isNotEmpty(spText)) {
-            messages.add(ChatMessage.ofSystem(spText.trim()));
+        if (spBuf.length() > 0) {
+            messages.add(ChatMessage.ofSystem(spBuf.toString().trim()));
         }
 
         // 加载限定窗口大小的历史记录

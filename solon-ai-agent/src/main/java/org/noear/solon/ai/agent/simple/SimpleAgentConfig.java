@@ -23,6 +23,8 @@ import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Locale;
+
 /**
  * 简单智能体配置类
  *
@@ -167,6 +169,10 @@ public class SimpleAgentConfig {
     public AgentProfile getProfile() {
         if (profile == null) profile = new AgentProfile();
         return profile;
+    }
+
+    public Locale getLocale() {
+        return Locale.CHINESE;
     }
 
     public String getSystemPromptFor(FlowContext context) {
