@@ -119,10 +119,12 @@ public class TeamAgentContractNetTest {
     @DisplayName("资格预审：排除休假专家")
     public void testContractNetEligibility() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-        Agent boss = ReActAgent.of(chatModel).name("boss").description("在忙").build();
-        Agent intern = ReActAgent.of(chatModel).name("intern").description("在线").build();
+        Agent boss = ReActAgent.of(chatModel).name("boss").description("在忙").feedbackMode(false).build();
+        Agent intern = ReActAgent.of(chatModel).name("intern").description("在线").feedbackMode(false).build();
 
-        TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.CONTRACT_NET).agentAdd(boss, intern)
+        TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.CONTRACT_NET)
+                .feedbackMode(false)
+                .agentAdd(boss, intern)
                 .systemPrompt(p->p.instruction("状态为'在忙'的专家禁止中标。")).build();
 
         AgentSession session = InMemoryAgentSession.of("c5");

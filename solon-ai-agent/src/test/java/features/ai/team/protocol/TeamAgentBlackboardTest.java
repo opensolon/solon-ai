@@ -43,16 +43,20 @@ public class TeamAgentBlackboardTest {
 
         // 后端：观察到没 api 就写 api
         Agent backend = ReActAgent.of(chatModel).name("Backend").defaultToolAdd(tools)
+                .feedbackMode(false)
                 .systemPrompt(p->p
                         .instruction("若看板无'api'，调用 write(k='api', v='ok')。" + LIMIT)).build();
 
         // 前端：观察到有 api 才写 ui
         Agent frontend = ReActAgent.of(chatModel).name("Frontend").defaultToolAdd(tools)
+                .feedbackMode(false)
                 .systemPrompt(p->p
                         .instruction("若看板有'api'，调用 write(k='ui', v='done') 并回复 FINISH。" + LIMIT)).build();
 
         // 注意：这里没有 TeamSystemPrompt 调度，完全靠协议自动轮询和 Agent 的自发判断
-        TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.BLACKBOARD)
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.BLACKBOARD)
+                .feedbackMode(false)
                 .agentAdd(backend, frontend).maxTurns(5).build();
 
         AgentSession session = InMemoryAgentSession.of("s1");
@@ -74,15 +78,18 @@ public class TeamAgentBlackboardTest {
 
         // 初级工：设定一个低分
         Agent junior = ReActAgent.of(chatModel).name("Junior").defaultToolAdd(tools)
+                .feedbackMode(false)
                 .systemPrompt(p->p.instruction("将'score'设为'60'。" + LIMIT)).build();
 
         // 资深工：看到低分就修正为高分
         Agent senior = ReActAgent.of(chatModel).name("Senior").defaultToolAdd(tools)
+                .feedbackMode(false)
                 .description("资深专家，负责对评分进行最终核准和修正（尤其是当分数为60时）")
                 .systemPrompt(p->p
                         .instruction("若看板'score'为'60'，将其覆盖写为'99'。" + LIMIT)).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.BLACKBOARD)
+                .feedbackMode(false)
                 .agentAdd(junior, senior).maxTurns(4).build();
 
         AgentSession session = InMemoryAgentSession.of("s2");
@@ -110,15 +117,20 @@ public class TeamAgentBlackboardTest {
 
         // 编写者：反复尝试
         Agent writer = ReActAgent.of(chatModel).name("Writer").defaultToolAdd(tools)
+                .feedbackMode(false)
                 .systemPrompt(p->p.instruction("写一个含'A'的词并写入'data'。" + LIMIT)).build();
 
         // 审计者：不含'A'就报错，含'A'才通过
         Agent auditor = ReActAgent.of(chatModel).name("Auditor").defaultToolAdd(tools)
+                .feedbackMode(false)
                 .systemPrompt(p->p
                         .instruction("若'data'不含'A'，写'status'为'FAIL'；若含'A'，写'status'为'PASS'并回复 FINISH。" + LIMIT)).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.BLACKBOARD)
-                .agentAdd(writer, auditor).maxTurns(6).build();
+                .feedbackMode(false)
+                .agentAdd(writer, auditor)
+                .maxTurns(6)
+                .build();
 
         AgentSession session = InMemoryAgentSession.of("s3");
         String result = team.call(Prompt.of("提交合规文档"), session).getContent();

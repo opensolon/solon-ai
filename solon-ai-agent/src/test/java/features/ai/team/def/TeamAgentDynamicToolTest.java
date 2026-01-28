@@ -50,6 +50,7 @@ public class TeamAgentDynamicToolTest {
         // 3. 构建团队智能体 (Team)
         TeamAgent vipTeam = TeamAgent.of(chatModel)
                 .agentAdd(searcher)
+                .feedbackMode(false)
                 .build();
 
         // 4. 使用 AgentSession 替代 FlowContext

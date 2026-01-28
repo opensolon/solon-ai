@@ -31,6 +31,7 @@ public class TeamAgentPersistenceHitlCombinedTest {
         // 1. 构建团队
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name(teamName)
+                .feedbackMode(false)
                 .systemPrompt(p->p
                         .role("你是一个财务合规主管。")
                         .instruction(trace -> "规则：Worker 提交后流程挂起；收到 signed 信号后指派 Approver。任务结束时请复述 Approver 的结论。"))

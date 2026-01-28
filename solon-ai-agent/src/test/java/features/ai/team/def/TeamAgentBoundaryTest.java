@@ -117,7 +117,9 @@ public class TeamAgentBoundaryTest {
         // 测试：多 Agent 团队的性能及调度稳定性
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        TeamAgent.Builder builder = TeamAgent.of(chatModel).name("large_team");
+        TeamAgent.Builder builder = TeamAgent.of(chatModel)
+                .feedbackMode(false)
+                .name("large_team");
 
         for (int i = 0; i < 5; i++) {
             builder.agentAdd(ReActAgent.of(chatModel)

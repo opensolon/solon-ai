@@ -68,6 +68,7 @@ public class TeamAgentMultiTurnTest {
         TeamAgent conciergeTeam = TeamAgent.of(chatModel)
                 .name("travel_concierge_team")
                 .agentAdd(searcher, planner)
+                .feedbackMode(false)
                 .maxTurns(6)
                 .build();
 

@@ -96,12 +96,14 @@ public class TeamAgentRecursiveTest {
         // 确保子团队有明确的完成标记，以便 HierarchicalProtocol 清除看板错误
         TeamAgent devTeam = TeamAgent.of(chatModel).name("dev_team")
                 .description("代码实现小组")
+                .feedbackMode(false)
                 .agentAdd(createSimpleAgent("Coder", "程序员"))
                 .build();
 
         // 3. 带有审核逻辑的顶层团队
         TeamAgent projectTeam = TeamAgent.of(chatModel).name("quality_project")
                 .description("带质检的项目组。如果结果不满意，Reviewer 会要求重写。")
+                .feedbackMode(false)
                 .systemPrompt(p->p
                         .role("你是一个严谨的代码项目主管。")
                         .instruction(trace ->

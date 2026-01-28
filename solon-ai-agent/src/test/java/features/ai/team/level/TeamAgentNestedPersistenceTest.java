@@ -44,9 +44,14 @@ public class TeamAgentNestedPersistenceTest {
         };
 
         // 2. 构建层级团队：Project (Parent) -> Dev (Child) -> Coder
-        TeamAgent devTeam = TeamAgent.of(chatModel).name("dev_team").agentAdd(coder).build();
+        TeamAgent devTeam = TeamAgent.of(chatModel).name("dev_team")
+                .feedbackMode(false)
+                .agentAdd(coder)
+                .build();
+
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name("quality_project")
+                .feedbackMode(false)
                 .agentAdd(devTeam)
                 .agentAdd(reviewer)
                 .build();
