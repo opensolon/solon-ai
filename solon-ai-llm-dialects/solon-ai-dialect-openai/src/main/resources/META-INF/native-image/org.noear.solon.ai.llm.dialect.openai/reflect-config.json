@@ -8,6 +8,10 @@
     "allDeclaredConstructors": true
   },
   {
+    "name": "org.noear.solon.ai.llm.dialect.openai.OpenaiResponsesDialect",
+    "allDeclaredConstructors": true
+  },
+  {
     "name": "org.noear.solon.ai.llm.dialect.openai.OpenaiEmbeddingDialect",
     "allDeclaredConstructors": true
   },

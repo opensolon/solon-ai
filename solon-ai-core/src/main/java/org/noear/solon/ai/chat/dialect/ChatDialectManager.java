@@ -40,6 +40,7 @@ public class ChatDialectManager {
         register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.dashscope.DashscopeChatDialect"));
         register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.ollama.OllamaChatDialect"));
         register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.openai.OpenaiChatDialect"));
+        register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.openai.OpenaiResponsesDialect"));
         register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.gemini.GeminiChatDialect"));
         register(ClassUtil.tryInstance("org.noear.solon.ai.llm.dialect.claude.ClaudeChatDialect"));
     }
