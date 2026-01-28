@@ -34,10 +34,11 @@ import java.util.function.Function;
 public class ReActSystemPromptCn implements ReActSystemPrompt {
     private static final Logger log = LoggerFactory.getLogger(ReActSystemPromptCn.class);
 
-    /** 默认单例（标准 ReAct 模板） */
     private static final ReActSystemPrompt _DEFAULT = new ReActSystemPromptCn(null, null);
 
-    public static ReActSystemPrompt getDefault() { return _DEFAULT; }
+    public static ReActSystemPrompt getDefault() {
+        return _DEFAULT;
+    }
 
     private final String roleDesc;
     private final Function<ReActTrace, String> instructionProvider;
@@ -49,12 +50,17 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
     }
 
     @Override
-    public Locale getLocale() { return Locale.CHINESE; }
+    public Locale getLocale() {
+        return Locale.CHINESE;
+    }
 
     @Override
     public String getSystemPrompt(ReActTrace trace) {
-        final String role = getRole();
-        final String instruction = getInstruction(trace);
+        String role = getRole();
+
+        if (role == null) {
+            role = "你是一个专业的任务解决助手";
+        }
 
         StringBuilder sb = new StringBuilder();
 
@@ -65,7 +71,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
                 .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
 
         // 2. 注入指令集（含格式、准则、示例）
-        sb.append(instruction);
+        sb.append(getInstruction(trace));
 
         // 3. 工具集动态注入
         if (trace.getOptions().getTools().isEmpty()) {
@@ -88,10 +94,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
 
     @Override
     public String getRole() {
-        if (roleDesc != null) {
-            return roleDesc;
-        }
-        return "你是一个专业的任务解决助手";
+        return roleDesc;
     }
 
     @Override
@@ -146,8 +149,12 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         return sb.toString();
     }
 
-    /** 创建构建器 */
-    public static Builder builder() { return new Builder(); }
+    /**
+     * 创建构建器
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
 
     public static class Builder implements ReActSystemPrompt.Builder {
         private String roleDesc;

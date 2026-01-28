@@ -34,7 +34,9 @@ import java.util.function.Function;
 public class ReActSystemPromptEn implements ReActSystemPrompt {
     private static final Logger log = LoggerFactory.getLogger(ReActSystemPromptEn.class);
 
-    /** 默认英文模板单例 */
+    /**
+     * 默认英文模板单例
+     */
     private static final ReActSystemPrompt _DEFAULT = new ReActSystemPromptEn(null, null);
 
     public static ReActSystemPrompt getDefault() {
@@ -57,8 +59,11 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
     @Override
     public String getSystemPrompt(ReActTrace trace) {
-        final String role = getRole();
-        final String instruction = getInstruction(trace);
+        String role = getRole();
+
+        if (role == null) {
+            role = "You are a professional Task Solver";
+        }
 
         StringBuilder sb = new StringBuilder();
 
@@ -69,7 +74,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
                 .append("Thought -> Action -> Observation.\n\n");
 
         // 2. Instructions
-        sb.append(instruction);
+        sb.append(getInstruction(trace));
 
         // 3. Toolset
         if (trace.getOptions().getTools().isEmpty()) {
@@ -92,10 +97,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
     @Override
     public String getRole() {
-        if (roleDesc != null) {
-            return roleDesc;
-        }
-        return "You are a professional Task Solver";
+        return roleDesc;
     }
 
     @Override
@@ -154,7 +156,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         return new Builder();
     }
 
-    public static class Builder implements ReActSystemPrompt.Builder{
+    public static class Builder implements ReActSystemPrompt.Builder {
         private String roleDesc;
         private Function<ReActTrace, String> instructionProvider;
 

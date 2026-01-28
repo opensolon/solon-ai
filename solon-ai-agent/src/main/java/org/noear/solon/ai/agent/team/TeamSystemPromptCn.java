@@ -39,7 +39,9 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
     private static final TeamSystemPrompt _DEFAULT = new TeamSystemPromptCn(null, null);
 
-    public static TeamSystemPrompt getDefault() { return _DEFAULT; }
+    public static TeamSystemPrompt getDefault() {
+        return _DEFAULT;
+    }
 
     private final String roleDesc;
     private final Function<TeamTrace, String> instructionProvider;
@@ -51,16 +53,25 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
     }
 
     @Override
-    public Locale getLocale() { return Locale.CHINESE; }
+    public Locale getLocale() {
+        return Locale.CHINESE;
+    }
 
     /**
      * 构建完整的系统提示词模板
      */
     @Override
     public String getSystemPrompt(TeamTrace trace) {
+        String role = getRole();
+
+        if (role == null) {
+            role = "你是一个团队协作主管 (Supervisor)，负责协调成员完成任务";
+        }
+
+
         StringBuilder sb = new StringBuilder();
         // 1. 注入角色定义
-        sb.append("## 角色定义\n").append(getRole()).append("\n\n");
+        sb.append("## 角色定义\n").append(role).append("\n\n");
         // 2. 注入综合指令（成员、任务、协议、规范）
         sb.append(getInstruction(trace));
         return sb.toString();
@@ -68,10 +79,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
     @Override
     public String getRole() {
-        if (roleDesc != null) {
-            return roleDesc;
-        }
-        return "你是一个团队协作主管 (Supervisor)，负责协调成员完成任务";
+        return roleDesc;
     }
 
     /**
@@ -131,7 +139,9 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
         return sb.toString();
     }
 
-    public static Builder builder() { return new Builder(); }
+    public static Builder builder() {
+        return new Builder();
+    }
 
     public static class Builder implements TeamSystemPrompt.Builder {
         private String roleDesc;

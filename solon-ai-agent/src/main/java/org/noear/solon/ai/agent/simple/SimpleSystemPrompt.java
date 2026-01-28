@@ -82,7 +82,7 @@ public class SimpleSystemPrompt {
 
     /** 获取角色文本 */
     public String getRole() {
-        return roleDesc != null ? roleDesc : null;
+        return roleDesc;
     }
 
     /** 获取指令文本 */

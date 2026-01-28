@@ -33,7 +33,9 @@ import java.util.function.Function;
 public class TeamSystemPromptEn implements TeamSystemPrompt {
     private static final TeamSystemPrompt _DEFAULT = new TeamSystemPromptEn(null, null);
 
-    public static TeamSystemPrompt getDefault() { return _DEFAULT; }
+    public static TeamSystemPrompt getDefault() {
+        return _DEFAULT;
+    }
 
     private final String roleDesc;
     private final Function<TeamTrace, String> instructionProvider;
@@ -45,14 +47,23 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
     }
 
     @Override
-    public Locale getLocale() { return Locale.ENGLISH; }
+    public Locale getLocale() {
+        return Locale.ENGLISH;
+    }
 
     @Override
     public String getSystemPrompt(TeamTrace trace) {
+        String role = getRole();
+
+        if (role == null) {
+            role = "You are the Team Supervisor, responsible for coordinating agents to complete the task";
+        }
+
+
         StringBuilder sb = new StringBuilder();
 
         // 1. Role Section
-        sb.append("## Role Definition\n").append(getRole()).append("\n\n");
+        sb.append("## Role Definition\n").append(role).append("\n\n");
 
         // 2. Comprehensive Instructions
         sb.append(getInstruction(trace));
@@ -62,10 +73,7 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
 
     @Override
     public String getRole() {
-        if (roleDesc != null) {
-            return roleDesc;
-        }
-        return "You are the Team Supervisor, responsible for coordinating agents to complete the task";
+        return roleDesc;
     }
 
     /**
@@ -125,9 +133,11 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
         return sb.toString();
     }
 
-    public static Builder builder() { return new Builder(); }
+    public static Builder builder() {
+        return new Builder();
+    }
 
-    public static class Builder implements TeamSystemPrompt.Builder{
+    public static class Builder implements TeamSystemPrompt.Builder {
         private String roleDesc;
         private Function<TeamTrace, String> instructionProvider;
 
