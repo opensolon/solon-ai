@@ -92,13 +92,15 @@ public class PlanTask implements NamedTaskComponent {
             trace.getMetrics().addUsage(response.getUsage());
         }
 
-        if (response.hasChoices() && response.getMessage().getMetadata().containsKey("source")) {
-            String source = response.getMessage().getMetadataAs("source");
-            if (Assert.isNotEmpty(source)) {
-                trace.setFinalAnswer(source);
-                trace.setRoute(Agent.ID_END);
-                trace.getContext().interrupt();
-                return;
+        if (response.hasChoices()) {
+            if (FeedbackTool.TOOL_NAME.equals(response.getMessage().getMetadataAs("__tool"))) {
+                String source = response.getMessage().getMetadataAs("source");
+                if (Assert.isNotEmpty(source)) {
+                    trace.setFinalAnswer(source);
+                    trace.setRoute(Agent.ID_END);
+                    trace.getContext().interrupt();
+                    return;
+                }
             }
         }
 
