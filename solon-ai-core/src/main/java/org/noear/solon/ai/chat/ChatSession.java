@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * 聊天会话（方便持久化）
@@ -105,28 +106,40 @@ public interface ChatSession extends NonSerializable {
 
     /**
      * 转为 ndjson
+     *
+     * @deprecated 3.9.1 {@link ChatMessage#toNdjson(Collection)}
      */
+    @Deprecated
     default String toNdjson() throws IOException {
         return ChatMessage.toNdjson(getMessages());
     }
 
     /**
      * 转为 ndjson
+     *
+     * @deprecated 3.9.1 {@link ChatMessage#toNdjson(Collection, OutputStream)}
      */
+    @Deprecated
     default void toNdjson(OutputStream out) throws IOException {
         ChatMessage.toNdjson(getMessages(), out);
     }
 
     /**
      * 加载 ndjson
+     *
+     * @deprecated 3.9.1 {@link ChatMessage#fromNdjson(String, Consumer)}
      */
+    @Deprecated
     default void loadNdjson(String ndjson) throws IOException {
         ChatMessage.fromNdjson(ndjson, this::addMessage);
     }
 
     /**
      * 加载 ndjson
+     *
+     * @deprecated 3.9.1 {@link ChatMessage#fromNdjson(InputStream, Consumer)}
      */
+    @Deprecated
     default void loadNdjson(InputStream ins) throws IOException {
         ChatMessage.fromNdjson(ins, this::addMessage);
     }
