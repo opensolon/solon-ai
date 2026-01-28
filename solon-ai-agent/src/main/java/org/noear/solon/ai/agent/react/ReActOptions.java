@@ -37,31 +37,50 @@ import java.util.function.Function;
 public class ReActOptions implements NonSerializable {
     private static final Logger LOG = LoggerFactory.getLogger(ReActOptions.class);
 
-    /** 工具调用上下文（透传给 FunctionTool） */
+    /**
+     * 工具调用上下文（透传给 FunctionTool）
+     */
     private final ModelOptionsAmend<?, ReActInterceptor> modelOptions = new ModelOptionsAmend<>();
 
     private String skillInstruction;
 
-    /** 最大推理步数（防止死循环） */
+    /**
+     * 最大推理步数（防止死循环）
+     */
     private int maxSteps = 10;
-    /** 最大重试次数 */
+    /**
+     * 最大重试次数
+     */
     private int maxRetries = 3;
-    /** 重试延迟基础时间（毫秒） */
+    /**
+     * 重试延迟基础时间（毫秒）
+     */
     private long retryDelayMs = 1000L;
-    /** 会话回溯窗口大小 */
+    /**
+     * 会话回溯窗口大小
+     */
     private int sessionWindowSize = 8;
-    /** 输出格式约束 (JSON Schema) */
+    /**
+     * 输出格式约束 (JSON Schema)
+     */
     private String outputSchema;
 
-    /** 反馈模式（允许主动寻求外部帮助/反馈） */
+    /**
+     * 反馈模式（允许主动寻求外部帮助/反馈）
+     */
     private boolean feedbackMode = false;
     private Function<ReActTrace, String> feedbackDescriptionProvider;
-    /** 规划模式（推理前先制定计划） */
+    private Function<ReActTrace, String> feedbackReasonDescriptionProvider;
+    /**
+     * 规划模式（推理前先制定计划）
+     */
     private boolean planningMode = false;
-    private Function<ReActTrace, String> planningInstructionProvider; // 规划专用指令
+    private Function<ReActTrace, String> planningInstructionProvider;
 
 
-    /** 浅拷贝选项实例 */
+    /**
+     * 浅拷贝选项实例
+     */
     protected ReActOptions copy() {
         ReActOptions tmp = new ReActOptions();
         tmp.modelOptions.putAll(modelOptions);
@@ -82,13 +101,17 @@ public class ReActOptions implements NonSerializable {
     // --- 配置注入 (Protected) ---
 
 
-    /** 设置容错策略 */
+    /**
+     * 设置容错策略
+     */
     protected void setRetryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
         this.retryDelayMs = Math.max(500, retryDelayMs);
     }
 
-    /** 设置会话回溯深度 */
+    /**
+     * 设置会话回溯深度
+     */
     protected void setSessionWindowSize(int sessionWindowSize) {
         this.sessionWindowSize = Math.max(0, sessionWindowSize);
     }
@@ -100,28 +123,48 @@ public class ReActOptions implements NonSerializable {
         this.maxSteps = val;
     }
 
-    protected void setOutputSchema(String val) { this.outputSchema = val; }
+    protected void setOutputSchema(String val) {
+        this.outputSchema = val;
+    }
 
 
     protected void setSkillInstruction(String skillInstruction) {
         this.skillInstruction = skillInstruction;
     }
 
-    protected void setFeedbackMode(boolean feedbackMode) { this.feedbackMode = feedbackMode; }
-
-    protected void setPlanningMode(boolean planningMode) { this.planningMode = planningMode; }
+    protected void setPlanningMode(boolean planningMode) {
+        this.planningMode = planningMode;
+    }
 
     protected void setPlanningInstructionProvider(Function<ReActTrace, String> provider) {
         this.planningInstructionProvider = provider;
     }
 
+    protected void setFeedbackMode(boolean feedbackMode) {
+        this.feedbackMode = feedbackMode;
+    }
+
+    protected void setFeedbackDescriptionProvider(Function<ReActTrace, String> provider) {
+        this.feedbackDescriptionProvider = provider;
+    }
+
+    protected void setFeedbackReasonDescriptionProvider(Function<ReActTrace, String> provider) {
+        this.feedbackReasonDescriptionProvider = provider;
+    }
+
     // --- 参数获取 (Public) ---
 
-    public FunctionTool getTool(String name) { return modelOptions.tool(name); }
+    public FunctionTool getTool(String name) {
+        return modelOptions.tool(name);
+    }
 
-    public Collection<FunctionTool> getTools() { return modelOptions.tools(); }
+    public Collection<FunctionTool> getTools() {
+        return modelOptions.tools();
+    }
 
-    public Map<String,Object> getToolContext() { return modelOptions.toolContext(); }
+    public Map<String, Object> getToolContext() {
+        return modelOptions.toolContext();
+    }
 
     public ModelOptionsAmend<?, ReActInterceptor> getModelOptions() {
         return modelOptions;
@@ -151,13 +194,13 @@ public class ReActOptions implements NonSerializable {
         return sessionWindowSize;
     }
 
-    public String getOutputSchema() { return outputSchema; }
-
-    public boolean isFeedbackMode() {
-        return feedbackMode;
+    public String getOutputSchema() {
+        return outputSchema;
     }
 
-    public boolean isPlanningMode() { return planningMode; }
+    public boolean isPlanningMode() {
+        return planningMode;
+    }
 
     public String getPlanningInstruction(ReActTrace trace) {
         if (planningInstructionProvider != null) {
@@ -175,4 +218,23 @@ public class ReActOptions implements NonSerializable {
     }
 
 
+    public boolean isFeedbackMode() {
+        return feedbackMode;
+    }
+
+    public String getFeedbackDescription(ReActTrace trace) {
+        if (feedbackDescriptionProvider == null) {
+            return null;
+        }
+
+        return feedbackDescriptionProvider.apply(trace);
+    }
+
+    public String getFeedbackReasonDescription(ReActTrace trace) {
+        if (feedbackReasonDescriptionProvider == null) {
+            return null;
+        }
+
+        return feedbackReasonDescriptionProvider.apply(trace);
+    }
 }

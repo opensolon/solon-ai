@@ -194,7 +194,7 @@ public class ActionTask implements NamedTaskComponent {
      * @return 工具输出的字符串结果
      */
     private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
-        if (FeedbackTool.tool_name.equals(name)) {
+        if (FeedbackTool.TOOL_NAME.equals(name)) {
             String reason = (String) args.get("reason");
             trace.setFinalAnswer(reason);
             trace.setRoute(Agent.ID_END);

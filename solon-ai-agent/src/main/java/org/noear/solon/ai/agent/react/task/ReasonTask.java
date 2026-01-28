@@ -191,7 +191,9 @@ public class ReasonTask implements NamedTaskComponent {
                 .prompt(messages)
                 .options(o -> {
                     if(trace.getOptions().isFeedbackMode()) {
-                        o.toolAdd(FeedbackTool.tool);
+                        o.toolAdd(FeedbackTool.getTool(
+                                trace.getOptions().getFeedbackDescription(trace),
+                                trace.getOptions().getFeedbackReasonDescription(trace)));
                     }
 
                     o.toolAdd(trace.getOptions().getTools());

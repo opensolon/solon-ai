@@ -73,18 +73,43 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
         return this;
     }
 
-    public ReActOptionsAmend feedbackMode(boolean feedbackMode) {
-        options.setFeedbackMode(feedbackMode);
-        return this;
-    }
-
     public ReActOptionsAmend planningMode(boolean planningMode) {
         options.setPlanningMode(planningMode);
         return this;
     }
 
+    public ReActOptionsAmend planningInstruction(String instruction) {
+        options.setPlanningInstructionProvider(t -> instruction);
+        return this;
+    }
+
     public ReActOptionsAmend planningInstruction(Function<ReActTrace, String> provider) {
         options.setPlanningInstructionProvider(provider);
+        return this;
+    }
+
+    public ReActOptionsAmend feedbackMode(boolean feedbackMode) {
+        options.setFeedbackMode(feedbackMode);
+        return this;
+    }
+
+    public ReActOptionsAmend feedbackDescription(String description) {
+        options.setFeedbackDescriptionProvider(t -> description);
+        return this;
+    }
+
+    public ReActOptionsAmend feedbackDescription(Function<ReActTrace, String> provider) {
+        options.setFeedbackDescriptionProvider(provider);
+        return this;
+    }
+
+    public ReActOptionsAmend feedbackReasonDescription(String description) {
+        options.setFeedbackReasonDescriptionProvider(t -> description);
+        return this;
+    }
+
+    public ReActOptionsAmend feedbackReasonDescription(Function<ReActTrace, String> provider) {
+        options.setFeedbackReasonDescriptionProvider(provider);
         return this;
     }
 }

@@ -38,6 +38,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 团队协作智能体 (Team Agent)
@@ -414,8 +415,31 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder feedbackMode(boolean feedbackMode) {
-            config.getDefaultOptions().setFeedbackMode(feedbackMode);
+        /**
+         * 反馈模式（允许主动寻求外部帮助/反馈）
+         */
+        public Builder feedbackMode(boolean val) {
+            config.getDefaultOptions().setFeedbackMode(val);
+            return this;
+        }
+
+        public Builder feedbackDescription(String description) {
+            config.getDefaultOptions().setFeedbackDescriptionProvider(t -> description);
+            return this;
+        }
+
+        public Builder feedbackDescription(Function<TeamTrace, String> provider) {
+            config.getDefaultOptions().setFeedbackDescriptionProvider(provider);
+            return this;
+        }
+
+        public Builder feedbackReasonDescription(String description) {
+            config.getDefaultOptions().setFeedbackReasonDescriptionProvider(t -> description);
+            return this;
+        }
+
+        public Builder feedbackReasonDescription(Function<TeamTrace, String> provider) {
+            config.getDefaultOptions().setFeedbackReasonDescriptionProvider(provider);
             return this;
         }
 

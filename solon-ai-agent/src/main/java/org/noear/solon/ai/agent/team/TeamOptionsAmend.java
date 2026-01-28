@@ -17,6 +17,8 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 
+import java.util.function.Function;
+
 /**
  * 团队协作选项修正器
  *
@@ -64,6 +66,26 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
 
     public TeamOptionsAmend feedbackMode(boolean feedbackMode){
         options.setFeedbackMode(feedbackMode);
+        return this;
+    }
+
+    public TeamOptionsAmend feedbackDescription(String description) {
+        options.setFeedbackDescriptionProvider(t -> description);
+        return this;
+    }
+
+    public TeamOptionsAmend feedbackDescription(Function<TeamTrace, String> provider) {
+        options.setFeedbackDescriptionProvider(provider);
+        return this;
+    }
+
+    public TeamOptionsAmend feedbackReasonDescription(String description) {
+        options.setFeedbackReasonDescriptionProvider(t -> description);
+        return this;
+    }
+
+    public TeamOptionsAmend feedbackReasonDescription(Function<TeamTrace, String> provider) {
+        options.setFeedbackReasonDescriptionProvider(provider);
         return this;
     }
 

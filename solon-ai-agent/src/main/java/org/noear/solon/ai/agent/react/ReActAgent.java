@@ -459,14 +459,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         /**
-         * 反馈模式（允许主动寻求外部帮助/反馈）
-         */
-        public Builder feedbackMode(boolean val) {
-            config.getDefaultOptions().setFeedbackMode(val);
-            return this;
-        }
-
-        /**
          * 规划模式（推理前先制定计划）
          */
         public Builder planningMode(boolean val) {
@@ -477,6 +469,39 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         public Builder planningInstruction(Function<ReActTrace, String> provider) {
             config.getDefaultOptions().setPlanningInstructionProvider(provider);
+            return this;
+        }
+
+        public Builder planningInstruction(String instruction) {
+            config.getDefaultOptions().setPlanningInstructionProvider(t -> instruction);
+            return this;
+        }
+
+        /**
+         * 反馈模式（允许主动寻求外部帮助/反馈）
+         */
+        public Builder feedbackMode(boolean val) {
+            config.getDefaultOptions().setFeedbackMode(val);
+            return this;
+        }
+
+        public Builder feedbackDescription(String description) {
+            config.getDefaultOptions().setFeedbackDescriptionProvider(t -> description);
+            return this;
+        }
+
+        public Builder feedbackDescription(Function<ReActTrace, String> provider) {
+            config.getDefaultOptions().setFeedbackDescriptionProvider(provider);
+            return this;
+        }
+
+        public Builder feedbackReasonDescription(String description) {
+            config.getDefaultOptions().setFeedbackReasonDescriptionProvider(t -> description);
+            return this;
+        }
+
+        public Builder feedbackReasonDescription(Function<ReActTrace, String> provider) {
+            config.getDefaultOptions().setFeedbackReasonDescriptionProvider(provider);
             return this;
         }
 

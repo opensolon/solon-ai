@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.util;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
+import org.noear.solon.core.util.Assert;
 
 /**
  * 流程挂起工具（主要为 TeamAgent 传递 ctx.stop 信号）
@@ -27,14 +28,28 @@ import org.noear.solon.ai.chat.tool.FunctionToolDesc;
  * @since 3.9.0
  */
 public class FeedbackTool {
-    public static final String tool_name = "__ask_for_feedback";
+    public static final String TOOL_NAME = "__ask_for_feedback";
 
-    public static final FunctionTool tool = new FunctionToolDesc(tool_name).returnDirect(true)
-            .description("当任务缺失必要参数、条件或外部反馈而无法继续时，必须调用此工具反馈，并向用户说明原因。")
-            .stringParamAdd("reason", "向用户说明原因，并请求补全缺失信息")
-            .doHandle((args) -> {
-                return ONode.ofBean(args).set("status", "suspended").toJson();
-            });
+    public static final String TOOL_DESCRIPTION_DEF = "当任务缺失必要参数、条件或外部反馈而无法继续时，必须调用此工具反馈，并向用户说明原因。";
+    public static final String TOOL_REASON_DESCRIPTION_DEF = "向用户说明原因";
+
+
+    public static FunctionTool getTool(String tool_description, String tool_reason_description) {
+        if (Assert.isEmpty(tool_description)) {
+            tool_description = TOOL_DESCRIPTION_DEF;
+        }
+
+        if (Assert.isEmpty(tool_reason_description)) {
+            tool_reason_description = TOOL_REASON_DESCRIPTION_DEF;
+        }
+
+        return new FunctionToolDesc(TOOL_NAME).returnDirect(true)
+                .description(tool_description)
+                .stringParamAdd("reason", tool_reason_description)
+                .doHandle((args) -> {
+                    return ONode.ofBean(args).set("status", "suspended").toJson();
+                });
+    }
 
     public static boolean isSuspend(String text) {
         return text != null && text.contains("\"status\":\"suspended\"");

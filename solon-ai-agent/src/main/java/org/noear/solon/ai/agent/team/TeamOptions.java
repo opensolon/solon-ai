@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * 团队协作配置选项 (Runtime Options)
@@ -59,6 +60,8 @@ public class TeamOptions implements NonSerializable {
 
     /** 反馈模式（允许主动寻求外部帮助/反馈） */
     private boolean feedbackMode = false;
+    private Function<TeamTrace, String> feedbackDescriptionProvider;
+    private Function<TeamTrace, String> feedbackReasonDescriptionProvider;
 
     /**
      * 模型选项
@@ -123,6 +126,14 @@ public class TeamOptions implements NonSerializable {
 
     protected void setFeedbackMode(boolean feedbackMode) {
         this.feedbackMode = feedbackMode;
+    }
+
+    protected void setFeedbackDescriptionProvider(Function<TeamTrace, String> provider) {
+        this.feedbackDescriptionProvider = provider;
+    }
+
+    protected void setFeedbackReasonDescriptionProvider(Function<TeamTrace, String> provider) {
+        this.feedbackReasonDescriptionProvider = provider;
     }
 
     /**
@@ -190,5 +201,21 @@ public class TeamOptions implements NonSerializable {
 
     public boolean isFeedbackMode() {
         return feedbackMode;
+    }
+
+    public String getFeedbackDescription(TeamTrace trace) {
+        if (feedbackDescriptionProvider == null) {
+            return null;
+        }
+
+        return feedbackDescriptionProvider.apply(trace);
+    }
+
+    public String getFeedbackReasonDescription(TeamTrace trace) {
+        if (feedbackReasonDescriptionProvider == null) {
+            return null;
+        }
+
+        return feedbackReasonDescriptionProvider.apply(trace);
     }
 }
