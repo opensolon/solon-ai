@@ -102,6 +102,8 @@ public class TeamTrace implements AgentTrace {
      * 协议私有存储空间（供 TeamProtocol 存储私有状态）
      */
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
+    /** 是否等待反馈 */
+    private boolean waitingFeedback;
 
     /**
      * 最终交付答案
@@ -277,6 +279,14 @@ public class TeamTrace implements AgentTrace {
         return turnCounter.incrementAndGet();
     }
 
+    public boolean isWaitingFeedback() {
+        return waitingFeedback;
+    }
+
+    public void setWaitingFeedback(boolean waitingFeedback) {
+        this.waitingFeedback = waitingFeedback;
+    }
+
     /**
      * 获取协议私有上下文
      */
@@ -302,6 +312,7 @@ public class TeamTrace implements AgentTrace {
     public int getRecordCount() {
         return records.size();
     }
+
 
     /**
      * 记录执行足迹

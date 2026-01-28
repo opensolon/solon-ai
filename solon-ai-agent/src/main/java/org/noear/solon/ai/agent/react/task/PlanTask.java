@@ -99,6 +99,7 @@ public class PlanTask implements NamedTaskComponent {
                     trace.setFinalAnswer(source);
                     trace.setRoute(Agent.ID_END);
                     trace.getContext().interrupt();
+                    trace.setWaitingFeedback(true);
                     return;
                 }
             }

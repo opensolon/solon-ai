@@ -80,6 +80,8 @@ public class ReActTrace implements AgentTrace {
     private volatile String lastResult;
     /** 计划 */
     private final List<String> plans = new CopyOnWriteArrayList<>();
+    /** 是否等待反馈 */
+    private boolean waitingFeedback;
 
 
     public ReActTrace() {
@@ -120,6 +122,7 @@ public class ReActTrace implements AgentTrace {
         this.route = ReActAgent.ID_REASON;
         this.finalAnswer = null;
         this.lastResult = null;
+        this.waitingFeedback = false;
 
         // 3. 结构化数据重置
         plans.clear();
@@ -280,6 +283,14 @@ public class ReActTrace implements AgentTrace {
      */
     public int getToolCallCount() {
         return toolCounter.get();
+    }
+
+    public boolean isWaitingFeedback() {
+        return waitingFeedback;
+    }
+
+    public void setWaitingFeedback(boolean waitingFeedback) {
+        this.waitingFeedback = waitingFeedback;
     }
 
     //------------------
