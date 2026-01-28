@@ -56,7 +56,7 @@ public class SimpleAgentConfig {
     /**
      * 系统提示词模板（支持动态注入上下文）
      */
-    private SimpleSystemPrompt systemPrompt;
+    private SimpleSystemPrompt systemPrompt = SimpleSystemPrompt.getDefault();
     /**
      * 绑定的物理聊天模型
      */

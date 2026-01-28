@@ -30,7 +30,11 @@ import java.util.function.Function;
  */
 @Preview("3.8.1")
 public class SimpleSystemPrompt {
-    private static final Logger LOG = LoggerFactory.getLogger(SimpleSystemPrompt.class);
+    private static SimpleSystemPrompt _DEFAULT = new SimpleSystemPrompt(null, null);
+
+    public static SimpleSystemPrompt getDefault() {
+        return _DEFAULT;
+    }
 
     /** 角色设定提供者 */
     private final String roleDesc;
@@ -46,7 +50,6 @@ public class SimpleSystemPrompt {
      * 组合 角色 (Role) 与 指令 (Instruction) 文本
      */
     public String getSystemPrompt(SimpleTrace trace) {
-        StringBuilder sb = new StringBuilder();
         String role = getRole();
         String inst = getInstruction(trace);
 
@@ -54,6 +57,7 @@ public class SimpleSystemPrompt {
             role = trace.getConfig().getDescription();
         }
 
+        StringBuilder sb = new StringBuilder();
         if (role != null) {
             sb.append("## 角色设定\n").append(role).append("\n\n");
         }
