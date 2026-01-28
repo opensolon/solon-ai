@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -146,7 +147,7 @@ public class ReActPlanningTest {
         // 2. 在 call 级别动态开启
         agent.prompt("计算 1+2+3")
                 .session(session)
-                .options( o -> o.planningMode(true))
+                .options(o -> o.planningMode(true))
                 .call();
 
         // 3. 验证是否有计划
@@ -174,5 +175,26 @@ public class ReActPlanningTest {
         List<String> plans = agent.getTrace(session).getPlans();
         Assertions.assertTrue(plans.stream().anyMatch(p -> p.toLowerCase().contains("just do it")),
                 "应该采用了自定义的规划指令");
+    }
+
+    @Test
+    public void testFeedbackMode() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .planningMode(true)
+                .feedbackMode(true)
+                .build();
+        AgentSession session = InMemoryAgentSession.of("custom_plan_001");
+
+        ReActResponse resp = agent.prompt("请通过不断思考，尽可能深入地分析这个问题")
+                .session(session)
+                .call();
+
+        System.out.println("=====最终输出=====");
+        System.out.println(resp.getContent());
+
+        List<String> plans = resp.getTrace().getPlans();
+        Assertions.assertEquals(0, plans.size(), "反馈模式没有生效");
     }
 }
