@@ -15,9 +15,11 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActAgentConfig;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
@@ -77,10 +79,27 @@ public class PlanTask implements NamedTaskComponent {
         // 3. 调用模型生成计划
         ChatResponse response = config.getChatModel()
                 .prompt(messages)
+                .options(o->{
+                    if(trace.getOptions().isFeedbackMode()) {
+                        o.toolAdd(FeedbackTool.getTool(
+                                trace.getOptions().getFeedbackDescription(trace),
+                                trace.getOptions().getFeedbackReasonDescription(trace)));
+                    }
+                })
                 .call();
 
         if (response.getUsage() != null) {
             trace.getMetrics().addUsage(response.getUsage());
+        }
+
+        if (response.hasChoices() && response.getMessage().getMetadata().containsKey("source")) {
+            String source = response.getMessage().getMetadataAs("source");
+            if (Assert.isNotEmpty(source)) {
+                trace.setFinalAnswer(source);
+                trace.setRoute(Agent.ID_END);
+                trace.getContext().interrupt();
+                return;
+            }
         }
 
         String planContent = response.getResultContent();

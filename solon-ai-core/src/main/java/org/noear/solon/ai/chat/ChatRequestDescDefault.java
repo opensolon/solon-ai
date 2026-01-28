@@ -437,6 +437,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     String content = doToolCall(resp, tool, call.arguments());
                     ToolMessage toolMessage = ChatMessage.ofTool(content, call.name(), call.id(), tool.returnDirect());
                     toolMessage.addMetadata(tool.meta());
+                    toolMessage.addMetadata("__tool", tool.name());
 
                     session.addMessage(toolMessage);
                     toolMessages.add(toolMessage);
