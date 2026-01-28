@@ -77,7 +77,7 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     /**
      * 生成动态元数据（用于协作传递）
      */
-    default ONode toMetadata(FlowContext context){
+    default ONode toMetadata(FlowContext context) {
         return AgentUtil.toMetadataNode(this, context);
     }
 
@@ -194,6 +194,8 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     static String KEY_CURRENT_TEAM_TRACE_KEY = "_current_team_trace_key_";
     static String KEY_SESSION = "_SESSION_";
     static String KEY_PROTOCOL = "_PROTOCOL_";
+
+    static String META_AGENT = "_agent_";
 
     // --- Node IDs ---
     static String ID_START = "start";

@@ -10,7 +10,7 @@ import org.noear.solon.ai.chat.ChatModel;
 public class LlmUtil {
     public static ChatModel getChatModelReasoner() {
         return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
-                .apiKey("sk-e289372b9c5542dba143568e96c17b33")
+                .apiKey("sk-19a568bbfc0248dfbac088a0a70fa74d")
                 .model("deepseek-reasoner") //deepseek-reasoner//deepseek-chat
                 .build();
     }

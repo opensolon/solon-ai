@@ -99,6 +99,12 @@ public class SimpleAgentTest {
 
         message = agent.call(session);
 
+        //有记忆数据
+        Assertions.assertTrue(Utils.isNotEmpty(message.getContent()));
+
+        message = agent.call(InMemoryAgentSession.of());
+
+        //没有记忆数据
         Assertions.assertTrue(Utils.isEmpty(message.getContent()));
     }
 }

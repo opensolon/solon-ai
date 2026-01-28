@@ -136,6 +136,8 @@ public class A2AProtocol extends TeamProtocolBase {
                 });
 
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_TRANSFER).returnDirect(true);
+        tool.metaPut(Agent.META_AGENT, agent.name());
+
         tool.doHandle(args -> {
             String target = (String) args.get("target");
             String state = (String) args.get("state");

@@ -149,6 +149,8 @@ public class ContractNetProtocol extends TeamProtocolBase {
 
         if (ID_BIDDING.equals(trace.getRoute())) {
             FunctionToolDesc tool = new FunctionToolDesc(TOOL_SUBMIT_BID).returnDirect(true);
+            tool.metaPut(Agent.META_AGENT, agent.name());
+
             boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
             if (isZh) {

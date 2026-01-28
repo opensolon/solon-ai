@@ -140,22 +140,24 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         if (trace == null) return;
 
 
-        FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_SYNC).returnDirect(true);
+        FunctionToolDesc tool = new FunctionToolDesc(TOOL_SYNC).returnDirect(true);
+        tool.metaPut(Agent.META_AGENT, agent.name());
+
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
         if (isZh) {
-            toolDesc.title("同步黑板").description("同步你的结论和后续待办。建议在完成任务前调用。")
+            tool.title("同步黑板").description("同步你的结论和后续待办。建议在完成任务前调用。")
                     .stringParamAdd("result", "本阶段的确切结论")
                     .stringParamAdd("todo", "建议后续协作回合的任务（TODOs）")
                     .stringParamAdd("state", "JSON 格式的详细业务数据");
         } else {
-            toolDesc.title("Sync Blackboard").description("Sync findings and future todos.")
+            tool.title("Sync Blackboard").description("Sync findings and future todos.")
                     .stringParamAdd("result", "Key findings")
                     .stringParamAdd("todo", "Suggested tasks for next turns")
                     .stringParamAdd("state", "Detailed JSON state");
         }
 
-        toolDesc.doHandle(args -> {
+        tool.doHandle(args -> {
             BoardState state = (BoardState) trace.getProtocolContext().computeIfAbsent(KEY_BOARD_DATA, k -> new BoardState());
             String res = (String) args.get("result");
             String todo = (String) args.get("todo");
@@ -171,7 +173,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
             }
         });
 
-        receiver.accept(toolDesc);
+        receiver.accept(tool);
     }
 
     @Override

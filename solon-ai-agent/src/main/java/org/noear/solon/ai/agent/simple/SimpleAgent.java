@@ -302,7 +302,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                 trace.getMetrics().addUsage(resp.getUsage());
             }
 
-            if (resp.hasChoices() && resp.getMessage().getMetadata().containsKey("source")) {
+            if (resp.hasChoices() && resp.getMessage().getMetadata().containsKey(Agent.META_AGENT)) {
                 String source = resp.getMessage().getMetadataAs("source");
                 if (Assert.isNotEmpty(source)) {
                     return ChatMessage.ofAssistant(source);

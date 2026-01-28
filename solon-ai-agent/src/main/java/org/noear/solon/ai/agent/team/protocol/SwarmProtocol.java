@@ -119,25 +119,27 @@ public class SwarmProtocol extends TeamProtocolBase {
 
 
         SwarmState state = getSwarmState(trace);
-        FunctionToolDesc toolDesc = new FunctionToolDesc(TOOL_EMERGE).returnDirect(true);
+        FunctionToolDesc tool = new FunctionToolDesc(TOOL_EMERGE).returnDirect(true);
+        tool.metaPut(Agent.META_AGENT, agent.name());
+
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
         if (isZh) {
-            toolDesc.title("涌现任务").description("当你发现需要拆解子任务或建议其他专家介入时调用。")
+            tool.title("涌现任务").description("当你发现需要拆解子任务或建议其他专家介入时调用。")
                     .stringParamAdd("tasks", "待办任务描述，多个用分号分隔")
                     .stringParamAdd("agents", "建议执行的专家名，多个用分号分隔");
         } else {
-            toolDesc.title("Emerge Tasks").description("Call this to decompose tasks or suggest other experts.")
+            tool.title("Emerge Tasks").description("Call this to decompose tasks or suggest other experts.")
                     .stringParamAdd("tasks", "Task descriptions, separated by semicolons")
                     .stringParamAdd("agents", "Suggested agent names, separated by semicolons");
         }
 
-        toolDesc.doHandle(args -> {
+        tool.doHandle(args -> {
             state.emerge((String) args.get("tasks"), (String) args.get("agents"));
             return isZh ? "系统：子任务已加入任务池。" : "System: Tasks added to pool.";
         });
 
-        receiver.accept(toolDesc);
+        receiver.accept(tool);
     }
 
     @Override

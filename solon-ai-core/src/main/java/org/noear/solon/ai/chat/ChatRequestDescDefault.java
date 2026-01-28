@@ -430,16 +430,18 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         List<ToolMessage> toolMessages = new ArrayList<>();
         for (ToolCall call : acm.getToolCalls()) {
-            FunctionTool func = options.tool(call.name());
+            FunctionTool tool = options.tool(call.name());
 
-            if (func != null) {
+            if (tool != null) {
                 try {
-                    String content = doToolCall(resp, func, call.arguments());
-                    ToolMessage toolMessage = ChatMessage.ofTool(content, call.name(), call.id(), func.returnDirect());
+                    String content = doToolCall(resp, tool, call.arguments());
+                    ToolMessage toolMessage = ChatMessage.ofTool(content, call.name(), call.id(), tool.returnDirect());
+                    toolMessage.addMetadata(tool.meta());
+
                     session.addMessage(toolMessage);
                     toolMessages.add(toolMessage);
                 } catch (Throwable ex) {
-                    throw new ToolCallException("The tool call failed, name: '" + func + "'", ex);
+                    throw new ToolCallException("The tool call failed, name: '" + tool + "'", ex);
                 }
             } else {
                 //会存在调用的call实际上不存在的情况

@@ -68,7 +68,7 @@ public class ReActOptions implements NonSerializable {
     /**
      * 反馈模式（允许主动寻求外部帮助/反馈）
      */
-    private boolean feedbackMode = false;
+    private boolean feedbackMode = true;
     private Function<ReActTrace, String> feedbackDescriptionProvider;
     private Function<ReActTrace, String> feedbackReasonDescriptionProvider;
     /**
