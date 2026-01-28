@@ -234,9 +234,15 @@ public abstract class AbstractChatDialect implements ChatDialect {
             buf.append(toolMessage.getContent());
         }
 
-        return ChatMessage.ofAssistant(buf.toString())
+        AssistantMessage assistantMessage =  ChatMessage.ofAssistant(buf.toString())
                 .addMetadata("reason", "tool")
                 .addMetadata("source", toolCallMessage.getResultContent());
+
+        for (ToolMessage toolMessage : toolMessages) {
+            assistantMessage.addMetadata(toolMessage.getMetadata());
+        }
+
+        return assistantMessage;
     }
 
     /**
