@@ -55,7 +55,7 @@ public class ActionTask implements NamedTaskComponent {
 
     /** 匹配文本模式下的 Action: {JSON} 内容 */
     private static final Pattern ACTION_PATTERN = Pattern.compile(
-            "Action:\\s*(?:```json)?\\s*(\\{[\\s\\S]*?\\})\\s*(?:```)?",
+            "Action:\\s*(?:```json)?\\s*(\\{[\\s\\S]*\\})\\s*(?:```)?",
             Pattern.DOTALL
     );
 
