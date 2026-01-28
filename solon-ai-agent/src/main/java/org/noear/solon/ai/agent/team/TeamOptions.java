@@ -56,7 +56,9 @@ public class TeamOptions implements NonSerializable {
     private int recordWindowSize = 8;
 
     private String skillInstruction;
-    private boolean enableFeedback = false; // 是否启用挂起环节
+
+    /** 反馈模式（允许主动寻求外部帮助/反馈） */
+    private boolean feedbackMode = false;
 
     /**
      * 模型选项
@@ -78,7 +80,7 @@ public class TeamOptions implements NonSerializable {
         tmp.recordWindowSize = this.recordWindowSize;
         tmp.skillInstruction = this.skillInstruction;
 
-        tmp.enableFeedback = this.enableFeedback;
+        tmp.feedbackMode = this.feedbackMode;
 
         return tmp;
     }
@@ -119,8 +121,8 @@ public class TeamOptions implements NonSerializable {
         this.skillInstruction = skillInstruction;
     }
 
-    protected void setEnableFeedback(boolean enableFeedback) {
-        this.enableFeedback = enableFeedback;
+    protected void setFeedbackMode(boolean feedbackMode) {
+        this.feedbackMode = feedbackMode;
     }
 
     /**
@@ -186,7 +188,7 @@ public class TeamOptions implements NonSerializable {
         return skillInstruction;
     }
 
-    public boolean isEnableFeedback() {
-        return enableFeedback;
+    public boolean isFeedbackMode() {
+        return feedbackMode;
     }
 }

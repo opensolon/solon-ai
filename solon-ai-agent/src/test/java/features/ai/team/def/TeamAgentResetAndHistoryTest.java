@@ -49,7 +49,7 @@ public class TeamAgentResetAndHistoryTest {
         TeamAgent teamAgent = TeamAgent.of(chatModel)
                 .name("trip_leader")
                 .description("你是旅行领队，负责协调天气专家和美食专家为用户提供旅行建议")
-                .enableFeedback(true)
+                .feedbackMode(true)
                 .maxTurns(maxTurns)
                 .agentAdd(weatherAgent)
                 .agentAdd(foodAgent)

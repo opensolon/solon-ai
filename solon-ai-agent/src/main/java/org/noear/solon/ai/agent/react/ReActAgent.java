@@ -458,19 +458,47 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        public Builder enableFeedback(boolean val) {
-            config.getDefaultOptions().setEnableFeedback(val);
+        /**
+         * 反馈模式（允许主动寻求外部帮助/反馈）
+         */
+        public Builder feedbackMode(boolean val) {
+            config.getDefaultOptions().setFeedbackMode(val);
             return this;
         }
 
+        /**
+         * 规划模式（推理前先制定计划）
+         */
+        public Builder planningMode(boolean val) {
+            config.getDefaultOptions().setPlanningMode(val);
+            return this;
+        }
+
+
+        public Builder planningInstruction(Function<ReActTrace, String> provider) {
+            config.getDefaultOptions().setPlanningInstructionProvider(provider);
+            return this;
+        }
+
+
+        /**
+         * 启用规划模式（推理前先制定计划）
+         *
+         * @deprecated 3.9.0 {@link #planningMode(boolean)}
+         */
+        @Deprecated
         public Builder enablePlanning(boolean val) {
-            config.getDefaultOptions().setEnablePlanning(val);
-            return this;
+           return planningMode(val);
         }
 
+        /**
+         * 启用反馈模式（允许主动寻求外部帮助/反馈）
+         *
+         * @deprecated 3.9.0 {@link #feedbackMode(boolean)}
+         */
+        @Deprecated
         public Builder planInstruction(Function<ReActTrace, String> provider) {
-            config.getDefaultOptions().setPlanInstructionProvider(provider);
-            return this;
+            return planningInstruction(provider);
         }
 
         public ReActAgent build() {

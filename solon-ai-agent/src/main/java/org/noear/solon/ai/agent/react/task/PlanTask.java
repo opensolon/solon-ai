@@ -57,7 +57,7 @@ public class PlanTask implements NamedTaskComponent {
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
 
-        if(trace.getOptions().isEnablePlanning() == false){
+        if(trace.getOptions().isPlanningMode() == false){
             if (LOG.isTraceEnabled()) {
                 LOG.trace("ReActAgent [{}] Plan is disabled, skipping...", config.getName());
             }
@@ -70,7 +70,7 @@ public class PlanTask implements NamedTaskComponent {
 
         // 2. 构建规划请求
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.ofSystem(trace.getOptions().getPlanInstruction(trace)));
+        messages.add(ChatMessage.ofSystem(trace.getOptions().getPlanningInstruction(trace)));
         // 动态拼接引导词
         messages.add(ChatMessage.ofUser(targetLabel + trace.getOriginalPrompt().getUserContent()));
 

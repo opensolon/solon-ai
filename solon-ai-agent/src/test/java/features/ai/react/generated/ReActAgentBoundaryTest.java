@@ -28,7 +28,7 @@ public class ReActAgentBoundaryTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new LoopTools())
-                .enableFeedback(false)
+                .feedbackMode(false)
                 .modelOptions(o -> o.temperature(0.0))
                 .maxSteps(3) // 限制最多 3 步迭代
                 .build();
@@ -52,13 +52,13 @@ public class ReActAgentBoundaryTest {
     }
 
     @Test
-    public void testMaxStepsReached_B() throws Throwable {
+    public void testMaxStepsReachedFeedback() throws Throwable {
         // 测试：强制达到最大步数限制（防止 AI 进入无限思考循环）
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new LoopTools())
-                .enableFeedback(true)
+                .feedbackMode(true)
                 .modelOptions(o -> o.temperature(0.0))
                 .maxSteps(3) // 限制最多 3 步迭代
                 .build();

@@ -83,7 +83,7 @@ public class ReasonTask implements NamedTaskComponent {
         // [逻辑 2: 提示词工程] 融合系统角色、执行计划、输出格式约束及协议指令
         String systemPrompt = config.getSystemPromptFor(trace, context);
 
-        if (trace.getOptions().isEnablePlanning() && trace.hasPlans()) {
+        if (trace.getOptions().isPlanningMode() && trace.hasPlans()) {
             systemPrompt += "\n\n[执行计划]\n" + String.join("\n", trace.getPlans()) +
                     "\n请参考以上计划执行，当前已进行到第 " + (trace.getStepCount() + 1) + " 轮推理。";
         }
@@ -190,7 +190,7 @@ public class ReasonTask implements NamedTaskComponent {
         ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o -> {
-                    if(trace.getOptions().isEnableFeedback()) {
+                    if(trace.getOptions().isFeedbackMode()) {
                         o.toolAdd(FeedbackTool.tool);
                     }
 

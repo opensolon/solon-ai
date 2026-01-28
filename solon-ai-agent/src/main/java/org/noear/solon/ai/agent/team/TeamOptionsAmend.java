@@ -62,8 +62,8 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
         return this;
     }
 
-    public TeamOptionsAmend enableFeedback(boolean enableFeedback){
-        options.setEnableFeedback(enableFeedback);
+    public TeamOptionsAmend feedbackMode(boolean feedbackMode){
+        options.setFeedbackMode(feedbackMode);
         return this;
     }
 

@@ -10,7 +10,6 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 
 import java.util.List;
@@ -22,7 +21,7 @@ public class ReActPlanningTest {
 
     /**
      * 测试 1：验证基础规划能力
-     * 目标：确认 enablePlanning(true) 后，Trace 中是否成功生成了 Plans
+     * 目标：确认 planningMode(true) 后，Trace 中是否成功生成了 Plans
      */
     @Test
     public void testBasicPlanning() throws Throwable {
@@ -31,7 +30,7 @@ public class ReActPlanningTest {
         // 1. 构建开启 Planning 的 Agent
         ReActAgent agent = ReActAgent.of(chatModel)
                 .name("planner_agent")
-                .enablePlanning(true) // 开启规划
+                .planningMode(true) // 开启规划
                 .defaultToolAdd(new InfoTools())
                 .build();
 
@@ -65,7 +64,7 @@ public class ReActPlanningTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .enablePlanning(true)
+                .planningMode(true)
                 .defaultToolAdd(new OrderTools())
                 .build();
 
@@ -94,7 +93,7 @@ public class ReActPlanningTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
-                .enablePlanning(true)
+                .planningMode(true)
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("plan_003");
@@ -141,13 +140,13 @@ public class ReActPlanningTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. Builder 默认关闭
-        ReActAgent agent = ReActAgent.of(chatModel).enablePlanning(false).build();
+        ReActAgent agent = ReActAgent.of(chatModel).planningMode(false).build();
         AgentSession session = InMemoryAgentSession.of("dynamic_001");
 
         // 2. 在 call 级别动态开启
         agent.prompt("计算 1+2+3")
                 .session(session)
-                .options( o -> o.enablePlanning(true))
+                .options( o -> o.planningMode(true))
                 .call();
 
         // 3. 验证是否有计划
@@ -161,7 +160,7 @@ public class ReActPlanningTest {
     @Test
     public void testCustomPlanInstruction() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-        ReActAgent agent = ReActAgent.of(chatModel).enablePlanning(true).build();
+        ReActAgent agent = ReActAgent.of(chatModel).planningMode(true).build();
         AgentSession session = InMemoryAgentSession.of("custom_plan_001");
 
         // 注入一个极简的指令，强制模型只输出一步
@@ -169,7 +168,7 @@ public class ReActPlanningTest {
 
         agent.prompt("帮我写个简历")
                 .session(session)
-                .options(o -> o.planInstruction(t -> customInstruction))
+                .options(o -> o.planningInstruction(t -> customInstruction))
                 .call();
 
         List<String> plans = agent.getTrace(session).getPlans();

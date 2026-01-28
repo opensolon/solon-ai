@@ -73,18 +73,18 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
         return this;
     }
 
-    public ReActOptionsAmend enableFeedback(boolean enableFeedback) {
-        options.setEnableFeedback(enableFeedback);
+    public ReActOptionsAmend feedbackMode(boolean feedbackMode) {
+        options.setFeedbackMode(feedbackMode);
         return this;
     }
 
-    public ReActOptionsAmend enablePlanning(boolean enablePlanning) {
-        options.setEnablePlanning(enablePlanning);
+    public ReActOptionsAmend planningMode(boolean planningMode) {
+        options.setPlanningMode(planningMode);
         return this;
     }
 
-    public ReActOptionsAmend planInstruction(Function<ReActTrace, String> provider) {
-        options.setPlanInstructionProvider(provider);
+    public ReActOptionsAmend planningInstruction(Function<ReActTrace, String> provider) {
+        options.setPlanningInstructionProvider(provider);
         return this;
     }
 }

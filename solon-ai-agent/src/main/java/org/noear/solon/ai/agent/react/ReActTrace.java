@@ -305,7 +305,7 @@ public class ReActTrace implements AgentTrace {
     public void setPlans(Collection<String> newPlans) {
         this.plans.clear();
 
-        if (options.isEnablePlanning()) {
+        if (options.isPlanningMode()) {
             if (Assert.isNotEmpty(newPlans)) {
                 // 过滤空行并修剪
                 newPlans.stream()

@@ -53,9 +53,12 @@ public class ReActOptions implements NonSerializable {
     /** 输出格式约束 (JSON Schema) */
     private String outputSchema;
 
-    private boolean enableFeedback = false; // 是否启用挂起环节
-    private boolean enablePlanning = false; // 是否启用规划环节
-    private Function<ReActTrace, String> planInstructionProvider; // 规划专用指令
+    /** 反馈模式（允许主动寻求外部帮助/反馈） */
+    private boolean feedbackMode = false;
+    private Function<ReActTrace, String> feedbackDescriptionProvider;
+    /** 规划模式（推理前先制定计划） */
+    private boolean planningMode = false;
+    private Function<ReActTrace, String> planningInstructionProvider; // 规划专用指令
 
 
     /** 浅拷贝选项实例 */
@@ -68,9 +71,9 @@ public class ReActOptions implements NonSerializable {
         tmp.sessionWindowSize = sessionWindowSize;
         tmp.outputSchema = outputSchema;
 
-        tmp.enableFeedback = enableFeedback;
-        tmp.enablePlanning = enablePlanning;
-        tmp.planInstructionProvider = planInstructionProvider;
+        tmp.feedbackMode = feedbackMode;
+        tmp.planningMode = planningMode;
+        tmp.planningInstructionProvider = planningInstructionProvider;
 
         return tmp;
     }
@@ -104,12 +107,12 @@ public class ReActOptions implements NonSerializable {
         this.skillInstruction = skillInstruction;
     }
 
-    protected void setEnableFeedback(boolean enableFeedback) { this.enableFeedback = enableFeedback; }
+    protected void setFeedbackMode(boolean feedbackMode) { this.feedbackMode = feedbackMode; }
 
-    protected void setEnablePlanning(boolean enablePlanning) { this.enablePlanning = enablePlanning; }
+    protected void setPlanningMode(boolean planningMode) { this.planningMode = planningMode; }
 
-    protected void setPlanInstructionProvider(Function<ReActTrace, String> provider) {
-        this.planInstructionProvider = provider;
+    protected void setPlanningInstructionProvider(Function<ReActTrace, String> provider) {
+        this.planningInstructionProvider = provider;
     }
 
     // --- 参数获取 (Public) ---
@@ -150,15 +153,15 @@ public class ReActOptions implements NonSerializable {
 
     public String getOutputSchema() { return outputSchema; }
 
-    public boolean isEnableFeedback() {
-        return enableFeedback;
+    public boolean isFeedbackMode() {
+        return feedbackMode;
     }
 
-    public boolean isEnablePlanning() { return enablePlanning; }
+    public boolean isPlanningMode() { return planningMode; }
 
-    public String getPlanInstruction(ReActTrace trace) {
-        if (planInstructionProvider != null) {
-            return planInstructionProvider.apply(trace);
+    public String getPlanningInstruction(ReActTrace trace) {
+        if (planningInstructionProvider != null) {
+            return planningInstructionProvider.apply(trace);
         }
 
         // 默认规划指令
@@ -170,4 +173,6 @@ public class ReActOptions implements NonSerializable {
                     "Requirements: One step per line, starting with a number. Do not output any extra explanation.";
         }
     }
+
+
 }
