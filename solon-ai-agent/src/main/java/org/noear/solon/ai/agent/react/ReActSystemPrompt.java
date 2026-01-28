@@ -41,24 +41,6 @@ public interface ReActSystemPrompt {
     }
 
     /**
-     * 获取最终渲染后的提示词 (执行 Snel 模板渲染)
-     *
-     * @param trace   当前执行轨迹 (含步数、行为记录)
-     * @param context 流程上下文 (含动态业务变量)
-     */
-    default String getSystemPromptFor(ReActTrace trace, FlowContext context) {
-        String raw = getSystemPrompt(trace);
-        if (context == null || raw == null) {
-            return raw;
-        }
-
-        // 基于 FlowContext 模型进行变量替换
-        String rendered = SnelUtil.render(raw, context.vars());
-
-        return rendered;
-    }
-
-    /**
      * 获取原始提示词模板
      */
     String getSystemPrompt(ReActTrace trace);

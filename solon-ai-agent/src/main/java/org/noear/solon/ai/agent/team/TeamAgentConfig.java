@@ -18,10 +18,8 @@ package org.noear.solon.ai.agent.team;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.IgnoreCaseMap;
+import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.NonSerializable;
@@ -164,7 +162,16 @@ public class TeamAgentConfig implements NonSerializable {
     public String getOutputKey() { return outputKey; }
 
     public String getSystemPromptFor(TeamTrace trace, FlowContext context) {
-        return systemPrompt.getSystemPromptFor(trace, context);
+        String raw = systemPrompt.getSystemPrompt(trace);
+
+        if (context == null || raw == null) {
+            return raw;
+        }
+
+        // 动态渲染模板（如解析 #{user_name}）
+        String finalPrompt = SnelUtil.render(raw, context.vars());
+
+        return finalPrompt;
     }
 
     public Locale getLocale() { return systemPrompt.getLocale(); }

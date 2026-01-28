@@ -17,18 +17,13 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * ReAct 智能体配置
@@ -138,7 +133,15 @@ public class ReActAgentConfig {
      * 根据当前上下文获取动态渲染的系统提示词
      */
     public String getSystemPromptFor(ReActTrace trace, FlowContext context) {
-        return systemPrompt.getSystemPromptFor(trace, context);
+        String raw = systemPrompt.getSystemPrompt(trace);
+        if (context == null || raw == null) {
+            return raw;
+        }
+
+        // 动态渲染模板（如解析 #{user_name}）
+        String rendered = SnelUtil.render(raw, context.vars());
+
+        return rendered;
     }
 
     public Locale getLocale() { return systemPrompt.getLocale(); }

@@ -76,6 +76,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
     @Override
     public String description() {
+        if (config.getDescription() == null) {
+            return config.getName();
+        }
+
         return config.getDescription();
     }
 
@@ -121,10 +125,13 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
 
         FlowContext context = session.getSnapshot();
+        TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL); // 从上下文获取协议
         TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         // 初始化或恢复推理痕迹 (Trace)
         SimpleTrace trace = getTrace(context, prompt);
+
+        trace.prepare(config, session, protocol);
 
         if (Prompt.isEmpty(prompt)) {
             //可能是旧问题（之前中断的）
@@ -137,7 +144,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         // 1. 构建请求消息
-        Prompt finalPrompt = prepareAgentPrompt(parentTeamTrace, session, prompt);
+        Prompt finalPrompt = prepareAgentPrompt(trace, parentTeamTrace, session, prompt);
 
         // 2. 物理调用：执行带重试机制的 LLM 请求
         AssistantMessage assistantMessage = null;
@@ -182,20 +189,19 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     /**
      * 组装完整的 Prompt 消息列表（含 SystemPrompt、OutputSchema 及历史窗口）
      */
-    private Prompt prepareAgentPrompt(TeamTrace parentTeamTrace, AgentSession session, Prompt originalPrompt) {
+    private Prompt prepareAgentPrompt(SimpleTrace trace, TeamTrace parentTeamTrace, AgentSession session, Prompt originalPrompt) {
         // 1. 获取基础 System Prompt
         StringBuilder spBuf = new StringBuilder();
-        String baseSp = config.getSystemPromptFor(session.getSnapshot());
+        String baseSp = config.getSystemPromptFor(trace, session.getSnapshot());
         if (baseSp != null) {
             spBuf.append(baseSp);
         }
 
         // 2. 【核心修复】注入协议指令（断面数据：如 Coder 写的代码就在这里）
         FlowContext context = session.getSnapshot();
-        TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL); // 从上下文获取协议
-        if (protocol != null) {
+        if (trace.getProtocol() != null) {
             // 调用协议注入，它会把 "## 当前接力任务断面" 附加到 spBuf 后面
-            protocol.injectAgentInstruction(context, this, config.getLocale(), spBuf);
+            trace.getProtocol().injectAgentInstruction(context, this, config.getLocale(), spBuf);
         }
 
         // 3. 注入 JSON Schema 指令
@@ -242,11 +248,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                     ONode.serialize(finalPrompt.getMessages(), Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }
 
-       ChatRequestDesc chatReq = null;
+        ChatRequestDesc chatReq = null;
 
         if (config.getChatModel() != null) {
             //构建 chatModel 请求
-            final TeamProtocol protocol = session.getSnapshot().getAs(Agent.KEY_PROTOCOL);
             chatReq = config.getChatModel()
                     .prompt(finalPrompt)
                     .options(o -> {
@@ -254,8 +259,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                         o.toolAdd(options.tools());
 
                         //协议工具
-                        if (protocol != null) {
-                            protocol.injectAgentTools(session.getSnapshot(), this, o::toolAdd);
+                        if (trace.getProtocol() != null) {
+                            trace.getProtocol().injectAgentTools(session.getSnapshot(), this, o::toolAdd);
                         }
 
                         o.toolContextPut(options.toolContext());
@@ -471,10 +476,6 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
             if (config.getName() == null) {
                 config.setName("simple_agent");
-            }
-
-            if (config.getDescription() == null) {
-                config.setDescription(config.getTitle() != null ? config.getTitle() : config.getName());
             }
 
             return new SimpleAgent(config);

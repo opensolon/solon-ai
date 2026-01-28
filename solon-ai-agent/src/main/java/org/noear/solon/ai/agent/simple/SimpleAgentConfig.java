@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
+import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -175,12 +176,16 @@ public class SimpleAgentConfig {
         return Locale.CHINESE;
     }
 
-    public String getSystemPromptFor(FlowContext context) {
-        if (systemPrompt == null) {
-            return "";
+    public String getSystemPromptFor(SimpleTrace trace,FlowContext context) {
+        String raw = systemPrompt.getSystemPrompt(trace);
+        if (context == null || raw == null) {
+            return raw;
         }
 
-        return systemPrompt.getSystemPromptFor(context);
+        // 动态渲染模板（如解析 #{user_name}）
+        String rendered = SnelUtil.render(raw, context.vars());
+
+        return rendered;
     }
 
     public ChatModel getChatModel() {

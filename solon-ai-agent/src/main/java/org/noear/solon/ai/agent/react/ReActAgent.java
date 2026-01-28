@@ -134,6 +134,10 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
     @Override
     public String description() {
+        if (config.getDescription() == null) {
+            return config.getName();
+        }
+
         return config.getDescription();
     }
 
@@ -529,10 +533,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         public ReActAgent build() {
             if (config.getName() == null) {
                 config.setName("react_agent");
-            }
-
-            if (config.getDescription() == null) {
-                config.setDescription(config.getTitle() != null ? config.getTitle() : config.getName());
             }
 
             return new ReActAgent(config);

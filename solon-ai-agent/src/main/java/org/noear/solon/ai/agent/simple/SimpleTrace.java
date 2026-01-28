@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.agent.simple;
 
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.flow.FlowContext;
 
 /**
  * Simple 运行轨迹记录器 (状态机上下文)
@@ -27,6 +30,10 @@ import org.noear.solon.ai.chat.prompt.Prompt;
  * @since 3.8.4
  */
 public class SimpleTrace implements AgentTrace {
+    private transient SimpleAgentConfig config;
+    private transient AgentSession session;
+    private transient TeamProtocol protocol;
+
     private Prompt originalPrompt;
     private final Metrics metrics = new Metrics();
 
@@ -36,6 +43,33 @@ public class SimpleTrace implements AgentTrace {
 
     public SimpleTrace(Prompt originalPrompt) {
         this.originalPrompt = originalPrompt;
+    }
+
+    protected void prepare(SimpleAgentConfig config, AgentSession session, TeamProtocol protocol) {
+        this.config = config;
+        this.session = session;
+        this.protocol = protocol;
+    }
+
+
+    public SimpleAgentConfig getConfig() {
+        return config;
+    }
+
+    public AgentSession getSession() {
+        return session;
+    }
+
+    public TeamProtocol getProtocol() {
+        return protocol;
+    }
+
+    public FlowContext getContext() {
+        if (session != null) {
+            return session.getSnapshot();
+        } else {
+            return null;
+        }
     }
 
     protected void setOriginalPrompt(Prompt prompt) {

@@ -41,25 +41,6 @@ public interface TeamSystemPrompt {
     Locale getLocale();
 
     /**
-     * 为当前上下文生成并渲染最终的系统提示词
-     * * @param trace   协作轨迹（包含成员与状态）
-     *
-     * @param context 流程上下文（提供渲染模版的业务变量）
-     */
-    default String getSystemPromptFor(TeamTrace trace, FlowContext context) {
-        String template = getSystemPrompt(trace);
-
-        if (context == null) {
-            return template;
-        }
-
-        // 基于 Snel 模板引擎注入业务变量
-        String finalPrompt = SnelUtil.render(template, context.vars());
-
-        return finalPrompt;
-    }
-
-    /**
      * 获取未渲染的原始提示词模板
      */
     String getSystemPrompt(TeamTrace trace);

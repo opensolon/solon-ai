@@ -59,7 +59,11 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         String role = getRole();
 
         if (role == null) {
-            role = "你是一个专业的任务解决助手";
+            role = trace.getConfig().getDescription();
+
+            if (role == null) {
+                role = "你是一个专业的任务解决助手";
+            }
         }
 
         StringBuilder sb = new StringBuilder();

@@ -223,7 +223,11 @@ public class TeamTrace implements AgentTrace {
     }
 
     public FlowContext getContext() {
-        return (session != null) ? session.getSnapshot() : null;
+        if (session != null) {
+            return session.getSnapshot();
+        } else {
+            return null;
+        }
     }
 
     public TeamProtocol getProtocol() {

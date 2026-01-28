@@ -15,8 +15,6 @@
  */
 package org.noear.solon.ai.agent.simple;
 
-import org.noear.solon.core.util.SnelUtil;
-import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,39 +35,24 @@ public class SimpleSystemPrompt {
     /** 角色设定提供者 */
     private final String roleDesc;
     /** 执行指令提供者 */
-    private final Function<FlowContext, String> instructionProvider;
+    private final Function<SimpleTrace, String> instructionProvider;
 
-    public SimpleSystemPrompt(String roleDesc, Function<FlowContext, String> instructionProvider) {
+    public SimpleSystemPrompt(String roleDesc, Function<SimpleTrace, String> instructionProvider) {
         this.roleDesc = roleDesc;
         this.instructionProvider = instructionProvider;
     }
 
     /**
-     * 获取最终渲染后的系统提示词
-     */
-    public String getSystemPromptFor(FlowContext context) {
-        String rawPrompt = getSystemPrompt(context);
-        if (context == null || rawPrompt == null) {
-            return rawPrompt;
-        }
-
-        // 动态渲染模板（如解析 ${user_name}）
-        String rendered = SnelUtil.render(rawPrompt, context.vars());
-
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Simple SystemPrompt rendered: {}", rendered);
-        }
-
-        return rendered;
-    }
-
-    /**
      * 组合 角色 (Role) 与 指令 (Instruction) 文本
      */
-    public String getSystemPrompt(FlowContext context) {
+    public String getSystemPrompt(SimpleTrace trace) {
         StringBuilder sb = new StringBuilder();
         String role = getRole();
-        String inst = getInstruction(context);
+        String inst = getInstruction(trace);
+
+        if (role == null) {
+            role = trace.getConfig().getDescription();
+        }
 
         if (role != null) {
             sb.append("## 角色设定\n").append(role).append("\n\n");
@@ -86,8 +69,8 @@ public class SimpleSystemPrompt {
     }
 
     /** 获取指令文本 */
-    public String getInstruction(FlowContext context) {
-        return instructionProvider != null ? instructionProvider.apply(context) : null;
+    public String getInstruction(SimpleTrace trace) {
+        return instructionProvider != null ? instructionProvider.apply(trace) : null;
     }
 
     public static Builder builder() {
@@ -99,7 +82,7 @@ public class SimpleSystemPrompt {
      */
     public static class Builder {
         private String roleDesc;
-        private Function<FlowContext, String> instructionProvider;
+        private Function<SimpleTrace, String> instructionProvider;
 
         /** 设置静态角色文本 */
         public Builder role(String role) {
@@ -113,7 +96,7 @@ public class SimpleSystemPrompt {
         }
 
         /** 设置动态指令提供逻辑 */
-        public Builder instruction(Function<FlowContext, String> instructionProvider) {
+        public Builder instruction(Function<SimpleTrace, String> instructionProvider) {
             this.instructionProvider = instructionProvider;
             return this;
         }

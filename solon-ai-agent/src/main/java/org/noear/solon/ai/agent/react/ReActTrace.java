@@ -49,8 +49,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ReActTrace implements AgentTrace {
     private static final Logger LOG = LoggerFactory.getLogger(ReActTrace.class);
 
-    /** 度量指标 */
-    private final Metrics metrics = new Metrics();
     /** 运行配置 */
     private transient ReActAgentConfig config;
     /** 运行选项 */
@@ -61,6 +59,9 @@ public class ReActTrace implements AgentTrace {
     private transient TeamProtocol protocol;
     /** 协议注入的专用工具映射表 */
     private transient final Map<String, FunctionTool> protocolToolMap = new LinkedHashMap<>();
+
+    /** 度量指标 */
+    private final Metrics metrics = new Metrics();
 
     /** 任务提示词 */
     private Prompt originalPrompt;
@@ -160,7 +161,11 @@ public class ReActTrace implements AgentTrace {
      * 获取流程快照快照
      */
     public FlowContext getContext() {
-        return (session != null) ? session.getSnapshot() : null;
+        if (session != null) {
+            return session.getSnapshot();
+        } else {
+            return null;
+        }
     }
 
     public TeamProtocol getProtocol() {

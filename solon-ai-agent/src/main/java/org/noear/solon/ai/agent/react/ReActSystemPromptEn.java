@@ -62,7 +62,11 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         String role = getRole();
 
         if (role == null) {
-            role = "You are a professional Task Solver";
+            role = trace.getConfig().getDescription();
+
+            if (role == null) {
+                role = "You are a professional Task Solver";
+            }
         }
 
         StringBuilder sb = new StringBuilder();
