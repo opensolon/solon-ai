@@ -59,7 +59,7 @@ public class TeamOptions implements NonSerializable {
     private String skillInstruction;
 
     /** 反馈模式（允许主动寻求外部帮助/反馈） */
-    private boolean feedbackMode = true;
+    private boolean feedbackMode = false;
     private Function<TeamTrace, String> feedbackDescriptionProvider;
     private Function<TeamTrace, String> feedbackReasonDescriptionProvider;
 
