@@ -93,13 +93,13 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
         return requestBuilder.buildAssistantMessageNode(toolCallBuilders);
     }
 
-    /**
-     * 构建助手消息（通过工具消息）
-     * @author oisin lu
-     * @date 2026年1月28日
-     */
-    @Override
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
-    }
+//    /**
+//     * 构建助手消息（通过工具消息）
+//     * @author oisin lu
+//     * @date 2026年1月28日
+//     */
+//    @Override
+//    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
+//        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
+//    }
 }
