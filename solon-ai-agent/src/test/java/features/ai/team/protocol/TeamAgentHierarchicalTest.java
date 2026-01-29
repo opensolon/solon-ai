@@ -27,13 +27,14 @@ public class TeamAgentHierarchicalTest {
     public void testSupervisorDecisionLogic() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent collector = ReActAgent.of(chatModel).name("collector").description("收集原始水果名称").build();
-        Agent analyzer = ReActAgent.of(chatModel).name("analyzer").description("分析水果颜色").build();
+        Agent collector = ReActAgent.of(chatModel).name("collector").role("数据采集员").instruction("收集原始水果名称").build();
+        Agent analyzer = ReActAgent.of(chatModel).name("analyzer").role("色彩分析员").instruction("分析水果颜色").build();
 
         TeamAgent team = TeamAgent.of(chatModel).agentAdd(collector, analyzer).build();
         AgentSession session = InMemoryAgentSession.of("s1");
 
-        String result = team.call(Prompt.of("香蕉是什么颜色的？"), session).getContent();
+        // 改为链式调用
+        String result = team.prompt(Prompt.of("香蕉是什么颜色的？")).session(session).call().getContent();
 
         TeamTrace trace = team.getTrace(session);
         System.out.println("Path: " + trace.getFormattedHistory());
@@ -48,13 +49,14 @@ public class TeamAgentHierarchicalTest {
     public void testSupervisorChainDecision() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent searcher = ReActAgent.of(chatModel).name("searcher").description("提供随机数字").build();
-        Agent mapper = ReActAgent.of(chatModel).name("mapper").description("将数字翻倍").build();
+        Agent searcher = ReActAgent.of(chatModel).name("searcher").role("数据提供方").instruction("提供随机数字").build();
+        Agent mapper = ReActAgent.of(chatModel).name("mapper").role("逻辑运算方").instruction("将数字翻倍").build();
 
         TeamAgent team = TeamAgent.of(chatModel).agentAdd(searcher, mapper).maxTurns(5).build();
         AgentSession session = InMemoryAgentSession.of("s2");
 
-        team.call(Prompt.of("找一个数字并翻倍"), session);
+        // 改为链式调用
+        team.prompt(Prompt.of("找一个数字并翻倍")).session(session).call();
 
         TeamTrace trace = team.getTrace(session);
         List<String> workers = trace.getRecords().stream()
@@ -72,25 +74,27 @@ public class TeamAgentHierarchicalTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 开发者：第一次故意犯错（写 secret），审计后改正
-        Agent coder = ReActAgent.of(chatModel).name("Coder").description("写代码")
-                .systemPrompt(p -> p
-                        .instruction("写一个登录函数。初次编写请硬编码 'key=123'；若被审计打回，则改为从 env 读取。" + LIMIT))
+        Agent coder = ReActAgent.of(chatModel).name("Coder")
+                .role("开发工程师")
+                .instruction("写一个登录函数。初次编写请硬编码 'key=123'；若被审计打回，则改为从 env 读取。" + LIMIT)
                 .build();
 
         // 审计员：发现硬编码就打回
-        Agent reviewer = ReActAgent.of(chatModel).name("Reviewer").description("审计代码")
-                .systemPrompt(p -> p
-                        .instruction("检查硬编码。发现 '123' 则输出 'REJECT'；否则输出 'PASS'。" + LIMIT))
+        Agent reviewer = ReActAgent.of(chatModel).name("Reviewer")
+                .role("代码审计员")
+                .instruction("检查硬编码。发现 '123' 则输出 'REJECT'；否则输出 'PASS'。" + LIMIT)
                 .build();
 
-        TeamAgent team = TeamAgent.of(chatModel).name("DevTeam").agentAdd(coder, reviewer).maxTurns(10)
-                .systemPrompt(p -> p
-                        .instruction("流程：Coder -> Reviewer。若 Reviewer 返回 REJECT，必须再次指派 Coder 重写。" +
-                                "\n 完成时，只需要输出 Coder 的最终结果")
-                ).build();
+        // 主管团队：使用 role 和 instruction 替代 systemPrompt
+        TeamAgent team = TeamAgent.of(chatModel).name("DevTeam")
+                .agentAdd(coder, reviewer).maxTurns(10)
+                .role("项目主管")
+                .instruction("协作流程：Coder -> Reviewer。若 Reviewer 返回 REJECT，必须再次指派 Coder 重写。\n完成时，只需要输出 Coder 的最终结果")
+                .build();
 
         AgentSession session = InMemoryAgentSession.of("s3");
-        String result = team.call(Prompt.of("实现安全登录"), session).getContent();
+        // 改为链式调用
+        String result = team.prompt(Prompt.of("实现安全登录")).session(session).call().getContent();
 
         TeamTrace trace = team.getTrace(session);
         long coderTurns = trace.getRecords().stream().filter(r -> "Coder".equals(r.getSource())).count();
@@ -109,13 +113,14 @@ public class TeamAgentHierarchicalTest {
     public void testSupervisorSelfHealing() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent strategist = ReActAgent.of(chatModel).name("strategist").description("只给思路，不写代码").build();
-        Agent implementer = ReActAgent.of(chatModel).name("implementer").description("只管写代码").build();
+        Agent strategist = ReActAgent.of(chatModel).name("strategist").role("架构师").instruction("只给思路，不写代码").build();
+        Agent implementer = ReActAgent.of(chatModel).name("implementer").role("程序员").instruction("只管写代码").build();
 
         TeamAgent team = TeamAgent.of(chatModel).agentAdd(strategist, implementer).build();
         AgentSession session = InMemoryAgentSession.of("s4");
 
-        String result = team.call(Prompt.of("写个冒泡排序"), session).getContent();
+        // 改为链式调用
+        String result = team.prompt(Prompt.of("写个冒泡排序")).session(session).call().getContent();
 
         System.out.println("=====最终输出=====");
         System.out.println(result);

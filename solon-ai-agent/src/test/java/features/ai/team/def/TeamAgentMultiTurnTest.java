@@ -43,24 +43,20 @@ public class TeamAgentMultiTurnTest {
     public void testMultiTurnCollaboration() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 定义角色（保持不变，增强 SummarizationInterceptor 的感知）
+        // 1. 定义角色（合并 role 并改为 role(x).instruction(y) 风格）
         Agent searcher = ReActAgent.of(chatModel)
                 .name("searcher")
-                .description("旅游百科搜素员")
-                .systemPrompt(p->p
-                        .role("你是一个专业的目的地常识专家")
-                        .instruction("只需提供目的地的核心特色、人文地理等基础信息。不要发散，直接给出结构化文本。"))
+                .role("专业的目的地常识专家")
+                .instruction("只需提供目的地的核心特色、人文地理等基础信息。不要发散，直接给出结构化文本。")
                 .defaultInterceptorAdd(new SummarizationInterceptor())
                 .build();
 
         Agent planner = ReActAgent.of(chatModel)
                 .name("planner")
-                .description("私人行程规划师")
-                .systemPrompt(p->p
-                        .role("你负责制定具体的旅行方案")
-                        .instruction("### 核心准则\n" +
-                                "1. 必须优先检索历史记录中的目的地信息。\n" +
-                                "2. 严格遵循用户在当前轮次提出的预算、偏好等新约束。"))
+                .role("制定具体旅行方案的私人行程规划师")
+                .instruction("### 核心准则\n" +
+                        "1. 必须优先检索历史记录中的目的地信息。\n" +
+                        "2. 严格遵循用户在当前轮次提出的预算、偏好等新约束。")
                 .defaultInterceptorAdd(new SummarizationInterceptor())
                 .build();
 
@@ -77,16 +73,18 @@ public class TeamAgentMultiTurnTest {
 
         // --- 第一轮：确定目的地 ---
         System.out.println(">>> [Round 1] 用户：我想去杭州玩。");
-        conciergeTeam.call(Prompt.of("我想去杭州玩。"), session);
+        // 改为 prompt().session().call() 风格
+        conciergeTeam.prompt(Prompt.of("我想去杭州玩。")).session(session).call();
 
         // 第一次调用后，我们主要确认 Trace 是否生成
         TeamTrace trace1 = conciergeTeam.getTrace(session);
         Assertions.assertNotNull(trace1, "第一轮执行应产生轨迹");
         Assertions.assertTrue(trace1.getRecords().stream().anyMatch(ag->ag.isAgent() && ag.getSource().equals("searcher")), "历史轨迹应保留第一轮 searcher 的足迹");
 
-        // --- 第二轮：约束注入 (这是最容易失败的地方) ---
+        // --- 第二轮：约束注入 ---
         System.out.println("\n>>> [Round 2] 用户：预算只有 500 元，帮我重新规划。");
-        String finalResult = conciergeTeam.call(Prompt.of("预算只有 500 元，帮我重新规划。"), session).getContent();
+        // 改为 prompt().session().call() 风格
+        String finalResult = conciergeTeam.prompt(Prompt.of("预算只有 500 元，帮我重新规划。")).session(session).call().getContent();
 
         System.out.println("=== 最终执行结果 ===");
         System.out.println(finalResult);

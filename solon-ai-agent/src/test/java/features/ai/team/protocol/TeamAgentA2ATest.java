@@ -32,17 +32,19 @@ public class TeamAgentA2ATest {
     public void testA2ABasicLogic() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent designer = ReActAgent.of(chatModel).name("designer").description("设计")
-                .systemPrompt(p->p
-                        .instruction("描述一个红色按钮样式。完成后必须 transfer_to 给 developer。" + SHORT_LIMIT)).build();
+        Agent designer = ReActAgent.of(chatModel).name("designer")
+                .role("设计专家")
+                .instruction("描述一个红色按钮样式。完成后必须 transfer_to 给 developer。" + SHORT_LIMIT).build();
 
-        Agent developer = ReActAgent.of(chatModel).name("developer").description("开发")
-                .systemPrompt(p->p
-                        .instruction("根据设计输出简短 HTML。" + SHORT_LIMIT)).build();
+        Agent developer = ReActAgent.of(chatModel).name("developer")
+                .role("开发专家")
+                .instruction("根据设计输出简短 HTML。" + SHORT_LIMIT).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.A2A).agentAdd(designer, developer).maxTurns(5).build();
         AgentSession session = InMemoryAgentSession.of("a2a_s1");
-        String result = team.call(Prompt.of("开始任务"), session).getContent();
+
+        // 风格重组
+        String result = team.prompt(Prompt.of("开始任务")).session(session).call().getContent();
 
         List<String> order = team.getTrace(session).getRecords().stream()
                 .map(TeamTrace.TeamRecord::getSource).filter(n -> !"supervisor".equals(n)).collect(Collectors.toList());
@@ -60,16 +62,18 @@ public class TeamAgentA2ATest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         Agent agentA = ReActAgent.of(chatModel).name("A")
-                .systemPrompt(p->p
-                        .instruction("将 'DATA_777' 存入 transfer_to 的 memo 参数并移交给 B。" + SHORT_LIMIT)).build();
+                .role("发送方")
+                .instruction("将 'DATA_777' 存入 transfer_to 的 memo 参数并移交给 B。" + SHORT_LIMIT).build();
 
         Agent agentB = ReActAgent.of(chatModel).name("B")
-                .systemPrompt(p->p
-                        .instruction("重复你收到的 memo 数据。" + SHORT_LIMIT)).build();
+                .role("接收方")
+                .instruction("重复你收到的 memo 数据。" + SHORT_LIMIT).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.A2A).agentAdd(agentA, agentB).build();
         AgentSession session = InMemoryAgentSession.of("a2a_s2");
-        team.call(Prompt.of("启动"), session);
+
+        // 风格重组
+        team.prompt(Prompt.of("启动")).session(session).call();
 
         String history = team.getTrace(session).getFormattedHistory();
         log("History", history);
@@ -82,12 +86,14 @@ public class TeamAgentA2ATest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         Agent agentA = ReActAgent.of(chatModel).name("A")
-                .systemPrompt(p->p
-                        .instruction("故意移交给不存在的专家 'ghost'。" + SHORT_LIMIT)).build();
+                .role("测试节点")
+                .instruction("故意移交给不存在的专家 'ghost'。" + SHORT_LIMIT).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.A2A).agentAdd(agentA).build();
         AgentSession session = InMemoryAgentSession.of("a2a_s3");
-        team.call(Prompt.of("触发幻觉"), session);
+
+        // 风格重组
+        team.prompt(Prompt.of("触发幻觉")).session(session).call();
 
         log("Final Route", team.getTrace(session).getRoute());
         Assertions.assertEquals(Agent.ID_END, team.getTrace(session).getRoute());
@@ -98,13 +104,15 @@ public class TeamAgentA2ATest {
     public void testA2ALoopAndMaxIteration() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent a = ReActAgent.of(chatModel).name("A").systemPrompt(p->p.instruction("转给 B。")).build();
-        Agent b = ReActAgent.of(chatModel).name("B").systemPrompt(p->p.instruction("转给 A。")).build();
+        Agent a = ReActAgent.of(chatModel).name("A").role("节点A").instruction("转给 B。").build();
+        Agent b = ReActAgent.of(chatModel).name("B").role("节点B").instruction("转给 A。").build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.A2A).agentAdd(a, b).maxTurns(3).build();
         AgentSession session = InMemoryAgentSession.of("a2a_s4");
 
-        team.call(Prompt.of("踢球"), session);
+        // 风格重组
+        team.prompt(Prompt.of("踢球")).session(session).call();
+
         log("Record Count", team.getTrace(session).getRecordCount());
         Assertions.assertTrue(team.getTrace(session).getRecordCount() >= 3);
     }
@@ -117,29 +125,30 @@ public class TeamAgentA2ATest {
 
         // 分析：提取关键字
         Agent analyst = ReActAgent.of(chatModel).name("Analyst")
-                .systemPrompt(p->p.role("分析员")
-                        .instruction("提取输入中的‘金额’，放入 memo 转交给 Auditor。" + SHORT_LIMIT)).build();
+                .role("分析员")
+                .instruction("提取输入中的‘金额’，放入 memo 转交给 Auditor。" + SHORT_LIMIT).build();
 
         // 审计：判定金额风险
         Agent auditor = ReActAgent.of(chatModel).name("Auditor")
-                .systemPrompt(p->p.role("审计员")
-                        .instruction("若 memo 金额 > 1000，移交给 Legal；否则直接给 Designer。" + SHORT_LIMIT)).build();
+                .role("审计员")
+                .instruction("若 memo 金额 > 1000，移交给 Legal；否则直接给 Designer。" + SHORT_LIMIT).build();
 
         // 法务：二次确认
         Agent legal = ReActAgent.of(chatModel).name("Legal")
-                .systemPrompt(p->p.role("法务")
-                        .instruction("对高额单据备注 'APPROVED' 并转交给 Designer。" + SHORT_LIMIT)).build();
+                .role("法务")
+                .instruction("对高额单据备注 'APPROVED' 并转交给 Designer。" + SHORT_LIMIT).build();
 
         // 设计：产出最终代码
         Agent designer = ReActAgent.of(chatModel).name("Designer")
-                .systemPrompt(p->p.role("开发")
-                        .instruction(t -> "根据上游数据输出 HTML 凭证，以 " + t.getConfig().getFinishMarker() + " 结束。")).build();
+                .role("开发")
+                .instruction(t -> "根据上游数据输出 HTML 凭证，以 " + t.getConfig().getFinishMarker() + " 结束。").build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.A2A).agentAdd(analyst, auditor, legal, designer).maxTurns(10).build();
         AgentSession session = InMemoryAgentSession.of("a2a_s5");
 
         // 测试路径：Analyst -> Auditor -> Legal -> Designer (因为金额 9999 > 1000)
-        String result = team.call(Prompt.of("处理订单：金额 9999 元"), session).getContent();
+        // 风格重组
+        String result = team.prompt(Prompt.of("处理订单：金额 9999 元")).session(session).call().getContent();
 
         List<String> history = team.getTrace(session).getRecords().stream()
                 .map(TeamTrace.TeamRecord::getSource).filter(s -> !s.equals("supervisor")).collect(Collectors.toList());

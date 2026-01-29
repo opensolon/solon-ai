@@ -11,7 +11,6 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 
 /**
  * 【业务场景测试】：基于权限的动态工具加载
@@ -35,7 +34,8 @@ public class TeamAgentDynamicToolTest {
         // 使用 then 钩子函数，根据当前业务状态动态配置工具
         Agent searcher = ReActAgent.of(chatModel)
                 .name("searcher")
-                .description("差旅搜索专家。请根据你的工具权限为用户提供信息。")
+                .role("差旅搜索专家")
+                .instruction("你负责差旅信息查询。请根据你当前被授予的工具权限为用户提供准确信息，不要提及你没有权限访问的数据。")
                 .then(slf -> {
                     // 注入基础工具（所有用户可用）
                     slf.defaultToolAdd(new BasicTravelTool());
@@ -61,8 +61,8 @@ public class TeamAgentDynamicToolTest {
         String question = "我是尊贵的 VIP，请查一下我在上海机场能用哪个私密休息室？";
 
         // 6. 执行测试调用
-        // 遵循 3.8.x 推荐的 call(Prompt, AgentSession) 契约
-        String result = vipTeam.call(Prompt.of(question), session).getContent();
+        // 修改为 3.8.x 推荐的链式调用风格
+        String result = vipTeam.prompt(Prompt.of(question)).session(session).call().getContent();
 
         // 输出回复结果用于调试
         System.out.println(">>> [AI 回复]：\n" + result);

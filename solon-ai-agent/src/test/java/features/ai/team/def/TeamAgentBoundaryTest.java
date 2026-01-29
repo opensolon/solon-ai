@@ -37,7 +37,8 @@ public class TeamAgentBoundaryTest {
 
         Agent soloAgent = ReActAgent.of(chatModel)
                 .name("solo")
-                .description("擅长独立处理任务的 Agent")
+                .role("独立任务处理者")
+                .instruction("擅长独立处理任务，无需外部协作。")
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
@@ -46,7 +47,7 @@ public class TeamAgentBoundaryTest {
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_solo");
-        String result = team.call(Prompt.of("你好"), session).getContent();
+        String result = team.prompt(Prompt.of("你好")).session(session).call().getContent();
 
         Assertions.assertNotNull(result);
         System.out.println("单 Agent 团队执行结果: " + result);
@@ -59,12 +60,14 @@ public class TeamAgentBoundaryTest {
 
         Agent agentA = ReActAgent.of(chatModel)
                 .name("agent_a")
-                .description("总是将任务转交给 agent_b 处理")
+                .role("任务转发者 A")
+                .instruction("负责初步接收任务，并总是将任务转交给 agent_b 处理。")
                 .build();
 
         Agent agentB = ReActAgent.of(chatModel)
                 .name("agent_b")
-                .description("总是将任务转交给 agent_a 处理")
+                .role("任务转发者 B")
+                .instruction("负责接收 A 的请求，并总是将任务转交给 agent_a 处理。")
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
@@ -75,7 +78,7 @@ public class TeamAgentBoundaryTest {
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_loop");
-        String result = team.call(Prompt.of("循环测试任务"), session).getContent();
+        String result = team.prompt(Prompt.of("循环测试任务")).session(session).call().getContent();
 
         System.out.println("迭代限制后的结果: " + result);
         Assertions.assertNotNull(result);
@@ -92,7 +95,8 @@ public class TeamAgentBoundaryTest {
 
         Agent agent = ReActAgent.of(chatModel)
                 .name("test_agent")
-                .description("通用测试助手")
+                .role("通用测试助手")
+                .instruction("能够根据对话历史恢复上下文并继续执行任务。")
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
@@ -103,10 +107,10 @@ public class TeamAgentBoundaryTest {
         AgentSession session = InMemoryAgentSession.of("test_null_restore");
 
         // 1. 注入初始提示词
-        team.call(Prompt.of("记住：我的幸运数字是 7"), session);
+        team.prompt(Prompt.of("记住：我的幸运数字是 7")).session(session).call();
 
         // 2. 传入 null，验证 Agent 是否能根据 Session 历史找回上下文
-        String result = team.call(session).getContent();
+        String result = team.prompt().session(session).call().getContent();
 
         Assertions.assertNotNull(result);
         System.out.println("上下文恢复结果: " + result);
@@ -124,7 +128,8 @@ public class TeamAgentBoundaryTest {
         for (int i = 0; i < 5; i++) {
             builder.agentAdd(ReActAgent.of(chatModel)
                     .name("agent_" + i)
-                    .description("我是第 " + i + " 号专家，负责特定模块的分析")
+                    .role(i + " 号模块专家")
+                    .instruction("我是第 " + i + " 号专家，负责特定模块的分析。")
                     .build());
         }
 
@@ -132,7 +137,7 @@ public class TeamAgentBoundaryTest {
         AgentSession session = InMemoryAgentSession.of("perf_test");
 
         long startTime = System.currentTimeMillis();
-        String result = team.call(Prompt.of("请协作完成一份综合性能报告"), session).getContent();
+        String result = team.prompt(Prompt.of("请协作完成一份综合性能报告")).session(session).call().getContent();
         long duration = System.currentTimeMillis() - startTime;
 
         System.out.println("执行耗时: " + duration + "ms");
@@ -146,8 +151,14 @@ public class TeamAgentBoundaryTest {
         // 测试：在复杂任务下触发迭代强制停止
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent agentA = ReActAgent.of(chatModel).name("agent_a").description("A: 认为任务非常复杂，总是推给 B").build();
-        Agent agentB = ReActAgent.of(chatModel).name("agent_b").description("B: 认为需要更多视角，总是推给 A").build();
+        Agent agentA = ReActAgent.of(chatModel).name("agent_a")
+                .role("过度谨慎的专家 A")
+                .instruction("认为任务非常复杂，总是推给 B。")
+                .build();
+        Agent agentB = ReActAgent.of(chatModel).name("agent_b")
+                .role("寻求多维度的专家 B")
+                .instruction("认为需要更多视角，总是推给 A。")
+                .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .agentAdd(agentA).agentAdd(agentB)
@@ -157,7 +168,7 @@ public class TeamAgentBoundaryTest {
         AgentSession session = InMemoryAgentSession.of("test_hard_limit");
 
         // 提出一个极其宏大、无法轻易完结的问题以诱发多次协作
-        String result = team.call(Prompt.of("请详细论述量子计算对全球金融加密体系的每一步具体影响"), session).getContent();
+        String result = team.prompt(Prompt.of("请详细论述量子计算对全球金融加密体系的每一步具体影响")).session(session).call().getContent();
 
         TeamTrace trace = team.getTrace(session);
         System.out.println("最终迭代次数: " + trace.getTurnCount());
@@ -173,14 +184,18 @@ public class TeamAgentBoundaryTest {
         TeamAgent.Builder builder = TeamAgent.of(chatModel).name("expert_group");
 
         for (String role : roles) {
-            builder.agentAdd(ReActAgent.of(chatModel).name(role).description("我是" + role).build());
+            builder.agentAdd(ReActAgent.of(chatModel)
+                    .name(role)
+                    .role(role + "领域专家")
+                    .instruction("我是" + role + "，负责从对应维度给出方案。")
+                    .build());
         }
 
         TeamAgent team = builder.build();
         AgentSession session = InMemoryAgentSession.of("test_expert_sync");
 
-        String prompt = "我们要发布一个高并发系统，请各专家从架构、测试、运维三个维度给出方案";
-        String result = team.call(Prompt.of(prompt), session).getContent();
+        String promptStr = "我们要发布一个高并发系统，请各专家从架构、测试、运维三个维度给出方案";
+        String result = team.prompt(Prompt.of(promptStr)).session(session).call().getContent();
 
         TeamTrace trace = team.getTrace(session);
         long distinctAgents = trace.getRecords().stream().map(s -> s.getSource()).distinct().count();

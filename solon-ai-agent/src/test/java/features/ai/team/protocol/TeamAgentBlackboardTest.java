@@ -44,28 +44,27 @@ public class TeamAgentBlackboardTest {
         // 后端：观察到没 api 就写 api
         Agent backend = ReActAgent.of(chatModel).name("Backend").defaultToolAdd(tools)
                 .feedbackMode(false)
-                .systemPrompt(p->p
-                        .instruction("若看板无'api'，调用 write(k='api', v='ok')。" + LIMIT)).build();
+                .role("后端开发者")
+                .instruction("若看板无'api'，调用 write(k='api', v='ok')。" + LIMIT).build();
 
         // 前端：观察到有 api 才写 ui
         Agent frontend = ReActAgent.of(chatModel).name("Frontend").defaultToolAdd(tools)
                 .feedbackMode(false)
-                .systemPrompt(p->p
-                        .instruction("若看板有'api'，调用 write(k='ui', v='done') 并回复 FINISH。" + LIMIT)).build();
+                .role("前端开发者")
+                .instruction("若看板有'api'，调用 write(k='ui', v='done') 并回复 FINISH。" + LIMIT).build();
 
-        // 注意：这里没有 TeamSystemPrompt 调度，完全靠协议自动轮询和 Agent 的自发判断
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.BLACKBOARD)
                 .feedbackMode(false)
                 .agentAdd(backend, frontend).maxTurns(5).build();
 
         AgentSession session = InMemoryAgentSession.of("s1");
-        team.call(Prompt.of("开始构建系统"), session);
+        // 改为 .prompt().session().call() 风格
+        team.prompt(Prompt.of("开始构建系统")).session(session).call();
 
         String board = team.getTrace(session).getProtocolDashboardSnapshot();
         System.out.println("Final Board: " + board);
 
-        // 断言：黑板上最终聚集了两个维度的信息
         Assertions.assertTrue(board.contains("ok") && board.contains("done"), "黑板应聚合前后端两份数据");
     }
 
@@ -79,21 +78,22 @@ public class TeamAgentBlackboardTest {
         // 初级工：设定一个低分
         Agent junior = ReActAgent.of(chatModel).name("Junior").defaultToolAdd(tools)
                 .feedbackMode(false)
-                .systemPrompt(p->p.instruction("将'score'设为'60'。" + LIMIT)).build();
+                .role("初级评测员")
+                .instruction("将'score'设为'60'。" + LIMIT).build();
 
         // 资深工：看到低分就修正为高分
         Agent senior = ReActAgent.of(chatModel).name("Senior").defaultToolAdd(tools)
                 .feedbackMode(false)
-                .description("资深专家，负责对评分进行最终核准和修正（尤其是当分数为60时）")
-                .systemPrompt(p->p
-                        .instruction("若看板'score'为'60'，将其覆盖写为'99'。" + LIMIT)).build();
+                .role("资深专家")
+                .instruction("作为资深专家，负责对评分进行最终核准和修正（尤其是当分数为60时）。若看板'score'为'60'，将其覆盖写为'99'。" + LIMIT).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.BLACKBOARD)
                 .feedbackMode(false)
                 .agentAdd(junior, senior).maxTurns(4).build();
 
         AgentSession session = InMemoryAgentSession.of("s2");
-        String result = team.call(Prompt.of("请进行最终评分"), session).getContent();
+        // 改为 .prompt().session().call() 风格
+        String result = team.prompt(Prompt.of("请进行最终评分")).session(session).call().getContent();
         TeamTrace trace = team.getTrace(session);
 
         System.out.println("=====最终结果=====");
@@ -104,7 +104,6 @@ public class TeamAgentBlackboardTest {
         String board = trace.getProtocolDashboardSnapshot();
         System.out.println("Board Status: " + board);
 
-        // 断言：最终状态必须是 Senior 的修正值
         Assertions.assertTrue(board.contains("score") && board.contains("99"), "资深专家应能成功覆盖黑板状态");
     }
 
@@ -118,13 +117,14 @@ public class TeamAgentBlackboardTest {
         // 编写者：反复尝试
         Agent writer = ReActAgent.of(chatModel).name("Writer").defaultToolAdd(tools)
                 .feedbackMode(false)
-                .systemPrompt(p->p.instruction("写一个含'A'的词并写入'data'。" + LIMIT)).build();
+                .role("内容编写者")
+                .instruction("写一个含'A'的词并写入'data'。" + LIMIT).build();
 
         // 审计者：不含'A'就报错，含'A'才通过
         Agent auditor = ReActAgent.of(chatModel).name("Auditor").defaultToolAdd(tools)
                 .feedbackMode(false)
-                .systemPrompt(p->p
-                        .instruction("若'data'不含'A'，写'status'为'FAIL'；若含'A'，写'status'为'PASS'并回复 FINISH。" + LIMIT)).build();
+                .role("合规审计员")
+                .instruction("若'data'不含'A'，写'status'为'FAIL'；若含'A'，写'status'为'PASS'并回复 FINISH。" + LIMIT).build();
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.BLACKBOARD)
                 .feedbackMode(false)
@@ -133,7 +133,8 @@ public class TeamAgentBlackboardTest {
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("s3");
-        String result = team.call(Prompt.of("提交合规文档"), session).getContent();
+        // 改为 .prompt().session().call() 风格
+        String result = team.prompt(Prompt.of("提交合规文档")).session(session).call().getContent();
         TeamTrace trace = team.getTrace(session);
 
         System.out.println("=====最终结果=====");
@@ -155,17 +156,18 @@ public class TeamAgentBlackboardTest {
         MethodToolProvider tools = new MethodToolProvider(new BoardTools());
 
         Agent a = ReActAgent.of(chatModel).name("A").defaultToolAdd(tools)
-                .systemPrompt(p->p.instruction("将'x'设为'1'。" + LIMIT)).build();
+                .role("竞争者A")
+                .instruction("将'x'设为'1'。" + LIMIT).build();
         Agent b = ReActAgent.of(chatModel).name("B").defaultToolAdd(tools)
-                .systemPrompt(p->p.instruction("将'x'设为'2'。" + LIMIT)).build();
+                .role("竞争者B")
+                .instruction("将'x'设为'2'。" + LIMIT).build();
 
-        // 设置极小的 maxTurns 验证框架截断能力
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.BLACKBOARD)
                 .agentAdd(a, b).maxTurns(3).build();
 
         AgentSession session = InMemoryAgentSession.of("s4");
-        // 如果框架没有截断，这里会一直跑下去。maxTurns 保证了安全性。
-        Assertions.assertDoesNotThrow(() -> team.call(Prompt.of("开始竞争"), session));
+        // 改为 .prompt().session().call() 风格
+        Assertions.assertDoesNotThrow(() -> team.prompt(Prompt.of("开始竞争")).session(session).call());
 
         TeamTrace trace = team.getTrace(session);
         Assertions.assertTrue(trace.getRecordCount() <= 4, "框架应在 maxTurns 到达时强制停止博弈");

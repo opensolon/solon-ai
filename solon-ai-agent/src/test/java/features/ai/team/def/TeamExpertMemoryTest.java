@@ -23,11 +23,11 @@ public class TeamExpertMemoryTest {
         // 关键：使用同一个 Session
         AgentSession session = InMemoryAgentSession.of("memory_share_001");
 
-        // 1. 定义美食专家：它没有任何系统提示词说明用户口味，全靠记忆
+        // 1. 定义美食专家：采用新的 role(x).instruction(y) 风格，合并重复的 role
         ReActAgent foodAgent = ReActAgent.of(chatModel)
                 .name("food_expert")
-                .description("美食推荐专家")
-                .systemPrompt(p -> p.role("美食专家").instruction("直接调用工具推荐美食。"))
+                .role("美食专家")
+                .instruction("作为美食推荐专家，直接调用工具根据用户需求推荐美食。")
                 .defaultToolAdd(new SecureFoodTools())
                 .build();
 
@@ -39,8 +39,10 @@ public class TeamExpertMemoryTest {
 
         // --- 第一步：埋入长期记忆 ---
         System.out.println(">>> 轮次 1：埋入偏好（海鲜过敏）");
+        // 改为 prompt(prompt).session(session).call() 风格
         teamAgent.prompt("你好，我叫 Noear。我对海鲜严重过敏，请务必记住这点。")
-                .session(session).call();
+                .session(session)
+                .call();
 
         // --- 第二步：专家调用（不重复提及过敏） ---
         System.out.println("\n>>> 轮次 2：验证专家是否记得过敏");

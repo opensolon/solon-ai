@@ -29,27 +29,23 @@ public class Issue_IDJQ95_simp {
     public void case1() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. Coder - 现在只需要专注于写代码并指明接力给谁
+        // 1. Coder - 合并角色定义并改用 instruction 风格
         Agent coder = SimpleAgent.of(chatModel)
                 .name("Coder")
-                .description("负责编写 HTML/JS 代码的开发专家")
-                .systemPrompt(p -> p
-                        .role("Coder 前端开发者")
-                        .instruction("你是一个专业的代码助手。\n" +
-                                "1. 收到任务后，请在回复正文中直接编写全量的 HTML/JS 代码。\n" +
-                                "2. 代码完成后，再移交给 Reviewer 进行审核。"))
+                .role("负责编写 HTML/JS 代码的前端开发专家")
+                .instruction("你是一个专业的代码助手。\n" +
+                        "1. 收到任务后，请在回复正文中直接编写全量的 HTML/JS 代码。\n" +
+                        "2. 代码完成后，再移交给 Reviewer 进行审核。")
                 .build();
 
-        // 2. Reviewer - 现在它能从协议注入的上下文中直接读到代码
+        // 2. Reviewer - 合并角色定义并改用 instruction 风格
         Agent reviewer = SimpleAgent.of(chatModel)
                 .name("Reviewer")
-                .description("负责代码安全和逻辑审查的审计专家")
-                .systemPrompt(p -> p
-                        .role("Reviewer 代码审查专家")
-                        .instruction("任务：审查 Coder 提供的代码。\n" +
-                                "1. 请检查 [Handover Context] 中提供的代码内容。\n" +
-                                "2. 如果代码正确，请输出代码全量内容并声明完成。\n" +
-                                "3. 如果没有看到代码或代码有错，请退回给 Coder 并说明原因。"))
+                .role("负责代码安全和逻辑审查的代码审查专家")
+                .instruction("任务：审查 Coder 提供的代码。\n" +
+                        "1. 请检查 [Handover Context] 中提供的代码内容。\n" +
+                        "2. 如果代码正确，请输出代码全量内容并声明完成。\n" +
+                        "3. 如果没有看到代码或代码有错，请退回给 Coder 并说明原因。")
                 .build();
 
         // 3. TeamAgent
@@ -60,12 +56,11 @@ public class Issue_IDJQ95_simp {
                 .maxTurns(6)
                 .build();
 
-        // 4. 执行
+        // 4. 执行 - 修改为 .prompt().session().call() 风格
         AgentSession agentSession = InMemoryAgentSession.of();
-        AssistantMessage result = devTeam.call(
-                Prompt.of("编写一个简单的 HTML 网页，代码不要超过20行（只是测试下）。写完后交给 Reviewer 审核。"),
-                agentSession
-        );
+        AssistantMessage result = devTeam.prompt(
+                Prompt.of("编写一个简单的 HTML 网页，代码不要超过20行（只是测试下）。写完后交给 Reviewer 审核。")
+        ).session(agentSession).call().getMessage();
 
         System.out.println("======= 最终输出 =======");
         System.out.println(result.getContent());

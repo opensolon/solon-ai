@@ -28,23 +28,25 @@ public class TeamAgentPersistenceHitlCombinedTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         String teamName = "combined_manager";
 
-        // 1. 构建团队
+        // 1. 构建团队 (改用 role.instruction 风格)
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name(teamName)
                 .feedbackMode(false)
-                .systemPrompt(p->p
-                        .role("你是一个财务合规主管。")
-                        .instruction(trace -> "规则：Worker 提交后流程挂起；收到 signed 信号后指派 Approver。任务结束时请复述 Approver 的结论。"))
+                .role("财务合规主管")
+                .instruction("协作规则：\n" +
+                        "1. Worker 提交后流程挂起；\n" +
+                        "2. 收到 signed 信号后指派 Approver；\n" +
+                        "3. 任务结束时请复述 Approver 的结论。")
                 .agentAdd(new Agent() {
                     @Override public String name() { return "Worker"; }
-                    @Override public String description() { return "处理业务逻辑"; }
+                    @Override public String role() { return "处理业务逻辑"; }
                     @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
                         return ChatMessage.ofAssistant("单据初稿已处理完成。[FINISH]");
                     }
                 })
                 .agentAdd(new Agent() {
                     @Override public String name() { return "Approver"; }
-                    @Override public String description() { return "最终签字审批"; }
+                    @Override public String role() { return "最终签字审批"; }
                     @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
                         return ChatMessage.ofAssistant("核对无误，签字通过。[FINISH]");
                     }
@@ -71,7 +73,8 @@ public class TeamAgentPersistenceHitlCombinedTest {
         // --- 阶段 1：启动并触发挂起 ---
         System.out.println(">>> 阶段 1：提交初始任务...");
         AgentSession session1 = InMemoryAgentSession.of("job_001");
-        projectTeam.call(Prompt.of("处理财务单据"), session1);
+        // 改为链式调用
+        projectTeam.prompt(Prompt.of("处理财务单据")).session(session1).call();
 
         FlowContext context1 = session1.getSnapshot();
         Assertions.assertTrue(context1.isStopped(), "流程应在 Worker 执行后被拦截器挂起");
@@ -87,8 +90,8 @@ public class TeamAgentPersistenceHitlCombinedTest {
         // 注入人工干预信号
         context2.put("signed", true);
 
-        // 恢复执行
-        projectTeam.call(session2);
+        // 恢复执行 (改为链式调用，不传 Prompt 以触发续跑)
+        projectTeam.prompt().session(session2).call();
 
         // --- 阶段 3：精准结果提取与最终验证 ---
         TeamTrace trace = projectTeam.getTrace(session2);
@@ -97,7 +100,6 @@ public class TeamAgentPersistenceHitlCombinedTest {
         List<TeamTrace.TeamRecord> steps = trace.getRecords();
 
         // 修正点：从 Steps 列表中【倒序】查找第一个非主管的专家消息
-        // 之前的 reduce 在某些 List 实现或反序列化集合中可能指向了错误位置
         String finalResult = "";
         for (int i = steps.size() - 1; i >= 0; i--) {
             TeamTrace.TeamRecord step = steps.get(i);

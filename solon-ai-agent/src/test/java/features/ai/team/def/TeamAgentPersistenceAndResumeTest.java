@@ -33,7 +33,8 @@ public class TeamAgentPersistenceAndResumeTest {
                     spec.addStart(Agent.ID_START).linkAdd("searcher");
                     spec.addActivity(ReActAgent.of(chatModel)
                                     .name("searcher")
-                                    .description("天气搜索员，负责提供实时气候数据")
+                                    .role("天气搜索员")
+                                    .instruction("负责提供实时气候数据，并为后续行程规划提供依据")
                                     .build())
                             .linkAdd(TeamAgent.ID_SUPERVISOR);
                 }).build();
@@ -63,7 +64,7 @@ public class TeamAgentPersistenceAndResumeTest {
         AgentSession session = InMemoryAgentSession.of(restoredContext);
 
         // 验证恢复：调用时不传 Prompt，触发“断点续跑”模式
-        String finalResult = tripAgent.call(session).getContent();
+        String finalResult = tripAgent.prompt().session(session).call().getContent();
 
         // --- 阶段 C：核心验证 ---
         TeamTrace finalTrace = tripAgent.getTrace(session);
@@ -87,20 +88,21 @@ public class TeamAgentPersistenceAndResumeTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("reset_test_team")
-                .agentAdd(ReActAgent.of(chatModel).name("agent").build())
+                .agentAdd(ReActAgent.of(chatModel).name("agent")
+                        .role("智能助手")
+                        .instruction("根据用户提示词提供帮助")
+                        .build())
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("test_reset_id");
 
         // 第一次调用：建立初始上下文
-        team.call(Prompt.of("你好"), session);
+        team.prompt(Prompt.of("你好")).session(session).call();
         TeamTrace trace1 = team.getTrace(session);
         Assertions.assertNotNull(trace1);
-        int initialSteps = trace1.getRecordCount();
 
         // 第二次调用：传入完全不同的 Prompt
-        // 框架应识别出这是一个新任务，并根据业务需要决定是否重置或追加
-        String result2 = team.call(Prompt.of("再见"), session).getContent();
+        String result2 = team.prompt(Prompt.of("再见")).session(session).call().getContent();
 
         Assertions.assertNotNull(result2);
         System.out.println("第二次调用成功完成");
@@ -112,7 +114,10 @@ public class TeamAgentPersistenceAndResumeTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         TeamAgent team = TeamAgent.of(chatModel)
                 .name("isolation_team")
-                .agentAdd(ReActAgent.of(chatModel).name("agent").build())
+                .agentAdd(ReActAgent.of(chatModel).name("agent")
+                        .role("隔离测试助手")
+                        .instruction("识别并引用上下文中的变量")
+                        .build())
                 .build();
 
         // 创建两个独立的 Session
@@ -124,8 +129,8 @@ public class TeamAgentPersistenceAndResumeTest {
         session2.getSnapshot().put("user_name", "李四");
 
         // 执行调用
-        team.call(Prompt.of("谁在和你说话？"), session1);
-        team.call(Prompt.of("谁在和你说话？"), session2);
+        team.prompt(Prompt.of("谁在和你说话？")).session(session1).call();
+        team.prompt(Prompt.of("谁在和你说话？")).session(session2).call();
 
         Assertions.assertNotEquals(
                 session1.getSnapshot().get("user_name"),

@@ -29,11 +29,8 @@ public class SimpleAgentTest {
         // 2. 构建 SimpleAgent
         SimpleAgent resumeAgent = SimpleAgent.of(chatModel)
                 .name("ResumeExtractor")
-                .description("简历信息提取器")
-                // 配置系统提示词模板
-                .systemPrompt(p -> p
-                        .role("你是一个专业的人事助理")
-                        .instruction("请从用户提供的文本中提取关键信息"))
+                .role("专业的人事助理，擅长简历信息提取")
+                .instruction("请从用户提供的文本中提取关键信息")
                 // 配置输出格式（自动将 POJO 转为 JSON Schema）
                 .outputSchema(ResumeInfo.class)
                 // 配置结果存储到 Context 中的键名
@@ -52,7 +49,7 @@ public class SimpleAgentTest {
 
         // 5. 执行调用
         System.out.println("--- 正在提取信息 ---");
-        AssistantMessage message = resumeAgent.call(Prompt.of(userInput), session);
+        AssistantMessage message = resumeAgent.prompt(Prompt.of(userInput)).session(session).call().getMessage();
 
         // 6. 获取结果
         // 方式 A：从返回值获取
@@ -97,12 +94,12 @@ public class SimpleAgentTest {
         Assertions.assertTrue(message.getContent().contains("阿飞"), "记忆失败了");
 
 
-        message = agent.call(session);
+        message = agent.prompt().session(session).call().getMessage();
 
         //有记忆数据
         Assertions.assertTrue(Utils.isNotEmpty(message.getContent()));
 
-        message = agent.call(InMemoryAgentSession.of());
+        message = agent.prompt().session(InMemoryAgentSession.of()).call().getMessage();
 
         //没有记忆数据
         Assertions.assertTrue(Utils.isEmpty(message.getContent()));

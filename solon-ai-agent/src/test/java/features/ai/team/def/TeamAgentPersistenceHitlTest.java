@@ -16,7 +16,7 @@ import org.noear.solon.flow.Node;
 
 /**
  * TeamAgent 持久化与人工介入（HITL）联合场景测试
- * * <p>测试场景：
+ * <p>测试场景：
  * 1. Agent 团队执行过程中产生阶段性产出。
  * 2. 拦截器检测到产出后强制挂起流程，模拟进入人工审批。
  * 3. 状态序列化为 JSON 模拟持久化。
@@ -29,11 +29,17 @@ public class TeamAgentPersistenceHitlTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         String teamId = "approval_team";
 
-        // 1. 构建团队并注入 HITL 拦截器
+        // 1. 构建团队并注入 HITL 拦截器 (使用新的 role.instruction 风格)
         TeamAgent teamAgent = TeamAgent.of(chatModel)
                 .name(teamId)
-                .agentAdd(ReActAgent.of(chatModel).name("worker").description("初稿撰写").build())
-                .agentAdd(ReActAgent.of(chatModel).name("approver").description("修辞优化").build())
+                .agentAdd(ReActAgent.of(chatModel).name("worker")
+                        .role("初稿撰写员")
+                        .instruction("负责根据用户需求撰写初步的文案草稿。")
+                        .build())
+                .agentAdd(ReActAgent.of(chatModel).name("approver")
+                        .role("文案优化专家")
+                        .instruction("负责对 worker 产出的初稿进行修辞优化和专业度提升。")
+                        .build())
                 .defaultInterceptorAdd(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {
@@ -50,11 +56,11 @@ public class TeamAgentPersistenceHitlTest {
                 .build();
 
         // --- 阶段 A: 发起请求并触发自动挂起 ---
-        // 使用 AgentSession 替代直接操作 FlowContext
         AgentSession session1 = InMemoryAgentSession.of("order_hitl_001");
 
         System.out.println(">>> 阶段 A: 启动流程...");
-        teamAgent.call(Prompt.of("请起草一份周报内容"), session1);
+        // 升级为链式调用风格
+        teamAgent.prompt(Prompt.of("请起草一份周报内容")).session(session1).call();
 
         // 获取底层快照验证状态
         FlowContext context1 = session1.getSnapshot();
@@ -76,8 +82,8 @@ public class TeamAgentPersistenceHitlTest {
         // 模拟人工操作：注入审批通过信号
         restoredContext.put("manager_ok", true);
 
-        // 继续执行：此时不传 Prompt，系统会基于 Session 中的 Trace 自动恢复执行
-        String finalResult = teamAgent.call(session2).getContent();
+        // 继续执行：传入 null prompt，触发断点续跑
+        String finalResult = teamAgent.prompt().session(session2).call().getContent();
 
         System.out.println("=== 最终执行结果 ===");
         System.out.println(finalResult);

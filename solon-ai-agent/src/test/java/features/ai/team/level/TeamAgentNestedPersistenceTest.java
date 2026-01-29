@@ -29,7 +29,7 @@ public class TeamAgentNestedPersistenceTest {
         // 1. 定义底层 Agent
         Agent coder = new Agent() {
             @Override public String name() { return "Coder"; }
-            @Override public String description() { return "负责编写核心业务代码"; }
+            @Override public String role() { return "负责编写核心业务代码"; }
             @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
                 return ChatMessage.ofAssistant("代码已提交: login.java");
             }
@@ -37,20 +37,26 @@ public class TeamAgentNestedPersistenceTest {
 
         Agent reviewer = new Agent() {
             @Override public String name() { return "Reviewer"; }
-            @Override public String description() { return "负责代码质量审核"; }
+            @Override public String role() { return "负责代码质量审核"; }
             @Override public AssistantMessage call(Prompt prompt, AgentSession session) {
                 return ChatMessage.ofAssistant("审核通过 [FINISH]");
             }
         };
 
         // 2. 构建层级团队：Project (Parent) -> Dev (Child) -> Coder
-        TeamAgent devTeam = TeamAgent.of(chatModel).name("dev_team")
+        // 优化：改由 role(x).instruction(y) 风格定义
+        TeamAgent devTeam = TeamAgent.of(chatModel)
+                .name("dev_team")
+                .role("开发执行小组")
+                .instruction("负责根据任务需求完成代码实现与初步自测。")
                 .feedbackMode(false)
                 .agentAdd(coder)
                 .build();
 
         TeamAgent projectTeam = TeamAgent.of(chatModel)
                 .name("quality_project")
+                .role("质量管理项目组")
+                .instruction("负责协调开发小组进行功能实现，并指派审核员进行质量终审。")
                 .feedbackMode(false)
                 .agentAdd(devTeam)
                 .agentAdd(reviewer)
@@ -90,8 +96,8 @@ public class TeamAgentNestedPersistenceTest {
         FlowContext context2 = FlowContext.fromJson(jsonState);
         AgentSession session = InMemoryAgentSession.of(context2);
 
-        // 触发调用（不传 Prompt，系统自动从 Trace 恢复）
-        String result = projectTeam.call(session).getContent();
+        // 3. 执行：触发调用（改为 agent.prompt(null).session(session).call() 风格）
+        String result = projectTeam.prompt().session(session).call().getContent();
 
         // --- 验证点 ---
         TeamTrace finalTrace = projectTeam.getTrace(session);

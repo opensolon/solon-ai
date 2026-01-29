@@ -47,19 +47,15 @@ public class TeamAgentTransferTest {
 
         ReActAgent translator = ReActAgent.of(chatModel)
                 .name("translator")
-                .description("专业翻译官")
-                .systemPrompt(p->p
-                        .role("你是一个专业翻译专家")
-                        .instruction("将输入的中文翻译为英文，直接给出译文。"))
+                .role("专业翻译专家")
+                .instruction("将输入的中文翻译为英文，直接给出译文。")
                 .outputKey("translate_result") // 自动存入 session
                 .build();
 
         ReActAgent polisher = ReActAgent.of(chatModel)
                 .name("polisher")
-                .description("润色专家")
-                .systemPrompt(p->p
-                        .role("你是一个英文润色润色大师")
-                        .instruction("对上一步 translator 产出的译文进行学术化处理。"))
+                .role("英文润色大师")
+                .instruction("对上一步 translator 产出的译文进行学术化处理。")
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
@@ -70,7 +66,7 @@ public class TeamAgentTransferTest {
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_001");
-        team.call(Prompt.of("翻译并润色：'代码构建未来'"), session);
+        team.prompt(Prompt.of("翻译并润色：'代码构建未来'")).session(session).call();
 
         String translateResult = session.getSnapshot().getAs("translate_result");
         String finalReport = session.getSnapshot().getAs("final_report");
@@ -92,18 +88,16 @@ public class TeamAgentTransferTest {
 
         ReActAgent translator = ReActAgent.of(chatModel)
                 .name("translator")
+                .role("翻译官")
+                .instruction("直接输出译文，不要任何前缀解释。")
                 .outputKey("translate_result")
-                .systemPrompt(p->p
-                        .role("翻译官")
-                        .instruction("直接输出译文，不要任何前缀解释。"))
                 .build();
 
         ReActAgent polisher = ReActAgent.of(chatModel)
                 .name("polisher")
+                .role("润色专家")
                 // 核心：框架自动解析 #{translate_result} 并替换为 Session 中的值
-                .systemPrompt(p->p
-                        .role("润色专家")
-                        .instruction("请对这段译文进行优化：#{translate_result}"))
+                .instruction("请对这段译文进行优化：#{translate_result}")
                 .outputKey("final_result")
                 .build();
 
@@ -114,7 +108,7 @@ public class TeamAgentTransferTest {
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_002");
-        team.call(Prompt.of("人工智能正在改变世界"), session);
+        team.prompt(Prompt.of("人工智能正在改变世界")).session(session).call();
 
         String midResult = session.getSnapshot().getAs("translate_result");
         String finalResult = session.getSnapshot().getAs("final_result");
@@ -133,15 +127,11 @@ public class TeamAgentTransferTest {
     public void testJsonSchemaOutput() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        //
-
         SimpleAgent extractor = SimpleAgent.of(chatModel)
                 .name("extractor")
-                .description("实体关系提取器")
-                .systemPrompt(p -> p
-                        .role("你是一个高精度信息提取专家")
-                        .instruction("从文本中提取关键实体，严格遵守 JSON Schema 规范。"))
-                .outputSchema(Personnel.class)//"{\"entity_name\": \"string\", \"birth_year\": \"integer\", \"title\": \"string\"}")
+                .role("高精度信息提取专家")
+                .instruction("从文本中提取关键实体，严格遵守 JSON Schema 规范。")
+                .outputSchema(Personnel.class)
                 .outputKey("structured_data")
                 .build();
 

@@ -31,7 +31,8 @@ public class TeamAgentMemoryTest {
         // 构建团队：由主管 + 一个事实核对专家组成
         ReActAgent worker = ReActAgent.of(chatModel)
                 .name("fact_checker")
-                .description("负责记录和查询用户提供的事实信息")
+                .role("事实核对专家")
+                .instruction("负责记录和查询用户提供的事实信息")
                 .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
@@ -43,11 +44,11 @@ public class TeamAgentMemoryTest {
 
         // 第一轮：存入事实
         String p1 = "我的秘密口令是 'Solon-AI-666'，请确认收到。";
-        team.call(Prompt.of(p1), session);
+        team.prompt(Prompt.of(p1)).session(session).call();
 
         // 第二轮：提取事实
         String p2 = "刚才我告诉你的秘密口令是什么？";
-        AssistantMessage resp = team.call(Prompt.of(p2), session);
+        AssistantMessage resp = team.prompt(Prompt.of(p2)).session(session).call().getMessage();
         String content = resp.getContent();
 
         System.out.println("AI 记忆提取结果: " + content);
@@ -68,23 +69,26 @@ public class TeamAgentMemoryTest {
     public void testSessionIsolation() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
         TeamAgent team = TeamAgent.of(chatModel).name("iso_team").agentAdd(
-                ReActAgent.of(chatModel).name("helper").description("助手").build()
+                ReActAgent.of(chatModel).name("helper")
+                        .role("通用助手")
+                        .instruction("根据上下文回答用户问题")
+                        .build()
         ).build();
 
         // Session A 叫 Alice
         AgentSession sessionA = InMemoryAgentSession.of("SA");
-        team.call(Prompt.of("我叫 Alice"), sessionA);
+        team.prompt(Prompt.of("我叫 Alice")).session(sessionA).call();
 
         // Session B 叫 Bob
         AgentSession sessionB = InMemoryAgentSession.of("SB");
-        team.call(Prompt.of("我叫 Bob"), sessionB);
+        team.prompt(Prompt.of("我叫 Bob")).session(sessionB).call();
 
         // 验证 A 的记忆
-        String respA = team.call(Prompt.of("我叫什么名字？"), sessionA).getContent();
+        String respA = team.prompt(Prompt.of("我叫什么名字？")).session(sessionA).call().getContent();
         Assertions.assertTrue(respA.contains("Alice") && !respA.contains("Bob"), "SA 应该只记得 Alice");
 
         // 验证 B 的记忆
-        String respB = team.call(Prompt.of("我叫什么名字？"), sessionB).getContent();
+        String respB = team.prompt(Prompt.of("我叫什么名字？")).session(sessionB).call().getContent();
         Assertions.assertTrue(respB.contains("Bob") && !respB.contains("Alice"), "SB 应该只记得 Bob");
     }
 

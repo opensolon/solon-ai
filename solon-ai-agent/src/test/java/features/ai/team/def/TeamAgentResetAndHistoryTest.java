@@ -24,19 +24,21 @@ public class TeamAgentResetAndHistoryTest {
         AgentSession session = InMemoryAgentSession.of("team_session_001");
 
         // 1. 定义子 Agent A: 天气专家 (ReAct)
+        // 合并 role 并采用新的 instruction 风格
         ReActAgent weatherAgent = ReActAgent.of(chatModel)
                 .name("weather_expert")
-                .description("负责查询各地的实时天气信息")
-                .systemPrompt(p->p.role("天气专家").instruction("负责提供天气数据"))
+                .role("天气专家")
+                .instruction("负责查询各地的实时天气信息，提供准确的天气数据")
                 .defaultToolAdd(new WeatherTools())
                 .maxSteps(4)
                 .build();
 
         // 2. 定义子 Agent B: 美食专家 (ReAct)
+        // 合并 role 并采用新的 instruction 风格
         ReActAgent foodAgent = ReActAgent.of(chatModel)
                 .name("food_expert")
-                .description("负责根据天气和地点推荐当地特色美食")
-                .systemPrompt(p->p.role("美食专家").instruction("负责根据天气和地点推荐当地特色美食。"))
+                .role("美食专家")
+                .instruction("负责根据天气和地点推荐当地特色美食")
                 .defaultToolAdd(new FoodTools())
                 .maxSteps(4)
                 .build();
@@ -48,7 +50,7 @@ public class TeamAgentResetAndHistoryTest {
         // 3. 定义 TeamAgent: 领队
         TeamAgent teamAgent = TeamAgent.of(chatModel)
                 .name("trip_leader")
-                .description("你是旅行领队，负责协调天气专家和美食专家为用户提供旅行建议")
+                .role("你是旅行领队，负责协调天气专家和美食专家为用户提供旅行建议")
                 .feedbackMode(true)
                 .maxTurns(maxTurns)
                 .agentAdd(weatherAgent)
@@ -58,6 +60,7 @@ public class TeamAgentResetAndHistoryTest {
 
         // --- 第一轮：用户介绍 ---
         System.out.println(">>> 轮次 1：建立身份记忆");
+        // 改为 prompt().session().call() 风格
         TeamResponse r1 = teamAgent.prompt("你好，我是 Noear，一名喜欢吃辣的开发者。").session(session).call();
 
         totalTurns += r1.getTrace().getTurnCount();
@@ -65,7 +68,7 @@ public class TeamAgentResetAndHistoryTest {
 
         // --- 第二轮：复杂协作任务（涉及子 Agent 间的重置） ---
         System.out.println("\n>>> 轮次 2：跨 Agent 协作（上海天气+美食）");
-        // 这会触发领队分配任务给 weather_expert，然后再给 food_expert
+        // 改为 prompt().session().call() 风格
         TeamResponse r2 = teamAgent.prompt("我现在在上海，帮我查查天气并推荐点吃的，记得考虑我的口味。")
                 .session(session)
                 .call();
@@ -79,6 +82,7 @@ public class TeamAgentResetAndHistoryTest {
 
         // --- 第三轮：验证子 Agent 的步数是否独立重置 ---
         System.out.println("\n>>> 轮次 3：再次协作（北京场景）");
+        // 改为 prompt().session().call() 风格
         TeamResponse r3 = teamAgent.prompt("我现在去北京了，再帮我查查那边的天气和美食。")
                 .session(session)
                 .call();
@@ -87,12 +91,12 @@ public class TeamAgentResetAndHistoryTest {
         System.out.println("Leader: " + r3.getContent());
 
         // 核心验证：如果子 Agent 的步数没重置，在 TeamAgent 多次分发任务后，子 Agent 的步数会累计超限
-        // 虽然 TeamAgent 自身不走 ReAct 步数，但它持有的子 ReActAgent 必须是 reset 状态
         Assertions.assertTrue(r3.getContent().contains("北京"), "城市切换失败");
         Assertions.assertTrue(r3.getContent().contains("烤鸭") || r3.getContent().contains("鸡丁"), "北京美食推荐缺失");
 
         // --- 第四轮：全局记忆考研 ---
         System.out.println("\n>>> 轮次 4：全局记忆考研");
+        // 改为 prompt().session().call() 风格
         TeamResponse r4 = teamAgent.prompt("你还记得我是谁吗？我之前在上海的时候天气怎么样？").session(session).call();
 
         totalTurns += r4.getTrace().getTurnCount();

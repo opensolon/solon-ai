@@ -11,7 +11,6 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 
 import java.io.ByteArrayOutputStream;
@@ -36,14 +35,16 @@ public class TeamAgentDemo {
         // Coder: 负责代码生成并拥有执行代码的能力
         Agent coder = ReActAgent.of(chatModel)
                 .name("coder")
-                .description("Java 程序员，擅长编写高质量代码并能通过工具验证运行结果。")
+                .role("Java 程序员，擅长编写高质量代码并能通过工具验证运行结果。")
+                .instruction("你负责根据需求编写 Java 代码，并在必要时使用 CodeExecutorTool 工具运行代码以确保其正确性。")
                 .defaultToolAdd(new CodeExecutorTool())
                 .build();
 
         // Writer: 负责逻辑解释与文档包装
         Agent writer = ReActAgent.of(chatModel)
                 .name("writer")
-                .description("技术作家，擅长将复杂的代码逻辑转化为通俗易懂的解释。")
+                .role("技术作家，擅长将复杂的代码逻辑转化为通俗易懂的解释。")
+                .instruction("你负责接收代码逻辑或运行结果，并将其整理成结构清晰、易于理解的技术文档或解释说明。")
                 .build();
 
         // 2. 构建团队智能体（默认采用 Supervisor 模式）
@@ -59,7 +60,7 @@ public class TeamAgentDemo {
 
         // 4. 执行任务：由团队协作完成
         String query = "写一个 Java 的单例模式并解释它";
-        String result = team.call(Prompt.of(query), session).getContent();
+        String result = team.prompt(Prompt.of(query)).session(session).call().getContent();
 
         System.out.println("--- 团队协作结果 ---");
         System.out.println(result);
