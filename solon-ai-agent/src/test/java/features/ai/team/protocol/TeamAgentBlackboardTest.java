@@ -45,13 +45,14 @@ public class TeamAgentBlackboardTest {
         Agent backend = ReActAgent.of(chatModel).name("Backend").defaultToolAdd(tools)
                 .feedbackMode(false)
                 .role("后端开发者")
-                .instruction("若看板无'api'，调用 write(k='api', v='ok')。" + LIMIT).build();
-
+                .instruction("检查看板。若无 key 为 'api' 的数据，必须调用 write(k='api', v='ok')。不要做多余的规划。" + LIMIT)
+                .build();
         // 前端：观察到有 api 才写 ui
         Agent frontend = ReActAgent.of(chatModel).name("Frontend").defaultToolAdd(tools)
                 .feedbackMode(false)
                 .role("前端开发者")
-                .instruction("若看板有'api'，调用 write(k='ui', v='done') 并回复 FINISH。" + LIMIT).build();
+                .instruction("若看板有'api'，调用 write(k='ui', v='done') 并回复 FINISH。" + LIMIT)
+                .build();
 
         TeamAgent team = TeamAgent.of(chatModel)
                 .protocol(TeamProtocols.BLACKBOARD)
@@ -87,7 +88,9 @@ public class TeamAgentBlackboardTest {
                 .role("资深专家")
                 .instruction("作为资深专家，负责对评分进行最终核准和修正（尤其是当分数为60时）。若看板'score'为'60'，将其覆盖写为'99'。" + LIMIT).build();
 
-        TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.BLACKBOARD)
+        TeamAgent team = TeamAgent.of(chatModel)
+                .protocol(TeamProtocols.BLACKBOARD)
+                .instruction("任务必须经过 Junior 评分和 Senior 核准两个阶段。只有当 Senior 完成核准后才能结束。") // 强制流程约束
                 .feedbackMode(false)
                 .agentAdd(junior, senior).maxTurns(4).build();
 

@@ -208,14 +208,6 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
-        // 显式终结符判定，防止 Supervisor 在任务收尾阶段胡乱路由
-        String lastContent = trace.getLastAgentContent();
-        if (lastContent != null && (lastContent.contains("FINISH]") || lastContent.contains("Final Answer:"))) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Blackboard Protocol: Terminal signal detected, ending task.");
-            }
-            return null;
-        }
         return super.resolveSupervisorRoute(context, trace, decision);
     }
 
@@ -253,7 +245,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
             BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
             if (state != null && !state.todos.isEmpty()) {
-                if (trace.getTurnCount() < 5) {
+                if (trace.getTurnCount() < trace.getOptions().getMaxTurns()) {
                     LOG.warn("Blackboard Protocol: Blocking finish! Pending todos exist: {}. Current turn: {}",
                             state.todos, trace.getTurnCount());
                     return false;
