@@ -146,7 +146,7 @@ public class ReasonTask implements NamedTaskComponent {
         final String thoughtContent = extractThought(clearContent);
 
         trace.getWorkingMemory().addMessage(ChatMessage.ofAssistant(rawContent));
-        trace.setLastResult(thoughtContent);
+        trace.setLastResult(clearContent);
 
         // 触发思考事件（仅在存在有效思考文本时通知）
         if(Assert.isNotEmpty(thoughtContent)) {
