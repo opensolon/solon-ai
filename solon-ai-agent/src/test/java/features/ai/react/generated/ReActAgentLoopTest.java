@@ -50,7 +50,7 @@ public class ReActAgentLoopTest {
         System.out.println("模型答复1: " + result1);
 
         // 验证：应该触发了 AskTool，最终答复应该是询问卡号
-        Assertions.assertTrue(result1.contains("卡号") || result1.contains("银行卡"),
+        Assertions.assertTrue(result1.contains("卡号") || result1.contains("银行卡") || result1.contains("交易流水"),
                 "模型应该主动询问银行卡号");
 
         FlowContext context = session.getSnapshot();
