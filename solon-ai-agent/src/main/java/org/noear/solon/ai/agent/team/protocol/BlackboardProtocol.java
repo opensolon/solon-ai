@@ -78,8 +78,13 @@ public class BlackboardProtocol extends HierarchicalProtocol {
                             data.set(k, v);
                         }
                     });
-                } else {
-                    data.set("result_" + agentName, node.getString());
+                } else if (node.isValue()){
+                    String str = node.getString();
+                    if(str.startsWith("{")) {
+                        merge(agentName, ONode.ofJson(str));
+                    } else {
+                        data.set("result_" + agentName, str);
+                    }
                 }
             } catch (Exception e) {
                 LOG.warn("Blackboard Protocol: Merge failed for [{}], payload: {}", agentName, rawInput);
@@ -113,10 +118,9 @@ public class BlackboardProtocol extends HierarchicalProtocol {
             String normalized = rawTodo.replaceAll("[,;，；\n\r]+", ";");
             Arrays.stream(normalized.split(";"))
                     .map(String::trim)
-                    .map(t -> t.replaceAll("^(?i)([\\d\\.\\*\\-\\s、]+)", "")) // 清洗序号
-                    .map(String::trim)
-                    .filter(t -> t.length() > 1)
-                    .forEach(todos::add);
+                    .forEach(t -> {
+                        todos.add(t);
+                    });
         }
 
         @Override
