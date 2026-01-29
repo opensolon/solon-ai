@@ -322,6 +322,14 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
+        /**
+         * @deprecated 3.9.1 {@link #role(String)}
+         * */
+        @Deprecated
+        public Builder description(String val) {
+            return role(val);
+        }
+
         public Builder profile(AgentProfile profile) {
             config.setProfile(profile);
             return this;
