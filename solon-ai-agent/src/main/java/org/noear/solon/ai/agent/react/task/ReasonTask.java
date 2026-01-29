@@ -275,6 +275,13 @@ public class ReasonTask implements NamedTaskComponent {
 
         int markerIndex = answer.indexOf(marker);
         if (markerIndex < 0) {
+            /**
+             * 示例："\n\nThought: 用户想要转账500元给老张，但是缺少必需的收款人银行卡号信息，需要向用户询问。\nAction: 我需要向用户询问老张的银行卡号，因为这是执行转账操作的必需参数。"
+             * */
+            markerIndex = answer.indexOf("Action:");
+        }
+
+        if (markerIndex < 0) {
             return "";
         }
 
