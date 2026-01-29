@@ -13,7 +13,15 @@
 ### v3.9.1
 
 * 新增 solon-ai-dialect-claude 插件
+* 新增 solon-ai-dialect-openai OpenaiResponses 方言适配
+* 添加 solon-ai-agent feedbackMode 模式（默认为 false）
 * 优化 solon-ai-agent ReActAgent 添加主动挂机的能力（处理无法完成的任务时，可避免幻觉轮询）
+* 优化 solon-ai-agent description + systemPrompt 标为弃用，改由 role + instruction 替代（简化了）
+* 优化 solon-ai-agent A2AProtocol 协议
+* 调整 solon-ai-agent 取消 title（减少迷惑）
+* 调整 solon-ai-agent enablePlanning 更名为 planningMode （前者标为弃用）
+* 修复 solon-ai-agent ReActAgent 新话题开始时， ReActTrace 没有重置干净的问题
+* 修复 solon-ai-agent SimpleAgent 没有接入协作协议 prepareAgentPrompt 勾子
 * qdrant 升为 1.16.2
 
 ### v3.9.0
