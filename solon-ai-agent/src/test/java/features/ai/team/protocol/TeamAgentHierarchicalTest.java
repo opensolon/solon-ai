@@ -49,7 +49,7 @@ public class TeamAgentHierarchicalTest {
     public void testSupervisorChainDecision() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        Agent searcher = ReActAgent.of(chatModel).name("searcher").role("数据提供方").instruction("提供随机数字").build();
+        Agent searcher = ReActAgent.of(chatModel).name("searcher").role("数据提供方").instruction("你只负责提供一个随机数字。严禁将数字翻倍。").build();
         Agent mapper = ReActAgent.of(chatModel).name("mapper").role("逻辑运算方").instruction("将数字翻倍").build();
 
         TeamAgent team = TeamAgent.of(chatModel).agentAdd(searcher, mapper).maxTurns(5).build();
@@ -67,48 +67,8 @@ public class TeamAgentHierarchicalTest {
         Assertions.assertTrue(workers.size() >= 2, "主管应先后指派 searcher 和 mapper");
     }
 
-    // 3. 生产级博弈：验证 [开发 -> 审计 -> 打回重写] 的闭环
-    @Test
-    @DisplayName("博弈测试：代码审计与打回流")
-    public void testFinalAnswerAndGame() throws Throwable {
-        ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 开发者：第一次故意犯错（写 secret），审计后改正
-        Agent coder = ReActAgent.of(chatModel).name("Coder")
-                .role("开发工程师")
-                .instruction("写一个登录函数。初次编写请硬编码 'key=123'；若被审计打回，则改为从 env 读取。" + LIMIT)
-                .build();
-
-        // 审计员：发现硬编码就打回
-        Agent reviewer = ReActAgent.of(chatModel).name("Reviewer")
-                .role("代码审计员")
-                .instruction("检查硬编码。发现 '123' 则输出 'REJECT'；否则输出 'PASS'。" + LIMIT)
-                .build();
-
-        // 主管团队：使用 role 和 instruction 替代 systemPrompt
-        TeamAgent team = TeamAgent.of(chatModel).name("DevTeam")
-                .agentAdd(coder, reviewer).maxTurns(10)
-                .role("项目主管")
-                .instruction("协作流程：Coder -> Reviewer。若 Reviewer 返回 REJECT，必须再次指派 Coder 重写。\n完成时，只需要输出 Coder 的最终结果")
-                .build();
-
-        AgentSession session = InMemoryAgentSession.of("s3");
-        // 改为链式调用
-        String result = team.prompt(Prompt.of("实现安全登录")).session(session).call().getContent();
-
-        TeamTrace trace = team.getTrace(session);
-        long coderTurns = trace.getRecords().stream().filter(r -> "Coder".equals(r.getSource())).count();
-
-        System.out.println("Coder 执行次数: " + coderTurns);
-        System.out.println("最终结果: " + result);
-
-        // 断言 1：发生了打回，Coder 至少执行了 2 次
-        Assertions.assertTrue(coderTurns >= 2, "主管应在审计失败后重新指派开发");
-        // 断言 2：最终结果已修复（不含硬编码 123）
-        Assertions.assertFalse(result.contains("123"), "最终产物仍包含敏感信息");
-    }
-
-    // 4. 自愈/补位：验证主管在专家“拒载”时的调度
+    // 3. 自愈/补位：验证主管在专家“拒载”时的调度
     @Test
     public void testSupervisorSelfHealing() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
@@ -131,5 +91,75 @@ public class TeamAgentHierarchicalTest {
 
         Assertions.assertTrue(usedBoth, "主管应调度战略家思考并由程序员落地");
         Assertions.assertTrue(result.toLowerCase().contains("sort"));
+    }
+
+    // 4. 消息中继：验证主管在 HIERARCHICAL 协议下跨 Agent 传递上下文的能力
+    @Test
+    @DisplayName("层级协议：验证主管的消息中继能力")
+    public void testSupervisorMessageRelay() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 专家 A：生成随机密钥
+        Agent secretGenerator = ReActAgent.of(chatModel).name("Generator")
+                .role("密钥生成员")
+                .instruction("随机生成一个 4 位数字作为临时密钥，并明确告知主管。" + LIMIT)
+                .build();
+
+        // 专家 B：对密钥进行处理
+        Agent formatter = ReActAgent.of(chatModel).name("Formatter")
+                .role("格式化工具")
+                .instruction("接收主管给出的数字密钥，将其用方括号包围（如 [1234]）。" + LIMIT)
+                .build();
+
+        // 使用默认的 HIERARCHICAL 协议
+        TeamAgent team = TeamAgent.of(chatModel).name("RelayTeam")
+                .agentAdd(secretGenerator, formatter)
+                .role("协调员")
+                .instruction("流程：先让 Generator 生成密钥，然后必须将该密钥告知 Formatter 进行处理。")
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("s5");
+        String result = team.prompt(Prompt.of("生成并格式化一个密钥")).session(session).call().getContent();
+
+        TeamTrace trace = team.getTrace(session);
+        System.out.println("中继路径: " + trace.getFormattedHistory());
+        System.out.println("最终结果: " + result);
+
+        // 验证 1：两个专家都参与了
+        boolean usedBoth = trace.getRecords().stream().anyMatch(r -> "Generator".equals(r.getSource()))
+                && trace.getRecords().stream().anyMatch(r -> "Formatter".equals(r.getSource()));
+        Assertions.assertTrue(usedBoth, "主管应完成消息中继指派");
+
+        // 验证 2：结果符合 Formatter 的处理逻辑（证明主管成功传递了 A 的输出给 B）
+        Assertions.assertTrue(result.matches(".*\\[\\d{4}\\].*"), "结果应包含方括号包围的 4 位数字");
+    }
+
+    // 5. 边界测试：验证最大迭代轮次拦截，防止死循环
+    @Test
+    @DisplayName("边界测试：验证 maxTurns 强制拦截")
+    public void testMaxTurnsLimit() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 两个互相推诿的 Agent
+        Agent a = ReActAgent.of(chatModel).name("AgentA")
+                .role("推诿者")
+                .instruction("无论主管说什么，都回复：'我不确定，请询问 AgentB'。").build();
+        Agent b = ReActAgent.of(chatModel).name("AgentB")
+                .role("推诿者")
+                .instruction("无论主管说什么，都回复：'我不确定，请询问 AgentA'。").build();
+
+        // 限制 maxTurns 为 3 轮
+        int maxTurns = 3;
+        TeamAgent team = TeamAgent.of(chatModel).agentAdd(a, b).maxTurns(maxTurns).build();
+        AgentSession session = InMemoryAgentSession.of("s6");
+
+        // 执行任务
+        team.prompt(Prompt.of("谁是世界上最聪明的人？")).session(session).call();
+
+        TeamTrace trace = team.getTrace(session);
+        System.out.println("迭代总轮次: " + trace.getTurnCount());
+
+        // 验证：实际轮次不能超过 maxTurns
+        Assertions.assertTrue(trace.getTurnCount() <= maxTurns, "TeamAgent 必须在达到 maxTurns 时强制停止");
     }
 }

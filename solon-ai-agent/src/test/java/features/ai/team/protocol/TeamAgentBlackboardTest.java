@@ -175,4 +175,46 @@ public class TeamAgentBlackboardTest {
         TeamTrace trace = team.getTrace(session);
         Assertions.assertTrue(trace.getRecordCount() <= 4, "框架应在 maxTurns 到达时强制停止博弈");
     }
+
+    // 5. 生产级博弈：验证 [开发 -> 审计 -> 打回重写] 的闭环
+    @Test
+    @DisplayName("博弈测试：代码审计与打回流")
+    public void testFinalAnswerAndGame() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 开发者：第一次故意犯错（写 secret），审计后改正
+        Agent coder = ReActAgent.of(chatModel).name("Coder")
+                .role("开发工程师")
+                .instruction("写一个登录函数。初次编写请硬编码 'key=123'；若被审计打回，则改为从 env 读取。" + LIMIT)
+                .build();
+
+        // 审计员：发现硬编码就打回
+        Agent reviewer = ReActAgent.of(chatModel).name("Reviewer")
+                .role("代码审计员")
+                .instruction("检查硬编码。发现 '123' 则输出 'REJECT'；否则输出 'PASS'。" + LIMIT)
+                .build();
+
+        // 主管团队：使用 role 和 instruction 替代 systemPrompt
+        TeamAgent team = TeamAgent.of(chatModel).name("DevTeam")
+                .protocol(TeamProtocols.BLACKBOARD)
+                .agentAdd(coder, reviewer).maxTurns(10)
+                .role("项目主管")
+                .instruction("协作流程：Coder -> Reviewer。若 Reviewer 返回 REJECT，必须再次指派 Coder 重写。\n完成时，只需要输出 Coder 的最终结果")
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("s3");
+        // 改为链式调用
+        String result = team.prompt(Prompt.of("实现安全登录")).session(session).call().getContent();
+
+        TeamTrace trace = team.getTrace(session);
+        long coderTurns = trace.getRecords().stream().filter(r -> "Coder".equals(r.getSource())).count();
+
+        System.out.println("Coder 执行次数: " + coderTurns);
+        System.out.println("最终结果: " + result);
+
+        // 断言 1：发生了打回，Coder 至少执行了 2 次
+        Assertions.assertTrue(coderTurns >= 2, "主管应在审计失败后重新指派开发");
+        // 断言 2：最终结果已修复（不含硬编码 123）
+        Assertions.assertFalse(result.contains("123"), "最终产物仍包含敏感信息");
+    }
 }
