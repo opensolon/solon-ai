@@ -340,6 +340,14 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
+        public Builder instruction(String instruction){
+            return systemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
+        }
+
+        public Builder instruction(Function<TeamTrace, String> instruction){
+            return systemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
+        }
+
         public Builder systemPrompt(TeamSystemPrompt promptProvider) {
             config.setSystemPrompt(promptProvider);
             return this;

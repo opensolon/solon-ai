@@ -112,11 +112,6 @@ public class SimpleAgentConfig {
 
     protected void setSystemPrompt(SimpleSystemPrompt systemPrompt) {
         this.systemPrompt = systemPrompt;
-
-        String role = systemPrompt.getRole();
-        if (role != null && description == null) {
-            description = role;
-        }
     }
 
     protected void setChatModel(ChatModel chatModel) {

@@ -87,11 +87,6 @@ public class TeamAgentConfig implements NonSerializable {
     protected void setOutputKey(String outputKey) { this.outputKey = outputKey; }
     protected void setSystemPrompt(TeamSystemPrompt promptProvider) {
         this.systemPrompt = promptProvider;
-
-        String role = systemPrompt.getRole();
-        if (role != null && description == null) {
-            description = role;
-        }
     }
 
     /**

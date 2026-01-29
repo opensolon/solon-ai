@@ -342,6 +342,14 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
+        public Builder instruction(String instruction) {
+            return systemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
+        }
+
+        public Builder instruction(Function<ReActTrace, String> instruction) {
+            return systemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
+        }
+
         public Builder systemPrompt(ReActSystemPrompt val) {
             config.setSystemPrompt(val);
             return this;
@@ -517,7 +525,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
          */
         @Deprecated
         public Builder enablePlanning(boolean val) {
-           return planningMode(val);
+            return planningMode(val);
         }
 
         /**

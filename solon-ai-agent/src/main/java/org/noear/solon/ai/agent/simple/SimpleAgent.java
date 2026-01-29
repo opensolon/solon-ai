@@ -42,6 +42,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Type;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 简单智能体实现
@@ -357,6 +358,14 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         public Builder profile(AgentProfile profile) {
             config.setProfile(profile);
             return this;
+        }
+
+        public Builder instruction(String instruction){
+            return systemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
+        }
+
+        public Builder instruction(Function<SimpleTrace, String> instruction) {
+            return systemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
         }
 
         public Builder systemPrompt(SimpleSystemPrompt systemPrompt) {

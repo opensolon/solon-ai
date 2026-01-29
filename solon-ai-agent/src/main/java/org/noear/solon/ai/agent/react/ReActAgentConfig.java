@@ -82,11 +82,6 @@ public class ReActAgentConfig {
 
     protected void setSystemPrompt(ReActSystemPrompt val) {
         this.systemPrompt = val;
-
-        String role = systemPrompt.getRole();
-        if (role != null && description == null) {
-            description = role;
-        }
     }
 
     protected void setOutputKey(String val) { this.outputKey = val; }
