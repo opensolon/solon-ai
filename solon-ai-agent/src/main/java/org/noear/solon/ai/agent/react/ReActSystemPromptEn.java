@@ -97,8 +97,8 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             return roleDesc;
         }
 
-        if (trace.getConfig().getDescription() != null) {
-            return trace.getConfig().getDescription();
+        if (trace.getConfig().getRole() != null) {
+            return trace.getConfig().getRole();
         }
 
         return "Professional Task Solver";

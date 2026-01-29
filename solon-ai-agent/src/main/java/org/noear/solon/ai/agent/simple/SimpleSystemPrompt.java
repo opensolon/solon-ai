@@ -74,8 +74,8 @@ public class SimpleSystemPrompt {
             return roleDesc;
         }
 
-        if (trace.getConfig().getDescription() != null) {
-            return trace.getConfig().getDescription();
+        if (trace.getConfig().getRole() != null) {
+            return trace.getConfig().getRole();
         }
 
         return null;

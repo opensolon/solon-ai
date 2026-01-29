@@ -94,8 +94,8 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
             return roleDesc;
         }
 
-        if (trace.getConfig().getDescription() != null) {
-            return trace.getConfig().getDescription();
+        if (trace.getConfig().getRole() != null) {
+            return trace.getConfig().getRole();
         }
 
         return "专业的任务解决助手";

@@ -33,8 +33,8 @@ public class AgentUtil {
 
         node.set("name", agent.name());
 
-        if (Assert.isNotEmpty(agent.description())) {
-            node.set("description", agent.descriptionFor(context));
+        if (Assert.isNotEmpty(agent.role())) {
+            node.set("role", agent.roleFor(context));
         }
 
         AgentProfile profile = agent.profile();

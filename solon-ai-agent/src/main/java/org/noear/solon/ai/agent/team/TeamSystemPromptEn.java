@@ -71,8 +71,8 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
             return roleDesc;
         }
 
-        if (trace.getConfig().getDescription() != null) {
-            return trace.getConfig().getDescription();
+        if (trace.getConfig().getRole() != null) {
+            return trace.getConfig().getRole();
         }
 
         return "Team Supervisor, responsible for coordinating agents to complete the task";

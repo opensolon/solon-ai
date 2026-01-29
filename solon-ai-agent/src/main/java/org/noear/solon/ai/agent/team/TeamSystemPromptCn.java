@@ -76,8 +76,8 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
             return roleDesc;
         }
 
-        if (trace.getConfig().getDescription() != null) {
-            return trace.getConfig().getDescription();
+        if (trace.getConfig().getRole() != null) {
+            return trace.getConfig().getRole();
         }
 
         return "团队协作主管 (Supervisor)，负责协调成员完成任务";

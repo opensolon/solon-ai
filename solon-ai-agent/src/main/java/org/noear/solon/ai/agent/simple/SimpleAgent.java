@@ -71,12 +71,12 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     }
 
     @Override
-    public String description() {
-        if (config.getDescription() == null) {
+    public String role() {
+        if (config.getRole() == null) {
             return config.getName();
         }
 
-        return config.getDescription();
+        return config.getRole();
     }
 
     @Override
@@ -340,8 +340,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return this;
         }
 
-        public Builder description(String description) {
-            config.setDescription(description);
+        public Builder role(String role) {
+            config.setRole(role);
             return this;
         }
 

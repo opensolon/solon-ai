@@ -128,12 +128,12 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     }
 
     @Override
-    public String description() {
-        if (config.getDescription() == null) {
+    public String role() {
+        if (config.getRole() == null) {
             return config.getName();
         }
 
-        return config.getDescription();
+        return config.getRole();
     }
 
     @Override
@@ -312,13 +312,13 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        public Builder name(String val) {
-            config.setName(val);
+        public Builder name(String name) {
+            config.setName(name);
             return this;
         }
 
-        public Builder description(String val) {
-            config.setDescription(val);
+        public Builder role(String role) {
+            config.setRole(role);
             return this;
         }
 

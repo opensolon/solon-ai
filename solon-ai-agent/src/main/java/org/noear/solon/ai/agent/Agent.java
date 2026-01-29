@@ -54,24 +54,24 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     /**
      * 智能体职责描述（用于语义路由与任务分发参考）
      */
-    String description();
+    String role();
+
+    /**
+     * 生成动态职责描述（支持模板渲染）
+     */
+    default String roleFor(FlowContext context) {
+        if (context == null) {
+            return role();
+        }
+
+        return SnelUtil.render(role(), context.vars());
+    }
 
     /**
      * 智能体档案（能力画像与交互契约）
      */
     default AgentProfile profile() {
         return null;
-    }
-
-    /**
-     * 生成动态职责描述（支持模板渲染）
-     */
-    default String descriptionFor(FlowContext context) {
-        if (context == null) {
-            return description();
-        }
-
-        return SnelUtil.render(description(), context.vars());
     }
 
     /**

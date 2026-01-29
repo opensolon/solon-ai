@@ -44,7 +44,7 @@ public class SimpleAgentConfig {
     /**
      * 功能描述
      */
-    private String description;
+    private String role;
     /**
      * 智能体画像（能力、模态支持等）
      */
@@ -94,8 +94,8 @@ public class SimpleAgentConfig {
         this.name = name;
     }
 
-    protected void setDescription(String description) {
-        this.description = description;
+    protected void setRole(String role) {
+        this.role = role;
     }
 
     protected void setProfile(AgentProfile profile) {
@@ -146,8 +146,8 @@ public class SimpleAgentConfig {
         return traceKey;
     }
 
-    public String getDescription() {
-        return description;
+    public String getRole() {
+        return role;
     }
 
     public AgentProfile getProfile() {

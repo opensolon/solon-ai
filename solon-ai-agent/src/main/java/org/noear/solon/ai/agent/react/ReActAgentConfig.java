@@ -39,7 +39,7 @@ public class ReActAgentConfig {
     /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
     private volatile String traceKey;
     /** 智能体职责描述（用于模型识别角色任务） */
-    private String description;
+    private String role;
     /** 智能体画像 */
     private AgentProfile profile;
     /** 执行推理的基础模型 */
@@ -68,7 +68,7 @@ public class ReActAgentConfig {
 
     protected void setName(String name) { this.name = name; }
 
-    protected void setDescription(String description) { this.description = description; }
+    protected void setRole(String role) { this.role = role; }
 
     protected void setProfile(AgentProfile profile) { this.profile = profile; }
 
@@ -95,7 +95,7 @@ public class ReActAgentConfig {
         return traceKey;
     }
 
-    public String getDescription() { return description; }
+    public String getRole() { return role; }
 
     public AgentProfile getProfile() {
         if (profile == null) profile = new AgentProfile();
