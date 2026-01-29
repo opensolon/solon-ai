@@ -338,11 +338,13 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return systemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
         }
 
+        @Deprecated
         public Builder systemPrompt(TeamSystemPrompt promptProvider) {
             config.setSystemPrompt(promptProvider);
             return this;
         }
 
+        @Deprecated
         public Builder systemPrompt(Consumer<TeamSystemPrompt.Builder> promptBuilder) {
             TeamSystemPrompt.Builder builder = TeamSystemPrompt.builder();
             promptBuilder.accept(builder);

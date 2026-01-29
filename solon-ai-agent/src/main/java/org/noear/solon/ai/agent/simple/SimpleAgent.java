@@ -358,11 +358,13 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return systemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
         }
 
+        @Deprecated
         public Builder systemPrompt(SimpleSystemPrompt systemPrompt) {
             config.setSystemPrompt(systemPrompt);
             return this;
         }
 
+        @Deprecated
         public Builder systemPrompt(Consumer<SimpleSystemPrompt.Builder> promptBuilder) {
             SimpleSystemPrompt.Builder builder = SimpleSystemPrompt.builder();
             promptBuilder.accept(builder);
