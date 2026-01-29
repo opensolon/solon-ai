@@ -128,11 +128,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     }
 
     @Override
-    public String title() {
-        return config.getTitle();
-    }
-
-    @Override
     public String description() {
         if (config.getDescription() == null) {
             return config.getName();
@@ -319,11 +314,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         public Builder name(String val) {
             config.setName(val);
-            return this;
-        }
-
-        public Builder title(String val) {
-            config.setTitle(val);
             return this;
         }
 

@@ -71,11 +71,6 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     }
 
     @Override
-    public String title() {
-        return config.getTitle();
-    }
-
-    @Override
     public String description() {
         if (config.getDescription() == null) {
             return config.getName();
@@ -342,11 +337,6 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
         public Builder name(String name) {
             config.setName(name);
-            return this;
-        }
-
-        public Builder title(String title) {
-            config.setTitle(title);
             return this;
         }
 

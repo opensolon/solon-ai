@@ -32,8 +32,8 @@ public class TeamAgentPersistenceHitlTest {
         // 1. 构建团队并注入 HITL 拦截器
         TeamAgent teamAgent = TeamAgent.of(chatModel)
                 .name(teamId)
-                .agentAdd(ReActAgent.of(chatModel).name("worker").title("初稿撰写").build())
-                .agentAdd(ReActAgent.of(chatModel).name("approver").title("修辞优化").build())
+                .agentAdd(ReActAgent.of(chatModel).name("worker").description("初稿撰写").build())
+                .agentAdd(ReActAgent.of(chatModel).name("approver").description("修辞优化").build())
                 .defaultInterceptorAdd(new TeamInterceptor() {
                     @Override
                     public void onNodeStart(FlowContext ctx, Node n) {

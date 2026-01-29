@@ -109,11 +109,6 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
     }
 
     @Override
-    public String title() {
-        return config.getTitle();
-    }
-
-    @Override
     public String description() {
         if (config.getDescription() == null) {
             return config.getName();
@@ -317,11 +312,6 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
         public Builder name(String name) {
             config.setName(name);
-            return this;
-        }
-
-        public Builder title(String title) {
-            config.setTitle(title);
             return this;
         }
 

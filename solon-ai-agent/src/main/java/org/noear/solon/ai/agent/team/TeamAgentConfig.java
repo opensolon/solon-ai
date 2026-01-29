@@ -45,8 +45,6 @@ public class TeamAgentConfig implements NonSerializable {
     private String name = "team_agent";
     /** 状态跟踪键（用于隔离 Session 中的轨迹数据） */
     private volatile String traceKey;
-    /** 显示标题 */
-    private String title;
     /** 职能描述（供上层团队调度识别） */
     private String description;
     /** 档案信息（能力与边界定义） */
@@ -79,7 +77,6 @@ public class TeamAgentConfig implements NonSerializable {
     // --- 配置注入 (Protected) ---
 
     protected void setName(String name) { this.name = name; }
-    protected void setTitle(String title) { this.title = title; }
     protected void setDescription(String description) { this.description = description; }
     protected void setProfile(AgentProfile profile) { this.profile = profile; }
     protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) { this.graphAdjuster = graphAdjuster; }
@@ -130,7 +127,6 @@ public class TeamAgentConfig implements NonSerializable {
         return traceKey;
     }
 
-    public String getTitle() { return title; }
     public String getDescription() { return description; }
 
     public AgentProfile getProfile() {

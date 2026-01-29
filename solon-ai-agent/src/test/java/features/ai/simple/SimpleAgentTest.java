@@ -29,7 +29,7 @@ public class SimpleAgentTest {
         // 2. 构建 SimpleAgent
         SimpleAgent resumeAgent = SimpleAgent.of(chatModel)
                 .name("ResumeExtractor")
-                .title("简历信息提取器")
+                .description("简历信息提取器")
                 // 配置系统提示词模板
                 .systemPrompt(p -> p
                         .role("你是一个专业的人事助理")

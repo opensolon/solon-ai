@@ -42,10 +42,6 @@ public class SimpleAgentConfig {
     /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
     private volatile String traceKey;
     /**
-     * 显示标题
-     */
-    private String title;
-    /**
      * 功能描述
      */
     private String description;
@@ -98,10 +94,6 @@ public class SimpleAgentConfig {
         this.name = name;
     }
 
-    protected void setTitle(String title) {
-        this.title = title;
-    }
-
     protected void setDescription(String description) {
         this.description = description;
     }
@@ -152,10 +144,6 @@ public class SimpleAgentConfig {
             traceKey = "__" + this.name;
         }
         return traceKey;
-    }
-
-    public String getTitle() {
-        return title;
     }
 
     public String getDescription() {
