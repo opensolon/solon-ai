@@ -71,18 +71,19 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         public void absorb(String agentName, String content, TeamProtocolBase protocol) {
             if (Utils.isEmpty(content)) return;
 
+            // 1. 提取结构化数据存入 _results (用于逻辑计算)
             ONode report = protocol.sniffJson(content);
             if (report.isObject() && !report.isEmpty()) {
-                report.remove("agent");
-                report.remove("role");
-                data.setAll(report.getObjectUnsafe());
-            } else {
-                String memo = content.trim().replace("\n", " ");
-                if (memo.length() > MAX_MEMO_LEN) {
-                    memo = memo.substring(0, MAX_MEMO_LEN) + "...";
-                }
-                data.getOrNew("_reports").set(agentName, memo);
+                data.getOrNew("_results").set(agentName, report);
             }
+
+            // 2. 【核心修改】：提取一段干净的文本存入 _reports (用于 Shadow Context 和汇总)
+            // 移除 content 中的 JSON 块，保留原始话术
+            String cleanContent = content.replaceAll("\\{.*\\}", "").trim();
+            if (cleanContent.length() > MAX_MEMO_LEN) {
+                cleanContent = cleanContent.substring(0, MAX_MEMO_LEN) + "...";
+            }
+            data.getOrNew("_reports").set(agentName, cleanContent);
         }
 
         @Override
@@ -146,6 +147,22 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         HierarchicalState state = (HierarchicalState) trace.getProtocolContext().get(KEY_HIERARCHY_STATE);
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         StringBuilder sb = new StringBuilder();
+
+        // 逻辑：专家不看全局看板，但能看到“上一个同事干了什么”，解决断层
+        String lastAgent = trace.getLastAgentName();
+        if (state != null && Utils.isNotEmpty(lastAgent)) {
+            ONode dashboard = ONode.ofJson(state.toString());
+            if (dashboard.get("_reports").hasKey(lastAgent)) {
+                String lastSummary = dashboard.get("_reports").get(lastAgent).getString();
+
+                sb.append(isZh ? "\n\n### 前置背景 (Pre-Context)\n" : "\n\n### Pre-Context\n");
+                sb.append(isZh ? "- 来自 " : "- From ").append(lastAgent).append(": ")
+                        .append("**").append(lastSummary).append("**\n");
+
+                sb.append(isZh ? "> 请务必基于上述背景数据进行处理，不要修改原始关键信息。\n"
+                        : "> Please process based on the data above without altering core information.\n");
+            }
+        }
 
         // 注入 A：透传主管的决策分析逻辑
         // 在 SupervisorTask 分发决策时，应将原始决策文本存入 active_instruction
@@ -307,6 +324,14 @@ public class HierarchicalProtocol extends TeamProtocolBase {
             }
         } else {
             sb.append("```json\n").append(dashboard.toJson()).append("\n```\n");
+        }
+
+        if (isZh) {
+            sb.append("\n### 派发指令准则 (Standard Operating Procedure):\n");
+            sb.append("> 1. **显式数据传递**：指派专家时，必须复述看板 `_results` 中的核心参数。\n");
+        } else {
+            sb.append("\n### Directive Standards (SOP):\n");
+            sb.append("> 1. **Explicit Data Transfer**: Always restate core parameters from `_results`.\n");
         }
 
         if (isZh) {

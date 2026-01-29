@@ -13,6 +13,8 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -131,7 +133,9 @@ public class TeamAgentHierarchicalTest {
         Assertions.assertTrue(usedBoth, "主管应完成消息中继指派");
 
         // 验证 2：结果符合 Formatter 的处理逻辑（证明主管成功传递了 A 的输出给 B）
-        Assertions.assertTrue(result.matches(".*\\[\\d{4}\\].*"), "结果应包含方括号包围的 4 位数字");
+        Pattern p = Pattern.compile("\\[\\d{4}\\]");
+        Matcher m = p.matcher(result);
+        Assertions.assertTrue(m.find(), "结果中应包含方括号包围的数字，实际结果为: " + result);
     }
 
     // 5. 边界测试：验证最大迭代轮次拦截，防止死循环
