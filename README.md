@@ -8,7 +8,7 @@ Solon-AI
     <br/>
     <strong>Restraint, efficiency and openness</strong>
     <br/>
-    <strong>It is the same type of framework as LangChain and LangGraph</strong>
+    <strong>It is the same type of development framework as LangChain and LangGraph</strong>
 </p>
 <p align="center">
 	<a href="https://solon.noear.org/article/learn-solon-ai">https://solon.noear.org/article/learn-solon-ai</a>

@@ -8,7 +8,7 @@ Solon-AI
     <br/>
     <strong>克制、高效、开放</strong>
     <br/>
-    <strong>与 LangChain、LangGraph 是同类型的框架</strong>
+    <strong>与 LangChain、LangGraph 是同类型的开发框架</strong>
 </p>
 <p align="center">
 	<a href="https://solon.noear.org/article/learn-solon-ai">https://solon.noear.org/article/learn-solon-ai</a>
