@@ -16,7 +16,6 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.lang.Preview;
 import java.util.Locale;
 import java.util.function.Function;
@@ -53,12 +52,8 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
 
     @Override
     public String getSystemPrompt(TeamTrace trace) {
-        String role = getRole();
-
-        if (role == null) {
-            role = "You are the Team Supervisor, responsible for coordinating agents to complete the task";
-        }
-
+        String role = getRole(trace);
+        String instruction = getInstruction(trace);
 
         StringBuilder sb = new StringBuilder();
 
@@ -66,20 +61,26 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
         sb.append("## Role Definition\n").append(role).append("\n\n");
 
         // 2. Comprehensive Instructions
-        sb.append(getInstruction(trace));
+        sb.append(instruction);
 
         return sb.toString();
     }
 
-    @Override
-    public String getRole() {
-        return roleDesc;
+    public String getRole(TeamTrace trace) {
+        if (roleDesc != null) {
+            return roleDesc;
+        }
+
+        if (trace.getConfig().getDescription() != null) {
+            return trace.getConfig().getDescription();
+        }
+
+        return "You are the Team Supervisor, responsible for coordinating agents to complete the task";
     }
 
     /**
      * 构建核心指令集：采用 Markdown 分层结构提升 LLM 遵循度
      */
-    @Override
     public String getInstruction(TeamTrace trace) {
         TeamAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();

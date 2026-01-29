@@ -342,6 +342,18 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
+        public Builder systemPrompt(ReActSystemPrompt val) {
+            config.setSystemPrompt(val);
+            return this;
+        }
+
+        public Builder systemPrompt(Consumer<ReActSystemPrompt.Builder> promptBuilder) {
+            ReActSystemPrompt.Builder builder = ReActSystemPrompt.builder();
+            promptBuilder.accept(builder);
+            config.setSystemPrompt(builder.build());
+            return this;
+        }
+
         /**
          * 微调推理图结构
          */
@@ -355,18 +367,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
          */
         public Builder finishMarker(String val) {
             config.setFinishMarker(val);
-            return this;
-        }
-
-        public Builder systemPrompt(ReActSystemPrompt val) {
-            config.setSystemPrompt(val);
-            return this;
-        }
-
-        public Builder systemPrompt(Consumer<ReActSystemPrompt.Builder> promptBuilder) {
-            ReActSystemPrompt.Builder builder = ReActSystemPrompt.builder();
-            promptBuilder.accept(builder);
-            config.setSystemPrompt(builder.build());
             return this;
         }
 

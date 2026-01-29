@@ -36,24 +36,13 @@ public interface ReActSystemPrompt {
     /**
      * 获取语言环境 (默认中文)
      */
-    default Locale getLocale() {
-        return Locale.CHINESE;
-    }
+    Locale getLocale();
 
     /**
      * 获取原始提示词模板
      */
     String getSystemPrompt(ReActTrace trace);
 
-    /**
-     * 获取角色设定 (Personality)
-     */
-    String getRole();
-
-    /**
-     * 获取执行指令 (Rules & Constraints)
-     */
-    String getInstruction(ReActTrace trace);
 
     // --- Builder Pattern ---
 
@@ -68,18 +57,26 @@ public interface ReActSystemPrompt {
      * 构建器接口
      */
     interface Builder {
-        /** 设置静态角色 */
+        /**
+         * 设置静态角色
+         */
         Builder role(String role);
 
-        /** 设置静态指令 */
+        /**
+         * 设置静态指令
+         */
         default Builder instruction(String instruction) {
             return instruction(trace -> instruction);
         }
 
-        /** 设置动态指令逻辑 (如：接近最大步数时提示收敛) */
+        /**
+         * 设置动态指令逻辑 (如：接近最大步数时提示收敛)
+         */
         Builder instruction(Function<ReActTrace, String> instructionProvider);
 
-        /** 构建实例 */
+        /**
+         * 构建实例
+         */
         ReActSystemPrompt build();
     }
 }

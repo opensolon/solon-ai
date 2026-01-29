@@ -56,15 +56,8 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
 
     @Override
     public String getSystemPrompt(ReActTrace trace) {
-        String role = getRole();
-
-        if (role == null) {
-            role = trace.getConfig().getDescription();
-
-            if (role == null) {
-                role = "你是一个专业的任务解决助手";
-            }
-        }
+        String role = getRole(trace);
+        String instruction = getInstruction(trace);
 
         StringBuilder sb = new StringBuilder();
 
@@ -75,7 +68,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
                 .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
 
         // 2. 注入指令集（含格式、准则、示例）
-        sb.append(getInstruction(trace));
+        sb.append(instruction);
 
         // 3. 工具集动态注入
         if (trace.getOptions().getTools().isEmpty()) {
@@ -96,12 +89,18 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         return sb.toString();
     }
 
-    @Override
-    public String getRole() {
-        return roleDesc;
+    public String getRole(ReActTrace trace) {
+        if (roleDesc != null) {
+            return roleDesc;
+        }
+
+        if (trace.getConfig().getDescription() != null) {
+            return trace.getConfig().getDescription();
+        }
+
+        return "你是一个专业的任务解决助手";
     }
 
-    @Override
     public String getInstruction(ReActTrace trace) {
         ReActAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();

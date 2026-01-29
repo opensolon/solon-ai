@@ -16,12 +16,10 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Locale;
 import java.util.function.Function;
 
@@ -62,30 +60,32 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
      */
     @Override
     public String getSystemPrompt(TeamTrace trace) {
-        String role = getRole();
-
-        if (role == null) {
-            role = "你是一个团队协作主管 (Supervisor)，负责协调成员完成任务";
-        }
-
+        String role = getRole(trace);
+        String instruction = getInstruction(trace);
 
         StringBuilder sb = new StringBuilder();
         // 1. 注入角色定义
         sb.append("## 角色定义\n").append(role).append("\n\n");
         // 2. 注入综合指令（成员、任务、协议、规范）
-        sb.append(getInstruction(trace));
+        sb.append(instruction);
         return sb.toString();
     }
 
-    @Override
-    public String getRole() {
-        return roleDesc;
+    public String getRole(TeamTrace trace) {
+        if (roleDesc != null) {
+            return roleDesc;
+        }
+
+        if (trace.getConfig().getDescription() != null) {
+            return trace.getConfig().getDescription();
+        }
+
+        return "你是一个团队协作主管 (Supervisor)，负责协调成员完成任务";
     }
 
     /**
      * 核心指令构造逻辑：按维度拼装 Prompt 块
      */
-    @Override
     public String getInstruction(TeamTrace trace) {
         TeamAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();

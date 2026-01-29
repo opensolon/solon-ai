@@ -359,11 +359,6 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return this;
         }
 
-        public Builder chatModel(ChatModel chatModel) {
-            config.setChatModel(chatModel);
-            return this;
-        }
-
         public Builder systemPrompt(SimpleSystemPrompt systemPrompt) {
             config.setSystemPrompt(systemPrompt);
             return this;
@@ -373,6 +368,11 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             SimpleSystemPrompt.Builder builder = SimpleSystemPrompt.builder();
             promptBuilder.accept(builder);
             config.setSystemPrompt(builder.build());
+            return this;
+        }
+
+        public Builder chatModel(ChatModel chatModel) {
+            config.setChatModel(chatModel);
             return this;
         }
 

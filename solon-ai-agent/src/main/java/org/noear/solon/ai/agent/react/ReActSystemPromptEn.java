@@ -59,15 +59,8 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
     @Override
     public String getSystemPrompt(ReActTrace trace) {
-        String role = getRole();
-
-        if (role == null) {
-            role = trace.getConfig().getDescription();
-
-            if (role == null) {
-                role = "You are a professional Task Solver";
-            }
-        }
+        String role = getRole(trace);
+        String instruction = getInstruction(trace);
 
         StringBuilder sb = new StringBuilder();
 
@@ -78,7 +71,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
                 .append("Thought -> Action -> Observation.\n\n");
 
         // 2. Instructions
-        sb.append(getInstruction(trace));
+        sb.append(instruction);
 
         // 3. Toolset
         if (trace.getOptions().getTools().isEmpty()) {
@@ -99,12 +92,18 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         return sb.toString();
     }
 
-    @Override
-    public String getRole() {
-        return roleDesc;
+    public String getRole(ReActTrace trace) {
+        if (roleDesc != null) {
+            return roleDesc;
+        }
+
+        if (trace.getConfig().getDescription() != null) {
+            return trace.getConfig().getDescription();
+        }
+
+        return "You are a professional Task Solver";
     }
 
-    @Override
     public String getInstruction(ReActTrace trace) {
         ReActAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();

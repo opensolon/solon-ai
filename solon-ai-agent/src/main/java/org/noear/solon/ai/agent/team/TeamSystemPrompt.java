@@ -15,11 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.core.util.SnelUtil;
-import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Locale;
 import java.util.function.Function;
@@ -44,18 +40,6 @@ public interface TeamSystemPrompt {
      * 获取未渲染的原始提示词模板
      */
     String getSystemPrompt(TeamTrace trace);
-
-    /**
-     * 获取身份定义片段 (Role)
-     * <p>描述 Supervisor 的人格设定与管理风格。</p>
-     */
-    String getRole();
-
-    /**
-     * 获取核心指令片段 (Instruction)
-     * <p>描述行动逻辑、输出格式约束及协议指令。</p>
-     */
-    String getInstruction(TeamTrace trace);
 
 
     /**

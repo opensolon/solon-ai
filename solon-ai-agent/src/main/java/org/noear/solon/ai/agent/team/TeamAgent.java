@@ -340,16 +340,6 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        /**
-         * 添加团队成员
-         */
-        public Builder agentAdd(Agent... agents) {
-            for (Agent agent : agents) {
-                config.addAgent(agent);
-            }
-            return this;
-        }
-
         public Builder systemPrompt(TeamSystemPrompt promptProvider) {
             config.setSystemPrompt(promptProvider);
             return this;
@@ -359,6 +349,17 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             TeamSystemPrompt.Builder builder = TeamSystemPrompt.builder();
             promptBuilder.accept(builder);
             config.setSystemPrompt(builder.build());
+            return this;
+        }
+
+
+        /**
+         * 添加团队成员
+         */
+        public Builder agentAdd(Agent... agents) {
+            for (Agent agent : agents) {
+                config.addAgent(agent);
+            }
             return this;
         }
 

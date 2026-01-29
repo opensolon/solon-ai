@@ -16,8 +16,6 @@
 package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.function.Function;
 
@@ -36,9 +34,13 @@ public class SimpleSystemPrompt {
         return _DEFAULT;
     }
 
-    /** 角色设定提供者 */
+    /**
+     * 角色设定提供者
+     */
     private final String roleDesc;
-    /** 执行指令提供者 */
+    /**
+     * 执行指令提供者
+     */
     private final Function<SimpleTrace, String> instructionProvider;
 
     public SimpleSystemPrompt(String roleDesc, Function<SimpleTrace, String> instructionProvider) {
@@ -50,12 +52,8 @@ public class SimpleSystemPrompt {
      * 组合 角色 (Role) 与 指令 (Instruction) 文本
      */
     public String getSystemPrompt(SimpleTrace trace) {
-        String role = getRole();
+        String role = getRole(trace);
         String inst = getInstruction(trace);
-
-        if (role == null) {
-            role = trace.getConfig().getDescription();
-        }
 
         StringBuilder sb = new StringBuilder();
         if (role != null) {
@@ -67,12 +65,24 @@ public class SimpleSystemPrompt {
         return sb.toString();
     }
 
-    /** 获取角色文本 */
-    public String getRole() {
+    /**
+     * 获取角色文本
+     */
+    public String getRole(SimpleTrace trace) {
+        if (roleDesc != null) {
+            return roleDesc;
+        }
+
+        if (trace.getConfig().getDescription() != null) {
+            return trace.getConfig().getDescription();
+        }
+
         return roleDesc;
     }
 
-    /** 获取指令文本 */
+    /**
+     * 获取指令文本
+     */
     public String getInstruction(SimpleTrace trace) {
         return instructionProvider != null ? instructionProvider.apply(trace) : null;
     }
@@ -88,18 +98,24 @@ public class SimpleSystemPrompt {
         private String roleDesc;
         private Function<SimpleTrace, String> instructionProvider;
 
-        /** 设置静态角色文本 */
+        /**
+         * 设置静态角色文本
+         */
         public Builder role(String role) {
             this.roleDesc = role;
             return this;
         }
 
-        /** 设置静态指令文本 */
+        /**
+         * 设置静态指令文本
+         */
         public Builder instruction(String instruction) {
             return instruction(ctx -> instruction);
         }
 
-        /** 设置动态指令提供逻辑 */
+        /**
+         * 设置动态指令提供逻辑
+         */
         public Builder instruction(Function<SimpleTrace, String> instructionProvider) {
             this.instructionProvider = instructionProvider;
             return this;
