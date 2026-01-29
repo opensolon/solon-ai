@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
  */
 public class TeamAgentHierarchicalTest {
 
-    private static final String LIMIT = " (Constraint: Reply < 10 words)";
+    private static final String LIMIT = " (Constraint: Reply < 20 words)";
 
     // 1. 基础决策：验证主管能否根据 Description 选对人
     @Test
