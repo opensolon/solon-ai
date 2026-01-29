@@ -47,7 +47,7 @@ public class ReActOptions implements NonSerializable {
     /**
      * 最大推理步数（防止死循环）
      */
-    private int maxSteps = 10;
+    private int maxSteps = 8;
     /**
      * 最大重试次数
      */
