@@ -65,7 +65,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         StringBuilder sb = new StringBuilder();
 
         // 1. Role & Paradigm
-        sb.append("## Role\n")
+        sb.append("## Your Role\n")
                 .append(role).append(". ")
                 .append("You must solve the problem using the ReAct pattern: ")
                 .append("Thought -> Action -> Observation.\n\n");
@@ -101,7 +101,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             return trace.getConfig().getDescription();
         }
 
-        return "You are a professional Task Solver";
+        return "Professional Task Solver";
     }
 
     public String getInstruction(ReActTrace trace) {

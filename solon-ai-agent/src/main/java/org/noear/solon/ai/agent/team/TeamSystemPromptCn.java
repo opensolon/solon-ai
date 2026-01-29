@@ -65,7 +65,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
         StringBuilder sb = new StringBuilder();
         // 1. 注入角色定义
-        sb.append("## 角色定义\n").append(role).append("\n\n");
+        sb.append("## 你的角色\n").append(role).append("\n\n");
         // 2. 注入综合指令（成员、任务、协议、规范）
         sb.append(instruction);
         return sb.toString();
@@ -80,7 +80,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
             return trace.getConfig().getDescription();
         }
 
-        return "你是一个团队协作主管 (Supervisor)，负责协调成员完成任务";
+        return "团队协作主管 (Supervisor)，负责协调成员完成任务";
     }
 
     /**

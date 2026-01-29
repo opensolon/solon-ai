@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.simple;
 
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.util.function.Function;
@@ -53,14 +54,14 @@ public class SimpleSystemPrompt {
      */
     public String getSystemPrompt(SimpleTrace trace) {
         String role = getRole(trace);
-        String inst = getInstruction(trace);
+        String instruction = getInstruction(trace);
 
         StringBuilder sb = new StringBuilder();
-        if (role != null) {
-            sb.append("## 角色设定\n").append(role).append("\n\n");
+        if (Assert.isNotEmpty(role)) {
+            sb.append("## 你的角色\n").append(role).append("\n\n");
         }
-        if (inst != null) {
-            sb.append("## 执行指令\n").append(inst);
+        if (Assert.isNotEmpty(instruction)) {
+            sb.append("## 执行指令\n").append(instruction);
         }
         return sb.toString();
     }
@@ -77,7 +78,7 @@ public class SimpleSystemPrompt {
             return trace.getConfig().getDescription();
         }
 
-        return roleDesc;
+        return null;
     }
 
     /**

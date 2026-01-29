@@ -62,7 +62,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         StringBuilder sb = new StringBuilder();
 
         // 1. 角色定义与 ReAct 范式宣告
-        sb.append("## 角色\n")
+        sb.append("## 你的角色\n")
                 .append(role).append("。")
                 .append("你必须使用 ReAct 模式解决问题：")
                 .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
@@ -98,7 +98,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
             return trace.getConfig().getDescription();
         }
 
-        return "你是一个专业的任务解决助手";
+        return "专业的任务解决助手";
     }
 
     public String getInstruction(ReActTrace trace) {

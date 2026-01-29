@@ -58,7 +58,7 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
         StringBuilder sb = new StringBuilder();
 
         // 1. Role Section
-        sb.append("## Role Definition\n").append(role).append("\n\n");
+        sb.append("## Your Role\n").append(role).append("\n\n");
 
         // 2. Comprehensive Instructions
         sb.append(instruction);
@@ -75,7 +75,7 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
             return trace.getConfig().getDescription();
         }
 
-        return "You are the Team Supervisor, responsible for coordinating agents to complete the task";
+        return "Team Supervisor, responsible for coordinating agents to complete the task";
     }
 
     /**
