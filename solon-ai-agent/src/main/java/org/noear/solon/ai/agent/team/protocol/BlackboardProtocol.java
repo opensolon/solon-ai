@@ -44,6 +44,9 @@ public class BlackboardProtocol extends HierarchicalProtocol {
     private static final String KEY_BOARD_DATA = "blackboard_state_obj";
     private static final String TOOL_SYNC = "__sync_to_blackboard__";
 
+    public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_COMPLETED = "COMPLETED";
+
     /**
      * 黑板状态机：管理共享数据与待办队列 (TODOs)
      */
@@ -58,12 +61,19 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         public void merge(String agentName, Object rawInput) {
             if (rawInput == null) return;
             this.lastUpdater = agentName;
+            this.todos.remove(agentName);
+
             try {
                 ONode node = ONode.ofBean(rawInput);
                 if (node.isObject()) {
                     node.getObjectUnsafe().forEach((k, v) -> {
                         if ("todo".equalsIgnoreCase(k)) {
                             addTodoNode(v);
+                        } else if ("status".equalsIgnoreCase(k)) {
+                            if (STATUS_FAILED.equalsIgnoreCase(v.getString())) {
+                                todos.add(agentName);
+                            }
+                            data.set(k, v);
                         } else {
                             data.set(k, v);
                         }
@@ -208,6 +218,22 @@ public class BlackboardProtocol extends HierarchicalProtocol {
 
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
+        BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
+
+        if (decision.contains(config.getFinishMarker()) && state != null) {
+            // 优先级 1：存在明确待办
+            if (!state.todos.isEmpty()) {
+                String next = state.todos.iterator().next();
+                LOG.info("Blackboard: Intervention! Rerouting to [{}] to clear todos.", next);
+                return next;
+            }
+            // 优先级 2：状态为 FAILED 且未修复
+            if (STATUS_FAILED.equalsIgnoreCase(state.data.get("status").getString())) {
+                LOG.warn("Blackboard: Intervention! Status is FAILED, blocking finish.");
+                return state.lastUpdater; // 尝试指回最后的更新者修复，或由主管自行选择（若返回 super）
+            }
+        }
+
         return super.resolveSupervisorRoute(context, trace, decision);
     }
 
@@ -241,17 +267,16 @@ public class BlackboardProtocol extends HierarchicalProtocol {
     @Override
     public boolean shouldSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         if (decision.contains(config.getFinishMarker())) {
-            if (config.getGraphAdjuster() != null) return true;
-
             BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
-            if (state != null && !state.todos.isEmpty()) {
-                if (trace.getTurnCount() < trace.getOptions().getMaxTurns()) {
-                    LOG.warn("Blackboard Protocol: Blocking finish! Pending todos exist: {}. Current turn: {}",
-                            state.todos, trace.getTurnCount());
+            if (state != null) {
+                boolean hasPending = !state.todos.isEmpty() || STATUS_FAILED.equalsIgnoreCase(state.data.get("status").getString());
+                if (hasPending && trace.getTurnCount() < trace.getOptions().getMaxTurns()) {
+                    LOG.warn("Blackboard: Physical Block! Status is incomplete. Turn: {}", trace.getTurnCount());
                     return false;
                 }
             }
         }
+
         return super.shouldSupervisorRoute(context, trace, decision);
     }
 }
