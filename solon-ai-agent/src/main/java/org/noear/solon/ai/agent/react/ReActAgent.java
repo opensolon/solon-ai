@@ -341,11 +341,13 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         public Builder instruction(String instruction) {
-            return systemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
+            config.setSystemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
+            return this;
         }
 
         public Builder instruction(Function<ReActTrace, String> instruction) {
-            return systemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
+            config.setSystemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
+            return this;
         }
 
         @Deprecated

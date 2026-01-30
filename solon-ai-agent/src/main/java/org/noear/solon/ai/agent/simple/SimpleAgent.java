@@ -351,7 +351,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
         /**
          * @deprecated 3.9.1 {@link #role(String)}
-         * */
+         *
+         */
         @Deprecated
         public Builder description(String val) {
             return role(val);
@@ -362,12 +363,14 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return this;
         }
 
-        public Builder instruction(String instruction){
-            return systemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
+        public Builder instruction(String instruction) {
+            config.setSystemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
+            return this;
         }
 
         public Builder instruction(Function<SimpleTrace, String> instruction) {
-            return systemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
+            config.setSystemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
+            return this;
         }
 
         @Deprecated

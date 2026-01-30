@@ -267,7 +267,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             }
 
             AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-            if(Assert.isNotEmpty(result)) {
+            if (Assert.isNotEmpty(result)) {
                 if (parentTeamTrace == null) {
                     session.addMessage(assistantMessage);
                 }
@@ -322,7 +322,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
         /**
          * @deprecated 3.9.1 {@link #role(String)}
-         * */
+         */
         @Deprecated
         public Builder description(String val) {
             return role(val);
@@ -338,12 +338,14 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder instruction(String instruction){
-            return systemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
+        public Builder instruction(String instruction) {
+            config.setSystemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
+            return this;
         }
 
-        public Builder instruction(Function<TeamTrace, String> instruction){
-            return systemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
+        public Builder instruction(Function<TeamTrace, String> instruction) {
+            config.setSystemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
+            return this;
         }
 
         @Deprecated
