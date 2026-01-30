@@ -16,6 +16,7 @@
 package org.noear.solon.ai.skills.file;
 
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
 import org.slf4j.Logger;
@@ -55,6 +56,13 @@ public class FileStorageSkill extends AbsSkill {
 
     @Override
     public String description() { return "磁盘管家：支持文件的创建、读取、列表查询和删除操作，用于数据持久化。"; }
+
+    @Override
+    public boolean isSupported(Prompt prompt) {
+        String content = prompt.getUserContent();
+        // 只有当涉及到文件操作意图时，才加载文件和压缩工具
+        return content.matches(".*(保存|文件|下载|打包|压缩|ZIP|zip|导出).*");
+    }
 
     @ToolMapping(name = "write_file", description = "创建或覆盖一个文件，并写入文本内容")
     public String writeFile(@Param("fileName") String fileName, @Param("content") String content) {

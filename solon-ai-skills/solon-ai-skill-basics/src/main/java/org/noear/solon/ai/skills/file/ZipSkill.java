@@ -16,6 +16,7 @@
 package org.noear.solon.ai.skills.file;
 
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
 import org.slf4j.Logger;
@@ -47,6 +48,13 @@ public class ZipSkill extends AbsSkill {
 
     @Override
     public String description() { return "压缩专家：可以将指定文件或目录打包为 ZIP。"; }
+
+    @Override
+    public boolean isSupported(Prompt prompt) {
+        String content = prompt.getUserContent();
+        // 只有当涉及到文件操作意图时，才加载文件和压缩工具
+        return content.matches(".*(保存|文件|下载|打包|压缩|ZIP|zip|导出).*");
+    }
 
     @ToolMapping(name = "zip_files", description = "将指定文件列表打包到 ZIP 中")
     public String zipFiles(@Param("zipFileName") String zipFileName, @Param("fileNames") String[] fileNames) {

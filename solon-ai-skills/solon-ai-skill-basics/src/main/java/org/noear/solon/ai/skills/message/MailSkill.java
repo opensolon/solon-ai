@@ -17,6 +17,7 @@ package org.noear.solon.ai.skills.message;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.net.http.HttpUtils;
@@ -53,6 +54,13 @@ public class MailSkill extends AbsSkill {
 
     @Override
     public String description() { return "邮件专家：通过云服务发送邮件，支持添加本地附件。"; }
+
+    @Override
+    public boolean isSupported(Prompt prompt) {
+        String content = prompt.getUserContent();
+        // 仅在明确需要发送或交付时激活
+        return content.matches(".*(发邮件|发送|邮箱|email|mail).*");
+    }
 
     @ToolMapping(name = "send_email", description = "发送邮件给指定收件人")
     public String sendEmail(@Param("to") String to,
