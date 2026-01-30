@@ -18,6 +18,7 @@
 * 新增 solon-ai-skill-text2sql 插件
 * 新增 solon-ai-skill-openapi 插件
 * 新增 solon-ai-skill-basics 插件
+* 新增 solon-ai-skill-web 插件
 * 添加 solon-ai-core ChatModel role 和 instruction 支持（提供类似 SimpleAgent 效果）
 * 添加 solon-ai-agent feedbackMode 模式（默认为 false）
 * 优化 solon-ai-agent ReActAgent 添加主动挂机的能力（处理无法完成的任务时，可避免幻觉轮询）

@@ -1,3 +1,18 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.noear.solon.ai.skills.web;
 
 import org.noear.snack4.ONode;
@@ -12,9 +27,10 @@ import org.slf4j.LoggerFactory;
  * 联网搜索技能：支持多驱动自适应 (Serper, Bing, Baidu)
  *
  * @author noear
+ * @since 3.9.1
  */
 public class WebSearchSkill extends AbsSkill {
-    private static final Logger log = LoggerFactory.getLogger(WebSearchSkill.class);
+    private static final Logger LOG = LoggerFactory.getLogger(WebSearchSkill.class);
 
     private final String apiKey;
     private final SearchDriver driver;
@@ -53,7 +69,7 @@ public class WebSearchSkill extends AbsSkill {
 
             return sb.length() == 0 ? "未找到相关搜索结果。" : sb.toString();
         } catch (Exception e) {
-            log.error("Web search failed [{}]: {}", driver, query, e);
+            LOG.error("Web search failed [{}]: {}", driver, query, e);
             return "搜索服务暂时不可用: " + e.getMessage();
         }
     }
@@ -102,21 +118,26 @@ public class WebSearchSkill extends AbsSkill {
     // --- 内置驱动实现：Baidu (百度智能云版) ---
     public static final SearchDriver BAIDU = new SearchDriver() {
         public String executeRequest(String q, int n, String k) throws Exception {
-            // 百度 API 通常需要 access_token 或特殊的 Authorization 签名
-            // 这里演示标准的 RESTful POST 结构
-            return HttpUtils.http("https://api.baidu.com/rpc/2.0/cloud_search/v1/web")
+            // 注意：AppBuilder 的端点通常带有 /v2/ 前缀
+            return HttpUtils.http("https://gw.alinesno.com/api/baidu/appbuilder/v2/ai_search/web_search")
                     .header("Authorization", "Bearer " + k)
                     .header("Content-Type", "application/json")
-                    .bodyJson(new ONode().set("query", q).set("max_results", n).toJson())
+                    // 百度 AppBuilder 接收的是 messages 数组，且 top_k 在 resource_type_filter 中定义
+                    .bodyJson(new ONode()
+                            .set("messages", new ONode().add(new ONode().set("role", "user").set("content", q)))
+                            .set("resource_type_filter", new ONode().add(new ONode().set("type", "web").set("top_k", n)))
+                            .toJson())
                     .post();
         }
+
         public java.util.List<SearchResult> parseResults(ONode root) {
-            // 百度返回通常在 data.results 数组下
-            return root.get("data").get("results").getArrayUnsafe().stream()
+            // 百度 AppBuilder 的返回通常在 cells 数组或特定的 search_results 结构中
+            // 这里建议根据你实际对接的百度云具体产品线（千帆 vs AppBuilder）微调路径
+            return root.get("search_results").getArrayUnsafe().stream()
                     .map(i -> new SearchResult(
                             i.get("title").getString(),
                             i.get("url").getString(),
-                            i.get("content").getString())) // 百度摘要字段通常叫 content
+                            i.get("content").getString())) // 百度通常返回 content 或 snippet
                     .collect(java.util.stream.Collectors.toList());
         }
     };
