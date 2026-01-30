@@ -141,9 +141,9 @@ public class Text2SqlSkill extends AbsSkill {
             return tools.stream()
                     .filter(tool -> "execute_sql".equals(tool.name()))
                     .collect(Collectors.toList());
-        } else {
-            return super.getTools(prompt);
         }
+
+        return super.getTools(prompt);
     }
 
     @ToolMapping(name = "get_table_schema", description = "获取特定表的详细 DDL 和列信息")

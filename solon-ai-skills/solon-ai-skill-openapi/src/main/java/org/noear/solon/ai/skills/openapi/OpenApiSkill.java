@@ -90,18 +90,25 @@ public class OpenApiSkill extends AbsSkill {
                 .append("- **Base URL**: ").append(apiBaseUrl).append("\n\n");
 
         if (schemaMode == SchemaMode.FULL) {
-            sb.append("##### 2. 接口详细定义\n").append(formatApiDocs(dynamicTools));
+            sb.append("##### 2. 接口详细定义 (API Specs)\n").append(formatApiDocs(dynamicTools));
         } else {
             sb.append("##### 2. 接口清单 (API List)\n")
-                    .append("当前系统接口丰富，调用前**必须调用 `get_api_detail` 获取参数详情**:\n")
-                    .append(dynamicTools.stream().map(t -> t.name).collect(Collectors.joining(", "))).append("\n");
+                    .append("当前系统接口较多，已开启**动态探测模式**。在发起请求前，请遵循以下流程：\n")
+                    .append("1. **定位**: 从下方目录中识别最匹配业务需求的接口名。\n")
+                    .append("2. **探测**: **必须先调用 `get_api_detail` 获取该接口的参数 Schema**，严禁凭直觉猜测参数名或类型。\n")
+                    .append("3. **执行**: 根据探测到的 Schema 构造 `call_api` 请求。\n\n")
+                    .append("- **可用目录**: ").append(dynamicTools.stream().map(t -> t.name).collect(Collectors.joining(", ")));
         }
 
-        sb.append("\n##### 3. API 调用规范\n")
-                .append("1. **精确参数**: 路径参数(Path)与请求体(Body/Query)需严格分离，路径参数变量名需与接口定义一致。\n")
-                .append("2. **全动词支持**: 支持 GET/POST/PUT/DELETE。执行修改/删除操作前，需确保已通过查询接口确认了目标 ID。\n")
-                .append("3. **响应处理**: 优先通过返回码识别状态，2xx 为成功，4xx/5xx 请解析 Body 中的 error 提示进行自愈重试。\n")
-                .append("4. **链式调用**: 若一个任务需多个 API 协同，请按逻辑顺序逐步执行。");
+        sb.append("\n\n##### 3. API 调用准则\n")
+                .append("1. **参数构造**: \n")
+                .append("   - 路径参数 (path_params) 映射 URL 中的占位符；Query/Body 参数放入 query_or_body_params。\n")
+                .append("   - 严格遵循 Schema 定义的数据类型（如 Integer vs String）。\n")
+                .append("2. **操作逻辑**: \n")
+                .append("   - 对于增删改操作，优先通过返回的状态码解析结果。若返回 404，通常意味着目标资源不存在。\n")
+                .append("3. **异常处理**: \n")
+                .append("   - 若接口返回报错，请分析响应体中的 error 信息。如因参数缺失，可结合 `get_api_detail` 修正后再次尝试。\n")
+                .append("4. **约束**: 仅支持调用目录中定义的接口，严禁编造或猜测。");
 
         return sb.toString();
     }
