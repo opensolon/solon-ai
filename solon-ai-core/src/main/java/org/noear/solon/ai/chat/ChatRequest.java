@@ -44,7 +44,8 @@ public class ChatRequest implements NonSerializable {
         this.dialect = dialect;
         this.options = options;
         this.stream = stream;
-        this.finalPrompt = Prompt.of(systemMessage).addMessage(originalPrompt.getMessages());
+        this.finalPrompt = Prompt.of(systemMessage)
+                .addMessage(session.getMessages());
 
         this.originalPrompt = (originalPrompt == null ? finalPrompt : originalPrompt);
     }

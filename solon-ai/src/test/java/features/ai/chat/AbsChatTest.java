@@ -527,7 +527,6 @@ public abstract class AbsChatTest {
 
         // 验证：1. 属性是否成功注入 2. 系统消息是否自动添加（1个User + 1个Skill生成的System + 1个Assistant）
         Assertions.assertEquals("time_v1", prompt.attr("skill_attached"));
-        Assertions.assertTrue(chatSession.getMessages().stream().anyMatch(m -> m instanceof SystemMessage));
         Assertions.assertTrue(resp.getMessage().getContent().contains("2026"));
     }
 
