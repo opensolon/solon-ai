@@ -146,7 +146,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         if (LOG.isTraceEnabled()) {
-            LOG.trace("Team SystemPrompt rendered for agent [{}]:\n{}", trace.getAgentName(), finalSystemPrompt);
+            LOG.trace("TeamAgent SystemPrompt rendered for agent [{}]:\n{}", trace.getAgentName(), finalSystemPrompt);
         }
 
         List<ChatMessage> messages = new ArrayList<>();

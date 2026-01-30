@@ -207,6 +207,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                     .append(config.getOutputSchema());
         }
 
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("SimpleAgent SystemPrompt rendered for trace [{}]: {}", name(), spBuf);
+        }
+
         List<ChatMessage> messages = new ArrayList<>();
 
         if (spBuf.length() > 0) {
