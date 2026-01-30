@@ -93,11 +93,11 @@ public class OpenApiSkill extends AbsSkill {
             sb.append("##### 2. 接口详细定义 (API Specs)\n").append(formatApiDocs(dynamicTools));
         } else {
             sb.append("##### 2. 接口清单 (API List)\n")
-                    .append("当前系统接口较多，已开启**动态探测模式**。在发起请求前，请遵循以下流程：\n")
-                    .append("1. **定位**: 从下方目录中识别最匹配业务需求的接口名。\n")
-                    .append("2. **探测**: **必须先调用 `get_api_detail` 获取该接口的参数 Schema**，严禁凭直觉猜测参数名或类型。\n")
-                    .append("3. **执行**: 根据探测到的 Schema 构造 `call_api` 请求。\n\n")
-                    .append("- **可用目录**: ").append(dynamicTools.stream().map(t -> t.name).collect(Collectors.joining(", ")));
+                    .append("当前库接口较多，调用前请根据业务需求匹配接口名。**若不确定参数结构，请先通过 `get_api_detail` 获取详情**：\n\n");
+
+            for (ApiTool t : dynamicTools) {
+                sb.append("- **").append(t.name).append("**: ").append(t.description).append("\n");
+            }
         }
 
         sb.append("\n\n##### 3. API 调用准则\n")
@@ -192,9 +192,13 @@ public class OpenApiSkill extends AbsSkill {
             // 生成符合 AI 习惯的名称: post_v1_order_create
             this.name = (this.method + "_" + path.replaceAll("[^a-zA-Z0-9]", "_"))
                     .replaceAll("_+", "_").toLowerCase();
-            this.description = Utils.valueOr(detail.get("summary").getString(), "No description");
 
-            // 精简 Schema，只取核心结构，移除 example 等干扰信息
+            // 描述：summary > description > path
+            String summary = detail.get("summary").getString();
+            String desc = detail.get("description").getString();
+            this.description = Utils.valueOr(summary, desc, "接口路径: " + path);
+
+            // 架构 Schema，只取核心结构，移除 example 等干扰信息
             this.inputSchema = cleanSchema(detail.get("parameters"));
             if (detail.hasKey("requestBody")) {
                 this.inputSchema += " | Body: " + cleanSchema(detail.get("requestBody"));
