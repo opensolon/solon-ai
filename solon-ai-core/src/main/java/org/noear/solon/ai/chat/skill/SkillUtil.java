@@ -94,29 +94,29 @@ public class SkillUtil {
 
         // 2. 构建 System Prompt 指令块
         if (Utils.isNotEmpty(ins) || (tools != null && !tools.isEmpty())) {
-            if (combinedInstruction.length() > 0) {
-                combinedInstruction.append("\n");
-            }
+            combinedInstruction.append("\n---\n"); // 使用分割线开启独立空间
 
-            // 统一头部
-            combinedInstruction.append("**Skill**: ").append(skill.name());
-
-            // 补充 Skill 描述（如果有）
-            if (Utils.isNotEmpty(skill.metadata().getDescription()) && !skill.name().equals(skill.metadata().getDescription())) {
-                combinedInstruction.append(" (").append(skill.metadata().getDescription()).append(")");
+            // 技能标题行：### [Skill: Name] Description
+            combinedInstruction.append("#### [Skill: ").append(skill.name()).append("]");
+            if (Utils.isNotEmpty(skill.description())) {
+                combinedInstruction.append(" - ").append(skill.description());
             }
             combinedInstruction.append("\n");
 
-            // 注入具体指令
+            // 注入技能特有的指令（如数据库结构、API 限制等）
             if (Utils.isNotEmpty(ins)) {
-                combinedInstruction.append(ins).append("\n");
+                combinedInstruction.append(ins.trim()).append("\n");
             }
 
-            // 注入工具关联说明（告知模型这些工具受此 Skill 指令约束）
+            // 显式声明该技能控制的工具范围
             if (tools != null && !tools.isEmpty()) {
-                String toolNames = tools.stream().map(t -> t.name()).collect(Collectors.joining(", "));
-                combinedInstruction.append("- **Supported Tools**: ").append(toolNames).append("\n");
+                String toolNames = tools.stream()
+                        .map(t -> "`" + t.name() + "`") // 给工具名加反引号，增强识别度
+                        .collect(Collectors.joining(", "));
+                combinedInstruction.append("> **Tool Scope**: 此技能指令适用于以下工具的调用: ").append(toolNames).append("\n");
             }
+
+            combinedInstruction.append("---\n"); // 闭合分割线
         }
     }
 }
