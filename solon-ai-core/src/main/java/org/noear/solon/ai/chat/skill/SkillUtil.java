@@ -83,10 +83,6 @@ public class SkillUtil {
             for (FunctionTool tool : tools) {
                 // 将所属 Skill 的名字注入工具的 meta
                 tool.metaPut("skill", skill.name());
-                // 如果需要，也可以把 Skill 的描述或其它元数据注入
-                if (Utils.isNotEmpty(skill.description())) {
-                    tool.metaPut("skill_desc", skill.description());
-                }
             }
         }
 
