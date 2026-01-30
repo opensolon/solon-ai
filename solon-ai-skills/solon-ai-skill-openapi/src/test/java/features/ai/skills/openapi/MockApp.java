@@ -17,11 +17,11 @@ public class MockApp {
         Solon.start(MockApp.class, args);
     }
 
-    // --- 1. 模拟 OpenAPI 描述文件接口 ---
+    // --- 1. 模拟 OpenAPI 3.0 (OAS3) ---
 
     @Get
-    @Mapping("swagger/v1/api-docs")
-    public String apiDocs() {
+    @Mapping("swagger/v3/api-docs")
+    public String apiDocs3() {
         return "{\n" +
                 "  \"openapi\": \"3.0.0\",\n" +
                 "  \"paths\": {\n" +
@@ -58,6 +58,57 @@ public class MockApp {
                 "        },\n" +
                 "        \"required\": [\"productName\"]\n" +
                 "      }\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+    }
+
+    // --- 2. 模拟 OpenAPI 2.0 (Swagger) ---
+    @Get
+    @Mapping("swagger/v2/api-docs")
+    public String apiDocs2() {
+        return "{\n" +
+                "  \"swagger\": \"2.0\",\n" +
+                "  \"paths\": {\n" +
+                "    \"/users/{id}\": {\n" +
+                "      \"get\": {\n" +
+                "        \"summary\": \"获取用户信息\",\n" +
+                "        \"parameters\": [ \n" +
+                "           { \"name\": \"id\", \"in\": \"path\", \"required\": true, \"type\": \"integer\" } \n" +
+                "        ],\n" +
+                "        \"responses\": {\n" +
+                "          \"200\": { \"description\": \"成功\", \"schema\": { \"$ref\": \"#/definitions/User\" } }\n" +
+                "        }\n" +
+                "      }\n" +
+                "    },\n" +
+                "    \"/orders/create\": {\n" +
+                "      \"post\": {\n" +
+                "        \"summary\": \"创建订单\",\n" +
+                "        \"parameters\": [ \n" +
+                "           { \"name\": \"body\", \"in\": \"body\", \"required\": true, \"schema\": { \"$ref\": \"#/definitions/OrderRequest\" } } \n" +
+                "        ],\n" +
+                "        \"responses\": {\n" +
+                "          \"200\": { \"description\": \"成功\", \"schema\": { \"type\": \"object\", \"properties\": { \"orderId\": { \"type\": \"string\" } } } }\n" +
+                "        }\n" +
+                "      }\n" +
+                "    }\n" +
+                "  },\n" +
+                "  \"definitions\": {\n" +
+                "    \"User\": {\n" +
+                "      \"type\": \"object\",\n" +
+                "      \"properties\": {\n" +
+                "        \"id\": { \"type\": \"integer\" },\n" +
+                "        \"name\": { \"type\": \"string\" },\n" +
+                "        \"status\": { \"type\": \"string\", \"description\": \"用户状态: active, disabled\" }\n" +
+                "      }\n" +
+                "    },\n" +
+                "    \"OrderRequest\": {\n" +
+                "      \"type\": \"object\",\n" +
+                "      \"properties\": {\n" +
+                "        \"productName\": { \"type\": \"string\" },\n" +
+                "        \"amount\": { \"type\": \"integer\" }\n" +
+                "      },\n" +
+                "      \"required\": [\"productName\"]\n" +
                 "    }\n" +
                 "  }\n" +
                 "}";
