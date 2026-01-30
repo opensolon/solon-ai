@@ -41,16 +41,17 @@ import java.util.stream.Collectors;
  * @since 3.9.1
  */
 public class Text2SqlSkill extends AbsSkill {
-    private final static Logger LOG = LoggerFactory.getLogger(Text2SqlSkill.class);
+    protected final static Logger LOG = LoggerFactory.getLogger(Text2SqlSkill.class);
 
-    private final SqlUtils sqlUtils;
-    private final List<String> tableNames;
-    private final String cachedSchemaInfo;
+    protected final SqlUtils sqlUtils;
+    protected final List<String> tableNames;
+    protected final String cachedSchemaInfo;
 
-    private int maxRows = 50;
-    private int maxContextLength = 8000;
-    private String dialectName = "Generic SQL";
-    private SchemaMode schemaMode = SchemaMode.FULL;
+    protected int maxRows = 50;
+    protected int maxContextLength = 8000;
+    protected String dialectName = "Generic SQL";
+    protected SchemaMode schemaMode = SchemaMode.FULL;
+    protected boolean readOnly = true;
 
     public Text2SqlSkill(DataSource dataSource, String... tables) {
         this(SqlUtils.of(dataSource), tables);
@@ -79,6 +80,10 @@ public class Text2SqlSkill extends AbsSkill {
         return this;
     }
 
+    public Text2SqlSkill readOnly(boolean readOnly) {
+        this.readOnly = readOnly;
+        return this;
+    }
 
     @Override
     public String name() {
@@ -112,13 +117,19 @@ public class Text2SqlSkill extends AbsSkill {
                     .append(String.join(", ", tableNames));
         }
 
-        sb.append("##### 3. SQL 执行准则\n")
-                .append("1. **方言一致性**: 必须使用 ").append(dialectName).append(" 的原生语法（函数、分页、转义符）。\n")
-                .append("2. **先探测后重度计算**: 若对字段格式或方言函数有疑虑，优先执行 `SELECT col FROM table LIMIT 1` 探测真实数据，严禁盲目尝试复杂转换。\n")
-                .append("3. **关键字转义**: 识别 ").append(dialectName).append(" 的保留字（如 YEAR, ORDER, USER），若作为别名或表名使用，必须加方言对应的转义符（如双引号或反引号）。\n")
-                .append("4. **自愈逻辑**: 遇到报错时，根据错误信息分析是否为方言函数不支持或类型不匹配，调整逻辑后重试。\n")
-                .append("5. **结果收敛**: 若多次尝试后确认无数据或方言不支持，请诚实告知用户，严禁编造数据。");
+        sb.append("##### 3. SQL 执行准则 (严格遵守)\n");
 
+        if (readOnly) {
+            sb.append("1. **权限边界**: 你是一个**只读**分析专家。严禁执行 `DELETE`, `UPDATE`, `INSERT` 等写指令。遇到此类请求必须礼貌拒绝。\n");
+        } else {
+            sb.append("1. **操作风险**: 你拥有**数据修改权限**。在执行 `UPDATE` 或 `DELETE` 前，必须确保 WHERE 条件极其精确。执行大批量修改前应建议用户备份。\n");
+        }
+
+        sb.append("2. **方言一致性**: 必须使用 ").append(dialectName).append(" 的原生语法（函数、分页、转义符）。\n")
+                .append("3. **先探测后重度计算**: 对字段格式有疑虑时，优先执行 `SELECT col FROM table LIMIT 1` 探测真实数据，严禁盲目尝试复杂转换。\n")
+                .append("4. **关键字转义**: 识别保留字（如 YEAR, ORDER, USER），作为别名或表名使用时必须加转义符（如双引号或反引号）。\n")
+                .append("5. **自愈逻辑**: 遇到报错时，根据错误信息分析类型不匹配或方言不支持原因，调整逻辑后重试一次。\n")
+                .append("6. **结果收敛**: 若确认无数据或方言不支持，请诚实告知用户，严禁编造数据。");
 
         return sb.toString();
     }
