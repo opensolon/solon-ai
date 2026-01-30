@@ -38,20 +38,26 @@ public class InMemoryChatSession implements ChatSession {
     protected final List<ChatMessage> messages = new ArrayList<>();
     protected final int maxMessages;
 
-    public InMemoryChatSession(String sessionId){
-        this(sessionId, null, null, 0);
+    public InMemoryChatSession(String sessionId) {
+        this(sessionId, 0);
     }
 
-    public InMemoryChatSession(String sessionId, int maxMessages){
-        this(sessionId, null, null, maxMessages);
-    }
-
-    public InMemoryChatSession(String sessionId, List<SystemMessage> systemMessages, List<ChatMessage> messages, int maxMessages) {
+    public InMemoryChatSession(String sessionId, int maxMessages) {
         if (sessionId == null) {
             this.sessionId = Utils.guid();
         } else {
             this.sessionId = sessionId;
         }
+
+        this.maxMessages = maxMessages;
+    }
+
+    /**
+     * @deprecated 3.9.1 不建议在会话里放系统消息
+     * */
+    @Deprecated
+    public InMemoryChatSession(String sessionId, List<SystemMessage> systemMessages, List<ChatMessage> messages, int maxMessages) {
+        this(sessionId, maxMessages);
 
         if (systemMessages != null) {
             this.messages.addAll(systemMessages);
@@ -60,8 +66,6 @@ public class InMemoryChatSession implements ChatSession {
         if (messages != null) {
             this.messages.addAll(messages);
         }
-
-        this.maxMessages = maxMessages;
     }
 
 
@@ -164,7 +168,10 @@ public class InMemoryChatSession implements ChatSession {
 
         /**
          * 系统消息
+         *
+         * @deprecated 3.9.1 不建议在会话里放系统消息
          */
+        @Deprecated
         public Builder systemMessages(SystemMessage... systemMessages) {
             this.systemMessages = Arrays.asList(systemMessages);
             return this;
@@ -191,7 +198,10 @@ public class InMemoryChatSession implements ChatSession {
          * 构建
          */
         public InMemoryChatSession build() {
-            return new InMemoryChatSession(sessionId, systemMessages, messages, maxMessages);
+            InMemoryChatSession session = new InMemoryChatSession(sessionId, maxMessages);
+            session.addMessage(systemMessages);
+            session.addMessage(messages);
+            return session;
         }
     }
 }

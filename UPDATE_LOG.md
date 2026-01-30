@@ -17,9 +17,11 @@
 * 新增 solon-ai-dialect-openai OpenaiResponses 方言适配
 * 新增 solon-ai-skill-text2sql 插件
 * 添加 solon-ai-agent feedbackMode 模式（默认为 false）
+* 添加 solon-ai-core ChatModel role 和 instruction 支持（提供类似 SimpleAgent 效果）
 * 优化 solon-ai-agent ReActAgent 添加主动挂机的能力（处理无法完成的任务时，可避免幻觉轮询）
 * 优化 solon-ai-agent description + systemPrompt 标为弃用，改由 role + instruction 替代（简化了）
 * 优化 solon-ai-agent A2AProtocol 协议
+* 调整 solon-ai-core InMemoryChatSession systemMessages 标为弃用（不建议放到会话里，不方便做结构化的管理）
 * 调整 solon-ai-agent 取消 title（减少迷惑）
 * 调整 solon-ai-agent enablePlanning 更名为 planningMode （前者标为弃用）
 * 修复 solon-ai-agent ReActAgent 新话题开始时， ReActTrace 没有重置干净的问题

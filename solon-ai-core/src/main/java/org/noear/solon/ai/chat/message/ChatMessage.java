@@ -21,6 +21,7 @@ import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.core.util.Assert;
 
 import java.io.*;
 import java.time.LocalDateTime;
@@ -83,6 +84,22 @@ public interface ChatMessage extends Serializable {
      */
     static SystemMessage ofSystem(String content) {
         return new SystemMessage(content);
+    }
+
+    /**
+     * 构建系统消息
+     */
+    static SystemMessage ofSystem(String role, String instruction) {
+        StringBuilder buf = new StringBuilder();
+
+        if (Assert.isNotEmpty(role)) {
+            buf.append("## 你的角色\n").append(role).append("\n\n");
+        }
+        if (Assert.isNotEmpty(instruction)) {
+            buf.append("## 执行指令\n").append(instruction);
+        }
+
+        return new SystemMessage(buf.toString());
     }
 
     /**
