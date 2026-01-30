@@ -52,5 +52,8 @@
 
         <module>../../solon-ai-rag-searchs/solon-ai-search-baidu</module>
         <module>../../solon-ai-rag-searchs/solon-ai-search-bocha</module>
+
+
+        <module>../../solon-ai-skills/solon-ai-skill-text2sql</module>
     </modules>
 </project>

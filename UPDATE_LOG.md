@@ -12,8 +12,10 @@
 
 ### v3.9.1
 
+
 * 新增 solon-ai-dialect-claude 插件
 * 新增 solon-ai-dialect-openai OpenaiResponses 方言适配
+* 新增 solon-ai-skill-text2sql 插件
 * 添加 solon-ai-agent feedbackMode 模式（默认为 false）
 * 优化 solon-ai-agent ReActAgent 添加主动挂机的能力（处理无法完成的任务时，可避免幻觉轮询）
 * 优化 solon-ai-agent description + systemPrompt 标为弃用，改由 role + instruction 替代（简化了）
