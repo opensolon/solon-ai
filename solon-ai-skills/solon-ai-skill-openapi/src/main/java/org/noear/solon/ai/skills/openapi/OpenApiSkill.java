@@ -31,7 +31,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 智能 OpenAPI 调用技能（支持全动词交互）
+ * 智能 OpenAPI 调用技能（支持 OpenAPI 2.0 & 3.0 自适应）
  *
  * @author noear
  * @since 3.9.1
@@ -116,7 +116,6 @@ public class OpenApiSkill extends AbsSkill {
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
         if (schemaMode == SchemaMode.FULL) {
-            // FULL 模式下屏蔽探测工具，减少干扰
             return tools.stream().filter(t -> "call_api".equals(t.name())).collect(Collectors.toList());
         }
         return super.getTools(prompt);
@@ -189,26 +188,38 @@ public class OpenApiSkill extends AbsSkill {
         public ApiTool(String path, String method, ONode detail) {
             this.path = path;
             this.method = method.toUpperCase();
-            // 生成符合 AI 习惯的名称: post_v1_order_create
             this.name = (this.method + "_" + path.replaceAll("[^a-zA-Z0-9]", "_"))
                     .replaceAll("_+", "_").toLowerCase();
 
-            // 描述：summary > description > path
+            // 1. 描述自适应
             String summary = detail.get("summary").getString();
             String desc = detail.get("description").getString();
             this.description = Utils.valueOr(summary, desc, "接口路径: " + path);
 
-            // 架构 Schema，只取核心结构，移除 example 等干扰信息
+            // 2. 入参自适应 (兼容 2.0 parameters & 3.0 requestBody)
             this.inputSchema = cleanSchema(detail.get("parameters"));
             if (detail.hasKey("requestBody")) {
-                this.inputSchema += " | Body: " + cleanSchema(detail.get("requestBody"));
+                ONode content = detail.get("requestBody").get("content");
+                ONode bodySchema = content.get("application/json").get("schema");
+                if (bodySchema.isNull() && content.size() > 0) {
+                    bodySchema = content.get(0).get("schema"); // 兜底
+                }
+                if (!bodySchema.isNull()) {
+                    this.inputSchema += " | Body: " + cleanSchema(bodySchema);
+                }
             }
-            this.outputSchema = cleanSchema(detail.get("responses").get("200"));
+
+            // 3. 出参自适应 (兼容 2.0 schema & 3.0 content)
+            ONode resp200 = detail.get("responses").get("200");
+            ONode outSchema = resp200.get("content").get("application/json").get("schema");
+            if (outSchema.isNull()) {
+                outSchema = resp200.get("schema"); // OpenAPI 2.0 回退
+            }
+            this.outputSchema = cleanSchema(outSchema);
         }
 
         private String cleanSchema(ONode node) {
             if (node == null || node.isNull()) return "{}";
-            // 实际应用中这里可以写一个简单的递归过滤器，只保留 type, properties, required
             return node.toJson();
         }
     }
