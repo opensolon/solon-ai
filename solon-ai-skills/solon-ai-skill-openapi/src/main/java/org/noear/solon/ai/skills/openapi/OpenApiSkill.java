@@ -31,7 +31,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 智能 OpenAPI 调用技能（支持 OpenAPI 2.0 & 3.0 自适应）
+ * 智能 OpenAPI 调用技能（支持 2.0/3.0 自适应及 $ref 模型解析）
  *
  * @author noear
  * @since 3.9.1
@@ -43,6 +43,7 @@ public class OpenApiSkill extends AbsSkill {
     private final String apiBaseUrl;
     private final List<ApiTool> dynamicTools = new ArrayList<>();
 
+    private ONode rootSchema; // 保存根节点用于 JSONPath 解析
     private SchemaMode schemaMode = SchemaMode.FULL;
     private int maxContextLength = 8000;
 
@@ -55,21 +56,50 @@ public class OpenApiSkill extends AbsSkill {
     private void initTools() {
         try {
             String json = HttpUtils.http(openApiUrl).get();
-            ONode schema = ONode.ofJson(json);
+            this.rootSchema = ONode.ofJson(json);
 
-            schema.get("paths").getObject().forEach((path, methods) -> {
+            rootSchema.get("paths").getObject().forEach((path, methods) -> {
                 methods.getObject().forEach((method, detail) -> {
                     if (!method.startsWith("x-") && !"options".equalsIgnoreCase(method)) {
-                        dynamicTools.add(new ApiTool(path, method, detail));
+                        dynamicTools.add(new ApiTool(this, path, method, detail));
                     }
                 });
             });
-            // 接口超过 30 个自动切换为动态模式
+
             this.schemaMode = dynamicTools.size() > 30 ? SchemaMode.DYNAMIC : SchemaMode.FULL;
         } catch (Exception e) {
             log.error("OpenAPI schema loading failed: {}", openApiUrl, e);
             throw new RuntimeException("OpenAPI 初始化失败", e);
         }
+    }
+
+    // 提供给 ApiTool 使用的解引用方法
+    protected String resolveRef(ONode node) {
+        if (node == null || node.isNull()) return "{}";
+
+        // 如果包含引用
+        if (node.hasKey("$ref")) {
+            String ref = node.get("$ref").getString();
+            // 将 #/components/schemas/User 转换为 $.components.schemas.User
+            String jsonPath = ref.replace("#/", "$.").replace("/", ".");
+            ONode refNode = rootSchema.select(jsonPath);
+            if (!refNode.isNull()) {
+                return refNode.toJson();
+            }
+        }
+
+        // 如果是普通的 parameters 数组，尝试深度检查其内部的 schema 引用
+        if (node.isArray()) {
+            node.getArrayUnsafe().forEach(n -> {
+                if (n.hasKey("schema") && n.get("schema").hasKey("$ref")) {
+                    String ref = n.get("schema").get("$ref").getString();
+                    ONode refNode = rootSchema.select(ref.replace("#/", "$.").replace("/", "."));
+                    if (!refNode.isNull()) n.set("schema", refNode);
+                }
+            });
+        }
+
+        return node.toJson();
     }
 
     public OpenApiSkill schemaMode(SchemaMode mode) { this.schemaMode = mode; return this; }
@@ -80,7 +110,7 @@ public class OpenApiSkill extends AbsSkill {
 
     @Override
     public String description() {
-        return "业务 API 专家：支持多维度的 REST 接口调用，能够根据业务逻辑组合 API 请求。";
+        return "业务 API 专家：支持 REST 接口调用，自动解析 OpenAPI 2.0/3.0 模型引用。";
     }
 
     @Override
@@ -93,7 +123,7 @@ public class OpenApiSkill extends AbsSkill {
             sb.append("##### 2. 接口详细定义 (API Specs)\n").append(formatApiDocs(dynamicTools));
         } else {
             sb.append("##### 2. 接口清单 (API List)\n")
-                    .append("当前库接口较多，调用前请根据业务需求匹配接口名。**若不确定参数结构，请先通过 `get_api_detail` 获取详情**：\n\n");
+                    .append("接口较多，编写请求前请通过 `get_api_detail` 确认具体的字段 Schema：\n\n");
 
             for (ApiTool t : dynamicTools) {
                 sb.append("- **").append(t.name).append("**: ").append(t.description).append("\n");
@@ -101,14 +131,9 @@ public class OpenApiSkill extends AbsSkill {
         }
 
         sb.append("\n\n##### 3. API 调用准则\n")
-                .append("1. **参数构造**: \n")
-                .append("   - 路径参数 (path_params) 映射 URL 中的占位符；Query/Body 参数放入 query_or_body_params。\n")
-                .append("   - 严格遵循 Schema 定义的数据类型（如 Integer vs String）。\n")
-                .append("2. **操作逻辑**: \n")
-                .append("   - 对于增删改操作，优先通过返回的状态码解析结果。若返回 404，通常意味着目标资源不存在。\n")
-                .append("3. **异常处理**: \n")
-                .append("   - 若接口返回报错，请分析响应体中的 error 信息。如因参数缺失，可结合 `get_api_detail` 修正后再次尝试。\n")
-                .append("4. **约束**: 仅支持调用目录中定义的接口，严禁编造或猜测。");
+                .append("1. **参数构造**: Path 参数映射 URL；Query/Body 参数放入 query_or_body_params。\n")
+                .append("2. **类型检查**: 严格遵循 Schema 定义的数据类型。\n")
+                .append("3. **探测**: 若结构含模糊引用，必须先执行 `get_api_detail`。");
 
         return sb.toString();
     }
@@ -121,7 +146,7 @@ public class OpenApiSkill extends AbsSkill {
         return super.getTools(prompt);
     }
 
-    @ToolMapping(name = "get_api_detail", description = "获取特定 API 的参数 Schema 和返回值模型定义")
+    @ToolMapping(name = "get_api_detail", description = "获取特定 API 的参数 Schema 和返回值定义（含模型展开）")
     public String getApiDetail(@Param("api_name") String apiName) {
         return dynamicTools.stream()
                 .filter(t -> t.name.equals(apiName))
@@ -130,7 +155,7 @@ public class OpenApiSkill extends AbsSkill {
                 .orElse("Error: API '" + apiName + "' not found.");
     }
 
-    @ToolMapping(name = "call_api", description = "根据规范执行 REST 接口请求")
+    @ToolMapping(name = "call_api", description = "执行 REST 接口请求")
     public String callApi(
             @Param("api_name") String apiName,
             @Param("path_params") Map<String, Object> pathParams,
@@ -185,42 +210,35 @@ public class OpenApiSkill extends AbsSkill {
         public String inputSchema;
         public String outputSchema;
 
-        public ApiTool(String path, String method, ONode detail) {
+        public ApiTool(OpenApiSkill skill, String path, String method, ONode detail) {
             this.path = path;
             this.method = method.toUpperCase();
             this.name = (this.method + "_" + path.replaceAll("[^a-zA-Z0-9]", "_"))
                     .replaceAll("_+", "_").toLowerCase();
 
-            // 1. 描述自适应
-            String summary = detail.get("summary").getString();
-            String desc = detail.get("description").getString();
-            this.description = Utils.valueOr(summary, desc, "接口路径: " + path);
+            this.description = Utils.valueOr(detail.get("summary").getString(),
+                    detail.get("description").getString(), "路径: " + path);
 
-            // 2. 入参自适应 (兼容 2.0 parameters & 3.0 requestBody)
-            this.inputSchema = cleanSchema(detail.get("parameters"));
+            // 1. 入参处理（带解引用）
+            this.inputSchema = skill.resolveRef(detail.get("parameters"));
             if (detail.hasKey("requestBody")) {
                 ONode content = detail.get("requestBody").get("content");
                 ONode bodySchema = content.get("application/json").get("schema");
                 if (bodySchema.isNull() && content.size() > 0) {
-                    bodySchema = content.get(0).get("schema"); // 兜底
+                    bodySchema = content.get(0).get("schema");
                 }
                 if (!bodySchema.isNull()) {
-                    this.inputSchema += " | Body: " + cleanSchema(bodySchema);
+                    this.inputSchema += " | Body: " + skill.resolveRef(bodySchema);
                 }
             }
 
-            // 3. 出参自适应 (兼容 2.0 schema & 3.0 content)
+            // 2. 出参处理（带解引用）
             ONode resp200 = detail.get("responses").get("200");
-            ONode outSchema = resp200.get("content").get("application/json").get("schema");
-            if (outSchema.isNull()) {
-                outSchema = resp200.get("schema"); // OpenAPI 2.0 回退
+            ONode outSchemaNode = resp200.get("content").get("application/json").get("schema");
+            if (outSchemaNode.isNull()) {
+                outSchemaNode = resp200.get("schema");
             }
-            this.outputSchema = cleanSchema(outSchema);
-        }
-
-        private String cleanSchema(ONode node) {
-            if (node == null || node.isNull()) return "{}";
-            return node.toJson();
+            this.outputSchema = skill.resolveRef(outSchemaNode);
         }
     }
 }

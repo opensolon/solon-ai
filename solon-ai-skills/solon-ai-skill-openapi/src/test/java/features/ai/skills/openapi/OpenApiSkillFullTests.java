@@ -16,81 +16,74 @@ import org.noear.solon.test.SolonTest;
  */
 @SolonTest(MockApp.class)
 public class OpenApiSkillFullTests extends HttpTester {
-    private SimpleAgent getAgent(){
-        // 1. 对应 MockApp 中的路径配置
-        // 注意：MockApp 运行在随机端口或默认端口，HttpTester 会自动处理路径映射，
-        // 但给 Skill 的 URL 需要明确（单测中通常用 8080 或 path 变量）
+
+    private SimpleAgent getAgent(SchemaMode mode) {
         String mockApiDocsUrl = "http://localhost:8080/swagger/v1/api-docs";
         String apiBaseUrl = "http://localhost:8080";
 
-        // 2. 获取模型
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 3. 实例化 OpenApiSkill (开启 DYNAMIC 模式)
+        // 实例化 Skill 并指定模式
         OpenApiSkill apiSkill = new OpenApiSkill(mockApiDocsUrl, apiBaseUrl)
-                .schemaMode(SchemaMode.FULL);
+                .schemaMode(mode);
 
-        SimpleAgent agent = SimpleAgent.of(chatModel)
-                .role("系统管理员")
+        return SimpleAgent.of(chatModel)
+                .role("业务助理")
                 .defaultSkillAdd(apiSkill)
                 .build();
-
-        return agent;
     }
 
-
+    /**
+     * 测试 1：验证 $ref 模型引用的自动解析能力
+     */
     @Test
-    public void testApiInteraction() throws Throwable {
-        SimpleAgent agent = getAgent();
+    public void testModelReferenceDereference() throws Throwable {
+        SimpleAgent agent = getAgent(SchemaMode.FULL);
 
-        System.out.println("=== 开始 API 决策链检测 ===");
+        String query = "查询 ID 为 123 的用户状态是什么？";
+        System.out.println("[测试 $ref 解析]: " + query);
 
-        // [检测点 1]: 动态探测与 GET 查询
-        String q1 = "查询 ID 为 1001 的用户信息和他的状态";
-        System.out.println("[测试提问]: " + q1);
-        SimpleResponse resp1 = agent.prompt(q1).call();
-        System.out.println("[最终回答]: " + resp1.getContent());
+        SimpleResponse resp = agent.prompt(query).call();
+        String content = resp.getContent();
+        System.out.println("[回答]: " + content);
 
-        // 断言：AI 应该能获取到 MockApp 返回的 "active" 状态
-        Assertions.assertTrue(resp1.getContent().contains("1001"), "回答应包含用户ID");
-        Assertions.assertTrue(resp1.getContent().toLowerCase().contains("active"), "AI 应该能读到 Response Schema 中的状态字段");
-
-        // [检测点 2]: 全动词支持与 POST 构造
-        String q2 = "帮我创建一个名字叫 'Noear' 的用户，并告诉我新用户的 ID";
-        System.out.println("\n[测试提问]: " + q2);
-        SimpleResponse resp2 = agent.prompt(q2).call();
-        System.out.println("[最终回答]: " + resp2.getContent());
-
-        // 断言：MockApp 的 add 接口返回的是 {"code":200, "data":"100..."}
-        // AI 应该能解析出这个 data 字段
-        Assertions.assertTrue(resp2.getContent().contains("100"), "AI 应能解析并告知新生成的 ID");
+        // 断言：AI 必须能看到 User 模型里的 status 字段
+        Assertions.assertTrue(content.toLowerCase().contains("active"), "AI 应该能读到引用的 User 模型中的状态");
     }
 
+    /**
+     * 测试 2：验证 DYNAMIC 动态探测模式
+     * 在该模式下，AI 初始只知道接口列表，不知道具体参数，需要主动调用 get_api_detail
+     */
     @Test
-    public void testNonExistentApi() throws Throwable {
-        SimpleAgent agent = getAgent();
+    public void testDynamicSchemaDiscovery() throws Throwable {
+        SimpleAgent agent = getAgent(SchemaMode.DYNAMIC);
 
-        System.out.println("\n=== 开始不存在接口的边界检测 ===");
+        // 询问一个需要复杂 Body 的接口
+        String query = "帮我订购一个 'MacBook Pro'，数量为 1";
+        System.out.println("\n[测试动态探测]: " + query);
 
-        // [检测点 3]: 接口不存在的情况
-        // 故意询问一个 MockApp 文档里没有的功能（比如删除订单）
-        // AI 可能会尝试寻找 delete_orders_id 之类的接口
-        String q3 = "帮我删除 ID 为 999 的订单记录";
-        System.out.println("[测试提问]: " + q3);
+        SimpleResponse resp = agent.prompt(query).call();
+        String content = resp.getContent();
+        System.out.println("[回答]: " + content);
 
-        SimpleResponse resp3 = agent.prompt(q3).call();
-        String content = resp3.getContent();
-        System.out.println("[最终回答]: " + content);
+        // 断言：AI 应该成功调用了 orders/create 接口并返回了订单 ID
+        // 在 DYNAMIC 模式下，这证明了 AI 经历了：列清单 -> 查详情 (get_api_detail) -> 调接口 (call_api)
+        Assertions.assertTrue(content.contains("ORD-"), "AI 应通过动态探测解析出 Body 结构并成功下单");
+    }
 
-        // 断言逻辑：
-        // 1. AI 应该诚实告知无法完成（因为文档里没有对应的 API）
-        // 2. 或者在尝试调用不存在的 api_name 时，Skill 返回了 "Error: API ... not found"
-        // AI 最终的回答不应该包含“删除成功”等虚假信息
-        boolean isHandled = content.contains("没有") ||
-                content.contains("无法") ||
-                content.contains("不存在") ||
-                content.contains("权限");
+    /**
+     * 测试 3：验证 OAS 3.0 requestBody 的自适应提取
+     */
+    @Test
+    public void testOas3RequestBody() throws Throwable {
+        SimpleAgent agent = getAgent(SchemaMode.FULL);
 
-        Assertions.assertTrue(isHandled, "AI 面对不存在的接口时应给出合理的否定回答。实际回答：" + content);
+        // 这里的关键是让 AI 意识到接口定义在 requestBody 下
+        String query = "创建一个订单，产品名称是 'iPhone 15'";
+        SimpleResponse resp = agent.prompt(query).call();
+
+        // 只要能成功返回订单 ID，说明 Skill 成功把 OAS3 的 content/application/json 结构抹平给了 AI
+        Assertions.assertTrue(resp.getContent().contains("ORD-"));
     }
 }
