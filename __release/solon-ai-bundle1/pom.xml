@@ -54,8 +54,11 @@
         <module>../../solon-ai-rag-searchs/solon-ai-search-bocha</module>
 
 
+        <module>../../solon-ai-skills/solon-ai-skills</module>
         <module>../../solon-ai-skills/solon-ai-skill-basics</module>
         <module>../../solon-ai-skills/solon-ai-skill-openapi</module>
+        <module>../../solon-ai-skills/solon-ai-skill-data</module>
+        <module>../../solon-ai-skills/solon-ai-skill-web</module>
         <module>../../solon-ai-skills/solon-ai-skill-text2sql</module>
     </modules>
 </project>
