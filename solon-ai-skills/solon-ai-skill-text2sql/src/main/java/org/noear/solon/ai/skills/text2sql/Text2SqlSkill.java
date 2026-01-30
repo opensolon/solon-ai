@@ -1,3 +1,18 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.noear.solon.ai.skills.text2sql;
 
 import org.noear.snack4.ONode;
@@ -8,6 +23,8 @@ import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.data.sql.SqlUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -16,23 +33,24 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
- * 顶级工业级通用智能 SQL 转换技能 (全数据库方言兼容版)
+ * 智能 SQL 转换技能
+ *
+ * @author noear
+ * @since 3.9.1
  */
 public class Text2SqlSkill extends AbsSkill {
+    private final static Logger LOG = LoggerFactory.getLogger(Text2SqlSkill.class);
+
     private final SqlUtils sqlUtils;
     private final List<String> tableNames;
     private final String cachedSchemaInfo;
 
-    // --- 动态参数 ---
     private int maxRows = 50;
     private int maxContextLength = 8000;
     private String dialectName = "Generic SQL";
 
     public Text2SqlSkill(DataSource dataSource, String... tables) {
-        super();
-        this.sqlUtils = SqlUtils.of(dataSource);
-        this.tableNames = Arrays.asList(tables);
-        this.cachedSchemaInfo = extractSchemaInfo(tableNames);
+        this(SqlUtils.of(dataSource), tables);
     }
 
     public Text2SqlSkill(SqlUtils sqlUtils, String... tables) {
@@ -50,30 +68,37 @@ public class Text2SqlSkill extends AbsSkill {
 
     @Override
     public String description() {
-        return "数据库专家：深度理解多表结构、主外键及国产方言（达梦、金仓、海量等）。";
+        return "数据库专家：深度理解多表结构、主外键及国产方言，支持语义化查询。";
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
         String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         return "你是一个高级 " + dialectName + " 数据专家。当前系统时间: " + now + "\n" +
-                "--- SCHEMA START ---\n" + cachedSchemaInfo + "\n--- SCHEMA END ---\n" +
-                "【执行准则】：\n" +
-                "1. 务必参考字段注释理解业务含义。优先通过 [PK] 和 [FK] 进行表关联。\n" +
-                "2. 仅允许 SELECT。严禁多条语句并行（禁止分号）。\n" +
-                "3. 必须适配 " + dialectName + " 的特定语法。";
+                "【数据库结构说明】:\n" + cachedSchemaInfo + "\n" +
+                "【执行准则】:\n" +
+                "1. 参考字段注释理解业务逻辑。优先通过 [PK] 和 [FK] 进行表关联。\n" +
+                "2. 仅允许 SELECT。必须适配 " + dialectName + " 的特定语法（如分页、日期函数）。\n" +
+                "3. 严禁多条语句并行，严禁增删改操作。";
     }
 
     @ToolMapping(name = "execute_sql", description = "执行单条只读 SELECT 语句并获取 JSON 结果。")
     public String executeSql(@Param("sql") String sql) {
-        if (Assert.isBlank(sql)) return "Error: SQL is empty.";
+        if (Assert.isBlank(sql)) {
+            return "Error: SQL is empty.";
+        }
+
+        if(LOG.isTraceEnabled()){
+            LOG.trace("Executing SQL: {}", sql);
+        }
+
         String cleanSql = sql.trim();
         String upperSql = cleanSql.toUpperCase();
 
         if (!upperSql.startsWith("SELECT")) return "Error: Only SELECT is permitted.";
-        if (upperSql.contains(";") || upperSql.contains("--") || upperSql.contains("/*")) return "Error: Restricted characters detected.";
+        if (upperSql.contains(";") || upperSql.contains("--") || upperSql.contains("/*")) return "Error: Restricted characters.";
 
-        // --- 优化点 1：全方言自动分页补全 ---
+        // 分页补全逻辑
         if (!upperSql.contains("LIMIT") && !upperSql.contains("FETCH FIRST") && !upperSql.contains("TOP ")) {
             if (dialectName.contains("MySQL") || dialectName.contains("PostgreSQL") ||
                     dialectName.contains("Kingbase") || dialectName.contains("H2") || dialectName.contains("SQLite")) {
@@ -81,7 +106,6 @@ public class Text2SqlSkill extends AbsSkill {
             } else if (dialectName.contains("Dameng") || dialectName.contains("Oracle") || dialectName.contains("DB2")) {
                 cleanSql += " FETCH FIRST " + maxRows + " ROWS ONLY";
             } else if (dialectName.contains("SQL Server")) {
-                // SQL Server 的 TOP 需要插入到 SELECT 后，此处建议 AI 自行处理，或通过正则补全
                 if(!upperSql.startsWith("SELECT TOP")) {
                     cleanSql = cleanSql.replaceFirst("(?i)SELECT", "SELECT TOP " + maxRows);
                 }
@@ -108,17 +132,17 @@ public class Text2SqlSkill extends AbsSkill {
             String schema = conn.getSchema();
 
             for (String tableName : tables) {
+                // 1. 获取表名与注释
                 sb.append("Table: ").append(tableName);
-
-                // A. 表注释
                 try (ResultSet rs = dbMeta.getTables(catalog, schema, tableName, new String[]{"TABLE"})) {
                     if (rs.next()) {
                         String remarks = rs.getString("REMARKS");
-                        if (Assert.isNotEmpty(remarks)) sb.append(" (").append(remarks).append(")");
+                        if (Assert.isNotEmpty(remarks)) sb.append(" // ").append(remarks);
                     }
                 }
+                sb.append("\nColumns:\n");
 
-                // B. 主外键关系 (关联精度核心)
+                // 2. 提取主键与外键索引
                 Set<String> pks = new HashSet<>();
                 try (ResultSet rs = dbMeta.getPrimaryKeys(catalog, schema, tableName)) {
                     while (rs.next()) pks.add(rs.getString("COLUMN_NAME"));
@@ -128,67 +152,26 @@ public class Text2SqlSkill extends AbsSkill {
                     while (rs.next()) fks.put(rs.getString("FKCOLUMN_NAME"), rs.getString("PKTABLE_NAME"));
                 }
 
-                // C. 字段明细与样本
-                sb.append("\nColumns:\n");
+                // 3. 生成“瘦身版”结构 (核心：字段 + 类型 + 标记 + 注释)
                 try (ResultSet rs = dbMeta.getColumns(catalog, schema, tableName, null)) {
                     while (rs.next()) {
                         String col = rs.getString("COLUMN_NAME");
-                        sb.append(String.format(" - %s %s %s%s // %s\n",
-                                col, rs.getString("TYPE_NAME"),
-                                pks.contains(col) ? "[PK]" : "",
-                                fks.containsKey(col) ? "[FK->"+fks.get(col)+"]" : "",
-                                Utils.valueOr(rs.getString("REMARKS"), "")));
+                        String type = rs.getString("TYPE_NAME");
+                        String remarks = Utils.valueOr(rs.getString("REMARKS"), "");
+
+                        sb.append(" - ").append(col).append(" ").append(type);
+                        if (pks.contains(col)) sb.append(" [PK]");
+                        if (fks.containsKey(col)) sb.append(" [FK->").append(fks.get(col)).append("]");
+                        if (Assert.isNotEmpty(remarks)) sb.append(" // ").append(remarks);
+                        sb.append("\n");
                     }
                 }
-
-                sb.append("DDL: ").append(getDdl(conn, tableName)).append("\n");
                 sb.append("------------------------------------------\n");
             }
-        } catch (Exception e) { return "Metadata Error: " + e.getMessage(); }
+        } catch (Exception e) {
+            LOG.error("Extract schema error", e);
+            return "Metadata Error: " + e.getMessage();
+        }
         return sb.toString();
-    }
-
-    private String getDdl(Connection conn, String tableName) throws SQLException {
-        DatabaseMetaData meta = conn.getMetaData();
-        String dbType = meta.getDatabaseProductName().toUpperCase();
-
-        // --- 优化点 2：针对国产及主流库的原生 DDL 获取 ---
-        // 达梦 (Dameng)
-        if (dbType.contains("DM") || dbType.contains("DAMENG")) {
-            try (PreparedStatement pstmt = conn.prepareStatement("SELECT DBMS_METADATA.GET_DDL('TABLE', ?) FROM DUAL")) {
-                pstmt.setString(1, tableName.toUpperCase());
-                try (ResultSet rs = pstmt.executeQuery()) { if (rs.next()) return rs.getString(1); }
-            } catch (Exception ignored) {}
-        }
-        // 人大金仓 (Kingbase) / PostgreSQL
-        if (dbType.contains("KINGBASE") || dbType.contains("POSTGRESQL")) {
-            try (Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery("SELECT pg_get_tabledef('" + tableName + "')")) {
-                if (rs.next()) return rs.getString(1);
-            } catch (Exception ignored) {}
-        }
-        // MySQL / MariaDB
-        if (dbType.contains("MYSQL") || dbType.contains("MARIA")) {
-            try (Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery("SHOW CREATE TABLE " + tableName)) {
-                if (rs.next()) return rs.getString(2);
-            } catch (Exception ignored) {}
-        }
-
-        // --- 优化点 3：万能兜底 (Mock DDL) ---
-        return buildMockDdl(meta, conn.getCatalog(), conn.getSchema(), tableName);
-    }
-
-    private String buildMockDdl(DatabaseMetaData meta, String cat, String sche, String tab) throws SQLException {
-        StringBuilder sb = new StringBuilder("CREATE TABLE " + tab + " (\n");
-        try (ResultSet rs = meta.getColumns(cat, sche, tab, null)) {
-            boolean first = true;
-            while (rs.next()) {
-                if (!first) sb.append(",\n");
-                sb.append("  ").append(rs.getString("COLUMN_NAME")).append(" ").append(rs.getString("TYPE_NAME"));
-                first = false;
-            }
-        }
-        return sb.append("\n);").toString();
     }
 }
