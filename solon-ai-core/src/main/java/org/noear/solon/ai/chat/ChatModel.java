@@ -212,10 +212,10 @@ public class ChatModel implements AiModel {
         /**
          * 默认工具添加（即每次请求都会带上）
          *
-         * @param tool 工具对象
+         * @param tools 工具
          */
-        public Builder defaultToolAdd(FunctionTool tool) {
-            config.addDefaultTool(tool);
+        public Builder defaultToolAdd(FunctionTool... tools) {
+            config.addDefaultTool(tools);
             return this;
         }
 
@@ -269,8 +269,11 @@ public class ChatModel implements AiModel {
          *
          * @since 3.8.4
          */
-        public Builder defaultSkillAdd(Skill skill) {
-            return defaultSkillAdd(0, skill);
+        public Builder defaultSkillAdd(Skill... skill) {
+            for (Skill s : skill) {
+                defaultSkillAdd(0, s);
+            }
+            return this;
         }
 
         /**

@@ -428,9 +428,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         public Builder defaultSkillAdd(Skill... skills) {
-            for (Skill skill : skills) {
-                config.getDefaultOptions().skillAdd(0, skill);
-            }
+            config.getDefaultOptions().skillAdd(skills);
             return this;
         }
 

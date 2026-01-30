@@ -458,8 +458,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder defaultSkillAdd(Skill skill) {
-            config.getDefaultOptions().getModelOptions().skillAdd(skill);
+        public Builder defaultSkillAdd(Skill... skills) {
+            config.getDefaultOptions().getModelOptions().skillAdd(skills);
             return this;
         }
 
@@ -468,8 +468,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder defaultToolAdd(FunctionTool tool) {
-            config.getDefaultOptions().getModelOptions().toolAdd(tool);
+        public Builder defaultToolAdd(FunctionTool... tools) {
+            config.getDefaultOptions().getModelOptions().toolAdd(tools);
             return this;
         }
 

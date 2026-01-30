@@ -86,8 +86,8 @@ public class ChatConfig extends AiConfig {
     /**
      * 添加默认工具（即每次请求都会带上）
      */
-    public void addDefaultTool(FunctionTool tool) {
-        getModelOptions().toolAdd(tool);
+    public void addDefaultTool(FunctionTool... tools) {
+        getModelOptions().toolAdd(tools);
     }
 
     /**

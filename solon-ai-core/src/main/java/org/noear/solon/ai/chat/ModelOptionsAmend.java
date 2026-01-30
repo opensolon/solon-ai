@@ -127,8 +127,11 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     /**
      * 添加函数工具
      */
-    public T toolAdd(FunctionTool tool) {
-        tools.put(tool.name(), tool);
+    public T toolAdd(FunctionTool... tools) {
+        for (FunctionTool tool : tools) {
+            this.tools.put(tool.name(), tool);
+        }
+
         return (T) this;
     }
 
@@ -198,8 +201,16 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      *
      * @since 3.8.4
      */
-    public T skillAdd(Skill skill) {
-        return skillAdd(0, skill);
+    public T skillAdd(Skill... skills) {
+        for (Skill s : skills) {
+            this.skills.add(new RankEntity<>(s, 0));
+        }
+
+        if (this.skills.size() > 1) {
+            Collections.sort(this.skills);
+        }
+
+        return (T) this;
     }
 
     /**
