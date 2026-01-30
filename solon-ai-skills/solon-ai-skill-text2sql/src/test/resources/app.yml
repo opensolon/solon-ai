@@ -1,0 +1,5 @@
+solon.dataSources:
+  h2:
+    class: "org.noear.solon.data.datasource.UnpooledDataSource"
+    jdbcUrl: "jdbc:h2:mem:test;MODE=MYSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE"
+    driverClassName: "org.h2.Driver"

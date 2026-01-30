@@ -16,13 +16,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
- * 工业级通用智能 SQL 转换技能 (支持国产数据库)
+ * 顶级工业级通用智能 SQL 转换技能 (全数据库方言兼容版)
  */
 public class Text2SqlSkill extends AbsSkill {
     private final SqlUtils sqlUtils;
     private final List<String> tableNames;
     private final String cachedSchemaInfo;
 
+    // --- 动态参数 ---
     private int maxRows = 50;
     private int maxContextLength = 8000;
     private String dialectName = "Generic SQL";
@@ -31,17 +32,25 @@ public class Text2SqlSkill extends AbsSkill {
         super();
         this.sqlUtils = SqlUtils.of(dataSource);
         this.tableNames = Arrays.asList(tables);
-        this.cachedSchemaInfo = extractSchemaInfo(dataSource, tableNames);
+        this.cachedSchemaInfo = extractSchemaInfo(tableNames);
+    }
+
+    public Text2SqlSkill(SqlUtils sqlUtils, String... tables) {
+        super();
+        this.sqlUtils = sqlUtils;
+        this.tableNames = Arrays.asList(tables);
+        this.cachedSchemaInfo = extractSchemaInfo(tableNames);
     }
 
     public Text2SqlSkill maxRows(int maxRows) { this.maxRows = maxRows; return this; }
+    public Text2SqlSkill maxContextLength(int length) { this.maxContextLength = length; return this; }
 
     @Override
     public String name() { return "sql_expert"; }
 
     @Override
     public String description() {
-        return "数据库专家：深度理解多表结构、主外键及国产方言（达梦、金仓等）。";
+        return "数据库专家：深度理解多表结构、主外键及国产方言（达梦、金仓、海量等）。";
     }
 
     @Override
@@ -52,29 +61,36 @@ public class Text2SqlSkill extends AbsSkill {
                 "【执行准则】：\n" +
                 "1. 务必参考字段注释理解业务含义。优先通过 [PK] 和 [FK] 进行表关联。\n" +
                 "2. 仅允许 SELECT。严禁多条语句并行（禁止分号）。\n" +
-                "3. 必须适配 " + dialectName + " 的特定语法（如分页、日期函数）。";
+                "3. 必须适配 " + dialectName + " 的特定语法。";
     }
 
-    @ToolMapping(name = "execute_sql", description = "执行单条只读 SELECT 语句并获取结果。")
+    @ToolMapping(name = "execute_sql", description = "执行单条只读 SELECT 语句并获取 JSON 结果。")
     public String executeSql(@Param("sql") String sql) {
         if (Assert.isBlank(sql)) return "Error: SQL is empty.";
         String cleanSql = sql.trim();
         String upperSql = cleanSql.toUpperCase();
 
-        if (!upperSql.startsWith("SELECT")) return "Error: Only SELECT is allowed.";
-        if (upperSql.contains(";") || upperSql.contains("--")) return "Error: Illegal characters.";
+        if (!upperSql.startsWith("SELECT")) return "Error: Only SELECT is permitted.";
+        if (upperSql.contains(";") || upperSql.contains("--") || upperSql.contains("/*")) return "Error: Restricted characters detected.";
 
-        // 自动分页逻辑补全 (针对不同方言)
+        // --- 优化点 1：全方言自动分页补全 ---
         if (!upperSql.contains("LIMIT") && !upperSql.contains("FETCH FIRST") && !upperSql.contains("TOP ")) {
-            if (dialectName.contains("MySQL") || dialectName.contains("PostgreSQL") || dialectName.contains("Kingbase")) {
+            if (dialectName.contains("MySQL") || dialectName.contains("PostgreSQL") ||
+                    dialectName.contains("Kingbase") || dialectName.contains("H2") || dialectName.contains("SQLite")) {
                 cleanSql += " LIMIT " + maxRows;
-            } else if (dialectName.contains("Dameng") || dialectName.contains("Oracle")) {
+            } else if (dialectName.contains("Dameng") || dialectName.contains("Oracle") || dialectName.contains("DB2")) {
                 cleanSql += " FETCH FIRST " + maxRows + " ROWS ONLY";
+            } else if (dialectName.contains("SQL Server")) {
+                // SQL Server 的 TOP 需要插入到 SELECT 后，此处建议 AI 自行处理，或通过正则补全
+                if(!upperSql.startsWith("SELECT TOP")) {
+                    cleanSql = cleanSql.replaceFirst("(?i)SELECT", "SELECT TOP " + maxRows);
+                }
             }
         }
 
         try {
             List<Map> rows = sqlUtils.sql(cleanSql).queryRowList(Map.class);
+            if (rows == null || rows.isEmpty()) return "Query OK. No data.";
             String json = ONode.serialize(rows);
             return json.length() > maxContextLength ? json.substring(0, maxContextLength) + "... [Truncated]" : json;
         } catch (SQLException e) {
@@ -82,9 +98,10 @@ public class Text2SqlSkill extends AbsSkill {
         }
     }
 
-    private String extractSchemaInfo(DataSource ds, List<String> tables) {
+    private String extractSchemaInfo(List<String> tables) {
         StringBuilder sb = new StringBuilder();
-        try (Connection conn = ds.getConnection()) {
+
+        try (Connection conn = sqlUtils.getDataSource().getConnection()) {
             DatabaseMetaData dbMeta = conn.getMetaData();
             this.dialectName = dbMeta.getDatabaseProductName();
             String catalog = conn.getCatalog();
@@ -93,7 +110,7 @@ public class Text2SqlSkill extends AbsSkill {
             for (String tableName : tables) {
                 sb.append("Table: ").append(tableName);
 
-                // 1. 获取表注释
+                // A. 表注释
                 try (ResultSet rs = dbMeta.getTables(catalog, schema, tableName, new String[]{"TABLE"})) {
                     if (rs.next()) {
                         String remarks = rs.getString("REMARKS");
@@ -101,7 +118,7 @@ public class Text2SqlSkill extends AbsSkill {
                     }
                 }
 
-                // 2. 提取主外键
+                // B. 主外键关系 (关联精度核心)
                 Set<String> pks = new HashSet<>();
                 try (ResultSet rs = dbMeta.getPrimaryKeys(catalog, schema, tableName)) {
                     while (rs.next()) pks.add(rs.getString("COLUMN_NAME"));
@@ -111,7 +128,7 @@ public class Text2SqlSkill extends AbsSkill {
                     while (rs.next()) fks.put(rs.getString("FKCOLUMN_NAME"), rs.getString("PKTABLE_NAME"));
                 }
 
-                // 3. 提取字段列表
+                // C. 字段明细与样本
                 sb.append("\nColumns:\n");
                 try (ResultSet rs = dbMeta.getColumns(catalog, schema, tableName, null)) {
                     while (rs.next()) {
@@ -124,11 +141,10 @@ public class Text2SqlSkill extends AbsSkill {
                     }
                 }
 
-                // 4. 方言适配 DDL
                 sb.append("DDL: ").append(getDdl(conn, tableName)).append("\n");
                 sb.append("------------------------------------------\n");
             }
-        } catch (Exception e) { return "Error: " + e.getMessage(); }
+        } catch (Exception e) { return "Metadata Error: " + e.getMessage(); }
         return sb.toString();
     }
 
@@ -136,34 +152,30 @@ public class Text2SqlSkill extends AbsSkill {
         DatabaseMetaData meta = conn.getMetaData();
         String dbType = meta.getDatabaseProductName().toUpperCase();
 
-        // 达梦 (Dameng) - 往往支持 DBMS_METADATA 或类似 Oracle 的查询
+        // --- 优化点 2：针对国产及主流库的原生 DDL 获取 ---
+        // 达梦 (Dameng)
         if (dbType.contains("DM") || dbType.contains("DAMENG")) {
             try (PreparedStatement pstmt = conn.prepareStatement("SELECT DBMS_METADATA.GET_DDL('TABLE', ?) FROM DUAL")) {
                 pstmt.setString(1, tableName.toUpperCase());
-                try (ResultSet rs = pstmt.executeQuery()) {
-                    if (rs.next()) return rs.getString(1);
-                }
-            } catch (Exception e) { /* Fallback */ }
+                try (ResultSet rs = pstmt.executeQuery()) { if (rs.next()) return rs.getString(1); }
+            } catch (Exception ignored) {}
         }
-
-        // 人大金仓 (Kingbase) - 兼容 PG 风格
+        // 人大金仓 (Kingbase) / PostgreSQL
         if (dbType.contains("KINGBASE") || dbType.contains("POSTGRESQL")) {
-            // 人大金仓通常支持标准 PG 系统查询，但也提供原生函数
             try (Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery("SELECT pg_get_tabledef('" + tableName + "')")) {
                 if (rs.next()) return rs.getString(1);
-            } catch (Exception e) { /* Fallback */ }
+            } catch (Exception ignored) {}
         }
-
-        // MySQL / H2 原生适配
-        if (dbType.contains("MYSQL") || dbType.contains("H2")) {
+        // MySQL / MariaDB
+        if (dbType.contains("MYSQL") || dbType.contains("MARIA")) {
             try (Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery("SHOW CREATE TABLE " + tableName)) {
-                return rs.next() ? rs.getString(2) : "";
-            }
+                if (rs.next()) return rs.getString(2);
+            } catch (Exception ignored) {}
         }
 
-        // 通用 JDBC 逻辑拼装兜底 (适用于所有不支持原文 DDL 的库)
+        // --- 优化点 3：万能兜底 (Mock DDL) ---
         return buildMockDdl(meta, conn.getCatalog(), conn.getSchema(), tableName);
     }
 
