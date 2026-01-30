@@ -13,7 +13,7 @@ public class Demo {
         Text2SqlSkill sqlSkill = new Text2SqlSkill(dataSource, "users", "orders", "order_refunds")
                 .maxRows(50); // 限制返回行数，保护内存
 
-        // 构发建 Agent 或 ChatModel
+        // 构建 Agent 或 ChatModel
         ChatModel agent = ChatModel.of("https://api.moark.com/v1/chat/completions")
                 .apiKey("***")
                 .model("Qwen3-32B")

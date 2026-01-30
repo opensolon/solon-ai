@@ -13,7 +13,7 @@ public class Demo {
         // 2. 创建技能
         OpenApiSkill apiSkill = new OpenApiSkill(docUrl, baseUrl);
 
-        // 3. 接入 Agent
+        // 3. 构建 Agent 或 ChatModel
         SimpleAgent agent = SimpleAgent.of(chatModel)
                 .defaultSkillAdd(apiSkill)
                 .build();

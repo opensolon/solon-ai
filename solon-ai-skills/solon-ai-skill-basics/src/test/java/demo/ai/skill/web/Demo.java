@@ -6,18 +6,15 @@ import org.noear.solon.ai.skills.system.SystemClockSkill;
 import org.noear.solon.ai.skills.web.WebCrawlerSkill;
 import org.noear.solon.ai.skills.web.WebSearchSkill;
 
-/**
- *
- * @author noear 2026/1/30 created
- *
- */
+
 public class Demo {
     public void test() throws Exception {
-        WebSearchSkill search = new WebSearchSkill(WebSearchSkill.SERPER, "serper_key");
+        WebSearchSkill search = new WebSearchSkill(WebSearchSkill.BAIDU, "serper_key");
         WebCrawlerSkill crawler = new WebCrawlerSkill(WebCrawlerSkill.FIRECRAWL, "jina_key");
         FileStorageSkill disk = new FileStorageSkill("./ai_workspace");
         SystemClockSkill clock = new SystemClockSkill();
 
+        // 构建 Agent 或 ChatModel
         ChatModel agent = ChatModel.of("url..")
                 .model("xxx")
                 .defaultSkillAdd(clock, disk, search, crawler)
