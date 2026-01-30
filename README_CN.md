@@ -69,6 +69,20 @@ Solon AI 是 Solon 项目核心子项目之一。它是一个全场景的 Java A
 * https://gitcode.com/solonlab/solon-ai-mcp-embedded-examples
 * https://github.com/solonlab/solon-ai-mcp-embedded-examples
 
+
+## 能用来开发什么应用？
+
+* 通用自主智能体应用（比如：Manus、OpenOperator）
+* 智能助理与 RAG 知识库应用（比如：Dify、Coze）
+* 多 Agent 协作的任务编排应用（比如：AutoGPT、MetaGPT）
+* 业务驱动的受控流程审批应用（比如：智能版钉钉审批流、SAP 智能模块）
+* 结构化数据处理与 ETL 应用（比如：Instabase、Unstructured.io）
+* 实时数据智能看板应用（比如：Text-to-SQL 类应用）
+* 自动化测试与质量保障应用（比如：GitHub Copilot Workspace）
+* 低代码/可视化 AI 工作流平台（比如：LangFlow、Flowise）
+* 等等...
+
+
 ## 核心模块体验
 
 * ChatModel（通用大语言模型 LLM 调用接口）

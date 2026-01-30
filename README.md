@@ -70,6 +70,19 @@ Examples of embeddings (including third-party frameworks) for solon-ai:
 * https://gitcode.com/solonlab/solon-ai-mcp-embedded-examples
 * https://github.com/solonlab/solon-ai-mcp-embedded-examples
 
+
+## What types of applications can be developed?
+
+* General-purpose Autonomous Agents (e.g., Manus, OpenOperator)
+* Intelligent Assistants & RAG Knowledge Bases (e.g., Dify, Coze)
+* Multi-Agent Collaborative Orchestration (e.g., AutoGPT, MetaGPT)
+* Business-Driven Controlled Workflows (e.g., AI-enhanced DingTalk/Lark approvals, SAP Intelligent Modules)
+* Intelligent Document Processing & ETL (e.g., Instabase, Unstructured.io)
+* Real-time Data Insights & Dashboards (e.g., Text-to-SQL applications)
+* Automated Testing & Quality Assurance (e.g., GitHub Copilot Workspace)
+* Low-Code/Visual AI Workflow Platforms (e.g., LangFlow, Flowise)
+* And more...
+
 ## Core Module Experience
 
 * ChatModel(General Purpose LLM call interface)
