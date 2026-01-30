@@ -108,9 +108,9 @@ public class ReActTrace implements AgentTrace {
 
     protected void activeSkills() {
         //设置指令
-        StringBuilder combinedInstruction = SkillUtil.activeSkills(options.getModelOptions(), originalPrompt);
-        if (combinedInstruction.length() > 0) {
-            options.setSkillInstruction(combinedInstruction.toString());
+        StringBuilder skillsInstruction = SkillUtil.activeSkills(options.getModelOptions(), originalPrompt, new StringBuilder());
+        if (skillsInstruction.length() > 0) {
+            options.setSkillInstruction(skillsInstruction.toString());
         }
     }
 

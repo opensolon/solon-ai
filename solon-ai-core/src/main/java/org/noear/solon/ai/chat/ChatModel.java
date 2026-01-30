@@ -185,6 +185,25 @@ public class ChatModel implements AiModel {
             return this;
         }
 
+        /**
+         * 角色
+         */
+        public Builder role(String role) {
+            config.getModelOptions().role(role);
+            return this;
+        }
+
+        /**
+         * 指令
+         */
+        public Builder instruction(String instruction) {
+            config.getModelOptions().instruction(instruction);
+            return this;
+        }
+
+        /**
+         * 模型选项
+         */
         public Builder modelOptions(Consumer<ModelOptionsAmend<?, ChatInterceptor>> consumer) {
             consumer.accept(config.getModelOptions());
             return this;

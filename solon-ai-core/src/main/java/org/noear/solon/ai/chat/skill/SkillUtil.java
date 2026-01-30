@@ -37,9 +37,7 @@ public class SkillUtil {
     /**
      * 激活技能
      */
-    public static StringBuilder activeSkills(ModelOptionsAmend<?, ?> modelOptions, Prompt prompt) {
-        StringBuilder combinedInstruction = new StringBuilder();
-
+    public static StringBuilder activeSkills(ModelOptionsAmend<?, ?> modelOptions, Prompt prompt, StringBuilder builder) {
         for (RankEntity<Skill> item : modelOptions.skills()) {
             Skill skill = item.target;
 
@@ -63,13 +61,13 @@ public class SkillUtil {
             }
 
             //聚合提示词
-            injectSkillInstruction(skill, prompt, combinedInstruction);
+            injectSkillInstruction(skill, prompt, builder);
 
             //部署工具
             modelOptions.toolAdd(skill.getTools(prompt));
         }
 
-        return combinedInstruction;
+        return builder;
     }
 
 

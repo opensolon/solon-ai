@@ -120,7 +120,13 @@ public class PromptImpl implements Prompt, Serializable {
 
     @Override
     public Prompt addMessage(ChatMessage... msgs) {
-        return addMessage(Arrays.asList(msgs));
+        for (ChatMessage msg : msgs) {
+            if (msg != null) {
+                this.messages.add(msg);
+            }
+        }
+
+        return this;
     }
 
     @Override

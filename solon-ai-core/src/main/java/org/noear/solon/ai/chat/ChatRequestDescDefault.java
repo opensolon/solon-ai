@@ -19,6 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.*;
+import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
@@ -29,6 +30,7 @@ import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCallException;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.net.http.HttpException;
@@ -70,6 +72,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         this.options = new ChatOptions();
         this.options.putAll(config.getModelOptions());
+        this.options.role(config.getModelOptions().role());
+        this.options.instruction(config.getModelOptions().instruction());
     }
 
     public ChatRequestDesc session(ChatSession session) {
@@ -108,34 +112,49 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     /**
      * 准备
      */
-    private void prepare(){
+    private SystemMessage prepare() {
         if (session == null) {
             session = InMemoryChatSession.builder().build();
-        }
-
-        StringBuilder combinedInstruction = SkillUtil.activeSkills(options, originalPrompt);
-        if (combinedInstruction.length() > 0) {
-            session.addMessage(ChatMessage.ofSystem(combinedInstruction.toString()));
         }
 
         if (originalPrompt != null) {
             session.addMessage(originalPrompt);
         }
+
+        //---
+
+        StringBuilder systemMessage = new StringBuilder();
+
+        if (Assert.isNotEmpty(options.role())) {
+            systemMessage.append("## 你的角色\n").append(options.role()).append("\n\n");
+        }
+        if (Assert.isNotEmpty(options.instruction())) {
+            systemMessage.append("## 执行指令\n").append(options.instruction());
+        }
+
+        SkillUtil.activeSkills(options, originalPrompt, systemMessage);
+        if (systemMessage.length() > 0) {
+            return ChatMessage.ofSystem(systemMessage.toString());
+        } else {
+            return null;
+        }
     }
+
+    private SystemMessage systemMessage;
 
     /**
      * 调用
      */
     @Override
     public ChatResponse call() throws IOException {
-        prepare();
+        systemMessage = prepare();
 
         return internalCall();
     }
 
     protected ChatResponse internalCall() throws IOException {
         //构建请求数据（每次请求重新构建 finalPrompt）
-        ChatRequest req = new ChatRequest(config, dialect, options, session, originalPrompt, false);
+        ChatRequest req = new ChatRequest(config, dialect, options, session, systemMessage, originalPrompt, false);
 
         CallChain chain = new CallChain(options.interceptors(), this::doCall);
 
@@ -160,7 +179,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             log.debug("llm-response: {}", respJson);
         }
 
-        ChatResponseDefault resp = new ChatResponseDefault(req,false);
+        ChatResponseDefault resp = new ChatResponseDefault(req, false);
         resp.setResponseData(respJson);
         dialect.parseResponseJson(config, resp, respJson);
 
@@ -196,14 +215,14 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     @Override
     public Publisher<ChatResponse> stream() {
-        prepare();
+        systemMessage = prepare();
 
         return internalStream();
     }
 
     private Publisher<ChatResponse> internalStream() {
         //构建请求数据（每次请求重新构建 finalPrompt）
-        ChatRequest req = new ChatRequest(config, dialect, options, session, originalPrompt,true);
+        ChatRequest req = new ChatRequest(config, dialect, options, session, systemMessage, originalPrompt, true);
 
         StreamChain chain = new StreamChain(options.interceptors(), this::doStream);
 

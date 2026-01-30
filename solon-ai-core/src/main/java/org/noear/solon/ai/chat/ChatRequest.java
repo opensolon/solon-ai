@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.dialect.ChatDialect;
+import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.NonSerializable;
@@ -36,14 +37,15 @@ public class ChatRequest implements NonSerializable {
     private final Prompt originalPrompt;
     private final Prompt finalPrompt;
 
-    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session, Prompt originalPrompt, boolean stream) {
+    public ChatRequest(ChatConfig config, ChatDialect dialect, ChatOptions options, ChatSession session, SystemMessage systemMessage, Prompt originalPrompt, boolean stream) {
         this.session = session;
         this.config = config;
         this.configReadonly = new ChatConfigReadonly(config);
         this.dialect = dialect;
         this.options = options;
         this.stream = stream;
-        this.finalPrompt = Prompt.of(session.getMessages());
+        this.finalPrompt = Prompt.of(systemMessage).addMessage(originalPrompt.getMessages());
+
         this.originalPrompt = (originalPrompt == null ? finalPrompt : originalPrompt);
     }
 
