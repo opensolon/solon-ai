@@ -45,6 +45,7 @@ public class Text2SqlSkill extends AbsSkill {
 
     protected final SqlUtils sqlUtils;
     protected final List<String> tableNames;
+    protected final Map<String, String> tableRemarksMap = new LinkedHashMap<>();
     protected final String cachedSchemaInfo;
 
     protected int maxRows = 50;
@@ -113,8 +114,12 @@ public class Text2SqlSkill extends AbsSkill {
             sb.append("##### 2. 数据库结构说明 (Schema)\n").append(cachedSchemaInfo);
         } else {
             sb.append("##### 2. 数据库目录 (Table List)\n")
-                    .append("当前库表较多，初始仅列出目录。**编写 SQL 前必须调用 `get_table_schema` 探测所需表的结构**:\n")
-                    .append(String.join(", ", tableNames));
+                    .append("当前库表较多，初始仅列出目录。**编写 SQL 前必须调用 `get_table_schema` 探测所需表的结构**:\n\n");
+
+            for (String tableName : tableNames) {
+                String remarks = tableRemarksMap.getOrDefault(tableName, "");
+                sb.append("- **").append(tableName).append("**").append(Utils.isEmpty(remarks) ? "" : ": " + remarks).append("\n");
+            }
         }
 
         sb.append("##### 3. SQL 执行准则 (严格遵守)\n");
@@ -217,17 +222,24 @@ public class Text2SqlSkill extends AbsSkill {
             String schema = conn.getSchema();
 
             for (String tableName : tables) {
-                // 1. 表名作为加粗列表项，移除冗余的 "Table:" 标签和分割线
-                sb.append("* **Table: ").append(tableName).append("**");
+                String tableRemarks = null; // 明确命名为 tableRemarks
                 try (ResultSet rs = dbMeta.getTables(catalog, schema, tableName, new String[]{"TABLE", "VIEW"})) {
                     if (rs.next()) {
-                        String remarks = rs.getString("REMARKS");
-                        if (Assert.isNotEmpty(remarks)) sb.append(" // ").append(remarks);
+                        tableRemarks = rs.getString("REMARKS");
+                        if (Utils.isNotEmpty(tableRemarks)) {
+                            tableRemarksMap.put(tableName, tableRemarks);
+                        }
                     }
+                }
+
+                // 1. 表名信息
+                sb.append("* **Table: ").append(tableName).append("**");
+                if (Utils.isNotEmpty(tableRemarks)) {
+                    sb.append(" // ").append(tableRemarks);
                 }
                 sb.append("\n");
 
-                // 2. 提取主键与外键关联 (FK 明确指向表.列)
+                // 2. 主键与外键关联 (保持不变)
                 Set<String> pks = new HashSet<>();
                 try (ResultSet rs = dbMeta.getPrimaryKeys(catalog, schema, tableName)) {
                     while (rs.next()) pks.add(rs.getString("COLUMN_NAME"));
@@ -240,17 +252,17 @@ public class Text2SqlSkill extends AbsSkill {
                     }
                 }
 
-                // 3. 生成列清单：使用双空格缩进，增强隶属感
+                // 3. 生成列清单：重命名变量为 colRemarks
                 try (ResultSet rs = dbMeta.getColumns(catalog, schema, tableName, null)) {
                     while (rs.next()) {
                         String col = rs.getString("COLUMN_NAME");
                         String type = rs.getString("TYPE_NAME");
-                        String remarks = Utils.valueOr(rs.getString("REMARKS"), "");
+                        String colRemarks = Utils.valueOr(rs.getString("REMARKS"), ""); // 明确命名
 
                         sb.append("  - ").append(col).append(" (").append(type).append(")");
                         if (pks.contains(col)) sb.append(" [PK]");
                         if (fks.containsKey(col)) sb.append(" [FK -> ").append(fks.get(col)).append("]");
-                        if (Assert.isNotEmpty(remarks)) sb.append(" // ").append(remarks);
+                        if (Assert.isNotEmpty(colRemarks)) sb.append(" // ").append(colRemarks);
                         sb.append("\n");
                     }
                 }
