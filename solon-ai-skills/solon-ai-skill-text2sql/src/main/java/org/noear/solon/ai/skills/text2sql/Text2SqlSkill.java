@@ -172,9 +172,14 @@ public class Text2SqlSkill extends AbsSkill {
         }
 
         String upperSql = cleanSql.toUpperCase();
-        if (!upperSql.startsWith("SELECT")) return "Error: Only SELECT is permitted.";
-        if (upperSql.contains(";") || upperSql.contains("--") || upperSql.contains("/*")) {
-            return "Error: Restricted characters detected.";
+        // 根据配置决定是否拦截
+        if (readOnly && !upperSql.startsWith("SELECT")) {
+            return "Error: This tool is restricted to SELECT statements only.";
+        }
+
+        // 严禁多条执行（防止注入或脚本）
+        if (upperSql.contains(";") && !cleanSql.endsWith(";")) {
+            return "Error: Multiple SQL statements are not allowed.";
         }
 
         // 分页补全逻辑 (适配常用主流及国产数据库)
