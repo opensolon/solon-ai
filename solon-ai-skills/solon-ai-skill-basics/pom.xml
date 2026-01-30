@@ -11,7 +11,7 @@
         <relativePath>../../solon-ai-parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>solon-ai-skill-openapi</artifactId>
+    <artifactId>solon-ai-skill-basics</artifactId>
     <name>${project.artifactId}</name>
     <packaging>jar</packaging>
 
@@ -19,24 +19,6 @@
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-ai</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>snack4-jsonpath</artifactId>
-            <version>${snack4.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-web</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-agent</artifactId>
-            <scope>test</scope>
         </dependency>
 
         <dependency>
