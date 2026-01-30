@@ -57,6 +57,5 @@
         <module>../../solon-ai-skills/solon-ai-skill-basics</module>
         <module>../../solon-ai-skills/solon-ai-skill-openapi</module>
         <module>../../solon-ai-skills/solon-ai-skill-text2sql</module>
-        <module>../../solon-ai-skills/solon-ai-skill-web</module>
     </modules>
 </project>
