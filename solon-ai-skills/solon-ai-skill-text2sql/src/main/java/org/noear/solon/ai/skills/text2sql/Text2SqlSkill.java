@@ -83,7 +83,7 @@ public class Text2SqlSkill extends AbsSkill {
         return "##### 1. 环境与上下文\n" +
                 "- **当前库类型**: " + dialectName + "\n" +
                 "- **系统时间**: " + now + "\n\n" +
-                "##### 2. 数据库结构说明 (Schema & Sample Data)\n" + cachedSchemaInfo + "\n" +
+                "##### 2. 数据库结构说明 (Schema)\n" + cachedSchemaInfo + "\n" +
                 "##### 3. SQL 执行准则\n" +
                 "1. **方言一致性**: 必须使用 " + dialectName + " 的原生语法（函数、分页、转义符）。\n" +
                 "2. **先探测后重度计算**: 若对字段格式或方言函数有疑虑，优先执行 `SELECT col FROM table LIMIT 1` 探测真实数据，严禁盲目尝试复杂转换。\n" +
@@ -139,7 +139,7 @@ public class Text2SqlSkill extends AbsSkill {
         }
     }
 
-    private String extractSchemaInfo(List<String> tables) {
+    protected String extractSchemaInfo(List<String> tables) {
         StringBuilder sb = new StringBuilder();
 
         try (Connection conn = sqlUtils.getDataSource().getConnection()) {
