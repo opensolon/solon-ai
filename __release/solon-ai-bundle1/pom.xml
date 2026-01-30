@@ -55,5 +55,6 @@
 
 
         <module>../../solon-ai-skills/solon-ai-skill-text2sql</module>
+        <module>../../solon-ai-skills/solon-ai-skill-openapi</module>
     </modules>
 </project>
