@@ -20,6 +20,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.data.sql.SqlUtils;
@@ -31,6 +32,7 @@ import java.sql.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 智能 SQL 转换技能
@@ -48,6 +50,7 @@ public class Text2SqlSkill extends AbsSkill {
     private int maxRows = 50;
     private int maxContextLength = 8000;
     private String dialectName = "Generic SQL";
+    private SchemaMode schemaMode = SchemaMode.FULL;
 
     public Text2SqlSkill(DataSource dataSource, String... tables) {
         this(SqlUtils.of(dataSource), tables);
@@ -58,13 +61,29 @@ public class Text2SqlSkill extends AbsSkill {
         this.sqlUtils = sqlUtils;
         this.tableNames = Arrays.asList(tables);
         this.cachedSchemaInfo = extractSchemaInfo(tableNames);
+        this.schemaMode = tableNames.size() > 20 ? SchemaMode.DYNAMIC : SchemaMode.FULL;
     }
 
-    public Text2SqlSkill maxRows(int maxRows) { this.maxRows = maxRows; return this; }
-    public Text2SqlSkill maxContextLength(int length) { this.maxContextLength = length; return this; }
+    public Text2SqlSkill maxRows(int maxRows) {
+        this.maxRows = maxRows;
+        return this;
+    }
+
+    public Text2SqlSkill maxContextLength(int length) {
+        this.maxContextLength = length;
+        return this;
+    }
+
+    public Text2SqlSkill schemaMode(SchemaMode schemaMode) {
+        this.schemaMode = schemaMode;
+        return this;
+    }
+
 
     @Override
-    public String name() { return "sql_expert"; }
+    public String name() {
+        return "sql_expert";
+    }
 
     @Override
     public String description() {
@@ -79,17 +98,50 @@ public class Text2SqlSkill extends AbsSkill {
     @Override
     public String getInstruction(Prompt prompt) {
         String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        StringBuilder sb = new StringBuilder();
 
-        return "##### 1. 环境与上下文\n" +
-                "- **当前库类型**: " + dialectName + "\n" +
-                "- **系统时间**: " + now + "\n\n" +
-                "##### 2. 数据库结构说明 (Schema)\n" + cachedSchemaInfo + "\n" +
-                "##### 3. SQL 执行准则\n" +
-                "1. **方言一致性**: 必须使用 " + dialectName + " 的原生语法（函数、分页、转义符）。\n" +
-                "2. **先探测后重度计算**: 若对字段格式或方言函数有疑虑，优先执行 `SELECT col FROM table LIMIT 1` 探测真实数据，严禁盲目尝试复杂转换。\n" +
-                "3. **关键字转义**: 识别 " + dialectName + " 的保留字（如 YEAR, ORDER, USER），若作为别名或表名使用，必须加方言对应的转义符（如双引号或反引号）。\n" +
-                "4. **自愈逻辑**: 遇到报错时，根据错误信息分析是否为方言函数不支持或类型不匹配，调整逻辑后重试。\n" +
-                "5. **结果收敛**: 若多次尝试后确认无数据或方言不支持，请诚实告知用户，严禁编造数据。";
+        sb.append("##### 1. 环境与上下文\n")
+                .append("- **当前库类型**: ").append(dialectName).append("\n")
+                .append("- **系统时间**: ").append(now).append("\n\n");
+
+        if (schemaMode == SchemaMode.FULL) {
+            sb.append("##### 2. 数据库结构说明 (Schema)\n").append(cachedSchemaInfo);
+        } else {
+            sb.append("##### 2. 数据库目录 (Table List)\n")
+                    .append("当前库表较多，初始仅列出目录。**编写 SQL 前必须调用 `get_table_schema` 探测所需表的结构**:\n")
+                    .append(String.join(", ", tableNames));
+        }
+
+        sb.append("##### 3. SQL 执行准则\n")
+                .append("1. **方言一致性**: 必须使用 ").append(dialectName).append(" 的原生语法（函数、分页、转义符）。\n")
+                .append("2. **先探测后重度计算**: 若对字段格式或方言函数有疑虑，优先执行 `SELECT col FROM table LIMIT 1` 探测真实数据，严禁盲目尝试复杂转换。\n")
+                .append("3. **关键字转义**: 识别 ").append(dialectName).append(" 的保留字（如 YEAR, ORDER, USER），若作为别名或表名使用，必须加方言对应的转义符（如双引号或反引号）。\n")
+                .append("4. **自愈逻辑**: 遇到报错时，根据错误信息分析是否为方言函数不支持或类型不匹配，调整逻辑后重试。\n")
+                .append("5. **结果收敛**: 若多次尝试后确认无数据或方言不支持，请诚实告知用户，严禁编造数据。");
+
+
+        return sb.toString();
+    }
+
+    @Override
+    public Collection<FunctionTool> getTools(Prompt prompt) {
+        if (schemaMode == SchemaMode.FULL) {
+            //全量，不需要 get_table_schema
+            return tools.stream()
+                    .filter(tool -> "execute_sql".equals(tool.name()))
+                    .collect(Collectors.toList());
+        } else {
+            return super.getTools(prompt);
+        }
+    }
+
+    @ToolMapping(name = "get_table_schema", description = "获取特定表的详细 DDL 和列信息")
+    public String getTableSchema(@Param("tableName") String tableName) {
+        if (!tableNames.contains(tableName)) {
+            return "Error: Table '" + tableName + "' not found.";
+        }
+        // 动态提取单表的结构
+        return extractSchemaInfo(Collections.singletonList(tableName));
     }
 
     @ToolMapping(name = "execute_sql", description = "执行单条只读 SELECT 语句并获取 JSON 结果。")
@@ -98,7 +150,7 @@ public class Text2SqlSkill extends AbsSkill {
             return "Error: SQL is empty.";
         }
 
-        if(LOG.isTraceEnabled()){
+        if (LOG.isTraceEnabled()) {
             LOG.trace("Executing SQL: {}", sql);
         }
 
@@ -122,7 +174,7 @@ public class Text2SqlSkill extends AbsSkill {
             } else if (dn.contains("DAMENG") || dn.contains("ORACLE") || dn.contains("DB2")) {
                 cleanSql += " FETCH FIRST " + maxRows + " ROWS ONLY";
             } else if (dn.contains("SQL SERVER")) {
-                if(!upperSql.startsWith("SELECT TOP")) {
+                if (!upperSql.startsWith("SELECT TOP")) {
                     cleanSql = cleanSql.replaceFirst("(?i)SELECT", "SELECT TOP " + maxRows);
                 }
             }
@@ -151,7 +203,7 @@ public class Text2SqlSkill extends AbsSkill {
             for (String tableName : tables) {
                 // 1. 表名作为加粗列表项，移除冗余的 "Table:" 标签和分割线
                 sb.append("* **Table: ").append(tableName).append("**");
-                try (ResultSet rs = dbMeta.getTables(catalog, schema, tableName, new String[]{"TABLE"})) {
+                try (ResultSet rs = dbMeta.getTables(catalog, schema, tableName, new String[]{"TABLE", "VIEW"})) {
                     if (rs.next()) {
                         String remarks = rs.getString("REMARKS");
                         if (Assert.isNotEmpty(remarks)) sb.append(" // ").append(remarks);
