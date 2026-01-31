@@ -489,7 +489,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
          * @param toolObj 工具对象
          */
         public Builder defaultToolAdd(Object toolObj) {
-            return defaultToolAdd(new MethodToolProvider(toolObj));
+            config.getDefaultOptions().getModelOptions().toolAdd(toolObj);
+            return this;
         }
 
         public Builder defaultToolContextPut(String key, Object value) {

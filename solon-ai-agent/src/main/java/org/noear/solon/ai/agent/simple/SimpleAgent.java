@@ -458,7 +458,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
          * @param toolObj 工具对象
          */
         public Builder defaultToolAdd(Object toolObj) {
-            return defaultToolAdd(new MethodToolProvider(toolObj));
+            config.getDefaultOptions().toolAdd(toolObj);
+            return this;
         }
 
 

@@ -445,7 +445,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         public Builder defaultToolAdd(Object toolObj) {
-            return defaultToolAdd(new MethodToolProvider(toolObj));
+            config.getDefaultOptions().getModelOptions().toolAdd(toolObj);
+            return this;
         }
 
 
