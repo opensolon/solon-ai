@@ -19,7 +19,7 @@ import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 最终汇总输出：完成所有循环后的最终应答结果
+ * ReAct 最终汇总块：完成所有循环后的最终结果输出
  *
  * @author noear
  * @since 3.9.1

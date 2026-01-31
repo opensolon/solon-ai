@@ -27,22 +27,22 @@ import org.noear.solon.lang.Preview;
 @Preview("3.9.1")
 public interface AgentChunk {
     /**
-     * 获取当前产生输出的智能体名字
+     * 获取当前产生块的智能体名字
      */
     String getAgentName();
 
     /**
-     * 获取对应的流程节点 ID（用于溯源）
+     * 获取流程节点 ID（用于 Flow 任务溯源）
      */
     String getNodeId();
 
     /**
-     * 获取当前输出所属的会话
+     * 获取所属会话
      */
     AgentSession getSession();
 
     /**
-     * 获取当前流片段的消息内容
+     * 获取当前块的消息内容
      */
     ChatMessage getMessage();
 }

@@ -21,7 +21,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 动作输出（Acting）：标识智能体正在调用外部工具或执行特定指令
+ * ReAct 动作块（Acting）：标识智能体正在调用外部工具或执行特定指令
  *
  * @author noear
  * @since 3.9.1
