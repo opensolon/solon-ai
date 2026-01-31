@@ -49,7 +49,20 @@ public interface AgentChunk {
     ChatMessage getMessage();
 
     /**
+     * 是否有当前块内容
+     */
+    default boolean hasContent() {
+        return getMessage() != null && getMessage().getContent() != null;
+    }
+
+    /**
      * 获取当前块的消息内容
      */
-    String getContent();
+    default String getContent() {
+        if (hasContent()) {
+            return getMessage().getContent();
+        } else {
+            return "";
+        }
+    }
 }

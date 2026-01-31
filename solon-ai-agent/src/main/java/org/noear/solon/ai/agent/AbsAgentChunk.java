@@ -57,13 +57,4 @@ public abstract class AbsAgentChunk implements AgentChunk {
     public ChatMessage getMessage() {
         return message;
     }
-
-    @Override
-    public String getContent() {
-        if (message == null || message.getContent() == null) {
-            return "";
-        } else {
-            return message.getContent();
-        }
-    }
 }
