@@ -32,7 +32,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 压缩技能：支持将文件或目录打包为 ZIP 格式 (可配置编码版)
+ * 压缩技能：支持混合打包文件或目录
  *
  * @author noear
  * @since 3.9.1
@@ -52,110 +52,94 @@ public class ZipSkill extends AbsSkill {
     }
 
     @Override
-    public String name() {
-        return "zip_tool";
-    }
+    public String name() { return "zip_tool"; }
 
     @Override
     public String description() {
-        return "压缩专家：可以将指定文件或目录打包为 ZIP。";
+        return "压缩专家：可以将指定的一个或多个路径（文件或目录）打包为 ZIP。";
     }
 
     @Override
-    public boolean isSupported(Prompt prompt) {
-        return true;
-    }
+    public boolean isSupported(Prompt prompt) { return true; }
 
-    /**
-     * 获取 FileSystem 配置环境
-     */
-    private Map<String, String> getFileSystemEnv() {
-        Map<String, String> env = new HashMap<>();
-        env.put("create", "true");
-        // 关键点：将 Charset 转为 String 传给 ZipFileSystemProvider
-        env.put("encoding", charset.name());
-        return env;
-    }
-
-    @ToolMapping(name = "zip_files", description = "将指定文件列表打包到 ZIP 中")
-    public String zipFiles(@Param("zipFileName") String zipFileName, @Param("fileNames") String[] fileNames) {
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("zipFiles: {}, fileNames: {}", zipFileName, fileNames);
-        }
-
+    @ToolMapping(name = "zip", description = "将指定的路径列表（支持文件和目录混合）打包到 ZIP 文件中。")
+    public String zip(@Param("zipFileName") String zipFileName, @Param("paths") String[] paths) {
         Path zipPath = resolvePath(zipFileName);
         ensureParentDir(zipPath);
 
-        try (FileSystem zipfs = FileSystems.newFileSystem(URI.create("jar:" + zipPath.toUri()), getFileSystemEnv())) {
-            for (String name : fileNames) {
-                Path source = resolvePath(name);
-                if (Files.isRegularFile(source)) {
-                    // 计算相对路径，保留子目录层级
-                    String relativePath = rootPath.relativize(source).toString().replace("\\", "/");
-                    Path pathInZip = zipfs.getPath("/" + relativePath);
+        Map<String, String> env = new HashMap<>();
+        env.put("create", "true");
+        env.put("encoding", charset.name());
 
-                    if (pathInZip.getParent() != null) {
-                        Files.createDirectories(pathInZip.getParent());
-                    }
-                    Files.copy(source, pathInZip, StandardCopyOption.REPLACE_EXISTING);
+        try (FileSystem zipfs = FileSystems.newFileSystem(URI.create("jar:" + zipPath.toUri()), env)) {
+            for (String sourceName : paths) {
+                Path sourcePath = resolvePath(sourceName);
+                if (!Files.exists(sourcePath)) {
+                    continue;
+                }
+
+                if (Files.isDirectory(sourcePath)) {
+                    // 如果是目录，递归添加
+                    addToZipRecursive(sourcePath, zipfs, zipPath);
+                } else {
+                    // 如果是文件，直接添加
+                    addToZip(sourcePath, zipfs);
                 }
             }
-            return "文件已打包至: " + zipFileName;
+            return "打包成功，保存至: " + zipFileName;
         } catch (IOException e) {
-            LOG.error("Zip files failed: {}, charset: {}", zipFileName, charset, e);
+            LOG.error("Zip failed: {}, charset: {}", zipFileName, charset, e);
             return "打包失败: " + e.getMessage();
         }
     }
 
-    @ToolMapping(name = "zip_directory", description = "将整个工作目录递归打包成 ZIP")
-    public String zipDirectory(@Param("zipFileName") String zipFileName) {
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("zipDirectory: {}", zipFileName);
-        }
-
-        Path zipPath = resolvePath(zipFileName);
-        ensureParentDir(zipPath);
-
-        try (FileSystem zipfs = FileSystems.newFileSystem(URI.create("jar:" + zipPath.toUri()), getFileSystemEnv())) {
-            Files.walkFileTree(rootPath, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                    if (!dir.equals(rootPath)) {
-                        String relativePath = rootPath.relativize(dir).toString().replace("\\", "/");
-                        Files.createDirectories(zipfs.getPath(relativePath + "/"));
+    /**
+     * 递归添加目录到 ZIP
+     */
+    private void addToZipRecursive(Path sourceDir, FileSystem zipfs, Path zipPath) throws IOException {
+        Files.walkFileTree(sourceDir, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                // 在 ZIP 中创建对应的目录结构
+                String relativePath = rootPath.relativize(dir).toString().replace("\\", "/");
+                if (!relativePath.isEmpty()) {
+                    Path pathInZip = zipfs.getPath(relativePath + "/");
+                    if (Files.notExists(pathInZip)) {
+                        Files.createDirectories(pathInZip);
                     }
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                // 防止把正在生成的 zip 文件自己又压进去
+                if (Files.isSameFile(file, zipPath)) {
                     return FileVisitResult.CONTINUE;
                 }
+                addToZip(file, zipfs);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
 
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    // 跳过压缩包本身，防止递归包含
-                    if (Files.exists(zipPath) && Files.isSameFile(file, zipPath)) {
-                        return FileVisitResult.CONTINUE;
-                    }
+    /**
+     * 单个文件添加
+     */
+    private void addToZip(Path file, FileSystem zipfs) throws IOException {
+        String relativePath = rootPath.relativize(file).toString().replace("\\", "/");
+        Path pathInZip = zipfs.getPath(relativePath);
 
-                    String relativePath = rootPath.relativize(file).toString().replace("\\", "/");
-                    Path pathInZip = zipfs.getPath(relativePath);
-
-                    if (pathInZip.getParent() != null) {
-                        Files.createDirectories(pathInZip.getParent());
-                    }
-                    Files.copy(file, pathInZip, StandardCopyOption.REPLACE_EXISTING);
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-            return "整个目录已成功压缩至: " + zipFileName;
-        } catch (IOException e) {
-            LOG.error("Zip directory failed: {}, charset: {}", zipFileName, charset, e);
-            return "目录打包失败: " + e.getMessage();
+        if (pathInZip.getParent() != null && Files.notExists(pathInZip.getParent())) {
+            Files.createDirectories(pathInZip.getParent());
         }
+        Files.copy(file, pathInZip, StandardCopyOption.REPLACE_EXISTING);
     }
 
     private void ensureParentDir(Path path) {
         try {
             if (path.getParent() != null) Files.createDirectories(path.getParent());
-        } catch (IOException ignored) {
-        }
+        } catch (IOException ignored) {}
     }
 
     private Path resolvePath(String fileName) {
