@@ -57,4 +57,9 @@ public abstract class AbsAgentChunk implements AgentChunk {
     public ChatMessage getMessage() {
         return message;
     }
+
+    @Override
+    public String getContent() {
+        return message.getContent();
+    }
 }

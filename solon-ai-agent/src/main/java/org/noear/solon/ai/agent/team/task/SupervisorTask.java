@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
@@ -156,6 +157,10 @@ public class SupervisorTask implements NamedTaskComponent {
 
 
         ChatResponse response = callWithRetry(trace, messages);
+        AssistantMessage responseMessage = response.getMessage();
+        if(responseMessage == null){
+            responseMessage = response.getAggregationMessage();
+        }
 
         if (response.getUsage() != null) {
             trace.getMetrics().addUsage(response.getUsage());
@@ -163,7 +168,7 @@ public class SupervisorTask implements NamedTaskComponent {
 
         trace.getOptions().getInterceptors().forEach(item -> item.target.onModelEnd(trace, response));
 
-        String clearContent = response.hasContent() ? response.getResultContent() : "";
+        String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
         String decision = clearContent.trim();
         trace.setLastDecision(decision);
         trace.getOptions().getInterceptors().forEach(item -> item.target.onSupervisorDecision(trace, decision));

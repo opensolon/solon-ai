@@ -42,7 +42,12 @@ public interface AgentChunk {
     AgentSession getSession();
 
     /**
-     * 获取当前块的消息内容
+     * 获取当前块的消息
      */
     ChatMessage getMessage();
+
+    /**
+     * 获取当前块的消息内容
+     */
+    String getContent();
 }
