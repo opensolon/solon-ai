@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.agent.team.NodeChunk;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.util.AgentUtil;
@@ -170,6 +171,12 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
 
         // 4. 同步执行轨迹与结果处理
         if (trace != null) {
+            //状态实时化
+            if(trace.getOptions().getStreamSink() != null){
+                trace.getOptions().getStreamSink().next(new NodeChunk(node, trace, msg));
+            }
+
+            //协议后处理集成
             String rawContent = (msg.getContent() == null) ? "" : msg.getContent().trim();
             String finalResult = trace.getProtocol().resolveAgentOutput(trace, this, rawContent);
 
@@ -177,6 +184,7 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
                 finalResult = "Agent [" + name() + "] processed but returned no textual content.";
             }
 
+            //指标自动化同步
             trace.addRecord(ChatRole.ASSISTANT, name(), finalResult, duration);
 
             // 执行后置回调
