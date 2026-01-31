@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.AgentOutput;
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -86,7 +86,7 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
         return new ReActResponse(session, trace, message);
     }
 
-    public Flux<AgentOutput> stream() {
+    public Flux<AgentChunk> stream() {
         if (session == null) {
             if (log.isDebugEnabled()) {
                 log.debug("No session provided for ReActRequest, using temporary InMemoryAgentSession.");
@@ -94,7 +94,7 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
             session = InMemoryAgentSession.of();
         }
 
-        return Flux.<AgentOutput>create(sink -> {
+        return Flux.<AgentChunk>create(sink -> {
             try {
                 options.setStreamSink(sink);
                 AssistantMessage message = agent.call(prompt, session, options);
@@ -102,7 +102,7 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
 
                 ReActResponse resp = new ReActResponse(session, trace, message);
 
-                sink.next(new ReActOutput(resp));
+                sink.next(new ReActChunk(resp));
                 sink.complete();
             } catch (Throwable e) {
                 sink.error(e);

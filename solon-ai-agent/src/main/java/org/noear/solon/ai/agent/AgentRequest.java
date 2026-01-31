@@ -49,5 +49,5 @@ public interface AgentRequest<Req extends AgentRequest<Req,Resp>,Resp extends Ag
     /**
      * 响应式流输出：实时推送推理过程中的中间结果（如思考、动作、内容片段）
      */
-    Flux<AgentOutput> stream();
+    Flux<AgentChunk> stream();
 }

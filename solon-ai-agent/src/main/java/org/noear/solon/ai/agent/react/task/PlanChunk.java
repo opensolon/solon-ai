@@ -15,27 +15,33 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentOutput;
+import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 动作输出（Acting）：标识智能体正在调用外部工具或执行特定指令
+ * ReAct 计划输出（Planning）：包含智能体生成的任务拆解或后续步骤规划
  *
  * @author noear
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class ActionOutput extends AbsAgentOutput {
+public class PlanChunk extends AbsAgentChunk {
     private final ReActTrace trace;
+    private final ChatResponse response;
 
-    public ActionOutput(String nodeId, ReActTrace trace, ChatMessage message) {
-        super(nodeId, trace.getAgentName(), trace.getSession(), message);
+    public PlanChunk(String nodeId, ReActTrace trace, ChatResponse response) {
+        super(nodeId, trace.getAgentName(), trace.getSession(), response.getMessage());
         this.trace = trace;
+        this.response = response;
     }
 
     public ReActTrace getTrace() {
         return trace;
+    }
+
+    public ChatResponse getResponse() {
+        return response;
     }
 }

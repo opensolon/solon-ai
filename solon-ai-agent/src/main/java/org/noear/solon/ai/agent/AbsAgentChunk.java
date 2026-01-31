@@ -25,13 +25,13 @@ import org.noear.solon.lang.Preview;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public abstract class AbsAgentOutput implements AgentOutput {
+public abstract class AbsAgentChunk implements AgentChunk {
     protected final String nodeId;
     protected final String agentName;
     protected final AgentSession session;
     protected final ChatMessage message;
 
-    public AbsAgentOutput(String nodeId, String agentName, AgentSession session, ChatMessage message) {
+    public AbsAgentChunk(String nodeId, String agentName, AgentSession session, ChatMessage message) {
         this.nodeId = nodeId;
         this.agentName = agentName;
         this.session = session;

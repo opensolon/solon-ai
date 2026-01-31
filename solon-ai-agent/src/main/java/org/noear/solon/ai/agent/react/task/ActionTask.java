@@ -123,7 +123,7 @@ public class ActionTask implements NamedTaskComponent {
         trace.getWorkingMemory().addMessage(toolMessage);
         if(trace.getOptions().getStreamSink() != null){
             trace.getOptions().getStreamSink().next(
-                    new ActionOutput(ReActAgent.ID_ACTION, trace, toolMessage));
+                    new ActionChunk(ReActAgent.ID_ACTION, trace, toolMessage));
         }
     }
 

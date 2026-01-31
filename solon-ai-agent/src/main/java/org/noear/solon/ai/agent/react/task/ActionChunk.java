@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,36 +13,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent;
+package org.noear.solon.ai.agent.react.task;
 
+import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**
- * 智能体输出（用于流式输出的数据包）
+ * ReAct 动作输出（Acting）：标识智能体正在调用外部工具或执行特定指令
  *
  * @author noear
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public interface AgentOutput {
-    /**
-     * 获取当前产生输出的智能体名字
-     */
-    String getAgentName();
+public class ActionChunk extends AbsAgentChunk {
+    private final ReActTrace trace;
 
-    /**
-     * 获取对应的流程节点 ID（用于溯源）
-     */
-    String getNodeId();
+    public ActionChunk(String nodeId, ReActTrace trace, ChatMessage message) {
+        super(nodeId, trace.getAgentName(), trace.getSession(), message);
+        this.trace = trace;
+    }
 
-    /**
-     * 获取当前输出所属的会话
-     */
-    AgentSession getSession();
-
-    /**
-     * 获取当前流片段的消息内容
-     */
-    ChatMessage getMessage();
+    public ReActTrace getTrace() {
+        return trace;
+    }
 }

@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.AbsAgentOutput;
+import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.lang.Preview;
@@ -27,11 +27,11 @@ import org.noear.solon.lang.Preview;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class ReasonOutput extends AbsAgentOutput {
+public class ReasonChunk extends AbsAgentChunk {
     private final ReActTrace trace;
     private final ChatResponse response;
 
-    public ReasonOutput(String nodeId, ReActTrace trace, ChatResponse response) {
+    public ReasonChunk(String nodeId, ReActTrace trace, ChatResponse response) {
         super(nodeId, trace.getAgentName(), trace.getSession(), response.getMessage());
         this.trace = trace;
         this.response = response;

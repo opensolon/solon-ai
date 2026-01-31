@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.AbsAgentOutput;
+import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -25,10 +25,10 @@ import org.noear.solon.lang.Preview;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class ReActOutput extends AbsAgentOutput {
+public class ReActChunk extends AbsAgentChunk {
     private final ReActResponse response;
 
-    public ReActOutput(ReActResponse resp) {
+    public ReActChunk(ReActResponse resp) {
         super(resp.getTrace().getAgentName(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
         this.response = resp;
     }

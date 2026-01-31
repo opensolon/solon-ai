@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.simple;
 
-import org.noear.solon.ai.agent.AgentOutput;
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -90,7 +90,7 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
         return new SimpleResponse(session, trace, message);
     }
 
-    public Flux<AgentOutput> stream() {
+    public Flux<AgentChunk> stream() {
         return null;
     }
 }

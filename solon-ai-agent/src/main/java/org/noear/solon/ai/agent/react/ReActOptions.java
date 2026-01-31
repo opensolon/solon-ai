@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.ai.agent.AgentOutput;
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
@@ -39,7 +39,7 @@ import java.util.function.Function;
 public class ReActOptions implements NonSerializable {
     private static final Logger LOG = LoggerFactory.getLogger(ReActOptions.class);
 
-    private transient FluxSink<AgentOutput> streamSink;
+    private transient FluxSink<AgentChunk> streamSink;
 
     /**
      * 工具调用上下文（透传给 FunctionTool）
@@ -156,7 +156,7 @@ public class ReActOptions implements NonSerializable {
         this.feedbackReasonDescriptionProvider = provider;
     }
 
-    public void setStreamSink(FluxSink<AgentOutput> streamSink) {
+    public void setStreamSink(FluxSink<AgentChunk> streamSink) {
         this.streamSink = streamSink;
     }
 
@@ -246,7 +246,7 @@ public class ReActOptions implements NonSerializable {
         return feedbackReasonDescriptionProvider.apply(trace);
     }
 
-    public FluxSink<AgentOutput> getStreamSink() {
+    public FluxSink<AgentChunk> getStreamSink() {
         return streamSink;
     }
 }
