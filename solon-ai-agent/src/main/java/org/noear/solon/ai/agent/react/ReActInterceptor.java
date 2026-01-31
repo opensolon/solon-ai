@@ -56,6 +56,13 @@ public interface ReActInterceptor extends AgentInterceptor, FlowInterceptor, Cha
     }
 
     /**
+     * 计划节点：接收 LLM 返回的原始推理消息
+     */
+    default void onPlan(ReActTrace trace, AssistantMessage message){
+
+    }
+
+    /**
      * 推理节点：接收 LLM 返回的原始推理消息
      */
     default void onReason(ReActTrace trace, AssistantMessage message) {

@@ -119,6 +119,11 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onModelEnd(trace, response);
         }
 
+        // 触发推理审计事件（传递原始消息对象）
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onReason(trace, response.getMessage());
+        }
+
         // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
         if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
             trace.getWorkingMemory().addMessage(ChatMessage.ofUser("Your last response was empty. Please provide Action or Final Answer."));
@@ -137,10 +142,6 @@ public class ReasonTask implements NamedTaskComponent {
         final String rawContent = response.hasContent() ? response.getContent() : ""; // 原始（含 think）
         final String clearContent = response.hasContent() ? response.getResultContent() : ""; // 干净（无 think）
 
-        // 触发推理审计事件（传递原始消息对象）
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onReason(trace, response.getMessage());
-        }
 
         // 进一步清洗协议头（如 Thought:{...}\nAction:），提取核心思维逻辑
         final String thoughtContent = extractThought(clearContent);

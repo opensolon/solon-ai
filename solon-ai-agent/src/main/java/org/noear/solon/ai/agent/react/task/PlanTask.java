@@ -18,11 +18,13 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActAgentConfig;
+import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
@@ -90,6 +92,11 @@ public class PlanTask implements NamedTaskComponent {
 
         if (response.getUsage() != null) {
             trace.getMetrics().addUsage(response.getUsage());
+        }
+
+        // 触发计划审计事件（传递原始消息对象）
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onPlan(trace, response.getMessage());
         }
 
         if (response.hasChoices()) {
