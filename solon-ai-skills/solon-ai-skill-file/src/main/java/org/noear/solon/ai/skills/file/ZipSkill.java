@@ -24,13 +24,15 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 压缩技能：支持将文件或目录打包为 ZIP 格式 (优化版)
+ * 压缩技能：支持将文件或目录打包为 ZIP 格式 (可配置编码版)
  *
  * @author noear
  * @since 3.9.1
@@ -38,38 +40,57 @@ import java.util.Map;
 public class ZipSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(ZipSkill.class);
     private final Path rootPath;
+    private final Charset charset;
 
     public ZipSkill(String workDir) {
+        this(workDir, StandardCharsets.UTF_8);
+    }
+
+    public ZipSkill(String workDir, Charset charset) {
         this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
+        this.charset = (charset == null ? StandardCharsets.UTF_8 : charset);
     }
 
     @Override
-    public String name() { return "zip_tool"; }
+    public String name() {
+        return "zip_tool";
+    }
 
     @Override
-    public String description() { return "压缩专家：可以将指定文件或目录打包为 ZIP。"; }
+    public String description() {
+        return "压缩专家：可以将指定文件或目录打包为 ZIP。";
+    }
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        String content = prompt.getUserContent();
-        // 只有当涉及到文件操作意图时，才加载文件和压缩工具
-        return content.matches(".*(保存|文件|下载|打包|压缩|ZIP|zip|导出).*");
+        return true;
+    }
+
+    /**
+     * 获取 FileSystem 配置环境
+     */
+    private Map<String, String> getFileSystemEnv() {
+        Map<String, String> env = new HashMap<>();
+        env.put("create", "true");
+        // 关键点：将 Charset 转为 String 传给 ZipFileSystemProvider
+        env.put("encoding", charset.name());
+        return env;
     }
 
     @ToolMapping(name = "zip_files", description = "将指定文件列表打包到 ZIP 中")
     public String zipFiles(@Param("zipFileName") String zipFileName, @Param("fileNames") String[] fileNames) {
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("zipFiles: {}, fileNames: {}", zipFileName, fileNames);
+        }
+
         Path zipPath = resolvePath(zipFileName);
         ensureParentDir(zipPath);
 
-        Map<String, String> env = new HashMap<>();
-        env.put("create", "true");
-        env.put("encoding", "UTF-8");
-
-        try (FileSystem zipfs = FileSystems.newFileSystem(URI.create("jar:" + zipPath.toUri()), env)) {
+        try (FileSystem zipfs = FileSystems.newFileSystem(URI.create("jar:" + zipPath.toUri()), getFileSystemEnv())) {
             for (String name : fileNames) {
                 Path source = resolvePath(name);
                 if (Files.isRegularFile(source)) {
-                    // 优化点：计算相对路径，保留子目录层级
+                    // 计算相对路径，保留子目录层级
                     String relativePath = rootPath.relativize(source).toString().replace("\\", "/");
                     Path pathInZip = zipfs.getPath("/" + relativePath);
 
@@ -81,25 +102,24 @@ public class ZipSkill extends AbsSkill {
             }
             return "文件已打包至: " + zipFileName;
         } catch (IOException e) {
-            LOG.error("Zip files failed: {}", zipFileName, e);
+            LOG.error("Zip files failed: {}, charset: {}", zipFileName, charset, e);
             return "打包失败: " + e.getMessage();
         }
     }
 
     @ToolMapping(name = "zip_directory", description = "将整个工作目录递归打包成 ZIP")
     public String zipDirectory(@Param("zipFileName") String zipFileName) {
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("zipDirectory: {}", zipFileName);
+        }
+
         Path zipPath = resolvePath(zipFileName);
         ensureParentDir(zipPath);
 
-        Map<String, String> env = new HashMap<>();
-        env.put("create", "true");
-        env.put("encoding", "UTF-8");
-
-        try (FileSystem zipfs = FileSystems.newFileSystem(URI.create("jar:" + zipPath.toUri()), env)) {
+        try (FileSystem zipfs = FileSystems.newFileSystem(URI.create("jar:" + zipPath.toUri()), getFileSystemEnv())) {
             Files.walkFileTree(rootPath, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                    // 处理空目录：在压缩包内创建对应文件夹
                     if (!dir.equals(rootPath)) {
                         String relativePath = rootPath.relativize(dir).toString().replace("\\", "/");
                         Files.createDirectories(zipfs.getPath(relativePath + "/"));
@@ -109,7 +129,7 @@ public class ZipSkill extends AbsSkill {
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    // 关键优化：跳过压缩包本身
+                    // 跳过压缩包本身，防止递归包含
                     if (Files.exists(zipPath) && Files.isSameFile(file, zipPath)) {
                         return FileVisitResult.CONTINUE;
                     }
@@ -117,7 +137,6 @@ public class ZipSkill extends AbsSkill {
                     String relativePath = rootPath.relativize(file).toString().replace("\\", "/");
                     Path pathInZip = zipfs.getPath(relativePath);
 
-                    // 拷贝文件（如果父目录没创建则创建，覆盖已存在的）
                     if (pathInZip.getParent() != null) {
                         Files.createDirectories(pathInZip.getParent());
                     }
@@ -127,7 +146,7 @@ public class ZipSkill extends AbsSkill {
             });
             return "整个目录已成功压缩至: " + zipFileName;
         } catch (IOException e) {
-            LOG.error("Zip directory failed: {}", zipFileName, e);
+            LOG.error("Zip directory failed: {}, charset: {}", zipFileName, charset, e);
             return "目录打包失败: " + e.getMessage();
         }
     }
@@ -135,7 +154,8 @@ public class ZipSkill extends AbsSkill {
     private void ensureParentDir(Path path) {
         try {
             if (path.getParent() != null) Files.createDirectories(path.getParent());
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+        }
     }
 
     private Path resolvePath(String fileName) {
