@@ -50,7 +50,19 @@ import java.util.function.Function;
 
 /**
  * ReAct (Reason + Act) 协同推理智能体
- * <p>通过 [Reasoning -> Acting -> Observation] 的闭环模式，利用工具解决复杂逻辑任务。</p>
+ *
+ * <p>该智能体实现了经典 ReAct 推理模式：通过【思考(Thought) -> 动作(Act) -> 观察(Observation)】的循环，
+ * 使 LLM 能够使用外部工具解决复杂任务。其核心是一个基于 Solon Flow 构建的计算图。</p>
+ *
+ * <p>执行流程：</p>
+ * <pre>
+ * Start -> [Plan (可选)] -> [Reason (决策)] --(Action意图)--> [Action (执行工具)] --(结果回传)--> Reason
+ * |
+ * (结束意图) --> End
+ * </pre>
+ *
+ * @author noear
+ * @since 3.8.1
  */
 @Preview("3.8.1")
 public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
@@ -171,7 +183,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     }
 
     /**
-     * 智能体核心调用流程
+     * 智能体核心调用流程：管理会话上下文、痕迹记录与拦截器触发
      */
     protected AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) throws Throwable {
         final FlowContext context = session.getSnapshot();
@@ -324,7 +336,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         /**
          * @deprecated 3.9.1 {@link #role(String)}
-         * */
+         *
+         */
         @Deprecated
         public Builder description(String val) {
             return role(val);

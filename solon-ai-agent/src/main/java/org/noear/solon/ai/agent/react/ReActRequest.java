@@ -30,7 +30,9 @@ import java.util.function.Consumer;
 
 /**
  * ReAct 模式推理请求
- * <p>采用 Fluent API 风格，封装了 Agent 调用的完整参数（Prompt、Session、Options）</p>
+ *
+ * <p>采用 Fluent API 风格，封装了单次 Agent 调用的完整参数。
+ * 它是线程不安全的，每个请求应由 {@link ReActAgent#prompt(Prompt)} 独立创建。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -52,7 +54,7 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
     }
 
     /**
-     * 绑定会话实例
+     * 绑定持久化会话：用于维持长期记忆或多轮对话上下文
      */
     @Override
     public ReActRequest session(AgentSession session) {
@@ -69,7 +71,9 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
     }
 
     /**
-     * 执行同步调用
+     * 执行同步调用：阻塞当前线程直至推理完成或超时
+     *
+     * @return 包含最终答案、执行指标和过程轨迹的响应对象
      */
     @Override
     public ReActResponse call() throws Throwable {
@@ -86,6 +90,10 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
         return new ReActResponse(session, trace, message);
     }
 
+    /**
+     * 响应式流输出：实时推送推理过程中的 Chunk（如 ReasonChunk, ActionChunk）
+     * 适用于 Web 端 SSE 或 WebSocket 实时展示思考过程
+     */
     public Flux<AgentChunk> stream() {
         if (session == null) {
             if (log.isDebugEnabled()) {

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -23,6 +24,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 import java.util.function.Consumer;
 
@@ -85,5 +87,9 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
         TeamTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
 
         return new TeamResponse(session, trace, message);
+    }
+
+    public Flux<AgentChunk> stream()  {
+        return null;
     }
 }
