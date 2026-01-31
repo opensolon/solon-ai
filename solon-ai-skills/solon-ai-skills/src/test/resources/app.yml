@@ -3,3 +3,10 @@ solon.dataSources:
     class: "org.noear.solon.data.datasource.UnpooledDataSource"
     jdbcUrl: "jdbc:h2:mem:test;MODE=MYSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE"
     driverClassName: "org.h2.Driver"
+
+
+solon.redis:
+  server: "localhost:6379"
+  db: 0 #默认为 0，可不配置
+  password: ""
+  maxTotaol: 200 #默认为 200，可不配
