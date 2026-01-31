@@ -4,6 +4,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.lang.Preview;
 import org.simplejavamail.api.email.EmailPopulatingBuilder;
 import org.simplejavamail.api.mailer.Mailer;
 import org.simplejavamail.api.mailer.config.TransportStrategy;
@@ -19,6 +20,7 @@ import java.nio.file.Paths;
 /**
  * 邮件专家技能：基于 Simple Java Mail 实现
  */
+@Preview("3.9.1")
 public class MailSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(MailSkill.class);
     private final Path rootPath;

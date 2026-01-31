@@ -1,11 +1,13 @@
 package org.noear.solon.ai.skills.social;
 
 import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
 
 /**
  * Webhook 技能基类
  */
+@Preview("3.9.1")
 public abstract class AbsWebhookSkill extends AbsSkill {
     protected final String webhookUrl;
 

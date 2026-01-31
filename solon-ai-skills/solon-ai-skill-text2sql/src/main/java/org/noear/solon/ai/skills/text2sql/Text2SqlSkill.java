@@ -24,6 +24,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.data.sql.SqlUtils;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +41,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.1
  */
+@Preview("3.9.1")
 public class Text2SqlSkill extends AbsSkill {
     protected final static Logger LOG = LoggerFactory.getLogger(Text2SqlSkill.class);
 

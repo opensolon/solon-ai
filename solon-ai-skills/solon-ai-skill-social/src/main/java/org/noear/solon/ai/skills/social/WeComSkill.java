@@ -4,10 +4,12 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.lang.Preview;
 
 /**
  * 企业微信专家技能
  */
+@Preview("3.9.1")
 public class WeComSkill extends AbsWebhookSkill {
     public WeComSkill(String webhookUrl) { super(webhookUrl); }
 

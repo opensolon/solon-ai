@@ -6,6 +6,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +16,7 @@ import org.slf4j.LoggerFactory;
  * @author noear
  * @since 3.9.1
  */
+@Preview("3.9.1")
 public class RedisSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(RedisSkill.class);
     private final RedisClient redis;

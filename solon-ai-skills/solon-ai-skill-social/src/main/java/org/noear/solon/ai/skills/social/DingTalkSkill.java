@@ -5,6 +5,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Preview;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -14,6 +15,7 @@ import java.net.URLEncoder;
 /**
  * 钉钉专家技能：支持文本、Markdown 以及 @ 提醒
  */
+@Preview("3.9.1")
 public class DingTalkSkill extends AbsWebhookSkill {
     private final String secret;
 

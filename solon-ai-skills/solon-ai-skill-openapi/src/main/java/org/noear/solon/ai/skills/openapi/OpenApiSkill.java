@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,7 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.1
  */
+@Preview("3.9.1")
 public class OpenApiSkill extends AbsSkill {
     private static final Logger log = LoggerFactory.getLogger(OpenApiSkill.class);
 

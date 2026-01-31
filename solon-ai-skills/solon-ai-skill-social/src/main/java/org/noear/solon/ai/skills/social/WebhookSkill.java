@@ -3,9 +3,12 @@ package org.noear.solon.ai.skills.social;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.lang.Preview;
 
-/** * 通用 Webhook 技能：用于触发 Jenkins、极狐 GitLab 或其他自定义 API
+/**
+ * 通用 Webhook 技能：用于触发 Jenkins、极狐 GitLab 或其他自定义 API
  */
+@Preview("3.9.1")
 public class WebhookSkill extends AbsWebhookSkill {
     public WebhookSkill(String webhookUrl) { super(webhookUrl); }
 

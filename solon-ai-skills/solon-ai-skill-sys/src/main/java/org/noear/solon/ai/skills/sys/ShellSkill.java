@@ -3,7 +3,9 @@ package org.noear.solon.ai.skills.sys;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.lang.Preview;
 
+@Preview("3.9.1")
 public class ShellSkill extends AbsProcessSkill {
     private final String shellCmd;
 

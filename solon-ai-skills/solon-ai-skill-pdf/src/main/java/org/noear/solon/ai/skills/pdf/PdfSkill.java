@@ -10,6 +10,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,9 +24,10 @@ import java.util.function.Supplier;
 
 /**
  * PDF 专家技能（解耦版）
- * * @author noear
+ * @author noear
  * @since 3.9.1
  */
+@Preview("3.9.1")
 public class PdfSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(PdfSkill.class);
     private final Path rootPath;

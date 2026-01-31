@@ -17,6 +17,8 @@ package org.noear.solon.ai.skills.sys;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.lang.Preview;
+
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -27,6 +29,7 @@ import java.util.Locale;
  * @author noear
  * @since 3.9.1
  */
+@Preview("3.9.1")
 public class SystemClockSkill extends AbsSkill {
 
     @Override

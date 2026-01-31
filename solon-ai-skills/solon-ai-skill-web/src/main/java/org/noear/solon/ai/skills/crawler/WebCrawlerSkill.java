@@ -19,6 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,7 @@ import org.slf4j.LoggerFactory;
  * @author noear
  * @since 3.9.1
  */
+@Preview("3.9.1")
 public class WebCrawlerSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(WebCrawlerSkill.class);
 
