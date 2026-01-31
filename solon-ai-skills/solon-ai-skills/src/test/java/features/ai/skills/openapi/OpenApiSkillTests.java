@@ -1,6 +1,6 @@
 package features.ai.skills.openapi;
 
-import demo.ai.skills.openapi.LlmUtil;
+import demo.ai.skills.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.simple.SimpleAgent;

@@ -1,4 +1,4 @@
-package demo.ai.skills.text2sql;
+package demo.ai.skills;
 
 import org.noear.solon.ai.chat.ChatModel;
 
