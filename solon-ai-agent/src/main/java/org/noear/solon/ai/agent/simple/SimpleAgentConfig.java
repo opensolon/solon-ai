@@ -60,7 +60,7 @@ public class SimpleAgentConfig {
     /**
      * 模型选项
      */
-    private ModelOptionsAmend<?, SimpleInterceptor> defaultOptions = new ModelOptionsAmend<>();
+    private SimpleOptions defaultOptions = new SimpleOptions();
     /**
      * 自定义处理器（与 chatModel 二选一）
      */
@@ -175,7 +175,7 @@ public class SimpleAgentConfig {
         return chatModel;
     }
 
-    public ModelOptionsAmend<?, SimpleInterceptor> getDefaultOptions() {
+    public SimpleOptions getDefaultOptions() {
         return defaultOptions;
     }
 

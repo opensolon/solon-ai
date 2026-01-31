@@ -6,10 +6,15 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.agent.simple.ChatChunk;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
+import org.noear.solon.ai.agent.simple.SimpleChunk;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import reactor.test.StepVerifier;
+
+import java.util.ArrayList;
 
 
 public class SimpleAgentTest {
@@ -103,5 +108,28 @@ public class SimpleAgentTest {
 
         //没有记忆数据
         Assertions.assertTrue(Utils.isEmpty(message.getContent()));
+    }
+
+    @Test
+    public void testSimpleAgentStream() throws Throwable {
+        SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel()).build();
+        AgentSession session = InMemoryAgentSession.of("s1");
+
+        agent.prompt("讲个冷笑话")
+                .session(session)
+                .stream()
+                .as(StepVerifier::create)
+                .recordWith(ArrayList::new) // 记录所有收到的 chunk
+                .thenConsumeWhile(c -> true)
+                .consumeRecordedWith(chunks -> {
+                    // 验证中间块
+                    boolean hasChatChunks = chunks.stream().anyMatch(c -> c instanceof ChatChunk);
+                    // 验证结束块
+                    boolean hasSimpleChunk = chunks.stream().anyMatch(c -> c instanceof SimpleChunk);
+
+                    Assertions.assertTrue(hasChatChunks, "流中应该包含 ChatChunk 中间片段");
+                    Assertions.assertTrue(hasSimpleChunk, "流中应该包含 SimpleChunk 最终汇总");
+                })
+                .verifyComplete();
     }
 }

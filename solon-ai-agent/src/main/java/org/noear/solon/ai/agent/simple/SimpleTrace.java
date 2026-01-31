@@ -31,6 +31,7 @@ import org.noear.solon.flow.FlowContext;
  */
 public class SimpleTrace implements AgentTrace {
     private transient SimpleAgentConfig config;
+    private transient SimpleOptions options;
     private transient AgentSession session;
     private transient TeamProtocol protocol;
 
@@ -45,15 +46,23 @@ public class SimpleTrace implements AgentTrace {
         this.originalPrompt = originalPrompt;
     }
 
-    protected void prepare(SimpleAgentConfig config, AgentSession session, TeamProtocol protocol) {
+    protected void prepare(SimpleAgentConfig config, SimpleOptions options, AgentSession session, TeamProtocol protocol) {
         this.config = config;
+        this.options = options;
         this.session = session;
         this.protocol = protocol;
     }
 
+    public String getAgentName() {
+        return config.getName();
+    }
 
     public SimpleAgentConfig getConfig() {
         return config;
+    }
+
+    public SimpleOptions getOptions() {
+        return options;
     }
 
     public AgentSession getSession() {

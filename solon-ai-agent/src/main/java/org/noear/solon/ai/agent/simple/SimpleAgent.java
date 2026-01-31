@@ -30,7 +30,6 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
@@ -114,7 +113,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         return trace;
     }
 
-    protected AssistantMessage call(Prompt prompt, AgentSession session, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
+    protected AssistantMessage call(Prompt prompt, AgentSession session, SimpleOptions options) throws Throwable {
         if (options == null) {
             options = config.getDefaultOptions();
         }
@@ -127,7 +126,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         // 初始化或恢复推理痕迹 (Trace)
         SimpleTrace trace = getTrace(context, prompt);
 
-        trace.prepare(config, session, protocol);
+        trace.prepare(config, options, session, protocol);
 
         if (Prompt.isEmpty(prompt)) {
             //可能是旧问题（之前中断的）
@@ -301,20 +300,36 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     private AssistantMessage doCall(SimpleTrace trace, AgentSession session, Prompt finalPrompt, ChatRequestDesc chatReq) throws Throwable {
         if (chatReq != null) {
             // chatModel 处理
-            ChatResponse resp = chatReq.call();
+            ChatResponse response;
 
-            if (resp.getUsage() != null) {
-                trace.getMetrics().addUsage(resp.getUsage());
+            if(trace.getOptions().getStreamSink() == null){
+                response = chatReq.call();
+            } else {
+                response = chatReq.stream()
+                        .doOnNext(resp->{
+                            trace.getOptions().getStreamSink().next(
+                                    new ChatChunk( trace, resp));
+                        })
+                        .blockLast();
             }
 
-            if (resp.hasChoices() && resp.getMessage().getMetadata().containsKey(Agent.META_AGENT)) {
-                String source = resp.getMessage().getMetadataAs("source");
+            AssistantMessage responseMessage = response.getMessage();
+            if(responseMessage == null){
+                responseMessage = response.getAggregationMessage();
+            }
+
+            if (response.getUsage() != null) {
+                trace.getMetrics().addUsage(response.getUsage());
+            }
+
+            if (responseMessage.hasContent() && responseMessage.getMetadata().containsKey(Agent.META_AGENT)) {
+                String source = responseMessage.getMetadataAs("source");
                 if (Assert.isNotEmpty(source)) {
                     return ChatMessage.ofAssistant(source);
                 }
             }
 
-            String clearContent = resp.hasContent() ? resp.getResultContent() : "";
+            String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
             return ChatMessage.ofAssistant(clearContent);
         } else {
             // fallback 到自定义处理器
