@@ -1,15 +1,15 @@
 package demo.ai.skills;
 
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.skills.sys.SystemClockSkill;
 import org.noear.solon.ai.skills.sys.NodejsSkill;
 import org.noear.solon.ai.skills.sys.PythonSkill;
 import org.noear.solon.ai.skills.sys.ShellSkill;
 import org.noear.solon.ai.skills.file.FileStorageSkill;
 import org.noear.solon.ai.skills.file.ZipSkill;
-import org.noear.solon.ai.skills.multimedia.ImageGenerationSkill;
-import org.noear.solon.ai.skills.multimedia.VideoGenerationSkill;
+import org.noear.solon.ai.skills.generation.ImageGenerationSkill;
+import org.noear.solon.ai.skills.generation.VideoGenerationSkill;
 import org.noear.solon.ai.skills.social.MailSkill;
-import org.noear.solon.ai.skills.sys.SystemClockSkill;
 import org.noear.solon.ai.skills.crawler.WebCrawlerSkill;
 import org.noear.solon.ai.skills.search.WebSearchSkill;
 

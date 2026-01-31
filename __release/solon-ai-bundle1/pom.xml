@@ -55,10 +55,13 @@
 
 
         <module>../../solon-ai-skills/solon-ai-skills</module>
-        <module>../../solon-ai-skills/solon-ai-skill-basics</module>
         <module>../../solon-ai-skills/solon-ai-skill-openapi</module>
+        <module>../../solon-ai-skills/solon-ai-skill-generation</module>
         <module>../../solon-ai-skills/solon-ai-skill-data</module>
         <module>../../solon-ai-skills/solon-ai-skill-web</module>
+        <module>../../solon-ai-skills/solon-ai-skill-file</module>
+        <module>../../solon-ai-skills/solon-ai-skill-social</module>
+        <module>../../solon-ai-skills/solon-ai-skill-sys</module>
         <module>../../solon-ai-skills/solon-ai-skill-text2sql</module>
     </modules>
 </project>

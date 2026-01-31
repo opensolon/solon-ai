@@ -226,7 +226,7 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
-                <artifactId>solon-ai-skill-basics</artifactId>
+                <artifactId>solon-ai-skill-generation</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -239,6 +239,24 @@
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-skill-web</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-skill-file</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-skill-social</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-skill-sys</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

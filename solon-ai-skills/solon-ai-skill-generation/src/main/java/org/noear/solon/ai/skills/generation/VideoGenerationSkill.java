@@ -1,4 +1,4 @@
-package org.noear.solon.ai.skills.multimedia;
+package org.noear.solon.ai.skills.generation;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
