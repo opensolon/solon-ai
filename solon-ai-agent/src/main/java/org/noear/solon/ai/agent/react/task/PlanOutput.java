@@ -21,7 +21,7 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 计划输出
+ * ReAct 计划输出（Planning）：包含智能体生成的任务拆解或后续步骤规划
  *
  * @author noear
  * @since 3.9.1

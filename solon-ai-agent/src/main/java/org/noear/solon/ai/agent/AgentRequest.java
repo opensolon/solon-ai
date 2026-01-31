@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent;
 
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
+import reactor.core.publisher.Flux;
 
 /**
  * 智能体请求构建器
@@ -36,12 +37,17 @@ import org.noear.solon.lang.Preview;
 @Preview("3.9.0")
 public interface AgentRequest<Req extends AgentRequest<Req,Resp>,Resp extends AgentResponse> extends NonSerializable {
     /**
-     * 使用会话
+     * 绑定或切换当前请求的会话上下文
      */
     Req session(AgentSession session);
 
     /**
-     * 调用
+     * 同步调用：阻塞等待推理结束并返回完整响应
      */
     Resp call() throws Throwable;
+
+    /**
+     * 响应式流输出：实时推送推理过程中的中间结果（如思考、动作、内容片段）
+     */
+    Flux<AgentOutput> stream();
 }

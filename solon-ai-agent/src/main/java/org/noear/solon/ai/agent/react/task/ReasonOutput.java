@@ -21,7 +21,7 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 思考输出
+ * ReAct 思考输出（Reasoning）：包含智能体对当前问题的逻辑分析流
  *
  * @author noear
  * @since 3.9.1

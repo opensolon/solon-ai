@@ -19,7 +19,7 @@ import org.noear.solon.ai.agent.AbsAgentOutput;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 输出
+ * ReAct 最终汇总输出：完成所有循环后的最终应答结果
  *
  * @author noear
  * @since 3.9.1

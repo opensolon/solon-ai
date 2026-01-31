@@ -19,7 +19,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**
- * 智能体输出基类
+ * 智能体输出基类（提供属性存储支持）
  *
  * @author noear
  * @since 3.9.1

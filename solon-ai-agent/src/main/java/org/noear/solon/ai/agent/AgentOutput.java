@@ -19,7 +19,7 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
 /**
- * 智能体输出
+ * 智能体输出（用于流式输出的数据包）
  *
  * @author noear
  * @since 3.9.1
@@ -27,22 +27,22 @@ import org.noear.solon.lang.Preview;
 @Preview("3.9.1")
 public interface AgentOutput {
     /**
-     * 获取智能体名字
+     * 获取当前产生输出的智能体名字
      */
     String getAgentName();
 
     /**
-     * 获取节点ID
+     * 获取对应的流程节点 ID（用于溯源）
      */
     String getNodeId();
 
     /**
-     * 获取会话
+     * 获取当前输出所属的会话
      */
     AgentSession getSession();
 
     /**
-     * 获取消息
+     * 获取当前流片段的消息内容
      */
     ChatMessage getMessage();
 }
