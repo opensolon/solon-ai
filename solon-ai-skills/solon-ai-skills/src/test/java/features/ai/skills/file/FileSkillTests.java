@@ -56,7 +56,7 @@ public class FileSkillTests {
         Assertions.assertEquals(content, readContent);
 
         // 测试列表
-        String list = fileSkill.list();
+        String list = fileSkill.list(null);
         Assertions.assertTrue(list.contains("logs"));
 
         // 测试删除
@@ -74,7 +74,7 @@ public class FileSkillTests {
 
         // 执行打包
         String zipName = "out.zip";
-        zipSkill.zipFiles(zipName, new String[]{"a.txt", "b.txt"});
+        zipSkill.zip(zipName, new String[]{"a.txt", "b.txt"});
 
         // 验证文件存在
         Path zipPath = Paths.get(workDir, zipName);
