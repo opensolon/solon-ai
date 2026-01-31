@@ -89,7 +89,27 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
         return new TeamResponse(session, trace, message);
     }
 
-    public Flux<AgentChunk> stream()  {
-        return null;
+    public Flux<AgentChunk> stream() {
+        if (session == null) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("No session provided for TeamRequest, using temporary InMemoryAgentSession.");
+            }
+            session = InMemoryAgentSession.of();
+        }
+
+        return Flux.<AgentChunk>create(sink -> {
+            try {
+                options.setStreamSink(sink);
+                AssistantMessage message = agent.call(prompt, session, options);
+                TeamTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+
+                TeamResponse resp = new TeamResponse(session, trace, message);
+
+                sink.next(new TeamChunk(resp));
+                sink.complete();
+            } catch (Throwable e) {
+                sink.error(e);
+            }
+        });
     }
 }

@@ -15,12 +15,14 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.FluxSink;
 
 import java.util.*;
 import java.util.function.Function;
@@ -35,6 +37,8 @@ import java.util.function.Function;
  */
 public class TeamOptions implements NonSerializable {
     private static final Logger LOG = LoggerFactory.getLogger(TeamOptions.class);
+
+    private transient FluxSink<AgentChunk> streamSink;
 
     /**
      * 最大协作回合数（指团队中 Supervisor 指派专家的次数上限，防止死循环）
@@ -86,6 +90,14 @@ public class TeamOptions implements NonSerializable {
         tmp.feedbackMode = this.feedbackMode;
 
         return tmp;
+    }
+
+    protected void setStreamSink(FluxSink<AgentChunk> streamSink) {
+        this.streamSink = streamSink;
+    }
+
+    public FluxSink<AgentChunk> getStreamSink() {
+        return streamSink;
     }
 
 

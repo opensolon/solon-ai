@@ -197,6 +197,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             options = config.getDefaultOptions();
         }
 
+        if (parentTeamTrace != null) {
+            //传递流控
+            options.setStreamSink(parentTeamTrace.getOptions().getStreamSink());
+        }
+
         trace.prepare(config, options, session, protocol);
 
 

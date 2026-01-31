@@ -286,7 +286,16 @@ public class SupervisorTask implements NamedTaskComponent {
         int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
-                return req.call();
+                if(trace.getOptions().getStreamSink() == null) {
+                    return req.call();
+                } else {
+                    return req.stream()
+                            .doOnNext(resp -> {
+                                trace.getOptions().getStreamSink().next(
+                                        new SupervisorChunk(TeamAgent.ID_SUPERVISOR, trace, resp));
+                            })
+                            .blockLast();
+                }
             } catch (Exception e) {
                 if (i == maxRetries - 1) throw new RuntimeException("Supervisor call failed", e);
                 LOG.warn("Supervisor call failed, retrying ({}/{})...", i + 1, maxRetries);

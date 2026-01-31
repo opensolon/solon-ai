@@ -114,17 +114,21 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     }
 
     protected AssistantMessage call(Prompt prompt, AgentSession session, SimpleOptions options) throws Throwable {
+        final FlowContext context = session.getSnapshot();
+        final TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL); // 从上下文获取协议
+        final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
+
+        // 初始化或恢复推理痕迹 (Trace)
+        SimpleTrace trace = getTrace(context, prompt);
+
         if (options == null) {
             options = config.getDefaultOptions();
         }
 
-
-        FlowContext context = session.getSnapshot();
-        TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL); // 从上下文获取协议
-        TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
-
-        // 初始化或恢复推理痕迹 (Trace)
-        SimpleTrace trace = getTrace(context, prompt);
+        if (parentTeamTrace != null) {
+            //传递流控
+            options.setStreamSink(parentTeamTrace.getOptions().getStreamSink());
+        }
 
         trace.prepare(config, options, session, protocol);
 
