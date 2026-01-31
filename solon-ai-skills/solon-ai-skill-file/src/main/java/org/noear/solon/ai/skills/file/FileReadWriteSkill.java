@@ -11,16 +11,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
- * 文件读写技能（Java 8 兼容版，带沙箱保护与溢出控制）
+ * 文件读写技能（增强版：带沙箱保护、溢出控制与管理功能）
  * @author noear
  * @since 3.9.1
  */
 public class FileReadWriteSkill extends AbsSkill {
     private static final Logger log = LoggerFactory.getLogger(FileReadWriteSkill.class);
     private final Path rootPath;
-    // 限制读取 24KB，防止过大内容塞爆大模型上下文（Context Window）
+    // 限制读取 24KB，防止过大内容塞爆大模型上下文
     private static final int MAX_READ_SIZE = 1024 * 24;
 
     public FileReadWriteSkill(String workDir) {
@@ -29,59 +31,47 @@ public class FileReadWriteSkill extends AbsSkill {
     }
 
     @Override
-    public String name() {
-        return "file_manager";
-    }
+    public String name() { return "file_manager"; }
 
     @Override
     public String description() {
-        return "文件专家：支持本地文本文件的存储与检索。适用于保存生成的报告、记录笔记或分析日志。";
+        return "文件专家：支持本地文件的存储、检索、查看列表及删除。适用于管理生成的报告或记录。";
     }
 
     @Override
     public boolean isSupported(Prompt prompt) {
         String content = prompt.getUserContent().toLowerCase();
-        // 意图过滤，仅在涉及文件读写动作时触发
-        return content.contains("文件") || content.contains("file") ||
-                content.contains("写下") || content.contains("读取") || content.contains("保存");
+        // 涵盖了读、写、查、删的所有意图
+        return content.matches(".*(文件|file|写下|读取|保存|列表|目录|删除|delete).*");
     }
 
-    @ToolMapping(name = "write_text_file", description = "写入文本到文件。会自动创建不存在的目录。建议使用 .txt, .md 或 .json 后缀。")
+    @ToolMapping(name = "file_write", description = "写入文本到文件。会自动创建不存在的目录。")
     public String write(@Param("fileName") String fileName, @Param("content") String content) {
         try {
             Path target = resolvePath(fileName);
-
-            // Java 8 自动创建父级目录逻辑
             Path parent = target.getParent();
             if (parent != null && !Files.exists(parent)) {
                 Files.createDirectories(parent);
             }
 
-            // Java 8 写文件标准写法
             byte[] bytes = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
             Files.write(target, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 
             log.info("AI File Saved: {}", target);
             return "文件保存成功: " + fileName;
-        } catch (SecurityException se) {
-            return "权限拒绝: " + se.getMessage();
         } catch (Exception e) {
-            log.error("File write error: {}", fileName, e);
             return "写入失败: " + e.getMessage();
         }
     }
 
-    @ToolMapping(name = "read_text_file", description = "从本地读取文本文件内容。")
+    @ToolMapping(name = "file_read", description = "读取文本文件内容。")
     public String read(@Param("fileName") String fileName) {
         try {
             Path target = resolvePath(fileName);
-            if (!Files.exists(target)) {
-                return "文件不存在: " + fileName;
-            }
+            if (!Files.exists(target)) return "文件不存在: " + fileName;
 
             long size = Files.size(target);
             if (size > MAX_READ_SIZE) {
-                // Java 8 保护性读取：只加载前 MAX_READ_SIZE 字节
                 byte[] buffer = new byte[MAX_READ_SIZE];
                 try (InputStream is = Files.newInputStream(target)) {
                     int readLen = is.read(buffer);
@@ -89,30 +79,48 @@ public class FileReadWriteSkill extends AbsSkill {
                             "\n...(内容过长，仅展示前 " + (MAX_READ_SIZE / 1024) + "KB)...";
                 }
             } else {
-                // 小文件一次性读取
-                byte[] bytes = Files.readAllBytes(target);
-                return new String(bytes, StandardCharsets.UTF_8);
+                return new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
             }
         } catch (Exception e) {
-            log.error("File read error: {}", fileName, e);
             return "读取失败: " + e.getMessage();
         }
     }
 
+    // --- 吸收自 FileStorageSkill 的功能 ---
+
+    @ToolMapping(name = "file_list", description = "列出当前目录下的所有文件。")
+    public String list() {
+        try (Stream<Path> stream = Files.walk(rootPath, 1)) {
+            String files = stream.filter(p -> !p.equals(rootPath))
+                    .map(p -> p.getFileName().toString())
+                    .collect(Collectors.joining(", "));
+            return files.isEmpty() ? "目录为空。" : "当前文件列表: " + files;
+        } catch (IOException e) {
+            return "获取列表失败: " + e.getMessage();
+        }
+    }
+
+    @ToolMapping(name = "file_delete", description = "删除指定文件。")
+    public String delete(@Param("fileName") String fileName) {
+        try {
+            Path target = resolvePath(fileName);
+            return Files.deleteIfExists(target) ? "文件已删除: " + fileName : "文件不存在。";
+        } catch (Exception e) {
+            return "删除失败: " + e.getMessage();
+        }
+    }
+
     private Path resolvePath(String name) {
-        // 简单清理路径名
         Path p = rootPath.resolve(name).normalize();
         if (!p.startsWith(rootPath)) {
-            throw new SecurityException("禁止越权访问沙箱外部目录");
+            throw new SecurityException("禁止越权访问沙箱外部");
         }
         return p;
     }
 
     private void ensureDir(Path path) {
         try {
-            if (!Files.exists(path)) {
-                Files.createDirectories(path);
-            }
+            if (!Files.exists(path)) Files.createDirectories(path);
         } catch (IOException ignored) {}
     }
 }
