@@ -173,6 +173,11 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             options = config.getDefaultOptions();
         }
 
+        if (parentTeamTrace != null) {
+            //传递流控
+            options.setStreamSink(parentTeamTrace.getOptions().getStreamSink());
+        }
+
         // 1. 运行时环境准备
         trace.prepare(config, options, session, config.getName());
 
