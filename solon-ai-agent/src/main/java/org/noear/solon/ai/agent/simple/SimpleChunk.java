@@ -19,7 +19,8 @@ import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.lang.Preview;
 
 /**
- * 简单智能体响应块
+ * 简单智能体响应汇总块（流式结束块）
+ * <p>通常作为流式输出的最后一个元素，提供完整的响应结果、会话状态及最终的指标统计</p>
  *
  * @author noear
  * @since 3.9.1

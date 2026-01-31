@@ -101,6 +101,14 @@ public class ReActOptions implements NonSerializable {
         return tmp;
     }
 
+    protected void setStreamSink(FluxSink<AgentChunk> streamSink) {
+        this.streamSink = streamSink;
+    }
+
+    public FluxSink<AgentChunk> getStreamSink() {
+        return streamSink;
+    }
+
 
     // --- 配置注入 (Protected) ---
 
@@ -154,10 +162,6 @@ public class ReActOptions implements NonSerializable {
 
     protected void setFeedbackReasonDescriptionProvider(Function<ReActTrace, String> provider) {
         this.feedbackReasonDescriptionProvider = provider;
-    }
-
-    public void setStreamSink(FluxSink<AgentChunk> streamSink) {
-        this.streamSink = streamSink;
     }
 
     // --- 参数获取 (Public) ---
@@ -244,9 +248,5 @@ public class ReActOptions implements NonSerializable {
         }
 
         return feedbackReasonDescriptionProvider.apply(trace);
-    }
-
-    public FluxSink<AgentChunk> getStreamSink() {
-        return streamSink;
     }
 }

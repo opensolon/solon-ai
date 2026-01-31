@@ -20,7 +20,8 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 动作块（Acting）：标识智能体正在调用外部工具或执行特定指令
+ * 智能体对话片段块（流式中间块）
+ * <p>用于在流式生成过程中，实时传递底层的对话增量内容及其关联的轨迹信息</p>
  *
  * @author noear
  * @since 3.9.1
