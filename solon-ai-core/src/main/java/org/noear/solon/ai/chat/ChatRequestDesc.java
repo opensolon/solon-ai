@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.lang.Preview;
 import org.reactivestreams.Publisher;
+import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.util.function.Consumer;
@@ -60,5 +61,5 @@ public interface ChatRequestDesc {
     /**
      * 流响应
      */
-    Publisher<ChatResponse> stream();
+    Flux<ChatResponse> stream();
 }

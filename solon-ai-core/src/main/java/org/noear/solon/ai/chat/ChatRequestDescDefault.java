@@ -43,6 +43,7 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.util.*;
@@ -214,13 +215,13 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      * 流响应
      */
     @Override
-    public Publisher<ChatResponse> stream() {
+    public Flux<ChatResponse> stream() {
         systemMessage = prepare();
 
-        return internalStream();
+        return Flux.from(internalStream());
     }
 
-    private Publisher<ChatResponse> internalStream() {
+    private Flux<ChatResponse> internalStream() {
         //构建请求数据（每次请求重新构建 finalPrompt）
         ChatRequest req = new ChatRequest(config, dialect, options, session, systemMessage, originalPrompt, true);
 
@@ -232,7 +233,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     /**
      * 流响应
      */
-    private Publisher<ChatResponse> doStream(ChatRequest req) {
+    private Flux<ChatResponse> doStream(ChatRequest req) {
         HttpUtils httpUtils = dialect.createHttpUtils(config, req.isStream());
 
         String reqJson = req.toRequestData();
@@ -241,7 +242,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             log.debug("llm-request: {}", reqJson);
         }
 
-        return subscriber -> {
+        return Flux.from(subscriber -> {
             httpUtils.bodyOfJson(reqJson).execAsync("POST")
                     .whenComplete((resp, err) -> {
                         Subscriber<? super ChatResponse> subscriberProxy = ChatSubscriberProxy.of(subscriber);
@@ -269,7 +270,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                             subscriberProxy.onError(err);
                         }
                     });
-        };
+        });
     }
 
     private void parseResp(ChatRequest req, HttpResponse httpResp, Subscriber<? super ChatResponse> subscriber) throws IOException {

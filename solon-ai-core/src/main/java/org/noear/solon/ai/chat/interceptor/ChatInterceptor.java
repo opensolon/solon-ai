@@ -17,7 +17,7 @@ package org.noear.solon.ai.chat.interceptor;
 
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.reactivestreams.Publisher;
+import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 
@@ -44,7 +44,7 @@ public interface ChatInterceptor extends ToolInterceptor {
      * @param req   请求
      * @param chain 拦截链
      */
-    default Publisher<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
+    default Flux<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
         return chain.doIntercept(req);
     }
 }

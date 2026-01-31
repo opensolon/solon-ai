@@ -26,6 +26,7 @@
 * 优化 solon-ai-agent A2AProtocol 协议
 * 调整 solon-ai-core InMemoryChatSession systemMessages 标为弃用（不建议放到会话里，不方便做结构化的管理）
 * 调整 solon-ai-agent 取消 title（减少迷惑）
+* 调整 solon-ai-core ChatModel.stream 返回由 Publisher 改为 Flux
 * 调整 solon-ai-agent enablePlanning 更名为 planningMode （前者标为弃用）
 * 修复 solon-ai-agent ReActAgent 新话题开始时， ReActTrace 没有重置干净的问题
 * 修复 solon-ai-agent SimpleAgent 没有接入协作协议 prepareAgentPrompt 勾子
