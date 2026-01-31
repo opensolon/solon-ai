@@ -247,7 +247,8 @@ public class ChatModel implements AiModel {
          * @param toolObj 工具对象
          */
         public Builder defaultToolAdd(Object toolObj) {
-            return defaultToolAdd(new MethodToolProvider(toolObj));
+            config.getModelOptions().toolAdd(toolObj);
+            return this;
         }
 
         /**
@@ -259,7 +260,7 @@ public class ChatModel implements AiModel {
         public Builder defaultToolAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
             FunctionToolDesc decl = new FunctionToolDesc(name);
             toolBuilder.accept(decl);
-            config.addDefaultTool(decl);
+            config.getModelOptions().toolAdd(decl);
             return this;
         }
 

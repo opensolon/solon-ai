@@ -161,7 +161,13 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      * @param toolObj 工具对象
      */
     public T toolAdd(Object toolObj) {
-        return toolAdd(new MethodToolProvider(toolObj));
+        if (toolObj instanceof FunctionTool) {
+            FunctionTool tool = (FunctionTool) toolObj;
+            this.tools.put(tool.name(), tool);
+            return (T) this;
+        } else {
+            return toolAdd(new MethodToolProvider(toolObj));
+        }
     }
 
     /**
