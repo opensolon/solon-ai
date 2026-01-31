@@ -375,15 +375,15 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
 
+            // 如果没有消息，说明工具调用解析失败或没有工具需要处理，直接完成
+            if (assistantMessages.isEmpty()) {
+                log.debug("The tool call resolution result is empty, ending the streaming response");
+                return true; //触发外层的完成事件
+            }
+
             session.addMessage(assistantMessages);
 
             if (options.isAutoToolCall()) {
-                // 如果没有消息，说明工具调用解析失败或没有工具需要处理，直接完成
-                if (assistantMessages.isEmpty()) {
-                    log.debug("工具调用解析结果为空，结束流式响应");
-                    return true; //触发外层的完成事件
-                }
-
                 AssistantMessage choiceMessage = assistantMessages.get(0);
                 List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
@@ -401,6 +401,12 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     return true; //触发外层的完成事件
                 }
             } else {
+                AssistantMessage message = assistantMessages.get(0);
+                resp.reset();
+                resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
+                resp.aggregationMessageContent.setLength(0);
+
+                publishResponse(subscriber, resp, resp.lastChoice());
                 return true; //触发外层的完成事件
             }
 
@@ -411,7 +417,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private void publishResponse(Subscriber<? super ChatResponse> subscriber, ChatResponseDefault resp, ChatChoice choice) {
-        if (choice.getMessage().getContent() != null) {
+        if (choice.getMessage().hasContent()) {
             resp.aggregationMessageContent.append(choice.getMessage().getContent());
         }
         subscriber.onNext(resp);

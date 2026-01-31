@@ -26,6 +26,7 @@ import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
@@ -35,6 +36,7 @@ import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 import java.util.*;
 
@@ -110,6 +112,10 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
         ChatResponse response = callWithRetry(trace, messages);
+        AssistantMessage responseMessage = response.getMessage();
+        if(responseMessage == null){
+            responseMessage = response.getAggregationMessage();
+        }
 
         if (response.getUsage() != null) {
             trace.getMetrics().addUsage(response.getUsage());
@@ -121,26 +127,26 @@ public class ReasonTask implements NamedTaskComponent {
 
         // 触发推理审计事件（传递原始消息对象）
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onReason(trace, response.getMessage());
+            item.target.onReason(trace, responseMessage);
         }
 
         // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
-        if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
+        if (Assert.isEmpty(responseMessage.getContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
             trace.getWorkingMemory().addMessage(ChatMessage.ofUser("Your last response was empty. Please provide Action or Final Answer."));
             trace.setRoute(ReActAgent.ID_REASON);
             return;
         }
 
         // [逻辑 4: 路由分发 - 基于原生工具调用协议]
-        if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
-            trace.getWorkingMemory().addMessage(response.getMessage());
+        if (Assert.isNotEmpty(responseMessage.getToolCalls())) {
+            trace.getWorkingMemory().addMessage(responseMessage);
             trace.setRoute(ReActAgent.ID_ACTION);
             return;
         }
 
         // [逻辑 5: 路由判断 - 文本 ReAct 协议解析]
-        final String rawContent = response.hasContent() ? response.getContent() : ""; // 原始（含 think）
-        final String clearContent = response.hasContent() ? response.getResultContent() : ""; // 干净（无 think）
+        final String rawContent = responseMessage.hasContent() ? responseMessage.getContent() : ""; // 原始（含 think）
+        final String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : ""; // 干净（无 think）
 
 
         // 进一步清洗协议头（如 Thought:{...}\nAction:），提取核心思维逻辑
@@ -219,7 +225,7 @@ public class ReasonTask implements NamedTaskComponent {
         int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
-                return req.call();
+                return Flux.from(req.stream()).blockLast();
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
                     LOG.error("ReActAgent [{}] failed after {} retries", config.getName(), maxRetries, e);

@@ -19,6 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Type;
@@ -83,8 +84,15 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     /**
      * 转为 Bean（content 须是 json，否则会异常）
      */
-    public <T> T toBean(Type type){
+    public <T> T toBean(Type type) {
         return ONode.deserialize(content, type);
+    }
+
+    /**
+     * 是否有内容
+     */
+    public boolean hasContent() {
+        return Assert.isNotEmpty(content);
     }
 
     /**
