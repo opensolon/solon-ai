@@ -1,11 +1,11 @@
 package demo.ai.skills;
 
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.skills.file.FileReadWriteSkill;
 import org.noear.solon.ai.skills.sys.SystemClockSkill;
 import org.noear.solon.ai.skills.sys.NodejsSkill;
 import org.noear.solon.ai.skills.sys.PythonSkill;
 import org.noear.solon.ai.skills.sys.ShellSkill;
-import org.noear.solon.ai.skills.file.FileStorageSkill;
 import org.noear.solon.ai.skills.file.ZipSkill;
 import org.noear.solon.ai.skills.generation.ImageGenerationSkill;
 import org.noear.solon.ai.skills.generation.VideoGenerationSkill;
@@ -40,7 +40,7 @@ public class AdvancedDemo {
     public void techResearchTask() throws Exception {
         WebSearchSkill search = new WebSearchSkill(WebSearchSkill.BING, "bing_key");
         WebCrawlerSkill crawler = new WebCrawlerSkill(WebCrawlerSkill.JINA, "jina_key");
-        FileStorageSkill storage = new FileStorageSkill("./research_docs");
+        FileReadWriteSkill storage = new FileReadWriteSkill("./research_docs");
         ZipSkill zip = new ZipSkill("./research_docs");
 
         ChatModel agent = ChatModel.of("...")
@@ -59,7 +59,7 @@ public class AdvancedDemo {
         ShellSkill shell = new ShellSkill("./server_logs");
         // Nodejs 负责解析复杂的日志 JSON
         NodejsSkill nodejs = new NodejsSkill("./server_logs");
-        FileStorageSkill storage = new FileStorageSkill("./server_logs");
+        FileReadWriteSkill storage = new FileReadWriteSkill("./server_logs");
         MailSkill mail = new MailSkill(MailSkill.RESEND, "resend_key", "./server_logs");
 
         ChatModel agent = ChatModel.of("...")
@@ -78,7 +78,7 @@ public class AdvancedDemo {
         SystemClockSkill clock = new SystemClockSkill();
         WebSearchSkill search = new WebSearchSkill(WebSearchSkill.BAIDU, "baidu_key");
         WebCrawlerSkill crawler = new WebCrawlerSkill(WebCrawlerSkill.FIRECRAWL, "firecrawl_key");
-        FileStorageSkill storage = new FileStorageSkill("./competitor_news");
+        FileReadWriteSkill storage = new FileReadWriteSkill("./competitor_news");
 
         ChatModel agent = ChatModel.of("...")
                 .defaultSkillAdd(clock, search, crawler, storage)
@@ -98,7 +98,7 @@ public class AdvancedDemo {
         WebCrawlerSkill crawler = new WebCrawlerSkill(WebCrawlerSkill.JINA, "key");
         PythonSkill python = new PythonSkill("./ai_workspace");
         NodejsSkill nodejs = new NodejsSkill("./ai_workspace");
-        FileStorageSkill disk = new FileStorageSkill("./ai_workspace");
+        FileReadWriteSkill disk = new FileReadWriteSkill("./ai_workspace");
         ZipSkill zip = new ZipSkill("./ai_workspace");
         MailSkill mail = new MailSkill(MailSkill.RESEND, "key", "./ai_workspace");
 

@@ -1,7 +1,7 @@
 package demo.ai.skills;
 
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.file.FileStorageSkill;
+import org.noear.solon.ai.skills.file.FileReadWriteSkill;
 import org.noear.solon.ai.skills.sys.SystemClockSkill;
 import org.noear.solon.ai.skills.crawler.WebCrawlerSkill;
 import org.noear.solon.ai.skills.search.WebSearchSkill;
@@ -11,7 +11,7 @@ public class Demo {
     public void test() throws Exception {
         WebSearchSkill search = new WebSearchSkill(WebSearchSkill.BAIDU, "serper_key");
         WebCrawlerSkill crawler = new WebCrawlerSkill(WebCrawlerSkill.FIRECRAWL, "jina_key");
-        FileStorageSkill disk = new FileStorageSkill("./ai_workspace");
+        FileReadWriteSkill disk = new FileReadWriteSkill("./ai_workspace");
         SystemClockSkill clock = new SystemClockSkill();
 
         // 构建 Agent 或 ChatModel
