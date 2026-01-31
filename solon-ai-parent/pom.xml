@@ -232,6 +232,18 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>solon-ai-skill-mail</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-skill-pdf</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-skill-data</artifactId>
                 <version>${project.version}</version>
             </dependency>
