@@ -21,7 +21,9 @@ import org.noear.solon.ai.agent.react.ReActAgentConfig;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.util.FeedbackTool;
+import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
@@ -79,7 +81,7 @@ public class PlanTask implements NamedTaskComponent {
         messages.add(ChatMessage.ofUser(targetLabel + trace.getOriginalPrompt().getUserContent()));
 
         // 3. 调用模型生成计划
-        ChatResponse response = config.getChatModel()
+        ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o->{
                     if(trace.getOptions().isFeedbackMode()) {
@@ -87,8 +89,26 @@ public class PlanTask implements NamedTaskComponent {
                                 trace.getOptions().getFeedbackDescription(trace),
                                 trace.getOptions().getFeedbackReasonDescription(trace)));
                     }
-                })
-                .call();
+                });
+
+        ChatResponse response;
+
+        if(trace.getOptions().getStreamSink() != null){
+            response = req.stream()
+                    .doOnNext(resp->{
+                        trace.getOptions().getStreamSink().next(
+                                new PlanOutput(ReActAgent.ID_PLAN, trace, resp));
+                    })
+                    .blockLast();
+        } else {
+            response = req.call();
+        }
+
+
+        AssistantMessage responseMessage = response.getMessage();
+        if(responseMessage == null){
+            responseMessage = response.getAggregationMessage();
+        }
 
         if (response.getUsage() != null) {
             trace.getMetrics().addUsage(response.getUsage());
@@ -96,12 +116,12 @@ public class PlanTask implements NamedTaskComponent {
 
         // 触发计划审计事件（传递原始消息对象）
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onPlan(trace, response.getMessage());
+            item.target.onPlan(trace, responseMessage);
         }
 
-        if (response.hasChoices()) {
-            if (FeedbackTool.TOOL_NAME.equals(response.getMessage().getMetadataAs("__tool"))) {
-                String source = response.getMessage().getMetadataAs("source");
+        if (responseMessage.hasContent()) {
+            if (FeedbackTool.TOOL_NAME.equals(responseMessage.getMetadataAs("__tool"))) {
+                String source = responseMessage.getMetadataAs("source");
                 if (Assert.isNotEmpty(source)) {
                     trace.setFinalAnswer(source);
                     trace.setRoute(Agent.ID_END);
@@ -112,7 +132,7 @@ public class PlanTask implements NamedTaskComponent {
             }
         }
 
-        String planContent = response.getResultContent();
+        String planContent = responseMessage.getResultContent();
 
         if (Assert.isEmpty(planContent)) {
             LOG.warn("ReActAgent [{}] Plan generated empty content, using default goal.", config.getName());

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.simple;
 
+import org.noear.solon.ai.agent.AgentOutput;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -25,6 +26,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 import java.util.function.Consumer;
 
@@ -86,5 +88,9 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
         SimpleTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
 
         return new SimpleResponse(session, trace, message);
+    }
+
+    public Flux<AgentOutput> stream() {
+        return null;
     }
 }

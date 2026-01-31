@@ -26,6 +26,7 @@ import org.noear.solon.ai.chat.interceptor.ToolChain;
 import org.noear.solon.ai.chat.interceptor.ToolRequest;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
@@ -118,7 +119,12 @@ public class ActionTask implements NamedTaskComponent {
         }
 
         // 协议闭环：回填 ToolMessage
-        trace.getWorkingMemory().addMessage(ChatMessage.ofTool(result, call.name(), call.id()));
+        ToolMessage toolMessage = ChatMessage.ofTool(result, call.name(), call.id());
+        trace.getWorkingMemory().addMessage(toolMessage);
+        if(trace.getOptions().getStreamSink() != null){
+            trace.getOptions().getStreamSink().next(
+                    new ActionOutput(ReActAgent.ID_ACTION, trace, toolMessage));
+        }
     }
 
     /**

@@ -15,15 +15,16 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.AgentOutput;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 import java.util.function.Consumer;
 
@@ -83,5 +84,29 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
         ReActTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
 
         return new ReActResponse(session, trace, message);
+    }
+
+    public Flux<AgentOutput> stream() {
+        if (session == null) {
+            if (log.isDebugEnabled()) {
+                log.debug("No session provided for ReActRequest, using temporary InMemoryAgentSession.");
+            }
+            session = InMemoryAgentSession.of();
+        }
+
+        return Flux.<AgentOutput>create(sink -> {
+            try {
+                options.setStreamSink(sink);
+                AssistantMessage message = agent.call(prompt, session, options);
+                ReActTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+
+                ReActResponse resp = new ReActResponse(session, trace, message);
+
+                sink.next(new ReActOutput(resp));
+                sink.complete();
+            } catch (Throwable e) {
+                sink.error(e);
+            }
+        });
     }
 }

@@ -36,7 +36,6 @@ import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Flux;
 
 import java.util.*;
 
@@ -225,7 +224,14 @@ public class ReasonTask implements NamedTaskComponent {
         int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
-                return Flux.from(req.stream()).blockLast();
+                if (trace.getOptions().getStreamSink() != null) {
+                    return req.stream().doOnNext(resp->{
+                        trace.getOptions().getStreamSink()
+                                .next(new ReasonOutput(ReActAgent.ID_REASON, trace, resp));
+                    }).blockLast();
+                } else {
+                    return req.call();
+                }
             } catch (Exception e) {
                 if (i == maxRetries - 1) {
                     LOG.error("ReActAgent [{}] failed after {} retries", config.getName(), maxRetries, e);

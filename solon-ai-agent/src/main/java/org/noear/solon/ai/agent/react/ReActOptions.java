@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.AgentOutput;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
@@ -22,6 +23,7 @@ import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.FluxSink;
 
 import java.util.*;
 import java.util.function.Function;
@@ -36,6 +38,8 @@ import java.util.function.Function;
 @Preview("3.8.1")
 public class ReActOptions implements NonSerializable {
     private static final Logger LOG = LoggerFactory.getLogger(ReActOptions.class);
+
+    private transient FluxSink<AgentOutput> streamSink;
 
     /**
      * 工具调用上下文（透传给 FunctionTool）
@@ -152,6 +156,10 @@ public class ReActOptions implements NonSerializable {
         this.feedbackReasonDescriptionProvider = provider;
     }
 
+    public void setStreamSink(FluxSink<AgentOutput> streamSink) {
+        this.streamSink = streamSink;
+    }
+
     // --- 参数获取 (Public) ---
 
     public FunctionTool getTool(String name) {
@@ -236,5 +244,9 @@ public class ReActOptions implements NonSerializable {
         }
 
         return feedbackReasonDescriptionProvider.apply(trace);
+    }
+
+    public FluxSink<AgentOutput> getStreamSink() {
+        return streamSink;
     }
 }
