@@ -76,12 +76,12 @@ public class ReActStreamTest {
                 .stream()
                 .doOnNext(chunk -> {
                     if (chunk instanceof ReasonChunk) {
-                        System.out.println("[思考]: " + chunk.getMessage().getContent());
+                        System.out.println("[思考]: " + chunk.getContent());
                     } else if (chunk instanceof ActionChunk) {
                         actionFound.set(true);
                         System.out.println("[动作]: 正在调用工具...");
                     } else if (chunk instanceof ReActChunk) {
-                        System.out.println("[结果]: " + ((ReActChunk) chunk).getResponse().getContent());
+                        System.out.println("[结果]: " + chunk.getContent());
                     }
                 })
                 .blockLast(); // 阻塞直至流结束

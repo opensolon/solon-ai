@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -44,6 +45,7 @@ public interface AgentChunk {
     /**
      * 获取当前块的消息
      */
+    @Nullable
     ChatMessage getMessage();
 
     /**
