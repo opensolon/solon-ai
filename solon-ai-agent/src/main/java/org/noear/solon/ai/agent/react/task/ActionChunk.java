@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -28,11 +29,18 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.9.1")
 public class ActionChunk extends AbsAgentChunk {
+    private final Node node;
     private final ReActTrace trace;
 
-    public ActionChunk(ReActTrace trace, ChatMessage message) {
+    public ActionChunk(Node node, ReActTrace trace, ChatMessage message) {
         super(trace.getAgentName(), trace.getSession(), message);
+
+        this.node = node;
         this.trace = trace;
+    }
+
+    public Node getNode() {
+        return node;
     }
 
     public ReActTrace getTrace() {

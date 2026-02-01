@@ -95,7 +95,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 return;
             }
 
-            dispatch(context, trace);
+            dispatch(node, context, trace);
 
         } catch (Exception e) {
             handleError(context, e);
@@ -105,7 +105,7 @@ public class SupervisorTask implements NamedTaskComponent {
     /**
      * 构建 Prompt 并调用模型进行调度决策
      */
-    protected void dispatch(FlowContext context, TeamTrace trace) throws Exception {
+    protected void dispatch(Node node, FlowContext context, TeamTrace trace) throws Exception {
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
         // 组装系统提示词 (基础模版 + 协议扩展)
@@ -156,7 +156,7 @@ public class SupervisorTask implements NamedTaskComponent {
         messages.add(ChatMessage.ofUser(userContent.toString()));
 
 
-        ChatResponse response = callWithRetry(trace, messages);
+        ChatResponse response = callWithRetry(node, trace, messages);
         AssistantMessage responseMessage = response.getMessage();
         if(responseMessage == null){
             responseMessage = response.getAggregationMessage();
@@ -270,7 +270,7 @@ public class SupervisorTask implements NamedTaskComponent {
     /**
      * 带重试机制的模型调用
      */
-    protected ChatResponse callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
+    protected ChatResponse callWithRetry(Node node, TeamTrace trace, List<ChatMessage> messages) {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
             if(trace.getOptions().isFeedbackMode()) {
                 o.toolAdd(FeedbackTool.getTool(
@@ -297,7 +297,7 @@ public class SupervisorTask implements NamedTaskComponent {
                     return req.stream()
                             .doOnNext(resp -> {
                                 trace.getOptions().getStreamSink().next(
-                                        new SupervisorChunk(trace, resp));
+                                        new SupervisorChunk(node, trace, resp));
                             })
                             .blockLast();
                 }

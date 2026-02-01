@@ -85,7 +85,7 @@ public class ActionTask implements NamedTaskComponent {
         // 1. 优先处理原生工具调用（Native Tool Calls）
         if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
             for (ToolCall call : lastAssistant.getToolCalls()) {
-                processNativeToolCall(trace, call);
+                processNativeToolCall(node, trace, call);
                 if (Agent.ID_END.equals(trace.getRoute())) {
                     break;
                 }
@@ -94,13 +94,13 @@ public class ActionTask implements NamedTaskComponent {
         }
 
         // 2. 文本模式：解析模型输出中的 Action 块
-        processTextModeAction(trace);
+        processTextModeAction(node, trace);
     }
 
     /**
      * 处理标准 ToolCall 协议调用
      */
-    private void processNativeToolCall(ReActTrace trace, ToolCall call) throws Throwable {
+    private void processNativeToolCall(Node node, ReActTrace trace, ToolCall call) throws Throwable {
         if(LOG.isDebugEnabled()) {
             LOG.debug("Processing native tool call for agent [{}]: {}.", config.getName(), call);
         }
@@ -121,16 +121,17 @@ public class ActionTask implements NamedTaskComponent {
         // 协议闭环：回填 ToolMessage
         ToolMessage toolMessage = ChatMessage.ofTool(result, call.name(), call.id());
         trace.getWorkingMemory().addMessage(toolMessage);
+
         if(trace.getOptions().getStreamSink() != null){
             trace.getOptions().getStreamSink().next(
-                    new ActionChunk(trace, toolMessage));
+                    new ActionChunk(node, trace, toolMessage));
         }
     }
 
     /**
      * 解析并执行文本模式下的 Action 指令
      */
-    private void processTextModeAction(ReActTrace trace) throws Throwable {
+    private void processTextModeAction(Node node, ReActTrace trace) throws Throwable {
         String lastContent = trace.getLastResult(); //这里的 LastResult 是经过 ReasonTask 清洗后的 Thought 主体
         if (Assert.isEmpty(lastContent)) {
             return;
@@ -183,15 +184,24 @@ public class ActionTask implements NamedTaskComponent {
             }
         }
 
+        final ChatMessage chatMessage;
+
         if (foundAny) {
             // 文本模式：将观测结果作为 User 消息反馈给 LLM
-            trace.getWorkingMemory().addMessage(ChatMessage.ofUser(allObservations.toString().trim()));
+            chatMessage = ChatMessage.ofUser(allObservations.toString().trim());
+            trace.getWorkingMemory().addMessage(chatMessage);
         } else {
             // 容错处理：当模型格式错误时，引导其修正
             if (LOG.isTraceEnabled()) {
                 LOG.trace("No valid Action format found in assistant response for agent [{}].", config.getName());
             }
-            trace.getWorkingMemory().addMessage(ChatMessage.ofUser("Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}"));
+            chatMessage = ChatMessage.ofUser("Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}");
+            trace.getWorkingMemory().addMessage(chatMessage);
+        }
+
+        if (trace.getOptions().getStreamSink() != null) {
+            trace.getOptions().getStreamSink().next(
+                    new ActionChunk(node, trace, chatMessage));
         }
     }
 

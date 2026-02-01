@@ -110,7 +110,7 @@ public class ReasonTask implements NamedTaskComponent {
         messages.addAll(trace.getWorkingMemory().getMessages());
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
-        ChatResponse response = callWithRetry(trace, messages);
+        ChatResponse response = callWithRetry(node, trace, messages);
         AssistantMessage responseMessage = response.getMessage();
         if(responseMessage == null){
             responseMessage = response.getAggregationMessage();
@@ -186,7 +186,7 @@ public class ReasonTask implements NamedTaskComponent {
         trace.setFinalAnswer(extractFinalAnswer(clearContent));
     }
 
-    private ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) {
+    private ChatResponse callWithRetry(Node node, ReActTrace trace, List<ChatMessage> messages) {
         if(LOG.isTraceEnabled()){
             LOG.trace("ReActAgent [{}] calling model... messages: {}",
                     config.getName(),
@@ -227,7 +227,7 @@ public class ReasonTask implements NamedTaskComponent {
                 if (trace.getOptions().getStreamSink() != null) {
                     return req.stream().doOnNext(resp->{
                         trace.getOptions().getStreamSink()
-                                .next(new ReasonChunk(trace, resp));
+                                .next(new ReasonChunk(node, trace, resp));
                     }).blockLast();
                 } else {
                     return req.call();
