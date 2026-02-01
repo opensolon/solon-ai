@@ -49,13 +49,21 @@ public class WebSearchSkill extends AbsSkill {
     }
 
     @Override
-    public String name() { return "web_search"; }
+    public String name() {
+        return "web_search";
+    }
 
     @Override
-    public String description() { return "联网搜索专家：提供实时新闻、技术文档和资讯检索。"; }
+    public String description() {
+        return "联网搜索专家：提供实时新闻、技术文档和资讯检索。";
+    }
 
     @ToolMapping(name = "search", description = "联网搜索，返回标题、链接和摘要")
     public String search(@Param("query") String query) {
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("Web search: {}", query);
+        }
+
         try {
             // 1. 发起请求
             String json = driver.executeRequest(query, maxResults, apiKey);
@@ -79,12 +87,18 @@ public class WebSearchSkill extends AbsSkill {
     // --- 驱动接口定义 ---
     public interface SearchDriver {
         String executeRequest(String query, int maxResults, String apiKey) throws Exception;
+
         java.util.List<SearchResult> parseResults(ONode root);
     }
 
     public static class SearchResult {
         public String title, link, snippet;
-        public SearchResult(String t, String l, String s) { title=t; link=l; snippet=s; }
+
+        public SearchResult(String t, String l, String s) {
+            title = t;
+            link = l;
+            snippet = s;
+        }
     }
 
     // --- 内置驱动实现：Serper (Google) ---
@@ -92,8 +106,9 @@ public class WebSearchSkill extends AbsSkill {
         public String executeRequest(String q, int n, String k) throws Exception {
             return HttpUtils.http("https://google.serper.dev/search")
                     .header("X-API-KEY", k).header("Content-Type", "application/json")
-                    .bodyJson(new ONode().set("q", q).set("num", n).toJson()).post();
+                    .bodyOfJson(new ONode().set("q", q).set("num", n).toJson()).post();
         }
+
         public java.util.List<SearchResult> parseResults(ONode root) {
             return root.get("organic").getArrayUnsafe().stream()
                     .map(i -> new SearchResult(i.get("title").getString(), i.get("link").getString(), i.get("snippet").getString()))
@@ -110,6 +125,7 @@ public class WebSearchSkill extends AbsSkill {
                     .data("count", String.valueOf(n))
                     .get();
         }
+
         public java.util.List<SearchResult> parseResults(ONode root) {
             return root.get("webPages").get("value").getArrayUnsafe().stream()
                     .map(i -> new SearchResult(i.get("name").getString(), i.get("url").getString(), i.get("snippet").getString()))
@@ -125,7 +141,7 @@ public class WebSearchSkill extends AbsSkill {
                     .header("Authorization", "Bearer " + k)
                     .header("Content-Type", "application/json")
                     // 百度 AppBuilder 接收的是 messages 数组，且 top_k 在 resource_type_filter 中定义
-                    .bodyJson(new ONode()
+                    .bodyOfJson(new ONode()
                             .set("messages", new ONode().add(new ONode().set("role", "user").set("content", q)))
                             .set("resource_type_filter", new ONode().add(new ONode().set("type", "web").set("top_k", n)))
                             .toJson())

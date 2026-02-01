@@ -213,7 +213,7 @@ public class RestApiSkill extends AbsSkill {
         if ("GET".equalsIgnoreCase(tool.getMethod())) {
             http.data(dataParams);
         } else {
-            http.bodyJson(ONode.serialize(dataParams));
+            http.bodyOfJson(ONode.serialize(dataParams));
         }
 
         try {
