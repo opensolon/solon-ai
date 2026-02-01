@@ -1,5 +1,7 @@
 package org.noear.solon.ai.skills.openapi;
 
+import org.noear.solon.core.util.Assert;
+
 /**
  * API 工具信息模型
  *
@@ -17,33 +19,77 @@ public class ApiTool {
 
     // --- Getter 方法 (公开) ---
 
-    public String getName() { return name; }
+    public String getName() {
+        return name;
+    }
 
-    public String getDescription() { return description; }
+    public String getDescription() {
+        return description;
+    }
 
-    public String getPath() { return path; }
+    public String getPath() {
+        return path;
+    }
 
-    public String getMethod() { return method; }
+    public String getMethod() {
+        return method;
+    }
 
-    public String getInputSchema() { return inputSchema; }
+    public String getInputSchema() {
+        return inputSchema;
+    }
 
-    public String getOutputSchema() { return outputSchema; }
+    public String getInputSchemaOr(String defVal) {
+        if (Assert.isEmpty(inputSchema)) {
+            return defVal;
+        } else {
+            return inputSchema;
+        }
+    }
 
-    public boolean isDeprecated() { return isDeprecated; }
+    public String getOutputSchema() {
+        return outputSchema;
+    }
+
+    public String getOutputSchemaOr(String defVal) {
+        if (Assert.isEmpty(outputSchema)) {
+            return defVal;
+        } else {
+            return outputSchema;
+        }
+    }
+
+    public boolean isDeprecated() {
+        return isDeprecated;
+    }
 
     // --- Setter 方法 (内部权限) ---
 
-    protected void setName(String name) { this.name = name; }
+    protected void setName(String name) {
+        this.name = name;
+    }
 
-    protected void setDescription(String description) { this.description = description; }
+    protected void setDescription(String description) {
+        this.description = description;
+    }
 
-    protected void setPath(String path) { this.path = path; }
+    protected void setPath(String path) {
+        this.path = path;
+    }
 
-    protected void setMethod(String method) { this.method = method; }
+    protected void setMethod(String method) {
+        this.method = method;
+    }
 
-    protected void setInputSchema(String inputSchema) { this.inputSchema = inputSchema; }
+    protected void setInputSchema(String inputSchema) {
+        this.inputSchema = inputSchema;
+    }
 
-    protected void setOutputSchema(String outputSchema) { this.outputSchema = outputSchema; }
+    protected void setOutputSchema(String outputSchema) {
+        this.outputSchema = outputSchema;
+    }
 
-    protected void setDeprecated(boolean deprecated) { isDeprecated = deprecated; }
+    protected void setDeprecated(boolean deprecated) {
+        isDeprecated = deprecated;
+    }
 }
