@@ -136,7 +136,10 @@ public class Text2SqlSkill extends AbsSkill {
                 .append("3. **先探测后重度计算**: 对字段格式有疑虑时，优先执行 `SELECT col FROM table LIMIT 1` 探测真实数据，严禁盲目尝试复杂转换。\n")
                 .append("4. **关键字转义**: 识别保留字（如 YEAR, ORDER, USER），作为别名或表名使用时必须加转义符（如双引号或反引号）。\n")
                 .append("5. **自愈逻辑**: 遇到报错时，根据错误信息分析类型不匹配或方言不支持原因，调整逻辑后重试一次。\n")
-                .append("6. **结果收敛**: 若确认无数据或方言不支持，请诚实告知用户，严禁编造数据。");
+                .append("6. **结果收敛**: 若确认无数据或方言不支持，请诚实告知用户，严禁编造数据。")
+                .append("7. **强制限定词**: 在多表关联查询时，所有字段必须带有表别名作为前缀（如 `t1.id`, `t2.name`），严禁使用裸字段名以防歧义。\n")
+                .append("8. **连接路径确认**: 关联三张以上表时，优先确认主外键连接链路，避免产生笛卡尔积。\n")
+                .append("9. **结果截断意识**: 除非用户明确要求查看全量数据，否则在编写 SQL 时必须根据方言自行追加分页代码（如 LIMIT 或 TOP），默认展示 ").append(maxRows).append(" 条以内数据。");
 
         return sb.toString();
     }
@@ -162,7 +165,7 @@ public class Text2SqlSkill extends AbsSkill {
         return extractSchemaInfo(Collections.singletonList(tableName));
     }
 
-    @ToolMapping(name = "execute_sql", description = "执行单条只读 SELECT 语句并获取 JSON 结果。")
+    @ToolMapping(name = "execute_sql", description = "执行单条只读 SELECT 语句并获取结果。")
     public String executeSql(@Param("sql") String sql) {
         if (Assert.isBlank(sql)) {
             return "Error: SQL is empty.";
@@ -172,45 +175,71 @@ public class Text2SqlSkill extends AbsSkill {
             LOG.trace("Executing SQL: {}", sql);
         }
 
+        // 1. 基础清洗与安全检查
         String cleanSql = sql.trim();
-        // 自动移除末尾分号，增强容错
         if (cleanSql.endsWith(";")) {
             cleanSql = cleanSql.substring(0, cleanSql.length() - 1);
         }
 
         String upperSql = cleanSql.toUpperCase();
-        // 根据配置决定是否拦截
         if (readOnly && !upperSql.startsWith("SELECT")) {
             return "Error: This tool is restricted to SELECT statements only.";
         }
 
-        // 严禁多条执行（防止注入或脚本）
         if (upperSql.contains(";") && !cleanSql.endsWith(";")) {
             return "Error: Multiple SQL statements are not allowed.";
         }
 
-        // 分页补全逻辑 (适配常用主流及国产数据库)
-        if (!upperSql.contains("LIMIT") && !upperSql.contains("FETCH FIRST") && !upperSql.contains("TOP ")) {
+        // 2. 智能化分页兜底逻辑 (采用子查询包装法，确保方言兼容性)
+        boolean hasLimit = upperSql.contains("LIMIT") || upperSql.contains("FETCH FIRST") ||
+                upperSql.contains("TOP ") || upperSql.contains("ROWNUM");
+
+        if (!hasLimit) {
             String dn = dialectName.toUpperCase();
-            if (dn.contains("MYSQL") || dn.contains("POSTGRE") || dn.contains("KINGBASE") || dn.contains("H2") || dn.contains("SQLITE")) {
-                cleanSql += " LIMIT " + maxRows;
-            } else if (dn.contains("DAMENG") || dn.contains("ORACLE") || dn.contains("DB2")) {
-                cleanSql += " FETCH FIRST " + maxRows + " ROWS ONLY";
+            if (dn.contains("MYSQL") || dn.contains("POSTGRE") || dn.contains("H2") || dn.contains("SQLITE") || dn.contains("KINGBASE")) {
+                // MySQL/PostgreSQL 风格
+                cleanSql = "SELECT * FROM (" + cleanSql + ") _t LIMIT " + maxRows;
+            } else if (dn.contains("ORACLE") || dn.contains("DAMENG")) {
+                // Oracle/达梦 风格 (兼容旧版本 ROWNUM)
+                cleanSql = "SELECT * FROM (" + cleanSql + ") _t WHERE ROWNUM <= " + maxRows;
             } else if (dn.contains("SQL SERVER")) {
-                if (!upperSql.startsWith("SELECT TOP")) {
-                    cleanSql = cleanSql.replaceFirst("(?i)SELECT", "SELECT TOP " + maxRows);
-                }
+                // SQL Server 风格 (OFFSET/FETCH 是 2012+ 的标准语法，比 TOP 更适合包装)
+                cleanSql = "SELECT * FROM (" + cleanSql + ") _t ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT " + maxRows + " ROWS ONLY";
+            } else {
+                // 默认兜底：尝试标准 SQL 包装
+                cleanSql = "SELECT * FROM (" + cleanSql + ") _t FETCH FIRST " + maxRows + " ROWS ONLY";
             }
         }
 
+        // 3. 执行查询与结果处理
         try {
             List<Map> rows = sqlUtils.sql(cleanSql).queryRowList(Map.class);
-            if (rows == null || rows.isEmpty()) return "Query OK. No data.";
-            String json = ONode.serialize(rows);
-            // 结果截断保护，防止 context 溢出
-            return json.length() > maxContextLength ? json.substring(0, maxContextLength) + "... [Truncated]" : json;
+            if (rows == null || rows.isEmpty()) {
+                return "Query OK. No data found.";
+            }
+
+            // 结果集截断保护：优先保证返回结果是合法的 JSON 结构
+            // 如果结果数超过 maxRows 的一半，我们只返回前 10 条作为样本，引导 AI 进一步分析
+            if (rows.size() > 15) {
+                List<Map> subRows = rows.stream().limit(10).collect(Collectors.toList());
+                return ONode.serialize(subRows) + "\n\n[Note: 结果集较大，已自动截断。当前显示前 10 条，实际查询到 " + rows.size() + " 条数据。]";
+            }
+
+            String fullJson = ONode.serialize(rows);
+            // 最后的长度字符截断兜底（防止单行超长字段撑爆）
+            if (fullJson.length() > maxContextLength) {
+                return fullJson.substring(0, maxContextLength) + "... [Data too large, truncated]";
+            }
+
+            return fullJson;
+
         } catch (SQLException e) {
-            return "SQL Error: " + e.getMessage();
+            // 提供带 Hint 的错误反馈，增强 AI 自愈能力
+            String errorMsg = e.getMessage();
+            LOG.warn("SQL Execution failed: {} \nRaw SQL: {}", errorMsg, cleanSql);
+
+            return "SQL Error: " + errorMsg + "\n" +
+                    "Hint: 请检查字段别名、JOIN 条件或 " + dialectName + " 的特有语法。如果是多表关联，请务必为字段加上别名前缀。";
         }
     }
 
