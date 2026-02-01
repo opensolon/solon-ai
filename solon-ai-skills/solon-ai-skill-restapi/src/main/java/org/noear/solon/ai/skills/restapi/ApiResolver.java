@@ -27,6 +27,7 @@ import java.util.List;
  */
 @Preview("3.9.1")
 public interface ApiResolver {
+
     String getName();
 
     List<ApiTool> resolve(String definitionUrl, String source);

@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.skills.restapi.resolver.OpenApiResolver;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
@@ -89,14 +90,25 @@ public class RestApiSkill extends AbsSkill {
                 resolver = OpenApiResolver.getInstance();
             }
 
-            HttpUtils http = HttpUtils.http(definitionUrl);
-            if (authenticator != null) {
-                authenticator.apply(http, null);
+            log.info("RestApiSkill: Using {} for {}", resolver.getName(), definitionUrl);
+
+            final String source ;
+
+            if(definitionUrl.startsWith("http://") || definitionUrl.startsWith("https://")) {
+                //网络地址（http://..., https://...）
+                HttpUtils http = HttpUtils.http(definitionUrl);
+                if (authenticator != null) {
+                    authenticator.apply(http, null);
+                }
+                source = http.get();
+            } else {
+                //资源地址（"classpath:demo.xxx" or "file:./demo.xxx" or "./demo.xxx" or "demo.xxx"）
+                source = ResourceUtil.findResourceAsString(definitionUrl);
             }
 
-            String source = http.get();
-
-            log.info("RestApiSkill: Using {} for {}", resolver.getName(), definitionUrl);
+            if (Utils.isEmpty(source)) {
+                throw new IllegalArgumentException("API definition source is empty from: " + definitionUrl);
+            }
 
             List<ApiTool> allTools = resolver.resolve(definitionUrl, source);
 
