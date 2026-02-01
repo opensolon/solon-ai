@@ -48,6 +48,10 @@ public class Text2SqlSkill extends AbsSkill {
     protected final SqlUtils sqlUtils;
     protected final List<String> tableNames;
     protected final Map<String, String> tableRemarksMap = new LinkedHashMap<>();
+    /**
+     * 优化点 1: 全局关系拓扑缓存。key:表名, value:外键关联线索描述
+     */
+    protected final Map<String, List<String>> globalRelations = new HashMap<>();
     protected final String cachedSchemaInfo;
 
     protected int maxRows = 50;
@@ -64,8 +68,44 @@ public class Text2SqlSkill extends AbsSkill {
         super();
         this.sqlUtils = sqlUtils;
         this.tableNames = Arrays.asList(tables);
-        this.cachedSchemaInfo = extractSchemaInfo(tableNames);
+
+        // 构造时优先加载全局元数据（备注与关系图谱）
+        loadGlobalMetadata();
+
         this.schemaMode = tableNames.size() > 20 ? SchemaMode.DYNAMIC : SchemaMode.FULL;
+        this.cachedSchemaInfo = (schemaMode == SchemaMode.FULL) ? extractSchemaInfo(tableNames) : null;
+    }
+
+    /**
+     * 提取全局元数据逻辑。解决 DYNAMIC 模式下 AI “视野孤岛”问题
+     */
+    private void loadGlobalMetadata() {
+        try (Connection conn = sqlUtils.getDataSource().getConnection()) {
+            DatabaseMetaData dbMeta = conn.getMetaData();
+            this.dialectName = dbMeta.getDatabaseProductName();
+            String catalog = conn.getCatalog();
+            String schema = conn.getSchema();
+
+            for (String tableName : tableNames) {
+                // 预取表注释
+                try (ResultSet rs = dbMeta.getTables(catalog, schema, tableName, new String[]{"TABLE", "VIEW"})) {
+                    if (rs.next()) {
+                        String remarks = rs.getString("REMARKS");
+                        if (Utils.isNotEmpty(remarks)) tableRemarksMap.put(tableName, remarks);
+                    }
+                }
+                // 预取外键关系，构建全局地图
+                try (ResultSet rs = dbMeta.getImportedKeys(catalog, schema, tableName)) {
+                    while (rs.next()) {
+                        String rel = tableName + "." + rs.getString("FKCOLUMN_NAME") +
+                                " -> " + rs.getString("PKTABLE_NAME") + "." + rs.getString("PKCOLUMN_NAME");
+                        globalRelations.computeIfAbsent(tableName, k -> new ArrayList<>()).add(rel);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.error("Load global metadata error", e);
+        }
     }
 
     public Text2SqlSkill maxRows(int maxRows) {
@@ -115,31 +155,39 @@ public class Text2SqlSkill extends AbsSkill {
         if (schemaMode == SchemaMode.FULL) {
             sb.append("##### 2. 数据库结构说明 (Schema)\n").append(cachedSchemaInfo);
         } else {
-            sb.append("##### 2. 数据库目录 (Table List)\n")
-                    .append("当前库表较多，初始仅列出目录。**编写 SQL 前必须调用 `get_table_schema` 探测所需表的结构**:\n\n");
+            // 优化点 4: DYNAMIC 模式下输出更丰富的“语义目录”与“关联地图”
+            sb.append("##### 2. 数据库目录与关联图谱 (Table List & Relations)\n")
+                    .append("当前库表较多，请根据表名和备注评估所需表。**编写 SQL 前必须调用 `get_table_schema` 探测所需表的结构**:\n\n");
 
             for (String tableName : tableNames) {
                 String remarks = tableRemarksMap.getOrDefault(tableName, "");
-                sb.append("- **").append(tableName).append("**").append(Utils.isEmpty(remarks) ? "" : ": " + remarks).append("\n");
+                sb.append("- **").append(tableName).append("**").append(Utils.isEmpty(remarks) ? "" : ": " + remarks);
+
+                List<String> rels = globalRelations.get(tableName);
+                if (rels != null && !rels.isEmpty()) {
+                    sb.append(" [关系线索: ").append(String.join(", ", rels)).append("]");
+                }
+                sb.append("\n");
             }
+            sb.append("\n");
         }
 
         sb.append("##### 3. SQL 执行准则 (严格遵守)\n");
 
         if (readOnly) {
-            sb.append("1. **权限边界**: 你是一个**只读**分析专家。严禁执行 `DELETE`, `UPDATE`, `INSERT` 等写指令。遇到此类请求必须礼貌拒绝。\n");
+            sb.append("1. **权限边界**: 你是一个**只读**分析专家。严禁执行写指令。遇到写请求必须礼貌拒绝。\n");
         } else {
-            sb.append("1. **操作风险**: 你拥有**数据修改权限**。在执行 `UPDATE` 或 `DELETE` 前，必须确保 WHERE 条件极其精确。执行大批量修改前应建议用户备份。\n");
+            sb.append("1. **操作风险**: 你拥有写权限。执行大批量修改前应建议用户备份。\n");
         }
 
-        sb.append("2. **方言一致性**: 必须使用 ").append(dialectName).append(" 的原生语法（函数、分页、转义符）。\n")
-                .append("3. **先探测后重度计算**: 对字段格式有疑虑时，优先执行 `SELECT col FROM table LIMIT 1` 探测真实数据，严禁盲目尝试复杂转换。\n")
-                .append("4. **关键字转义**: 识别保留字（如 YEAR, ORDER, USER），作为别名或表名使用时必须加转义符（如双引号或反引号）。\n")
-                .append("5. **自愈逻辑**: 遇到报错时，根据错误信息分析类型不匹配或方言不支持原因，调整逻辑后重试一次。\n")
-                .append("6. **结果收敛**: 若确认无数据或方言不支持，请诚实告知用户，严禁编造数据。")
-                .append("7. **强制限定词**: 在多表关联查询时，所有字段必须带有表别名作为前缀（如 `t1.id`, `t2.name`），严禁使用裸字段名以防歧义。\n")
-                .append("8. **连接路径确认**: 关联三张以上表时，优先确认主外键连接链路，避免产生笛卡尔积。\n")
-                .append("9. **结果截断意识**: 除非用户明确要求查看全量数据，否则在编写 SQL 时必须根据方言自行追加分页代码（如 LIMIT 或 TOP），默认展示 ").append(maxRows).append(" 条以内数据。");
+        sb.append("2. **方言一致性**: 必须使用 ").append(dialectName).append(" 的原生语法。\n")
+                .append("3. **先探测后重度计算**: 对字段存储内容或格式有疑虑时，优先执行单行采样查询（使用当前方言对应的分页语法，如 LIMIT 1, TOP 1 或 ROWNUM=1）探测真实数据，严禁盲目尝试复杂转换。\n")
+                .append("4. **关键字转义**: 识别保留字，作为别名或表名使用时必须加转义符（如双引号或反引号）。\n")
+                .append("5. **自愈逻辑**: 遇到报错时，根据错误信息分析类型不匹配或方言不支持原因，调整逻辑后重试。\n")
+                .append("6. **结果收敛**: 若确认无数据或方言不支持，请诚实告知用户。\n")
+                .append("7. **强制限定词**: 多表关联查询时，所有字段必须带有表别名作为前缀，严禁使用裸字段名。\n")
+                .append("8. **连接路径确认**: 关联三张以上表时，优先确认主外键连接链路（参考第 2 节关联图谱），避免产生笛卡尔积。\n")
+                .append("9. **结果截断意识**: 除非明确要求全量数据，编写 SQL 时必须自行追加分页代码，默认展示 ").append(maxRows).append(" 条以内数据。");
 
         return sb.toString();
     }
@@ -147,12 +195,10 @@ public class Text2SqlSkill extends AbsSkill {
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
         if (schemaMode == SchemaMode.FULL) {
-            //全量，不需要 get_table_schema
             return tools.stream()
                     .filter(tool -> "execute_sql".equals(tool.name()))
                     .collect(Collectors.toList());
         }
-
         return super.getTools(prompt);
     }
 
@@ -161,120 +207,75 @@ public class Text2SqlSkill extends AbsSkill {
         if (!tableNames.contains(tableName)) {
             return "Error: Table '" + tableName + "' not found.";
         }
-        // 动态提取单表的结构
         return extractSchemaInfo(Collections.singletonList(tableName));
     }
 
     @ToolMapping(name = "execute_sql", description = "执行单条只读 SELECT 语句并获取结果。")
     public String executeSql(@Param("sql") String sql) {
-        if (Assert.isBlank(sql)) {
-            return "Error: SQL is empty.";
-        }
+        if (Assert.isBlank(sql)) return "Error: SQL is empty.";
 
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Executing SQL: {}", sql);
-        }
-
-        // 1. 基础清洗与安全检查
         String cleanSql = sql.trim();
-        if (cleanSql.endsWith(";")) {
-            cleanSql = cleanSql.substring(0, cleanSql.length() - 1);
-        }
+        if (cleanSql.endsWith(";")) cleanSql = cleanSql.substring(0, cleanSql.length() - 1);
 
         String upperSql = cleanSql.toUpperCase();
-        if (readOnly && !upperSql.startsWith("SELECT")) {
-            return "Error: This tool is restricted to SELECT statements only.";
-        }
+        if (readOnly && !upperSql.startsWith("SELECT")) return "Error: Restricted to SELECT statements only.";
+        if (upperSql.contains(";") && !cleanSql.endsWith(";")) return "Error: Multiple SQL statements are not allowed.";
 
-        if (upperSql.contains(";") && !cleanSql.endsWith(";")) {
-            return "Error: Multiple SQL statements are not allowed.";
-        }
-
-        // 2. 智能化分页兜底逻辑 (采用子查询包装法，确保方言兼容性)
+        // 分页补全逻辑 (子查询包装法，确保方言兼容性)
         boolean hasLimit = upperSql.contains("LIMIT") || upperSql.contains("FETCH FIRST") ||
                 upperSql.contains("TOP ") || upperSql.contains("ROWNUM");
 
         if (!hasLimit) {
             String dn = dialectName.toUpperCase();
             if (dn.contains("MYSQL") || dn.contains("POSTGRE") || dn.contains("H2") || dn.contains("SQLITE") || dn.contains("KINGBASE")) {
-                // MySQL/PostgreSQL 风格
                 cleanSql = "SELECT * FROM (" + cleanSql + ") _t LIMIT " + maxRows;
             } else if (dn.contains("ORACLE") || dn.contains("DAMENG")) {
-                // Oracle/达梦 风格 (兼容旧版本 ROWNUM)
                 cleanSql = "SELECT * FROM (" + cleanSql + ") _t WHERE ROWNUM <= " + maxRows;
             } else if (dn.contains("SQL SERVER")) {
-                // SQL Server 风格 (OFFSET/FETCH 是 2012+ 的标准语法，比 TOP 更适合包装)
                 cleanSql = "SELECT * FROM (" + cleanSql + ") _t ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT " + maxRows + " ROWS ONLY";
             } else {
-                // 默认兜底：尝试标准 SQL 包装
                 cleanSql = "SELECT * FROM (" + cleanSql + ") _t FETCH FIRST " + maxRows + " ROWS ONLY";
             }
         }
 
-        // 3. 执行查询与结果处理
         try {
             List<Map> rows = sqlUtils.sql(cleanSql).queryRowList(Map.class);
-            if (rows == null || rows.isEmpty()) {
-                return "Query OK. No data found.";
-            }
+            if (rows == null || rows.isEmpty()) return "Query OK. No data found.";
 
-            // 结果集截断保护：优先保证返回结果是合法的 JSON 结构
-            // 如果结果数超过 maxRows 的一半，我们只返回前 10 条作为样本，引导 AI 进一步分析
-            if (rows.size() > 15) {
-                List<Map> subRows = rows.stream().limit(10).collect(Collectors.toList());
-                return ONode.serialize(subRows) + "\n\n[Note: 结果集较大，已自动截断。当前显示前 10 条，实际查询到 " + rows.size() + " 条数据。]";
+            // 结构化截断保护
+            int sampleSize = Math.min(10, maxRows);
+            if (rows.size() > sampleSize + 5) {
+                List<Map> subRows = rows.stream().limit(sampleSize).collect(Collectors.toList());
+                return ONode.serialize(subRows) + "\n\n[Note: 结果集较大已截断。显示前" + sampleSize + "条，总数: " + rows.size() + "]";
             }
 
             String fullJson = ONode.serialize(rows);
-            // 最后的长度字符截断兜底（防止单行超长字段撑爆）
-            if (fullJson.length() > maxContextLength) {
-                return fullJson.substring(0, maxContextLength) + "... [Data too large, truncated]";
-            }
-
-            return fullJson;
-
+            return fullJson.length() > maxContextLength ? fullJson.substring(0, maxContextLength) + "... [Truncated]" : fullJson;
         } catch (SQLException e) {
-            // 提供带 Hint 的错误反馈，增强 AI 自愈能力
-            String errorMsg = e.getMessage();
-            LOG.warn("SQL Execution failed: {} \nRaw SQL: {}", errorMsg, cleanSql);
-
-            return "SQL Error: " + errorMsg + "\n" +
-                    "Hint: 请检查字段别名、JOIN 条件或 " + dialectName + " 的特有语法。如果是多表关联，请务必为字段加上别名前缀。";
+            return "SQL Error: " + e.getMessage() + "\nHint: 请检查别名、JOIN 条件或 " + dialectName + " 的特有语法。多表关联请务必加别名前缀。";
         }
     }
 
     protected String extractSchemaInfo(List<String> tables) {
         StringBuilder sb = new StringBuilder();
-
         try (Connection conn = sqlUtils.getDataSource().getConnection()) {
             DatabaseMetaData dbMeta = conn.getMetaData();
-            this.dialectName = dbMeta.getDatabaseProductName();
             String catalog = conn.getCatalog();
             String schema = conn.getSchema();
 
             for (String tableName : tables) {
-                String tableRemarks = null; // 明确命名为 tableRemarks
-                try (ResultSet rs = dbMeta.getTables(catalog, schema, tableName, new String[]{"TABLE", "VIEW"})) {
-                    if (rs.next()) {
-                        tableRemarks = rs.getString("REMARKS");
-                        if (Utils.isNotEmpty(tableRemarks)) {
-                            tableRemarksMap.put(tableName, tableRemarks);
-                        }
-                    }
-                }
-
-                // 1. 表名信息
+                // 1. 表名与备注
                 sb.append("* **Table: ").append(tableName).append("**");
-                if (Utils.isNotEmpty(tableRemarks)) {
-                    sb.append(" // ").append(tableRemarks);
-                }
+                String remarks = tableRemarksMap.get(tableName);
+                if (Utils.isNotEmpty(remarks)) sb.append(" // ").append(remarks);
                 sb.append("\n");
 
-                // 2. 主键与外键关联 (保持不变)
+                // 2. 主键
                 Set<String> pks = new HashSet<>();
                 try (ResultSet rs = dbMeta.getPrimaryKeys(catalog, schema, tableName)) {
                     while (rs.next()) pks.add(rs.getString("COLUMN_NAME"));
                 }
+                // 3. 外键 (仅提取当前表的导入键)
                 Map<String, String> fks = new HashMap<>();
                 try (ResultSet rs = dbMeta.getImportedKeys(catalog, schema, tableName)) {
                     while (rs.next()) {
@@ -283,12 +284,12 @@ public class Text2SqlSkill extends AbsSkill {
                     }
                 }
 
-                // 3. 生成列清单：重命名变量为 colRemarks
+                // 4. 列详情
                 try (ResultSet rs = dbMeta.getColumns(catalog, schema, tableName, null)) {
                     while (rs.next()) {
                         String col = rs.getString("COLUMN_NAME");
                         String type = rs.getString("TYPE_NAME");
-                        String colRemarks = Utils.valueOr(rs.getString("REMARKS"), ""); // 明确命名
+                        String colRemarks = Utils.valueOr(rs.getString("REMARKS"), "");
 
                         sb.append("  - ").append(col).append(" (").append(type).append(")");
                         if (pks.contains(col)) sb.append(" [PK]");
