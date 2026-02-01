@@ -68,7 +68,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         sb.append("## Your Role\n")
                 .append(role).append(". ");
 
-        if (trace.getConfig().getStyle() == ReActStyle.NATURAL) {
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             sb.append("You are an expert with autonomous action capabilities, able to use tools directly as needed to solve problems.\n\n");
         } else {
             sb.append("You must solve the problem using the ReAct pattern: ")
@@ -110,7 +110,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
     }
 
     public String getInstruction(ReActTrace trace) {
-        if (trace.getConfig().getStyle() == ReActStyle.NATURAL) {
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             return getNaturalInstruction(trace);
         } else {
             return getClassicInstruction(trace); // 即你原来的逻辑

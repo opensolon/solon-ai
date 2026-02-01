@@ -53,7 +53,7 @@ public class ReActAgentConfig {
     /** 结果回填 Key */
     private String outputKey;
 
-    private ReActStyle style = ReActStyle.CLASSIC;
+    private ReActStyle style = ReActStyle.NATIVE_TOOL;
 
     /** 默认运行选项（限流、重试、窗口等） */
     private final ReActOptions defaultOptions = new ReActOptions();

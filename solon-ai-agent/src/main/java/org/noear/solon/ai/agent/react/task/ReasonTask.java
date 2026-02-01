@@ -158,7 +158,7 @@ public class ReasonTask implements NamedTaskComponent {
             }
         }
 
-        if (trace.getConfig().getStyle() == ReActStyle.NATURAL) {
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             if (Assert.isNotEmpty(clearContent)) {
                 trace.setRoute(Agent.ID_END);
                 trace.setFinalAnswer(clearContent); // 直接取干净的正文
@@ -264,7 +264,7 @@ public class ReasonTask implements NamedTaskComponent {
             return "";
         }
 
-        if (trace.getConfig().getStyle() == ReActStyle.NATURAL) {
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             return clearContent;
         }
 

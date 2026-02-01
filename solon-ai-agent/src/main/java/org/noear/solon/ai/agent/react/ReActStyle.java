@@ -18,7 +18,7 @@ package org.noear.solon.ai.agent.react;
 import org.noear.solon.lang.Preview;
 
 /**
- * ReAct 风格
+ * ReAct 执行风格
  *
  * @author noear
  * @since 3.9.1
@@ -26,11 +26,16 @@ import org.noear.solon.lang.Preview;
 @Preview("3.9.1")
 public enum ReActStyle {
     /**
-     * 经典风格（论文模式）：强制输出 Thought, Action, Observation 标签
+     * 结构化文本模式 (论文模式)
+     * 表现为：LLM 显式输出 Thought: / Action: {JSON} 等文本标签。
+     * 场景：适合推理要求严苛、需要展示思考链、或底座模型不支持原生工具协议。
      */
-    CLASSIC,
+    STRUCTURED_TEXT,
+
     /**
-     * 自然风格（现代模式）：原生函数调用，不输出 ReAct 特定标签
+     * 原生工具模式 (自然模式)
+     * 表现为：利用 LLM 厂商标准的 tool_calls 协议，不带 ReAct 特定标签。
+     * 场景：适配现代模型（GPT-4o, Claude 3.5, DeepSeek 等），响应更快且更稳定。
      */
-    NATURAL
+    NATIVE_TOOL
 }
