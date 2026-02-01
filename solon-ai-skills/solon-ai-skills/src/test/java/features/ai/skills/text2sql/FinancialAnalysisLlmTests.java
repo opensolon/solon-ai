@@ -50,7 +50,7 @@ public class FinancialAnalysisLlmTests {
         System.out.println("=== 开始执行 AI 决策链检测 ===");
 
         // [检测点 3]: 语义理解检测 - "已支付" 对应 status=1
-        verifyQuery(agent, "张三一共支付了多少钱？", "5400");
+        verifyQuery(agent, "张三一共支付了多少钱？", "5400", "5,400");
 
         // [检测点 4]: 跨表关联检测 - 三表关联 (Users + Orders + Refunds)
         verifyQuery(agent, "列出所有退款订单的客户姓名和退款金额", "王五");

@@ -54,13 +54,13 @@ public class Text2SqlSkill extends AbsSkill {
     protected final SqlUtils sqlUtils;
     protected final List<String> tableNames;
     protected final Map<String, String> tableRemarksMap = new LinkedHashMap<>();
-    protected final Map<String, List<String>> globalRelations = new HashMap<>();
+    protected Map<String, List<String>> globalRelations;
 
     protected SqlDialect dialect;
     protected String cachedSchemaInfo;
     protected int maxRows = 50;
     protected int maxContextLength = 8000;
-    protected SchemaMode schemaMode = null;
+    protected SchemaMode schemaMode = SchemaMode.FULL;
     protected boolean readOnly = true;
 
     public Text2SqlSkill(DataSource dataSource, String... tables) {
@@ -74,16 +74,18 @@ public class Text2SqlSkill extends AbsSkill {
     }
 
     private void init() {
-        if (schemaMode != null) {
+        if (globalRelations != null) {
             return;
         }
 
         Utils.locker().lock();
 
         try {
-            if (schemaMode != null) {
+            if (globalRelations != null) {
                 return;
             }
+
+            globalRelations = new HashMap<>();
 
             // 1. 初始化方言适配器与元数据
             initDialectAndMetadata();
@@ -106,8 +108,8 @@ public class Text2SqlSkill extends AbsSkill {
             String productName = dbMeta.getDatabaseProductName();
 
             // 自动匹配方言
-            if(this.dialect == null) {
-                this.dialect = DialectFactory.create(productName);
+            if (dialect == null) {
+                dialect = DialectFactory.create(productName);
             }
 
             dialect = dialect.adaptDialect(conn);
@@ -135,7 +137,10 @@ public class Text2SqlSkill extends AbsSkill {
             }
         } catch (Exception e) {
             LOG.error("Text2SqlSkill meta load error", e);
-            this.dialect = new GenericDialect();
+
+            if (dialect == null) {
+                dialect = new GenericDialect();
+            }
         }
     }
 

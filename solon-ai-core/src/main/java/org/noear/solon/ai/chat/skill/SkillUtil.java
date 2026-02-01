@@ -53,7 +53,7 @@ public class SkillUtil {
             }
 
             try {
-                // 挂载
+                // 开始挂载（可以做些初始化）
                 skill.onAttach(prompt);
             } catch (Throwable e) {
                 LOG.error("Skill active failed: {}", skill.getClass().getName(), e);
