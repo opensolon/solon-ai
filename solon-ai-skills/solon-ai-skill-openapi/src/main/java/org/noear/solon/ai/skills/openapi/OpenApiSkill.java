@@ -55,7 +55,6 @@ public class OpenApiSkill extends AbsSkill {
         this.apiBaseUrl = apiBaseUrl;
     }
 
-
     public OpenApiSkill schemaMode(SchemaMode mode) {
         this.schemaMode = mode;
         return this;
@@ -82,7 +81,7 @@ public class OpenApiSkill extends AbsSkill {
                 return;
             }
 
-            // 1. 加载
+            // 1. 加载 (支持初始化鉴权)
             HttpUtils http = HttpUtils.http(openApiUrl);
             if (authenticator != null) {
                 authenticator.apply(http, null);
@@ -102,7 +101,7 @@ public class OpenApiSkill extends AbsSkill {
                     .filter(t -> !t.isDeprecated())
                     .collect(Collectors.toList());
 
-            // 4. 决定模式
+            // 4. 根据接口规模决定运行模式
             this.schemaMode = dynamicTools.size() > 30 ? SchemaMode.DYNAMIC : SchemaMode.FULL;
         } catch (Exception e) {
             log.error("OpenAPI schema loading failed: {}", openApiUrl, e);
@@ -251,7 +250,7 @@ public class OpenApiSkill extends AbsSkill {
             if (result.length() > maxContextLength) {
                 return result.substring(0, maxContextLength) + "... [Data truncated]";
             }
-            return result;
+            return Utils.isEmpty(result) ? "Success: No content returned." : result;
         } catch (Exception e) {
             log.warn("API 调用失败: {} {}", tool.getName(), e.getMessage());
             return "HTTP Execution Error: " + e.getMessage();
@@ -276,7 +275,6 @@ public class OpenApiSkill extends AbsSkill {
 
     public interface OpenApiParser {
         String getName();
-
         List<ApiTool> parse(OpenApiSkill skill, ONode root);
     }
 
@@ -290,9 +288,7 @@ public class OpenApiSkill extends AbsSkill {
     }
 
     static class OpenApiV2Parser implements OpenApiParser {
-        public String getName() {
-            return "Swagger 2.0 Parser";
-        }
+        public String getName() { return "Swagger 2.0 Parser"; }
 
         public List<ApiTool> parse(OpenApiSkill skill, ONode root) {
             List<ApiTool> tools = new ArrayList<>();
@@ -316,9 +312,7 @@ public class OpenApiSkill extends AbsSkill {
     }
 
     static class OpenApiV3Parser implements OpenApiParser {
-        public String getName() {
-            return "OpenAPI 3.0 Parser";
-        }
+        public String getName() { return "OpenAPI 3.0 Parser"; }
 
         public List<ApiTool> parse(OpenApiSkill skill, ONode root) {
             List<ApiTool> tools = new ArrayList<>();
