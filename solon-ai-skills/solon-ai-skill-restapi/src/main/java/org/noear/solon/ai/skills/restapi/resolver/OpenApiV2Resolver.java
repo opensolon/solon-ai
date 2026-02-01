@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.skills.restapi.resolve;
+package org.noear.solon.ai.skills.restapi.resolver;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.skills.restapi.ApiTool;

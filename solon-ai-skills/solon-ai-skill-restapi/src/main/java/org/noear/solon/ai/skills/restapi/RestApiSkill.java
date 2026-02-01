@@ -21,7 +21,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.skills.restapi.resolve.OpenApiResolver;
+import org.noear.solon.ai.skills.restapi.resolver.OpenApiResolver;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
