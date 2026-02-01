@@ -66,7 +66,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
                 .append(role).append("。");
 
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-            sb.append("你是一个具备自主行动能力的专家，如果有需要可使用工具协助解决问题。\n\n");
+            sb.append("你是一个具备自主行动能力的专家。\n\n");
         } else {
             sb.append("你必须使用 ReAct 模式解决问题：")
                     .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");

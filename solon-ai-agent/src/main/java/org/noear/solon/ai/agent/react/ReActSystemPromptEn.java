@@ -69,7 +69,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
                 .append(role).append(". ");
 
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-            sb.append("You are an expert with autonomous action capabilities. You may use tools to assist in solving problems as needed; provide a direct response when you have sufficient information.\n\n");
+            sb.append("You are an expert with autonomous action capabilities.\n\n");
         } else {
             sb.append("You must solve the problem using the ReAct pattern: ")
                     .append("Thought -> Action -> Observation.\n\n");
