@@ -19,6 +19,8 @@ import java.util.List;
 public class MailSkillTests {
 
     private final String workDir = "./test_workspace";
+    private final String toMail = "user@example.com";
+
     private MailSkill mailSkill;
 
     @BeforeEach
@@ -32,12 +34,16 @@ public class MailSkillTests {
 
         // 2. 初始化技能（使用 Mock 服务器参数）
         // 在 Simple Java Mail 中，如果检测到环境或显式指定，可以使用 MockMailer
-        mailSkill = new MailSkill(workDir, "smtp.mock.com", 25, "ai@test.com", "password");
+        mailSkill = new MailSkill(workDir,
+                "smtp.mock.com",
+                25,
+                "ai@test.com",
+                "password");
     }
 
     @Test
     public void testSendPlainTextEmail() {
-        String to = "user@example.com";
+        String to = toMail;
         String subject = "测试邮件";
         String body = "这是一封纯文本邮件。";
 
@@ -50,7 +56,7 @@ public class MailSkillTests {
 
     @Test
     public void testSendHtmlEmail() {
-        String to = "user@example.com";
+        String to = toMail;
         String subject = "HTML 邮件测试";
         String body = "<h1>你好</h1><p>这是一个<b>HTML</b>正文。</p>";
 
@@ -67,7 +73,7 @@ public class MailSkillTests {
         Files.write(filePath, "附件内容: Hello Solon AI".getBytes());
 
         // 2. 发送带附件的邮件
-        String result = mailSkill.sendEmail("boss@company.com", "周报", "请查收附件", fileName);
+        String result = mailSkill.sendEmail(toMail, "周报", "请查收附件", fileName);
 
         // 3. 验证
         Assertions.assertTrue(result.contains("成功"));
