@@ -32,7 +32,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 智能 OpenAPI 调用技能（支持 2.0/3.0 自适应及 $ref 模型解析）
+ * 智能 OpenAPI 调用技能
  *
  * @author noear
  * @since 3.9.1
@@ -43,7 +43,7 @@ public class OpenApiSkill extends AbsSkill {
 
     private final String openApiUrl;
     private final String apiBaseUrl;
-    private final List<ApiTool> dynamicTools = new ArrayList<>();
+    private List<ApiTool> dynamicTools;
 
     private ONode rootSchema; // 保存根节点用于 JSONPath 解析
     private SchemaMode schemaMode = SchemaMode.FULL;
@@ -52,33 +52,42 @@ public class OpenApiSkill extends AbsSkill {
     public OpenApiSkill(String openApiUrl, String apiBaseUrl) {
         this.openApiUrl = openApiUrl;
         this.apiBaseUrl = apiBaseUrl;
-        this.initTools();
     }
 
-    private void initTools() {
+    private void init() {
+        if (dynamicTools != null) {
+            return;
+        }
+
+        Utils.locker().lock();
         try {
+            if (dynamicTools != null) {
+                return;
+            }
+
+            dynamicTools = new ArrayList<>();
+
+            // 1. 加载并识别版本
             String json = HttpUtils.http(openApiUrl).get();
             this.rootSchema = ONode.ofJson(json);
 
-            rootSchema.get("paths").getObject().forEach((path, methods) -> {
-                methods.getObject().forEach((method, detail) -> {
-                    if (!method.startsWith("x-") && !"options".equalsIgnoreCase(method)) {
-                        dynamicTools.add(new ApiTool(this, path, method, detail));
-                    }
-                });
-            });
+            // 2. 获取适配解析器
+            OpenApiParser parser = OpenApiParserFactory.create(rootSchema);
+            log.info("OpenApiSkill: Using {} for {}", parser.getName(), openApiUrl);
 
+            // 3. 提取工具集
+            this.dynamicTools.addAll(parser.parse(this, rootSchema));
+
+            // 4. 决定模式
             this.schemaMode = dynamicTools.size() > 30 ? SchemaMode.DYNAMIC : SchemaMode.FULL;
         } catch (Exception e) {
             log.error("OpenAPI schema loading failed: {}", openApiUrl, e);
-            throw new RuntimeException("OpenAPI 初始化失败", e);
+            this.schemaMode = SchemaMode.DYNAMIC; // 至少保证模式不为空
+        } finally {
+            Utils.locker().unlock();
         }
     }
 
-    /**
-     * 优化点 1: 递归解引用与 Schema 瘦身
-     * 剔除无关描述，只保留 AI 核心推理字段，防止多层引用断裂。
-     */
     protected String resolveRef(ONode node) {
         return resolveRefNode(node, new HashSet<>()).toJson();
     }
@@ -86,11 +95,10 @@ public class OpenApiSkill extends AbsSkill {
     protected ONode resolveRefNode(ONode node, Set<String> visited) {
         if (node == null || node.isNull()) return new ONode();
 
-        // 处理引用
         if (node.hasKey("$ref")) {
             String ref = node.get("$ref").getString();
             if (visited.contains(ref)) {
-                return ONode.ofBean("_Circular_Reference_"); // 终止循环
+                return ONode.ofBean("_Circular_Reference_");
             }
             visited.add(ref);
 
@@ -99,7 +107,6 @@ public class OpenApiSkill extends AbsSkill {
             return resolveRefNode(refNode, visited);
         }
 
-        // 瘦身与递归构建
         if (node.isObject()) {
             ONode cleanNode = new ONode().asObject();
             node.getObjectUnsafe().forEach((k, v) -> {
@@ -125,14 +132,29 @@ public class OpenApiSkill extends AbsSkill {
         return node;
     }
 
-    public OpenApiSkill schemaMode(SchemaMode mode) { this.schemaMode = mode; return this; }
+    public OpenApiSkill schemaMode(SchemaMode mode) {
+        this.schemaMode = mode;
+        return this;
+    }
+
+    public OpenApiSkill maxContextLength(int length) {
+        this.maxContextLength = length;
+        return this;
+    }
 
     @Override
-    public String name() { return "api_expert"; }
+    public String name() {
+        return "api_expert";
+    }
 
     @Override
     public String description() {
         return "业务 API 专家：支持 REST 接口精准调用，能够自动解析复杂的模型嵌套。";
+    }
+
+    @Override
+    public void onAttach(Prompt prompt) {
+        init();
     }
 
     @Override
@@ -144,7 +166,6 @@ public class OpenApiSkill extends AbsSkill {
         if (schemaMode == SchemaMode.FULL) {
             sb.append("##### 2. 接口详细定义 (API Specs)\n").append(formatApiDocs(dynamicTools));
         } else {
-            // 优化点 2: 增强型目录，包含 Method 和 Path，便于 AI 初步定位
             sb.append("##### 2. 接口清单 (API List)\n")
                     .append("接口较多。**调用前必须通过 `get_api_detail` 确认具体的 Schema 定义**：\n\n");
 
@@ -230,6 +251,131 @@ public class OpenApiSkill extends AbsSkill {
         return sb.toString();
     }
 
+    // ==========================================
+    // OpenAPI 解析适配体系
+    // ==========================================
+
+    public interface OpenApiParser {
+        String getName();
+
+        List<ApiTool> parse(OpenApiSkill skill, ONode root);
+    }
+
+    static class OpenApiParserFactory {
+        static OpenApiParser create(ONode root) {
+            if (root.hasKey("openapi") && root.get("openapi").getString().startsWith("3.")) {
+                return new OpenApiV3Parser();
+            }
+            return new OpenApiV2Parser();
+        }
+    }
+
+    /**
+     * Swagger 2.0 解析器
+     */
+    static class OpenApiV2Parser implements OpenApiParser {
+        public String getName() {
+            return "Swagger 2.0 Parser";
+        }
+
+        public List<ApiTool> parse(OpenApiSkill skill, ONode root) {
+            List<ApiTool> tools = new ArrayList<>();
+            root.get("paths").getObject().forEach((path, methods) -> {
+                methods.getObject().forEach((method, detail) -> {
+                    if (isValidMethod(method)) {
+                        ApiTool tool = new ApiTool();
+                        tool.path = path;
+                        tool.method = method.toUpperCase();
+                        tool.name = generateName(detail, tool.method, path);
+                        tool.description = extractDescription(detail);
+
+                        // V2 的入参全部在 parameters 中（含 body）
+                        tool.inputSchema = skill.resolveRef(detail.get("parameters"));
+
+                        // V2 的出参通常在 responses.200.schema
+                        ONode resp200 = detail.get("responses").get("200");
+                        tool.outputSchema = skill.resolveRef(resp200.get("schema"));
+                        tool.isDeprecated = detail.get("deprecated").getBoolean();
+
+                        tools.add(tool);
+                    }
+                });
+            });
+            return tools;
+        }
+    }
+
+    /**
+     * OpenAPI 3.0 解析器
+     */
+    static class OpenApiV3Parser implements OpenApiParser {
+        public String getName() {
+            return "OpenAPI 3.0 Parser";
+        }
+
+        public List<ApiTool> parse(OpenApiSkill skill, ONode root) {
+            List<ApiTool> tools = new ArrayList<>();
+            root.get("paths").getObject().forEach((path, methods) -> {
+                methods.getObject().forEach((method, detail) -> {
+                    if (isValidMethod(method)) {
+                        ApiTool tool = new ApiTool();
+                        tool.path = path;
+                        tool.method = method.toUpperCase();
+                        tool.name = generateName(detail, tool.method, path);
+                        tool.description = extractDescription(detail);
+
+                        // V3 入参分为 parameters 和 requestBody
+                        StringBuilder input = new StringBuilder();
+                        String params = skill.resolveRef(detail.get("parameters"));
+                        if (!"[]".equals(params) && !"{}".equals(params)) {
+                            input.append(params);
+                        }
+
+                        if (detail.hasKey("requestBody")) {
+                            ONode content = detail.get("requestBody").get("content");
+                            ONode bodySchema = content.get("application/json").get("schema");
+                            if (bodySchema.isNull() && content.size() > 0) {
+                                bodySchema = content.get(0).get("schema");
+                            }
+                            if (!bodySchema.isNull()) {
+                                input.append(" | JSON Body: ").append(skill.resolveRef(bodySchema));
+                            }
+                        }
+                        tool.inputSchema = input.toString();
+
+                        // V3 出参在 responses.200.content.xxx.schema
+                        ONode resp200 = detail.get("responses").get("200");
+                        ONode outSchemaNode = resp200.get("content").get("application/json").get("schema");
+                        if (outSchemaNode.isNull() && resp200.get("content").size() > 0) {
+                            outSchemaNode = resp200.get("content").get(0).get("schema");
+                        }
+                        tool.outputSchema = skill.resolveRef(outSchemaNode);
+                        tool.isDeprecated = detail.get("deprecated").getBoolean();
+
+                        tools.add(tool);
+                    }
+                });
+            });
+            return tools;
+        }
+    }
+
+    private static boolean isValidMethod(String method) {
+        return !method.startsWith("x-") && !"options".equalsIgnoreCase(method);
+    }
+
+    private static String generateName(ONode detail, String method, String path) {
+        String opId = detail.get("operationId").getString();
+        if (Utils.isNotEmpty(opId)) return opId;
+        return (method + "_" + path.replaceAll("[^a-zA-Z0-9]", "_"))
+                .replaceAll("_+", "_").toLowerCase();
+    }
+
+    private static String extractDescription(ONode detail) {
+        return Utils.valueOr(detail.get("summary").getString(),
+                detail.get("description").getString(), "No summary available");
+    }
+
     public static class ApiTool {
         public String name;
         public String description;
@@ -237,42 +383,6 @@ public class OpenApiSkill extends AbsSkill {
         public String method;
         public String inputSchema;
         public String outputSchema;
-
-        public ApiTool(OpenApiSkill skill, String path, String method, ONode detail) {
-            this.path = path;
-            this.method = method.toUpperCase();
-
-            // 优化点 3: 优先使用 operationId 作为唯一标识，增强模型认知一致性
-            this.name = detail.get("operationId").getString();
-            if (Utils.isEmpty(this.name)) {
-                this.name = (this.method + "_" + path.replaceAll("[^a-zA-Z0-9]", "_"))
-                        .replaceAll("_+", "_").toLowerCase();
-            }
-
-            this.description = Utils.valueOr(detail.get("summary").getString(),
-                    detail.get("description").getString(), "No summary available");
-
-            // 入参解析 (支持 Header/Path/Query 及 Body 深度展开)
-            this.inputSchema = skill.resolveRef(detail.get("parameters"));
-            if (detail.hasKey("requestBody")) {
-                ONode content = detail.get("requestBody").get("content");
-                // 默认取 application/json，兼容处理
-                ONode bodySchema = content.get("application/json").get("schema");
-                if (bodySchema.isNull() && content.size() > 0) {
-                    bodySchema = content.get(0).get("schema");
-                }
-                if (!bodySchema.isNull()) {
-                    this.inputSchema += " | JSON Body: " + skill.resolveRef(bodySchema);
-                }
-            }
-
-            // 出参解析 (通常只解析 200 状态码)
-            ONode resp200 = detail.get("responses").get("200");
-            ONode outSchemaNode = resp200.get("content").get("application/json").get("schema");
-            if (outSchemaNode.isNull()) {
-                outSchemaNode = resp200.get("schema");
-            }
-            this.outputSchema = skill.resolveRef(outSchemaNode);
-        }
+        public boolean isDeprecated;
     }
 }

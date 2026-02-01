@@ -38,8 +38,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 智能 SQL 转换技能 (方言适配增强版)
- * 采用适配器模式解决了 H2 日期误判、别名冲突及国产数据库适配问题。
+ * 智能 SQL 转换技能
  *
  * @author noear
  * @since 3.9.1
