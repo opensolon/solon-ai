@@ -30,6 +30,12 @@ import java.sql.SQLException;
 @Preview("3.9.1")
 public class GenericDialect implements SqlDialect {
     public String getName() { return "Generic SQL"; }
+
+    @Override
+    public boolean matched(String product) {
+        return false;
+    }
+
     public String quoteIdentifier(String name) { return "\"" + name + "\""; }
     public String applyPagination(String sql, int maxRows) { return sql + " FETCH FIRST " + maxRows + " ROWS ONLY"; }
     public String getCustomInstruction() { return "遵循标准 SQL 语法。"; }

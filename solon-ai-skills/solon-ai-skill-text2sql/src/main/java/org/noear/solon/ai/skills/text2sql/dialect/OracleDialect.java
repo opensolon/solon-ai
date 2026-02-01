@@ -29,7 +29,12 @@ import java.sql.SQLException;
  */
 @Preview("3.9.1")
 public class OracleDialect implements SqlDialect {
-    public String getName() { return "Oracle/Dameng"; }
+    public String getName() { return "Oracle"; }
+
+    @Override
+    public boolean matched(String product) {
+        return product.contains("ORACLE") || product.contains("DM") || product.contains("DAMENG");
+    }
     public String quoteIdentifier(String name) { return "\"" + name.toUpperCase() + "\""; }
     public String applyPagination(String sql, int maxRows) {
         return "SELECT * FROM (" + sql + ") WHERE ROWNUM <= " + maxRows;

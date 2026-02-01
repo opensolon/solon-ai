@@ -36,6 +36,11 @@ public class H2Dialect implements SqlDialect {
         return "H2 Database";
     }
 
+    @Override
+    public boolean matched(String product) {
+        return product.contains("H2");
+    }
+
     public String quoteIdentifier(String name) {
         return "\"" + name.toUpperCase() + "\"";
     }

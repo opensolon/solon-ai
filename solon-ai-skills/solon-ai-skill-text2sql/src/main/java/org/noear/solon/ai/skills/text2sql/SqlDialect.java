@@ -36,6 +36,11 @@ public interface SqlDialect {
     String getName();
 
     /**
+     * 是否区配
+     */
+    boolean matched(String product);
+
+    /**
      * 包装标识符（如加反引号或双引号），防止关键字冲突
      */
     String quoteIdentifier(String name);

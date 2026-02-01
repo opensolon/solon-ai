@@ -36,6 +36,11 @@ public class SqliteDialect implements SqlDialect {
     }
 
     @Override
+    public boolean matched(String product) {
+        return product.contains("SQLITE");
+    }
+
+    @Override
     public String quoteIdentifier(String name) {
         // SQLite 推荐使用双引号，也可以使用 []
         return "\"" + name + "\"";

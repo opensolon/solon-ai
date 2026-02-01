@@ -31,6 +31,12 @@ import java.sql.SQLException;
 @Preview("3.9.1")
 public class MySqlDialect implements SqlDialect {
     public String getName() { return "MySQL"; }
+
+    @Override
+    public boolean matched(String product) {
+        return product.contains("MYSQL") || product.contains("MARIADB") || product.contains("TIDB");
+    }
+
     public String quoteIdentifier(String name) { return "`" + name + "`"; }
     public String applyPagination(String sql, int maxRows) { return sql + " LIMIT " + maxRows; }
     public String getCustomInstruction() { return "使用反引号处理别名。支持标准的 LIMIT 分页。"; }

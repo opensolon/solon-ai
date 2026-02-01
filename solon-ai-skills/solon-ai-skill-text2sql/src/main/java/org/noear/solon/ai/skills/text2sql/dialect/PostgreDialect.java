@@ -29,7 +29,12 @@ import java.sql.SQLException;
  */
 @Preview("3.9.1")
 public class PostgreDialect implements SqlDialect {
-    public String getName() { return "PostgreSQL/Kingbase/Highgo"; }
+    public String getName() { return "PostgreSQL"; }
+
+    @Override
+    public boolean matched(String product) {
+        return product.contains("POSTGRE") || product.contains("KINGBASE") || product.contains("HIGHGO");
+    }
     public String quoteIdentifier(String name) { return "\"" + name + "\""; }
     public String applyPagination(String sql, int maxRows) { return sql + " LIMIT " + maxRows; }
     public String getCustomInstruction() { return "PG/金仓/瀚高库区分大小写，别名请加双引号。支持 LIMIT 分页。"; }
