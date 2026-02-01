@@ -33,24 +33,29 @@ import java.sql.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 智能 SQL 转换技能
+ * 智能 SQL 转换技能 (通用增强版)
+ * 适配主流数据库（MySQL, PG, Oracle, SQL Server）及国产数据库（达梦, 金仓, 瀚高）
  *
  * @author noear
- * @since 3.9.1
+ * @since 3.9.1.2
  */
-@Preview("3.9.1")
+@Preview("3.9.1.2")
 public class Text2SqlSkill extends AbsSkill {
     protected final static Logger LOG = LoggerFactory.getLogger(Text2SqlSkill.class);
+
+    // 预编译保留字别名修复正则（防御 AI 遗漏引号）
+    private static final Pattern RESERVED_ALIAS_PATTERN = Pattern.compile(
+            "(?i)\\s+AS\\s+(YEAR|MONTH|DAY|ORDER|USER|GROUP|LIMIT|DESC|ASC|TABLE|KEY|LEVEL|VALUE)(\\s+|,|$)",
+            Pattern.CASE_INSENSITIVE);
 
     protected final SqlUtils sqlUtils;
     protected final List<String> tableNames;
     protected final Map<String, String> tableRemarksMap = new LinkedHashMap<>();
-    /**
-     * 优化点 1: 全局关系拓扑缓存。key:表名, value:外键关联线索描述
-     */
     protected final Map<String, List<String>> globalRelations = new HashMap<>();
     protected final String cachedSchemaInfo;
 
@@ -69,31 +74,29 @@ public class Text2SqlSkill extends AbsSkill {
         this.sqlUtils = sqlUtils;
         this.tableNames = Arrays.asList(tables);
 
-        // 构造时优先加载全局元数据（备注与关系图谱）
+        // 初始化元数据并自动识别方言
         loadGlobalMetadata();
 
         this.schemaMode = tableNames.size() > 20 ? SchemaMode.DYNAMIC : SchemaMode.FULL;
         this.cachedSchemaInfo = (schemaMode == SchemaMode.FULL) ? extractSchemaInfo(tableNames) : null;
     }
 
-    /**
-     * 提取全局元数据逻辑。解决 DYNAMIC 模式下 AI “视野孤岛”问题
-     */
     private void loadGlobalMetadata() {
         try (Connection conn = sqlUtils.getDataSource().getConnection()) {
             DatabaseMetaData dbMeta = conn.getMetaData();
-            // 自动适配 H2/MySQL/Oracle 的大小写敏感问题
+            // 自动识别方言名称（如 "H2", "MySQL", "DM DBMS" 等）
+            this.dialectName = dbMeta.getDatabaseProductName();
             String catalog = conn.getCatalog();
-            // 很多数据库 schema 传 null 效果更好
+
             for (String tableName : tableNames) {
-                // 获取注释
+                // 1. 获取表注释
                 try (ResultSet rs = dbMeta.getTables(catalog, null, tableName, new String[]{"TABLE", "VIEW"})) {
                     if (rs.next()) {
                         String remarks = rs.getString("REMARKS");
                         if (Utils.isNotEmpty(remarks)) tableRemarksMap.put(tableName, remarks);
                     }
                 }
-                // 获取外键关系 (这里是 DYNAMIC 模式 AI 决策的关键)
+                // 2. 获取关联关系（外键线索）
                 try (ResultSet rs = dbMeta.getImportedKeys(catalog, null, tableName)) {
                     while (rs.next()) {
                         String pkTable = rs.getString("PKTABLE_NAME");
@@ -130,19 +133,10 @@ public class Text2SqlSkill extends AbsSkill {
     }
 
     @Override
-    public String name() {
-        return "sql_expert";
-    }
+    public String name() { return "sql_expert"; }
 
     @Override
-    public String description() {
-        return "数据库专家：深度理解多表结构、关联关系及各类国产方言。";
-    }
-
-    @Override
-    public boolean isSupported(Prompt prompt) {
-        return true;
-    }
+    public String description() { return "数据库专家：精通多表关联、数据分析及各类数据库方言语法。"; }
 
     @Override
     public String getInstruction(Prompt prompt) {
@@ -156,105 +150,120 @@ public class Text2SqlSkill extends AbsSkill {
         if (schemaMode == SchemaMode.FULL) {
             sb.append("##### 2. 数据库结构说明 (Schema)\n").append(cachedSchemaInfo);
         } else {
-            // 优化点 4: DYNAMIC 模式下输出更丰富的“语义目录”与“关联地图”
-            sb.append("##### 2. 数据库目录与关联图谱 (Table List & Relations)\n")
-                    .append("当前库表较多，请根据表名和备注评估所需表。**编写 SQL 前必须调用 `get_table_schema` 探测所需表的结构**:\n\n");
-
+            sb.append("##### 2. 数据库目录与关联图谱\n")
+                    .append("编写查询前请先调用 `get_table_schema` 确认结构:\n\n");
             for (String tableName : tableNames) {
                 String remarks = tableRemarksMap.getOrDefault(tableName, "");
                 sb.append("- **").append(tableName).append("**").append(Utils.isEmpty(remarks) ? "" : ": " + remarks);
-
                 List<String> rels = globalRelations.get(tableName);
-                if (rels != null && !rels.isEmpty()) {
-                    sb.append(" [关系线索: ").append(String.join(", ", rels)).append("]");
-                }
+                if (rels != null && !rels.isEmpty()) sb.append(" [关系线索: ").append(String.join(", ", rels)).append("]");
                 sb.append("\n");
             }
-            sb.append("\n");
         }
 
-        sb.append("##### 3. SQL 执行准则 (严格遵守)\n");
-
-        if (readOnly) {
-            sb.append("1. **权限边界**: 你是一个**只读**分析专家。严禁执行写指令。遇到写请求必须礼貌拒绝。\n");
-        } else {
-            sb.append("1. **操作风险**: 你拥有写权限。执行大批量修改前应建议用户备份。\n");
-        }
-
-        sb.append("2. **方言一致性**: 必须使用 ").append(dialectName).append(" 的原生语法。\n")
-                .append("3. **先探测后重度计算**: 对字段存储内容或格式有疑虑时，优先执行单行采样查询（使用当前方言对应的分页语法，如 LIMIT 1, TOP 1 或 ROWNUM=1）探测真实数据，严禁盲目尝试复杂转换。\n")
-                .append("4. **关键字转义**: 识别保留字，作为别名或表名使用时必须加转义符（如双引号或反引号）。\n")
-                .append("5. **自愈逻辑**: 遇到报错时，根据错误信息分析类型不匹配或方言不支持原因，调整逻辑后重试。\n")
-                .append("6. **结果收敛**: 若确认无数据或方言不支持，请诚实告知用户。\n")
-                .append("7. **强制限定词**: 多表关联查询时，所有字段必须带有表别名作为前缀，严禁使用裸字段名。\n")
-                .append("8. **连接路径确认**: 关联三张以上表时，优先确认主外键连接链路（参考第 2 节关联图谱），避免产生笛卡尔积。\n")
-                .append("9. **结果截断意识**: 除非明确要求全量数据，编写 SQL 时必须自行追加分页代码，默认展示 ").append(maxRows).append(" 条以内数据。");
+        sb.append("\n##### 3. SQL 执行准则 (强制执行)\n")
+                .append("1. **只读性**: 仅允许 SELECT。严禁修改数据或结构。\n")
+                .append("2. **字段探测认知**: 若返回的日期呈现为长数字，那是序列化格式。**严禁在 SQL 中对其做除以 1000 的运算**。应直接视其为日期字段并调用 ").append(dialectName).append(" 的日期函数。\n")
+                .append("3. **保留字保护**: 为所有别名添加转义符。例如在 H2/Oracle/国产库中使用 `AS \"YEAR\"`，在 MySQL 中使用 `AS `year``。\n")
+                .append("4. **方言兼容**: 使用 ").append(dialectName).append(" 推荐的语法（如分页、字符串拼接）。\n")
+                .append("5. **自愈逻辑**: 若执行报错，请根据错误信息自检：1. 是否漏掉了引号；2. 函数名是否符合方言；3. 字段是否存在。不要重复提交错误 SQL。");
 
         return sb.toString();
     }
 
-    @Override
-    public Collection<FunctionTool> getTools(Prompt prompt) {
-        if (schemaMode == SchemaMode.FULL) {
-            return tools.stream()
-                    .filter(tool -> "execute_sql".equals(tool.name()))
-                    .collect(Collectors.toList());
-        }
-        return super.getTools(prompt);
-    }
-
-    @ToolMapping(name = "get_table_schema", description = "获取特定表的详细 DDL 和列信息")
-    public String getTableSchema(@Param("tableName") String tableName) {
-        if (!tableNames.contains(tableName)) {
-            return "Error: Table '" + tableName + "' not found.";
-        }
-        return extractSchemaInfo(Collections.singletonList(tableName));
-    }
-
-    @ToolMapping(name = "execute_sql", description = "执行单条只读 SELECT 语句并获取结果。")
+    @ToolMapping(name = "execute_sql", description = "执行单条 SELECT 语句。")
     public String executeSql(@Param("sql") String sql) {
         if (Assert.isBlank(sql)) return "Error: SQL is empty.";
 
         String cleanSql = sql.trim();
         if (cleanSql.endsWith(";")) cleanSql = cleanSql.substring(0, cleanSql.length() - 1);
 
+        // 自动防御：为 AI 容易忽略的保留字别名加引号 (兼容主流库引号规则)
+        cleanSql = autoFixAliases(cleanSql);
+
         String upperSql = cleanSql.toUpperCase();
         if (readOnly && !upperSql.startsWith("SELECT")) return "Error: Restricted to SELECT statements only.";
-        if (upperSql.contains(";") && !cleanSql.endsWith(";")) return "Error: Multiple SQL statements are not allowed.";
 
-        // 分页补全逻辑 (子查询包装法，确保方言兼容性)
-        boolean hasLimit = upperSql.contains("LIMIT") || upperSql.contains("FETCH FIRST") ||
-                upperSql.contains("TOP ") || upperSql.contains("ROWNUM");
-
-        if (!hasLimit) {
-            String dn = dialectName.toUpperCase();
-            if (dn.contains("MYSQL") || dn.contains("POSTGRE") || dn.contains("H2") || dn.contains("SQLITE") || dn.contains("KINGBASE")) {
-                cleanSql = "SELECT * FROM (" + cleanSql + ") _t LIMIT " + maxRows;
-            } else if (dn.contains("ORACLE") || dn.contains("DAMENG")) {
-                cleanSql = "SELECT * FROM (" + cleanSql + ") _t WHERE ROWNUM <= " + maxRows;
-            } else if (dn.contains("SQL SERVER")) {
-                cleanSql = "SELECT * FROM (" + cleanSql + ") _t ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT " + maxRows + " ROWS ONLY";
-            } else {
-                cleanSql = "SELECT * FROM (" + cleanSql + ") _t FETCH FIRST " + maxRows + " ROWS ONLY";
-            }
+        // 分页逻辑适配
+        if (!hasLimit(upperSql)) {
+            cleanSql = applyUniversalPagination(cleanSql);
         }
 
         try {
             List<Map> rows = sqlUtils.sql(cleanSql).queryRowList(Map.class);
             if (rows == null || rows.isEmpty()) return "Query OK. No data found.";
 
-            // 结构化截断保护
-            int sampleSize = Math.min(10, maxRows);
-            if (rows.size() > sampleSize + 5) {
-                List<Map> subRows = rows.stream().limit(sampleSize).collect(Collectors.toList());
-                return ONode.serialize(subRows) + "\n\n[Note: 结果集较大已截断。显示前" + sampleSize + "条，总数: " + rows.size() + "]";
-            }
-
-            String fullJson = ONode.serialize(rows);
-            return fullJson.length() > maxContextLength ? fullJson.substring(0, maxContextLength) + "... [Truncated]" : fullJson;
+            String json = ONode.serialize(rows);
+            return json.length() > maxContextLength ? json.substring(0, maxContextLength) + "... [Truncated]" : json;
         } catch (SQLException e) {
-            return "SQL Error: " + e.getMessage() + "\nHint: 请检查别名、JOIN 条件或 " + dialectName + " 的特有语法。多表关联请务必加别名前缀。";
+            return "SQL Error: " + e.getMessage() + "\nHint: 检查别名引号、函数方言是否匹配 " + dialectName + "。";
         }
+    }
+
+    /**
+     * 通用别名自动修复：识别常见保留字，确保它们被引号包裹。
+     */
+    private String autoFixAliases(String sql) {
+        Matcher matcher = RESERVED_ALIAS_PATTERN.matcher(sql);
+        StringBuffer sb = new StringBuffer();
+        String quote = dialectName.toUpperCase().contains("MYSQL") ? "`" : "\"";
+        while (matcher.find()) {
+            matcher.appendReplacement(sb, " AS " + quote + matcher.group(1).toUpperCase() + quote + matcher.group(2));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
+    private boolean hasLimit(String upperSql) {
+        return upperSql.contains("LIMIT") || upperSql.contains("FETCH FIRST") ||
+                upperSql.contains("TOP ") || upperSql.contains("ROWNUM");
+    }
+
+    /**
+     * 通用分页适配逻辑
+     */
+    private String applyUniversalPagination(String sql) {
+        String dn = dialectName.toUpperCase();
+
+        // 1. MySQL, PostgreSQL, H2, SQLite, Kingbase(金仓), Highgo(瀚高)
+        if (dn.contains("MYSQL") || dn.contains("POSTGRE") || dn.contains("H2") ||
+                dn.contains("SQLITE") || dn.contains("KINGBASE") || dn.contains("HIGHGO")) {
+            return sql + " LIMIT " + maxRows;
+        }
+
+        // 2. Oracle, Dameng(达梦)
+        if (dn.contains("ORACLE") || dn.contains("DM DBMS") || dn.contains("DAMENG")) {
+            // 简单判断是否已有 WHERE
+            String connector = sql.toUpperCase().contains("WHERE") ? " AND " : " WHERE ";
+            return sql + connector + "ROWNUM <= " + maxRows;
+        }
+
+        // 3. SQL Server (2012+)
+        if (dn.contains("MICROSOFT") || dn.contains("SQL SERVER")) {
+            if (!sql.toUpperCase().contains("ORDER BY")) {
+                sql += " ORDER BY (SELECT NULL)";
+            }
+            return sql + " OFFSET 0 ROWS FETCH NEXT " + maxRows + " ROWS ONLY";
+        }
+
+        // 4. 标准 SQL 分页 (DB2 等)
+        return sql + " FETCH FIRST " + maxRows + " ROWS ONLY";
+    }
+
+    // ... (extractSchemaInfo, getTableSchema, getTools 保持不变)
+
+    @ToolMapping(name = "get_table_schema", description = "获取表的 DDL 信息")
+    public String getTableSchema(@Param("tableName") String tableName) {
+        if (!tableNames.contains(tableName)) return "Error: Table '" + tableName + "' not found.";
+        return extractSchemaInfo(Collections.singletonList(tableName));
+    }
+
+    @Override
+    public Collection<FunctionTool> getTools(Prompt prompt) {
+        if (schemaMode == SchemaMode.FULL) {
+            return tools.stream().filter(t -> "execute_sql".equals(t.name())).collect(Collectors.toList());
+        }
+        return super.getTools(prompt);
     }
 
     protected String extractSchemaInfo(List<String> tables) {
@@ -263,45 +272,35 @@ public class Text2SqlSkill extends AbsSkill {
             DatabaseMetaData dbMeta = conn.getMetaData();
             String catalog = conn.getCatalog();
             String schema = conn.getSchema();
-
             for (String tableName : tables) {
-                // 1. 表名与备注
                 sb.append("* **Table: ").append(tableName).append("**");
                 String remarks = tableRemarksMap.get(tableName);
                 if (Utils.isNotEmpty(remarks)) sb.append(" // ").append(remarks);
                 sb.append("\n");
-
-                // 2. 主键
                 Set<String> pks = new HashSet<>();
                 try (ResultSet rs = dbMeta.getPrimaryKeys(catalog, schema, tableName)) {
                     while (rs.next()) pks.add(rs.getString("COLUMN_NAME"));
                 }
-                // 3. 外键 (仅提取当前表的导入键)
                 Map<String, String> fks = new HashMap<>();
                 try (ResultSet rs = dbMeta.getImportedKeys(catalog, schema, tableName)) {
                     while (rs.next()) {
-                        fks.put(rs.getString("FKCOLUMN_NAME"),
-                                rs.getString("PKTABLE_NAME") + "." + rs.getString("PKCOLUMN_NAME"));
+                        fks.put(rs.getString("FKCOLUMN_NAME"), rs.getString("PKTABLE_NAME") + "." + rs.getString("PKCOLUMN_NAME"));
                     }
                 }
-
-                // 4. 列详情
                 try (ResultSet rs = dbMeta.getColumns(catalog, schema, tableName, null)) {
                     while (rs.next()) {
                         String col = rs.getString("COLUMN_NAME");
                         String type = rs.getString("TYPE_NAME");
-                        String colRemarks = Utils.valueOr(rs.getString("REMARKS"), "");
-
+                        String colRemarks = rs.getString("REMARKS");
                         sb.append("  - ").append(col).append(" (").append(type).append(")");
                         if (pks.contains(col)) sb.append(" [PK]");
                         if (fks.containsKey(col)) sb.append(" [FK -> ").append(fks.get(col)).append("]");
-                        if (Assert.isNotEmpty(colRemarks)) sb.append(" // ").append(colRemarks);
+                        if (Utils.isNotEmpty(colRemarks)) sb.append(" // ").append(colRemarks);
                         sb.append("\n");
                     }
                 }
             }
         } catch (Exception e) {
-            LOG.error("Extract schema error", e);
             return "Metadata Error: " + e.getMessage();
         }
         return sb.toString();
