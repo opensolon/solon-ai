@@ -24,6 +24,9 @@ import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * 联网搜索技能：支持多驱动自适应 (Serper, Bing, Baidu)
  *
@@ -88,7 +91,7 @@ public class WebSearchSkill extends AbsSkill {
     public interface SearchDriver {
         String executeRequest(String query, int maxResults, String apiKey) throws Exception;
 
-        java.util.List<SearchResult> parseResults(ONode root);
+        List<SearchResult> parseResults(ONode root);
     }
 
     public static class SearchResult {
@@ -105,14 +108,20 @@ public class WebSearchSkill extends AbsSkill {
     public static final SearchDriver SERPER = new SearchDriver() {
         public String executeRequest(String q, int n, String k) throws Exception {
             return HttpUtils.http("https://google.serper.dev/search")
-                    .header("X-API-KEY", k).header("Content-Type", "application/json")
-                    .bodyOfJson(new ONode().set("q", q).set("num", n).toJson()).post();
+                    .header("X-API-KEY", k)
+                    .header("Content-Type", "application/json")
+                    .bodyOfJson(new ONode().set("q", q).set("num", n).toJson())
+                    .post();
         }
 
-        public java.util.List<SearchResult> parseResults(ONode root) {
-            return root.get("organic").getArrayUnsafe().stream()
-                    .map(i -> new SearchResult(i.get("title").getString(), i.get("link").getString(), i.get("snippet").getString()))
-                    .collect(java.util.stream.Collectors.toList());
+        public List<SearchResult> parseResults(ONode root) {
+            return root.get("organic").getArray()
+                    .stream()
+                    .map(i -> new SearchResult(
+                            i.get("title").getString(),
+                            i.get("link").getString(),
+                            i.get("snippet").getString()))
+                    .collect(Collectors.toList());
         }
     };
 
@@ -126,10 +135,14 @@ public class WebSearchSkill extends AbsSkill {
                     .get();
         }
 
-        public java.util.List<SearchResult> parseResults(ONode root) {
-            return root.get("webPages").get("value").getArrayUnsafe().stream()
-                    .map(i -> new SearchResult(i.get("name").getString(), i.get("url").getString(), i.get("snippet").getString()))
-                    .collect(java.util.stream.Collectors.toList());
+        public List<SearchResult> parseResults(ONode root) {
+            return root.get("webPages").get("value").getArray()
+                    .stream()
+                    .map(i -> new SearchResult(
+                            i.get("name").getString(),
+                            i.get("url").getString(),
+                            i.get("snippet").getString()))
+                    .collect(Collectors.toList());
         }
     };
 
@@ -148,15 +161,16 @@ public class WebSearchSkill extends AbsSkill {
                     .post();
         }
 
-        public java.util.List<SearchResult> parseResults(ONode root) {
+        public List<SearchResult> parseResults(ONode root) {
             // 百度 AppBuilder 的返回通常在 cells 数组或特定的 search_results 结构中
             // 这里建议根据你实际对接的百度云具体产品线（千帆 vs AppBuilder）微调路径
-            return root.get("search_results").getArrayUnsafe().stream()
+            return root.get("search_results").getArray()
+                    .stream()
                     .map(i -> new SearchResult(
                             i.get("title").getString(),
                             i.get("url").getString(),
                             i.get("content").getString())) // 百度通常返回 content 或 snippet
-                    .collect(java.util.stream.Collectors.toList());
+                    .collect(Collectors.toList());
         }
     };
 }

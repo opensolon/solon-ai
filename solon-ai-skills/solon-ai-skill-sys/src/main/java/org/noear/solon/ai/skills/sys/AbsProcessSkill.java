@@ -1,6 +1,22 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.noear.solon.ai.skills.sys;
 
 import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.*;
@@ -10,8 +26,15 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 进程执行基类：提供通用的代码写入、进程执行、输出捕获及超时控制
+ * 外部进程执行基类
+ *
+ * <p>提供通用的代码持久化、子进程启动、标准输出捕获及执行超时控制（默认 30s）。
+ * 具备输出截断保护机制，防止大数据量输出导致内存溢出。</p>
+ *
+ * @author noear
+ * @since 3.9.1
  */
+@Preview("3.9.1")
 public abstract class AbsProcessSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(AbsProcessSkill.class);
     protected final Path rootPath;
