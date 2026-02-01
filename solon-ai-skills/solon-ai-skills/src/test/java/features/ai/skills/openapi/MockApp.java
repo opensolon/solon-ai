@@ -39,11 +39,18 @@ public class MockApp {
                 "        \"responses\": { \"200\": { \"content\": { \"application/json\": { \"schema\": { \"type\": \"object\", \"properties\": { \"orderId\": { \"type\": \"string\" } } } } } } }\n" +
                 "      }\n" +
                 "    }\n" +
+                "    \"/admin/config\": {\n" +
+                "      \"get\": {\n" +
+                "        \"summary\": \"[鉴权] 获取系统配置\",\n" +
+                "        \"responses\": { \"200\": { \"description\": \"OK\", \"content\": { \"application/json\": { \"schema\": { \"type\": \"object\" } } } } }\n" +
+                "       }\n" +
+                "    }"+
                 "  },\n" +
                 "  \"components\": {\n" +
                 "    \"schemas\": {\n" +
                 "      \"User\": {\n" +
                 "        \"type\": \"object\",\n" +
+                "        \"description\": \"用户信息，包含 id, name, status(状态: active/inactive)\",\n" +
                 "        \"properties\": {\n" +
                 "          \"id\": { \"type\": \"integer\" },\n" +
                 "          \"name\": { \"type\": \"string\" },\n" +
@@ -73,12 +80,8 @@ public class MockApp {
                 "    \"/users/{id}\": {\n" +
                 "      \"get\": {\n" +
                 "        \"summary\": \"获取用户信息\",\n" +
-                "        \"parameters\": [ \n" +
-                "           { \"name\": \"id\", \"in\": \"path\", \"required\": true, \"type\": \"integer\" } \n" +
-                "        ],\n" +
-                "        \"responses\": {\n" +
-                "          \"200\": { \"description\": \"成功\", \"schema\": { \"$ref\": \"#/definitions/User\" } }\n" +
-                "        }\n" +
+                "        \"parameters\": [ { \"name\": \"id\", \"in\": \"path\", \"required\": true, \"type\": \"integer\" } ],\n" +
+                "        \"responses\": { \"200\": { \"description\": \"成功\", \"schema\": { \"$ref\": \"#/definitions/User\" } } }\n" +
                 "      }\n" +
                 "    },\n" +
                 "    \"/orders/create\": {\n" +
@@ -87,31 +90,56 @@ public class MockApp {
                 "        \"parameters\": [ \n" +
                 "           { \"name\": \"body\", \"in\": \"body\", \"required\": true, \"schema\": { \"$ref\": \"#/definitions/OrderRequest\" } } \n" +
                 "        ],\n" +
-                "        \"responses\": {\n" +
-                "          \"200\": { \"description\": \"成功\", \"schema\": { \"type\": \"object\", \"properties\": { \"orderId\": { \"type\": \"string\" } } } }\n" +
-                "        }\n" +
+                "        \"responses\": { \"200\": { \"description\": \"成功\", \"schema\": { \"type\": \"object\", \"properties\": { \"orderId\": { \"type\": \"string\" } } } } }\n" +
+                "      }\n" +
+                "    },\n" +
+                "    \"/admin/config\": {\n" +
+                "      \"get\": {\n" +
+                "        \"summary\": \"[鉴权] 获取系统配置\",\n" +
+                "        \"responses\": { \"200\": { \"description\": \"OK\" }, \"schema\": { \"type\": \"object\" } }\n" +
                 "      }\n" +
                 "    }\n" +
                 "  },\n" +
                 "  \"definitions\": {\n" +
                 "    \"User\": {\n" +
                 "      \"type\": \"object\",\n" +
+                "      \"description\": \"用户信息，包含 id, name, status(状态: active/inactive)\",\n" +
                 "      \"properties\": {\n" +
                 "        \"id\": { \"type\": \"integer\" },\n" +
                 "        \"name\": { \"type\": \"string\" },\n" +
-                "        \"status\": { \"type\": \"string\", \"description\": \"用户状态: active, disabled\" }\n" +
+                "          \"status\": { \"type\": \"string\", \"description\": \"用户状态: active, disabled\" }\n" +
+                "      }\n" +
+                "    },\n" +
+                "    \"Group\": {\n" +
+                "      \"type\": \"object\",\n" +
+                "      \"properties\": {\n" +
+                "        \"name\": { \"type\": \"string\" },\n" +
+                "        \"leader\": { \"$ref\": \"#/definitions/User\" }\n" + // 模拟循环引用 (V2)
                 "      }\n" +
                 "    },\n" +
                 "    \"OrderRequest\": {\n" +
                 "      \"type\": \"object\",\n" +
                 "      \"properties\": {\n" +
                 "        \"productName\": { \"type\": \"string\" },\n" +
-                "        \"amount\": { \"type\": \"integer\" }\n" +
+                "        \"detail\": { \"$ref\": \"#/definitions/OrderDetail\" }\n" + // 多级嵌套 (V2)
                 "      },\n" +
                 "      \"required\": [\"productName\"]\n" +
+                "    },\n" +
+                "    \"OrderDetail\": {\n" +
+                "      \"type\": \"object\",\n" +
+                "      \"properties\": { \"remark\": { \"type\": \"string\" }, \"priority\": { \"type\": \"integer\" } }\n" +
                 "    }\n" +
                 "  }\n" +
                 "}";
+    }
+
+    @Get
+    @Mapping("admin/config")
+    public Map<String, Object> getConfig(@Header("Authorization") String auth) {
+        if (auth == null || !auth.contains("mock-token")) {
+            throw new RuntimeException("401 Unauthorized");
+        }
+        return Utils.asMap("env", "prod", "version", "1.0.0");
     }
 
     @Get
