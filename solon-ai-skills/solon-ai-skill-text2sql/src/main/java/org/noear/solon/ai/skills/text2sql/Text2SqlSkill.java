@@ -306,11 +306,38 @@ public class Text2SqlSkill extends AbsSkill {
 
     static class DialectFactory {
         static SqlDialect create(String productName) {
+            if (productName == null) {
+                return new GenericDialect();
+            }
+
             String name = productName.toUpperCase();
-            if (name.contains("H2")) return new H2Dialect();
-            if (name.contains("MYSQL")) return new MySqlDialect();
-            if (name.contains("ORACLE") || name.contains("DM") || name.contains("DAMENG")) return new OracleDialect();
-            if (name.contains("POSTGRE") || name.contains("KINGBASE") || name.contains("HIGHGO")) return new PostgreDialect();
+
+            // 1. H2 Database
+            if (name.contains("H2")) {
+                return new H2Dialect();
+            }
+
+            // 2. MySQL / MariaDB / TiDB (通常兼容 MySQL 语法)
+            if (name.contains("MYSQL") || name.contains("MARIADB") || name.contains("TIDB")) {
+                return new MySqlDialect();
+            }
+
+            // 3. SQLite (轻量级本地数据库，需处理特殊的日期函数)
+            if (name.contains("SQLITE")) {
+                return new SqliteDialect();
+            }
+
+            // 4. Oracle / Dameng (达梦) / ClickHouse (部分语法类似)
+            if (name.contains("ORACLE") || name.contains("DM") || name.contains("DAMENG")) {
+                return new OracleDialect();
+            }
+
+            // 5. PostgreSQL / Kingbase (人大金仓) / Highgo (瀚高)
+            if (name.contains("POSTGRE") || name.contains("KINGBASE") || name.contains("HIGHGO")) {
+                return new PostgreDialect();
+            }
+
+            // 6. 默认回退到标准 SQL 方言
             return new GenericDialect();
         }
     }
