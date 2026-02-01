@@ -66,7 +66,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
                 .append(role).append("。");
 
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-            sb.append("你是一个具备自主行动能力的专家，能够根据需要直接使用工具解决问题。\n\n");
+            sb.append("你是一个具备自主行动能力的专家，如果有需要可使用工具协助解决问题。\n\n");
         } else {
             sb.append("你必须使用 ReAct 模式解决问题：")
                     .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
@@ -74,22 +74,6 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
 
         // 2. 注入指令集（含格式、准则、示例）
         sb.append(instruction);
-
-        // 3. 工具集动态注入
-        if (trace.getOptions().getTools().isEmpty()) {
-            sb.append("\n注意：当前没有可用工具。请直接给出 Final Answer。\n");
-        } else {
-            sb.append("\n## 可用工具\n");
-            sb.append("你也可以通过模型内置的函数调用工具（Function Calling）使用以下工具：\n");
-            trace.getOptions().getTools().forEach(t -> {
-                sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
-                // 必须告知模型参数 Schema 以便生成正确的 JSON
-                if (Assert.isNotEmpty(t.inputSchema())) {
-                    sb.append(" 参数定义: ").append(t.inputSchema());
-                }
-                sb.append("\n");
-            });
-        }
 
         return sb.toString();
     }
@@ -167,6 +151,22 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
                 .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"北京\"}}\n")
                 .append("Thought: 根据观察结果，北京天气良好。\n")
                 .append("Final Answer: ").append(config.getFinishMarker()).append("北京目前天气晴间多云，气温约 25°C。\n");
+
+        // F. 工具集动态注入
+        if (trace.getOptions().getTools().isEmpty()) {
+            sb.append("\n注意：当前没有可用工具。请直接给出 Final Answer。\n");
+        } else {
+            sb.append("\n## 可用工具\n");
+            sb.append("你也可以通过模型内置的函数调用工具（Function Calling）使用以下工具：\n");
+            trace.getOptions().getTools().forEach(t -> {
+                sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
+                // 必须告知模型参数 Schema 以便生成正确的 JSON
+                if (Assert.isNotEmpty(t.inputSchema())) {
+                    sb.append(" 参数定义: ").append(t.inputSchema());
+                }
+                sb.append("\n");
+            });
+        }
 
         return sb.toString();
     }

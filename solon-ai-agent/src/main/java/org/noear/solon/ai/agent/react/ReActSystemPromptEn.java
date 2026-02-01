@@ -69,7 +69,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
                 .append(role).append(". ");
 
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-            sb.append("You are an expert with autonomous action capabilities, able to use tools directly as needed to solve problems.\n\n");
+            sb.append("You are an expert with autonomous action capabilities. You may use tools to assist in solving problems as needed; provide a direct response when you have sufficient information.\n\n");
         } else {
             sb.append("You must solve the problem using the ReAct pattern: ")
                     .append("Thought -> Action -> Observation.\n\n");
@@ -77,22 +77,6 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
         // 2. Instructions
         sb.append(instruction);
-
-        // 3. Toolset
-        if (trace.getOptions().getTools().isEmpty()) {
-            sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
-        } else {
-            sb.append("\n## Available Tools\n");
-            // 同步中文版：明确使用内置函数调用
-            sb.append("You can also use the following tools, preferably via the model's built-in Function Calling feature:\n");
-            trace.getOptions().getTools().forEach(t -> {
-                sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
-                if (Assert.isNotEmpty(t.inputSchema())) {
-                    sb.append(" Input Schema: ").append(t.inputSchema());
-                }
-                sb.append("\n");
-            });
-        }
 
         return sb.toString();
     }
@@ -169,6 +153,23 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
                 .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"Paris\"}}\n")
                 .append("Thought: I have obtained the weather information.\n")
                 .append("Final Answer: ").append(config.getFinishMarker()).append("The weather in Paris is 18°C and sunny.\n");
+
+
+        // F. Toolset
+        if (trace.getOptions().getTools().isEmpty()) {
+            sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
+        } else {
+            sb.append("\n## Available Tools\n");
+            // 同步中文版：明确使用内置函数调用
+            sb.append("You can also use the following tools, preferably via the model's built-in Function Calling feature:\n");
+            trace.getOptions().getTools().forEach(t -> {
+                sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
+                if (Assert.isNotEmpty(t.inputSchema())) {
+                    sb.append(" Input Schema: ").append(t.inputSchema());
+                }
+                sb.append("\n");
+            });
+        }
 
         return sb.toString();
     }
