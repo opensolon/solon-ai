@@ -73,17 +73,27 @@ public class Text2SqlSkill extends AbsSkill {
         this.tableNames = Arrays.asList(tables);
     }
 
-    private void init(){
-        if(schemaMode != null) {
+    private void init() {
+        if (schemaMode != null) {
             return;
         }
 
-        // 1. 初始化方言适配器与元数据
-        initDialectAndMetadata();
+        Utils.locker().lock();
 
-        // 2. 根据表数量决定 Schema 模式
-        this.schemaMode = tableNames.size() > 20 ? SchemaMode.DYNAMIC : SchemaMode.FULL;
-        this.cachedSchemaInfo = (schemaMode == SchemaMode.FULL) ? extractSchemaInfo(tableNames) : null;
+        try {
+            if (schemaMode != null) {
+                return;
+            }
+
+            // 1. 初始化方言适配器与元数据
+            initDialectAndMetadata();
+
+            // 2. 根据表数量决定 Schema 模式
+            this.schemaMode = tableNames.size() > 20 ? SchemaMode.DYNAMIC : SchemaMode.FULL;
+            this.cachedSchemaInfo = (schemaMode == SchemaMode.FULL) ? extractSchemaInfo(tableNames) : null;
+        } finally {
+            Utils.locker().unlock();
+        }
     }
 
     /**
