@@ -75,44 +75,64 @@ public class OpenApiSkill extends AbsSkill {
         }
     }
 
-    // 提供给 ApiTool 使用的解引用方法
+    /**
+     * 优化点 1: 递归解引用与 Schema 瘦身
+     * 剔除无关描述，只保留 AI 核心推理字段，防止多层引用断裂。
+     */
     protected String resolveRef(ONode node) {
-        if (node == null || node.isNull()) return "{}";
+        return resolveRefNode(node, new HashSet<>()).toJson();
+    }
 
-        // 如果包含引用
+    protected ONode resolveRefNode(ONode node, Set<String> visited) {
+        if (node == null || node.isNull()) return new ONode();
+
+        // 处理引用
         if (node.hasKey("$ref")) {
             String ref = node.get("$ref").getString();
-            // 将 #/components/schemas/User 转换为 $.components.schemas.User
+            if (visited.contains(ref)) {
+                return ONode.ofBean("_Circular_Reference_"); // 终止循环
+            }
+            visited.add(ref);
+
             String jsonPath = ref.replace("#/", "$.").replace("/", ".");
             ONode refNode = rootSchema.select(jsonPath);
-            if (!refNode.isNull()) {
-                return refNode.toJson();
-            }
+            return resolveRefNode(refNode, visited);
         }
 
-        // 如果是普通的 parameters 数组，尝试深度检查其内部的 schema 引用
-        if (node.isArray()) {
-            node.getArrayUnsafe().forEach(n -> {
-                if (n.hasKey("schema") && n.get("schema").hasKey("$ref")) {
-                    String ref = n.get("schema").get("$ref").getString();
-                    ONode refNode = rootSchema.select(ref.replace("#/", "$.").replace("/", "."));
-                    if (!refNode.isNull()) n.set("schema", refNode);
+        // 瘦身与递归构建
+        if (node.isObject()) {
+            ONode cleanNode = new ONode().asObject();
+            node.getObjectUnsafe().forEach((k, v) -> {
+                if ("type".equals(k) || "properties".equals(k) || "items".equals(k) ||
+                        "required".equals(k) || "description".equals(k) || "enum".equals(k)) {
+                    if ("properties".equals(k)) {
+                        ONode props = cleanNode.get("properties");
+                        v.getObjectUnsafe().forEach((pk, pv) -> props.set(pk, resolveRefNode(pv, new HashSet<>(visited))));
+                    } else if ("items".equals(k)) {
+                        cleanNode.set("items", resolveRefNode(v, new HashSet<>(visited)));
+                    } else {
+                        cleanNode.set(k, v);
+                    }
                 }
             });
+            return cleanNode;
+        } else if (node.isArray()) {
+            ONode cleanArray = new ONode().asArray();
+            node.getArrayUnsafe().forEach(n -> cleanArray.add(resolveRefNode(n, new HashSet<>(visited))));
+            return cleanArray;
         }
 
-        return node.toJson();
+        return node;
     }
 
     public OpenApiSkill schemaMode(SchemaMode mode) { this.schemaMode = mode; return this; }
-    public OpenApiSkill maxContextLength(int length) { this.maxContextLength = length; return this; }
 
     @Override
     public String name() { return "api_expert"; }
 
     @Override
     public String description() {
-        return "业务 API 专家：支持 REST 接口调用，自动解析 OpenAPI 2.0/3.0 模型引用。";
+        return "业务 API 专家：支持 REST 接口精准调用，能够自动解析复杂的模型嵌套。";
     }
 
     @Override
@@ -124,18 +144,20 @@ public class OpenApiSkill extends AbsSkill {
         if (schemaMode == SchemaMode.FULL) {
             sb.append("##### 2. 接口详细定义 (API Specs)\n").append(formatApiDocs(dynamicTools));
         } else {
+            // 优化点 2: 增强型目录，包含 Method 和 Path，便于 AI 初步定位
             sb.append("##### 2. 接口清单 (API List)\n")
-                    .append("接口较多，编写请求前请通过 `get_api_detail` 确认具体的字段 Schema：\n\n");
+                    .append("接口较多。**调用前必须通过 `get_api_detail` 确认具体的 Schema 定义**：\n\n");
 
             for (ApiTool t : dynamicTools) {
-                sb.append("- **").append(t.name).append("**: ").append(t.description).append("\n");
+                sb.append("- **").append(t.name).append("**: ").append(t.description)
+                        .append(" (").append(t.method).append(" ").append(t.path).append(")\n");
             }
         }
 
-        sb.append("\n\n##### 3. API 调用准则\n")
-                .append("1. **参数构造**: Path 参数映射 URL；Query/Body 参数放入 query_or_body_params。\n")
-                .append("2. **类型检查**: 严格遵循 Schema 定义的数据类型。\n")
-                .append("3. **探测**: 若结构含模糊引用，必须先执行 `get_api_detail`。");
+        sb.append("\n##### 3. API 调用准则\n")
+                .append("1. **精准定位**: 优先根据 Summary 和 Path 锁定 API。\n")
+                .append("2. **参数构建**: Path 参数直接替换 URL；Query/Body 放入 query_or_body_params。JSON 结构必须严格符合 Schema。\n")
+                .append("3. **响应处理**: 默认返回 JSON 字符串。若结果过长将被截断，请关注 truncated 标记。");
 
         return sb.toString();
     }
@@ -148,10 +170,10 @@ public class OpenApiSkill extends AbsSkill {
         return super.getTools(prompt);
     }
 
-    @ToolMapping(name = "get_api_detail", description = "获取特定 API 的参数 Schema 和返回值定义（含模型展开）")
+    @ToolMapping(name = "get_api_detail", description = "获取特定 API 的参数 Schema 和返回值定义（含模型深度展开）")
     public String getApiDetail(@Param("api_name") String apiName) {
         return dynamicTools.stream()
-                .filter(t -> t.name.equals(apiName))
+                .filter(t -> t.name.equalsIgnoreCase(apiName))
                 .map(t -> formatApiDocs(Collections.singletonList(t)))
                 .findFirst()
                 .orElse("Error: API '" + apiName + "' not found.");
@@ -164,7 +186,7 @@ public class OpenApiSkill extends AbsSkill {
             @Param("query_or_body_params") Map<String, Object> dataParams) throws IOException {
 
         ApiTool tool = dynamicTools.stream()
-                .filter(t -> t.name.equals(apiName))
+                .filter(t -> t.name.equalsIgnoreCase(apiName))
                 .findFirst()
                 .orElse(null);
 
@@ -186,9 +208,13 @@ public class OpenApiSkill extends AbsSkill {
 
         try {
             String result = http.exec(tool.method).bodyAsString();
-            return result.length() > maxContextLength ? result.substring(0, maxContextLength) + "... [Truncated]" : result;
+            if (result.length() > maxContextLength) {
+                return result.substring(0, maxContextLength) + "... [Data truncated for context safety]";
+            }
+            return result;
         } catch (Exception e) {
-            return "HTTP Error: " + e.getMessage();
+            log.warn("API 调用失败: {} {}", tool.name, e.getMessage());
+            return "HTTP Execution Error: " + e.getMessage();
         }
     }
 
@@ -196,10 +222,10 @@ public class OpenApiSkill extends AbsSkill {
         StringBuilder sb = new StringBuilder();
         for (ApiTool tool : tools) {
             sb.append("* **API: ").append(tool.name).append("**\n")
-                    .append("  - Summary: ").append(tool.description).append("\n")
+                    .append("  - Description: ").append(tool.description).append("\n")
                     .append("  - Endpoint: ").append(tool.method).append(" ").append(tool.path).append("\n")
-                    .append("  - Input: ").append(tool.inputSchema).append("\n")
-                    .append("  - Output: ").append(tool.outputSchema).append("\n");
+                    .append("  - Request Schema: ").append(tool.inputSchema).append("\n")
+                    .append("  - Response Schema: ").append(tool.outputSchema).append("\n");
         }
         return sb.toString();
     }
@@ -215,26 +241,32 @@ public class OpenApiSkill extends AbsSkill {
         public ApiTool(OpenApiSkill skill, String path, String method, ONode detail) {
             this.path = path;
             this.method = method.toUpperCase();
-            this.name = (this.method + "_" + path.replaceAll("[^a-zA-Z0-9]", "_"))
-                    .replaceAll("_+", "_").toLowerCase();
+
+            // 优化点 3: 优先使用 operationId 作为唯一标识，增强模型认知一致性
+            this.name = detail.get("operationId").getString();
+            if (Utils.isEmpty(this.name)) {
+                this.name = (this.method + "_" + path.replaceAll("[^a-zA-Z0-9]", "_"))
+                        .replaceAll("_+", "_").toLowerCase();
+            }
 
             this.description = Utils.valueOr(detail.get("summary").getString(),
-                    detail.get("description").getString(), "路径: " + path);
+                    detail.get("description").getString(), "No summary available");
 
-            // 1. 入参处理（带解引用）
+            // 入参解析 (支持 Header/Path/Query 及 Body 深度展开)
             this.inputSchema = skill.resolveRef(detail.get("parameters"));
             if (detail.hasKey("requestBody")) {
                 ONode content = detail.get("requestBody").get("content");
+                // 默认取 application/json，兼容处理
                 ONode bodySchema = content.get("application/json").get("schema");
                 if (bodySchema.isNull() && content.size() > 0) {
                     bodySchema = content.get(0).get("schema");
                 }
                 if (!bodySchema.isNull()) {
-                    this.inputSchema += " | Body: " + skill.resolveRef(bodySchema);
+                    this.inputSchema += " | JSON Body: " + skill.resolveRef(bodySchema);
                 }
             }
 
-            // 2. 出参处理（带解引用）
+            // 出参解析 (通常只解析 200 状态码)
             ONode resp200 = detail.get("responses").get("200");
             ONode outSchemaNode = resp200.get("content").get("application/json").get("schema");
             if (outSchemaNode.isNull()) {
