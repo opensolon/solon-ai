@@ -58,11 +58,14 @@ public class SimpleSystemPrompt {
 
         StringBuilder sb = new StringBuilder();
         if (Assert.isNotEmpty(role)) {
-            sb.append("## 你的角色\n").append(role).append("\n\n");
+            sb.append("## 你的角色\n").append(role).append("。")
+                    .append("你是一个具备自主行动能力的专家。\n\n");
         }
+
         if (Assert.isNotEmpty(instruction)) {
             sb.append("## 执行指令\n").append(instruction);
         }
+
         return sb.toString();
     }
 
@@ -78,7 +81,7 @@ public class SimpleSystemPrompt {
             return trace.getConfig().getRole();
         }
 
-        return null;
+        return "专业的任务解决助手";
     }
 
     /**
