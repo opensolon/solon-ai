@@ -21,6 +21,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.skills.text2sql.dialect.*;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.data.sql.SqlUtils;
@@ -38,7 +39,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * 智能 SQL 转换技能
+ * 智能 Text-to-SQL 转换技能
  *
  * @author noear
  * @since 3.9.1
@@ -308,87 +309,9 @@ public class Text2SqlSkill extends AbsSkill {
             String name = productName.toUpperCase();
             if (name.contains("H2")) return new H2Dialect();
             if (name.contains("MYSQL")) return new MySqlDialect();
-            if (name.contains("ORACLE") || name.contains("DM") || name.contains("DAMENG")) return new OracleDmDialect();
+            if (name.contains("ORACLE") || name.contains("DM") || name.contains("DAMENG")) return new OracleDialect();
             if (name.contains("POSTGRE") || name.contains("KINGBASE") || name.contains("HIGHGO")) return new PostgreDialect();
             return new GenericDialect();
         }
-    }
-
-    static class H2Dialect implements SqlDialect {
-        public String getName() {
-            return "H2 Database";
-        }
-
-        public String quoteIdentifier(String name) {
-            return "\"" + name.toUpperCase() + "\"";
-        }
-
-        public String applyPagination(String sql, int maxRows) {
-            return sql + " LIMIT " + maxRows;
-        }
-
-        public String getCustomInstruction() {
-            return "H2 严格区分保留字。别名必须使用双引号(如 AS \"YEAR\")。长数字日期是序列化表现，严禁除以 1000，直接使用 YEAR() 等日期函数。";
-        }
-
-        public String getErrorHint(SQLException e) {
-            return "H2 报错通常与未转义的保留字别名或非法的日期数学运算有关。";
-        }
-
-        public SqlDialect adaptDialect(Connection conn) {
-            try (Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery("SELECT VALUE FROM INFORMATION_SCHEMA.SETTINGS WHERE NAME = 'MODE'")) {
-                if (rs.next() && "MySQL".equalsIgnoreCase(rs.getString(1))) {
-                    // 如果是 MySQL 模式，可以动态替换 dialect 或修改其内部标志
-                    return new MySqlDialect();
-                }
-            } catch (Exception ignored) {
-            }
-
-            return this;
-        }
-    }
-
-    static class MySqlDialect implements SqlDialect {
-        public String getName() { return "MySQL"; }
-        public String quoteIdentifier(String name) { return "`" + name + "`"; }
-        public String applyPagination(String sql, int maxRows) { return sql + " LIMIT " + maxRows; }
-        public String getCustomInstruction() { return "使用反引号处理别名。支持标准的 LIMIT 分页。"; }
-        public String getErrorHint(SQLException e) { return "请检查 SQL 语法及 MySQL 关键字冲突。"; }
-
-        @Override
-        public String findSchema(Connection conn) throws SQLException {
-            return null;
-        }
-    }
-
-    static class OracleDmDialect implements SqlDialect {
-        public String getName() { return "Oracle/Dameng"; }
-        public String quoteIdentifier(String name) { return "\"" + name.toUpperCase() + "\""; }
-        public String applyPagination(String sql, int maxRows) {
-            return "SELECT * FROM (" + sql + ") WHERE ROWNUM <= " + maxRows;
-        }
-        public String getCustomInstruction() { return "Oracle/达梦对别名建议使用双引号。必须通过 ROWNUM 限制行数。"; }
-        public String getErrorHint(SQLException e) { return "注意 Oracle 中 GROUP BY 必须包含 SELECT 中所有非聚合列。"; }
-        @Override
-        public boolean hasLimit(String upperSql) {
-            return upperSql.contains("ROWNUM") || upperSql.contains("FETCH FIRST");
-        }
-    }
-
-    static class PostgreDialect implements SqlDialect {
-        public String getName() { return "PostgreSQL/Kingbase/Highgo"; }
-        public String quoteIdentifier(String name) { return "\"" + name + "\""; }
-        public String applyPagination(String sql, int maxRows) { return sql + " LIMIT " + maxRows; }
-        public String getCustomInstruction() { return "PG/金仓/瀚高库区分大小写，别名请加双引号。支持 LIMIT 分页。"; }
-        public String getErrorHint(SQLException e) { return "请确认字段名大小写是否匹配。"; }
-    }
-
-    static class GenericDialect implements SqlDialect {
-        public String getName() { return "Generic SQL"; }
-        public String quoteIdentifier(String name) { return "\"" + name + "\""; }
-        public String applyPagination(String sql, int maxRows) { return sql + " FETCH FIRST " + maxRows + " ROWS ONLY"; }
-        public String getCustomInstruction() { return "遵循标准 SQL 语法。"; }
-        public String getErrorHint(SQLException e) { return "请检查方言兼容性。"; }
     }
 }
