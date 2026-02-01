@@ -82,23 +82,24 @@ public class Text2SqlSkill extends AbsSkill {
     private void loadGlobalMetadata() {
         try (Connection conn = sqlUtils.getDataSource().getConnection()) {
             DatabaseMetaData dbMeta = conn.getMetaData();
-            this.dialectName = dbMeta.getDatabaseProductName();
+            // 自动适配 H2/MySQL/Oracle 的大小写敏感问题
             String catalog = conn.getCatalog();
-            String schema = conn.getSchema();
-
+            // 很多数据库 schema 传 null 效果更好
             for (String tableName : tableNames) {
-                // 预取表注释
-                try (ResultSet rs = dbMeta.getTables(catalog, schema, tableName, new String[]{"TABLE", "VIEW"})) {
+                // 获取注释
+                try (ResultSet rs = dbMeta.getTables(catalog, null, tableName, new String[]{"TABLE", "VIEW"})) {
                     if (rs.next()) {
                         String remarks = rs.getString("REMARKS");
                         if (Utils.isNotEmpty(remarks)) tableRemarksMap.put(tableName, remarks);
                     }
                 }
-                // 预取外键关系，构建全局地图
-                try (ResultSet rs = dbMeta.getImportedKeys(catalog, schema, tableName)) {
+                // 获取外键关系 (这里是 DYNAMIC 模式 AI 决策的关键)
+                try (ResultSet rs = dbMeta.getImportedKeys(catalog, null, tableName)) {
                     while (rs.next()) {
-                        String rel = tableName + "." + rs.getString("FKCOLUMN_NAME") +
-                                " -> " + rs.getString("PKTABLE_NAME") + "." + rs.getString("PKCOLUMN_NAME");
+                        String pkTable = rs.getString("PKTABLE_NAME");
+                        String pkCol = rs.getString("PKCOLUMN_NAME");
+                        String fkCol = rs.getString("FKCOLUMN_NAME");
+                        String rel = tableName + "." + fkCol + " -> " + pkTable + "." + pkCol;
                         globalRelations.computeIfAbsent(tableName, k -> new ArrayList<>()).add(rel);
                     }
                 }
