@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -26,7 +27,7 @@ import org.noear.solon.lang.Preview;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public interface AgentChunk {
+public interface AgentChunk extends NonSerializable {
     /**
      * 获取当前产生块的智能体名字
      */

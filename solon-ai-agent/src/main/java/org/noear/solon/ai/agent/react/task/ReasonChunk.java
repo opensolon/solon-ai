@@ -29,9 +29,9 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.9.1")
 public class ReasonChunk extends AbsAgentChunk {
-    private final Node node;
-    private final ReActTrace trace;
-    private final ChatResponse response;
+    private final transient Node node;
+    private final transient ReActTrace trace;
+    private final transient ChatResponse response;
 
     public ReasonChunk(Node node, ReActTrace trace, ChatResponse response) {
         super(trace.getAgentName(), trace.getSession(), response.getMessage());

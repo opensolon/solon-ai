@@ -27,8 +27,8 @@ import org.noear.solon.flow.Node;
  * @since 3.9.1
  */
 public class NodeChunk extends AbsAgentChunk {
-    private final TeamTrace trace;
-    private final Node node;
+    private final transient TeamTrace trace;
+    private final transient Node node;
 
     public NodeChunk(Node node, TeamTrace trace, ChatMessage message) {
         super(trace.getAgentName(), trace.getSession(), message);

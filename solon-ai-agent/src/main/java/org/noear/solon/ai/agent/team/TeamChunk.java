@@ -25,7 +25,7 @@ import org.noear.solon.ai.agent.AbsAgentChunk;
  * @since 3.9.1
  */
 public class TeamChunk extends AbsAgentChunk {
-    private final TeamResponse response;
+    private final transient TeamResponse response;
 
     public TeamChunk(TeamResponse resp) {
         super(resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());

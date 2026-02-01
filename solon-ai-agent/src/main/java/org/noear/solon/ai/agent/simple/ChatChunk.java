@@ -28,8 +28,8 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.9.1")
 public class ChatChunk extends AbsAgentChunk {
-    private final SimpleTrace trace;
-    private final ChatResponse response;
+    private final transient SimpleTrace trace;
+    private final transient ChatResponse response;
 
     public ChatChunk(SimpleTrace trace, ChatResponse response) {
         super(trace.getAgentName(), trace.getSession(), response.getMessage());

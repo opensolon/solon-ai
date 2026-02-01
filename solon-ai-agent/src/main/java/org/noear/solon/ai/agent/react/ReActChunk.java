@@ -26,7 +26,7 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.9.1")
 public class ReActChunk extends AbsAgentChunk {
-    private final ReActResponse response;
+    private final transient ReActResponse response;
 
     public ReActChunk(ReActResponse resp) {
         super(resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());

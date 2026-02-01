@@ -27,8 +27,8 @@ import org.noear.solon.lang.Preview;
 @Preview("3.9.1")
 public abstract class AbsAgentChunk implements AgentChunk {
     protected final String agentName;
-    protected final AgentSession session;
     protected final ChatMessage message;
+    protected final transient AgentSession session;
 
     public AbsAgentChunk(String agentName, AgentSession session, ChatMessage message) {
         this.agentName = agentName;

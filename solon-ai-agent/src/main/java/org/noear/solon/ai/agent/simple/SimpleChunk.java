@@ -27,7 +27,7 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.9.1")
 public class SimpleChunk extends AbsAgentChunk {
-    private final SimpleResponse response;
+    private final transient SimpleResponse response;
 
     public SimpleChunk(SimpleResponse resp) {
         super(resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());

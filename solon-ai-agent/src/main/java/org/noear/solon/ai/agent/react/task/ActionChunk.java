@@ -29,8 +29,8 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.9.1")
 public class ActionChunk extends AbsAgentChunk {
-    private final Node node;
-    private final ReActTrace trace;
+    private final transient Node node;
+    private final transient ReActTrace trace;
 
     public ActionChunk(Node node, ReActTrace trace, ChatMessage message) {
         super(trace.getAgentName(), trace.getSession(), message);

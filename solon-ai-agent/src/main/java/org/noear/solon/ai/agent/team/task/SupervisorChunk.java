@@ -24,9 +24,9 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.9.1")
 public class SupervisorChunk extends AbsAgentChunk {
-    private final Node node;
-    private final TeamTrace trace;
-    private final ChatResponse response;
+    private final transient Node node;
+    private final transient TeamTrace trace;
+    private final transient ChatResponse response;
 
     public SupervisorChunk(Node node, TeamTrace trace, ChatResponse response) {
         super(trace.getAgentName(), trace.getSession(), response.getMessage());
