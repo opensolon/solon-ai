@@ -132,15 +132,18 @@ public class OpenApiSkill extends AbsSkill {
         if (node.isObject()) {
             ONode cleanNode = new ONode().asObject();
             node.getObjectUnsafe().forEach((k, v) -> {
-                // 包含组合模式支持 (anyOf, allOf 等)
                 if ("type".equals(k) || "properties".equals(k) || "items".equals(k) ||
                         "required".equals(k) || "description".equals(k) || "enum".equals(k) || k.contains("Of")) {
+
                     if ("properties".equals(k)) {
-                        ONode props = cleanNode.get("properties");
-                        v.getObjectUnsafe().forEach((pk, pv) -> props.set(pk, resolveRefNode(pv, new HashSet<>(visited))));
+                        ONode props = cleanNode.getOrNew("properties").asObject();
+                        v.getObjectUnsafe().forEach((pk, pv) -> {
+                            props.set(pk, resolveRefNode(pv, new HashSet<>(visited)));
+                        });
                     } else if ("items".equals(k)) {
                         cleanNode.set("items", resolveRefNode(v, new HashSet<>(visited)));
                     } else {
+                        // type, description 等直接填充
                         cleanNode.set(k, v);
                     }
                 }
@@ -292,17 +295,37 @@ public class OpenApiSkill extends AbsSkill {
                         tool.setName(generateName(detail, tool.getMethod(), path));
                         tool.setDescription(extractDescription(detail));
 
-                        // 修正：先检查 responses 是否存在
+                        // 1. Output 解析优化
                         if (detail.hasKey("responses")) {
                             ONode resps = detail.get("responses");
                             ONode node200 = resps.get("200");
                             if (node200.isNull()) node200 = resps.get("201");
 
-                            // V2 的 schema 在 response 节点下
-                            tool.setOutputSchema(skill.resolveRef(node200.get("schema")));
+                            // 显式提取 schema
+                            ONode schemaNode = node200.get("schema");
+                            // 这里的逻辑很关键：resolveRef 必须处理正确的上下文
+                            tool.setOutputSchema(skill.resolveRef(schemaNode));
                         }
 
-                        tool.setInputSchema(skill.resolveRef(detail.get("parameters")));
+                        // 2. Input 解析优化 (针对 V2 的 parameters 数组)
+                        ONode params = detail.get("parameters");
+                        if (params.isArray()) {
+                            StringBuilder inputSb = new StringBuilder();
+                            for (ONode p : params.getArrayUnsafe()) {
+                                if (p.hasKey("schema")) {
+                                    // 处理 body 参数中的 $ref
+                                    inputSb.append("Body: ").append(skill.resolveRef(p.get("schema")));
+                                } else {
+                                    // 处理 path/query 等普通参数
+                                    // 避免直接对整个数组 resolveRef，而是逐个处理
+                                    inputSb.append(p.toJson());
+                                }
+                            }
+                            tool.setInputSchema(inputSb.toString());
+                        } else {
+                            tool.setInputSchema(skill.resolveRef(params));
+                        }
+
                         tool.setDeprecated(detail.get("deprecated").getBoolean());
                         tools.add(tool);
                     }

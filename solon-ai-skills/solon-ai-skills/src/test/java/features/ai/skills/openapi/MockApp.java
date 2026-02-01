@@ -3,6 +3,7 @@ package features.ai.skills.openapi;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.annotation.*;
+import org.noear.solon.core.handle.Context;
 
 import java.util.Map;
 
@@ -18,7 +19,6 @@ public class MockApp {
     }
 
     // --- 1. 模拟 OpenAPI 3.0 (OAS3) ---
-
     @Get
     @Mapping("swagger/v3/api-docs")
     public String apiDocs3() {
@@ -38,31 +38,40 @@ public class MockApp {
                 "        \"requestBody\": { \"content\": { \"application/json\": { \"schema\": { \"$ref\": \"#/components/schemas/OrderRequest\" } } } },\n" +
                 "        \"responses\": { \"200\": { \"content\": { \"application/json\": { \"schema\": { \"type\": \"object\", \"properties\": { \"orderId\": { \"type\": \"string\" } } } } } } }\n" +
                 "      }\n" +
-                "    }\n" +
+                "    },\n" + // <-- 修正：补齐逗号
                 "    \"/admin/config\": {\n" +
                 "      \"get\": {\n" +
                 "        \"summary\": \"[鉴权] 获取系统配置\",\n" +
                 "        \"responses\": { \"200\": { \"description\": \"OK\", \"content\": { \"application/json\": { \"schema\": { \"type\": \"object\" } } } } }\n" +
                 "       }\n" +
-                "    }"+
+                "    },\n" + // <-- 修正：补齐逗号
+                "    \"/users/error_test\": {\n" +
+                "      \"get\": {\n" +
+                "        \"summary\": \"错误测试接口\",\n" +
+                "        \"parameters\": [ { \"name\": \"age\", \"in\": \"query\", \"required\": true, \"schema\": { \"type\": \"integer\" } } ],\n" +
+                "        \"responses\": { \"200\": { \"description\": \"OK\" } }\n" +
+                "      }\n" +
+                "    }\n" +
                 "  },\n" +
                 "  \"components\": {\n" +
                 "    \"schemas\": {\n" +
                 "      \"User\": {\n" +
                 "        \"type\": \"object\",\n" +
-                "        \"description\": \"用户信息，包含 id, name, status(状态: active/inactive)\",\n" +
+                "        \"description\": \"用户信息\",\n" +
                 "        \"properties\": {\n" +
                 "          \"id\": { \"type\": \"integer\" },\n" +
                 "          \"name\": { \"type\": \"string\" },\n" +
-                "          \"status\": { \"type\": \"string\", \"description\": \"用户状态: active, disabled\" }\n" +
+                "          \"status\": { \"type\": \"string\" },\n" +
+                "          \"group\": { \"$ref\": \"#/components/schemas/Group\" }\n" + // 循环引用测试支持
                 "        }\n" +
+                "      },\n" +
+                "      \"Group\": {\n" +
+                "        \"type\": \"object\",\n" +
+                "        \"properties\": { \"name\": { \"type\": \"string\" }, \"leader\": { \"$ref\": \"#/components/schemas/User\" } }\n" +
                 "      },\n" +
                 "      \"OrderRequest\": {\n" +
                 "        \"type\": \"object\",\n" +
-                "        \"properties\": {\n" +
-                "          \"productName\": { \"type\": \"string\" },\n" +
-                "          \"amount\": { \"type\": \"integer\" }\n" +
-                "        },\n" +
+                "        \"properties\": { \"productName\": { \"type\": \"string\" }, \"amount\": { \"type\": \"integer\" } },\n" +
                 "        \"required\": [\"productName\"]\n" +
                 "      }\n" +
                 "    }\n" +
@@ -76,68 +85,68 @@ public class MockApp {
     public String apiDocs2() {
         return "{\n" +
                 "  \"swagger\": \"2.0\",\n" +
+                "  \"info\": { \"title\": \"Mock API\", \"version\": \"1.0\" },\n" +
                 "  \"paths\": {\n" +
                 "    \"/users/{id}\": {\n" +
                 "      \"get\": {\n" +
                 "        \"summary\": \"获取用户信息\",\n" +
                 "        \"parameters\": [ { \"name\": \"id\", \"in\": \"path\", \"required\": true, \"type\": \"integer\" } ],\n" +
-                "        \"responses\": { \"200\": { \"description\": \"成功\", \"schema\": { \"$ref\": \"#/definitions/User\" } } }\n" +
+                "        \"responses\": {\n" +
+                "          \"200\": {\n" +
+                "            \"description\": \"OK\",\n" +
+                "            \"schema\": { \"$ref\": \"#/definitions/User\" }\n" +
+                "          }\n" +
+                "        }\n" +
                 "      }\n" +
                 "    },\n" +
                 "    \"/orders/create\": {\n" +
                 "      \"post\": {\n" +
                 "        \"summary\": \"创建订单\",\n" +
-                "        \"parameters\": [ \n" +
-                "           { \"name\": \"body\", \"in\": \"body\", \"required\": true, \"schema\": { \"$ref\": \"#/definitions/OrderRequest\" } } \n" +
-                "        ],\n" +
-                "        \"responses\": { \"200\": { \"description\": \"成功\", \"schema\": { \"type\": \"object\", \"properties\": { \"orderId\": { \"type\": \"string\" } } } } }\n" +
+                "        \"parameters\": [ { \"name\": \"body\", \"in\": \"body\", \"required\": true, \"schema\": { \"$ref\": \"#/definitions/OrderRequest\" } } ],\n" +
+                "        \"responses\": { \"200\": { \"description\": \"OK\", \"schema\": { \"type\": \"object\", \"properties\": { \"orderId\": { \"type\": \"string\" } } } } }\n" +
                 "      }\n" +
                 "    },\n" +
                 "    \"/admin/config\": {\n" +
                 "      \"get\": {\n" +
                 "        \"summary\": \"[鉴权] 获取系统配置\",\n" +
-                "        \"responses\": { \"200\": { \"description\": \"OK\" }, \"schema\": { \"type\": \"object\" } }\n" +
+                "        \"responses\": { \"200\": { \"description\": \"OK\", \"schema\": { \"type\": \"object\" } } }\n" +
                 "      }\n" +
                 "    }\n" +
                 "  },\n" +
                 "  \"definitions\": {\n" +
                 "    \"User\": {\n" +
                 "      \"type\": \"object\",\n" +
-                "      \"description\": \"用户信息，包含 id, name, status(状态: active/inactive)\",\n" +
                 "      \"properties\": {\n" +
                 "        \"id\": { \"type\": \"integer\" },\n" +
                 "        \"name\": { \"type\": \"string\" },\n" +
-                "          \"status\": { \"type\": \"string\", \"description\": \"用户状态: active, disabled\" }\n" +
+                "        \"status\": { \"type\": \"string\" },\n" + // 明确加上 status 类型
+                "        \"group\": { \"$ref\": \"#/definitions/Group\" }\n" +
                 "      }\n" +
                 "    },\n" +
                 "    \"Group\": {\n" +
                 "      \"type\": \"object\",\n" +
-                "      \"properties\": {\n" +
-                "        \"name\": { \"type\": \"string\" },\n" +
-                "        \"leader\": { \"$ref\": \"#/definitions/User\" }\n" + // 模拟循环引用 (V2)
-                "      }\n" +
+                "      \"properties\": { \"name\": { \"type\": \"string\" }, \"leader\": { \"$ref\": \"#/definitions/User\" } }\n" +
                 "    },\n" +
                 "    \"OrderRequest\": {\n" +
                 "      \"type\": \"object\",\n" +
                 "      \"properties\": {\n" +
                 "        \"productName\": { \"type\": \"string\" },\n" +
-                "        \"detail\": { \"$ref\": \"#/definitions/OrderDetail\" }\n" + // 多级嵌套 (V2)
-                "      },\n" +
-                "      \"required\": [\"productName\"]\n" +
+                "        \"detail\": { \"$ref\": \"#/definitions/OrderDetail\" }\n" +
+                "      }\n" +
                 "    },\n" +
-                "    \"OrderDetail\": {\n" +
-                "      \"type\": \"object\",\n" +
-                "      \"properties\": { \"remark\": { \"type\": \"string\" }, \"priority\": { \"type\": \"integer\" } }\n" +
-                "    }\n" +
+                "    \"OrderDetail\": { \"type\": \"object\", \"properties\": { \"remark\": { \"type\": \"string\" } } }\n" +
                 "  }\n" +
                 "}";
     }
 
+    // --- 业务接口实现 ---
+
     @Get
     @Mapping("admin/config")
-    public Map<String, Object> getConfig(@Header("Authorization") String auth) {
+    public Map<String, Object> getConfig(Context ctx, @Header("Authorization") String auth) {
         if (auth == null || !auth.contains("mock-token")) {
-            throw new RuntimeException("401 Unauthorized");
+            ctx.status(401); // 显式设置 401，满足 testAuthentication_Flow
+            return Utils.asMap("error", "Unauthorized");
         }
         return Utils.asMap("env", "prod", "version", "1.0.0");
     }
@@ -158,7 +167,6 @@ public class MockApp {
     @Mapping("users/error_test")
     public Map<String, Object> errorTest(Integer age) {
         if (age == null) {
-            // 故意抛出错误，提示需要 age 参数
             throw new IllegalArgumentException("Missing required parameter: age");
         }
         return Utils.asMap("result", "ok");
