@@ -1,4 +1,4 @@
-package features.ai.team.def;
+package features.ai.team.stream;
 
 import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Assertions;
