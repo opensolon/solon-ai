@@ -2,7 +2,7 @@ package demo.ai.skills.openapi;
 
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.openapi.OpenApiSkill;
+import org.noear.solon.ai.skills.restapi.RestApiSkill;
 
 public class Demo {
     public void test(ChatModel chatModel) throws Throwable {
@@ -11,7 +11,7 @@ public class Demo {
         String baseUrl = "http://api.example.com";
 
         // 2. 创建技能
-        OpenApiSkill apiSkill = new OpenApiSkill(docUrl, baseUrl);
+        RestApiSkill apiSkill = new RestApiSkill(docUrl, baseUrl);
 
         // 3. 构建 Agent 或 ChatModel
         SimpleAgent agent = SimpleAgent.of(chatModel)

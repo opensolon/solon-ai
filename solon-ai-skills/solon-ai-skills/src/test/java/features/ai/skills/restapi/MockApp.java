@@ -1,4 +1,4 @@
-package features.ai.skills.openapi;
+package features.ai.skills.restapi;
 
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;

@@ -28,8 +28,8 @@ solon-ai-skill-openapi 是 Solon AI 的一个标准插件，让 AI Agent 能够�
 ```java
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.openapi.OpenApiSkill;
-import org.noear.solon.ai.skills.openapi.SchemaMode;
+import org.noear.solon.ai.skills.restapi.RestApiSkill;
+import org.noear.solon.ai.skills.restapi.SchemaMode;
 
 public class Demo {
     public void test(ChatModel chatModel) throws Throwable {
@@ -38,7 +38,7 @@ public class Demo {
         String baseUrl = "http://api.example.com";
 
         // 2. 创建技能
-        OpenApiSkill apiSkill = new OpenApiSkill(docUrl, baseUrl)
+        RestApiSkill apiSkill = new RestApiSkill(docUrl, baseUrl)
                 .schemaMode(SchemaMode.DYNAMIC);
 
         // 3. 构发建 Agent 或 ChatModel

@@ -1,4 +1,19 @@
-package org.noear.solon.ai.skills.openapi;
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.noear.solon.ai.skills.restapi;
 
 import org.noear.solon.core.util.Assert;
 
@@ -65,31 +80,31 @@ public class ApiTool {
 
     // --- Setter 方法 (内部权限) ---
 
-    protected void setName(String name) {
+    public void setName(String name) {
         this.name = name;
     }
 
-    protected void setDescription(String description) {
+    public void setDescription(String description) {
         this.description = description;
     }
 
-    protected void setPath(String path) {
+    public void setPath(String path) {
         this.path = path;
     }
 
-    protected void setMethod(String method) {
+    public void setMethod(String method) {
         this.method = method;
     }
 
-    protected void setInputSchema(String inputSchema) {
+    public void setInputSchema(String inputSchema) {
         this.inputSchema = inputSchema;
     }
 
-    protected void setOutputSchema(String outputSchema) {
+    public void setOutputSchema(String outputSchema) {
         this.outputSchema = outputSchema;
     }
 
-    protected void setDeprecated(boolean deprecated) {
+    public void setDeprecated(boolean deprecated) {
         isDeprecated = deprecated;
     }
 }

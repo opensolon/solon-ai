@@ -13,24 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.skills.openapi;
+package org.noear.solon.ai.skills.restapi;
+
+import org.noear.solon.lang.Preview;
+
+import java.util.List;
 
 /**
- * 元数据加载模式
  *
- * <p>用于控制 AI 获取接口或数据库元数据的粒度，以平衡 Token 消耗与推理精度</p>
  *
  * @author noear
- * @since 3.0
+ * @since 3.9.1
  */
-public enum SchemaMode {
-    /**
-     * 全量模式（初始化时将所有元数据注入 Prompt，适用于小规模接口/表）
-     */
-    FULL,
+@Preview("3.9.1")
+public interface ApiResolver {
+    String getName();
 
-    /**
-     * 动态模式（仅注入目录，AI 根据需要调用探测工具获取具体元数据，适用于大规模场景）
-     */
-    DYNAMIC
+    List<ApiTool> resolve(String definitionUrl, String source);
 }

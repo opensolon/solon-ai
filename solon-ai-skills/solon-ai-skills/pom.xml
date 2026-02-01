@@ -43,7 +43,7 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-skill-openapi</artifactId>
+            <artifactId>solon-ai-skill-restapi</artifactId>
         </dependency>
 
         <dependency>
