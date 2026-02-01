@@ -29,7 +29,7 @@ public class ReActChunk extends AbsAgentChunk {
     private final ReActResponse response;
 
     public ReActChunk(ReActResponse resp) {
-        super(resp.getTrace().getAgentName(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
+        super(resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
         this.response = resp;
     }
 

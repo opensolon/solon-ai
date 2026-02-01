@@ -97,7 +97,7 @@ public class PlanTask implements NamedTaskComponent {
             response = req.stream()
                     .doOnNext(resp->{
                         trace.getOptions().getStreamSink().next(
-                                new PlanChunk(ReActAgent.ID_PLAN, trace, resp));
+                                new PlanChunk(trace, resp));
                     })
                     .blockLast();
         } else {

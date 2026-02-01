@@ -28,7 +28,7 @@ public class TeamChunk extends AbsAgentChunk {
     private final TeamResponse response;
 
     public TeamChunk(TeamResponse resp) {
-        super(resp.getTrace().getAgentName(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
+        super(resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
         this.response = resp;
     }
 

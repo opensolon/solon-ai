@@ -30,7 +30,7 @@ public class SimpleChunk extends AbsAgentChunk {
     private final SimpleResponse response;
 
     public SimpleChunk(SimpleResponse resp) {
-        super(resp.getTrace().getAgentName(), resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
+        super(resp.getTrace().getAgentName(), resp.getSession(), resp.getMessage());
         this.response = resp;
     }
 

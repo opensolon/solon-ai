@@ -30,8 +30,8 @@ import org.noear.solon.lang.Preview;
 public class ActionChunk extends AbsAgentChunk {
     private final ReActTrace trace;
 
-    public ActionChunk(String nodeId, ReActTrace trace, ChatMessage message) {
-        super(nodeId, trace.getAgentName(), trace.getSession(), message);
+    public ActionChunk(ReActTrace trace, ChatMessage message) {
+        super(trace.getAgentName(), trace.getSession(), message);
         this.trace = trace;
     }
 

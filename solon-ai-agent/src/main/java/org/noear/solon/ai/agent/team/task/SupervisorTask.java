@@ -297,7 +297,7 @@ public class SupervisorTask implements NamedTaskComponent {
                     return req.stream()
                             .doOnNext(resp -> {
                                 trace.getOptions().getStreamSink().next(
-                                        new SupervisorChunk(TeamAgent.ID_SUPERVISOR, trace, resp));
+                                        new SupervisorChunk(trace, resp));
                             })
                             .blockLast();
                 }

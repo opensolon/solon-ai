@@ -31,8 +31,8 @@ public class PlanChunk extends AbsAgentChunk {
     private final ReActTrace trace;
     private final ChatResponse response;
 
-    public PlanChunk(String nodeId, ReActTrace trace, ChatResponse response) {
-        super(nodeId, trace.getAgentName(), trace.getSession(), response.getMessage());
+    public PlanChunk(ReActTrace trace, ChatResponse response) {
+        super(trace.getAgentName(), trace.getSession(), response.getMessage());
         this.trace = trace;
         this.response = response;
     }

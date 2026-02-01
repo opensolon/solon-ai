@@ -227,7 +227,7 @@ public class ReasonTask implements NamedTaskComponent {
                 if (trace.getOptions().getStreamSink() != null) {
                     return req.stream().doOnNext(resp->{
                         trace.getOptions().getStreamSink()
-                                .next(new ReasonChunk(ReActAgent.ID_REASON, trace, resp));
+                                .next(new ReasonChunk(trace, resp));
                     }).blockLast();
                 } else {
                     return req.call();

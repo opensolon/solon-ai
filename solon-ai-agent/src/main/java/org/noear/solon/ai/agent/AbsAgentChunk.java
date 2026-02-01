@@ -26,21 +26,14 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.9.1")
 public abstract class AbsAgentChunk implements AgentChunk {
-    protected final String nodeId;
     protected final String agentName;
     protected final AgentSession session;
     protected final ChatMessage message;
 
-    public AbsAgentChunk(String nodeId, String agentName, AgentSession session, ChatMessage message) {
-        this.nodeId = nodeId;
+    public AbsAgentChunk(String agentName, AgentSession session, ChatMessage message) {
         this.agentName = agentName;
         this.session = session;
         this.message = message;
-    }
-
-    @Override
-    public String getNodeId() {
-        return nodeId;
     }
 
     @Override

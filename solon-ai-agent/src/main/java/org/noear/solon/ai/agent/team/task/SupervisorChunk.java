@@ -26,8 +26,8 @@ public class SupervisorChunk extends AbsAgentChunk {
     private final TeamTrace trace;
     private final ChatResponse response;
 
-    public SupervisorChunk(String nodeId, TeamTrace trace, ChatResponse response) {
-        super(nodeId, trace.getAgentName(), trace.getSession(), response.getMessage());
+    public SupervisorChunk(TeamTrace trace, ChatResponse response) {
+        super(trace.getAgentName(), trace.getSession(), response.getMessage());
 
         this.trace = trace;
         this.response = response;

@@ -33,11 +33,6 @@ public interface AgentChunk {
     String getAgentName();
 
     /**
-     * 获取流程节点 ID（用于 Flow 任务溯源）
-     */
-    String getNodeId();
-
-    /**
      * 获取所属会话
      */
     AgentSession getSession();
