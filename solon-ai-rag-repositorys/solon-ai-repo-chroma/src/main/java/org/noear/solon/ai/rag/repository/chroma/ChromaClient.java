@@ -155,7 +155,16 @@ public class ChromaClient {
      */
     public boolean isHealthy() {
         try {
-            String endpoint = buildEndpoint("heartbeat");
+            // heartbeat 端点不包含 tenant 和 database 路径
+            String endpoint;
+            if ("v1".equals(apiVersion)) {
+                endpoint = baseUrl + "api/v1/heartbeat";
+            } else if ("v2".equals(apiVersion)) {
+                endpoint = baseUrl + "api/v2/heartbeat";
+            } else {
+                return false;
+            }
+            
             String response = http(endpoint).get();
 
             Map<String, Object> responseMap = ONode.deserialize(response, Map.class);
@@ -246,6 +255,9 @@ public class ChromaClient {
             CollectionResponse response = http(endpoint).getAs(CollectionResponse.class);
 
             if (response.hasError()) {
+                if ("NotFoundError".equals(response.getError())){
+                    return null;
+                }
                 throw new IOException("Failed to get collection stats: " + response.getMessage());
             }
 

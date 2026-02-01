@@ -45,8 +45,12 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
 
     /**
      * 初始化仓库
+     * 如果集合不存在，则自动创建新集合
+     *
+     * @throws IOException 如果初始化失败
      */
     public void initRepository() throws IOException {
+        // 如果已经初始化过，直接返回
         if (collectionId != null) {
             return;
         }
@@ -56,13 +60,10 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
 
         if (collection != null) {
             collectionId = collection.getId();
-        }
-
-        if (collectionId != null) {
             return;
         }
 
-        // 创建新集合
+        // 集合不存在，创建新集合
         createNewCollection();
 
         // 验证集合是否创建成功
