@@ -16,12 +16,29 @@ public class PythonSkill extends AbsProcessSkill {
     private final String pythonCmd;
 
     public PythonSkill(String workDir) {
-        this(workDir, "python");
+        this(workDir, probePythonCmd());
     }
 
     public PythonSkill(String workDir, String pythonCmd) {
         super(workDir);
         this.pythonCmd = pythonCmd;
+    }
+
+    private static String probePythonCmd() {
+        if (checkCmd("python3")) {
+            return "python3";
+        } else {
+            return "python"; // 即使不存在，也作为默认值抛出后续异常
+        }
+    }
+
+    private static boolean checkCmd(String cmd) {
+        try {
+            Process p = Runtime.getRuntime().exec(cmd + " --version");
+            return p.waitFor() == 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override

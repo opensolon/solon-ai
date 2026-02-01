@@ -33,7 +33,7 @@ public class PythonSkillTests {
         Files.createDirectories(root);
 
         // 2. 初始化技能 (会自动探测系统的 python 指令)
-        pythonSkill = new PythonSkill(workDir, "python3");
+        pythonSkill = new PythonSkill(workDir);
     }
 
     // --- 1. 基础功能测试 ---
