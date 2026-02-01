@@ -60,7 +60,7 @@ public class Text2SqlSkill extends AbsSkill {
     protected String cachedSchemaInfo;
     protected int maxRows = 50;
     protected int maxContextLength = 8000;
-    protected SchemaMode schemaMode = SchemaMode.FULL;
+    protected SchemaMode schemaMode = null;
     protected boolean readOnly = true;
 
     public Text2SqlSkill(DataSource dataSource, String... tables) {
@@ -71,6 +71,12 @@ public class Text2SqlSkill extends AbsSkill {
         super();
         this.sqlUtils = sqlUtils;
         this.tableNames = Arrays.asList(tables);
+    }
+
+    private void init(){
+        if(schemaMode != null) {
+            return;
+        }
 
         // 1. 初始化方言适配器与元数据
         initDialectAndMetadata();
@@ -86,28 +92,34 @@ public class Text2SqlSkill extends AbsSkill {
     private void initDialectAndMetadata() {
         try (Connection conn = sqlUtils.getDataSource().getConnection()) {
             DatabaseMetaData dbMeta = conn.getMetaData();
+
             String productName = dbMeta.getDatabaseProductName();
 
             // 自动匹配方言
-            this.dialect = DialectFactory.create(productName);
+            if(this.dialect == null) {
+                this.dialect = DialectFactory.create(productName);
+            }
+
+            dialect = dialect.adaptDialect(conn);
 
             String catalog = conn.getCatalog();
+            String schema = dialect.findSchema(conn);
+
             for (String tableName : tableNames) {
                 // 加载表备注
-                try (ResultSet rs = dbMeta.getTables(catalog, null, tableName, new String[]{"TABLE", "VIEW"})) {
+                try (ResultSet rs = dbMeta.getTables(catalog, schema, tableName, new String[]{"TABLE", "VIEW"})) {
                     if (rs.next()) {
-                        String remarks = rs.getString("REMARKS");
+                        String remarks = dialect.getRemark(tableName, rs);
                         if (Utils.isNotEmpty(remarks)) tableRemarksMap.put(tableName, remarks);
                     }
                 }
                 // 加载外键关联
-                try (ResultSet rs = dbMeta.getImportedKeys(catalog, null, tableName)) {
+                try (ResultSet rs = dbMeta.getImportedKeys(catalog, schema, tableName)) {
                     while (rs.next()) {
-                        String pkTable = rs.getString("PKTABLE_NAME");
-                        String pkCol = rs.getString("PKCOLUMN_NAME");
-                        String fkCol = rs.getString("FKCOLUMN_NAME");
-                        String rel = tableName + "." + fkCol + " -> " + pkTable + "." + pkCol;
-                        globalRelations.computeIfAbsent(tableName, k -> new ArrayList<>()).add(rel);
+                        String rel = dialect.getRelation(tableName, rs);
+                        if (Utils.isNotEmpty(rel)) {
+                            globalRelations.computeIfAbsent(tableName, k -> new ArrayList<>()).add(rel);
+                        }
                     }
                 }
             }
@@ -122,11 +134,21 @@ public class Text2SqlSkill extends AbsSkill {
     public Text2SqlSkill schemaMode(SchemaMode schemaMode) { this.schemaMode = schemaMode; return this; }
     public Text2SqlSkill readOnly(boolean readOnly) { this.readOnly = readOnly; return this; }
 
+    public Text2SqlSkill dialect(SqlDialect dialect) {
+        this.dialect = dialect;
+        return this;
+    }
+
     @Override
     public String name() { return "sql_expert"; }
 
     @Override
     public String description() { return "数据库专家：具备深厚的 " + dialect.getName() + " 方言知识，擅长多表分析。"; }
+
+    @Override
+    public void onAttach(Prompt prompt) {
+        init();
+    }
 
     @Override
     public String getInstruction(Prompt prompt) {
@@ -173,7 +195,7 @@ public class Text2SqlSkill extends AbsSkill {
         if (readOnly && !cleanSql.toUpperCase().startsWith("SELECT")) return "Error: Restricted to SELECT only.";
 
         // 分页补全
-        if (!hasLimit(cleanSql.toUpperCase())) {
+        if (!dialect.hasLimit(cleanSql.toUpperCase())) {
             cleanSql = dialect.applyPagination(cleanSql, maxRows);
         }
 
@@ -199,11 +221,6 @@ public class Text2SqlSkill extends AbsSkill {
         return sb.toString();
     }
 
-    private boolean hasLimit(String upperSql) {
-        return upperSql.contains("LIMIT") || upperSql.contains("FETCH") ||
-                upperSql.contains("TOP ") || upperSql.contains("ROWNUM");
-    }
-
     @ToolMapping(name = "get_table_schema", description = "获取特定表的详细列信息和 DDL")
     public String getTableSchema(@Param("tableName") String tableName) {
         if (!tableNames.contains(tableName)) return "Error: Table not found.";
@@ -215,7 +232,8 @@ public class Text2SqlSkill extends AbsSkill {
         try (Connection conn = sqlUtils.getDataSource().getConnection()) {
             DatabaseMetaData dbMeta = conn.getMetaData();
             String catalog = conn.getCatalog();
-            String schema = conn.getSchema();
+            String schema = dialect.findSchema(conn);
+
             for (String tableName : tables) {
                 sb.append("* **Table: ").append(tableName).append("**");
                 String remarks = tableRemarksMap.get(tableName);
@@ -224,16 +242,31 @@ public class Text2SqlSkill extends AbsSkill {
 
                 Set<String> pks = new HashSet<>();
                 try (ResultSet rs = dbMeta.getPrimaryKeys(catalog, schema, tableName)) {
-                    while (rs.next()) pks.add(rs.getString("COLUMN_NAME"));
+                    while (rs.next()) {
+                        String col = dialect.getColumnName(tableName, rs);
+                        pks.add(col);
+                    }
                 }
 
                 try (ResultSet rs = dbMeta.getColumns(catalog, schema, tableName, null)) {
                     while (rs.next()) {
-                        String col = rs.getString("COLUMN_NAME");
-                        sb.append("  - ").append(col).append(" (").append(rs.getString("TYPE_NAME")).append(")");
-                        if (pks.contains(col)) sb.append(" [PK]");
-                        String cRem = rs.getString("REMARKS");
-                        if (Utils.isNotEmpty(cRem)) sb.append(" // ").append(cRem);
+                        String colName = dialect.getColumnName(tableName, rs);
+                        String colType = dialect.getColumnType(tableName, rs);
+                        int colSize = dialect.getColumnSize(tableName, rs);
+                        boolean colNullable = dialect.getColumnNullable(tableName, rs);
+
+                        String typeDesc = colType;
+                        if (colSize > 0 && colSize < 16777215) {
+                            typeDesc += "(" + colSize + ")";
+                        }
+                        if(!colNullable){
+                            typeDesc += " NOT NULL";
+                        }
+
+                        sb.append("  - ").append(colName).append(" (").append(typeDesc).append(")");
+                        if (pks.contains(colName)) sb.append(" [PK]");
+                        String colRemark = dialect.getRemark(tableName, rs);
+                        if (Utils.isNotEmpty(colRemark)) sb.append(" // ").append(colRemark);
                         sb.append("\n");
                     }
                 }
@@ -258,10 +291,55 @@ public class Text2SqlSkill extends AbsSkill {
 
     public interface SqlDialect {
         String getName();
+
         String quoteIdentifier(String name);
+
         String applyPagination(String sql, int maxRows);
+
         String getCustomInstruction();
+
         String getErrorHint(SQLException e);
+
+        default String findSchema(Connection conn) throws SQLException {
+            return conn.getSchema();
+        }
+
+        default boolean hasLimit(String upperSql) {
+            return upperSql.contains("LIMIT") || upperSql.contains("FETCH") ||
+                    upperSql.contains("TOP ") || upperSql.contains("ROWNUM");
+        }
+
+        default String getRemark(String tableName, ResultSet rs) throws SQLException {
+            return rs.getString("REMARKS");
+        }
+
+        default String getColumnName(String tableName, ResultSet rs) throws SQLException {
+            return rs.getString("COLUMN_NAME");
+        }
+
+        default String getColumnType(String tableName, ResultSet rs) throws SQLException{
+            return rs.getString("TYPE_NAME");
+        }
+
+        default int getColumnSize(String tableName, ResultSet rs) throws SQLException{
+            return rs.getInt("COLUMN_SIZE");
+        }
+
+        default boolean getColumnNullable(String tableName, ResultSet rs) throws SQLException{
+            return "NO".equals(rs.getString("IS_NULLABLE")) == false;
+        }
+
+        default String getRelation(String tableName, ResultSet rs) throws SQLException {
+            String pkTable = rs.getString("PKTABLE_NAME");
+            String pkCol = rs.getString("PKCOLUMN_NAME");
+            String fkCol = rs.getString("FKCOLUMN_NAME");
+            String rel = tableName + "." + fkCol + " -> " + pkTable + "." + pkCol;
+            return rel;
+        }
+
+        default SqlDialect adaptDialect(Connection conn){
+            return this;
+        }
     }
 
     static class DialectFactory {
@@ -276,14 +354,37 @@ public class Text2SqlSkill extends AbsSkill {
     }
 
     static class H2Dialect implements SqlDialect {
-        public String getName() { return "H2 Database"; }
-        public String quoteIdentifier(String name) { return "\"" + name.toUpperCase() + "\""; }
-        public String applyPagination(String sql, int maxRows) { return sql + " LIMIT " + maxRows; }
+        public String getName() {
+            return "H2 Database";
+        }
+
+        public String quoteIdentifier(String name) {
+            return "\"" + name.toUpperCase() + "\"";
+        }
+
+        public String applyPagination(String sql, int maxRows) {
+            return sql + " LIMIT " + maxRows;
+        }
+
         public String getCustomInstruction() {
             return "H2 严格区分保留字。别名必须使用双引号(如 AS \"YEAR\")。长数字日期是序列化表现，严禁除以 1000，直接使用 YEAR() 等日期函数。";
         }
+
         public String getErrorHint(SQLException e) {
             return "H2 报错通常与未转义的保留字别名或非法的日期数学运算有关。";
+        }
+
+        public SqlDialect adaptDialect(Connection conn) {
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery("SELECT VALUE FROM INFORMATION_SCHEMA.SETTINGS WHERE NAME = 'MODE'")) {
+                if (rs.next() && "MySQL".equalsIgnoreCase(rs.getString(1))) {
+                    // 如果是 MySQL 模式，可以动态替换 dialect 或修改其内部标志
+                    return new MySqlDialect();
+                }
+            } catch (Exception ignored) {
+            }
+
+            return this;
         }
     }
 
@@ -293,6 +394,11 @@ public class Text2SqlSkill extends AbsSkill {
         public String applyPagination(String sql, int maxRows) { return sql + " LIMIT " + maxRows; }
         public String getCustomInstruction() { return "使用反引号处理别名。支持标准的 LIMIT 分页。"; }
         public String getErrorHint(SQLException e) { return "请检查 SQL 语法及 MySQL 关键字冲突。"; }
+
+        @Override
+        public String findSchema(Connection conn) throws SQLException {
+            return null;
+        }
     }
 
     static class OracleDmDialect implements SqlDialect {
@@ -303,6 +409,10 @@ public class Text2SqlSkill extends AbsSkill {
         }
         public String getCustomInstruction() { return "Oracle/达梦对别名建议使用双引号。必须通过 ROWNUM 限制行数。"; }
         public String getErrorHint(SQLException e) { return "注意 Oracle 中 GROUP BY 必须包含 SELECT 中所有非聚合列。"; }
+        @Override
+        public boolean hasLimit(String upperSql) {
+            return upperSql.contains("ROWNUM") || upperSql.contains("FETCH FIRST");
+        }
     }
 
     static class PostgreDialect implements SqlDialect {
