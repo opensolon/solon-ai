@@ -255,7 +255,7 @@ public class ChromaClient {
             CollectionResponse response = http(endpoint).getAs(CollectionResponse.class);
 
             if (response.hasError()) {
-                if ("NotFoundError".equals(response.getError())){
+                if ("NotFoundError".equals(response.getError()) || response.getError().contains("not exist")){
                     return null;
                 }
                 throw new IOException("Failed to get collection stats: " + response.getMessage());
