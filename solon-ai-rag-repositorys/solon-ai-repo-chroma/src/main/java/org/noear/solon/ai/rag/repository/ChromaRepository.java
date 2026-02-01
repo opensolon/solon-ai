@@ -22,6 +22,7 @@ import org.noear.solon.lang.Preview;
 
 /**
  * Chroma 矢量存储知识库
+ * 自动检测并支持 Chroma v1 和 v2 API 版本，默认使用 v2
  *
  * @author 小奶奶花生米
  * @since 3.1
@@ -44,8 +45,12 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
 
     /**
      * 初始化仓库
+     * 如果集合不存在，则自动创建新集合
+     *
+     * @throws IOException 如果初始化失败
      */
     public void initRepository() throws IOException {
+        // 如果已经初始化过，直接返回
         if (collectionId != null) {
             return;
         }
@@ -55,13 +60,10 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
 
         if (collection != null) {
             collectionId = collection.getId();
-        }
-
-        if (collectionId != null) {
             return;
         }
 
-        // 创建新集合
+        // 集合不存在，创建新集合
         createNewCollection();
 
         // 验证集合是否创建成功
@@ -349,5 +351,31 @@ public class ChromaRepository implements RepositoryStorable, RepositoryLifecycle
         public ChromaRepository build() {
             return new ChromaRepository(this);
         }
+    }
+
+    /**
+     * 创建 Builder（自动检测 API 版本）
+     *
+     * @param embeddingModel 向量模型
+     * @param baseUrl Chroma 服务器地址
+     * @return Builder 实例
+     */
+    public static Builder builder(EmbeddingModel embeddingModel, String baseUrl) {
+        ChromaClient client = new ChromaClient(baseUrl);
+        return new Builder(embeddingModel, client);
+    }
+
+    /**
+     * 创建支持完整配置的 Builder（自动检测 API 版本）
+     *
+     * @param embeddingModel 向量模型
+     * @param baseUrl Chroma 服务器地址
+     * @param tenant 租户名称 (仅 v2 API 需要)
+     * @param database 数据库名称 (仅 v2 API 需要)
+     * @return Builder 实例
+     */
+    public static Builder builder(EmbeddingModel embeddingModel, String baseUrl, String tenant, String database) {
+        ChromaClient client = new ChromaClient(baseUrl, tenant, database);
+        return new Builder(embeddingModel, client);
     }
 }
