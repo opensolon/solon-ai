@@ -73,7 +73,8 @@ public class StopLoopInterceptor implements ReActInterceptor {
             // 记录 WARN 日志，便于生产环境定位哪些 Prompt 容易触发死循环
             log.warn(errorMsg);
 
-            throw new RuntimeException(errorMsg);
+            //中断
+            trace.interrupt(errorMsg);
         }
     }
 }

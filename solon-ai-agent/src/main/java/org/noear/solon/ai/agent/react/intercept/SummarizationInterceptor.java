@@ -58,7 +58,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onObservation(ReActTrace trace, String result) {
+    public void onObservation(ReActTrace trace, String toolName, String result) {
         if (trace.getWorkingMemory().size() < 4) return;
 
         // 1. 触发检查：缓冲 2 条消息，避免频繁重组

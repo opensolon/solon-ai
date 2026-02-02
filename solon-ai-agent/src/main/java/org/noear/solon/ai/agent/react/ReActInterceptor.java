@@ -58,7 +58,7 @@ public interface ReActInterceptor extends AgentInterceptor, FlowInterceptor, Cha
     /**
      * 计划节点：接收 LLM 返回的原始推理消息
      */
-    default void onPlan(ReActTrace trace, AssistantMessage message){
+    default void onPlan(ReActTrace trace, AssistantMessage message) {
 
     }
 
@@ -84,7 +84,7 @@ public interface ReActInterceptor extends AgentInterceptor, FlowInterceptor, Cha
     /**
      * 观察节点：工具执行返回结果 (Observation) 后触发
      */
-    default void onObservation(ReActTrace trace, String result) {
+    default void onObservation(ReActTrace trace, String toolName, String result) {
     }
 
     /**

@@ -113,7 +113,7 @@ public class ActionTask implements NamedTaskComponent {
 
         // 触发 Observation 生命周期拦截
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onObservation(trace, result);
+            item.target.onObservation(trace, call.name(), result);
         }
 
         if(trace.isInterrupted()){
@@ -191,7 +191,7 @@ public class ActionTask implements NamedTaskComponent {
 
                         // 5. 触发 Observation 拦截 (内容是纯的)
                         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-                            item.target.onObservation(trace, result);
+                            item.target.onObservation(trace, toolName, result);
                         }
 
                         if(trace.isInterrupted()){
