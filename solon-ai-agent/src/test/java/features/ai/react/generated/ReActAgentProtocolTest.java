@@ -143,7 +143,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         // 验证结果内容覆盖率
         Assertions.assertTrue(result.contains("张三") || result.contains("用户"), "结果应包含用户信息");
-        Assertions.assertTrue(result.contains("1000"), "结果应包含余额信息");
+        Assertions.assertTrue(result.contains("1000") || result.contains("1,000"), "结果应包含余额信息");
         Assertions.assertTrue(result.contains("优惠券"), "结果应包含优惠券信息");
     }
 
