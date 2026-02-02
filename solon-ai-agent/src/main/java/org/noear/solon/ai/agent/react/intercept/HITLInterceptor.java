@@ -47,8 +47,8 @@ public class HITLInterceptor implements ReActInterceptor {
         if (isApproved == null || !isApproved) {
             // 3. 构建介入上下文（供 UI 或审计使用）
             // 模仿 AgentSpace：不仅中断，还需保留当时的参数快照
-            trace.getContext().put("_last_intervened_tool_", toolName);
-            trace.getContext().put("_last_intervened_args_", args);
+            trace.getContext().put(HITL.LAST_TOOL_KEY, toolName);
+            trace.getContext().put(HITL.LAST_ARGS_KEY, new LinkedHashMap<>(args));
 
             // 4. 执行挂起
             // 这里的 reason 可以是一个 JSON，包含更丰富的元数据
@@ -62,8 +62,8 @@ public class HITLInterceptor implements ReActInterceptor {
             }
 
             trace.getContext().remove(specificKey);
-            trace.getContext().remove("_last_intervened_tool_");
-            trace.getContext().remove("_last_intervened_args_");
+            trace.getContext().remove(HITL.LAST_TOOL_KEY);
+            trace.getContext().remove(HITL.LAST_ARGS_KEY);
         }
     }
 
