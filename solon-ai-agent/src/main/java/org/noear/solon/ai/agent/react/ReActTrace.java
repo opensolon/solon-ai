@@ -81,6 +81,8 @@ public class ReActTrace implements AgentTrace {
     private volatile String finalAnswer;
     /** 模型最近一次原始思考内容 */
     private volatile String lastResult;
+    private AssistantMessage lastReasonMessage;
+
     /** 计划 */
     private final List<String> plans = new CopyOnWriteArrayList<>();
 
@@ -141,6 +143,7 @@ public class ReActTrace implements AgentTrace {
         this.route = ReActAgent.ID_REASON;
         this.finalAnswer = null;
         this.lastResult = null;
+        this.lastReasonMessage = null;
 
         // 3. 结构化数据重置
         plans.clear();
@@ -164,6 +167,7 @@ public class ReActTrace implements AgentTrace {
     public void interrupt(String reason) {
         this.interrupted = true;
         this.interruptReason = reason;
+        this.finalAnswer = reason;
 
         // 自动同步中断底层流程引擎
         if (session != null) {
@@ -289,6 +293,13 @@ public class ReActTrace implements AgentTrace {
         this.lastResult = lastResult;
     }
 
+    public AssistantMessage getLastReasonMessage() {
+        return lastReasonMessage;
+    }
+
+    public void setLastReasonMessage(AssistantMessage lastReasonMessage) {
+        this.lastReasonMessage = lastReasonMessage;
+    }
 
     /**
      * 获取人性化历史记录格式

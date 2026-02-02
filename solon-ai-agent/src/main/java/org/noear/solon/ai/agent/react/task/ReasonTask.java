@@ -147,7 +147,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 4: 路由分发 - 基于原生工具调用协议]
         if (Assert.isNotEmpty(responseMessage.getToolCalls())) {
-            trace.getWorkingMemory().addMessage(responseMessage);
+            trace.setLastReasonMessage(responseMessage);
             trace.setRoute(ReActAgent.ID_ACTION);
             return;
         }
@@ -160,7 +160,6 @@ public class ReasonTask implements NamedTaskComponent {
         // 进一步清洗协议头（如 Thought:{...}\nAction:），提取核心思维逻辑
         final String thoughtContent = extractThought(trace, clearContent);
 
-        trace.getWorkingMemory().addMessage(ChatMessage.ofAssistant(rawContent));
         trace.setLastResult(clearContent);
 
         // 触发思考事件（仅在存在有效思考文本时通知）
@@ -197,6 +196,7 @@ public class ReasonTask implements NamedTaskComponent {
         if (clearContent.contains("Action:")) {
             String actionPart = clearContent.substring(clearContent.indexOf("Action:"));
             if (actionPart.matches("(?s)Action:\\s*\\{.*")) {
+                trace.setLastReasonMessage(ChatMessage.ofAssistant(clearContent));
                 trace.setRoute(ReActAgent.ID_ACTION);
                 return;
             }

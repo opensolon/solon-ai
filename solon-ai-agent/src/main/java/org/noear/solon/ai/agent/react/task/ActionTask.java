@@ -74,7 +74,7 @@ public class ActionTask implements NamedTaskComponent {
             LOG.debug("ReActAgent [{}] action starting (Step: {})...", config.getName(), trace.getStepCount());
         }
 
-        AssistantMessage lastAssistant = trace.getWorkingMemory().getLastAssistantMessage();
+        AssistantMessage lastAssistant = trace.getLastReasonMessage();
 
         // 1. 优先处理原生工具调用（Native Tool Calls）
         if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
@@ -122,6 +122,7 @@ public class ActionTask implements NamedTaskComponent {
 
         // 协议闭环：回填 ToolMessage
         ToolMessage toolMessage = ChatMessage.ofTool(result, call.name(), call.id());
+        trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
         trace.getWorkingMemory().addMessage(toolMessage);
 
         if(trace.getOptions().getStreamSink() != null){
@@ -215,6 +216,7 @@ public class ActionTask implements NamedTaskComponent {
         if (foundAny) {
             // 文本模式：将观测结果作为 User 消息反馈给 LLM
             chatMessage = ChatMessage.ofUser(allObservations.toString().trim());
+            trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
             trace.getWorkingMemory().addMessage(chatMessage);
         } else {
             // 容错处理：当模型格式错误时，引导其修正
@@ -222,6 +224,7 @@ public class ActionTask implements NamedTaskComponent {
                 LOG.trace("No valid Action format found in assistant response for agent [{}].", config.getName());
             }
             chatMessage = ChatMessage.ofUser("Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}");
+            trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
             trace.getWorkingMemory().addMessage(chatMessage);
         }
 

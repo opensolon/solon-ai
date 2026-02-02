@@ -54,7 +54,6 @@ public class ReActAgentHitlTest {
                     Boolean approved = trace.getContext().getAs("is_approved");
                     if (approved == null) {
                         // 语义化中断
-                        trace.getWorkingMemory().removeLastAssistantMessage();
                         trace.interrupt("等待退款批准");
                     }
                 }
