@@ -120,9 +120,9 @@ public class TeamTrace implements AgentTrace {
     }
 
     public static TeamTrace getCurrent(FlowContext context) {
-        String teamTraceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
-        if (teamTraceKey != null) {
-            return context.getAs(teamTraceKey);
+        String traceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
+        if (traceKey != null) {
+            return context.getAs(traceKey);
         } else {
             return null;
         }

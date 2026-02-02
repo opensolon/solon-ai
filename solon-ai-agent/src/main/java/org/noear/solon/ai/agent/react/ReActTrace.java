@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.team.TeamProtocol;
@@ -92,6 +93,15 @@ public class ReActTrace implements AgentTrace {
     public ReActTrace(Prompt originalPrompt) {
         this();
         this.originalPrompt = originalPrompt;
+    }
+
+    public static ReActTrace getCurrent(FlowContext context) {
+        String traceKey = context.getAs(Agent.KEY_CURRENT_UNIT_TRACE_KEY);
+        if (traceKey != null) {
+            return context.getAs(traceKey);
+        } else {
+            return null;
+        }
     }
 
     // --- 生命周期与状态管理 ---
