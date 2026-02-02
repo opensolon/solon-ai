@@ -65,9 +65,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         sb.append("## 你的角色\n")
                 .append(role).append("。");
 
-        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-            sb.append("你是一个具备自主行动能力的专家。\n\n");
-        } else {
+        if (trace.getConfig().getStyle() == ReActStyle.STRUCTURED_TEXT) {
             sb.append("你必须使用 ReAct 模式解决问题：")
                     .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
         }
@@ -87,7 +85,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
             return trace.getConfig().getRole();
         }
 
-        return "专业的任务解决助手";
+        return "具备自主行动能力的专业任务解决专家";
     }
 
     public String getInstruction(ReActTrace trace) {
@@ -98,7 +96,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         }
     }
 
-    private String getNaturalInstruction(ReActTrace trace) {
+    protected String getNaturalInstruction(ReActTrace trace) {
         StringBuilder sb = new StringBuilder();
 
         sb.append("## 行为准则\n")
@@ -118,7 +116,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         return sb.toString();
     }
 
-    public String getClassicInstruction(ReActTrace trace) {
+    protected String getClassicInstruction(ReActTrace trace) {
         ReActAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 

@@ -68,9 +68,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         sb.append("## Your Role\n")
                 .append(role).append(". ");
 
-        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-            sb.append("You are an expert with autonomous action capabilities.\n\n");
-        } else {
+        if (trace.getConfig().getStyle() == ReActStyle.STRUCTURED_TEXT) {
             sb.append("You must solve the problem using the ReAct pattern: ")
                     .append("Thought -> Action -> Observation.\n\n");
         }
@@ -90,7 +88,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             return trace.getConfig().getRole();
         }
 
-        return "Professional Task Solver";
+        return "Professional task expert with autonomous action capabilities";
     }
 
     public String getInstruction(ReActTrace trace) {
@@ -101,7 +99,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         }
     }
 
-    private String getNaturalInstruction(ReActTrace trace) {
+    protected String getNaturalInstruction(ReActTrace trace) {
         StringBuilder sb = new StringBuilder();
 
         sb.append("## Code of Conduct\n")
@@ -120,7 +118,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         return sb.toString();
     }
 
-    public String getClassicInstruction(ReActTrace trace) {
+    protected String getClassicInstruction(ReActTrace trace) {
         ReActAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
