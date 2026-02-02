@@ -135,7 +135,11 @@ public class ActionTask implements NamedTaskComponent {
      * 解析并执行文本模式下的 Action 指令
      */
     private void processTextModeAction(Node node, ReActTrace trace) throws Throwable {
-        String lastContent = trace.getLastResult(); //这里的 LastResult 是经过 ReasonTask 清洗后的 Thought 主体
+        if(trace.getLastReasonMessage() == null){
+            return;
+        }
+
+        String lastContent = trace.getLastReasonMessage().getResultContent();
         if (Assert.isEmpty(lastContent)) {
             return;
         }

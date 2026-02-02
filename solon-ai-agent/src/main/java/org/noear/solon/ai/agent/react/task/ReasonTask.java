@@ -153,14 +153,13 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         // [逻辑 5: 路由判断 - 文本 ReAct 协议解析]
-        final String rawContent = responseMessage.hasContent() ? responseMessage.getContent() : ""; // 原始（含 think）
         final String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : ""; // 干净（无 think）
 
 
         // 进一步清洗协议头（如 Thought:{...}\nAction:），提取核心思维逻辑
         final String thoughtContent = extractThought(trace, clearContent);
 
-        trace.setLastResult(clearContent);
+        trace.setLastReasonMessage(responseMessage);
 
         // 触发思考事件（仅在存在有效思考文本时通知）
         if(Assert.isNotEmpty(thoughtContent)) {
@@ -196,7 +195,6 @@ public class ReasonTask implements NamedTaskComponent {
         if (clearContent.contains("Action:")) {
             String actionPart = clearContent.substring(clearContent.indexOf("Action:"));
             if (actionPart.matches("(?s)Action:\\s*\\{.*")) {
-                trace.setLastReasonMessage(ChatMessage.ofAssistant(clearContent));
                 trace.setRoute(ReActAgent.ID_ACTION);
                 return;
             }

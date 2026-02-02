@@ -80,7 +80,6 @@ public class ReActTrace implements AgentTrace {
     /** 最终回答内容 (Final Answer) */
     private volatile String finalAnswer;
     /** 模型最近一次原始思考内容 */
-    private volatile String lastResult;
     private AssistantMessage lastReasonMessage;
 
     /** 计划 */
@@ -142,7 +141,6 @@ public class ReActTrace implements AgentTrace {
         // 2. 核心状态重置（非常重要，防止直接跳过推理进入上一次的 END 状态）
         this.route = ReActAgent.ID_REASON;
         this.finalAnswer = null;
-        this.lastResult = null;
         this.lastReasonMessage = null;
 
         // 3. 结构化数据重置
@@ -283,14 +281,6 @@ public class ReActTrace implements AgentTrace {
 
     public void setFinalAnswer(String finalAnswer) {
         this.finalAnswer = finalAnswer;
-    }
-
-    public String getLastResult() {
-        return lastResult;
-    }
-
-    public void setLastResult(String lastResult) {
-        this.lastResult = lastResult;
     }
 
     public AssistantMessage getLastReasonMessage() {
