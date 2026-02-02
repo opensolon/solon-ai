@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react.task;
 
 import org.noear.snack4.ONode;
+import org.noear.snack4.json.JsonReader;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -38,10 +39,9 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.StringReader;
 import java.util.Collections;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * ReAct 动作执行任务 (Action/Acting)
@@ -53,12 +53,6 @@ import java.util.regex.Pattern;
 @Preview("3.8.1")
 public class ActionTask implements NamedTaskComponent {
     private static final Logger LOG = LoggerFactory.getLogger(ActionTask.class);
-
-    /** 匹配文本模式下的 Action: {JSON} 内容 */
-    private static final Pattern ACTION_PATTERN = Pattern.compile(
-            "Action:\\s*(?:```json)?\\s*(\\{[\\s\\S]*\\})\\s*(?:```)?",
-            Pattern.DOTALL
-    );
 
     private final ReActAgentConfig config;
 
@@ -141,46 +135,62 @@ public class ActionTask implements NamedTaskComponent {
             LOG.debug("Processing text mode action for agent [{}].", config.getName());
         }
 
-        Matcher matcher = ACTION_PATTERN.matcher(lastContent);
+        int actionLabelIndex = lastContent.indexOf("Action:");
         StringBuilder allObservations = new StringBuilder();
         boolean foundAny = false;
 
-        while (matcher.find()) {
-            foundAny = true;
-            try {
-                // 1. 提取 JSON 字符串
-                String jsonContent = matcher.group(1).trim();
-                ONode actionNode = ONode.ofJson(jsonContent);
+        if (actionLabelIndex >= 0) {
+            // 从 "Action:" 之后寻找第一个 '{'
+            int jsonStart = lastContent.indexOf('{', actionLabelIndex + 7);
 
-                // 2. 提取纯净的工具名和参数
-                String toolName = actionNode.get("name").getString();
-                ONode argsNode = actionNode.get("arguments");
-                Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
+            if (jsonStart >= 0) {
+                // 2. 使用 JsonReader 进行流式解析
+                // 无需lastIndexOf('}')，streamRead 会自动处理闭合
+                StringReader sr = new StringReader(lastContent.substring(jsonStart));
+                JsonReader jsonReader = new JsonReader(sr);
 
-                // 3. 触发 Action 拦截 (内容是纯的)
-                for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-                    item.target.onAction(trace, toolName, args);
+                while (true) {
+
+                    try {
+                        // 1. 提取 JSON 字符串
+                        ONode actionNode = jsonReader.streamRead();
+                        if (actionNode == null || actionNode.isObject() == false){
+                            break;
+                        }
+
+                        foundAny = true;
+
+                        // 2. 提取纯净的工具名和参数
+                        String toolName = actionNode.get("name").getString();
+                        ONode argsNode = actionNode.get("arguments");
+                        Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
+
+                        // 3. 触发 Action 拦截 (内容是纯的)
+                        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+                            item.target.onAction(trace, toolName, args);
+                        }
+
+                        // 4. 执行工具
+                        String result = executeTool(trace, toolName, args);
+
+                        if (Agent.ID_END.equals(trace.getRoute())) {
+                            break;
+                        }
+
+                        // 5. 触发 Observation 拦截 (内容是纯的)
+                        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+                            item.target.onObservation(trace, result);
+                        }
+
+                        // 6. 拼装回传给 LLM 的协议文本
+                        if (allObservations.length() > 0) {
+                            allObservations.append("\n");
+                        }
+                        allObservations.append("Observation: ").append(result);
+                    } catch (Exception e) {
+                        allObservations.append("\nObservation: Error parsing Action JSON: ").append(e.getMessage());
+                    }
                 }
-
-                // 4. 执行工具
-                String result = executeTool(trace, toolName, args);
-
-                if (Agent.ID_END.equals(trace.getRoute())) {
-                    break;
-                }
-
-                // 5. 触发 Observation 拦截 (内容是纯的)
-                for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-                    item.target.onObservation(trace, result);
-                }
-
-                // 6. 拼装回传给 LLM 的协议文本
-                if (allObservations.length() > 0) {
-                    allObservations.append("\n");
-                }
-                allObservations.append("Observation: ").append(result);
-            } catch (Exception e) {
-                allObservations.append("\nObservation: Error parsing Action JSON: ").append(e.getMessage());
             }
         }
 
