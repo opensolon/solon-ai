@@ -36,10 +36,8 @@ import org.noear.solon.lang.Preview;
 public interface AgentSession extends ChatSession, NonSerializable {
     /**
      * 同步/更新执行快照
-     *
-     * @param snapshot 包含最新业务数据的上下文
      */
-    void updateSnapshot(FlowContext snapshot);
+    void updateSnapshot();
 
     /**
      * 获取当前状态快照（用于状态回溯或持久化导出）

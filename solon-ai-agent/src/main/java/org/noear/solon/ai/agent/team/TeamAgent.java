@@ -279,7 +279,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                 trace.getWorkingMemory().addMessage(assistantMessage);
             }
 
-            session.updateSnapshot(context);
+            session.updateSnapshot();
 
             // 触发完成拦截
             options.getInterceptors().forEach(item -> item.target.onTeamEnd(trace));

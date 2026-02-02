@@ -123,8 +123,7 @@ public class RedisAgentSession implements AgentSession {
     }
 
     @Override
-    public void updateSnapshot(FlowContext snapshot) {
-        this.snapshot = snapshot;
+    public void updateSnapshot() {
         redisClient.getBucket().store(snapshotKey, snapshot.toJson());
 
         if (LOG.isDebugEnabled()) {

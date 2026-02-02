@@ -297,7 +297,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             trace.getWorkingMemory().addMessage(assistantMessage);
         }
 
-        session.updateSnapshot(context);
+        session.updateSnapshot();
 
         // 拦截器：任务结束事件
         for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {

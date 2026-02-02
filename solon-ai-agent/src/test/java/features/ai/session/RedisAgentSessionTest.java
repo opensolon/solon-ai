@@ -109,11 +109,11 @@ public class RedisAgentSessionTest {
     public void testUpdateSnapshot() {
         RedisAgentSession session = new RedisAgentSession(testId, redisClient);
 
-        FlowContext newCtx = FlowContext.of(testId);
+        FlowContext newCtx = session.getSnapshot();
         newCtx.put("status", "running");
 
         // 执行更新
-        session.updateSnapshot(newCtx);
+        session.updateSnapshot();
 
         // 验证内存
         Assertions.assertEquals("running", session.getSnapshot().get("status"));

@@ -88,8 +88,7 @@ public class InMemoryAgentSession extends InMemoryChatSession implements AgentSe
     }
 
     @Override
-    public void updateSnapshot(FlowContext snapshot) {
-        this.snapshot = snapshot;
+    public void updateSnapshot() {
     }
 
     @Override
