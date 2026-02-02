@@ -9,10 +9,10 @@ import java.util.Map;
  * 提升用户体验的 HITL 操作助手
  */
 public class HITL {
-    private static final String KEY_PREFIX = "_hitl_approved_";
-    private static final String ARGS_PREFIX = "_modified_args_";
-    private static final String LAST_TOOL_KEY = "_last_intervened_tool_";
-    private static final String LAST_ARGS_KEY = "_last_intervened_args_";
+    public static final String KEY_PREFIX = "_hitl_approved_";
+    public static final String ARGS_PREFIX = "_modified_args_";
+    public static final String LAST_TOOL_KEY = "_last_intervened_tool_";
+    public static final String LAST_ARGS_KEY = "_last_intervened_args_";
 
     public static void approve(AgentSession session, String toolName) {
         session.getSnapshot().put(KEY_PREFIX + toolName, true);

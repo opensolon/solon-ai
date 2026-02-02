@@ -55,10 +55,10 @@ public class HITLInterceptor implements ReActInterceptor {
             trace.interrupt("REQUIRED_HUMAN_APPROVAL:" + toolName);
         } else {
             // 5. 审批通过后的清理工作
-            Map<String, Object> modifiedArgs = trace.getContext().getAs("_modified_args_" + toolName);
+            Map<String, Object> modifiedArgs = trace.getContext().getAs(HITL.ARGS_PREFIX + toolName);
             if (modifiedArgs != null) {
-                args.putAll(modifiedArgs); // 用人工修改的参数覆盖 AI 生成的参数
-                trace.getContext().remove("_modified_args_" + toolName);
+                args.putAll(modifiedArgs);
+                trace.getContext().remove(HITL.ARGS_PREFIX + toolName);
             }
 
             trace.getContext().remove(specificKey);
