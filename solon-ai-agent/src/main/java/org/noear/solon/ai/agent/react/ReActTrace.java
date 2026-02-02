@@ -31,6 +31,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,8 +83,11 @@ public class ReActTrace implements AgentTrace {
     private volatile String lastResult;
     /** 计划 */
     private final List<String> plans = new CopyOnWriteArrayList<>();
-    /** 是否等待反馈 */
-    private boolean waitingFeedback;
+
+    /** 是否已请求中断（人工介入或逻辑挂起） */
+    private boolean interrupted;
+    /** 中断的原因或给用户的提示 */
+    private String interruptReason;
 
 
     public ReActTrace() {
@@ -114,6 +118,10 @@ public class ReActTrace implements AgentTrace {
         this.options = options;
         this.session = session;
         this.protocol = protocol;
+
+        //每次执行重置中断状态
+        this.interrupted = false;
+        this.interruptReason = null;
     }
 
     protected void activeSkills() {
@@ -133,7 +141,6 @@ public class ReActTrace implements AgentTrace {
         this.route = ReActAgent.ID_REASON;
         this.finalAnswer = null;
         this.lastResult = null;
-        this.waitingFeedback = false;
 
         // 3. 结构化数据重置
         plans.clear();
@@ -148,6 +155,29 @@ public class ReActTrace implements AgentTrace {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Agent [{}] trace reset for a new task.", getAgentName());
         }
+    }
+
+    /**
+     * 请求中断执行
+     * @param reason 中断原因（会设为 FinalAnswer 返回给调用者）
+     */
+    public void interrupt(String reason) {
+        this.interrupted = true;
+        this.interruptReason = reason;
+        this.finalAnswer = reason;
+
+        // 自动同步中断底层流程引擎
+        if (session != null) {
+            session.getSnapshot().interrupt();
+        }
+    }
+
+    public boolean isInterrupted() {
+        return interrupted;
+    }
+
+    public @Nullable String getInterruptReason() {
+        return interruptReason;
     }
 
     @Override
@@ -298,14 +328,6 @@ public class ReActTrace implements AgentTrace {
      */
     public int getToolCallCount() {
         return toolCounter.get();
-    }
-
-    public boolean isWaitingFeedback() {
-        return waitingFeedback;
-    }
-
-    public void setWaitingFeedback(boolean waitingFeedback) {
-        this.waitingFeedback = waitingFeedback;
     }
 
     //------------------

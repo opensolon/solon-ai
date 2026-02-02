@@ -185,8 +185,7 @@ public class SupervisorTask implements NamedTaskComponent {
             String reason = oNode.get("reason").getString();
             trace.setFinalAnswer(reason);
             trace.setRoute(Agent.ID_END);
-            trace.getContext().interrupt();
-            trace.setWaitingFeedback(true);
+            trace.interrupt(reason);
             return;
         }
 

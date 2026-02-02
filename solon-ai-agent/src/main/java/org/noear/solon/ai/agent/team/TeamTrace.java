@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
 import org.noear.solon.ai.chat.skill.SkillUtil;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,8 +103,12 @@ public class TeamTrace implements AgentTrace {
      * 协议私有存储空间（供 TeamProtocol 存储私有状态）
      */
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
-    /** 是否等待反馈 */
-    private boolean waitingFeedback;
+
+
+    /** 是否已请求中断（人工介入或逻辑挂起） */
+    private boolean interrupted;
+    /** 中断的原因或给用户的提示 */
+    private String interruptReason;
 
     /**
      * 最终交付答案
@@ -126,6 +131,20 @@ public class TeamTrace implements AgentTrace {
         } else {
             return null;
         }
+    }
+
+    /**
+     * 运行时环境准备
+     */
+    protected void prepare(TeamAgentConfig config, TeamOptions options, AgentSession session, String agentName) {
+        this.config = config;
+        this.options = options;
+        this.session = session;
+        this.agentName = agentName;
+
+        //每次执行重置中断状态
+        this.interrupted = false;
+        this.interruptReason = null;
     }
 
     protected void activeSkills() {
@@ -164,6 +183,30 @@ public class TeamTrace implements AgentTrace {
     }
 
     /**
+     * 请求中断执行
+     * @param reason 中断原因（会设为 FinalAnswer 返回给调用者）
+     */
+    public void interrupt(String reason) {
+        this.interrupted = true;
+        this.interruptReason = reason;
+        this.finalAnswer = reason;
+
+        // 自动同步中断底层流程引擎
+        if (session != null) {
+            session.getSnapshot().interrupt();
+        }
+    }
+
+    public boolean isInterrupted() {
+        return interrupted;
+    }
+
+    public @Nullable String getInterruptReason() {
+        return interruptReason;
+    }
+
+
+    /**
      * 是否为初始状态
      */
     public boolean isInitial() {
@@ -187,16 +230,6 @@ public class TeamTrace implements AgentTrace {
             if (record.isAgent()) return record.getDuration();
         }
         return 0L;
-    }
-
-    /**
-     * 运行时环境准备
-     */
-    protected void prepare(TeamAgentConfig config, TeamOptions options, AgentSession session, String agentName) {
-        this.config = config;
-        this.options = options;
-        this.session = session;
-        this.agentName = agentName;
     }
 
     // --- 属性访问 ---
@@ -281,14 +314,6 @@ public class TeamTrace implements AgentTrace {
 
     public int nextTurn() {
         return turnCounter.incrementAndGet();
-    }
-
-    public boolean isWaitingFeedback() {
-        return waitingFeedback;
-    }
-
-    public void setWaitingFeedback(boolean waitingFeedback) {
-        this.waitingFeedback = waitingFeedback;
     }
 
     /**

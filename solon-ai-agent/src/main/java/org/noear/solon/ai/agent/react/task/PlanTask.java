@@ -125,8 +125,7 @@ public class PlanTask implements NamedTaskComponent {
                 if (Assert.isNotEmpty(source)) {
                     trace.setFinalAnswer(source);
                     trace.setRoute(Agent.ID_END);
-                    trace.getContext().interrupt();
-                    trace.setWaitingFeedback(true);
+                    trace.interrupt(null);
                     return;
                 }
             }
