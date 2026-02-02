@@ -191,7 +191,9 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
 
             // 执行后置回调
             trace.getProtocol().onAgentEnd(trace, this);
-            trace.getOptions().getInterceptors().forEach(item -> item.target.onAgentEnd(trace, this));
+            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
+                item.target.onAgentEnd(trace, this);
+            }
         }
 
         if (LOG.isDebugEnabled()) {

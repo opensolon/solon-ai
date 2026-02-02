@@ -25,9 +25,9 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.*;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
@@ -218,42 +218,45 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         trace.activeSkills();
 
         // 触发团队启动拦截
-        options.getInterceptors().forEach(item -> item.target.onTeamStart(trace));
-
-
-        // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamAgent [{}] starting collaboration flow...", name());
+        for(RankEntity<TeamInterceptor> item : options.getInterceptors()){
+            item.target.onTeamStart(trace);
         }
 
-        long startTime = System.currentTimeMillis();
-
         try {
-            try {
-                final FlowOptions flowOptions = new FlowOptions();
-                options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
-
-                trace.getMetrics().reset();
-
-                context.with(Agent.KEY_CURRENT_TEAM_TRACE_KEY, config.getTraceKey(), () -> {
-                    context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
-                        flowEngine.eval(graph, -1, context, flowOptions);
-                    });
-                });
-            } finally {
-                // 记录性能指标
-                long duration = System.currentTimeMillis() - startTime;
-                trace.getMetrics().setTotalDuration(duration);
-
+            if(trace.isInterrupted() == false) {
+                // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("TeamAgent [{}] finished. Duration: {}ms, turns: {}",
-                            config.getName(), duration, trace.getTurnCount());
+                    LOG.debug("TeamAgent [{}] starting collaboration flow...", name());
                 }
 
-                // 父一级团队轨迹
-                if (parentTeamTrace != null) {
-                    // 汇总 token 使用情况
-                    parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+                long startTime = System.currentTimeMillis();
+
+                try {
+                    final FlowOptions flowOptions = new FlowOptions();
+                    options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
+
+                    trace.getMetrics().reset();
+
+                    context.with(Agent.KEY_CURRENT_TEAM_TRACE_KEY, config.getTraceKey(), () -> {
+                        context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
+                            flowEngine.eval(graph, -1, context, flowOptions);
+                        });
+                    });
+                } finally {
+                    // 记录性能指标
+                    long duration = System.currentTimeMillis() - startTime;
+                    trace.getMetrics().setTotalDuration(duration);
+
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("TeamAgent [{}] finished. Duration: {}ms, turns: {}",
+                                config.getName(), duration, trace.getTurnCount());
+                    }
+
+                    // 父一级团队轨迹
+                    if (parentTeamTrace != null) {
+                        // 汇总 token 使用情况
+                        parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+                    }
                 }
             }
 

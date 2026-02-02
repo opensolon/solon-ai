@@ -157,8 +157,12 @@ public class SupervisorTask implements NamedTaskComponent {
 
 
         ChatResponse response = callWithRetry(node, trace, messages);
+        if (trace.isInterrupted()) {
+            return;
+        }
+
         AssistantMessage responseMessage = response.getMessage();
-        if(responseMessage == null){
+        if (responseMessage == null) {
             responseMessage = response.getAggregationMessage();
         }
 
@@ -166,12 +170,23 @@ public class SupervisorTask implements NamedTaskComponent {
             trace.getMetrics().addUsage(response.getUsage());
         }
 
-        trace.getOptions().getInterceptors().forEach(item -> item.target.onModelEnd(trace, response));
+        for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onModelEnd(trace, response);
+        }
+        if (trace.isInterrupted()) {
+            return;
+        }
 
         String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
         String decision = clearContent.trim();
         trace.setLastDecision(decision);
-        trace.getOptions().getInterceptors().forEach(item -> item.target.onSupervisorDecision(trace, decision));
+
+        for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onSupervisorDecision(trace, decision);
+        }
+        if (trace.isInterrupted()) {
+            return;
+        }
 
         commitRoute(trace, decision, context);
     }
@@ -285,7 +300,14 @@ public class SupervisorTask implements NamedTaskComponent {
 
             o.optionSet(trace.getOptions().getModelOptions().options());
         });
-        trace.getOptions().getInterceptors().forEach(item -> item.target.onModelStart(trace, req));
+
+        for(RankEntity<TeamInterceptor> item: trace.getOptions().getInterceptors()){
+            item.target.onModelStart(trace, req);
+        }
+        if(trace.isInterrupted()){
+            return null;
+        }
+
 
         int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
