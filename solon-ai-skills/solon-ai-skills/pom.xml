@@ -43,12 +43,12 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-skill-restapi</artifactId>
+            <artifactId>solon-ai-skill-pdf</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-skill-pdf</artifactId>
+            <artifactId>solon-ai-skill-restapi</artifactId>
         </dependency>
 
         <dependency>
@@ -61,7 +61,6 @@
             <groupId>org.noear</groupId>
             <artifactId>solon-ai-skill-sys</artifactId>
         </dependency>
-
 
         <dependency>
             <groupId>org.noear</groupId>
