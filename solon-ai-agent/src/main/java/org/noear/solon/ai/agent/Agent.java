@@ -53,12 +53,14 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     String name();
 
     /**
-     * 智能体职责描述（用于语义路由与任务分发参考）
+     * 智能体角色职责（用于 Prompt 提示与协作分发参考）
      */
     String role();
 
     /**
-     * 生成动态职责描述（支持模板渲染）
+     * 生成动态角色描述
+     *
+     * @param context 流程上下文（支持使用 context.vars 渲染模板）
      */
     default String roleFor(FlowContext context) {
         if (context == null) {
