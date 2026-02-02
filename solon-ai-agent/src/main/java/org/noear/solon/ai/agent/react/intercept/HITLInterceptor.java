@@ -63,6 +63,7 @@ public class HITLInterceptor implements ReActInterceptor {
 
             trace.getContext().remove(specificKey);
             trace.getContext().remove("_last_intervened_tool_");
+            trace.getContext().remove("_last_intervened_args_");
         }
     }
 
