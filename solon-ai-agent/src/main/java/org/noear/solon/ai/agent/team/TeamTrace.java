@@ -189,7 +189,6 @@ public class TeamTrace implements AgentTrace {
     public void interrupt(String reason) {
         this.interrupted = true;
         this.interruptReason = reason;
-        this.finalAnswer = reason;
 
         // 自动同步中断底层流程引擎
         if (session != null) {
