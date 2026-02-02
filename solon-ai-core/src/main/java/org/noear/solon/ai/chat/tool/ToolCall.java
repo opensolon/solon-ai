@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import java.io.Serializable;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -37,6 +37,7 @@ public class ToolCall implements Serializable {
     }
 
     public ToolCall(String index, String id, String name, String argumentsStr, Map<String, Object> arguments) {
+        //允许拦截器修改参数集合（不要只读）
         this.index = index;
         this.id = id;
         this.name = name;
@@ -44,9 +45,9 @@ public class ToolCall implements Serializable {
         this.argumentsStr = argumentsStr;
 
         if (arguments == null) {
-            this.arguments = Collections.emptyMap();
+            this.arguments = new HashMap<>();
         } else {
-            this.arguments = Collections.unmodifiableMap(arguments);
+            this.arguments = arguments;
         }
     }
 

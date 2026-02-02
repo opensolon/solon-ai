@@ -40,7 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.StringReader;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -108,7 +108,7 @@ public class ActionTask implements NamedTaskComponent {
             return;
         }
 
-        Map<String, Object> args = (call.arguments() == null) ? Collections.emptyMap() : call.arguments();
+        Map<String, Object> args = (call.arguments() == null) ? new HashMap<>() : call.arguments();
         String result = executeTool(trace, call.name(), args);
 
         // 触发 Observation 生命周期拦截
@@ -176,7 +176,7 @@ public class ActionTask implements NamedTaskComponent {
                         // 2. 提取纯净的工具名和参数
                         String toolName = actionNode.get("name").getString();
                         ONode argsNode = actionNode.get("arguments");
-                        Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : Collections.emptyMap();
+                        Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
                         // 3. 触发 Action 拦截 (内容是纯的)
                         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
