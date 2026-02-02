@@ -23,7 +23,16 @@ import java.nio.file.Paths;
 import java.util.function.Supplier;
 
 /**
- * PDF 专家技能（解耦版）
+ * PDF 专家技能：提供 PDF 文档的结构化读取与精美排版生成能力。
+ *
+ * <p>核心职责：
+ * <ul>
+ * <li><b>双向转换</b>：支持将 PDF 提取为纯文本（Parse），以及将 Markdown/HTML 渲染为 PDF（Create）。</li>
+ * <li><b>字体引擎解耦</b>：通过 {@code Supplier<InputStream>} 支持灵活的字体注入，完美解决中文字体渲染及跨环境（如容器）部署问题。</li>
+ * <li><b>排版支持</b>：内置基础 CSS 样式，确保生成的文档具备良好的可读性（支持表格、代码块及行高优化）。</li>
+ * </ul>
+ * </p>
+ *
  * @author noear
  * @since 3.9.1
  */

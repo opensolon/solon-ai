@@ -23,9 +23,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Shell 脚本执行技能
+ * Shell 脚本执行技能：为 AI 提供系统级的自动化运维与底层资源管理能力。
  *
- * <p>支持在指定工作目录下执行系统级 Shell 命令。适用于文件系统管理、环境信息查询及自动化运维场景。</p>
+ * <p>该技能允许 Agent 在受限的工作目录（WorkDir）中执行系统指令。核心特性包括：
+ * <ul>
+ * <li><b>系统集成</b>：适用于文件批量处理、环境配置查询、系统状态监控及 CI/CD 自动化流水线。</li>
+ * <li><b>隔离执行</b>：基于 {@link AbsProcessSkill}，所有脚本在指定的物理沙箱中生成并运行，确保系统级调用的相对可控。</li>
+ * <li><b>跨平台扩展</b>：默认支持 {@code /bin/sh}（类 Unix 系统），亦可通过构造函数适配自定义 Shell 环境（如 {@code bash} 或 {@code zsh}）。</li>
+ * </ul>
+ * </p>
  *
  * @author noear
  * @since 3.9.1

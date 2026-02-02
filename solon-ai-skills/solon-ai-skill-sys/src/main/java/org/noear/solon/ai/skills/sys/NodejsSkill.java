@@ -25,9 +25,15 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 
 /**
- * Node.js 脚本执行技能
+ * Node.js 脚本执行技能：为 AI 提供高精度的逻辑计算与 JavaScript 生态扩展能力。
  *
- * <p>支持执行原生 JavaScript 代码。适用于处理 JSON 数据转换、Web 逻辑模拟或利用 Node.js 生态库进行文本处理。</p>
+ * <p>该技能允许 Agent 在受控的本地环境中运行异步 JavaScript 代码，核心价值包括：
+ * <ul>
+ * <li><b>复杂逻辑沙箱</b>：处理大模型难以胜任的循环嵌套、递归算法或高度复杂的 JSON 结构重组。</li>
+ * <li><b>Web 生态互通</b>：利用 Node.js 对 Web 标准的天然支持，进行数据抓取结果的清洗或加密算法模拟。</li>
+ * <li><b>非对称任务执行</b>：支持通过底层 {@code AbsProcessSkill} 在指定的 WorkDir 中生成、执行并清理临时脚本。</li>
+ * </ul>
+ * </p>
  *
  * @author noear
  * @since 3.9.1

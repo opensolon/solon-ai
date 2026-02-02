@@ -34,7 +34,17 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 智能 RestAPI 调用技能
+ * 智能 REST API 接入技能：实现从 API 定义到 AI 自动化调用的桥梁。
+ *
+ * <p>该技能通过解析 Swagger/OpenAPI 定义，将企业的业务接口动态转化为 AI 的可调用工具。
+ * 核心特性：
+ * <ul>
+ * <li><b>自适应 Schema 模式</b>：支持 FULL（全量加载）与 DYNAMIC（按需加载）模式，自动应对数百个接口导致的 Prompt 爆炸。</li>
+ * <li><b>智能协议解析</b>：内置 {@link OpenApiResolver}，支持对复杂嵌套模型和深层 Schema 的递归展开。</li>
+ * <li><b>灵活鉴权</b>：通过 {@link ApiAuthenticator} 统一处理 Token、OAuth2 或 Header 注入。</li>
+ * <li><b>上下文保护</b>：自动处理响应体截断，防止由于 API 返回大数据量导致的模型上下文溢出。</li>
+ * </ul>
+ * </p>
  *
  * @author noear
  * @since 3.9.1

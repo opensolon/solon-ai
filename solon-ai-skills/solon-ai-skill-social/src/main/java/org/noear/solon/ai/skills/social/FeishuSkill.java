@@ -28,7 +28,16 @@ import java.util.Base64;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 飞书助手技能：支持文本、富文本卡片以及 @ 提醒
+ * 飞书助手技能：为 AI 提供飞书（Lark）平台的深度协同与信息推送能力。
+ *
+ * <p>该技能基于飞书自定义机器人 Webhook 实现，具备以下核心逻辑：
+ * <ul>
+ * <li><b>智能消息升级</b>：自动根据是否包含 {@code title} 将消息由简陋的 {@code text} 模式升级为精美的 {@code interactive} 卡片模式。</li>
+ * <li><b>Lark Markdown 支持</b>：支持飞书特有的 {@code lark_md} 语法，允许在卡片中渲染更丰富的排版效果（如分栏、高亮）。</li>
+ * <li><b>安全加签验证</b>：内置飞书标准的签名算法，确保 Webhook 调用来源可靠，防止重放攻击。</li>
+ * <li><b>协同响应</b>：适用于 AI 自动化流程中的关键节点通知，如任务状态流转、数据看板推送等。</li>
+ * </ul>
+ * </p>
  *
  * @author noear
  * @since 3.9.1

@@ -11,7 +11,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Redis 存储技能：为 AI 提供长期记忆能力
+ * Redis 存储技能：为 AI 提供跨会话的“长期记忆”能力
+ *
+ * <p>该技能允许 AI Agent 将关键信息（如用户偏好、任务中间状态、历史事实）以 Key-Value 形式持久化。
+ *  相比于 Context Window 的短期记忆，本技能提供了可跨越不同会话周期的状态保持方案。</p>
  *
  * @author noear
  * @since 3.9.1
@@ -61,7 +64,12 @@ public class RedisSkill extends AbsSkill {
         }
     }
 
-    @ToolMapping(name = "redis_set", description = "在持久化仓库中存入重要信息。key 应该是简短的标识符。")
+    /**
+     * 存入记忆。
+     * AI 引导：当用户提到“记住我喜欢喝咖啡”时，AI 应生成 key='user_preference_coffee'
+     */
+    @ToolMapping(name = "redis_set",
+            description = "在持久化仓库中存入重要信息。key 应该是简短的标识符。")
     public String set(@Param("key") String key, @Param("value") String value) {
         if (LOG.isTraceEnabled()) {
             LOG.trace("Setting key: {} -> {}", key, value);

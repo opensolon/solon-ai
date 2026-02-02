@@ -25,10 +25,16 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 
 /**
- * Python 脚本执行技能
+ * Python 脚本执行技能：为 AI 提供科学计算、数据分析及自动化脚本处理能力。
  *
- * <p>提供 Python 代码的运行环境支持。特别适用于执行复杂的数学计算、科学分析、数据处理等 AI 擅长的编程任务。
- * 具备自动探测系统 python3/python 指令的能力。</p>
+ * <p>该技能允许 Agent 在本地环境中安全地运行 Python 逻辑，特别适用于以下场景：
+ * <ul>
+ * <li><b>科学计算</b>：处理复杂的数学公式、统计学分析。</li>
+ * <li><b>数据清洗</b>：利用 Python 强大的字符串和数据处理能力转换大规模 JSON 或文本。</li>
+ * <li><b>环境自适应</b>：内置命令探测机制，自动识别系统中的 {@code python3} 或 {@code python} 环境。</li>
+ * <li><b>IO 编码保护</b>：强制使用 UTF-8 编码，防止跨平台执行时的字符乱码问题。</li>
+ * </ul>
+ * </p>
  *
  * @author noear
  * @since 3.9.1

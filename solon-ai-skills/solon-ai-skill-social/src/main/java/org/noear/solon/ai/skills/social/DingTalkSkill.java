@@ -28,7 +28,16 @@ import java.util.Base64;
 import java.net.URLEncoder;
 
 /**
- * 钉钉专家技能：支持文本、Markdown 以及 @ 提醒
+ * 钉钉社交技能：为 AI 提供即时通讯工具的推送与触达能力。
+ *
+ * <p>该技能基于钉钉自定义机器人 Webhook 实现，具备以下特性：
+ * <ul>
+ * <li><b>智能消息路由</b>：根据参数自动切换 {@code text}（纯文本）或 {@code markdown}（富文本）模式。</li>
+ * <li><b>增强安全性</b>：内置 HmacSHA256 签名算法，支持钉钉机器人的“加签”安全设置。</li>
+ * <li><b>精准提醒</b>：集成 {@code atMobiles} 逻辑，支持 AI 在群聊中通过手机号精确 @ 目标用户。</li>
+ * <li><b>异步汇报场景</b>：非常适合作为 Agent 完成长时任务（如报表生成、代码审查）后的最后一步通知。</li>
+ * </ul>
+ * </p>
  *
  * @author noear
  * @since 3.9.1

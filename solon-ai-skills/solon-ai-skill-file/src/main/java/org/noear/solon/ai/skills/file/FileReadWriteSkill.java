@@ -17,7 +17,11 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * 文件读写技能
+ * 文件管理技能：为 AI 提供受限的本地文件系统访问能力。
+ *
+ * <p>该技能通过“工作空间（WorkDir）”机制实现沙箱隔离，确保 AI 仅能在指定目录下进行活动。
+ * 支持文本读写、目录遍历及文件生命周期管理。针对大文件提供了自动截断保护，防止超出大模型上下文限制。</p>
+ *
  * @author noear
  * @since 3.9.1
  */

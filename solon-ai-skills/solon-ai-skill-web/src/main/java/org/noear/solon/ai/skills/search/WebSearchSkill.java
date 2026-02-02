@@ -28,7 +28,16 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 联网搜索技能：支持多驱动自适应 (Serper, Bing, Baidu)
+ * 联网搜索技能：为 AI 代理提供实时动态的互联网信息检索能力。
+ *
+ * <p>该技能集成了全球主流搜索引擎驱动，具备以下特性：
+ * <ul>
+ * <li><b>全场景覆盖</b>：内置 {@code SERPER}(Google)、{@code BING} 与 {@code BAIDU} 驱动，适配全球与中文本地化搜索需求。</li>
+ * <li><b>结构化上下文</b>：自动将搜索原始结果转化为包含标题、链接与摘要的 Markdown 格式，便于 AI 进行二次引用与溯源。</li>
+ * <li><b>自适应解析策略</b>：不同搜索引擎的 JSON 响应格式互异，通过 {@link SearchDriver} 契约实现透明化的元数据提取。</li>
+ * <li><b> Token 成本控制</b>：支持设置 {@code maxResults}，在保证信息丰富度的同时防止因搜索内容过多导致 LLM 上下文溢出。</li>
+ * </ul>
+ * </p>
  *
  * @author noear
  * @since 3.9.1

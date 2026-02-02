@@ -18,7 +18,18 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
- * 邮件专家技能：基于 Simple Java Mail 实现
+ * 邮件通信技能：为 AI 提供正式的对外联络与附件分发能力。
+ *
+ * <p>基于 Simple Java Mail 实现，具备以下企业级特性：
+ * <ul>
+ * <li><b>智能正文识别</b>：自动探测内容格式，支持纯文本或富文本 (HTML) 渲染。</li>
+ * <li><b>沙箱附件集成</b>：无缝对接 WorkDir 资源，支持将 AI 生成的文件（图片、文档等）作为附件安全发送。</li>
+ * <li><b>现代安全协议</b>：适配 SMTPS/TLS 加密及连接池技术，确保在高并发任务流中的响应稳定性。</li>
+ * </ul>
+ * </p>
+ *
+ * @author noear
+ * @since 3.9.1
  */
 @Preview("3.9.1")
 public class MailSkill extends AbsSkill {

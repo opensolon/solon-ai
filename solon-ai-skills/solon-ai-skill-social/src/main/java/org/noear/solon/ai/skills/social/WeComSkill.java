@@ -22,7 +22,15 @@ import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Preview;
 
 /**
- * 企业微信专家技能
+ * 企业微信（WeCom）社交技能：为 AI 提供企业级通讯录成员及群聊的触达能力。
+ *
+ * <p>该技能通过企业微信群机器人 Webhook 实现，核心特性包括：
+ * <ul>
+ * <li><b>智能协议探测</b>：根据 {@code content} 内容自动识别并切换 {@code text} 与 {@code markdown} 消息类型。</li>
+ * <li><b>原生 Markdown 适配</b>：针对企微特有的 Markdown 子集进行优化，支持引用、标题、代码块及文字颜色（需符合企微规范）。</li>
+ * <li><b>纯净通讯逻辑</b>：无需加签，通过沙箱化的 Webhook URL 实现快速部署与即时反馈。</li>
+ * </ul>
+ * </p>
  *
  * @author noear
  * @since 3.9.1
