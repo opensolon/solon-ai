@@ -21,13 +21,9 @@ import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 
 /**
- * 智能体会话（运行状态与记忆中心）
- *
- * <p>核心职责：管理智能体的长短期记忆（History）与业务执行快照（Snapshot）。</p>
- * <ul>
- * <li><b>多轮对话：</b>按智能体维度隔离并持久化对话足迹。</li>
- * <li><b>状态机平衡：</b>通过 Snapshot 机制同步 Flow 工作流上下文。</li>
- * </ul>
+ * 智能体会话接口
+ * <p>负责维护智能体的运行状态、上下文记忆以及执行流快照。
+ * 继承自 {@link ChatSession}，扩展了对工作流（Flow）状态的支持。</p>
  *
  * @author noear
  * @since 3.8.1

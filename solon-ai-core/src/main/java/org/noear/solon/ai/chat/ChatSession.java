@@ -28,7 +28,10 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 聊天会话（方便持久化）
+ * 聊天会话接口
+ *
+ * <p>用于管理对话过程中的消息序列。设计上支持易持久化特性，
+ * 是构建聊天机器人或 AI 交互应用的基础存储单元。</p>
  *
  * @author noear
  * @since 3.1
