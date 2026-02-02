@@ -43,79 +43,54 @@ public class ReActAgentHitlTest {
      */
     @Test
     public void testHumanInTheLoop() throws Throwable {
-        // 获取聊天模型
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 定义人工介入拦截器 - 检测敏感操作节点
+        // 1. 定义更简单的业务拦截器
         ReActInterceptor hitlInterceptor = new ReActInterceptor() {
             @Override
-            public void onNodeStart(FlowContext ctx, Node node) {
-                // 当进入工具执行节点时，检查是否已获得人工批准
-                if (ReActAgent.ID_REASON.equals(node.getId())) {
-                    Boolean approved = ctx.getAs("is_approved");
+            public void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
+                // 针对特定工具进行拦截
+                if ("do_refund".equals(toolName)) {
+                    Boolean approved = trace.getContext().getAs("is_approved");
                     if (approved == null) {
-                        System.out.println("[拦截器] 检测到敏感工具调用，等待人工审批...");
-                        ctx.stop(); // 中断流程，等待人工介入
+                        // 语义化中断
+                        trace.interrupt("等待退款批准");
                     }
                 }
             }
         };
 
-        // 2. 构建 ReActAgent 并配置拦截器
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new RefundTools())
-                .modelOptions(o -> o.temperature(0.0))
                 .build();
 
-        // 3. 创建 AgentSession（包装 FlowContext）
-        AgentSession session = InMemoryAgentSession.of("hitl_session_123");
+        AgentSession session = InMemoryAgentSession.of("hitl_123");
         String prompt = "订单 ORD_888 没收到货，请帮我全额退款。";
 
-        // --- 第一步：发起请求，预期会被拦截 ---
-        System.out.println("--- 第一次调用 (预期拦截) ---");
+        // --- 第一步：执行拦截 ---
         ReActResponse resp = agent.prompt(prompt)
-                .options(o -> o.interceptorAdd(hitlInterceptor)) //添加拦截器
+                .options(o -> o.interceptorAdd(hitlInterceptor))
                 .session(session)
                 .call();
 
-        System.out.println(resp.getMetrics());
-        Assertions.assertTrue(resp.getMetrics().getTotalTokens() == 0);
+        // 调整断言：已经发生了 LLM 推理，Tokens 应该 > 0
+        Assertions.assertTrue(resp.getMetrics().getTotalTokens() > 0, "应该已经产生了推理消耗");
 
-        String result1 = resp.getContent();
+        ReActTrace state = session.getSnapshot().getAs("__" + agent.name());
+        Assertions.assertNotNull(state.getInterruptReason(), "应该存在挂起的人工任务");
 
-        // 通过 session.getSnapshot() 获取底层的 FlowContext 进行验证
-        FlowContext context = session.getSnapshot();
-
-        // 验证：流程应该被拦截并停止，最后停留在工具节点
-        Assertions.assertTrue(context.isStopped(), "流程应该被拦截并停止");
-        Assertions.assertEquals(ReActAgent.ID_REASON, context.lastNodeId(), "最后应停留在工具节点");
-
-        // 获取执行状态追踪，验证已有执行步骤
-        ReActTrace state = context.getAs("__" + agent.name());
-        Assertions.assertTrue(state.getStepCount() == 0, "应该还没有执行步骤");
-        System.out.println("当前状态：" + state.getRoute());
-
-        // --- 第二步：人工介入，注入批准信号 ---
-        System.out.println("\n--- 人工介入：批准退款 ---");
-        context.put("is_approved", true);
+        // --- 第二步：人工注入 ---
+        session.getSnapshot().put("is_approved", true);
 
         // --- 第三步：恢复执行 ---
-        System.out.println("--- 第二次调用 (恢复执行) ---");
-        // 恢复时传入相同的 session，prompt 会从 state 中自动获取
-        String result2 = agent.prompt()
-                .options(o -> o.interceptorAdd(hitlInterceptor)) //添加拦截器
+        // 此时 prompt() 为空，内部会自动从 state 恢复之前的 Action 执行
+        String result = agent.prompt()
+                .options(o -> o.interceptorAdd(hitlInterceptor))
                 .session(session)
                 .call()
                 .getContent();
 
-        // 验证：最终结果应包含退款成功的关键字
-        Assertions.assertNotNull(result2, "结果不应为空");
-        Assertions.assertTrue(result2.contains("成功") || result2.contains("退款"),
-                "审批后应执行成功，实际结果：" + result2);
-        System.out.println("最终答复: " + result2);
-
-        // 验证流程已正常结束
-        Assertions.assertFalse(context.isStopped(), "恢复后流程应正常结束");
+        Assertions.assertTrue(result.contains("成功"), "恢复后应执行成功");
     }
 
     /**

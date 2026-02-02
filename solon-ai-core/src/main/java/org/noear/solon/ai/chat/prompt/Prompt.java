@@ -106,11 +106,25 @@ public interface Prompt extends Serializable {
     ChatMessage getLastMessage();
 
     /**
+     * 移除最后消息
+     *
+     * @since 3.9.1
+     */
+    void removeLastMessage();
+
+    /**
      * 获取最后 Assistant 消息
      *
      * @since 3.9.0
      */
     AssistantMessage getLastAssistantMessage();
+
+    /**
+     * 移除最后 Assistant 消息
+     *
+     * @since 3.9.1
+     */
+    void removeLastAssistantMessage();
 
     /**
      * 获取用户消息内容

@@ -63,6 +63,15 @@ public class PromptImpl implements Prompt, Serializable {
     }
 
     @Override
+    public void removeLastMessage() {
+        if(messages.isEmpty() == false){
+            messages.remove(messages.size() - 1);
+            this.userContent = null;
+            this.systemContent = null;
+        }
+    }
+
+    @Override
     public AssistantMessage getLastAssistantMessage() {
         List<ChatMessage> currentMessages = this.messages;
         for (int i = currentMessages.size() - 1; i >= 0; i--) {
@@ -76,6 +85,19 @@ public class PromptImpl implements Prompt, Serializable {
             }
         }
         return null;
+    }
+
+    @Override
+    public void removeLastAssistantMessage() {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = messages.get(i);
+            if (msg instanceof AssistantMessage || msg.getRole() == ChatRole.ASSISTANT) {
+                messages.remove(i);
+                // 只要消息列表变了，建议把缓存清掉，防止 getUserContent 逻辑受干扰
+                this.userContent = null;
+                break;
+            }
+        }
     }
 
     @Override
