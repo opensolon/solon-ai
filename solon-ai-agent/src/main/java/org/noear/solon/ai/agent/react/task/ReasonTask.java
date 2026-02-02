@@ -108,6 +108,10 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
         ChatResponse response = callWithRetry(node, trace, messages);
+        if(trace.isInterrupted()){
+            return;
+        }
+
         AssistantMessage responseMessage = response.getMessage();
         if(responseMessage == null){
             responseMessage = response.getAggregationMessage();
@@ -121,9 +125,17 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onModelEnd(trace, response);
         }
 
+        if(trace.isInterrupted()){
+            return;
+        }
+
         // 触发推理审计事件（传递原始消息对象）
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onReason(trace, responseMessage);
+        }
+
+        if(trace.isInterrupted()){
+            return;
         }
 
         // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
@@ -156,6 +168,10 @@ public class ReasonTask implements NamedTaskComponent {
             for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                 item.target.onThought(trace, thoughtContent);
             }
+        }
+
+        if(trace.isInterrupted()){
+            return;
         }
 
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
@@ -224,6 +240,10 @@ public class ReasonTask implements NamedTaskComponent {
 
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onModelStart(trace, req);
+        }
+
+        if(trace.isInterrupted()){
+            return null;
         }
 
         int maxRetries = trace.getOptions().getMaxRetries();

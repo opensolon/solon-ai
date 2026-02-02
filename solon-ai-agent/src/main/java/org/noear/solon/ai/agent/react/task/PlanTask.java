@@ -119,13 +119,17 @@ public class PlanTask implements NamedTaskComponent {
             item.target.onPlan(trace, responseMessage);
         }
 
+        if(trace.isInterrupted()){
+            return;
+        }
+
         if (responseMessage.hasContent()) {
             if (FeedbackTool.TOOL_NAME.equals(responseMessage.getMetadataAs("__tool"))) {
                 String source = responseMessage.getMetadataAs("source");
                 if (Assert.isNotEmpty(source)) {
                     trace.setFinalAnswer(source);
                     trace.setRoute(Agent.ID_END);
-                    trace.interrupt(null);
+                    trace.interrupt(source);
                     return;
                 }
             }

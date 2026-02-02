@@ -211,7 +211,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
 
         if (Prompt.isEmpty(prompt)) {
-            //可能是旧问题（之前中断的）
+            // 可能是恢复执行（之前中断的）
             prompt = trace.getOriginalPrompt();
 
             if (Prompt.isEmpty(prompt)) {
@@ -219,7 +219,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                 return ChatMessage.ofAssistant("");
             }
         } else {
-            //新问题（重置相关数据）
+            // 新任务（重置相关数据）
             trace.reset(prompt);
             context.trace().recordNode(graph, null);
 
@@ -250,35 +250,37 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             item.target.onAgentStart(trace);
         }
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserContent());
-        }
-
-        long startTime = System.currentTimeMillis();
-        try {
-            final FlowOptions flowOptions = new FlowOptions();
-            options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
-
-            trace.getMetrics().reset();
-
-            // 核心执行：基于计算图进行循环推理
-            context.with(KEY_CURRENT_UNIT_TRACE_KEY, config.getTraceKey(), () -> {
-                flowEngine.eval(graph, -1, context, flowOptions);
-            });
-        } finally {
-            // 记录性能指标
-            long duration = System.currentTimeMillis() - startTime;
-            trace.getMetrics().setTotalDuration(duration);
-
+        if(trace.isInterrupted() == false) {
             if (LOG.isDebugEnabled()) {
-                LOG.debug("ReActAgent [{}] finished. Duration: {}ms, Steps: {}, Tools: {}",
-                        config.getName(), duration, trace.getStepCount(), trace.getToolCallCount());
+                LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserContent());
             }
 
-            // 父一级团队轨迹
-            if (parentTeamTrace != null) {
-                // 汇总 token 使用情况
-                parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+            long startTime = System.currentTimeMillis();
+            try {
+                final FlowOptions flowOptions = new FlowOptions();
+                options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
+
+                trace.getMetrics().reset();
+
+                // 核心执行：基于计算图进行循环推理
+                context.with(KEY_CURRENT_UNIT_TRACE_KEY, config.getTraceKey(), () -> {
+                    flowEngine.eval(graph, -1, context, flowOptions);
+                });
+            } finally {
+                // 记录性能指标
+                long duration = System.currentTimeMillis() - startTime;
+                trace.getMetrics().setTotalDuration(duration);
+
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("ReActAgent [{}] finished. Duration: {}ms, Steps: {}, Tools: {}",
+                            config.getName(), duration, trace.getStepCount(), trace.getToolCallCount());
+                }
+
+                // 父一级团队轨迹
+                if (parentTeamTrace != null) {
+                    // 汇总 token 使用情况
+                    parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+                }
             }
         }
 

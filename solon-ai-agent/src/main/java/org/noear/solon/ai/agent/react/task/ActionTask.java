@@ -104,12 +104,20 @@ public class ActionTask implements NamedTaskComponent {
             item.target.onAction(trace, call.name(), call.arguments());
         }
 
+        if(trace.isInterrupted()){
+            return;
+        }
+
         Map<String, Object> args = (call.arguments() == null) ? Collections.emptyMap() : call.arguments();
         String result = executeTool(trace, call.name(), args);
 
         // 触发 Observation 生命周期拦截
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onObservation(trace, result);
+        }
+
+        if(trace.isInterrupted()){
+            return;
         }
 
         // 协议闭环：回填 ToolMessage
@@ -170,6 +178,10 @@ public class ActionTask implements NamedTaskComponent {
                             item.target.onAction(trace, toolName, args);
                         }
 
+                        if(trace.isInterrupted()){
+                            return;
+                        }
+
                         // 4. 执行工具
                         String result = executeTool(trace, toolName, args);
 
@@ -180,6 +192,10 @@ public class ActionTask implements NamedTaskComponent {
                         // 5. 触发 Observation 拦截 (内容是纯的)
                         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                             item.target.onObservation(trace, result);
+                        }
+
+                        if(trace.isInterrupted()){
+                            return;
                         }
 
                         // 6. 拼装回传给 LLM 的协议文本
