@@ -24,7 +24,12 @@ import java.util.Map;
 /**
  * HITL 审批决策实体
  *
- * <p>用于承载人工干预的结果，支持批准、拒绝以及对 AI 拟调用参数的修正</p>
+ * <p>该实体定义了人工对 AI 行为的最终裁决。支持以下行为：</p>
+ * <ul>
+ * <li><b>APPROVE</b>: 批准执行。支持通过 {@code modifiedArgs} 实现“指令下达，参数修正”。</li>
+ * <li><b>REJECT</b>: 强制终止。流程直接路由至 END，Agent 会输出拒绝理由。</li>
+ * <li><b>SKIP</b>: 逻辑跳过。不执行真实工具，但向 Agent 返回一条 Observation 告知跳过原因。</li>
+ * </ul>
  *
  * @author noear
  * @since 3.9.1

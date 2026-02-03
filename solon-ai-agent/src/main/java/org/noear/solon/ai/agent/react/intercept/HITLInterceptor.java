@@ -26,8 +26,11 @@ import java.util.*;
 /**
  * 工业级人工介入拦截器 (Human-in-the-Loop Interceptor)
  *
- * <p>该拦截器在 ReAct 模式的 Action 阶段执行。通过预设策略判定是否需要拦截高危操作，
- * 并支持在人工决策后的参数修正或强制终止流程。</p>
+ * <p>该拦截器通过 ReAct 协议的生命周期钩子实现流程管控：</p>
+ * <ul>
+ * <li><b>onAction 阶段</b>：判定拦截逻辑。若无决策则抛出中断异常挂起任务；若已有决策则执行修正、跳过或拒绝。</li>
+ * <li><b>onObservation 阶段</b>：增强反馈逻辑。在工具执行成功后，将人工备注（Comment）注入观测结果，修正 AI 的下一轮认知。</li>
+ * </ul>
  *
  * @author noear
  * @since 3.9.1

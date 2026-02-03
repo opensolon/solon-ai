@@ -19,8 +19,13 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.lang.Preview;
 
 /**
- * HITL (Human-in-the-Loop) 操作助手
- * <p>提供面向业务层的便捷 API，用于提交审批决策及获取挂起状态</p>
+ * HITL (Human-in-the-Loop) 交互助手
+ *
+ * <p>提供面向业务层（如 Controller 或 Service）的便捷 API。主要用于：</p>
+ * <ul>
+ * <li><b>任务探知</b>：通过 {@link #getPendingTask} 获取当前会话中被拦截的挂起任务。</li>
+ * <li><b>决策回填</b>：通过 {@code approve/reject/skip} 提交人工干预指令，驱动 Agent 恢复执行。</li>
+ * </ul>
  *
  * @author noear
  * @since 3.9.1
@@ -50,6 +55,9 @@ public class HITL {
         submit(session, toolName, HITLDecision.approve());
     }
 
+    /**
+     * 快捷批准工具执行
+     */
     public static void approve(AgentSession session, String toolName, String comment) {
         submit(session, toolName, HITLDecision.approve().comment(comment));
     }
@@ -69,14 +77,14 @@ public class HITL {
     }
 
     /**
-     * 快捷拒绝工具执行（使用默认拒绝意见）
+     * 快捷跳过工具执行（使用默认拒绝意见）
      */
     public static void skip(AgentSession session, String toolName) {
         submit(session, toolName, HITLDecision.skip(null));
     }
 
     /**
-     * 快捷拒绝工具执行（带具体意见）
+     * 快捷跳过工具执行（带具体意见）
      */
     public static void skip(AgentSession session, String toolName, String comment) {
         submit(session, toolName, HITLDecision.skip(comment));
