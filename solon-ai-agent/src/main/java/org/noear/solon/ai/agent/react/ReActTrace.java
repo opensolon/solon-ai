@@ -37,6 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -91,6 +92,8 @@ public class ReActTrace implements AgentTrace {
     /** 中断的原因或给用户的提示 */
     private String interruptReason;
 
+    private final Map<String, Object> extras = new ConcurrentHashMap<>();
+    public Map<String, Object> getExtras() { return extras; }
 
     public ReActTrace() {
         this.route = ReActAgent.ID_REASON;

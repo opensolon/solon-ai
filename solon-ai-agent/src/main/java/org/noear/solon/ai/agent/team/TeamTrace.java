@@ -82,6 +82,12 @@ public class TeamTrace implements AgentTrace {
      * 路由决策：指向下一个 Agent 或 ID_END
      */
     private volatile String route;
+
+    /**
+     * 最终交付答案
+     */
+    private String finalAnswer;
+
     /**
      * 调度器原始决策文本（用于异常复盘）
      */
@@ -110,10 +116,9 @@ public class TeamTrace implements AgentTrace {
     /** 中断的原因或给用户的提示 */
     private String interruptReason;
 
-    /**
-     * 最终交付答案
-     */
-    private String finalAnswer;
+    private final Map<String, Object> extras = new ConcurrentHashMap<>();
+    public Map<String, Object> getExtras() { return extras; }
+
 
     public TeamTrace() {
         this.turnCounter = new AtomicInteger(0);
