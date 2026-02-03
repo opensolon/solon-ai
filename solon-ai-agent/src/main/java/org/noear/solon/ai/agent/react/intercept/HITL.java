@@ -26,6 +26,13 @@ public class HITL {
     /**
      * 快捷拒绝
      */
+    public static void reject(AgentSession session, String toolName) {
+        submit(session, toolName, HITLDecision.reject(null));
+    }
+
+    /**
+     * 快捷拒绝
+     */
     public static void reject(AgentSession session, String toolName, String comment) {
         submit(session, toolName, HITLDecision.reject(comment));
     }

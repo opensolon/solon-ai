@@ -18,14 +18,21 @@ public class HITLInterceptor implements ReActInterceptor {
     }
 
     public HITLInterceptor onSensitiveTool(String... toolNames) {
-        for (String name : toolNames) onTool(name, (trace, args) -> true);
+        HITLSensitiveStrategy toolDesc = new HITLSensitiveStrategy();
+        for (String name : toolNames) onTool(name, toolDesc);
         return this;
     }
 
     @Override
     public void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
         InterventionStrategy strategy = strategyMap.get(toolName);
-        if (strategy == null || !strategy.shouldIntervene(trace, args)) {
+        if(strategy == null){
+            return;
+        }
+
+        String comment = strategy.evaluate(trace,args);
+
+        if (comment == null) {
             return;
         }
 
@@ -34,8 +41,8 @@ public class HITLInterceptor implements ReActInterceptor {
 
         // 1. 还没决策：挂起
         if (decision == null) {
-            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolName, new LinkedHashMap<>(args)));
-            trace.interrupt("REQUIRED_HUMAN_APPROVAL:" + toolName);
+            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolName, new LinkedHashMap<>(args), comment));
+            trace.interrupt(comment);
             return;
         }
 
@@ -66,6 +73,6 @@ public class HITLInterceptor implements ReActInterceptor {
 
     @FunctionalInterface
     public interface InterventionStrategy {
-        boolean shouldIntervene(ReActTrace trace, Map<String, Object> args);
+        String evaluate(ReActTrace trace, Map<String, Object> args);
     }
 }

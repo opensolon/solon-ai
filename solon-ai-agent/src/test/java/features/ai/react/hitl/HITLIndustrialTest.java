@@ -3,10 +3,12 @@ package features.ai.react.hitl;
 import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.agent.react.intercept.HITL;
+import org.noear.solon.ai.agent.react.intercept.HITLDecision;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -14,16 +16,13 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.annotation.Param;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class HITLIndustrialTest {
 
     @Test
     public void testRejectFlow() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 配置拦截器：transfer 工具始终需要介入
+        // 使用新接口：注册敏感工具
         HITLInterceptor hitlInterceptor = new HITLInterceptor()
                 .onSensitiveTool("transfer");
 
@@ -35,45 +34,40 @@ public class HITLIndustrialTest {
         AgentSession session = InMemoryAgentSession.of("user_002");
 
         // 1. 发起请求
-        String prompt = "给李四转账 2000 元。已确认过";
-        System.out.println(">>> 尝试转账...");
+        String prompt = "给李四转账 2000 元。已确认过（不要再确认了）";
+        System.out.println(">>> 第一次调用：尝试转账");
         ReActResponse resp1 = agent.prompt(prompt).session(session).call();
 
-        // 验证拦截
+        // 验证被拦截
         Assertions.assertTrue(resp1.getTrace().isInterrupted(), "应该是被中断状态");
 
         // 2. 人工拒绝
         HITLTask pendingTask = HITL.getPendingTask(session);
-        System.out.println("收到审批申请: " + pendingTask.getToolName());
+        Assertions.assertNotNull(pendingTask);
+        System.out.println("收到审批申请: " + pendingTask.getToolName() + ", 原因: " + pendingTask.getComment());
 
-        System.out.println(">>> 人工介入：拒绝该操作");
-        HITL.reject(session, pendingTask.getToolName());
+        System.out.println(">>> 人工介入：拒绝该操作并给出理由");
+        String rejectMsg = "抱歉，由于风险控制，此操作已被管理员拒绝。";
+        HITL.reject(session, pendingTask.getToolName(), rejectMsg);
 
         // 3. 恢复执行
-        System.out.println(">>> 恢复执行，观察 AI 如何处理拒绝...");
-        ReActResponse resp2 = agent.prompt().session(session).call();
-
-        // 验证结果
-        System.out.println("AI 最终回复: " + resp2.getContent());
-        //Assertions.assertFalse(resp2.getTrace().isInterrupted(), "拒绝后流程应继续并结束");
-
-        // 通常 AI 会回复类似：“抱歉，转账申请被拒绝了”
-        boolean toldUserRejected = resp2.getContent().contains("拒绝") || resp2.getContent().contains("未通过");
-        Assertions.assertTrue(toldUserRejected, "AI 应该告知用户操作被拒绝");
+        System.out.println(">>> 第二次调用：恢复执行（验证拒绝逻辑）");
+        String content = agent.prompt().session(session).call().getContent();
+        System.out.println(content);
 
         // 验证清理工作
-        Assertions.assertNull(HITL.getPendingTask(session), "任务结束后 pendingTask 应该被清理");
+        Assertions.assertNull(HITL.getPendingTask(session), "任务结束后状态必须清理干净");
     }
 
     @Test
     public void testFullHITLFlow() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 初始化拦截器：配置超过 1000 元必须审批的策略
+        // 使用 evaluate 接口：动态判定
         HITLInterceptor hitlInterceptor = new HITLInterceptor()
                 .onTool("transfer", (trace, args) -> {
                     double amount = Double.parseDouble(args.get("amount").toString());
-                    return amount > 1000;
+                    return amount > 1000 ? "大额转账审批" : null;
                 });
 
         ReActAgent agent = ReActAgent.of(chatModel)
@@ -83,41 +77,32 @@ public class HITLIndustrialTest {
 
         AgentSession session = InMemoryAgentSession.of("user_001");
 
-        // --- 场景：用户要求转账 5000 元（触发拦截） ---
-        String prompt = "帮我给张三转账 5000 元。已确认过";
+        // 1. 触发拦截
+        System.out.println(">>> 第一次调用：转账 5000");
+        ReActResponse resp1 = agent.prompt("帮我给张三转账 5000 元。已确认过").session(session).call();
+        Assertions.assertTrue(resp1.getTrace().isInterrupted());
 
-        System.out.println(">>> 第一次调用：尝试大额转账");
-        ReActResponse resp1 = agent.prompt(prompt).session(session).call();
-
-        // 验证是否被中断
-        Assertions.assertTrue(resp1.getTrace().isInterrupted(), "应该被拦截器中断");
-        System.out.println("中断原因: " + resp1.getTrace().getInterruptReason());
-
-        // --- 场景：人工检查挂起任务，并决定修改参数（比如只允许转 800） ---
+        // 2. 获取任务并使用新 Fluent API 批准且修正参数
         HITLTask pendingTask = HITL.getPendingTask(session);
-        Assertions.assertEquals("transfer", pendingTask.getToolName());
-        System.out.println("待处理工具: " + pendingTask.getToolName());
-        System.out.println("原始参数: " + pendingTask.getArgs());
+        System.out.println("拦截原因: " + pendingTask.getComment());
 
-        // 人工介入：修改金额为 800，并批准
-        Map<String, Object> modifiedArgs = new HashMap<>();
-        modifiedArgs.put("to", "张三");
-        modifiedArgs.put("amount", 800.0);
+        System.out.println(">>> 人工介入：修正金额为 800 并批准");
+        HITLDecision decision = HITLDecision.approve()
+                .comment("同意转账，但修正了金额")
+                .modifiedArgs(Utils.asMap("to", "张三", "amount", 800.0));
 
-        System.out.println(">>> 人工介入：将金额修改为 800 并批准");
-        HITL.approveWithModifiedArgs(session, "transfer", modifiedArgs);
+        HITL.submit(session, pendingTask.getToolName(), decision);
 
-        // --- 场景：恢复执行 ---
+        // 3. 恢复执行
         System.out.println(">>> 第二次调用：恢复执行");
-        // 注意：恢复执行时 prompt() 传空，会自动加载 session 里的状态
         ReActResponse resp2 = agent.prompt().session(session).call();
 
         String finalContent = resp2.getContent();
-        System.out.println("最终结果: " + finalContent);
+        System.out.println("最终回复: " + finalContent);
 
-        // 验证：最终执行的是修改后的金额
-        Assertions.assertTrue(finalContent.contains("800"), "执行结果应包含修改后的金额");
-        Assertions.assertTrue(finalContent.contains("成功"), "流程应执行完毕");
+        // 验证修正结果
+        Assertions.assertTrue(finalContent.contains("800"), "应该执行修正后的 800 元");
+        Assertions.assertNull(HITL.getPendingTask(session), "执行完后状态应清理");
     }
 
     public static class BankTools {

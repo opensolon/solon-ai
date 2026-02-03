@@ -18,17 +18,37 @@ public class HITLDecision implements Serializable {
     }
 
     public static HITLDecision approve() {
-        return new HITLDecision().setApproved(true);
+        return new HITLDecision().approved(true);
     }
 
     public static HITLDecision reject(String comment) {
-        return new HITLDecision().setApproved(false).setComment(comment);
+        return new HITLDecision().approved(false).comment(comment);
     }
 
-    public boolean isApproved() { return approved; }
-    public HITLDecision setApproved(boolean approved) { this.approved = approved; return this; }
+    protected HITLDecision approved(boolean approved) {
+        this.approved = approved;
+        return this;
+    }
 
-    public String getComment() { return comment; }
+
+    public HITLDecision comment(String comment) {
+        this.comment = comment;
+        return this;
+    }
+
+    public HITLDecision modifiedArgs(Map<String, Object> modifiedArgs) {
+        this.modifiedArgs = modifiedArgs;
+        return this;
+    }
+
+    public boolean isApproved() {
+        return approved;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
     public String getCommentOrDefault() {
         if (Assert.isEmpty(comment)) {
             return "操作被拒绝：人工审批未通过。";
@@ -36,8 +56,8 @@ public class HITLDecision implements Serializable {
             return comment;
         }
     }
-    public HITLDecision setComment(String comment) { this.comment = comment; return this; }
 
-    public Map<String, Object> getModifiedArgs() { return modifiedArgs; }
-    public HITLDecision setModifiedArgs(Map<String, Object> modifiedArgs) { this.modifiedArgs = modifiedArgs; return this; }
+    public Map<String, Object> getModifiedArgs() {
+        return modifiedArgs;
+    }
 }
