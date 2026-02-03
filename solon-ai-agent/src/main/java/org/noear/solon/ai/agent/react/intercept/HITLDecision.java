@@ -57,32 +57,30 @@ public class HITLDecision implements Serializable {
         //用于反序列化
     }
 
+    public HITLDecision(int action) {
+        this.action = action;
+    }
+
     /**
      * 快速创建批准决策
      */
     public static HITLDecision approve() {
-        return new HITLDecision().action(ACTION_APPROVE);
+        return new HITLDecision(ACTION_APPROVE);
     }
 
     /**
      * 快速创建拒绝决策
      */
     public static HITLDecision reject(String comment) {
-        return new HITLDecision().action(ACTION_REJECT).comment(comment);
+        return new HITLDecision(ACTION_REJECT).comment(comment);
     }
 
     /**
      * 快速创建跳过决策
      */
     public static HITLDecision skip(String comment) {
-        return new HITLDecision().action(ACTION_SKIP).comment(comment);
+        return new HITLDecision(ACTION_SKIP).comment(comment);
     }
-
-    public HITLDecision action(int action) {
-        this.action = action;
-        return this;
-    }
-
 
     public HITLDecision comment(String comment) {
         this.comment = comment;
