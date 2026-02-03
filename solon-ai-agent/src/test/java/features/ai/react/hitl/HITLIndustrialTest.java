@@ -166,6 +166,55 @@ public class HITLIndustrialTest {
         Assertions.assertNull(HITL.getPendingTask(session), "执行完后状态应清理");
     }
 
+    @Test
+    public void testApproveFlow2() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 使用 evaluate 接口：动态判定
+        HITLInterceptor hitlInterceptor = new HITLInterceptor()
+                .onTool("transfer", (trace, args) -> {
+                    double amount = Double.parseDouble(args.get("amount").toString());
+                    return amount > 1000 ? "大额转账审批" : null;
+                });
+
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .role("银行专员（使用工具给账号转钱）")
+                .instruction("不要做多余的确认")
+                .defaultToolAdd(new BankTools())
+                .defaultInterceptorAdd(hitlInterceptor)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("user_001");
+
+        // 1. 触发拦截
+        System.out.println(">>> 第一次调用：转账 5000");
+        String prompt = "帮我给张三转账 5000 元。已确认过";
+        ReActResponse resp1 = agent.prompt(prompt).session(session).call();
+        Assertions.assertTrue(resp1.getTrace().isInterrupted());
+
+        // 2. 获取任务并使用新 Fluent API 批准且修正参数
+        HITLTask pendingTask = HITL.getPendingTask(session);
+        System.out.println("拦截原因: " + pendingTask.getComment());
+
+        System.out.println(">>> 人工介入：修正金额为 800 并批准");
+        HITLDecision decision = HITLDecision.approve()
+                .comment("同意转账，但修正了金额")
+                .modifiedArgs(Utils.asMap("to", "张三", "amount", 800.0));
+
+        HITL.submit(session, pendingTask.getToolName(), decision);
+
+        // 3. 恢复执行
+        System.out.println(">>> 第二次调用：恢复执行");
+        ReActResponse resp2 = agent.prompt(prompt).session(session).call();
+
+        String finalContent = resp2.getContent();
+        System.out.println("最终回复: " + finalContent);
+
+        // 验证修正结果
+        Assertions.assertTrue(finalContent.contains("800"), "应该执行修正后的 800 元");
+        Assertions.assertNull(HITL.getPendingTask(session), "执行完后状态应清理");
+    }
+
     public static class BankTools {
         @ToolMapping(description = "执行银行转账操作")
         public String transfer(@Param(description = "收款人姓名") String to,
