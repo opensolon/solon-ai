@@ -7,28 +7,18 @@ import java.util.*;
 
 /**
  * 工业级人工介入拦截器
- * <p>支持策略路由、动态风险评估与上下文注入</p>
  */
 public class HITLInterceptor implements ReActInterceptor {
 
     private final Map<String, InterventionStrategy> strategyMap = new HashMap<>();
-    private final String approvalStatusKey = "_hitl_approved_";
 
-    /**
-     * 为特定工具注册介入策略
-     */
     public HITLInterceptor onTool(String toolName, InterventionStrategy strategy) {
         strategyMap.put(toolName, strategy);
         return this;
     }
 
-    /**
-     * 快捷注册：高危工具（始终拦截）
-     */
     public HITLInterceptor onSensitiveTool(String... toolNames) {
-        for (String name : toolNames) {
-            onTool(name, (trace, args) -> true);
-        }
+        for (String name : toolNames) onTool(name, (trace, args) -> true);
         return this;
     }
 
@@ -39,50 +29,41 @@ public class HITLInterceptor implements ReActInterceptor {
             return;
         }
 
-        String specificKey = HITL.KEY_PREFIX + toolName;
-        String rejectKey = HITL.REJECT_PREFIX + toolName; // 获取拒绝 Key
+        // 获取决策实体
+        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolName);
 
-        Boolean isApproved = trace.getContext().getAs(specificKey);
-        Boolean isRejected = trace.getContext().getAs(rejectKey);
-
-        // 1. 处理拒绝逻辑
-        if (Boolean.TRUE.equals(isRejected)) {
-            // 给 AI 一个反馈，让它知道被拒绝了，它会据此回复用户
-            trace.setFinalAnswer("操作被拒绝：人工审批未通过。");
-            trace.setRoute(Agent.ID_END);
-            trace.interrupt("操作被拒绝：人工审批未通过。");
-
-            // 清理现场
-            trace.getContext().remove(rejectKey);
-            trace.getContext().remove(HITL.LAST_INTERVENED);
-
-            // 注意：这里不需要 interrupt，直接让流程继续走，AI 会看到 Observation
-
+        // 1. 还没决策：挂起
+        if (decision == null) {
+            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolName, new LinkedHashMap<>(args)));
+            trace.interrupt("REQUIRED_HUMAN_APPROVAL:" + toolName);
             return;
         }
 
-        // 2. 处理挂起逻辑
-        if (isApproved == null || !isApproved) {
-            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolName, new LinkedHashMap<>(args)));
-            trace.interrupt("REQUIRED_HUMAN_APPROVAL:" + toolName);
-        }
-        // 3. 处理审批通过逻辑
-        else {
-            Map<String, Object> modifiedArgs = trace.getContext().getAs(HITL.ARGS_PREFIX + toolName);
-            if (modifiedArgs != null) {
-                args.putAll(modifiedArgs);
-                trace.getContext().remove(HITL.ARGS_PREFIX + toolName);
-            }
+        // 2. 已经有决策了：根据结果处理
+        try {
+            if (decision.isApproved()) {
+                // 同意：检查是否有参数修正
+                if (decision.getModifiedArgs() != null) {
+                    args.putAll(decision.getModifiedArgs());
+                }
+                // 放行，让 Agent 继续执行工具调用
+            } else {
+                // 拒绝：直接结束或给 Observation
+                String msg =decision.getCommentOrDefault();
 
-            trace.getContext().remove(specificKey);
+                // 方案：设为 FinalAnswer 并结束，不执行工具
+                trace.setFinalAnswer(msg);
+                trace.setRoute(Agent.ID_END);
+                // 抛出中断异常，防止工具被调用
+                trace.interrupt(msg);
+            }
+        } finally {
+            // 无论同意还是拒绝，执行完这一步都要清理现场
+            trace.getContext().remove(HITL.DECISION_PREFIX + toolName);
             trace.getContext().remove(HITL.LAST_INTERVENED);
         }
     }
 
-    /**
-     * 策略接口：支持动态判定
-     * 例如：转账工具，金额 > 1000 才拦截
-     */
     @FunctionalInterface
     public interface InterventionStrategy {
         boolean shouldIntervene(ReActTrace trace, Map<String, Object> args);

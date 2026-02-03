@@ -1,34 +1,39 @@
 package org.noear.solon.ai.agent.react.intercept;
 
-
 import org.noear.solon.ai.agent.AgentSession;
-
-import java.util.Map;
 
 /**
  * 提升用户体验的 HITL 操作助手
  */
 public class HITL {
-    public static final String KEY_PREFIX = "_hitl_approved_";
-    public static final String REJECT_PREFIX = "_hitl_rejected_";
-    public static final String ARGS_PREFIX = "_modified_args_";
+    public static final String DECISION_PREFIX = "_hitl_decision_";
     public static final String LAST_INTERVENED = "_last_intervened_";
 
-    public static void reject(AgentSession session, String toolName) {
-        session.getSnapshot().put(REJECT_PREFIX + toolName, true);
+    /**
+     * 提交决策（同意/拒绝/修正）
+     */
+    public static void submit(AgentSession session, String toolName, HITLDecision decision) {
+        session.getSnapshot().put(DECISION_PREFIX + toolName, decision);
     }
 
+    /**
+     * 快捷批准
+     */
     public static void approve(AgentSession session, String toolName) {
-        session.getSnapshot().put(KEY_PREFIX + toolName, true);
+        submit(session, toolName, HITLDecision.approve());
     }
 
-    public static void approveWithModifiedArgs(AgentSession session, String toolName, Map<String, Object> newArgs) {
-        session.getSnapshot().put(KEY_PREFIX + toolName, true);
-        session.getSnapshot().put(ARGS_PREFIX + toolName, newArgs);
+    /**
+     * 快捷拒绝
+     */
+    public static void reject(AgentSession session, String toolName, String comment) {
+        submit(session, toolName, HITLDecision.reject(comment));
     }
 
+    /**
+     * 获取当前挂起的任务信息
+     */
     public static HITLTask getPendingTask(AgentSession session) {
-        HITLTask task = session.getSnapshot().getAs(LAST_INTERVENED);
-        return task;
+        return session.getSnapshot().getAs(LAST_INTERVENED);
     }
 }
