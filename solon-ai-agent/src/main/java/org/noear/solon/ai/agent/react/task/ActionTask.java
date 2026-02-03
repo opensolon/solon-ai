@@ -91,6 +91,50 @@ public class ActionTask implements NamedTaskComponent {
         processTextModeAction(node, trace);
     }
 
+
+    private String doAction(ReActTrace trace, String toolName, Map<String, Object> args) {
+        trace.setLastObservation(null);
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onAction(trace, toolName, args);
+        }
+
+        if (trace.isInterrupted()) {
+            return null;
+        }
+
+        if (Agent.ID_END.equals(trace.getRoute())) {
+            return null;
+        }
+
+        // 4. 执行工具
+        final String result;
+        if(Assert.isEmpty(trace.getLastObservation())){
+            result = executeTool(trace, toolName, args);
+        } else {
+            //可能会在 onAction 里产生 Observation
+            result = trace.getLastObservation();
+        }
+
+        if (Agent.ID_END.equals(trace.getRoute())) {
+            return null;
+        }
+
+        // 5. 触发 Observation 拦截 (内容是纯的)
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onObservation(trace, toolName, result);
+        }
+
+        if (trace.isInterrupted()) {
+            return null;
+        }
+
+        if (Agent.ID_END.equals(trace.getRoute())) {
+            return null;
+        }
+
+        return result;
+    }
+
     /**
      * 处理标准 ToolCall 协议调用
      */
@@ -99,28 +143,11 @@ public class ActionTask implements NamedTaskComponent {
             LOG.debug("Processing native tool call for agent [{}]: {}.", config.getName(), call);
         }
 
-        // 触发 Action 生命周期拦截
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onAction(trace, call.name(), call.arguments());
-        }
-
-        if(trace.isInterrupted()){
-            return;
-        }
-
         Map<String, Object> args = (call.arguments() == null) ? new HashMap<>() : call.arguments();
-        String result = executeTool(trace, call.name(), args);
 
-        if (Agent.ID_END.equals(trace.getRoute())) {
-            return;
-        }
-
-        // 触发 Observation 生命周期拦截
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onObservation(trace, call.name(), result);
-        }
-
-        if(trace.isInterrupted()){
+        // 触发 Action 生命周期拦截
+        String result = doAction(trace, call.name(), args);
+        if(result == null){
             return;
         }
 
@@ -167,11 +194,10 @@ public class ActionTask implements NamedTaskComponent {
                 JsonReader jsonReader = new JsonReader(sr);
 
                 while (true) {
-
                     try {
                         // 1. 提取 JSON 字符串
                         ONode actionNode = jsonReader.streamRead();
-                        if (actionNode == null || actionNode.isObject() == false){
+                        if (actionNode == null || actionNode.isObject() == false) {
                             break;
                         }
 
@@ -183,28 +209,9 @@ public class ActionTask implements NamedTaskComponent {
                         Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
                         // 3. 触发 Action 拦截 (内容是纯的)
-                        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-                            item.target.onAction(trace, toolName, args);
-                        }
-
-                        if(trace.isInterrupted()){
-                            return;
-                        }
-
-                        // 4. 执行工具
-                        String result = executeTool(trace, toolName, args);
-
-                        if (Agent.ID_END.equals(trace.getRoute())) {
+                        String result = doAction(trace, toolName, args);
+                        if (result == null) {
                             break;
-                        }
-
-                        // 5. 触发 Observation 拦截 (内容是纯的)
-                        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-                            item.target.onObservation(trace, toolName, result);
-                        }
-
-                        if(trace.isInterrupted()){
-                            return;
                         }
 
                         // 6. 拼装回传给 LLM 的协议文本

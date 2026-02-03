@@ -65,6 +65,11 @@ public class ReasonTask implements NamedTaskComponent {
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
 
+        if(Agent.ID_END.equals(trace.getRoute())){
+            //有可能在 action 的拦截里，要求终止
+            return;
+        }
+
         if (LOG.isDebugEnabled()) {
             LOG.debug("ReActAgent [{}] reasoning... Step: {}/{}",
                     config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps());

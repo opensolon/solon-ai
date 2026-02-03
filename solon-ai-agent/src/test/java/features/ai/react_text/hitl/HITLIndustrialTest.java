@@ -1,4 +1,4 @@
-package features.ai.react.hitl;
+package features.ai.react_text.hitl;
 
 import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.Assertions;
@@ -7,6 +7,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActResponse;
+import org.noear.solon.ai.agent.react.ReActStyle;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLDecision;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
@@ -27,6 +28,7 @@ public class HITLIndustrialTest {
                 .onSensitiveTool("transfer");
 
         ReActAgent agent = ReActAgent.of(chatModel)
+                .style(ReActStyle.STRUCTURED_TEXT)
                 .role("银行专员（使用工具给账号转钱）")
                 .instruction("不要做多余的确认")
                 .defaultToolAdd(new BankTools())
@@ -78,6 +80,7 @@ public class HITLIndustrialTest {
                 .onTool("transfer", (trace, args) -> "当前账户存在波动，建议人工确认执行还是跳过");
 
         ReActAgent agent = ReActAgent.of(chatModel)
+                .style(ReActStyle.STRUCTURED_TEXT)
                 .role("银行专员（使用工具给账号转钱）")
                 .instruction("不要做多余的确认")
                 .defaultToolAdd(new BankTools())
@@ -130,6 +133,7 @@ public class HITLIndustrialTest {
                 });
 
         ReActAgent agent = ReActAgent.of(chatModel)
+                .style(ReActStyle.STRUCTURED_TEXT)
                 .role("银行专员（使用工具给账号转钱）")
                 .instruction("不要做多余的确认")
                 .defaultToolAdd(new BankTools())

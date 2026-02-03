@@ -31,10 +31,14 @@ import java.util.Map;
  */
 @Preview("3.9.1")
 public class HITLDecision implements Serializable {
+    public static final int ACTION_APPROVE = 1;
+    public static final int ACTION_REJECT = 2;
+    public static final int ACTION_SKIP = 3; // 新增：跳过
+
     /**
      * 是否批准执行
      */
-    private boolean approved;
+    private int action;
     /**
      * 审批意见（拒绝理由或操作备注）
      */
@@ -52,18 +56,25 @@ public class HITLDecision implements Serializable {
      * 快速创建批准决策
      */
     public static HITLDecision approve() {
-        return new HITLDecision().approved(true);
+        return new HITLDecision().action(ACTION_APPROVE);
     }
 
     /**
      * 快速创建拒绝决策
      */
     public static HITLDecision reject(String comment) {
-        return new HITLDecision().approved(false).comment(comment);
+        return new HITLDecision().action(ACTION_REJECT).comment(comment);
     }
 
-    protected HITLDecision approved(boolean approved) {
-        this.approved = approved;
+    /**
+     * 快速创建跳过决策
+     */
+    public static HITLDecision skip(String comment) {
+        return new HITLDecision().action(ACTION_SKIP).comment(comment);
+    }
+
+    protected HITLDecision action(int action) {
+        this.action = action;
         return this;
     }
 
@@ -79,7 +90,15 @@ public class HITLDecision implements Serializable {
     }
 
     public boolean isApproved() {
-        return approved;
+        return action == ACTION_APPROVE;
+    }
+
+    public boolean isRejected() {
+        return action == ACTION_REJECT;
+    }
+
+    public boolean isSkipped() {
+        return action == ACTION_SKIP;
     }
 
     public String getComment() {
@@ -89,9 +108,9 @@ public class HITLDecision implements Serializable {
     /**
      * 获取备注信息，若为空则返回默认拒绝文案
      */
-    public String getCommentOrDefault() {
+    public String getCommentOrDefault(String def) {
         if (Assert.isEmpty(comment)) {
-            return "操作被拒绝：人工审批未通过。";
+            return def;
         } else {
             return comment;
         }

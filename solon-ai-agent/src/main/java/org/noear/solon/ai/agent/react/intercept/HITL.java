@@ -50,6 +50,10 @@ public class HITL {
         submit(session, toolName, HITLDecision.approve());
     }
 
+    public static void approve(AgentSession session, String toolName, String comment) {
+        submit(session, toolName, HITLDecision.approve().comment(comment));
+    }
+
     /**
      * 快捷拒绝工具执行（使用默认拒绝意见）
      */
@@ -62,6 +66,20 @@ public class HITL {
      */
     public static void reject(AgentSession session, String toolName, String comment) {
         submit(session, toolName, HITLDecision.reject(comment));
+    }
+
+    /**
+     * 快捷拒绝工具执行（使用默认拒绝意见）
+     */
+    public static void skip(AgentSession session, String toolName) {
+        submit(session, toolName, HITLDecision.skip(null));
+    }
+
+    /**
+     * 快捷拒绝工具执行（带具体意见）
+     */
+    public static void skip(AgentSession session, String toolName, String comment) {
+        submit(session, toolName, HITLDecision.skip(comment));
     }
 
     /**

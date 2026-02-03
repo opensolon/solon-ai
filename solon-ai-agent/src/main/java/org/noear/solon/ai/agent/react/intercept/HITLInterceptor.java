@@ -80,15 +80,16 @@ public class HITLInterceptor implements ReActInterceptor {
                     args.putAll(decision.getModifiedArgs());
                 }
                 // 允许放行，Agent 将继续进行真正的 Tool 调用
+            } else if(decision.isSkipped()){
+                String msg = decision.getCommentOrDefault("操作跳过：请继续下一步。");
+                trace.setLastObservation(msg);
             } else {
                 // 拒绝：直接结束或给 Observation
-                String msg =decision.getCommentOrDefault();
+                String msg = decision.getCommentOrDefault("操作拒绝：人工审批未通过。");
 
                 // 方案：设为 FinalAnswer 并结束，不执行工具
                 trace.setFinalAnswer(msg);
                 trace.setRoute(Agent.ID_END);
-                // 抛出中断异常，防止工具被调用
-                trace.interrupt(msg);
             }
         } finally {
             // 审批闭环后的现场清理，确保 Session 状态幂等
