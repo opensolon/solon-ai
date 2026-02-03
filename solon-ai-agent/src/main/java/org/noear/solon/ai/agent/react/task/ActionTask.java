@@ -111,6 +111,10 @@ public class ActionTask implements NamedTaskComponent {
         Map<String, Object> args = (call.arguments() == null) ? new HashMap<>() : call.arguments();
         String result = executeTool(trace, call.name(), args);
 
+        if (Agent.ID_END.equals(trace.getRoute())) {
+            return;
+        }
+
         // 触发 Observation 生命周期拦截
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onObservation(trace, call.name(), result);
