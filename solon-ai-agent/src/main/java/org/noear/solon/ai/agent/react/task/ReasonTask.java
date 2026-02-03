@@ -19,11 +19,8 @@ import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.agent.util.FeedbackTool;
-import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActAgentConfig;
-import org.noear.solon.ai.agent.react.ReActInterceptor;
-import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -149,7 +146,7 @@ public class ReasonTask implements NamedTaskComponent {
 
 
         // 进一步清洗协议头（如 Thought:{...}\nAction:），提取核心思维逻辑
-        final String thoughtContent = extractThought(clearContent);
+        final String thoughtContent = extractThought(trace, clearContent);
 
         trace.getWorkingMemory().addMessage(ChatMessage.ofAssistant(rawContent));
         trace.setLastResult(clearContent);
@@ -158,6 +155,14 @@ public class ReasonTask implements NamedTaskComponent {
         if(Assert.isNotEmpty(thoughtContent)) {
             for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                 item.target.onThought(trace, thoughtContent);
+            }
+        }
+
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            if (Assert.isNotEmpty(clearContent)) {
+                trace.setRoute(Agent.ID_END);
+                trace.setFinalAnswer(clearContent); // 直接取干净的正文
+                return;
             }
         }
 
@@ -254,9 +259,13 @@ public class ReasonTask implements NamedTaskComponent {
     /**
      * 移除技术性标签（如 <think>）及协议引导词（如 Thought:），获取纯净思考主体
      */
-    private String extractThought(String clearContent) {
+    private String extractThought(ReActTrace trace, String clearContent) {
         if (Utils.isEmpty(clearContent)) {
             return "";
+        }
+
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            return clearContent;
         }
 
         String result;

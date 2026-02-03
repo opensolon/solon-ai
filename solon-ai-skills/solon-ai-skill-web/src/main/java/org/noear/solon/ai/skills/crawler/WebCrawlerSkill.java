@@ -43,14 +43,23 @@ public class WebCrawlerSkill extends AbsSkill {
     }
 
     @Override
-    public String name() { return "web_crawler"; }
+    public String name() {
+        return "web_crawler";
+    }
 
     @Override
-    public String description() { return "阅读助手：抓取网页内容并转换为 LLM 友好的 Markdown。"; }
+    public String description() {
+        return "阅读助手：抓取网页内容并转换为 LLM 友好的 Markdown。";
+    }
 
     @ToolMapping(name = "crawl_url", description = "读取并分析指定 URL 网页的详细内容")
     public String crawl(@Param("url") String url) {
         if (url == null || !url.startsWith("http")) return "错误：URL 无效。";
+
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("Crawl url [{}]: {}", driver, url);
+        }
+
         try {
             return driver.crawl(url, apiKey);
         } catch (Exception e) {
@@ -68,9 +77,19 @@ public class WebCrawlerSkill extends AbsSkill {
     public static final CrawlerDriver JINA = (url, key) -> {
         HttpUtils http = HttpUtils.http("https://r.jina.ai/" + url);
 
-        // Jina 支持通过 Header 明确要求返回格式
-        http.header("X-Return-Format", "markdown");
-        if (key != null) {
+        // 1. 必须：设置模拟浏览器的 User-Agent
+        http.header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+                .header("Cache-Control", "no-cache")
+                .header("Pragma", "no-cache");
+
+        // 2. Jina 专用 Header
+        http.header("X-Return-Format", "markdown")
+                .header("X-No-Cache", "true"); // 避免获取旧的截断缓存
+
+        // 3. 如果有 Key 则添加
+        if (key != null && !key.isEmpty()) {
             http.header("Authorization", "Bearer " + key);
         }
 
@@ -83,7 +102,7 @@ public class WebCrawlerSkill extends AbsSkill {
         String json = HttpUtils.http("https://api.firecrawl.dev/v1/scrape")
                 .header("Authorization", "Bearer " + key)
                 .header("Content-Type", "application/json")
-                .bodyJson(new ONode()
+                .bodyOfJson(new ONode()
                         .set("url", url)
                         .set("formats", new ONode().add("markdown"))
                         .set("onlyMainContent", true) // 默认剔除导航和广告

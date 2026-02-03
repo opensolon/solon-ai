@@ -63,28 +63,17 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
 
         // 1. 角色定义与 ReAct 范式宣告
         sb.append("## 你的角色\n")
-                .append(role).append("。")
-                .append("你必须使用 ReAct 模式解决问题：")
-                .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
+                .append(role).append("。");
+
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            sb.append("你是一个具备自主行动能力的专家。\n\n");
+        } else {
+            sb.append("你必须使用 ReAct 模式解决问题：")
+                    .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
+        }
 
         // 2. 注入指令集（含格式、准则、示例）
         sb.append(instruction);
-
-        // 3. 工具集动态注入
-        if (trace.getOptions().getTools().isEmpty()) {
-            sb.append("\n注意：当前没有可用工具。请直接给出 Final Answer。\n");
-        } else {
-            sb.append("\n## 可用工具\n");
-            sb.append("你也可以通过模型内置的函数调用工具（Function Calling）使用以下工具：\n");
-            trace.getOptions().getTools().forEach(t -> {
-                sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
-                // 必须告知模型参数 Schema 以便生成正确的 JSON
-                if (Assert.isNotEmpty(t.inputSchema())) {
-                    sb.append(" 参数定义: ").append(t.inputSchema());
-                }
-                sb.append("\n");
-            });
-        }
 
         return sb.toString();
     }
@@ -102,6 +91,34 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
     }
 
     public String getInstruction(ReActTrace trace) {
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            return getNaturalInstruction(trace);
+        } else {
+            return getClassicInstruction(trace); // 即你原来的逻辑
+        }
+    }
+
+    private String getNaturalInstruction(ReActTrace trace) {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("## 行为准则\n")
+                .append("1. **直接回复**：分析问题后直接给出回答，不要输出 'Thought:' 或 'Final Answer:' 等标签。\n")
+                .append("2. **工具调用**：如需外部信息，请【直接】触发函数调用（Function Calling）。\n")
+                .append("3. **禁止伪造**：严禁在正文中模拟工具执行过程或伪造返回结果。\n\n");
+
+        // 业务指令注入
+        appendBusinessInstructions(sb, trace);
+
+        sb.append("## 示例\n")
+                .append("用户: 帮我查一下杭州的天气并总结。\n")
+                .append("（模型直接触发函数调用 get_weather）\n")
+                .append("（模型根据返回内容回复）\n")
+                .append("杭州今天晴，气温 20°C，非常适合出游。\n\n");
+
+        return sb.toString();
+    }
+
+    public String getClassicInstruction(ReActTrace trace) {
         ReActAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
@@ -125,6 +142,36 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
                 .append("4. 最终回答未带上 ").append(config.getFinishMarker()).append(" 将被视为无效。\n\n");
 
         // D. 业务指令注入
+        appendBusinessInstructions(sb, trace);
+
+        // E. 少样本引导 (Few-shot)
+        sb.append("## 示例\n")
+                .append("用户: 北京天气怎么样？\n")
+                .append("Thought: 我需要查询北京当前的实时天气信息。\n")
+                .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"北京\"}}\n")
+                .append("Thought: 根据观察结果，北京天气良好。\n")
+                .append("Final Answer: ").append(config.getFinishMarker()).append("北京目前天气晴间多云，气温约 25°C。\n");
+
+        // F. 工具集动态注入
+        if (trace.getOptions().getTools().isEmpty()) {
+            sb.append("\n注意：当前没有可用工具。请直接给出 Final Answer。\n");
+        } else {
+            sb.append("\n## 可用工具\n");
+            sb.append("你也可以通过模型内置的函数调用工具（Function Calling）使用以下工具：\n");
+            trace.getOptions().getTools().forEach(t -> {
+                sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
+                // 必须告知模型参数 Schema 以便生成正确的 JSON
+                if (Assert.isNotEmpty(t.inputSchema())) {
+                    sb.append(" 参数定义: ").append(t.inputSchema());
+                }
+                sb.append("\n");
+            });
+        }
+
+        return sb.toString();
+    }
+
+    private void appendBusinessInstructions(StringBuilder sb, ReActTrace trace) {
         if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
             sb.append("## 核心任务指令\n");
 
@@ -140,16 +187,6 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
             }
             sb.append("\n");
         }
-
-        // E. 少样本引导 (Few-shot)
-        sb.append("## 示例\n")
-                .append("用户: 北京天气怎么样？\n")
-                .append("Thought: 我需要查询北京当前的实时天气信息。\n")
-                .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"北京\"}}\n")
-                .append("Thought: 根据观察结果，北京天气良好。\n")
-                .append("Final Answer: ").append(config.getFinishMarker()).append("北京目前天气晴间多云，气温约 25°C。\n");
-
-        return sb.toString();
     }
 
     /**

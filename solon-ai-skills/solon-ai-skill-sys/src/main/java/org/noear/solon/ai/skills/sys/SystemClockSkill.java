@@ -24,7 +24,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
 /**
- * 系统时钟技能：为 AI 提供当前的真实日期、时间和星期
+ * 系统时钟技能
+ *
+ * <p>为 AI 代理提供真实的“时间感知”。通过此工具，AI 可以获取精确到秒的当前系统时间、日期及星期，
+ * 从而准确处理与时间相关的逻辑（如排班、日程提醒等）。</p>
  *
  * @author noear
  * @since 3.9.1

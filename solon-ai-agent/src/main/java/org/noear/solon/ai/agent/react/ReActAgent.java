@@ -329,6 +329,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
+        public Builder style(ReActStyle style) {
+            config.setStyle(style);
+            return this;
+        }
+
         public Builder name(String name) {
             config.setName(name);
             return this;

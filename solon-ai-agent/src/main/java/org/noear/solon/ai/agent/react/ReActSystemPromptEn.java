@@ -66,28 +66,17 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
         // 1. Role & Paradigm
         sb.append("## Your Role\n")
-                .append(role).append(". ")
-                .append("You must solve the problem using the ReAct pattern: ")
-                .append("Thought -> Action -> Observation.\n\n");
+                .append(role).append(". ");
+
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            sb.append("You are an expert with autonomous action capabilities.\n\n");
+        } else {
+            sb.append("You must solve the problem using the ReAct pattern: ")
+                    .append("Thought -> Action -> Observation.\n\n");
+        }
 
         // 2. Instructions
         sb.append(instruction);
-
-        // 3. Toolset
-        if (trace.getOptions().getTools().isEmpty()) {
-            sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
-        } else {
-            sb.append("\n## Available Tools\n");
-            // 同步中文版：明确使用内置函数调用
-            sb.append("You can also use the following tools, preferably via the model's built-in Function Calling feature:\n");
-            trace.getOptions().getTools().forEach(t -> {
-                sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
-                if (Assert.isNotEmpty(t.inputSchema())) {
-                    sb.append(" Input Schema: ").append(t.inputSchema());
-                }
-                sb.append("\n");
-            });
-        }
 
         return sb.toString();
     }
@@ -105,6 +94,33 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
     }
 
     public String getInstruction(ReActTrace trace) {
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            return getNaturalInstruction(trace);
+        } else {
+            return getClassicInstruction(trace); // 即你原来的逻辑
+        }
+    }
+
+    private String getNaturalInstruction(ReActTrace trace) {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("## Code of Conduct\n")
+                .append("1. **Direct Response**: Provide your answer directly after analyzing the problem. Do NOT output labels like 'Thought:' or 'Final Answer:'.\n")
+                .append("2. **Tool Invocation**: If external information is required, trigger Function Calling 【directly】.\n")
+                .append("3. **No Fabrication**: Strictly forbidden to simulate tool execution processes or forge results in the response body.\n\n");
+        // 业务指令注入
+        appendBusinessInstructions(sb, trace);
+
+        sb.append("## Example\n")
+                .append("User: Check the weather in London and summarize it.\n")
+                .append("(Model triggers function call: get_weather)\n")
+                .append("(Model responds based on result)\n")
+                .append("It is currently sunny in London with a temperature of 20°C, perfect for outdoor activities.\n\n");
+
+        return sb.toString();
+    }
+
+    public String getClassicInstruction(ReActTrace trace) {
         ReActAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
@@ -128,6 +144,37 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
                 .append("4. Completion is signaled ONLY by ").append(config.getFinishMarker()).append(".\n\n");
 
         // D. Business instructions
+        appendBusinessInstructions(sb, trace);
+
+        // E. Few-shot guidance
+        sb.append("## Example\n")
+                .append("User: What is the weather in Paris?\n")
+                .append("Thought: I need to check the current weather for Paris.\n")
+                .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"Paris\"}}\n")
+                .append("Thought: I have obtained the weather information.\n")
+                .append("Final Answer: ").append(config.getFinishMarker()).append("The weather in Paris is 18°C and sunny.\n");
+
+
+        // F. Toolset
+        if (trace.getOptions().getTools().isEmpty()) {
+            sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
+        } else {
+            sb.append("\n## Available Tools\n");
+            // 同步中文版：明确使用内置函数调用
+            sb.append("You can also use the following tools, preferably via the model's built-in Function Calling feature:\n");
+            trace.getOptions().getTools().forEach(t -> {
+                sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
+                if (Assert.isNotEmpty(t.inputSchema())) {
+                    sb.append(" Input Schema: ").append(t.inputSchema());
+                }
+                sb.append("\n");
+            });
+        }
+
+        return sb.toString();
+    }
+
+    private void appendBusinessInstructions(StringBuilder sb, ReActTrace trace) {
         if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
             sb.append("## Core Task Instructions\n");
 
@@ -143,16 +190,6 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             }
             sb.append("\n");
         }
-
-        // E. Few-shot guidance
-        sb.append("## Example\n")
-                .append("User: What is the weather in Paris?\n")
-                .append("Thought: I need to check the current weather for Paris.\n")
-                .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"Paris\"}}\n")
-                .append("Thought: I have obtained the weather information.\n")
-                .append("Final Answer: ").append(config.getFinishMarker()).append("The weather in Paris is 18°C and sunny.\n");
-
-        return sb.toString();
     }
 
     public static Builder builder() {
