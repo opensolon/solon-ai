@@ -117,7 +117,22 @@ public class TeamTrace implements AgentTrace {
     private String interruptReason;
 
     private final Map<String, Object> extras = new ConcurrentHashMap<>();
-    public Map<String, Object> getExtras() { return extras; }
+
+    public Map<String, Object> getExtras() {
+        return extras;
+    }
+
+    public Object getExtra(String key) {
+        return extras.get(key);
+    }
+
+    public <T> T getExtraAs(String key) {
+        return (T) extras.get(key);
+    }
+
+    public void setExtra(String key, Object val) {
+        extras.put(key, val);
+    }
 
 
     public TeamTrace() {
