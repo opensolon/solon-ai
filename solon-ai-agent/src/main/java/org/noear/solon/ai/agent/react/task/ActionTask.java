@@ -119,6 +119,8 @@ public class ActionTask implements NamedTaskComponent {
             return null;
         }
 
+        trace.setLastObservation(result);
+
         // 5. 触发 Observation 拦截 (内容是纯的)
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onObservation(trace, toolName, result);
@@ -132,7 +134,7 @@ public class ActionTask implements NamedTaskComponent {
             return null;
         }
 
-        return result;
+        return trace.getLastObservation();
     }
 
     /**
@@ -166,7 +168,7 @@ public class ActionTask implements NamedTaskComponent {
      * 解析并执行文本模式下的 Action 指令
      */
     private void processTextModeAction(Node node, ReActTrace trace) throws Throwable {
-        if(trace.getLastReasonMessage() == null){
+        if (trace.getLastReasonMessage() == null) {
             return;
         }
 
@@ -226,26 +228,25 @@ public class ActionTask implements NamedTaskComponent {
             }
         }
 
-        final ChatMessage chatMessage;
-
-        if (foundAny) {
-            // 文本模式：将观测结果作为 User 消息反馈给 LLM
-            chatMessage = ChatMessage.ofUser(allObservations.toString().trim());
-            trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
-            trace.getWorkingMemory().addMessage(chatMessage);
-        } else {
+        if (foundAny == false) {
             // 容错处理：当模型格式错误时，引导其修正
             if (LOG.isTraceEnabled()) {
                 LOG.trace("No valid Action format found in assistant response for agent [{}].", config.getName());
             }
-            chatMessage = ChatMessage.ofUser("Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}");
-            trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
-            trace.getWorkingMemory().addMessage(chatMessage);
+
+            allObservations.append("Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}");
         }
 
-        if (trace.getOptions().getStreamSink() != null) {
-            trace.getOptions().getStreamSink().next(
-                    new ActionChunk(node, trace, chatMessage));
+        //可能因为拦截原因，会没有产生数据
+        if (allObservations.length() > 0) {
+            ChatMessage chatMessage = ChatMessage.ofUser(allObservations.toString().trim());
+            trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
+            trace.getWorkingMemory().addMessage(chatMessage);
+
+            if (trace.getOptions().getStreamSink() != null) {
+                trace.getOptions().getStreamSink().next(
+                        new ActionChunk(node, trace, chatMessage));
+            }
         }
     }
 
