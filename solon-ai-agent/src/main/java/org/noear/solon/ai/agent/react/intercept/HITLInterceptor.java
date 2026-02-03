@@ -138,4 +138,23 @@ public class HITLInterceptor implements ReActInterceptor {
          */
         String evaluate(ReActTrace trace, Map<String, Object> args);
     }
+
+    public static class HITLSensitiveStrategy implements InterventionStrategy {
+        private String comment;
+
+        /** 设置拦截理由文案 */
+        public HITLSensitiveStrategy comment(String comment) {
+            this.comment = comment;
+            return this;
+        }
+
+        @Override
+        public String evaluate(ReActTrace trace, Map<String, Object> args) {
+            if (Assert.isEmpty(comment)) {
+                return "敏感操作，需要人工介入确认";
+            } else {
+                return comment;
+            }
+        }
+    }
 }
