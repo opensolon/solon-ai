@@ -140,7 +140,15 @@ public class ChatResponseDefault implements ChatResponse {
     }
 
     public String getAggregationContent() {
-        return aggregationMessageContent.toString();
+        if (hasChoices()) {
+            if (stream) {
+                return aggregationMessageContent.toString();
+            } else {
+                return lastChoice().getMessage().getContent();
+            }
+        } else {
+            return aggregationMessageContent.toString();
+        }
     }
 
     /**
