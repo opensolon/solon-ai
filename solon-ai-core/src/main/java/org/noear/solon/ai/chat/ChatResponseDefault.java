@@ -139,6 +139,10 @@ public class ChatResponseDefault implements ChatResponse {
         }
     }
 
+    public String getAggregationContent() {
+        return aggregationMessageContent.toString();
+    }
+
     /**
      * 获取聚合消息
      */

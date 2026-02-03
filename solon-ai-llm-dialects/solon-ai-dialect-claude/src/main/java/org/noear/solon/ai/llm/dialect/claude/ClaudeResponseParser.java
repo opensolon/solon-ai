@@ -280,7 +280,8 @@ public class ClaudeResponseParser {
 
                         List<ToolCall> toolCalls = new ArrayList<>();
                         toolCalls.add(toolCall);
-                        AssistantMessage assistantMessage = new AssistantMessage("", false, null, toolCallsRaw,
+                        AssistantMessage assistantMessage = new AssistantMessage(resp.getAggregationContent(),
+                                false, null, toolCallsRaw,
                                 toolCalls, null);
                         resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));
                         hasChoices = true;
@@ -411,7 +412,9 @@ public class ClaudeResponseParser {
                     toolCallsRaw.add(toolCallRaw);
                     List<ToolCall> toolCalls = new ArrayList<>();
                     toolCalls.add(toolCall);
-                    AssistantMessage assistantMessage = new AssistantMessage("", false, null, toolCallsRaw,
+
+                    AssistantMessage assistantMessage = new AssistantMessage(resp.getAggregationContent(),
+                            false, null, toolCallsRaw,
                             toolCalls, null);
                     messageList.add(assistantMessage);
                 }

@@ -435,9 +435,18 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
         }
 
-        if (content != null || toolCallsRaw != null) {
+        if (toolCallsRaw != null) {
             Object contentRaw = oContent.toBean();
+
+            if(Utils.isEmpty(content)){
+                //（流式可能为空）如果是 tool-call 把之前取合的内容也给它
+                content = resp.getAggregationContent();
+            }
+
             messageList.add(new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw));
+        } else if(content != null){
+            Object contentRaw = oContent.toBean();
+            messageList.add(new AssistantMessage(content, resp.in_thinking, contentRaw, null, null, searchResultsRaw));
         }
 
         return messageList;
