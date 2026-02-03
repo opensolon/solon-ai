@@ -210,7 +210,7 @@ public interface ChatMessage extends Serializable {
     }
 
     static ChatMessage fromJson(ONode oNode) {
-        ChatRole role = ChatRole.valueOf(oNode.get("role").getString());
+        ChatRole role = ChatRole.ofName(oNode.get("role").getString());
 
         if (role == ChatRole.TOOL) {
             return oNode.toBean(ToolMessage.class);
