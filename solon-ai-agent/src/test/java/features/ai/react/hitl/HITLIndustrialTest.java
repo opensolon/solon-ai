@@ -20,6 +20,52 @@ import java.util.Map;
 public class HITLIndustrialTest {
 
     @Test
+    public void testRejectFlow() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 配置拦截器：transfer 工具始终需要介入
+        HITLInterceptor hitlInterceptor = new HITLInterceptor()
+                .onSensitiveTool("transfer");
+
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .defaultToolAdd(new BankTools())
+                .defaultInterceptorAdd(hitlInterceptor)
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("user_002");
+
+        // 1. 发起请求
+        String prompt = "给李四转账 2000 元。已确认过";
+        System.out.println(">>> 尝试转账...");
+        ReActResponse resp1 = agent.prompt(prompt).session(session).call();
+
+        // 验证拦截
+        Assertions.assertTrue(resp1.getTrace().isInterrupted(), "应该是被中断状态");
+
+        // 2. 人工拒绝
+        HITLTask pendingTask = HITL.getPendingTask(session);
+        System.out.println("收到审批申请: " + pendingTask.getToolName());
+
+        System.out.println(">>> 人工介入：拒绝该操作");
+        HITL.reject(session, pendingTask.getToolName());
+
+        // 3. 恢复执行
+        System.out.println(">>> 恢复执行，观察 AI 如何处理拒绝...");
+        ReActResponse resp2 = agent.prompt().session(session).call();
+
+        // 验证结果
+        System.out.println("AI 最终回复: " + resp2.getContent());
+        //Assertions.assertFalse(resp2.getTrace().isInterrupted(), "拒绝后流程应继续并结束");
+
+        // 通常 AI 会回复类似：“抱歉，转账申请被拒绝了”
+        boolean toldUserRejected = resp2.getContent().contains("拒绝") || resp2.getContent().contains("未通过");
+        Assertions.assertTrue(toldUserRejected, "AI 应该告知用户操作被拒绝");
+
+        // 验证清理工作
+        Assertions.assertNull(HITL.getPendingTask(session), "任务结束后 pendingTask 应该被清理");
+    }
+
+    @Test
     public void testFullHITLFlow() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 

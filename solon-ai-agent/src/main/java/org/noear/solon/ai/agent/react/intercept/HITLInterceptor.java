@@ -1,5 +1,6 @@
 package org.noear.solon.ai.agent.react.intercept;
 
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import java.util.*;
@@ -34,27 +35,39 @@ public class HITLInterceptor implements ReActInterceptor {
     @Override
     public void onAction(ReActTrace trace, String toolName, Map<String, Object> args) {
         InterventionStrategy strategy = strategyMap.get(toolName);
-
-        // 1. 匹配策略：如果没有配置或策略判断无需介入，则直接放行
         if (strategy == null || !strategy.shouldIntervene(trace, args)) {
             return;
         }
 
-        // 2. 检查审批状态 (支持基于 ToolName 的精细化审批)
-        String specificKey = approvalStatusKey + toolName;
+        String specificKey = HITL.KEY_PREFIX + toolName;
+        String rejectKey = HITL.REJECT_PREFIX + toolName; // 获取拒绝 Key
+
         Boolean isApproved = trace.getContext().getAs(specificKey);
+        Boolean isRejected = trace.getContext().getAs(rejectKey);
 
+        // 1. 处理拒绝逻辑
+        if (Boolean.TRUE.equals(isRejected)) {
+            // 给 AI 一个反馈，让它知道被拒绝了，它会据此回复用户
+            trace.setFinalAnswer("操作被拒绝：人工审批未通过。");
+            trace.setRoute(Agent.ID_END);
+            trace.interrupt("操作被拒绝：人工审批未通过。");
+
+            // 清理现场
+            trace.getContext().remove(rejectKey);
+            trace.getContext().remove(HITL.LAST_INTERVENED);
+
+            // 注意：这里不需要 interrupt，直接让流程继续走，AI 会看到 Observation
+
+            return;
+        }
+
+        // 2. 处理挂起逻辑
         if (isApproved == null || !isApproved) {
-            // 3. 构建介入上下文（供 UI 或审计使用）
-            // 模仿 AgentSpace：不仅中断，还需保留当时的参数快照
-            trace.getContext().put(HITL.LAST_TOOL_KEY, toolName);
-            trace.getContext().put(HITL.LAST_ARGS_KEY, new LinkedHashMap<>(args));
-
-            // 4. 执行挂起
-            // 这里的 reason 可以是一个 JSON，包含更丰富的元数据
+            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolName, new LinkedHashMap<>(args)));
             trace.interrupt("REQUIRED_HUMAN_APPROVAL:" + toolName);
-        } else {
-            // 5. 审批通过后的清理工作
+        }
+        // 3. 处理审批通过逻辑
+        else {
             Map<String, Object> modifiedArgs = trace.getContext().getAs(HITL.ARGS_PREFIX + toolName);
             if (modifiedArgs != null) {
                 args.putAll(modifiedArgs);
@@ -62,8 +75,7 @@ public class HITLInterceptor implements ReActInterceptor {
             }
 
             trace.getContext().remove(specificKey);
-            trace.getContext().remove(HITL.LAST_TOOL_KEY);
-            trace.getContext().remove(HITL.LAST_ARGS_KEY);
+            trace.getContext().remove(HITL.LAST_INTERVENED);
         }
     }
 
