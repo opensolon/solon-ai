@@ -52,48 +52,95 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ReActTrace implements AgentTrace {
     private static final Logger LOG = LoggerFactory.getLogger(ReActTrace.class);
 
-    /** 运行配置 */
+    /**
+     * 运行配置
+     */
     private transient ReActAgentConfig config;
-    /** 运行选项 */
+    /**
+     * 运行选项
+     */
     private transient ReActOptions options;
-    /** Agent 会话上下文 */
+    /**
+     * Agent 会话上下文
+     */
     private transient AgentSession session;
-    /** 协作协议 (如 Team 模式) */
+    /**
+     * 协作协议 (如 Team 模式)
+     */
     private transient TeamProtocol protocol;
-    /** 协议注入的专用工具映射表 */
+    /**
+     * 协议注入的专用工具映射表
+     */
     private transient final Map<String, FunctionTool> protocolToolMap = new LinkedHashMap<>();
 
-    /** 度量指标 */
+    /**
+     * 度量指标
+     */
     private final Metrics metrics = new Metrics();
 
-    /** 任务提示词 */
+    /**
+     * 任务提示词
+     */
     private Prompt originalPrompt;
-    /** 工作记忆 */
+    /**
+     * 工作记忆
+     */
     private final Prompt workingMemory = new PromptImpl();
 
-    /** 迭代步数计数器 */
+    /**
+     * 迭代步数计数器
+     */
     private AtomicInteger stepCounter = new AtomicInteger(0);
-    /** 工具调用计数器 */
+    /**
+     * 工具调用计数器
+     */
     private AtomicInteger toolCounter = new AtomicInteger(0);
 
-    /** 逻辑路由标识 (REASON, ACTION, END) */
+    /**
+     * 逻辑路由标识 (REASON, ACTION, END)
+     */
     private volatile String route;
-    /** 最终回答内容 (Final Answer) */
+    /**
+     * 最终回答内容 (Final Answer)
+     */
     private volatile String finalAnswer;
-    /** 模型最近一次原始思考内容 */
+    /**
+     * 模型最近一次原始思考内容
+     */
     private AssistantMessage lastReasonMessage;
     private String lastObservation;
 
-    /** 计划 */
+    /**
+     * 计划
+     */
     private final List<String> plans = new CopyOnWriteArrayList<>();
 
-    /** 是否已请求中断（人工介入或逻辑挂起） */
+    /**
+     * 是否已请求中断（人工介入或逻辑挂起）
+     */
     private boolean interrupted;
-    /** 中断的原因或给用户的提示 */
+    /**
+     * 中断的原因或给用户的提示
+     */
     private String interruptReason;
 
     private final Map<String, Object> extras = new ConcurrentHashMap<>();
-    public Map<String, Object> getExtras() { return extras; }
+
+    public Map<String, Object> getExtras() {
+        return extras;
+    }
+
+    public Object getExtra(String key) {
+        return extras.get(key);
+    }
+
+    public <T> T getExtraAs(String key) {
+        return (T) extras.get(key);
+    }
+
+    public void setExtra(String key, Object val) {
+        extras.put(key, val);
+    }
 
     public ReActTrace() {
         this.route = ReActAgent.ID_REASON;
@@ -151,6 +198,7 @@ public class ReActTrace implements AgentTrace {
         // 3. 结构化数据重置
         plans.clear();
         workingMemory.clear();
+        extras.clear();
 
         // 4. 指标重置（确保单次 Prompt 的 Token 消耗和时长统计准确）
         metrics.reset();
@@ -165,6 +213,7 @@ public class ReActTrace implements AgentTrace {
 
     /**
      * 请求中断执行
+     *
      * @param reason 中断原因（会设为 FinalAnswer 返回给调用者）
      */
     public void interrupt(String reason) {
@@ -361,6 +410,7 @@ public class ReActTrace implements AgentTrace {
 
     /**
      * 设置或重置计划
+     *
      * @param newPlans 计划列表
      */
     public void setPlans(Collection<String> newPlans) {
