@@ -78,7 +78,7 @@ public class HITLDecision implements Serializable {
         return new HITLDecision().action(ACTION_SKIP).comment(comment);
     }
 
-    protected HITLDecision action(int action) {
+    public HITLDecision action(int action) {
         this.action = action;
         return this;
     }
