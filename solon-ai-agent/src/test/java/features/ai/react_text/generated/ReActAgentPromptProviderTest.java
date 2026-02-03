@@ -88,6 +88,7 @@ public class ReActAgentPromptProviderTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
+                .style(ReActStyle.STRUCTURED_TEXT)
                 .defaultToolAdd(new ChineseTools())
                 // 直接使用默认实现，适合通用中文场景
                 .systemPrompt(ReActSystemPromptCn.getDefault())

@@ -76,7 +76,7 @@ public class ReActAgentBoundaryTest {
         // 验证轨迹记录
         ReActTrace trace = agent.getTrace(session);
         Assertions.assertNotNull(trace);
-        Assertions.assertTrue(trace.getStepCount() == 1, "追踪步骤应等于或大于最大限制值");
+        Assertions.assertTrue(trace.getStepCount() >= 1, "追踪步骤应等于或大于最大限制值");
     }
 
     @Test

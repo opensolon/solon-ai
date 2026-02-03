@@ -199,7 +199,7 @@ public class ReasonTask implements NamedTaskComponent {
         // 2. 其次判断文本形式的工具执行意图（Action: { ... }）
         if (clearContent.contains("Action:")) {
             String actionPart = clearContent.substring(clearContent.indexOf("Action:"));
-            if (actionPart.matches("(?s)Action:\\s*\\{.*")) {
+            if (actionPart.length() > 7) {
                 trace.setRoute(ReActAgent.ID_ACTION);
                 return;
             }

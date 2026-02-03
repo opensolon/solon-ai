@@ -190,6 +190,8 @@ public class ActionTask implements NamedTaskComponent {
             int jsonStart = lastContent.indexOf('{', actionLabelIndex + 7);
 
             if (jsonStart >= 0) {
+                // Action: {'name': 'getUserInfo', 'arguments': {}}
+
                 // 2. 使用 JsonReader 进行流式解析
                 // 无需lastIndexOf('}')，streamRead 会自动处理闭合
                 StringReader sr = new StringReader(lastContent.substring(jsonStart));
@@ -212,17 +214,33 @@ public class ActionTask implements NamedTaskComponent {
 
                         // 3. 触发 Action 拦截 (内容是纯的)
                         String result = doAction(trace, toolName, args);
-                        if (result == null) {
-                            break;
-                        }
 
+                        if (result != null) {
+                            // 6. 拼装回传给 LLM 的协议文本
+                            if (allObservations.length() > 0) {
+                                allObservations.append("\n");
+                            }
+                            allObservations.append("Observation: ").append(result);
+                        }
+                    } catch (Exception e) {
+                        allObservations.append("\nObservation: Error parsing Action JSON: ").append(e.getMessage());
+                    }
+                }
+            } else {
+                // Action: getUserInfo
+                String toolName = lastContent.substring(actionLabelIndex + 7).trim();
+                if (trace.getOptions().getTool(toolName) != null) {
+                    foundAny = true;
+
+                    // 3. 触发 Action 拦截 (内容是纯的)
+                    String result = doAction(trace, toolName, new HashMap<>());
+
+                    if (result != null) {
                         // 6. 拼装回传给 LLM 的协议文本
                         if (allObservations.length() > 0) {
                             allObservations.append("\n");
                         }
                         allObservations.append("Observation: ").append(result);
-                    } catch (Exception e) {
-                        allObservations.append("\nObservation: Error parsing Action JSON: ").append(e.getMessage());
                     }
                 }
             }
