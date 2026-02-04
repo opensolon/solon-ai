@@ -1,0 +1,12 @@
+solon.code.cli:
+  name: "小花"
+  chatModel:
+    apiUrl: "https://api.deepseek.com/v1/chat/completions"
+    apiKey: "***"
+    model: "deepseek-chat"
+  mountPool:
+    "@shared": "${user.home}/WORK/work_github/solonlab/opencode-skills"
+
+# 1. chatModel 按需配置，不熟的看下 solon ai 官网资料 
+# 2. SolonCodeCLI 兼容 Claude Code Agent Skills
+# 3. skills 到处可以下载，比如：https://github.com/solonlab/opencode-skills
