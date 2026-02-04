@@ -44,6 +44,7 @@ public class ClaudeCodeCLI {
     private String workDir = ".";
     private String sharedSkillsDir;
     private boolean streaming = true;
+    private int maxSteps = 20;
 
     public ClaudeCodeCLI(ChatModel chatModel) {
         this.chatModel = chatModel;
@@ -65,6 +66,11 @@ public class ClaudeCodeCLI {
         return this;
     }
 
+    public ClaudeCodeCLI maxSteps(int maxSteps) {
+        this.maxSteps = maxSteps;
+        return this;
+    }
+
     /**
      * 是否开启流式响应
      */
@@ -79,7 +85,10 @@ public class ClaudeCodeCLI {
 
         // 2. 构建 ReAct Agent
         ReActAgent agent = ReActAgent.of(chatModel)
+                .role("ClaudeCodeAgent")
+                .instruction("严格遵守挂载技能中的【规范协议】执行任务")
                 .defaultSkillAdd(skills)
+                .maxSteps(maxSteps)
                 .build();
 
         if (session == null) {
@@ -108,18 +117,16 @@ public class ClaudeCodeCLI {
                             .doOnNext(chunk -> {
                                 if (chunk instanceof ReasonChunk) {
                                     //思考输出
-                                    System.out.print(chunk.getContent());
+                                    System.out.print("\033[90m" + chunk.getContent() + "\033[0m");
                                 } else if (chunk instanceof ActionChunk) {
                                     //动作输出
-                                    System.out.print(chunk.getContent());
+                                    System.out.print("\n\uD83D\uDEE0\ufe0f  " + chunk.getContent());
                                 } else if (chunk instanceof ReActChunk) {
                                     //最终结果输出
                                     System.out.print(chunk.getContent());
                                 }
                             })
                             .blockLast();
-
-                    System.out.println(lastChunk.getContent());
                 } else {
                     // 一次性输出
                     String response = agent.prompt(input).call().getContent();
