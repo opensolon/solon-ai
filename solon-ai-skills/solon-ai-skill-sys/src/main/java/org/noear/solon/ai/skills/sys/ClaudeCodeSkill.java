@@ -31,7 +31,7 @@ import java.util.stream.Stream;
 
 /**
  * Claude Code 综合技能：提供代码搜索、文件精确编辑及系统指令执行能力。
- * <p>参考 Claude Code 工具集设计，集成了探知、阅读、编辑和测试的完整闭环。</p>
+ * <p>100% 兼容 Claude Code Agent Skills 规范，支持全局 (@global/) 与本地双目录发现模式。</p>
  *
  * @author noear
  * @since 3.9.1
@@ -42,9 +42,11 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
     private final String shellCmd;
     private final String extension;
     private final boolean isWindows;
+    private final Path globalPath;
 
-    public ClaudeCodeSkill(String workDir) {
+    public ClaudeCodeSkill(String workDir, String globalSkillsDir) {
         super(workDir);
+        this.globalPath = globalSkillsDir != null ? Paths.get(globalSkillsDir).toAbsolutePath().normalize() : null;
         this.isWindows = System.getProperty("os.name").toLowerCase().contains("win");
         if (isWindows) {
             this.shellCmd = "cmd /c";
@@ -55,6 +57,10 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
         }
     }
 
+    public ClaudeCodeSkill(String workDir) {
+        this(workDir, null);
+    }
+
     @Override
     public String name() {
         return "claude_code_agent";
@@ -62,7 +68,7 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
 
     @Override
     public String description() {
-        return "代码专家技能：支持文件树浏览、全文本搜索(grep)、文件读写及 Shell 命令执行。";
+        return "代码专家技能：支持文件树浏览、全文本搜索(grep)、文件读写及 Shell 命令执行。兼容 Claude Code Skills 规范。";
     }
 
     @Override
@@ -74,59 +80,63 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
     public String getInstruction(Prompt prompt) {
         StringBuilder sb = new StringBuilder();
 
-        // 1. 核心协议：强调“发现-理解-执行”的规范流
         sb.append("## Claude Code Agent Skills 规范协议\n");
-        sb.append("- **技能发现**：当前工作目录下每个文件夹都可能是一个独立的 'Skill'。请优先使用 `ls` 探索。\n");
-        sb.append("- **规范优先**：进入技能目录后，**必须首先读取 `SKILL.md` 或 `README.md`**。这些文件定义了该技能的入口、参数和运行规范。\n");
-        sb.append("- **禁止自行发明**：除非规范要求你修改代码，否则严禁编写新脚本。必须按照 `SKILL.md` 的指示驱动现有程序。\n");
-        sb.append("- **环境适配**：在驱动技能前，先用 `exists_cmd` 确认该技能所需的运行时环境（如 python, java）。\n\n");
 
-        // 2. 增强型：自动扫描并注入根目录的全局规范
-        Path rootSkillMd = rootPath.resolve("SKILL.md");
-        if (!Files.exists(rootSkillMd)) {
-            rootSkillMd = rootPath.resolve("skill.md");
+        // 1. 动态空间声明（核心变更点）
+        if (globalPath != null) {
+            sb.append("- **空间映射**：支持 `@global/` 前缀访问系统全局技能库。无前缀路径指向当前项目工作区。\n");
+            sb.append("- **只读约束**：`@global/` 内容为系统只读，禁止写入或编辑。\n");
+        } else {
+            sb.append("- **空间映射**：当前环境**未配置**全局技能库。`@global/` 前缀路径暂不可用，请仅使用当前工作区路径。\n");
         }
 
-        if (Files.exists(rootSkillMd)) {
-            try {
-                String instructions = new String(Files.readAllBytes(rootSkillMd), StandardCharsets.UTF_8);
-                sb.append("### 全局操作规范 (Global Norms)\n").append(instructions).append("\n\n");
-            } catch (IOException e) {
-                LOG.warn("Failed to read root SKILL.md", e);
-            }
-        }
+        sb.append("- **技能发现**：通过 `ls` 探索。标识有 `(Claude Code Skill)` 的文件夹为标准技能包，必须先读取其 `SKILL.md` 后再驱动。\n");
+        sb.append("- **执行规范**：使用 `run_command`。若需在子目录执行，请组合指令（如 `cd path && cmd`）。\n\n");
 
-        sb.append("### 核心工具集指南\n");
-        sb.append("- 使用 `run_command` 来触发技能目录中定义的命令行入口。\n");
+        injectRootInstructions(sb, rootPath, "### 项目工作区规范 (Project Norms)\n");
+
+        if (globalPath != null) {
+            injectRootInstructions(sb, globalPath, "### 全局标准规范 (Global Norms)\n");
+        }
 
         return sb.toString();
     }
 
+    private void injectRootInstructions(StringBuilder sb, Path root, String title) {
+        Path md = root.resolve("SKILL.md");
+        if (!Files.exists(md)) md = root.resolve("skill.md");
+
+        if (Files.exists(md)) {
+            try {
+                String content = new String(Files.readAllBytes(md), StandardCharsets.UTF_8);
+                sb.append(title).append(content).append("\n\n");
+            } catch (IOException e) {
+                LOG.warn("Failed to read SKILL.md from {}", root, e);
+            }
+        }
+    }
+
     // --- 1. 探测工具 (Search & List) ---
 
-    @ToolMapping(name = "ls", description = "列出目录内容。path 为相对路径。默认仅展示当前层级。")
+    @ToolMapping(name = "ls", description = "列出目录内容。支持项目路径或 '@global/' 路径。")
     public String ls(@Param("path") String path) throws IOException {
-        Path target = resolvePath(path);
+        Path target = resolvePathExtended(path);
         if (!Files.exists(target)) return "错误：路径不存在 -> " + path;
 
         try (Stream<Path> stream = Files.list(target)) {
             return stream.map(p -> {
                 String prefix = Files.isDirectory(p) ? "[DIR] " : "[FILE] ";
-                String suffix = "";
-                // 如果是目录，探测一下是否为标准 Skill
-                if (Files.isDirectory(p)) {
-                    if (Files.exists(p.resolve("SKILL.md")) || Files.exists(p.resolve("skill.md"))) {
-                        suffix = " (Claude Code Skill)";
-                    }
-                }
-                return prefix + p.getFileName() + suffix;
+                boolean isSkill = Files.isDirectory(p) && (Files.exists(p.resolve("SKILL.md")) || Files.exists(p.resolve("skill.md")));
+                return prefix + p.getFileName() + (isSkill ? " (Claude Code Skill)" : "");
             }).collect(Collectors.joining("\n"));
         }
     }
 
-    @ToolMapping(name = "grep", description = "在指定路径下搜索包含特定模式的文件行。")
+    @ToolMapping(name = "grep", description = "全文本搜索。支持项目路径或 '@global/' 路径。")
     public String grep(@Param("pattern") String pattern, @Param("path") String path) throws IOException {
-        Path target = resolvePath(path);
+        Path target = resolvePathExtended(path);
+        String virtualPrefix = (path != null && path.startsWith("@global")) ? "@global/" : "";
+
         StringBuilder sb = new StringBuilder();
         try (Stream<Path> walk = Files.walk(target)) {
             List<Path> files = walk.filter(Files::isRegularFile).collect(Collectors.toList());
@@ -134,64 +144,67 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
                 List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
                 for (int i = 0; i < lines.size(); i++) {
                     if (lines.get(i).contains(pattern)) {
-                        sb.append(rootPath.relativize(file)).append(":").append(i + 1).append(": ")
-                                .append(lines.get(i).trim()).append("\n");
+                        String relPath = virtualPrefix + target.relativize(file).toString();
+                        sb.append(relPath).append(":").append(i + 1).append(": ").append(lines.get(i).trim()).append("\n");
                     }
                 }
             }
         }
-        return sb.length() == 0 ? "未找到匹配项: " + pattern : sb.toString();
+        return sb.length() == 0 ? "未找到匹配项" : sb.toString();
     }
 
     // --- 2. 读写工具 (Read & Write) ---
 
-    @ToolMapping(name = "cat", description = "读取并返回文件的完整内容。")
+    @ToolMapping(name = "cat", description = "读取文件内容。支持项目路径或 '@global/' 路径。")
     public String cat(@Param("path") String path) throws IOException {
-        Path target = resolvePath(path);
+        Path target = resolvePathExtended(path);
         byte[] bytes = Files.readAllBytes(target);
         if (bytes.length > maxOutputSize) {
-            return new String(bytes, 0, maxOutputSize, StandardCharsets.UTF_8) + "\n... [警告：内容过长已截断]";
+            return new String(bytes, 0, maxOutputSize, StandardCharsets.UTF_8) + "\n... [已截断]";
         }
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
-    @ToolMapping(name = "write", description = "全量覆盖写入文件。建议仅在创建新文件时使用。")
+    @ToolMapping(name = "write", description = "写入文件内容。严禁操作 @global 路径。")
     public String write(@Param("path") String path, @Param("content") String content) throws IOException {
+        if (isGlobal(path)) return "错误：全局库为只读空间，禁止写入。";
         Path target = resolvePath(path);
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(StandardCharsets.UTF_8));
-        return "成功全量写入文件: " + rootPath.relativize(target);
+        return "成功写入: " + rootPath.relativize(target);
     }
 
-    @ToolMapping(name = "edit", description = "精准替换代码片段。oldText 必须与 cat 读到的内容完全匹配。")
+    @ToolMapping(name = "edit", description = "精准代码编辑（替换）。严禁操作 @global 路径。")
     public String edit(@Param("path") String path, @Param("oldText") String oldText, @Param("newText") String newText) throws IOException {
+        if (isGlobal(path)) return "错误：全局库为只读空间，禁止编辑。";
         Path target = resolvePath(path);
         String content = new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
 
         if (!content.contains(oldText)) {
-            // 生产环境优化：尝试忽略首尾空白再匹配
             String oldTrim = oldText.trim();
             if (content.contains(oldTrim)) {
-                String newContent = content.replace(oldTrim, newText);
-                Files.write(target, newContent.getBytes(StandardCharsets.UTF_8));
-                return "文件局部更新成功(忽略空白匹配): " + rootPath.relativize(target);
+                Files.write(target, content.replace(oldTrim, newText).getBytes(StandardCharsets.UTF_8));
+                return "更新成功(忽略空白匹配)";
             }
-            return "错误：匹配失败。请先 cat 该文件确认最新内容。";
+            return "错误：内容匹配失败。";
         }
 
-        String newContent = content.replace(oldText, newText);
-        Files.write(target, newContent.getBytes(StandardCharsets.UTF_8));
-        return "文件局部更新成功: " + rootPath.relativize(target);
+        Files.write(target, content.replace(oldText, newText).getBytes(StandardCharsets.UTF_8));
+        return "更新成功: " + rootPath.relativize(target);
     }
 
     // --- 3. 执行工具 (Execute) ---
 
-    @ToolMapping(name = "run_command", description = "执行系统指令（测试、构建等）。")
+    @ToolMapping(name = "run_command", description = "执行系统指令。支持通过 @global 路径引用全局技能。")
     public String run(@Param("command") String command) {
-        return runCode(command, shellCmd, extension, null);
+        String finalCmd = command;
+        if (globalPath != null && command.contains("@global")) {
+            finalCmd = command.replace("@global", globalPath.toString());
+        }
+        return runCode(finalCmd, shellCmd, extension, null);
     }
 
-    @ToolMapping(name = "exists_cmd", description = "检查环境是否支持特定命令。")
+    @ToolMapping(name = "exists_cmd", description = "检查环境依赖（如 python, java 等）。")
     public boolean existsCmd(@Param("cmd") String cmd) {
         String cleanCmd = cmd.trim().split("\\s+")[0];
         String checkPattern = isWindows ? "where " + cleanCmd : "command -v " + cleanCmd;
@@ -203,14 +216,30 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
         }
     }
 
-    // --- 辅助方法 ---
+    // --- 路径安全与映射逻辑 ---
+
+    private boolean isGlobal(String path) {
+        return path != null && path.startsWith("@global");
+    }
+
+    private Path resolvePathExtended(String pathStr) {
+        if (isGlobal(pathStr)) {
+            if (globalPath == null) {
+                // 核心拦截：在这里给 Agent 反馈明确的配置缺失信息
+                throw new IllegalArgumentException("操作失败：当前环境未配置全局技能库路径 (@global/ 映射无效)。");
+            }
+            String sub = pathStr.substring(7).replaceFirst("^[/\\\\]", "");
+            Path p = globalPath.resolve(sub).normalize();
+            if (!p.startsWith(globalPath)) throw new SecurityException("非法越界访问");
+            return p;
+        }
+        return resolvePath(pathStr);
+    }
 
     private Path resolvePath(String pathStr) {
         String safePath = (pathStr == null || pathStr.isEmpty()) ? "." : pathStr;
         Path p = rootPath.resolve(safePath).normalize();
-        if (!p.startsWith(rootPath)) {
-            throw new SecurityException("非法访问：路径超出工作目录范围 -> " + pathStr);
-        }
+        if (!p.startsWith(rootPath)) throw new SecurityException("访问受限：超出项目范围");
         return p;
     }
 
