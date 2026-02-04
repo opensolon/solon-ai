@@ -67,21 +67,22 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        return prompt.getUserContent().toLowerCase()
-                .matches(".*(代码|修改|重构|搜索|文件|ls|cat|grep|run|test).*");
+        return true;
+//        return prompt.getUserContent().toLowerCase()
+//                .matches(".*(代码|修改|重构|搜索|文件|ls|cat|grep|run|test).*");
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
         StringBuilder sb = new StringBuilder();
 
-        // 1. 注入基础操作协议 (参考 Claude Code 核心逻辑)
+        // 1. 注入基础操作协议 (核心行动指南)
         sb.append("### 核心操作协议 (Core Protocol)\n");
-        sb.append("- 你是一个拥有文件系统访问权限的 AI 助手。请优先使用工具来解决问题。\n");
-        sb.append("- **禁止虚假确认**：除非成功调用了 `edit` 或 `write` 工具，否则不要声称你已经修改了文件。\n");
-        sb.append("- **先读后写**：在修改文件前，必须先使用 `cat` 或 `grep` 确认当前文件的内容和上下文。\n");
-        sb.append("- **原子化修改**：优先使用 `edit` 进行局部精准修改，而不是 `write` 覆盖整个文件。\n");
-        sb.append("- **验证闭环**：修改完成后，尽可能使用 `run_command` 运行相关测试确认修改正确。\n\n");
+        sb.append("- 你是一个拥有物理文件访问权限的 AI 助手。**必须优先使用工具**来解决问题，而非仅在对话中回复代码。\n");
+        sb.append("- **禁止虚假确认**：除非工具返回成功，否则不得声称已修改或创建了文件。\n");
+        sb.append("- **先读后写**：修改前必须调用 `cat` 确认代码精准上下文。禁止凭记忆猜测代码行。\n");
+        sb.append("- **原子化修改**：优先使用 `edit` 工具。调用时确保 `oldText` 与文件内容完全一致（含空格和缩进）。\n");
+        sb.append("- **验证闭环**：修改后，请使用 `run_command` 执行编译或测试指令以确认变更安全。\n\n");
 
         // 2. 自动感知项目规范文件
         Path skillMd = rootPath.resolve("skill.md");
@@ -91,7 +92,8 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
 
         if (Files.exists(skillMd)) {
             try {
-                String instructions = new String(Files.readAllBytes(skillMd), StandardCharsets.UTF_8);
+                byte[] bytes = Files.readAllBytes(skillMd);
+                String instructions = new String(bytes, StandardCharsets.UTF_8);
                 sb.append("### 项目特定规范与指导 (Project Norms)\n").append(instructions);
             } catch (IOException e) {
                 LOG.warn("Failed to read skill.md", e);
@@ -103,11 +105,10 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
 
     // --- 1. 探测工具 (Search & List) ---
 
-    @ToolMapping(name = "ls", description = "列出目录内容。path 为相对路径。")
+    @ToolMapping(name = "ls", description = "列出目录内容。path 为相对路径。默认仅展示当前层级。")
     public String ls(@Param("path") String path) throws IOException {
         Path target = resolvePath(path);
-
-        if (!Files.exists(target)) return "错误：路径不存在";
+        if (!Files.exists(target)) return "错误：路径不存在 -> " + path;
 
         try (Stream<Path> stream = Files.list(target)) {
             return stream.map(p -> (Files.isDirectory(p) ? "[DIR] " : "[FILE] ") + p.getFileName())
@@ -131,7 +132,7 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
                 }
             }
         }
-        return sb.length() == 0 ? "未找到匹配项" : sb.toString();
+        return sb.length() == 0 ? "未找到匹配项: " + pattern : sb.toString();
     }
 
     // --- 2. 读写工具 (Read & Write) ---
@@ -140,36 +141,38 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
     public String cat(@Param("path") String path) throws IOException {
         Path target = resolvePath(path);
         byte[] bytes = Files.readAllBytes(target);
-        // maxOutputSize 继承自 AbsProcessSkill
         if (bytes.length > maxOutputSize) {
-            return new String(bytes, 0, maxOutputSize, StandardCharsets.UTF_8) + "\n... [输出已截断]";
+            return new String(bytes, 0, maxOutputSize, StandardCharsets.UTF_8) + "\n... [警告：内容过长已截断]";
         }
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
-    @ToolMapping(name = "write", description = "写入内容到文件。如果文件存在则覆盖，不存在则创建。")
+    @ToolMapping(name = "write", description = "全量覆盖写入文件。建议仅在创建新文件时使用。")
     public String write(@Param("path") String path, @Param("content") String content) throws IOException {
         Path target = resolvePath(path);
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(StandardCharsets.UTF_8));
-        return "写入成功: " + path;
+        return "成功全量写入文件: " + rootPath.relativize(target);
     }
 
-    @ToolMapping(name = "edit", description = "精确替换文件内容。参数：oldText (原代码段), newText (替换代码段)")
-    public String editFile(@Param("path") String path, @Param("oldText") String oldText, @Param("newText") String newText) throws IOException {
+    @ToolMapping(name = "edit", description = "精准替换代码片段。oldText 必须与 cat 读到的内容完全匹配。")
+    public String edit(@Param("path") String path, @Param("oldText") String oldText, @Param("newText") String newText) throws IOException {
         Path target = resolvePath(path);
         String content = new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
+
+        // 增加对 oldText 的清理尝试，提高健壮性（处理 LLM 可能多出的换行或缩进）
         if (!content.contains(oldText)) {
-            return "错误：在文件中找不到指定的旧文本段落，请先 cat 确认内容。";
+            return "错误：匹配失败。请确保 oldText 与文件中的代码段（包括空格和缩进）完全一致。";
         }
+
         String newContent = content.replace(oldText, newText);
         Files.write(target, newContent.getBytes(StandardCharsets.UTF_8));
-        return "文件已局部更新成功。";
+        return "文件局部更新成功: " + rootPath.relativize(target);
     }
 
-    // --- 3. 执行工具 (Execute - 复用 AbsProcessSkill 核心逻辑) ---
+    // --- 3. 执行工具 (Execute) ---
 
-    @ToolMapping(name = "run_command", description = "在工作目录执行系统指令（如测试、构建、安装）。")
+    @ToolMapping(name = "run_command", description = "执行系统指令（测试、构建等）。")
     public String run(@Param("command") String command) {
         return runCode(command, shellCmd, extension, null);
     }
@@ -179,7 +182,8 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
         String cleanCmd = cmd.trim().split("\\s+")[0];
         String checkPattern = isWindows ? "where " + cleanCmd : "command -v " + cleanCmd;
         try {
-            return Runtime.getRuntime().exec(checkPattern).waitFor() == 0;
+            Process p = Runtime.getRuntime().exec(checkPattern);
+            return p.waitFor() == 0;
         } catch (Exception e) {
             return false;
         }
@@ -188,9 +192,10 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
     // --- 辅助方法 ---
 
     private Path resolvePath(String pathStr) {
-        Path p = rootPath.resolve(pathStr == null ? "" : pathStr).normalize();
+        String safePath = (pathStr == null || pathStr.isEmpty()) ? "." : pathStr;
+        Path p = rootPath.resolve(safePath).normalize();
         if (!p.startsWith(rootPath)) {
-            throw new SecurityException("越界访问被禁止: " + pathStr);
+            throw new SecurityException("非法访问：路径超出工作目录范围 -> " + pathStr);
         }
         return p;
     }
