@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.skills.claudecode;
 
-import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
@@ -27,11 +26,15 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Solon Code CLI 终端
- * <p>基于 ReAct 模式的代码协作终端，提供沉浸式的本地开发增强体验</p>
+ * Solon Code CLI 终端 (Pool-Box 模型)
+ * <p>基于 ReAct 模式的代码协作终端，提供多池挂载与任务盒隔离体验</p>
  *
  * @author noear
  * @since 3.9.1
@@ -42,8 +45,9 @@ public class SolonCodeCLI {
 
     private final ChatModel chatModel;
     private AgentSession session;
+    private String name = "SolonCodeAgent"; // 默认名称
     private String workDir = ".";
-    private String sharedSkillsDir;
+    private final Map<String, String> extraPools = new LinkedHashMap<>();
     private boolean streaming = true;
     private int maxSteps = 20;
 
@@ -52,93 +56,97 @@ public class SolonCodeCLI {
     }
 
     /**
-     * 设置工作目录
+     * 设置 Agent 名称 (同时也作为控制台输出前缀)
      */
+    public SolonCodeCLI name(String name) {
+        if (name != null && !name.isEmpty()) {
+            this.name = name;
+        }
+        return this;
+    }
+
     public SolonCodeCLI workDir(String workDir) {
         this.workDir = workDir;
         return this;
     }
 
-    /**
-     * 设置跨项目共享技能目录
-     */
-    public SolonCodeCLI sharedSkillsDir(String sharedSkillsDir) {
-        this.sharedSkillsDir = sharedSkillsDir;
+    public SolonCodeCLI mountPool(String alias, String dir) {
+        if (dir != null) {
+            this.extraPools.put(alias, dir);
+        }
         return this;
     }
 
-    /**
-     * 设置 Agent 最大思考步数
-     */
     public SolonCodeCLI maxSteps(int maxSteps) {
         this.maxSteps = maxSteps;
         return this;
     }
 
-    /**
-     * 是否开启流式响应 (开启后可实时查看思考过程)
-     */
     public SolonCodeCLI streaming(boolean streaming) {
         this.streaming = streaming;
         return this;
     }
 
     public void start() {
-        // 1. 初始化核心技能组件
-        CliSkill skills = new CliSkill(workDir, sharedSkillsDir);
+        if (session == null) {
+            session = new InMemoryAgentSession("cli-" + System.currentTimeMillis());
+        }
+
+        // 1. 初始化 CliSkill，注入 SessionID 确保盒子隔离语义
+        CliSkill skills = new CliSkill(session.getSessionId(), workDir);
+        extraPools.forEach(skills::mountPool);
 
         // 2. 构建 ReAct Agent
         ReActAgent agent = ReActAgent.of(chatModel)
-                .role("SolonCodeAgent")
-                .instruction("严格遵守挂载技能中的【交互规范】与【操作准则】执行任务")
+                .role("专业任务解决专家。你的名字叫 " + name + "。") // 联动名称
+                .instruction("严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
                 .defaultSkillAdd(skills)
                 .maxSteps(maxSteps)
                 .build();
 
-        if (session == null) {
-            session = new InMemoryAgentSession("cli");
-        }
-
-        // 3. 进入 REPL 循环
         Scanner scanner = new Scanner(System.in);
         printWelcome();
 
         while (true) {
             try {
-                System.out.print("\n\uD83D\uDCBB > "); // 使用小图标美化终端
+                System.out.print("\n\uD83D\uDCBB > ");
                 String input = scanner.nextLine();
 
                 if (input == null || input.trim().isEmpty()) continue;
                 if (isSystemCommand(input)) break;
 
-                System.out.print("Claude: ");
+                // 使用配置的名称作为输出前缀
+                System.out.print(name + ": ");
 
                 if (streaming) {
-                    // 流式输出响应
-                    AgentChunk lastChunk = agent.prompt(input)
+                    AtomicBoolean isReason = new AtomicBoolean(false);
+                    agent.prompt(input)
                             .session(session)
                             .stream()
                             .doOnNext(chunk -> {
                                 if (chunk instanceof ReasonChunk) {
-                                    //思考输出
-                                    ReasonChunk reasonChunk = (ReasonChunk) chunk;
-                                    System.out.print("\033[90m" + chunk.getContent() + "\033[0m");
-
-                                    if(reasonChunk.getResponse().isFinished()){
+                                    // 灰色输出思考内容
+                                    if(isReason.compareAndSet(false, true)){
                                         System.out.println();
                                     }
-                                } else if (chunk instanceof ActionChunk) {
-                                    //动作输出
-                                    System.out.println("\n\uD83D\uDEE0\ufe0f  " + chunk.getContent());
-                                } else if (chunk instanceof ReActChunk) {
-                                    //最终结果输出
-                                    System.out.println(chunk.getContent());
+                                    System.out.print("\033[90m" + chunk.getContent() + "\033[0m");
+                                } else {
+                                    if(isReason.get()){
+                                        isReason.set(false);
+                                    }
+
+                                    if (chunk instanceof ActionChunk) {
+                                        // 动作反馈
+                                        System.out.println("\n\uD83D\uDEE0\ufe0f  [调用工具]: " + chunk.getContent());
+                                    } else if (chunk instanceof ReActChunk) {
+                                        // 最终答案加粗输出
+                                        System.out.println("\033[1m" + chunk.getContent() + "\033[0m");
+                                    }
                                 }
                             })
                             .blockLast();
                 } else {
-                    // 一次性输出
-                    String response = agent.prompt(input).call().getContent();
+                    String response = agent.prompt(input).session(session).call().getContent();
                     System.out.println(response);
                 }
 
@@ -160,12 +168,31 @@ public class SolonCodeCLI {
         return false;
     }
 
-    private void printWelcome() {
+    protected void printWelcome() {
+        // 获取绝对且规范化的路径，去掉多余的 "."
+        String absolutePath;
+        try {
+            absolutePath = new File(workDir).getCanonicalPath();
+        } catch (Exception e) {
+            absolutePath = new File(workDir).getAbsolutePath();
+        }
+
+        System.out.println("==================================================");
+        System.out.println("🚀 " + name + " 终端已就绪");
         System.out.println("--------------------------------------------------");
-        System.out.println("Solon Code CLI (Experimental Edition)");
-        System.out.println("工作目录: " + workDir);
-        System.out.println("共享目录: " + (sharedSkillsDir != null ? sharedSkillsDir : "未设置"));
-        System.out.println("输入 'exit' 退出, 'clear' 清屏");
+        System.out.println("📂 工作空间: " + absolutePath);
+
+        if (!extraPools.isEmpty()) {
+            System.out.println("📦 挂载技能池:");
+            extraPools.forEach((k, v) -> {
+                // 对池路径也做一下规范化显示
+                String p = new File(v).getAbsolutePath();
+                System.out.println("  - " + k + " -> " + p);
+            });
+        }
+
         System.out.println("--------------------------------------------------");
+        System.out.println("💡 输入 'exit' 退出, 'clear' 清屏");
+        System.out.println("==================================================");
     }
 }

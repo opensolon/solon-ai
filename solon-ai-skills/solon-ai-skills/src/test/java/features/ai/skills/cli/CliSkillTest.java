@@ -1,4 +1,4 @@
-package features.ai.skills.claudecode;
+package features.ai.skills.cli;
 
 import demo.ai.skills.LlmUtil;
 import org.junit.jupiter.api.Assertions;
@@ -18,7 +18,7 @@ import java.nio.file.*;
  * @author noear
  * @since 3.9.1
  */
-public class ClaudeCodeSkillTest {
+public class CliSkillTest {
     // 下载 skills： https://github.com/solonlab/opencode-skills
 
     // 技能库根目录

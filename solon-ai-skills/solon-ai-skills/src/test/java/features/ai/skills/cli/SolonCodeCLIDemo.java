@@ -1,4 +1,4 @@
-package features.ai.skills.claudecode;
+package features.ai.skills.cli;
 
 import demo.ai.skills.LlmUtil;
 import org.noear.solon.Solon;
@@ -9,17 +9,20 @@ import org.noear.solon.ai.skills.claudecode.SolonCodeCLI;
  * @author noear 2026/2/4 created
  *
  */
-public class ClaudeCodeCLIDemo {
+public class SolonCodeCLIDemo {
     public static void main(String[] args) {
         //主要控制日志等级
-        Solon.start(ClaudeCodeCLIDemo.class, new String[]{"--cfg=cli.yml"});
+        Solon.start(SolonCodeCLIDemo.class, new String[]{"--cfg=cli.yml"});
 
         // 下载 skills： https://github.com/solonlab/opencode-skills
         String sharedDir = System.getProperty("user.home") + "/WORK/work_github/solonlab/opencode-skills";
 
-        SolonCodeCLI claudeCodeCLI = new SolonCodeCLI(LlmUtil.getChatModel());
-        claudeCodeCLI.sharedSkillsDir(sharedDir).maxSteps(100);
+        SolonCodeCLI solonCodeCLI = new SolonCodeCLI(LlmUtil.getChatModel())
+                .name("小花")
+                .workDir("./app")
+                .mountPool("@shared", sharedDir)
+                .maxSteps(100);
 
-        claudeCodeCLI.start();
+        solonCodeCLI.start();
     }
 }
