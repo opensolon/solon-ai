@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * 外部进程执行基类
  *
- * <p>提供通用的代码持久化、子进程启动、标准输出捕获及执行超时控制（默认 30s）。
+ * <p>提供通用的代码持久化、子进程启动、标准输出捕获及执行超时控制。
  * 具备输出截断保护机制，防止大数据量输出导致内存溢出。</p>
  *
  * @author noear
@@ -38,11 +38,27 @@ import java.util.concurrent.TimeUnit;
 public abstract class AbsProcessSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(AbsProcessSkill.class);
     protected final Path rootPath;
-    protected final int MAX_OUTPUT_SIZE = 1024 * 1024; // 1MB 限制
+
+    private int maxOutputSize = 1024 * 1024; // 默认 1MB
+    private int timeoutSeconds = 30;         // 默认 30s
 
     public AbsProcessSkill(String workDir) {
         this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
         ensureDir();
+    }
+
+    /**
+     * 配置最大输出大小（字节）
+     */
+    public void setMaxOutputSize(int maxOutputSize) {
+        this.maxOutputSize = maxOutputSize;
+    }
+
+    /**
+     * 配置超时时间（秒）
+     */
+    public void setTimeoutSeconds(int timeoutSeconds) {
+        this.timeoutSeconds = timeoutSeconds;
     }
 
     protected String runCode(String code, String cmd, String ext, Map<String, String> envs) {
@@ -51,7 +67,9 @@ public abstract class AbsProcessSkill extends AbsSkill {
             tempScript = Files.createTempFile(rootPath, "ai_script_", ext);
             Files.write(tempScript, code.getBytes(StandardCharsets.UTF_8));
 
-            ProcessBuilder pb = new ProcessBuilder(cmd, tempScript.toAbsolutePath().toString());
+            ProcessBuilder pb = new ProcessBuilder(cmd.split(" "));
+            pb.command().add(tempScript.toAbsolutePath().toString());
+
             pb.directory(rootPath.toFile());
             pb.redirectErrorStream(true);
 
@@ -62,23 +80,33 @@ public abstract class AbsProcessSkill extends AbsSkill {
             Process process = pb.start();
             StringBuilder output = new StringBuilder();
 
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (output.length() < MAX_OUTPUT_SIZE) {
-                        output.append(line).append("\n");
-                    } else {
-                        output.append("... [输出已截断]");
-                        process.destroyForcibly();
-                        break;
+            // 使用多线程异步读取
+            Thread readerThread = new Thread(() -> {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        synchronized (output) {
+                            if (output.length() < maxOutputSize) {
+                                output.append(line).append("\n");
+                            } else if (!output.toString().endsWith("... [输出已截断]")) {
+                                output.append("... [输出已截断]");
+                                process.destroyForcibly();
+                                break;
+                            }
+                        }
                     }
-                }
+                } catch (IOException ignored) {}
+            });
+            readerThread.start();
+
+            // 使用配置的超时时间
+            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                readerThread.interrupt();
+                return "执行超时：运行时间超过 " + timeoutSeconds + " 秒。";
             }
 
-            if (!process.waitFor(30, TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                return "执行超时：运行时间超过 30 秒。";
-            }
+            readerThread.join(1000);
 
             return output.length() == 0 ? "执行成功" : output.toString();
         } catch (Exception e) {
