@@ -68,37 +68,36 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
     @Override
     public boolean isSupported(Prompt prompt) {
         return true;
-//        return prompt.getUserContent().toLowerCase()
-//                .matches(".*(代码|修改|重构|搜索|文件|ls|cat|grep|run|test).*");
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
         StringBuilder sb = new StringBuilder();
 
-        // 1. 注入基础操作协议 (核心行动指南)
-        sb.append("### 核心操作协议 (Core Protocol)\n");
-        sb.append("- 你是一个拥有物理文件访问权限的 AI 助手。**必须优先使用工具**来解决问题，而非仅在对话中回复代码。\n");
-        sb.append("- **禁止虚假确认**：除非工具返回成功，否则不得声称已修改或创建了文件。\n");
-        sb.append("- **先读后写**：修改前必须调用 `cat` 确认代码精准上下文。禁止凭记忆猜测代码行。\n");
-        sb.append("- **原子化修改**：优先使用 `edit` 工具。调用时确保 `oldText` 与文件内容完全一致（含空格和缩进）。\n");
-        sb.append("- **验证闭环**：修改后，请使用 `run_command` 执行编译或测试指令以确认变更安全。\n\n");
+        // 1. 核心协议：强调“发现-理解-执行”的规范流
+        sb.append("## Claude Code Agent Skills 规范协议\n");
+        sb.append("- **技能发现**：当前工作目录下每个文件夹都可能是一个独立的 'Skill'。请优先使用 `ls` 探索。\n");
+        sb.append("- **规范优先**：进入技能目录后，**必须首先读取 `SKILL.md` 或 `README.md`**。这些文件定义了该技能的入口、参数和运行规范。\n");
+        sb.append("- **禁止自行发明**：除非规范要求你修改代码，否则严禁编写新脚本。必须按照 `SKILL.md` 的指示驱动现有程序。\n");
+        sb.append("- **环境适配**：在驱动技能前，先用 `exists_cmd` 确认该技能所需的运行时环境（如 python, java）。\n\n");
 
-        // 2. 自动感知项目规范文件
-        Path skillMd = rootPath.resolve("skill.md");
-        if (!Files.exists(skillMd)) {
-            skillMd = rootPath.resolve("CLAUDE.md");
+        // 2. 增强型：自动扫描并注入根目录的全局规范
+        Path rootSkillMd = rootPath.resolve("SKILL.md");
+        if (!Files.exists(rootSkillMd)) {
+            rootSkillMd = rootPath.resolve("skill.md");
         }
 
-        if (Files.exists(skillMd)) {
+        if (Files.exists(rootSkillMd)) {
             try {
-                byte[] bytes = Files.readAllBytes(skillMd);
-                String instructions = new String(bytes, StandardCharsets.UTF_8);
-                sb.append("### 项目特定规范与指导 (Project Norms)\n").append(instructions);
+                String instructions = new String(Files.readAllBytes(rootSkillMd), StandardCharsets.UTF_8);
+                sb.append("### 全局操作规范 (Global Norms)\n").append(instructions).append("\n\n");
             } catch (IOException e) {
-                LOG.warn("Failed to read skill.md", e);
+                LOG.warn("Failed to read root SKILL.md", e);
             }
         }
+
+        sb.append("### 核心工具集指南\n");
+        sb.append("- 使用 `run_command` 来触发技能目录中定义的命令行入口。\n");
 
         return sb.toString();
     }
@@ -111,8 +110,17 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
         if (!Files.exists(target)) return "错误：路径不存在 -> " + path;
 
         try (Stream<Path> stream = Files.list(target)) {
-            return stream.map(p -> (Files.isDirectory(p) ? "[DIR] " : "[FILE] ") + p.getFileName())
-                    .collect(Collectors.joining("\n"));
+            return stream.map(p -> {
+                String prefix = Files.isDirectory(p) ? "[DIR] " : "[FILE] ";
+                String suffix = "";
+                // 如果是目录，探测一下是否为标准 Skill
+                if (Files.isDirectory(p)) {
+                    if (Files.exists(p.resolve("SKILL.md")) || Files.exists(p.resolve("skill.md"))) {
+                        suffix = " (Claude Code Skill)";
+                    }
+                }
+                return prefix + p.getFileName() + suffix;
+            }).collect(Collectors.joining("\n"));
         }
     }
 
@@ -160,9 +168,15 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
         Path target = resolvePath(path);
         String content = new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
 
-        // 增加对 oldText 的清理尝试，提高健壮性（处理 LLM 可能多出的换行或缩进）
         if (!content.contains(oldText)) {
-            return "错误：匹配失败。请确保 oldText 与文件中的代码段（包括空格和缩进）完全一致。";
+            // 生产环境优化：尝试忽略首尾空白再匹配
+            String oldTrim = oldText.trim();
+            if (content.contains(oldTrim)) {
+                String newContent = content.replace(oldTrim, newText);
+                Files.write(target, newContent.getBytes(StandardCharsets.UTF_8));
+                return "文件局部更新成功(忽略空白匹配): " + rootPath.relativize(target);
+            }
+            return "错误：匹配失败。请先 cat 该文件确认最新内容。";
         }
 
         String newContent = content.replace(oldText, newText);
