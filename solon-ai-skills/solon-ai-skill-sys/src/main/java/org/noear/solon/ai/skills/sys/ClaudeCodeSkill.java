@@ -73,25 +73,32 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        // 自动感知项目规范文件
+        StringBuilder sb = new StringBuilder();
+
+        // 1. 注入基础操作协议 (参考 Claude Code 核心逻辑)
+        sb.append("### 核心操作协议 (Core Protocol)\n");
+        sb.append("- 你是一个拥有文件系统访问权限的 AI 助手。请优先使用工具来解决问题。\n");
+        sb.append("- **禁止虚假确认**：除非成功调用了 `edit` 或 `write` 工具，否则不要声称你已经修改了文件。\n");
+        sb.append("- **先读后写**：在修改文件前，必须先使用 `cat` 或 `grep` 确认当前文件的内容和上下文。\n");
+        sb.append("- **原子化修改**：优先使用 `edit` 进行局部精准修改，而不是 `write` 覆盖整个文件。\n");
+        sb.append("- **验证闭环**：修改完成后，尽可能使用 `run_command` 运行相关测试确认修改正确。\n\n");
+
+        // 2. 自动感知项目规范文件
         Path skillMd = rootPath.resolve("skill.md");
         if (!Files.exists(skillMd)) {
-            skillMd = rootPath.resolve("CLAUDE.md"); // 兼容 Claude 原生规范
+            skillMd = rootPath.resolve("CLAUDE.md");
         }
 
         if (Files.exists(skillMd)) {
             try {
                 String instructions = new String(Files.readAllBytes(skillMd), StandardCharsets.UTF_8);
-                LOG.info("Detected project skills from: {}", skillMd.getFileName());
-
-                // 将内容返回，Solon AI 框架会自动将其作为 System Message 注入
-                return "项目特定规范与技能指导：\n" + instructions;
+                sb.append("### 项目特定规范与指导 (Project Norms)\n").append(instructions);
             } catch (IOException e) {
                 LOG.warn("Failed to read skill.md", e);
             }
         }
 
-        return null;
+        return sb.toString();
     }
 
     // --- 1. 探测工具 (Search & List) ---
