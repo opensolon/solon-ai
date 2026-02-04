@@ -138,7 +138,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
 
         for (RankEntity<ChatInterceptor> item : options.interceptors()) {
-            item.target.onPrepare(options, originalPrompt, systemMessage);
+            item.target.onPrepare(session, options, originalPrompt, systemMessage);
         }
 
         if (systemMessage.length() > 0) {

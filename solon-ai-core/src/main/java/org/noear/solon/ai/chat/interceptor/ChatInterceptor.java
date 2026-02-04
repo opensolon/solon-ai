@@ -18,6 +18,7 @@ package org.noear.solon.ai.chat.interceptor;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import reactor.core.publisher.Flux;
 
@@ -30,7 +31,16 @@ import java.io.IOException;
  * @since 3.3
  */
 public interface ChatInterceptor extends ToolInterceptor {
-    default void onPrepare(ChatOptions options, Prompt originalPrompt, StringBuilder systemMessage){
+    /**
+     * 预处理（在构建请求之前触发）
+     * <p>用于动态调整配置、补充或修改提示词（Prompt）以及注入系统指令</p>
+     *
+     * @param session        当前聊天会话（可用于获取历史消息、元数据或状态标记）
+     * @param options        聊天配置（可修改，影响模型参数等）
+     * @param originalPrompt 原始提示词（包含用户消息和上下文）
+     * @param systemMessage  系统指令容器（可追加，将作为 System Message 发送）
+     */
+    default void onPrepare(ChatSession session, ChatOptions options, Prompt originalPrompt, StringBuilder systemMessage){
 
     }
 
