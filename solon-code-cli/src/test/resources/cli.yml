@@ -7,3 +7,4 @@ solon.code.cli:
   mountPool:
     "@shared": "${user.home}/WORK/work_github/solonlab/opencode-skills"
 
+# 下载 skills： https://github.com/solonlab/opencode-skills
