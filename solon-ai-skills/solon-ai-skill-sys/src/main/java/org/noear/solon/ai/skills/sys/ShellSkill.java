@@ -136,7 +136,7 @@ public class ShellSkill extends AbsProcessSkill {
     /**
      * 核心工具：执行指令
      */
-    @ToolMapping(name = "execute_shell", description = "在本地系统执行命令或脚本并获取输出")
+    @ToolMapping(name = "execute_shell", description = "在本地系统中执行单行指令或多行脚本，并获取标准输出。")
     public String execute(@Param("code") String code) {
         if (LOG.isTraceEnabled()) {
             LOG.trace("Executing shell code: {}", code);
