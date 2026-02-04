@@ -18,7 +18,7 @@ public class ClaudeCodeCLIDemo {
         String sharedDir = System.getProperty("user.home") + "/WORK/work_github/solonlab/opencode-skills";
 
         ClaudeCodeCLI claudeCodeCLI = new ClaudeCodeCLI(LlmUtil.getChatModel());
-        claudeCodeCLI.sharedSkillsDir(sharedDir);
+        claudeCodeCLI.sharedSkillsDir(sharedDir).maxSteps(100);
 
         claudeCodeCLI.start();
     }
