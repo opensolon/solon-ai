@@ -31,7 +31,7 @@ import java.util.stream.Stream;
 
 /**
  * Claude Code 综合技能：提供代码搜索、文件精确编辑及系统指令执行能力。
- * * <p>参考 Claude Code 工具集设计，集成了探知、阅读、编辑和测试的完整闭环。</p>
+ * <p>参考 Claude Code 工具集设计，集成了探知、阅读、编辑和测试的完整闭环。</p>
  *
  * @author noear
  * @since 3.9.1
@@ -56,7 +56,9 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
     }
 
     @Override
-    public String name() { return "claude_code_agent"; }
+    public String name() {
+        return "claude_code_agent";
+    }
 
     @Override
     public String description() {
@@ -80,10 +82,10 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
         if (Files.exists(skillMd)) {
             try {
                 String instructions = new String(Files.readAllBytes(skillMd), StandardCharsets.UTF_8);
-                LOG.info("Detected and attached project skills from: {}", skillMd.getFileName());
+                LOG.info("Detected project skills from: {}", skillMd.getFileName());
 
-                // 将文件内容注入到 Prompt 的系统指令中
-                return  "项目特定规范与技能指导：\n" + instructions;
+                // 将内容返回，Solon AI 框架会自动将其作为 System Message 注入
+                return "项目特定规范与技能指导：\n" + instructions;
             } catch (IOException e) {
                 LOG.warn("Failed to read skill.md", e);
             }
@@ -131,6 +133,7 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
     public String cat(@Param("path") String path) throws IOException {
         Path target = resolvePath(path);
         byte[] bytes = Files.readAllBytes(target);
+        // maxOutputSize 继承自 AbsProcessSkill
         if (bytes.length > maxOutputSize) {
             return new String(bytes, 0, maxOutputSize, StandardCharsets.UTF_8) + "\n... [输出已截断]";
         }
@@ -145,7 +148,7 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
         return "写入成功: " + path;
     }
 
-    @ToolMapping(name = "edit_file", description = "精确替换文件内容。参数：oldText (原代码段), newText (替换代码段)")
+    @ToolMapping(name = "edit", description = "精确替换文件内容。参数：oldText (原代码段), newText (替换代码段)")
     public String editFile(@Param("path") String path, @Param("oldText") String oldText, @Param("newText") String newText) throws IOException {
         Path target = resolvePath(path);
         String content = new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
@@ -157,7 +160,7 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
         return "文件已局部更新成功。";
     }
 
-    // --- 3. 执行工具 (Execute - 复用 ShellSkill 核心逻辑) ---
+    // --- 3. 执行工具 (Execute - 复用 AbsProcessSkill 核心逻辑) ---
 
     @ToolMapping(name = "run_command", description = "在工作目录执行系统指令（如测试、构建、安装）。")
     public String run(@Param("command") String command) {
@@ -170,7 +173,9 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
         String checkPattern = isWindows ? "where " + cleanCmd : "command -v " + cleanCmd;
         try {
             return Runtime.getRuntime().exec(checkPattern).waitFor() == 0;
-        } catch (Exception e) { return false; }
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     // --- 辅助方法 ---
@@ -186,6 +191,8 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
     private static String probeUnixShell() {
         try {
             return Runtime.getRuntime().exec("bash --version").waitFor() == 0 ? "bash" : "/bin/sh";
-        } catch (Exception e) { return "/bin/sh"; }
+        } catch (Exception e) {
+            return "/bin/sh";
+        }
     }
 }
