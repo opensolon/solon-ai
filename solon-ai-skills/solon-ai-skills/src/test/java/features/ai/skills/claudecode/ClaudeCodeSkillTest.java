@@ -4,7 +4,7 @@ import demo.ai.skills.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.skills.claudecode.CodeSpecSkills;
+import org.noear.solon.ai.skills.claudecode.CliSkill;
 
 import java.io.InputStream;
 import java.net.URL;
@@ -33,7 +33,7 @@ public class ClaudeCodeSkillTest {
                 .name("ClaudeCodeAgent")
                 .role(role)
                 .instruction("严格遵守挂载技能中的【规范协议】执行任务")
-                .defaultSkillAdd(new CodeSpecSkills(workDir))
+                .defaultSkillAdd(new CliSkill(workDir))
                 .maxSteps(30) // 生产环境建议 30 步，以支持复杂的链式思考
                 .build();
     }

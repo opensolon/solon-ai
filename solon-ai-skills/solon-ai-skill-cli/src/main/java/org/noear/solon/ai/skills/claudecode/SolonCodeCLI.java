@@ -85,7 +85,7 @@ public class SolonCodeCLI {
 
     public void start() {
         // 1. 初始化核心技能组件
-        CodeSpecSkills skills = new CodeSpecSkills(workDir, sharedSkillsDir);
+        CliSkill skills = new CliSkill(workDir, sharedSkillsDir);
 
         // 2. 构建 ReAct Agent
         ReActAgent agent = ReActAgent.of(chatModel)
