@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * Solon Code CLI 终端 (Pool-Box 模型)
@@ -46,8 +47,7 @@ public class SolonCodeCLI {
     private String name = "SolonCodeAgent"; // 默认名称
     private String workDir = ".";
     private final Map<String, String> extraPools = new LinkedHashMap<>();
-    private boolean streaming = true;
-    private int maxSteps = 20;
+    private Consumer<ReActAgent.Builder> configurator;
 
     public SolonCodeCLI(ChatModel chatModel) {
         this.chatModel = chatModel;
@@ -75,13 +75,8 @@ public class SolonCodeCLI {
         return this;
     }
 
-    public SolonCodeCLI maxSteps(int maxSteps) {
-        this.maxSteps = maxSteps;
-        return this;
-    }
-
-    public SolonCodeCLI streaming(boolean streaming) {
-        this.streaming = streaming;
+    public SolonCodeCLI config(Consumer<ReActAgent.Builder> configurator) {
+        this.configurator = configurator;
         return this;
     }
 
@@ -93,12 +88,16 @@ public class SolonCodeCLI {
         CliSkill skills = new CliSkill(session.getSessionId(), workDir);
         extraPools.forEach(skills::mountPool);
 
-        ReActAgent agent = ReActAgent.of(chatModel)
+        ReActAgent.Builder agentBuilder = ReActAgent.of(chatModel)
                 .role("你的名字叫 " + name + "。")
                 .instruction("你是一个超级智能助手（什么都能干）。要严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
-                .defaultSkillAdd(skills)
-                .maxSteps(maxSteps)
-                .build();
+                .defaultSkillAdd(skills);
+
+        if (configurator != null) {
+            configurator.accept(agentBuilder);
+        }
+
+        ReActAgent agent = agentBuilder.build();
 
         Scanner scanner = new Scanner(System.in);
         printWelcome();
@@ -113,43 +112,38 @@ public class SolonCodeCLI {
 
                 System.out.print(name + ": ");
 
-                if (streaming) {
-                    final String[] frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
-                    final int[] frameIdx = {0};
-                    final AtomicBoolean hasSpinner = new AtomicBoolean(false);
+                final String[] frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
+                final int[] frameIdx = {0};
+                final AtomicBoolean hasSpinner = new AtomicBoolean(false);
 
-                    agent.prompt(input)
-                            .session(session)
-                            .stream()
-                            .doOnNext(chunk -> {
-                                // 逻辑：只要是 Chunk 进来，我们都维持转子的旋转
-                                // 如果是 Reason 内容，我们打印它；如果是 Action，我们只转圈
-                                if (hasSpinner.get()) {
-                                    System.out.print("\b\b");
+                agent.prompt(input)
+                        .session(session)
+                        .stream()
+                        .doOnNext(chunk -> {
+                            // 逻辑：只要是 Chunk 进来，我们都维持转子的旋转
+                            // 如果是 Reason 内容，我们打印它；如果是 Action，我们只转圈
+                            if (hasSpinner.get()) {
+                                System.out.print("\b\b  \b\b");
+                            }
+
+                            if (chunk instanceof ReasonChunk) {
+                                String content = chunk.getContent();
+                                if (content != null) {
+                                    System.out.print(content);
                                 }
+                            }
 
-                                if (chunk instanceof ReasonChunk) {
-                                    String content = chunk.getContent();
-                                    if (content != null) {
-                                        System.out.print(content);
-                                    }
-                                }
+                            System.out.print(" " + frames[frameIdx[0]++ % frames.length]);
+                            System.out.flush();
+                            hasSpinner.set(true);
+                        })
+                        .blockLast();
 
-                                System.out.print(" " + frames[frameIdx[0]++ % frames.length]);
-                                System.out.flush();
-                                hasSpinner.set(true);
-                            })
-                            .blockLast();
-
-                    if (hasSpinner.get()) {
-                        System.out.print("\b\b  \b\b");
-                    }
-                    System.out.println();
-                } else {
-                    String response = agent.prompt(input).session(session).call().getContent();
-                    System.out.println(response);
+                if (hasSpinner.get()) {
+                    System.out.print("\b\b  \b\b");
                 }
 
+                System.out.println();
             } catch (Throwable e) {
                 System.err.println("\n[错误] " + e.getMessage());
                 LOG.error("CLI 执行异常", e);

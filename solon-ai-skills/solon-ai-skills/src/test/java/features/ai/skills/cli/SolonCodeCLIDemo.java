@@ -21,7 +21,9 @@ public class SolonCodeCLIDemo {
                 .name("小花")
                 .workDir("./app")
                 .mountPool("@shared", sharedDir)
-                .maxSteps(100);
+                .config(agent -> {
+                    agent.maxSteps(100);
+                });
 
         solonCodeCLI.start();
     }
