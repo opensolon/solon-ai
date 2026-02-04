@@ -1,4 +1,8 @@
 
+# Solon Code CLI
+
+体验上与 Claude Code CLI 类似。兼容 Claude Code Agent Skills。
+
 ### 1、修改配置
 
 （运行前）先修改 cli.yml 的配置（修改后，就可能运行了）
