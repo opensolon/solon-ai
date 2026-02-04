@@ -37,14 +37,14 @@ import java.util.stream.Stream;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class ClaudeCodeSkill extends AbsProcessSkill {
-    private final static Logger LOG = LoggerFactory.getLogger(ClaudeCodeSkill.class);
+public class ClaudeCodeAgentSkills extends AbsProcessSkill {
+    private final static Logger LOG = LoggerFactory.getLogger(ClaudeCodeAgentSkills.class);
     private final String shellCmd;
     private final String extension;
     private final boolean isWindows;
     private final Path globalPath;
 
-    public ClaudeCodeSkill(String workDir, String globalSkillsDir) {
+    public ClaudeCodeAgentSkills(String workDir, String globalSkillsDir) {
         super(workDir);
         this.globalPath = globalSkillsDir != null ? Paths.get(globalSkillsDir).toAbsolutePath().normalize() : null;
         this.isWindows = System.getProperty("os.name").toLowerCase().contains("win");
@@ -57,18 +57,18 @@ public class ClaudeCodeSkill extends AbsProcessSkill {
         }
     }
 
-    public ClaudeCodeSkill(String workDir) {
+    public ClaudeCodeAgentSkills(String workDir) {
         this(workDir, null);
     }
 
     @Override
     public String name() {
-        return "claude_code_agent";
+        return "claude_code_agent_skills";
     }
 
     @Override
     public String description() {
-        return "代码专家技能：支持文件树浏览、全文本搜索(grep)、文件读写及 Shell 命令执行。兼容 Claude Code Skills 规范。";
+        return "Claude Code 规范技能组：提供文件管理、代码搜索及系统指令执行的综合 Agent 能力。";
     }
 
     @Override
