@@ -92,6 +92,8 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
 
         sb.append("- **技能发现**：通过 `ls` 探索。标识有 `(Claude Code Skill)` 的文件夹为标准技能包，必须先读取其 `SKILL.md` 后再驱动。\n");
         sb.append("- **执行规范**：使用 `run_command`。若需在子目录执行，请组合指令（如 `cd path && cmd`）。\n\n");
+        sb.append("- **搜索优先**：检索代码意图或查找特定逻辑时，优先使用 `grep`，严禁盲目读取 (cat) 大量无关文件。\n");
+        sb.append("- **环境自查**：执行特定语言脚本前，先用 `exists_cmd` 检查环境（如 python3, node 等）。\n");
 
         injectRootInstructions(sb, rootPath, "### 项目工作区规范 (Project Norms)\n");
 
