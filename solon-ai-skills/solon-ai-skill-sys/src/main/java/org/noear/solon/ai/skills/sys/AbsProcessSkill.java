@@ -39,8 +39,8 @@ public abstract class AbsProcessSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(AbsProcessSkill.class);
     protected final Path rootPath;
 
-    private int maxOutputSize = 1024 * 1024; // 默认 1MB
-    private int timeoutSeconds = 30;         // 默认 30s
+    protected int maxOutputSize = 1024 * 1024; // 默认 1MB
+    protected int timeoutSeconds = 30;         // 默认 30s
 
     public AbsProcessSkill(String workDir) {
         this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
