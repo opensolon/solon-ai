@@ -98,7 +98,7 @@ public class SolonCodeCLI {
 
         // 2. 构建 ReAct Agent
         ReActAgent agent = ReActAgent.of(chatModel)
-                .role("专业任务解决专家。你的名字叫 " + name + "。") // 联动名称
+                .role("全能型智能助手。你的名字叫 " + name + "。") // 联动名称
                 .instruction("严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
                 .defaultSkillAdd(skills)
                 .maxSteps(maxSteps)
@@ -119,29 +119,12 @@ public class SolonCodeCLI {
                 System.out.print(name + ": ");
 
                 if (streaming) {
-                    AtomicBoolean isReason = new AtomicBoolean(false);
                     agent.prompt(input)
                             .session(session)
                             .stream()
                             .doOnNext(chunk -> {
                                 if (chunk instanceof ReasonChunk) {
-                                    // 灰色输出思考内容
-                                    if(isReason.compareAndSet(false, true)){
-                                        System.out.println();
-                                    }
-                                    System.out.print("\033[90m" + chunk.getContent() + "\033[0m");
-                                } else {
-                                    if(isReason.get()){
-                                        isReason.set(false);
-                                    }
-
-                                    if (chunk instanceof ActionChunk) {
-                                        // 动作反馈
-                                        System.out.println("\n\uD83D\uDEE0\ufe0f  [调用工具]: " + chunk.getContent());
-                                    } else if (chunk instanceof ReActChunk) {
-                                        // 最终答案加粗输出
-                                        System.out.println("\033[1m" + chunk.getContent() + "\033[0m");
-                                    }
+                                    System.out.print(chunk.getContent());
                                 }
                             })
                             .blockLast();
