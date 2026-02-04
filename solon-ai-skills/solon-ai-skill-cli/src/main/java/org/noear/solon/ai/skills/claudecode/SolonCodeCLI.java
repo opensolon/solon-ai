@@ -137,27 +137,36 @@ public class SolonCodeCLI implements Handler, Runnable {
         prepare();
 
         String input = ctx.param("input");
+        String mode = ctx.param("m");
 
         if (Assert.isNotEmpty(input)) {
             System.out.println(input);
 
-            ctx.contentType(MimeType.TEXT_EVENT_STREAM_UTF8_VALUE);
+            if ("call".equals(mode)) {
+                String result = agent.prompt(input).call().getContent();
+                System.out.print(result);
+                System.out.println();
+                System.out.print("\n\uD83D\uDCBB > ");
+                ctx.output(result);
+            } else {
+                ctx.contentType(MimeType.TEXT_EVENT_STREAM_UTF8_VALUE);
 
-            Flux<String> stringFlux = agent.prompt(input)
-                    .session(session)
-                    .stream()
-                    .filter(chunk -> chunk instanceof ReasonChunk)
-                    .map(chunk -> {
-                        System.out.print(chunk.getContent());
-                        return chunk.getContent();
-                    })
-                    .concatWithValues("[DONE]")
-                    .doOnComplete(() -> {
-                        System.out.println();
-                        System.out.print("\n\uD83D\uDCBB > ");
-                    });
+                Flux<String> stringFlux = agent.prompt(input)
+                        .session(session)
+                        .stream()
+                        .filter(chunk -> chunk instanceof ReasonChunk)
+                        .map(chunk -> {
+                            System.out.print(chunk.getContent());
+                            return chunk.getContent();
+                        })
+                        .concatWithValues("[DONE]")
+                        .doOnComplete(() -> {
+                            System.out.println();
+                            System.out.print("\n\uD83D\uDCBB > ");
+                        });
 
-            ctx.returnValue(stringFlux);
+                ctx.returnValue(stringFlux);
+            }
         }
     }
 

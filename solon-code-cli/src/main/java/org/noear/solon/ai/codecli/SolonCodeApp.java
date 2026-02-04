@@ -11,6 +11,7 @@ import java.util.Map;
 public class SolonCodeApp {
     static final String nameKey = "solon.code.cli.name";
     static final String workDirKey = "solon.code.cli.workDir";
+    static final String webPathKey = "solon.code.cli.webPath";
     static final String maxStepsKey = "solon.code.cli.maxSteps";
     static final String enableWebKey = "solon.code.cli.enableWeb";
     static final String enableConsoleKey = "solon.code.cli.enableConsole";
@@ -22,6 +23,7 @@ public class SolonCodeApp {
 
         String name = Solon.cfg().get(nameKey);
         String workDir = Solon.cfg().get(workDirKey, "./work");
+        String webPath = Solon.cfg().get(webPathKey, "/cli");
         int maxSteps = Solon.cfg().getInt(maxStepsKey, 100);
         boolean enableWeb = Solon.cfg().getBool(enableWebKey, true);
         boolean enableConsole = Solon.cfg().getBool(enableConsoleKey, true);
@@ -51,7 +53,7 @@ public class SolonCodeApp {
         }
 
         if (enableWeb) {
-            Solon.app().router().get("cli", solonCodeCLI);
+            Solon.app().router().get(webPath, solonCodeCLI);
         }
 
         if (enableConsole) {

@@ -1,6 +1,7 @@
 solon.code.cli:
   name: "小花"
   workDir: "./work"
+  webPath: "/cli"
   maxSteps: 100
   enableWeb: true
   enableConsole: true
