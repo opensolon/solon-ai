@@ -17,8 +17,6 @@ package org.noear.solon.ai.skills.claudecode;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActChunk;
-import org.noear.solon.ai.agent.react.task.ActionChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
@@ -92,14 +90,12 @@ public class SolonCodeCLI {
             session = new InMemoryAgentSession("cli-" + System.currentTimeMillis());
         }
 
-        // 1. 初始化 CliSkill，注入 SessionID 确保盒子隔离语义
         CliSkill skills = new CliSkill(session.getSessionId(), workDir);
         extraPools.forEach(skills::mountPool);
 
-        // 2. 构建 ReAct Agent
         ReActAgent agent = ReActAgent.of(chatModel)
-                .role("全能型智能助手。你的名字叫 " + name + "。") // 联动名称
-                .instruction("严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
+                .role("你的名字叫 " + name + "。")
+                .instruction("你是一个超级智能助手（什么都能干）。要严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
                 .defaultSkillAdd(skills)
                 .maxSteps(maxSteps)
                 .build();
@@ -115,19 +111,40 @@ public class SolonCodeCLI {
                 if (input == null || input.trim().isEmpty()) continue;
                 if (isSystemCommand(input)) break;
 
-                // 使用配置的名称作为输出前缀
                 System.out.print(name + ": ");
 
                 if (streaming) {
+                    final String[] frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
+                    final int[] frameIdx = {0};
+                    final AtomicBoolean hasSpinner = new AtomicBoolean(false);
+
                     agent.prompt(input)
                             .session(session)
                             .stream()
                             .doOnNext(chunk -> {
-                                if (chunk instanceof ReasonChunk) {
-                                    System.out.print(chunk.getContent());
+                                // 逻辑：只要是 Chunk 进来，我们都维持转子的旋转
+                                // 如果是 Reason 内容，我们打印它；如果是 Action，我们只转圈
+                                if (hasSpinner.get()) {
+                                    System.out.print("\b\b");
                                 }
+
+                                if (chunk instanceof ReasonChunk) {
+                                    String content = chunk.getContent();
+                                    if (content != null) {
+                                        System.out.print(content);
+                                    }
+                                }
+
+                                System.out.print(" " + frames[frameIdx[0]++ % frames.length]);
+                                System.out.flush();
+                                hasSpinner.set(true);
                             })
                             .blockLast();
+
+                    if (hasSpinner.get()) {
+                        System.out.print("\b\b  \b\b");
+                    }
+                    System.out.println();
                 } else {
                     String response = agent.prompt(input).session(session).call().getContent();
                     System.out.println(response);
