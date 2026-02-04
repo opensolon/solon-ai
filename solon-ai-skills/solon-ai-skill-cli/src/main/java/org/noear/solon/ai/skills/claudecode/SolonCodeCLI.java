@@ -159,6 +159,7 @@ public class SolonCodeCLI implements Handler, Runnable {
                             System.out.print(chunk.getContent());
                             return chunk.getContent();
                         })
+                        .filter(content -> Assert.isNotEmpty(content))
                         .concatWithValues("[DONE]")
                         .doOnComplete(() -> {
                             System.out.println();
