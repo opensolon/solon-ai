@@ -1,0 +1,11 @@
+solon.logging.appender:
+  console:
+    enable: false
+  file:
+    level: WARN
+
+solon.ai.chat:
+  cli:
+    apiUrl: "https://api.deepseek.com/v1/chat/completions"
+    apiKey: "sk-19a568bbfc0248dfbac088a0a70fa74d"
+    model: "deepseek-chat"
