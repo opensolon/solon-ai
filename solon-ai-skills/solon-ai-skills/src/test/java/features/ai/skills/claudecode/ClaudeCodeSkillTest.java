@@ -19,6 +19,7 @@ import java.nio.file.*;
  * @since 3.9.1
  */
 public class ClaudeCodeSkillTest {
+    // 下载 skills： https://github.com/solonlab/opencode-skills
 
     // 技能库根目录
     private final String workDir = "/Users/noear/WORK/work_github/solonlab/opencode-skills";
