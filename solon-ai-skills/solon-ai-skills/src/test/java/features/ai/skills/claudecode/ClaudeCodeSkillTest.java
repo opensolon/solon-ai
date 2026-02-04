@@ -1,10 +1,10 @@
-package features.ai.skills.sys;
+package features.ai.skills.claudecode;
 
 import demo.ai.skills.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.skills.sys.ClaudeCodeAgentSkills;
+import org.noear.solon.ai.skills.claudecode.ClaudeCodeAgentSkills;
 
 import java.io.InputStream;
 import java.net.URL;

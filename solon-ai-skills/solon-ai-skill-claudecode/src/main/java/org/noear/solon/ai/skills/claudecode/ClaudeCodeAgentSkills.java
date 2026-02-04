@@ -13,10 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.skills.sys;
+package org.noear.solon.ai.skills.claudecode;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.skills.sys.AbsProcessSkill;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -42,12 +43,13 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
     private final String shellCmd;
     private final String extension;
     private final boolean isWindows;
-    private final Path globalPath;
+    private final Path sharedPath;
 
-    public ClaudeCodeAgentSkills(String workDir, String globalSkillsDir) {
+    public ClaudeCodeAgentSkills(String workDir, String sharedSkillsDir) {
         super(workDir);
-        this.globalPath = globalSkillsDir != null ? Paths.get(globalSkillsDir).toAbsolutePath().normalize() : null;
+        this.sharedPath = sharedSkillsDir != null ? Paths.get(sharedSkillsDir).toAbsolutePath().normalize() : null;
         this.isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+
         if (isWindows) {
             this.shellCmd = "cmd /c";
             this.extension = ".bat";
@@ -84,7 +86,7 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
 
         // 1. 空间声明
         sb.append("#### 1. 空间映射\n");
-        if (globalPath != null) {
+        if (sharedPath != null) {
             sb.append("- **全局空间 (@global/)**：系统级共享库（只读）。\n");
         }
         sb.append("- **当前 OS**：").append(System.getProperty("os.name")).append("\n\n");
@@ -92,8 +94,8 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
         // 2. 渐进式加载索引 (核心优化：不直接读正文，只列清单)
         sb.append("#### 2. 技能发现索引 (Manifest)\n");
         sb.append("- **项目可用技能**: ").append(scanSkillNames(rootPath)).append("\n");
-        if (globalPath != null) {
-            sb.append("- **全局可用技能**: ").append(scanSkillNames(globalPath)).append("\n");
+        if (sharedPath != null) {
+            sb.append("- **全局可用技能**: ").append(scanSkillNames(sharedPath)).append("\n");
         }
         sb.append("> 提示：标记为 (Claude Code Skill) 的目录包含专项规范。请通过 `ls` 探索并读取其 `SKILL.md` 获取驱动指南。\n\n");
 
@@ -226,9 +228,9 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
     @ToolMapping(name = "run_command", description = "执行系统指令。@global/ 会被自动映射。")
     public String run(@Param("command") String command) {
         String finalCmd = command;
-        if (globalPath != null && command.contains("@global/")) {
+        if (sharedPath != null && command.contains("@global/")) {
             // 增强：规范化斜杠处理
-            finalCmd = command.replace("@global/", globalPath.toString() + "/");
+            finalCmd = command.replace("@global/", sharedPath.toString() + "/");
         }
         return runCode(finalCmd, shellCmd, extension, null);
     }
@@ -253,13 +255,13 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
 
     private Path resolvePathExtended(String pathStr) {
         if (isGlobal(pathStr)) {
-            if (globalPath == null) {
+            if (sharedPath == null) {
                 throw new IllegalArgumentException("操作失败：未配置全局技能库 (@global/ 映射无效)。");
             }
             // 移除前缀并处理路径分隔符
             String sub = pathStr.substring(7).replaceFirst("^[/\\\\]", "");
-            Path p = globalPath.resolve(sub).normalize();
-            if (!p.startsWith(globalPath)) throw new SecurityException("非法越界访问");
+            Path p = sharedPath.resolve(sub).normalize();
+            if (!p.startsWith(sharedPath)) throw new SecurityException("非法越界访问");
             return p;
         }
         return resolvePath(pathStr);

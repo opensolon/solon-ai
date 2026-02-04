@@ -35,15 +35,16 @@
 
 
         <module>../../solon-ai-skills/solon-ai-skills</module>
-        <module>../../solon-ai-skills/solon-ai-skill-restapi</module>
-        <module>../../solon-ai-skills/solon-ai-skill-pdf</module>
+        <module>../../solon-ai-skills/solon-ai-skill-claudecode</module>
+        <module>../../solon-ai-skills/solon-ai-skill-data</module>
+        <module>../../solon-ai-skills/solon-ai-skill-file</module>
         <module>../../solon-ai-skills/solon-ai-skill-generation</module>
         <module>../../solon-ai-skills/solon-ai-skill-mail</module>
-        <module>../../solon-ai-skills/solon-ai-skill-data</module>
-        <module>../../solon-ai-skills/solon-ai-skill-web</module>
-        <module>../../solon-ai-skills/solon-ai-skill-file</module>
+        <module>../../solon-ai-skills/solon-ai-skill-pdf</module>
+        <module>../../solon-ai-skills/solon-ai-skill-restapi</module>
         <module>../../solon-ai-skills/solon-ai-skill-social</module>
         <module>../../solon-ai-skills/solon-ai-skill-sys</module>
         <module>../../solon-ai-skills/solon-ai-skill-text2sql</module>
+        <module>../../solon-ai-skills/solon-ai-skill-web</module>
     </modules>
 </project>
