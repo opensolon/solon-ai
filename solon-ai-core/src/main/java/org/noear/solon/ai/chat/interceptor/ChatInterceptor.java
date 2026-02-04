@@ -15,8 +15,10 @@
  */
 package org.noear.solon.ai.chat.interceptor;
 
+import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import reactor.core.publisher.Flux;
 
 import java.io.IOException;
@@ -28,6 +30,10 @@ import java.io.IOException;
  * @since 3.3
  */
 public interface ChatInterceptor extends ToolInterceptor {
+    default void onPrepare(ChatOptions options, Prompt originalPrompt, StringBuilder systemMessage){
+
+    }
+
     /**
      * 拦截 Call 请求
      *

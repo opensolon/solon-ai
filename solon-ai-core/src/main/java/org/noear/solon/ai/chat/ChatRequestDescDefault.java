@@ -129,11 +129,18 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         if (Assert.isNotEmpty(options.role())) {
             systemMessage.append("## 你的角色\n").append(options.role()).append("\n\n");
         }
+
         if (Assert.isNotEmpty(options.instruction())) {
-            systemMessage.append("## 执行指令\n").append(options.instruction());
+            systemMessage.append("## 执行指令\n").append(options.instruction()).append("\n");
         }
 
         SkillUtil.activeSkills(options, originalPrompt, systemMessage);
+
+
+        for (RankEntity<ChatInterceptor> item : options.interceptors()) {
+            item.target.onPrepare(options, originalPrompt, systemMessage);
+        }
+
         if (systemMessage.length() > 0) {
             return ChatMessage.ofSystem(systemMessage.toString());
         } else {
