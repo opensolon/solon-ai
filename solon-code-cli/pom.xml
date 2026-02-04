@@ -43,4 +43,17 @@
         </dependency>
     </dependencies>
 
+    <build>
+        <finalName>SolonCodeCLI</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>org.noear.solon.ai.codecli.SolonCodeApp</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>

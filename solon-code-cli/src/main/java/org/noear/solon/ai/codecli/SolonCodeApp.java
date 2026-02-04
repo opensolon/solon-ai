@@ -1,31 +1,43 @@
 package org.noear.solon.ai.codecli;
 
 import org.noear.solon.Solon;
+import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.skills.claudecode.SolonCodeCLI;
+import org.noear.solon.core.util.Assert;
+
+import java.util.Map;
 
 public class SolonCodeApp {
     public static void main(String[] args) {
         Solon.start(SolonCodeApp.class, args);
 
+        String nameKey = "solon.code.cli.name";
+        String chatModelKey = "solon.code.cli.chatModel";
+        String mountPoolKey = "solon.code.cli.mountPool";
 
-        ChatModel chatModel = Solon.context().getBean(ChatModel.class);
+        String name = Solon.cfg().get(nameKey);
+        Map<String, String> mountPoolMap = Solon.cfg().getMap(mountPoolKey);
+        ChatConfig chatConfig = Solon.cfg().toBean(chatModelKey, ChatConfig.class);
 
-        if(chatModel == null){
+        if (chatConfig == null) {
             throw new RuntimeException("ChatModel config not found");
         }
 
-        // 下载 skills： https://github.com/solonlab/opencode-skills
-        String sharedDir = System.getProperty("user.home") + "/WORK/work_github/solonlab/opencode-skills";
-
+        ChatModel chatModel = ChatModel.of(chatConfig).build();
 
         SolonCodeCLI solonCodeCLI = new SolonCodeCLI(chatModel)
-                .name("小花")
-                .workDir("./app")
-                .mountPool("@shared", sharedDir)
+                .name(name)
+                .workDir("./work")
                 .config(agent -> {
                     agent.maxSteps(100);
                 });
+
+        if (Assert.isNotEmpty(mountPoolMap)) {
+            mountPoolMap.forEach((alias, dir) -> {
+                solonCodeCLI.mountPool(alias, dir);
+            });
+        }
 
         solonCodeCLI.start();
     }

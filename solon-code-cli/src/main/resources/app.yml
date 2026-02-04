@@ -1,3 +1,6 @@
+solon.config:
+  load: "file:cli.yml"
+
 solon.logging.appender:
   console:
     enable: false

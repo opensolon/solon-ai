@@ -1,0 +1,9 @@
+solon.code.cli:
+  name: "小花"
+  chatModel:
+    apiUrl: "https://api.deepseek.com/v1/chat/completions"
+    apiKey: "sk-19a568bbfc0248dfbac088a0a70fa74d"
+    model: "deepseek-chat"
+  mountPool:
+    "@shared": "${user.home}/WORK/work_github/solonlab/opencode-skills"
+
