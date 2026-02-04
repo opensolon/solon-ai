@@ -17,6 +17,7 @@ package org.noear.solon.ai.skills.claudecode;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.task.ActionChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
@@ -179,9 +180,13 @@ public class SolonCodeCLI implements Handler, Runnable {
         }
 
         prepare();
-
         Scanner scanner = new Scanner(System.in);
         printWelcome();
+
+        // ANSI 颜色定义
+        final String GRAY = "\033[90m";
+        final String YELLOW = "\033[33m";
+        final String RESET = "\033[0m";
 
         while (true) {
             try {
@@ -193,36 +198,61 @@ public class SolonCodeCLI implements Handler, Runnable {
 
                 System.out.print(name + ": ");
 
-                final String[] frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
-                final int[] frameIdx = {0};
-                final AtomicBoolean hasSpinner = new AtomicBoolean(false);
+                // 状态控制
+                final AtomicBoolean lastIsAction = new AtomicBoolean(false);
+                final AtomicBoolean inGrayMode = new AtomicBoolean(false);
 
                 agent.prompt(input)
                         .session(session)
                         .stream()
                         .doOnNext(chunk -> {
-                            // 逻辑：只要是 Chunk 进来，我们都维持转子的旋转
-                            // 如果是 Reason 内容，我们打印它；如果是 Action，我们只转圈
-                            if (hasSpinner.get()) {
-                                System.out.print("\b\b  \b\b");
-                            }
-
                             if (chunk instanceof ReasonChunk) {
-                                String content = chunk.getContent();
-                                if (content != null) {
-                                    System.out.print(content);
+                                ReasonChunk reason = (ReasonChunk) chunk;
+                                if (!reason.hasContent()) {
+                                    return; // 积累中
                                 }
-                            }
 
-                            System.out.print(" " + frames[frameIdx[0]++ % frames.length]);
-                            System.out.flush();
-                            hasSpinner.set(true);
+                                String content = reason.getContent();
+                                // 判断是否带有工具调用（即是否处于思考/推理阶段）
+                                boolean isToolCalling = Assert.isNotEmpty(reason.getResponse().getMessage().getToolCalls());
+
+                                if (isToolCalling) {
+                                    // --- 推理阶段：灰色 ---
+                                    if (!inGrayMode.get()) {
+                                        if (lastIsAction.get()) System.out.println();
+                                        System.out.print(GRAY);
+                                        inGrayMode.set(true);
+                                        lastIsAction.set(false);
+                                    }
+                                } else {
+                                    // --- 结果阶段：恢复默认色 ---
+                                    if (inGrayMode.get()) {
+                                        System.out.print(RESET);
+                                        inGrayMode.set(false);
+                                    }
+                                    if (lastIsAction.get()) {
+                                        System.out.println();
+                                        lastIsAction.set(false);
+                                    }
+                                }
+                                System.out.print(content);
+                                System.out.flush();
+
+                            } else if (chunk instanceof ActionChunk) {
+                                // --- 执行阶段：黄色高亮 ---
+                                if (inGrayMode.get()) {
+                                    System.out.print(RESET);
+                                    inGrayMode.set(false);
+                                }
+                                System.out.println();
+                                System.out.println(YELLOW + chunk.getContent() + RESET);
+                                lastIsAction.set(true);
+                            }
+                        })
+                        .doOnTerminate(() -> {
+                            System.out.print(RESET); // 最终安全重置
                         })
                         .blockLast();
-
-                if (hasSpinner.get()) {
-                    System.out.print("\b\b  \b\b");
-                }
 
                 System.out.println();
             } catch (Throwable e) {
@@ -253,7 +283,7 @@ public class SolonCodeCLI implements Handler, Runnable {
         }
 
         System.out.println("==================================================");
-        System.out.println("🚀 " + name + " 终端已就绪");
+        System.out.println("🚀 " + name + " 已就绪");
         System.out.println("--------------------------------------------------");
         System.out.println("📂 工作空间: " + absolutePath);
 

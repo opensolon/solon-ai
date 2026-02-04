@@ -19,6 +19,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.skills.sys.AbsProcessSkill;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -191,7 +192,10 @@ public class CliSkill extends AbsProcessSkill {
     @ToolMapping(name = "grep", description = "全文本递归搜索。支持本地盒子及挂载池。")
     public String grep(@Param("pattern") String pattern, @Param("path") String path) throws IOException {
         Path target = resolvePathExtended(path);
-        String virtualPrefix = path != null && path.startsWith("@") ? path.split("/")[0] + "/" : "";
+        // 获取用于显示的虚拟前缀（如果是 @pool 路径）
+        String virtualPrefix = (path != null && path.startsWith("@")) ? path.split("/")[0] + "/" : "";
+        // 获取规范化的显示路径
+        String displayPath = (path == null || path.isEmpty() || ".".equals(path)) ? "盒子根目录" : path;
 
         StringBuilder sb = new StringBuilder();
         try (Stream<Path> walk = Files.walk(target)) {
@@ -201,15 +205,23 @@ public class CliSkill extends AbsProcessSkill {
                     List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
                     for (int i = 0; i < lines.size(); i++) {
                         if (lines.get(i).contains(pattern)) {
+                            // 计算相对路径
                             String relPath = virtualPrefix + target.relativize(file).toString();
                             sb.append(relPath).append(":").append(i + 1).append(": ").append(lines.get(i).trim()).append("\n");
                         }
                     }
                 } catch (Exception ignored) {
+                    // 忽略二进制文件或无法读取的文件
                 }
             }
         }
-        return sb.length() == 0 ? "未找到匹配项" : sb.toString();
+
+        if (sb.length() == 0) {
+            // 增加更丰富的上下文反馈
+            return String.format("未找到匹配项 (搜索关键词: '%s', 搜索范围: %s)", pattern, displayPath);
+        }
+
+        return sb.toString();
     }
 
     @ToolMapping(name = "cat", description = "读取文件（代码、规范等）。支持池路径。")
@@ -234,20 +246,40 @@ public class CliSkill extends AbsProcessSkill {
     @ToolMapping(name = "edit", description = "精准文本替换。禁止操作池路径。")
     public String edit(@Param("path") String path, @Param("oldText") String oldText, @Param("newText") String newText) throws IOException {
         if (isPoolPath(path)) return "拒绝访问：技能池 (@pool) 空间为只读。";
-        Path target = resolvePath(path);
-        String content = new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
 
-        if (!content.contains(oldText)) {
-            String oldTrim = oldText.trim();
-            if (content.contains(oldTrim)) {
-                Files.write(target, content.replace(oldTrim, newText).getBytes(StandardCharsets.UTF_8));
-                return "更新成功(模糊匹配)";
-            }
-            return "错误：内容匹配失败。";
+        Path target = resolvePath(path);
+        if (!Files.exists(target)) {
+            return "错误：文件不存在 -> " + path;
         }
 
-        Files.write(target, content.replace(oldText, newText).getBytes(StandardCharsets.UTF_8));
-        return "更新成功: " + rootPath.relativize(target);
+        String content = new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
+
+        // 1. 完全匹配
+        if (content.contains(oldText)) {
+            Files.write(target, content.replace(oldText, newText).getBytes(StandardCharsets.UTF_8));
+            return "更新成功: " + rootPath.relativize(target);
+        }
+
+        // 2. 模糊匹配尝试 (去除首尾空格)
+        String oldTrim = oldText.trim();
+        if (Assert.isNotEmpty(oldTrim) && content.contains(oldTrim)) {
+            Files.write(target, content.replace(oldTrim, newText).getBytes(StandardCharsets.UTF_8));
+            return "更新成功（通过忽略首尾空白字符匹配成功）";
+        }
+
+        // 3. 彻底匹配失败：提供详细的错误反馈
+        StringBuilder error = new StringBuilder();
+        error.append("错误：无法在文件中找到指定的文本片段。\n");
+        error.append("待匹配文本: [").append(oldText).append("]\n");
+
+        // 技巧：如果文件不大，可以引导 Agent 先 cat 一下
+        if (content.length() < 2000) {
+            error.append("提示：文件内容与你记忆中不符。建议先调用 'cat' 重新读取该文件以确认精确的缩进和格式。");
+        } else {
+            error.append("提示：请检查缩进、换行符或特殊字符是否完全一致。");
+        }
+
+        return error.toString();
     }
 
     @ToolMapping(name = "run_command", description = "执行系统指令。支持自动解析 @pool/ 虚拟路径映射。")
