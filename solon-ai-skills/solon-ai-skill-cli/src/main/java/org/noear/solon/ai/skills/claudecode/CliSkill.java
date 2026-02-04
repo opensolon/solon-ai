@@ -65,13 +65,13 @@ public class CliSkill extends AbsProcessSkill {
 
     @Override
     public String name() {
-        // 保持协议标识符兼容性
+        // 保持协议标识符兼容性，确保 LLM 能识别
         return "claude_code_agent_skills";
     }
 
     @Override
     public String description() {
-        return "提供符合 Claude Code Agent Skills 规范的综合 CLI 能力，支持文件管理、共享技能索引及多领域指令执行。";
+        return "提供符合 Claude Code 规范的综合 CLI 能力，支持文件管理、共享技能索引及跨领域系统指令执行。";
     }
 
     @Override
@@ -88,24 +88,24 @@ public class CliSkill extends AbsProcessSkill {
         // 1. 空间声明
         sb.append("#### 1. 空间映射 (Space Mapping)\n");
         if (sharedPath != null) {
-            sb.append("- **共享空间 (@shared/)**：系统级共享库（只读）。\n");
+            sb.append("- **共享空间 (@shared/)**：只读的跨项目工具与规范库。\n");
         }
         sb.append("- **当前 OS**：").append(System.getProperty("os.name")).append("\n\n");
 
-        // 2. 渐进式加载索引 (核心优化：不直接读正文，只列清单)
+        // 2. 渐进式发现 (发现 -> 读取 -> 执行)
         sb.append("#### 2. 技能发现索引 (Discovery)\n");
         sb.append("- **本地可用技能**: ").append(scanSkillNames(rootPath)).append("\n");
         if (sharedPath != null) {
             sb.append("- **共享可用技能**: ").append(scanSkillNames(sharedPath)).append("\n");
         }
-        sb.append("> 提示：标记为 (Claude Code Skill) 的目录包含专项规范。请通过 `ls` 探索并读取其 `SKILL.md` 获取驱动指南。\n\n");
+        sb.append("> 提示：标记为 (Claude Code Skill) 的目录包含 `SKILL.md` 规范。请通过 `ls` 探索并读取规范以驱动任务。\n\n");
 
         // 3. 行为准则
         sb.append("#### 3. 操作准则(Action Guidelines)\n");
         sb.append("- **搜索优先**：检索逻辑优先使用 `grep`。避免盲目 `cat` 大文件。\n");
         sb.append("- **环境自查**：执行系统命令（如 ffmpeg, python, node）前必须先用 `exists_cmd` 确认环境可用。\n");
-        sb.append("- **递归发现**：技能下可能包含子级技能，进入目录后请重复“发现-读取规范”的过程。\n\n");
-        sb.append("- **自由组合**：你可以自由调用系统级 CLI 工具来处理跨领域的任务（如代码构建、视频渲染、网络调查）。\n\n");
+        sb.append("- **递归发现**：技能目录可能嵌套。进入新目录后应再次检查是否存在新的技能规范。\n");
+        sb.append("- **自由组合**：你可以自由调用系统级 CLI 工具来处理跨领域的任务（如代码构建、视频渲染、调查研究）。\n\n");
 
         // 4. 注入根目录规范（如果有）
         injectRootInstructions(sb, rootPath, "### 核心业务规范 (Project Norms)\n");
@@ -148,7 +148,7 @@ public class CliSkill extends AbsProcessSkill {
 
     // --- 1. 探测工具 (Search & List) ---
 
-    @ToolMapping(name = "ls", description = "列出目录内容。目录若标有 (Claude Code Skill) 则包含专项能力规范。")
+    @ToolMapping(name = "ls", description = "列出目录内容。标注为 (Claude Code Skill) 的目录含有专项能力驱动规范。")
     public String ls(@Param("path") String path) throws IOException {
         Path target = resolvePathExtended(path);
         if (!Files.exists(target)) return "错误：路径不存在 -> " + path;
@@ -162,7 +162,7 @@ public class CliSkill extends AbsProcessSkill {
         }
     }
 
-    @ToolMapping(name = "grep", description = "全文本搜索。支持子目录递归检索匹配项。")
+    @ToolMapping(name = "grep", description = "全文本搜索匹配项。支持递归检索。")
     public String grep(@Param("pattern") String pattern, @Param("path") String path) throws IOException {
         Path target = resolvePathExtended(path);
         String virtualPrefix = isShared(path) ? "@shared/" : "";
@@ -179,7 +179,7 @@ public class CliSkill extends AbsProcessSkill {
                             sb.append(relPath).append(":").append(i + 1).append(": ").append(lines.get(i).trim()).append("\n");
                         }
                     }
-                } catch (Exception ignored) {} // 跳过无法读取的二进制文件
+                } catch (Exception ignored) {}
             }
         }
         return sb.length() == 0 ? "未找到匹配项" : sb.toString();
@@ -197,7 +197,7 @@ public class CliSkill extends AbsProcessSkill {
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
-    @ToolMapping(name = "write", description = "新建或写入文件。禁止操作 @shared/ 只读目录。")
+    @ToolMapping(name = "write", description = "新建或写入文件。禁止操作 @shared/ 只读空间。")
     public String write(@Param("path") String path, @Param("content") String content) throws IOException {
         if (isShared(path)) return "错误：共享库为只读空间。";
         Path target = resolvePath(path);
@@ -206,7 +206,7 @@ public class CliSkill extends AbsProcessSkill {
         return "成功写入: " + rootPath.relativize(target);
     }
 
-    @ToolMapping(name = "edit", description = "精准文本块替换。适用于代码修正或配置文件增量更新。禁止操作 @shared/ 只读目录。")
+    @ToolMapping(name = "edit", description = "精准文本块替换。适用于代码修正、配置更新或文档编辑。禁止操作 @shared/ 只读目录。")
     public String edit(@Param("path") String path, @Param("oldText") String oldText, @Param("newText") String newText) throws IOException {
         if (isShared(path)) return "错误：共享库为只读空间。";
         Path target = resolvePath(path);
@@ -216,9 +216,9 @@ public class CliSkill extends AbsProcessSkill {
             String oldTrim = oldText.trim();
             if (content.contains(oldTrim)) {
                 Files.write(target, content.replace(oldTrim, newText).getBytes(StandardCharsets.UTF_8));
-                return "更新成功(模糊匹配)";
+                return "更新成功 (模糊匹配)";
             }
-            return "错误：内容匹配失败。";
+            return "错误：内容匹配失败，替换未执行。";
         }
 
         Files.write(target, content.replace(oldText, newText).getBytes(StandardCharsets.UTF_8));
@@ -227,17 +227,17 @@ public class CliSkill extends AbsProcessSkill {
 
     // --- 3. 执行工具 (Execute) ---
 
-    @ToolMapping(name = "run_command", description = "执行系统终端指令。可自由调用本地安装的 CLI 工具（如 mvn, git）。")
+    @ToolMapping(name = "run_command", description = "执行系统终端指令。可自由调用本地安装的工具（如 mvn, git, python, ffmpeg）。")
     public String run(@Param("command") String command) {
         String finalCmd = command;
         if (sharedPath != null && command.contains("@shared/")) {
-            // 增强：规范化斜杠处理
-            finalCmd = command.replace("@shared/", sharedPath.toString() + "/");
+            // 自动将虚拟路径映射为物理路径
+            finalCmd = command.replace("@shared/", sharedPath.toString() + FileSystems.getDefault().getSeparator());
         }
         return runCode(finalCmd, shellCmd, extension, null);
     }
 
-    @ToolMapping(name = "exists_cmd", description = "检查环境依赖（如 python, ffmpeg 等工具是否可用）。")
+    @ToolMapping(name = "exists_cmd", description = "检查环境依赖（如 python, java, ffmpeg, node 等是否可用）。")
     public boolean existsCmd(@Param("cmd") String cmd) {
         String cleanCmd = cmd.trim().split("\\s+")[0];
         String checkPattern = isWindows ? "where " + cleanCmd : "command -v " + cleanCmd;
@@ -258,12 +258,12 @@ public class CliSkill extends AbsProcessSkill {
     private Path resolvePathExtended(String pathStr) {
         if (isShared(pathStr)) {
             if (sharedPath == null) {
-                throw new IllegalArgumentException("操作失败：未配置共享技能库 (@shared/ 映射无效)。");
+                throw new IllegalArgumentException("操作失败：未配置共享技能库 (@shared/ 路径无效)。");
             }
-            // 移除前缀并处理路径分隔符
+            // 移除 "@shared" 前缀并规范化子路径
             String sub = pathStr.substring(7).replaceFirst("^[/\\\\]", "");
             Path p = sharedPath.resolve(sub).normalize();
-            if (!p.startsWith(sharedPath)) throw new SecurityException("非法越界访问");
+            if (!p.startsWith(sharedPath)) throw new SecurityException("非法越界访问共享空间");
             return p;
         }
         return resolvePath(pathStr);
