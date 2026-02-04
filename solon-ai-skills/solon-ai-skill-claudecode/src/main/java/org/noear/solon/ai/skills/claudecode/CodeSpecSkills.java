@@ -31,21 +31,21 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Claude Code 综合技能：提供代码搜索、文件精确编辑及系统指令执行能力。
- * <p>兼容 Claude Code Agent Skills 规范，支持共享 (@shared/) 与本地双目录发现模式。</p>
+ * 代码专家综合技能
+ * <p>兼容 Claude Code Agent Skills 协议规范，提供文件管理、精准搜索及跨项目共享技能能力。</p>
  *
  * @author noear
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class ClaudeCodeAgentSkills extends AbsProcessSkill {
-    private final static Logger LOG = LoggerFactory.getLogger(ClaudeCodeAgentSkills.class);
+public class CodeSpecSkills extends AbsProcessSkill {
+    private final static Logger LOG = LoggerFactory.getLogger(CodeSpecSkills.class);
     private final String shellCmd;
     private final String extension;
     private final boolean isWindows;
     private final Path sharedPath;
 
-    public ClaudeCodeAgentSkills(String workDir, String sharedSkillsDir) {
+    public CodeSpecSkills(String workDir, String sharedSkillsDir) {
         super(workDir);
         this.sharedPath = sharedSkillsDir != null ? Paths.get(sharedSkillsDir).toAbsolutePath().normalize() : null;
         this.isWindows = System.getProperty("os.name").toLowerCase().contains("win");
@@ -59,7 +59,7 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
         }
     }
 
-    public ClaudeCodeAgentSkills(String workDir) {
+    public CodeSpecSkills(String workDir) {
         this(workDir, null);
     }
 

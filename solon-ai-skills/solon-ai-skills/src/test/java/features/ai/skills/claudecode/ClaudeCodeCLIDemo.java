@@ -2,7 +2,7 @@ package features.ai.skills.claudecode;
 
 import demo.ai.skills.LlmUtil;
 import org.noear.solon.Solon;
-import org.noear.solon.ai.skills.claudecode.ClaudeCodeCLI;
+import org.noear.solon.ai.skills.claudecode.SolonCodeCLI;
 
 /**
  *
@@ -17,7 +17,7 @@ public class ClaudeCodeCLIDemo {
         // 下载 skills： https://github.com/solonlab/opencode-skills
         String sharedDir = System.getProperty("user.home") + "/WORK/work_github/solonlab/opencode-skills";
 
-        ClaudeCodeCLI claudeCodeCLI = new ClaudeCodeCLI(LlmUtil.getChatModel());
+        SolonCodeCLI claudeCodeCLI = new SolonCodeCLI(LlmUtil.getChatModel());
         claudeCodeCLI.sharedSkillsDir(sharedDir).maxSteps(100);
 
         claudeCodeCLI.start();

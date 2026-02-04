@@ -30,14 +30,15 @@ import org.slf4j.LoggerFactory;
 import java.util.Scanner;
 
 /**
- * Claude Code CLI 终端类
+ * Solon Code CLI 终端
+ * <p>基于 ReAct 模式的代码协作终端，提供沉浸式的本地开发增强体验</p>
  *
  * @author noear
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class ClaudeCodeCLI {
-    private final static Logger LOG = LoggerFactory.getLogger(ClaudeCodeCLI.class);
+public class SolonCodeCLI {
+    private final static Logger LOG = LoggerFactory.getLogger(SolonCodeCLI.class);
 
     private final ChatModel chatModel;
     private AgentSession session;
@@ -46,47 +47,50 @@ public class ClaudeCodeCLI {
     private boolean streaming = true;
     private int maxSteps = 20;
 
-    public ClaudeCodeCLI(ChatModel chatModel) {
+    public SolonCodeCLI(ChatModel chatModel) {
         this.chatModel = chatModel;
     }
 
     /**
      * 设置工作目录
      */
-    public ClaudeCodeCLI workDir(String workDir) {
+    public SolonCodeCLI workDir(String workDir) {
         this.workDir = workDir;
         return this;
     }
 
     /**
-     * 设置共享技能目录
+     * 设置跨项目共享技能目录
      */
-    public ClaudeCodeCLI sharedSkillsDir(String sharedSkillsDir) {
+    public SolonCodeCLI sharedSkillsDir(String sharedSkillsDir) {
         this.sharedSkillsDir = sharedSkillsDir;
         return this;
     }
 
-    public ClaudeCodeCLI maxSteps(int maxSteps) {
+    /**
+     * 设置 Agent 最大思考步数
+     */
+    public SolonCodeCLI maxSteps(int maxSteps) {
         this.maxSteps = maxSteps;
         return this;
     }
 
     /**
-     * 是否开启流式响应
+     * 是否开启流式响应 (开启后可实时查看思考过程)
      */
-    public ClaudeCodeCLI streaming(boolean streaming) {
+    public SolonCodeCLI streaming(boolean streaming) {
         this.streaming = streaming;
         return this;
     }
 
     public void start() {
         // 1. 初始化核心技能组件
-        ClaudeCodeAgentSkills skills = new ClaudeCodeAgentSkills(workDir, sharedSkillsDir);
+        CodeSpecSkills skills = new CodeSpecSkills(workDir, sharedSkillsDir);
 
         // 2. 构建 ReAct Agent
         ReActAgent agent = ReActAgent.of(chatModel)
-                .role("ClaudeCodeAgent")
-                .instruction("严格遵守挂载技能中的【规范协议】执行任务")
+                .role("SolonCodeAgent")
+                .instruction("严格遵守挂载技能中的【交互规范】与【操作准则】执行任务")
                 .defaultSkillAdd(skills)
                 .maxSteps(maxSteps)
                 .build();
@@ -95,7 +99,7 @@ public class ClaudeCodeCLI {
             session = new InMemoryAgentSession("cli");
         }
 
-        // 4. 进入 REPL 循环
+        // 3. 进入 REPL 循环
         Scanner scanner = new Scanner(System.in);
         printWelcome();
 
@@ -117,13 +121,18 @@ public class ClaudeCodeCLI {
                             .doOnNext(chunk -> {
                                 if (chunk instanceof ReasonChunk) {
                                     //思考输出
+                                    ReasonChunk reasonChunk = (ReasonChunk) chunk;
                                     System.out.print("\033[90m" + chunk.getContent() + "\033[0m");
+
+                                    if(reasonChunk.getResponse().isFinished()){
+                                        System.out.println();
+                                    }
                                 } else if (chunk instanceof ActionChunk) {
                                     //动作输出
-                                    System.out.print("\n\uD83D\uDEE0\ufe0f  " + chunk.getContent());
+                                    System.out.println("\n\uD83D\uDEE0\ufe0f  " + chunk.getContent());
                                 } else if (chunk instanceof ReActChunk) {
                                     //最终结果输出
-                                    System.out.print(chunk.getContent());
+                                    System.out.println(chunk.getContent());
                                 }
                             })
                             .blockLast();
@@ -153,7 +162,7 @@ public class ClaudeCodeCLI {
 
     private void printWelcome() {
         System.out.println("--------------------------------------------------");
-        System.out.println("Claude Code CLI (Solon AI Edition)");
+        System.out.println("Solon Code CLI (Experimental Edition)");
         System.out.println("工作目录: " + workDir);
         System.out.println("共享目录: " + (sharedSkillsDir != null ? sharedSkillsDir : "未设置"));
         System.out.println("输入 'exit' 退出, 'clear' 清屏");
