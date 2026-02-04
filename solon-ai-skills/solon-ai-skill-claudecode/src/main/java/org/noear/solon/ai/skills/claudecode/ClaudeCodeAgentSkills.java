@@ -32,7 +32,7 @@ import java.util.stream.Stream;
 
 /**
  * Claude Code 综合技能：提供代码搜索、文件精确编辑及系统指令执行能力。
- * <p>兼容 Claude Code Agent Skills 规范，支持全局 (@global/) 与本地双目录发现模式。</p>
+ * <p>兼容 Claude Code Agent Skills 规范，支持共享 (@shared/) 与本地双目录发现模式。</p>
  *
  * @author noear
  * @since 3.9.1
@@ -70,7 +70,7 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
 
     @Override
     public String description() {
-        return "提供符合 Claude Code 规范的综合 Agent 能力，支持文件管理、全局技能索引与执行。";
+        return "提供符合 Claude Code 规范的综合 Agent 能力，支持文件管理、共享技能索引与执行。";
     }
 
     @Override
@@ -87,7 +87,7 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
         // 1. 空间声明
         sb.append("#### 1. 空间映射\n");
         if (sharedPath != null) {
-            sb.append("- **全局空间 (@global/)**：系统级共享库（只读）。\n");
+            sb.append("- **共享空间 (@shared/)**：系统级共享库（只读）。\n");
         }
         sb.append("- **当前 OS**：").append(System.getProperty("os.name")).append("\n\n");
 
@@ -95,7 +95,7 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
         sb.append("#### 2. 技能发现索引 (Manifest)\n");
         sb.append("- **项目可用技能**: ").append(scanSkillNames(rootPath)).append("\n");
         if (sharedPath != null) {
-            sb.append("- **全局可用技能**: ").append(scanSkillNames(sharedPath)).append("\n");
+            sb.append("- **共享可用技能**: ").append(scanSkillNames(sharedPath)).append("\n");
         }
         sb.append("> 提示：标记为 (Claude Code Skill) 的目录包含专项规范。请通过 `ls` 探索并读取其 `SKILL.md` 获取驱动指南。\n\n");
 
@@ -163,7 +163,7 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
     @ToolMapping(name = "grep", description = "全文本搜索。支持子目录递归检索匹配项。")
     public String grep(@Param("pattern") String pattern, @Param("path") String path) throws IOException {
         Path target = resolvePathExtended(path);
-        String virtualPrefix = isGlobal(path) ? "@global/" : "";
+        String virtualPrefix = isShared(path) ? "@shared/" : "";
 
         StringBuilder sb = new StringBuilder();
         try (Stream<Path> walk = Files.walk(target)) {
@@ -185,7 +185,7 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
 
     // --- 2. 读写工具 (Read & Write) ---
 
-    @ToolMapping(name = "cat", description = "读取文件内容（如代码、配置或 SKILL.md 规范）。支持 @global/ 路径。")
+    @ToolMapping(name = "cat", description = "读取文件内容（如代码、配置或 SKILL.md 规范）。支持 @shared/ 路径。")
     public String cat(@Param("path") String path) throws IOException {
         Path target = resolvePathExtended(path);
         byte[] bytes = Files.readAllBytes(target);
@@ -195,18 +195,18 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
-    @ToolMapping(name = "write", description = "写入文件。禁止操作 @global/ 只读目录。")
+    @ToolMapping(name = "write", description = "写入文件。禁止操作 @shared/ 只读目录。")
     public String write(@Param("path") String path, @Param("content") String content) throws IOException {
-        if (isGlobal(path)) return "错误：全局库为只读空间。";
+        if (isShared(path)) return "错误：共享库为只读空间。";
         Path target = resolvePath(path);
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(StandardCharsets.UTF_8));
         return "成功写入: " + rootPath.relativize(target);
     }
 
-    @ToolMapping(name = "edit", description = "精准代码替换。禁止操作 @global/ 只读目录。")
+    @ToolMapping(name = "edit", description = "精准代码替换。禁止操作 @shared/ 只读目录。")
     public String edit(@Param("path") String path, @Param("oldText") String oldText, @Param("newText") String newText) throws IOException {
-        if (isGlobal(path)) return "错误：全局库为只读空间。";
+        if (isShared(path)) return "错误：共享库为只读空间。";
         Path target = resolvePath(path);
         String content = new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
 
@@ -225,12 +225,12 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
 
     // --- 3. 执行工具 (Execute) ---
 
-    @ToolMapping(name = "run_command", description = "执行系统指令。@global/ 会被自动映射。")
+    @ToolMapping(name = "run_command", description = "执行系统指令。@shared/ 会被自动映射。")
     public String run(@Param("command") String command) {
         String finalCmd = command;
-        if (sharedPath != null && command.contains("@global/")) {
+        if (sharedPath != null && command.contains("@shared/")) {
             // 增强：规范化斜杠处理
-            finalCmd = command.replace("@global/", sharedPath.toString() + "/");
+            finalCmd = command.replace("@shared/", sharedPath.toString() + "/");
         }
         return runCode(finalCmd, shellCmd, extension, null);
     }
@@ -249,14 +249,14 @@ public class ClaudeCodeAgentSkills extends AbsProcessSkill {
 
     // --- 路径安全与映射逻辑 ---
 
-    private boolean isGlobal(String path) {
-        return path != null && path.startsWith("@global");
+    private boolean isShared(String path) {
+        return path != null && path.startsWith("@shared");
     }
 
     private Path resolvePathExtended(String pathStr) {
-        if (isGlobal(pathStr)) {
+        if (isShared(pathStr)) {
             if (sharedPath == null) {
-                throw new IllegalArgumentException("操作失败：未配置全局技能库 (@global/ 映射无效)。");
+                throw new IllegalArgumentException("操作失败：未配置共享技能库 (@shared/ 映射无效)。");
             }
             // 移除前缀并处理路径分隔符
             String sub = pathStr.substring(7).replaceFirst("^[/\\\\]", "");
