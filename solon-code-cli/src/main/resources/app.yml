@@ -1,5 +1,5 @@
 solon.config:
-  load: "file:cli.yml"
+  load: "cli.yml"
 
 solon.logging.appender:
   console:

@@ -1,5 +1,9 @@
 solon.code.cli:
   name: "小花"
+  workDir: "./work"
+  maxSteps: 100
+  enableWeb: true
+  enableConsole: true
   chatModel:
     apiUrl: "https://api.deepseek.com/v1/chat/completions"
     apiKey: "sk-19a568bbfc0248dfbac088a0a70fa74d"

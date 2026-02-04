@@ -20,9 +20,14 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.core.handle.Context;
+import org.noear.solon.core.handle.Handler;
+import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.MimeType;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 import java.io.File;
 import java.util.LinkedHashMap;
@@ -39,7 +44,7 @@ import java.util.function.Consumer;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class SolonCodeCLI {
+public class SolonCodeCLI implements Handler, Runnable {
     private final static Logger LOG = LoggerFactory.getLogger(SolonCodeCLI.class);
 
     private final ChatModel chatModel;
@@ -48,6 +53,8 @@ public class SolonCodeCLI {
     private String workDir = ".";
     private final Map<String, String> extraPools = new LinkedHashMap<>();
     private Consumer<ReActAgent.Builder> configurator;
+    private boolean enableWeb = true;      // 默认启用 Web
+    private boolean enableConsole = true;  // 默认启用控制台
 
     public SolonCodeCLI(ChatModel chatModel) {
         this.chatModel = chatModel;
@@ -80,24 +87,88 @@ public class SolonCodeCLI {
         return this;
     }
 
-    public void start() {
-        if (session == null) {
-            session = new InMemoryAgentSession("cli-" + System.currentTimeMillis());
+    /**
+     * 是否启用 Web 交互
+     */
+    public SolonCodeCLI enableWeb(boolean enableWeb) {
+        this.enableWeb = enableWeb;
+        return this;
+    }
+
+    /**
+     * 是否启用控制台交互
+     */
+    public SolonCodeCLI enableConsole(boolean enableConsole) {
+        this.enableConsole = enableConsole;
+        return this;
+    }
+
+    private ReActAgent agent;
+
+    protected void prepare() {
+        if (agent == null) {
+            if (session == null) {
+                session = new InMemoryAgentSession("cli-" + System.currentTimeMillis());
+            }
+
+            CliSkill skills = new CliSkill(session.getSessionId(), workDir);
+            extraPools.forEach(skills::mountPool);
+
+            ReActAgent.Builder agentBuilder = ReActAgent.of(chatModel)
+                    .role("你的名字叫 " + name + "。")
+                    .instruction("你是一个超级智能助手（什么都能干）。要严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
+                    .defaultSkillAdd(skills);
+
+            if (configurator != null) {
+                configurator.accept(agentBuilder);
+            }
+
+            agent = agentBuilder.build();
+        }
+    }
+
+    @Override
+    public void handle(Context ctx) throws Throwable {
+        if (!enableWeb) {
+            ctx.status(404); // 如果未启用，直接返回 404
+            return;
         }
 
-        CliSkill skills = new CliSkill(session.getSessionId(), workDir);
-        extraPools.forEach(skills::mountPool);
+        prepare();
 
-        ReActAgent.Builder agentBuilder = ReActAgent.of(chatModel)
-                .role("你的名字叫 " + name + "。")
-                .instruction("你是一个超级智能助手（什么都能干）。要严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
-                .defaultSkillAdd(skills);
+        String input = ctx.param("input");
 
-        if (configurator != null) {
-            configurator.accept(agentBuilder);
+        if (Assert.isNotEmpty(input)) {
+            System.out.println(input);
+
+            ctx.contentType(MimeType.TEXT_EVENT_STREAM_UTF8_VALUE);
+
+            Flux<String> stringFlux = agent.prompt(input)
+                    .session(session)
+                    .stream()
+                    .filter(chunk -> chunk instanceof ReasonChunk)
+                    .map(chunk -> {
+                        System.out.print(chunk.getContent());
+                        return chunk.getContent();
+                    })
+                    .concatWithValues("[DONE]")
+                    .doOnComplete(() -> {
+                        System.out.println();
+                        System.out.print("\n\uD83D\uDCBB > ");
+                    });
+
+            ctx.returnValue(stringFlux);
+        }
+    }
+
+    @Override
+    public void run() {
+        if (!enableConsole) {
+            LOG.warn("SolonCodeCLI 控制台交互已禁用");
+            return;
         }
 
-        ReActAgent agent = agentBuilder.build();
+        prepare();
 
         Scanner scanner = new Scanner(System.in);
         printWelcome();

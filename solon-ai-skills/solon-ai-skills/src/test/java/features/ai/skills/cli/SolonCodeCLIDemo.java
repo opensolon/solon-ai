@@ -25,6 +25,6 @@ public class SolonCodeCLIDemo {
                     agent.maxSteps(100);
                 });
 
-        solonCodeCLI.start();
+        solonCodeCLI.run();
     }
 }
