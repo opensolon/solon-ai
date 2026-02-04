@@ -15,6 +15,7 @@
 
 * 新增 solon-ai-dialect-claude 插件
 * 新增 solon-ai-dialect-openai OpenaiResponses 方言适配
+* 新增 solon-ai-repo-weaviate 插件
 * 新增 solon-ai-skill-claudecode 插件
 * 新增 solon-ai-skill-text2sql 插件
 * 新增 solon-ai-skill-openapi 插件

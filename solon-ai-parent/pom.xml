@@ -199,6 +199,11 @@
                 <artifactId>solon-ai-repo-vectorex</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-repo-weaviate</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <dependency>
                 <groupId>org.noear</groupId>
