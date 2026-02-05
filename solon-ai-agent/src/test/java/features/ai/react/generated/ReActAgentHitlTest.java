@@ -12,7 +12,6 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowException;
@@ -54,7 +53,7 @@ public class ReActAgentHitlTest {
                     Boolean approved = trace.getContext().getAs("is_approved");
                     if (approved == null) {
                         // 语义化中断
-                        trace.interrupt("等待退款批准");
+                        trace.pending("等待退款批准");
                     }
                 }
             }
@@ -77,7 +76,7 @@ public class ReActAgentHitlTest {
         Assertions.assertTrue(resp.getMetrics().getTotalTokens() > 0, "应该已经产生了推理消耗");
 
         ReActTrace state = session.getSnapshot().getAs("__" + agent.name());
-        Assertions.assertNotNull(state.getInterruptReason(), "应该存在挂起的人工任务");
+        Assertions.assertNotNull(state.getPendingReason(), "应该存在挂起的人工任务");
 
         // --- 第二步：人工注入 ---
         session.getSnapshot().put("is_approved", true);

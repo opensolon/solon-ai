@@ -157,7 +157,7 @@ public class SupervisorTask implements NamedTaskComponent {
 
 
         ChatResponse response = callWithRetry(node, trace, messages);
-        if (trace.isInterrupted()) {
+        if (trace.isPending()) {
             return;
         }
 
@@ -173,7 +173,7 @@ public class SupervisorTask implements NamedTaskComponent {
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onModelEnd(trace, response);
         }
-        if (trace.isInterrupted()) {
+        if (trace.isPending()) {
             return;
         }
 
@@ -184,7 +184,7 @@ public class SupervisorTask implements NamedTaskComponent {
         for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onSupervisorDecision(trace, decision);
         }
-        if (trace.isInterrupted()) {
+        if (trace.isPending()) {
             return;
         }
 
@@ -200,7 +200,7 @@ public class SupervisorTask implements NamedTaskComponent {
             String reason = oNode.get("reason").getString();
             trace.setFinalAnswer(reason);
             trace.setRoute(Agent.ID_END);
-            trace.interrupt(reason);
+            trace.getContext().interrupt();
             return;
         }
 
@@ -304,7 +304,7 @@ public class SupervisorTask implements NamedTaskComponent {
         for(RankEntity<TeamInterceptor> item: trace.getOptions().getInterceptors()){
             item.target.onModelStart(trace, req);
         }
-        if(trace.isInterrupted()){
+        if(trace.isPending()){
             return null;
         }
 

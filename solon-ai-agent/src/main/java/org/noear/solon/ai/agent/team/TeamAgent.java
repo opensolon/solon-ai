@@ -223,7 +223,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         }
 
         try {
-            if(trace.isInterrupted() == false) {
+            if(trace.isPending() == false) {
                 // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("TeamAgent [{}] starting collaboration flow...", name());

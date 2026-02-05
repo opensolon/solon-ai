@@ -41,7 +41,7 @@ public class HITLIndustrialTest {
         ReActResponse resp1 = agent.prompt(prompt).session(session).call();
 
         // 验证被拦截
-        Assertions.assertTrue(resp1.getTrace().isInterrupted(), "应该是被中断状态");
+        Assertions.assertTrue(resp1.getTrace().isPending(), "应该是被中断状态");
 
         // 2. 人工拒绝
         HITLTask pendingTask = HITL.getPendingTask(session);
@@ -57,7 +57,7 @@ public class HITLIndustrialTest {
         ReActResponse resp2 = agent.prompt().session(session).call();
         String content = resp2.getContent();
         System.out.println(content);
-        Assertions.assertFalse(resp2.getTrace().isInterrupted(), "不应该被中断状态（而是结束）");
+        Assertions.assertFalse(resp2.getTrace().isPending(), "不应该被中断状态（而是结束）");
 
         // 验证清理工作
         Assertions.assertNull(HITL.getPendingTask(session), "任务结束后状态必须清理干净");
@@ -90,7 +90,7 @@ public class HITLIndustrialTest {
         String prompt = "给李四转账 2000 元";
         System.out.println(">>> 第一次调用：尝试转账 500");
         ReActResponse resp1 = agent.prompt(prompt).session(session).call();
-        Assertions.assertTrue(resp1.getTrace().isInterrupted());
+        Assertions.assertTrue(resp1.getTrace().isPending());
 
         // 2. 人工介入：选择“跳过”
         HITLTask pendingTask = HITL.getPendingTask(session);
@@ -112,7 +112,7 @@ public class HITLIndustrialTest {
         // 1. 最终回复不应包含“成功转账”（因为工具没被调用）
         // 2. 最终回复应包含 skipMsg 里的核心语意（证明 Agent 读取了反馈）
         Assertions.assertFalse(finalContent.contains("成功向 王五 转账"), "工具不应被执行");
-        Assertions.assertFalse(resp2.getTrace().isInterrupted(), "流程应正常结束");
+        Assertions.assertFalse(resp2.getTrace().isPending(), "流程应正常结束");
 
         // 验证清理
         Assertions.assertNull(HITL.getPendingTask(session), "状态应清理");
@@ -141,7 +141,7 @@ public class HITLIndustrialTest {
         // 1. 触发拦截
         System.out.println(">>> 第一次调用：转账 5000");
         ReActResponse resp1 = agent.prompt("帮我给张三转账 5000 元。已确认过").session(session).call();
-        Assertions.assertTrue(resp1.getTrace().isInterrupted());
+        Assertions.assertTrue(resp1.getTrace().isPending());
 
         // 2. 获取任务并使用新 Fluent API 批准且修正参数
         HITLTask pendingTask = HITL.getPendingTask(session);
@@ -190,7 +190,7 @@ public class HITLIndustrialTest {
         System.out.println(">>> 第一次调用：转账 5000");
         String prompt = "帮我给张三转账 5000 元。已确认过";
         ReActResponse resp1 = agent.prompt(prompt).session(session).call();
-        Assertions.assertTrue(resp1.getTrace().isInterrupted());
+        Assertions.assertTrue(resp1.getTrace().isPending());
 
         // 2. 获取任务并使用新 Fluent API 批准且修正参数
         HITLTask pendingTask = HITL.getPendingTask(session);

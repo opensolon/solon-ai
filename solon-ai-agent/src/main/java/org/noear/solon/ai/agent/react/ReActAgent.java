@@ -30,7 +30,6 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
@@ -254,7 +253,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             item.target.onAgentStart(trace);
         }
 
-        if(trace.isInterrupted() == false) {
+        if(trace.isPending() == false) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserContent());
             }

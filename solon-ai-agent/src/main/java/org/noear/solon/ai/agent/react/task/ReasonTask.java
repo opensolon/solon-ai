@@ -113,7 +113,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
         ChatResponse response = callWithRetry(node, trace, messages);
-        if(trace.isInterrupted()){
+        if(trace.isPending()){
             return;
         }
 
@@ -130,7 +130,7 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onModelEnd(trace, response);
         }
 
-        if(trace.isInterrupted()){
+        if(trace.isPending()){
             return;
         }
 
@@ -139,7 +139,7 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onReason(trace, responseMessage);
         }
 
-        if(trace.isInterrupted()){
+        if(trace.isPending()){
             return;
         }
 
@@ -173,7 +173,7 @@ public class ReasonTask implements NamedTaskComponent {
             }
         }
 
-        if(trace.isInterrupted()){
+        if(trace.isPending()){
             return;
         }
 
@@ -245,7 +245,7 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onModelStart(trace, req);
         }
 
-        if(trace.isInterrupted()){
+        if(trace.isPending()){
             return null;
         }
 

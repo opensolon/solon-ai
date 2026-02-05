@@ -151,7 +151,10 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
         // 3. 准备提示词并执行推理
         final Prompt effectivePrompt;
         if (trace != null) {
-            effectivePrompt = trace.getProtocol().prepareAgentPrompt(trace, this, trace.getWorkingMemory(), trace.getConfig().getLocale());
+            effectivePrompt = trace.getProtocol()
+                    .prepareAgentPrompt(trace, this,
+                            trace.getWorkingMemory(),
+                            trace.getConfig().getLocale());
         } else {
             effectivePrompt = null;
         }
@@ -174,7 +177,7 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
         // 4. 同步执行轨迹与结果处理
         if (trace != null) {
             //状态实时化
-            if(trace.getOptions().getStreamSink() != null){
+            if (trace.getOptions().getStreamSink() != null) {
                 trace.getOptions().getStreamSink().next(new NodeChunk(node, trace, msg));
             }
 

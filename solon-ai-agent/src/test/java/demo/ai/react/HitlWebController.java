@@ -36,7 +36,7 @@ public class HitlWebController {
         // 执行 Agent 逻辑
         ReActResponse resp = agent.prompt(prompt).session(session).call();
 
-        if (resp.getTrace().isInterrupted()) {
+        if (resp.getTrace().isPending()) {
             return Result.failure("REQUIRED_APPROVAL", HITL.getPendingTask(session));
         }
 

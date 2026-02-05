@@ -116,13 +116,13 @@ public class ReActTrace implements AgentTrace {
     private final List<String> plans = new CopyOnWriteArrayList<>();
 
     /**
-     * 是否已请求中断（人工介入或逻辑挂起）
+     * 是否处于挂起状态（如：等待人工介入、异步回调或逻辑暂存）
      */
-    private boolean interrupted;
+    private boolean pending;
     /**
-     * 中断的原因或给用户的提示
+     * 挂起原因（通常作为反馈给用户或审批者的提示信息）
      */
-    private String interruptReason;
+    private String pendingReason;
 
     private final Map<String, Object> extras = new ConcurrentHashMap<>();
 
@@ -172,8 +172,8 @@ public class ReActTrace implements AgentTrace {
         this.protocol = protocol;
 
         //每次执行重置中断状态
-        this.interrupted = false;
-        this.interruptReason = null;
+        this.pending = false;
+        this.pendingReason = null;
     }
 
     protected void activeSkills() {
@@ -212,27 +212,33 @@ public class ReActTrace implements AgentTrace {
     }
 
     /**
-     * 请求中断执行
+     * 触发协作流挂起
      *
-     * @param reason 中断原因（会设为 FinalAnswer 返回给调用者）
+     * @param reason 挂起原因或需要人工确认的提示词
      */
-    public void interrupt(String reason) {
-        this.interrupted = true;
-        this.interruptReason = reason;
+    public void pending(String reason) {
+        this.pending = true;
+        this.pendingReason = reason;
         this.finalAnswer = reason;
 
         // 自动同步中断底层流程引擎
         if (session != null) {
-            session.getSnapshot().interrupt();
+            session.getSnapshot().stop();
         }
     }
 
-    public boolean isInterrupted() {
-        return interrupted;
+    /**
+     * 判定当前任务是否正在挂起等待
+     */
+    public boolean isPending() {
+        return pending || (session != null && session.getSnapshot().isStopped());
     }
 
-    public @Nullable String getInterruptReason() {
-        return interruptReason;
+    /**
+     * 获取挂起的原因或提示信息
+     */
+    public @Nullable String getPendingReason() {
+        return pendingReason;
     }
 
     @Override

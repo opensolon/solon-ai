@@ -85,7 +85,7 @@ public class StopLoopInterceptor implements ReActInterceptor {
             log.warn(errorMsg);
 
             // 触发中断逻辑
-            trace.interrupt(errorMsg);
+            trace.pending(errorMsg);
         }
     }
 

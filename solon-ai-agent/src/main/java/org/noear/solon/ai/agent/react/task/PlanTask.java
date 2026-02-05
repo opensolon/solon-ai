@@ -119,7 +119,7 @@ public class PlanTask implements NamedTaskComponent {
             item.target.onPlan(trace, responseMessage);
         }
 
-        if(trace.isInterrupted()){
+        if(trace.isPending()){
             return;
         }
 
@@ -128,8 +128,8 @@ public class PlanTask implements NamedTaskComponent {
                 String source = responseMessage.getMetadataAs("source");
                 if (Assert.isNotEmpty(source)) {
                     trace.setRoute(Agent.ID_END);
-                    trace.interrupt(source);
                     trace.setFinalAnswer(source);
+                    trace.getContext().interrupt();
                     return;
                 }
             }

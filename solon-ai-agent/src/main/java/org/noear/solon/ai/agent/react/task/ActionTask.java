@@ -100,7 +100,7 @@ public class ActionTask implements NamedTaskComponent {
             item.target.onAction(trace, toolName, args);
         }
 
-        if (trace.isInterrupted()) {
+        if (trace.isPending()) {
             return null;
         }
 
@@ -128,7 +128,7 @@ public class ActionTask implements NamedTaskComponent {
             item.target.onObservation(trace, toolName, result);
         }
 
-        if (trace.isInterrupted()) {
+        if (trace.isPending()) {
             return null;
         }
 
@@ -278,8 +278,8 @@ public class ActionTask implements NamedTaskComponent {
         if (FeedbackTool.TOOL_NAME.equals(name)) {
             String reason = (String) args.get("reason");
             trace.setRoute(Agent.ID_END);
-            trace.interrupt(reason);
             trace.setFinalAnswer(reason);
+            trace.getContext().interrupt();
             return reason;
         }
 
