@@ -17,10 +17,7 @@ package org.noear.solon.ai.chat.session;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatSession;
-import org.noear.solon.ai.chat.message.AssistantMessage;
-import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.SystemMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.lang.Preview;
 
@@ -90,6 +87,50 @@ public class InMemoryChatSession implements ChatSession {
     @Override
     public List<ChatMessage> getMessages() {
         return messages;
+    }
+
+    /**
+     * 获取最近消息
+     *
+     * @param windowSize 窗口大小
+     */
+    @Override
+    public List<ChatMessage> getLatestMessages(int windowSize) {
+        List<ChatMessage> all = getMessages();
+        if (all == null || all.isEmpty()) return Collections.emptyList();
+
+        int size = all.size();
+        if (size <= windowSize || windowSize <= 0) return all;
+
+        // 1. 先定位到初步的截断点
+        int start = size - windowSize;
+
+        // 2. 向前寻找最近的一个 UserMessage 作为安全的起始点
+        // 这样能保证对话逻辑的完整性，且绝对不会出现 Tool/Assistant 错位
+        for (int i = start; i >= 0; i--) {
+            if (all.get(i) instanceof UserMessage) {
+                start = i;
+                break;
+            }
+        }
+
+        // 3. 兜底检查：如果往前找了一圈没找到 User（比如全是 Tool/Assistant）
+        // 那就只能向后找第一个 User
+        if (!(all.get(start) instanceof UserMessage)) {
+            for (int i = start; i < size; i++) {
+                if (all.get(i) instanceof UserMessage) {
+                    start = i;
+                    break;
+                }
+            }
+        }
+
+        // 4. 最终修剪：如果起始点还是 ToolMessage（极端情况），物理剔除它
+        while (start < size && (all.get(start) instanceof ToolMessage)) {
+            start++;
+        }
+
+        return all.subList(start, size);
     }
 
     /**

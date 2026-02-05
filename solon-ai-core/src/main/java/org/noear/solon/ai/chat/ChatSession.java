@@ -53,20 +53,7 @@ public interface ChatSession extends NonSerializable {
      *
      * @param windowSize 窗口大小
      */
-    default List<ChatMessage> getLatestMessages(int windowSize){
-        List<ChatMessage> all = getMessages();
-        if (all == null || all.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        int size = all.size();
-        if (size <= windowSize || windowSize <= 0) {
-            return all;
-        } else {
-            // 返回最后 N 条
-            return all.subList(size - windowSize, size);
-        }
-    }
+     List<ChatMessage> getLatestMessages(int windowSize);
 
     /**
      * 添加消息
