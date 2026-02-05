@@ -5,6 +5,7 @@ solon.code.cli:
   maxSteps: 100
   enableWeb: true
   enableConsole: true
+  enableHitl: true
   chatModel:
     apiUrl: "https://api.deepseek.com/v1/chat/completions"
     apiKey: "sk-19a568bbfc0248dfbac088a0a70fa74d"

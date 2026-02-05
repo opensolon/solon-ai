@@ -17,6 +17,10 @@ package org.noear.solon.ai.skills.claudecode;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.intercept.HITL;
+import org.noear.solon.ai.agent.react.intercept.HITLDecision;
+import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
+import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.agent.react.task.ActionChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -56,6 +60,7 @@ public class SolonCodeCLI implements Handler, Runnable {
     private Consumer<ReActAgent.Builder> configurator;
     private boolean enableWeb = true;      // 默认启用 Web
     private boolean enableConsole = true;  // 默认启用控制台
+    private boolean enableHitl = false;
 
     public SolonCodeCLI(ChatModel chatModel) {
         this.chatModel = chatModel;
@@ -104,6 +109,14 @@ public class SolonCodeCLI implements Handler, Runnable {
         return this;
     }
 
+    /**
+     * 是否启用 HITL 交互
+     */
+    public SolonCodeCLI enableHitl(boolean enableHitl) {
+        this.enableHitl = enableHitl;
+        return this;
+    }
+
     private ReActAgent agent;
 
     protected void prepare() {
@@ -119,6 +132,11 @@ public class SolonCodeCLI implements Handler, Runnable {
                     .role("你的名字叫 " + name + "。")
                     .instruction("你是一个超级智能助手（什么都能干）。要严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
                     .defaultSkillAdd(skills);
+
+            if (enableHitl) {
+                agentBuilder.defaultInterceptorAdd(new HITLInterceptor()
+                        .onSensitiveTool("write", "edit", "run_command"));
+            }
 
             if (configurator != null) {
                 configurator.accept(agentBuilder);
@@ -183,16 +201,10 @@ public class SolonCodeCLI implements Handler, Runnable {
         Scanner scanner = new Scanner(System.in);
         printWelcome();
 
-        final String GRAY = "\033[90m";
-        final String YELLOW = "\033[33m";
-        final String RESET = "\033[0m";
-
         while (true) {
             try {
-                // 1. 顶部清理逻辑：改用 read 循环避免 Illegal seek
-                while (System.in.available() > 0) {
-                    System.in.read();
-                }
+                // 1. 清理输入缓冲区
+                while (System.in.available() > 0) { System.in.read(); }
 
                 System.out.print("\n\uD83D\uDCBB > ");
                 System.out.flush();
@@ -206,86 +218,106 @@ public class SolonCodeCLI implements Handler, Runnable {
                 System.out.print(name + ": ");
                 System.out.flush();
 
-                java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
-                final AtomicBoolean lastIsAction = new AtomicBoolean(false);
-                final AtomicBoolean inGrayMode = new AtomicBoolean(false);
-
-                // 2. 启动异步流
-                reactor.core.Disposable disposable = agent.prompt(input)
-                        .session(session)
-                        .stream()
-                        .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
-                        .doOnNext(chunk -> {
-                            if (latch.getCount() == 0) return;
-
-                            if (chunk instanceof ReasonChunk) {
-                                ReasonChunk reason = (ReasonChunk) chunk;
-                                if (!reason.hasContent()) return;
-
-                                String content = reason.getContent();
-                                boolean isToolCalling = Assert.isNotEmpty(reason.getResponse().getMessage().getToolCalls());
-
-                                if (isToolCalling) {
-                                    if (!inGrayMode.get()) {
-                                        if (lastIsAction.get()) System.out.println();
-                                        System.out.print(GRAY);
-                                        inGrayMode.set(true);
-                                        lastIsAction.set(false);
-                                    }
-                                } else {
-                                    if (inGrayMode.get()) {
-                                        System.out.print(RESET);
-                                        inGrayMode.set(false);
-                                    }
-                                    if (lastIsAction.get()) {
-                                        System.out.println();
-                                        lastIsAction.set(false);
-                                    }
-                                }
-                                System.out.print(content);
-                                System.out.flush();
-                            } else if (chunk instanceof ActionChunk) {
-                                if (inGrayMode.get()) {
-                                    System.out.print(RESET);
-                                    inGrayMode.set(false);
-                                }
-                                System.out.println();
-                                System.out.println(YELLOW + chunk.getContent() + RESET);
-                                lastIsAction.set(true);
-                            }
-                        })
-                        .doFinally(signalType -> {
-                            System.out.print(RESET);
-                            latch.countDown();
-                        })
-                        .subscribe();
-
-                // 3. 键盘中断检测
-                while (latch.getCount() > 0) {
-                    if (System.in.available() > 0) {
-                        disposable.dispose();
-                        latch.countDown();
-                        break;
-                    }
-                    Thread.sleep(20);
-                }
-
-                latch.await();
-
-                // 4. 修复：彻底清理中断残余，使用循环读取代替 skip
-                Thread.sleep(20); // 稍微增加一点等待时间，确保缓冲区就绪
-                while (System.in.available() > 0) {
-                    System.in.read();
-                }
-
-                System.out.println();
-                System.out.flush();
+                // 【优化点 1】调用封装好的任务执行方法
+                performAgentTask(input, scanner);
 
             } catch (Throwable e) {
-                // 如果仍然有异常，避免打印堆栈，只给简洁提示
-                System.err.println("\n[提示] " + e.getMessage());
+                System.err.println("\n[提示] " + (e.getMessage() == null ? "执行中断" : e.getMessage()));
             }
         }
+    }
+
+    /**
+     * 【优化点】封装任务执行逻辑，增加续传状态控制
+     */
+    private void performAgentTask(String input, Scanner scanner) throws Exception {
+        final String GRAY = "\033[90m", YELLOW = "\033[33m", GREEN = "\033[32m", RED = "\033[31m", RESET = "\033[0m";
+
+        // 记录当前处理的 Prompt，后续续传用 null
+        String currentInput = input;
+
+        while (true) {
+            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            final AtomicBoolean isInterrupted = new AtomicBoolean(false);
+            final AtomicBoolean inGrayMode = new AtomicBoolean(false);
+
+            // 【关键优化 1】启动流。注意：currentInput 在第一次后会变为 null 触发续传
+            reactor.core.Disposable disposable = agent.prompt(currentInput)
+                    .session(session)
+                    .stream()
+                    .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .doOnNext(chunk -> {
+                        if (latch.getCount() == 0) return;
+                        if (chunk instanceof ReasonChunk) {
+                            ReasonChunk reason = (ReasonChunk) chunk;
+                            if (!reason.hasContent()) return;
+                            // 渲染逻辑...
+                            System.out.print(reason.getContent());
+                            System.out.flush();
+                        } else if (chunk instanceof ActionChunk) {
+                            System.out.println("\n" + YELLOW + chunk.getContent() + RESET);
+                        }
+                    })
+                    .doFinally(signal -> {
+                        latch.countDown();
+                    })
+                    .subscribe();
+
+            // 监控
+            while (latch.getCount() > 0) {
+                if (System.in.available() > 0) {
+                    disposable.dispose();
+                    isInterrupted.set(true);
+                    latch.countDown();
+                    break;
+                }
+                if (HITL.isHitl(session)) {
+                    latch.countDown();
+                    break;
+                }
+                Thread.sleep(50);
+            }
+            latch.await();
+
+            // 如果是用户手动回车中断，直接跳出大循环
+            if (isInterrupted.get()) {
+                cleanInputBuffer();
+                return;
+            }
+
+            // 【关键优化 2】处理 HITL 交互逻辑
+            if (HITL.isHitl(session)) {
+                HITLTask task = HITL.getPendingTask(session);
+                HITLDecision decision = HITL.getDecision(session, task);
+
+                if (decision == null) {
+                    System.out.print(GREEN + "\n❓ 是否允许操作 [" + task.getToolName() + "] ？(y/n): " + RESET);
+
+                    String choice = scanner.nextLine().trim().toLowerCase();
+                    if (choice.equals("y") || choice.equals("yes")) {
+                        System.out.println(GREEN + "✅ 已授权，执行中..." + RESET);
+                        HITL.approve(session, task.getToolName());
+                        currentInput = null; // 【核心】下一轮循环传入 null，实现断点续传
+                        continue;
+                    } else {
+                        System.out.println(RED + "❌ 已拒绝。" + RESET);
+                        HITL.reject(session, task.getToolName());
+                        currentInput = null; // 【核心】拒绝也需续传，让 AI 知道结果
+                        continue;
+                    }
+                } else {
+                    HITL.clear(session, task);
+                }
+            }
+
+            // 如果既没有中断也没有 HITL，说明任务彻底完成，退出小循环回到提示符
+            break;
+        }
+    }
+
+    private void cleanInputBuffer() throws Exception {
+        Thread.sleep(20);
+        while (System.in.available() > 0) System.in.read();
     }
 
     private boolean isSystemCommand(String input) {

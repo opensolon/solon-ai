@@ -5,4 +5,4 @@ solon.logging.appender:
   console:
     enable: false
   file:
-    level: WARN
+    level: INFO
