@@ -16,6 +16,7 @@
 package org.noear.solon.ai.codecli;
 
 import org.noear.solon.Solon;
+import org.noear.solon.ai.agent.session.FileAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.skills.claudecode.SolonCodeCLI;
 import org.noear.solon.core.util.Assert;
@@ -42,11 +43,13 @@ public class CliApp {
         SolonCodeCLI solonCodeCLI = new SolonCodeCLI(chatModel)
                 .name(config.name)
                 .workDir(config.workDir)
+                .session(new FileAgentSession("cli", config.workDir))
                 .enableWeb(config.enableWeb)
                 .enableConsole(config.enableConsole)
                 .enableHitl(config.enableHitl)
                 .config(agent -> {
-                    agent.maxSteps(config.maxSteps);
+                    agent.maxSteps(config.maxSteps)
+                            .sessionWindowSize(config.sessionWindowSize);
                 });
 
         if (Assert.isNotEmpty(config.mountPool)) {

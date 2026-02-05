@@ -35,6 +35,7 @@ public class CliConfig {
     public String webPath = "/cli";
 
     public int maxSteps = 100;
+    public int sessionWindowSize = 10;
 
     public boolean enableWeb = true;
     public boolean enableConsole = true;

@@ -92,6 +92,11 @@ public class SolonCodeCLI implements Handler, Runnable {
         return this;
     }
 
+    public SolonCodeCLI session(AgentSession session) {
+        this.session = session;
+        return this;
+    }
+
     public SolonCodeCLI config(Consumer<ReActAgent.Builder> configurator) {
         this.configurator = configurator;
         return this;
@@ -126,7 +131,7 @@ public class SolonCodeCLI implements Handler, Runnable {
     protected void prepare() {
         if (agent == null) {
             if (session == null) {
-                session = new InMemoryAgentSession("cli-" + System.currentTimeMillis());
+                session = new InMemoryAgentSession("cli");
             }
 
             CliSkill skills = new CliSkill(session.getSessionId(), workDir);
@@ -134,7 +139,7 @@ public class SolonCodeCLI implements Handler, Runnable {
 
             ReActAgent.Builder agentBuilder = ReActAgent.of(chatModel)
                     .role("你的名字叫 " + name + "。")
-                    .instruction("你是一个超级智能助手（什么都能干）。要严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
+                    .instruction("你是一个超级智能助手（什么都能干），有记忆能力。要严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
                     .defaultSkillAdd(skills);
 
 

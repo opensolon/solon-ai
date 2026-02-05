@@ -3,6 +3,7 @@ solon.code.cli:
   workDir: "./work"
   webPath: "/cli"
   maxSteps: 100
+  sessionWindowSize: 10
   enableWeb: true
   enableConsole: true
   enableHitl: false

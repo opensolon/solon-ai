@@ -28,9 +28,9 @@ import java.util.*;
 
 /**
  * 内存型智能体会话 (In-Memory Session)
- * * <p>管理单次协作的生命周期数据：
- * 1. 隔离的短期记忆：按 Agent 维度存储历史消息。
- * 2. 状态快照：承载业务流变量上下文。</p>
+ *
+ * @author noear
+ * @since 3.8.1
  */
 @Preview("3.8.1")
 public class InMemoryAgentSession extends InMemoryChatSession implements AgentSession {
