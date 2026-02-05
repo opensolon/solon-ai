@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.snack4.ONode;
 import org.noear.snack4.json.JsonReader;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActAgentConfig;
@@ -69,6 +70,7 @@ public class ActionTask implements NamedTaskComponent {
     public void run(FlowContext context, Node node) throws Throwable {
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
+        final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("ReActAgent [{}] action starting (Step: {})...", config.getName(), trace.getStepCount());
@@ -79,7 +81,7 @@ public class ActionTask implements NamedTaskComponent {
         // 1. 优先处理原生工具调用（Native Tool Calls）
         if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
             for (ToolCall call : lastAssistant.getToolCalls()) {
-                processNativeToolCall(node, trace, call);
+                processNativeToolCall(node,call, trace,  parentTeamTrace);
                 if (Agent.ID_END.equals(trace.getRoute())) {
                     break;
                 }
@@ -88,7 +90,7 @@ public class ActionTask implements NamedTaskComponent {
         }
 
         // 2. 文本模式：解析模型输出中的 Action 块
-        processTextModeAction(node, trace);
+        processTextModeAction(node, trace, parentTeamTrace);
     }
 
 
@@ -140,7 +142,7 @@ public class ActionTask implements NamedTaskComponent {
     /**
      * 处理标准 ToolCall 协议调用
      */
-    private void processNativeToolCall(Node node, ReActTrace trace, ToolCall call) throws Throwable {
+    private void processNativeToolCall(Node node, ToolCall call, ReActTrace trace, TeamTrace parentTeamTrace) throws Throwable {
         if(LOG.isDebugEnabled()) {
             LOG.debug("Processing native tool call for agent [{}]: {}.", config.getName(), call);
         }
@@ -158,6 +160,11 @@ public class ActionTask implements NamedTaskComponent {
         trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
         trace.getWorkingMemory().addMessage(toolMessage);
 
+        if (parentTeamTrace == null) {
+            trace.getSession().addMessage(trace.getLastReasonMessage());
+            trace.getSession().addMessage(toolMessage);
+        }
+
         if(trace.getOptions().getStreamSink() != null){
             trace.getOptions().getStreamSink().next(
                     new ActionChunk(node, trace, toolMessage));
@@ -167,7 +174,7 @@ public class ActionTask implements NamedTaskComponent {
     /**
      * 解析并执行文本模式下的 Action 指令
      */
-    private void processTextModeAction(Node node, ReActTrace trace) throws Throwable {
+    private void processTextModeAction(Node node, ReActTrace trace, TeamTrace parentTeamTrace) throws Throwable {
         if (trace.getLastReasonMessage() == null) {
             return;
         }
@@ -260,6 +267,11 @@ public class ActionTask implements NamedTaskComponent {
             ChatMessage chatMessage = ChatMessage.ofUser(allObservations.toString().trim());
             trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
             trace.getWorkingMemory().addMessage(chatMessage);
+
+            if (parentTeamTrace == null) {
+                trace.getSession().addMessage(trace.getLastReasonMessage());
+                trace.getSession().addMessage(chatMessage);
+            }
 
             if (trace.getOptions().getStreamSink() != null) {
                 trace.getOptions().getStreamSink().next(
