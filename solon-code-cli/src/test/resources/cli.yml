@@ -8,7 +8,7 @@ solon.code.cli:
   enableHitl: false
   chatModel:
     apiUrl: "https://api.deepseek.com/v1/chat/completions"
-    apiKey: "sk-19a568bbfc0248dfbac088a0a70fa74d"
+    apiKey: "sk-251740c893994c57a6536ecdbc33c189"
     model: "deepseek-chat"
   mountPool:
     "@shared": "${user.home}/WORK/work_github/solonlab/opencode-skills"
