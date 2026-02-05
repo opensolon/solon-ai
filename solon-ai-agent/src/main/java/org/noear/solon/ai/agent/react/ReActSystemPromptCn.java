@@ -68,6 +68,9 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         if (trace.getConfig().getStyle() == ReActStyle.STRUCTURED_TEXT) {
             sb.append("你必须使用 ReAct 模式解决问题：")
                     .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
+        } else {
+            sb.append("你必须使用 ReAct 模式解决问题：")
+                    .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
         }
 
         // 2. 注入指令集（含格式、准则、示例）

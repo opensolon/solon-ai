@@ -71,6 +71,9 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         if (trace.getConfig().getStyle() == ReActStyle.STRUCTURED_TEXT) {
             sb.append("You must solve the problem using the ReAct pattern: ")
                     .append("Thought -> Action -> Observation.\n\n");
+        } else {
+            sb.append("You must solve the problem using the ReAct pattern: ")
+                    .append("Thought -> Action -> Observation.\n\n");
         }
 
         // 2. Instructions
