@@ -189,8 +189,10 @@ public class SolonCodeCLI implements Handler, Runnable {
 
         while (true) {
             try {
-                // 彻底清理缓冲区
-                while (System.in.available() > 0) { System.in.read(); }
+                // 1. 顶部清理逻辑：改用 read 循环避免 Illegal seek
+                while (System.in.available() > 0) {
+                    System.in.read();
+                }
 
                 System.out.print("\n\uD83D\uDCBB > ");
                 System.out.flush();
@@ -202,23 +204,27 @@ public class SolonCodeCLI implements Handler, Runnable {
                 if (isSystemCommand(input)) break;
 
                 System.out.print(name + ": ");
+                System.out.flush();
 
                 java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
                 final AtomicBoolean lastIsAction = new AtomicBoolean(false);
                 final AtomicBoolean inGrayMode = new AtomicBoolean(false);
 
-                // 1. 启动流，并切到弹性线程池跑
+                // 2. 启动异步流
                 reactor.core.Disposable disposable = agent.prompt(input)
                         .session(session)
                         .stream()
-                        .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()) // 关键：解放主线程
+                        .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
                         .doOnNext(chunk -> {
-                            // 逻辑保持不变
+                            if (latch.getCount() == 0) return;
+
                             if (chunk instanceof ReasonChunk) {
                                 ReasonChunk reason = (ReasonChunk) chunk;
                                 if (!reason.hasContent()) return;
+
                                 String content = reason.getContent();
                                 boolean isToolCalling = Assert.isNotEmpty(reason.getResponse().getMessage().getToolCalls());
+
                                 if (isToolCalling) {
                                     if (!inGrayMode.get()) {
                                         if (lastIsAction.get()) System.out.println();
@@ -254,24 +260,30 @@ public class SolonCodeCLI implements Handler, Runnable {
                         })
                         .subscribe();
 
-                // 2. 主线程现在可以自由地检测键盘了
+                // 3. 键盘中断检测
                 while (latch.getCount() > 0) {
                     if (System.in.available() > 0) {
-                        disposable.dispose(); // 瞬间掐断
+                        disposable.dispose();
                         latch.countDown();
                         break;
                     }
-                    // 微秒级轮询，不吃 CPU 但保证响应
                     Thread.sleep(20);
                 }
 
-                // 3. 再次确保锁被释放，并清理换行
                 latch.await();
+
+                // 4. 修复：彻底清理中断残余，使用循环读取代替 skip
+                Thread.sleep(20); // 稍微增加一点等待时间，确保缓冲区就绪
+                while (System.in.available() > 0) {
+                    System.in.read();
+                }
+
                 System.out.println();
+                System.out.flush();
 
             } catch (Throwable e) {
-                System.err.println("\n[错误] " + e.getMessage());
-                LOG.error("CLI 执行异常", e);
+                // 如果仍然有异常，避免打印堆栈，只给简洁提示
+                System.err.println("\n[提示] " + e.getMessage());
             }
         }
     }
@@ -312,6 +324,7 @@ public class SolonCodeCLI implements Handler, Runnable {
 
         System.out.println("--------------------------------------------------");
         System.out.println("💡 输入 'exit' 退出, 'clear' 清屏");
+        System.out.println("🛑 在输出时按 '回车(Enter)' 可中断回复"); // 新增提示
         System.out.println("==================================================");
     }
 }
