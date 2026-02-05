@@ -252,9 +252,8 @@ public class SolonCodeCLI implements Handler, Runnable {
                     .doOnNext(chunk -> {
                         // 渲染逻辑：不依赖 latch 状态，确保最后一段话能打印完
                         if (chunk instanceof ReasonChunk) {
-                            ReasonChunk reason = (ReasonChunk) chunk;
-                            if (reason.hasContent()) {
-                                System.out.print(reason.getContent());
+                            if (chunk.hasContent()) {
+                                System.out.print(clearThink(chunk.getContent()));
                                 System.out.flush();
                             }
                         } else if (chunk instanceof ActionChunk) {
@@ -319,6 +318,10 @@ public class SolonCodeCLI implements Handler, Runnable {
             // 既无中断也无拦截，说明 Prompt 任务彻底执行完毕
             break;
         }
+    }
+
+    private String clearThink(String chunk){
+        return chunk.replaceAll("</?think>", "");
     }
 
     /**
