@@ -228,98 +228,113 @@ public class SolonCodeCLI implements Handler, Runnable {
     }
 
     /**
-     * 【优化点】封装任务执行逻辑，增加续传状态控制
+     * 执行 Agent 任务（优化版：修复状态泄露与异步同步问题）
      */
     private void performAgentTask(String input, Scanner scanner) throws Exception {
-        final String GRAY = "\033[90m", YELLOW = "\033[33m", GREEN = "\033[32m", RED = "\033[31m", RESET = "\033[0m";
+        final String YELLOW = "\033[33m", GREEN = "\033[32m", RED = "\033[31m", RESET = "\033[0m";
 
-        // 记录当前处理的 Prompt，后续续传用 null
         String currentInput = input;
+        // 标记：是否刚提交完审核结果
+        boolean isSubmittingDecision = false;
 
         while (true) {
             java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
             final AtomicBoolean isInterrupted = new AtomicBoolean(false);
-            final AtomicBoolean inGrayMode = new AtomicBoolean(false);
 
-            // 【关键优化 1】启动流。注意：currentInput 在第一次后会变为 null 触发续传
+            // 1. 启动流（注意：currentInput 在续传时为 null）
             reactor.core.Disposable disposable = agent.prompt(currentInput)
                     .session(session)
                     .stream()
                     .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
                     .doOnNext(chunk -> {
-                        if (latch.getCount() == 0) return;
+                        // 渲染逻辑：不依赖 latch 状态，确保最后一段话能打印完
                         if (chunk instanceof ReasonChunk) {
                             ReasonChunk reason = (ReasonChunk) chunk;
-                            if (!reason.hasContent()) return;
-                            // 渲染逻辑...
-                            System.out.print(reason.getContent());
-                            System.out.flush();
+                            if (reason.hasContent()) {
+                                System.out.print(reason.getContent());
+                                System.out.flush();
+                            }
                         } else if (chunk instanceof ActionChunk) {
-                            System.out.println("\n" + YELLOW + chunk.getContent() + RESET);
+                            System.out.println("\n" + YELLOW + "🛠️  " + chunk.getContent() + RESET);
                         }
                     })
-                    .doFinally(signal -> {
-                        latch.countDown();
-                    })
+                    .doFinally(signal -> latch.countDown())
                     .subscribe();
 
-            // 监控
+            // 【关键点 1】如果是续传，给流一点启动时间，避开旧状态残留的毫秒级窗口
+            if (isSubmittingDecision) {
+                Thread.sleep(60);
+                isSubmittingDecision = false;
+            }
+
+            // 2. 阻塞监控循环
             while (latch.getCount() > 0) {
+                // A. 检查键盘中断 (Enter)
                 if (System.in.available() > 0) {
                     disposable.dispose();
                     isInterrupted.set(true);
                     latch.countDown();
                     break;
                 }
+
+                // B. 检查是否有新的人工介入请求
                 if (HITL.isHitl(session)) {
                     latch.countDown();
                     break;
                 }
-                Thread.sleep(50);
+
+                Thread.sleep(40); // 采样频率
             }
             latch.await();
 
-            // 如果是用户手动回车中断，直接跳出大循环
+            // 处理用户手动中断
             if (isInterrupted.get()) {
                 cleanInputBuffer();
                 return;
             }
 
-            // 【关键优化 2】处理 HITL 交互逻辑
+            // 3. 处理人工介入逻辑
             if (HITL.isHitl(session)) {
                 HITLTask task = HITL.getPendingTask(session);
-                HITLDecision decision = HITL.getDecision(session, task);
+                System.out.print(GREEN + "\n❓ 是否允许操作 [" + task.getToolName() + "] ？(y/n): " + RESET);
 
-                if (decision == null) {
-                    System.out.print(GREEN + "\n❓ 是否允许操作 [" + task.getToolName() + "] ？(y/n): " + RESET);
-
-                    String choice = scanner.nextLine().trim().toLowerCase();
-                    if (choice.equals("y") || choice.equals("yes")) {
-                        System.out.println(GREEN + "✅ 已授权，执行中..." + RESET);
-                        HITL.approve(session, task.getToolName());
-                        currentInput = null; // 【核心】下一轮循环传入 null，实现断点续传
-                        continue;
-                    } else {
-                        System.out.println(RED + "❌ 已拒绝。" + RESET);
-                        HITL.reject(session, task.getToolName());
-                        currentInput = null; // 【核心】拒绝也需续传，让 AI 知道结果
-                        continue;
-                    }
+                String choice = scanner.nextLine().trim().toLowerCase();
+                if (choice.equals("y") || choice.equals("yes")) {
+                    System.out.println(GREEN + "✅ 已授权，执行中..." + RESET);
+                    HITL.approve(session, task.getToolName());
                 } else {
-                    HITL.clear(session, task);
+                    System.out.println(RED + "❌ 已拒绝。" + RESET);
+                    HITL.reject(session, task.getToolName());
                 }
+
+                // 【关键点 2】闭环清理：提交决策后，立即移除“任务挂起”标志位
+                // 这样可以确保下一轮循环开始时，isHitl(session) 初始必为 false
+                session.getSnapshot().remove(HITL.LAST_INTERVENED);
+
+                // 准备续传
+                currentInput = null;
+                isSubmittingDecision = true;
+                continue;
             }
 
-            // 如果既没有中断也没有 HITL，说明任务彻底完成，退出小循环回到提示符
+            // 既无中断也无拦截，说明 Prompt 任务彻底执行完毕
             break;
         }
     }
 
+    /**
+     * 清理输入缓冲区，防止中断触发的回车符污染下一个指令
+     */
     private void cleanInputBuffer() throws Exception {
-        Thread.sleep(20);
-        while (System.in.available() > 0) System.in.read();
+        Thread.sleep(50); // 给系统 IO 一点反应时间
+        while (System.in.available() > 0) {
+            System.in.read();
+        }
     }
 
+    /**
+     * 系统指令判定
+     */
     private boolean isSystemCommand(String input) {
         String cmd = input.trim().toLowerCase();
         if ("exit".equals(cmd) || "quit".equals(cmd)) return true;

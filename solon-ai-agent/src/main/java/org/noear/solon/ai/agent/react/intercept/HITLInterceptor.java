@@ -82,6 +82,10 @@ public class HITLInterceptor implements ReActInterceptor {
 
         // 2. 阶段：已有决策 —— 执行决策指令
 
+        // 既然已经到了这一步，说明已经有决策了，立即清理“挂起”标识，防止下一轮推理误判
+        trace.getContext().remove(HITL.LAST_INTERVENED);
+        trace.getContext().remove(HITL.DECISION_PREFIX + toolName);
+
         if (decision.isApproved()) {
             // 情况：批准执行 —— 处理参数修正
             if (decision.getModifiedArgs() != null) {
@@ -104,27 +108,16 @@ public class HITLInterceptor implements ReActInterceptor {
     @Override
     public void onObservation(ReActTrace trace, String toolName, String result) {
         try {
-            InterventionStrategy strategy = strategyMap.get(toolName);
-            if (strategy == null) {
-                return;
-            }
-
             HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolName);
-
-            if (decision == null) {
-                return;
-            }
-
-            if (decision.isApproved()) {
+            if (decision != null && decision.isApproved()) {
                 if (Assert.isNotEmpty(decision.getComment())) {
-                    // 建议：保持格式统一，确保 Observation 标签后的文案清晰
                     trace.setLastObservation(result + " (Note: " + decision.getComment() + ")");
                 }
             }
         } finally {
             // 审批闭环后的现场清理，确保 Session 状态幂等
-            trace.getContext().remove(HITL.DECISION_PREFIX + toolName);
             trace.getContext().remove(HITL.LAST_INTERVENED);
+            trace.getContext().remove(HITL.DECISION_PREFIX + toolName);
         }
     }
 
