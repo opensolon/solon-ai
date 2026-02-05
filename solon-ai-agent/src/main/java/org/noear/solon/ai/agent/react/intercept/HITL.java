@@ -32,10 +32,22 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.9.1")
 public class HITL {
-    /** 决策状态存储前缀 */
+    /**
+     * 决策状态存储前缀
+     */
     public static final String DECISION_PREFIX = "_hitl_decision_";
-    /** 最近一次被拦截的任务存储 Key */
+    /**
+     * 最近一次被拦截的任务存储 Key
+     */
     public static final String LAST_INTERVENED = "_last_intervened_";
+
+    /**
+     * 清理状态
+     */
+    public static void clear(AgentSession session, HITLTask task) {
+        session.getSnapshot().remove(LAST_INTERVENED);
+        session.getSnapshot().remove(DECISION_PREFIX + task.getToolName());
+    }
 
     /**
      * 提交人工决策
@@ -90,6 +102,10 @@ public class HITL {
         submit(session, toolName, HITLDecision.skip(comment));
     }
 
+    public static boolean isHitl(AgentSession session) {
+        return getPendingTask(session) != null;
+    }
+
     /**
      * 获取会话中当前挂起的任务信息
      *
@@ -97,5 +113,9 @@ public class HITL {
      */
     public static HITLTask getPendingTask(AgentSession session) {
         return session.getSnapshot().getAs(LAST_INTERVENED);
+    }
+
+    public static HITLDecision getDecision(AgentSession session, HITLTask task) {
+        return session.getSnapshot().getAs(DECISION_PREFIX + task.getToolName());
     }
 }

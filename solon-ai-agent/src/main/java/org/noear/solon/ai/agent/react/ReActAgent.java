@@ -160,6 +160,10 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
     @Override
     public ReActRequest prompt(String prompt) {
+        if (prompt == null) {
+            return prompt();
+        }
+
         return new ReActRequest(this, Prompt.of(prompt));
     }
 
