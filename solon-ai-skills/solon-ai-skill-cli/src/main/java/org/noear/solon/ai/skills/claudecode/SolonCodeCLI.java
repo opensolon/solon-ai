@@ -183,14 +183,19 @@ public class SolonCodeCLI implements Handler, Runnable {
         Scanner scanner = new Scanner(System.in);
         printWelcome();
 
-        // ANSI 颜色定义
         final String GRAY = "\033[90m";
         final String YELLOW = "\033[33m";
         final String RESET = "\033[0m";
 
         while (true) {
             try {
+                // 彻底清理缓冲区
+                while (System.in.available() > 0) { System.in.read(); }
+
                 System.out.print("\n\uD83D\uDCBB > ");
+                System.out.flush();
+
+                if (!scanner.hasNextLine()) break;
                 String input = scanner.nextLine();
 
                 if (input == null || input.trim().isEmpty()) continue;
@@ -198,26 +203,23 @@ public class SolonCodeCLI implements Handler, Runnable {
 
                 System.out.print(name + ": ");
 
-                // 状态控制
+                java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
                 final AtomicBoolean lastIsAction = new AtomicBoolean(false);
                 final AtomicBoolean inGrayMode = new AtomicBoolean(false);
 
-                agent.prompt(input)
+                // 1. 启动流，并切到弹性线程池跑
+                reactor.core.Disposable disposable = agent.prompt(input)
                         .session(session)
                         .stream()
+                        .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic()) // 关键：解放主线程
                         .doOnNext(chunk -> {
+                            // 逻辑保持不变
                             if (chunk instanceof ReasonChunk) {
                                 ReasonChunk reason = (ReasonChunk) chunk;
-                                if (!reason.hasContent()) {
-                                    return; // 积累中
-                                }
-
+                                if (!reason.hasContent()) return;
                                 String content = reason.getContent();
-                                // 判断是否带有工具调用（即是否处于思考/推理阶段）
                                 boolean isToolCalling = Assert.isNotEmpty(reason.getResponse().getMessage().getToolCalls());
-
                                 if (isToolCalling) {
-                                    // --- 推理阶段：灰色 ---
                                     if (!inGrayMode.get()) {
                                         if (lastIsAction.get()) System.out.println();
                                         System.out.print(GRAY);
@@ -225,7 +227,6 @@ public class SolonCodeCLI implements Handler, Runnable {
                                         lastIsAction.set(false);
                                     }
                                 } else {
-                                    // --- 结果阶段：恢复默认色 ---
                                     if (inGrayMode.get()) {
                                         System.out.print(RESET);
                                         inGrayMode.set(false);
@@ -237,9 +238,7 @@ public class SolonCodeCLI implements Handler, Runnable {
                                 }
                                 System.out.print(content);
                                 System.out.flush();
-
                             } else if (chunk instanceof ActionChunk) {
-                                // --- 执行阶段：黄色高亮 ---
                                 if (inGrayMode.get()) {
                                     System.out.print(RESET);
                                     inGrayMode.set(false);
@@ -249,12 +248,27 @@ public class SolonCodeCLI implements Handler, Runnable {
                                 lastIsAction.set(true);
                             }
                         })
-                        .doOnTerminate(() -> {
-                            System.out.print(RESET); // 最终安全重置
+                        .doFinally(signalType -> {
+                            System.out.print(RESET);
+                            latch.countDown();
                         })
-                        .blockLast();
+                        .subscribe();
 
+                // 2. 主线程现在可以自由地检测键盘了
+                while (latch.getCount() > 0) {
+                    if (System.in.available() > 0) {
+                        disposable.dispose(); // 瞬间掐断
+                        latch.countDown();
+                        break;
+                    }
+                    // 微秒级轮询，不吃 CPU 但保证响应
+                    Thread.sleep(20);
+                }
+
+                // 3. 再次确保锁被释放，并清理换行
+                latch.await();
                 System.out.println();
+
             } catch (Throwable e) {
                 System.err.println("\n[错误] " + e.getMessage());
                 LOG.error("CLI 执行异常", e);
