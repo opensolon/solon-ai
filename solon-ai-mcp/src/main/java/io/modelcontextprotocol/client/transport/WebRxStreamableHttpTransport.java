@@ -430,7 +430,7 @@ public class WebRxStreamableHttpTransport implements McpClientTransport {
                 : new DefaultMcpTransportStream<>(this.resumableStreams, this::reconnect);
         logger.debug("Connected stream {}", sessionStream.streamId());
 
-        var idWithMessages = Flux.from(TextStreamUtil.parseSseStream(response)).map(this::parse);
+        var idWithMessages = TextStreamUtil.parseSseStream(response).map(this::parse);
         return Flux.from(sessionStream.consumeSseStream(idWithMessages));
     }
 

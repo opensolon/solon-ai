@@ -12,7 +12,7 @@ import java.time.Duration;
 @SolonTest
 public class OpenRouterR1Test extends AbsThinkTest{
     private static final String apiUrl = "https://openrouter.ai/api/v1/chat/completions";
-    private static final String apiKey = "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";
+    private static final String apiKey = "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";
     private static final String model = "tngtech/deepseek-r1t2-chimera:free"; //deepseek/deepseek-r1-0528 //deepseek/deepseek-chat-v3-0324 //tngtech/deepseek-r1t2-chimera:free
 
     protected ChatModel.Builder getChatModelBuilder() {

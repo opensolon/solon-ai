@@ -38,15 +38,16 @@ import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.textstream.ServerSentEvent;
 import org.noear.solon.net.http.textstream.TextStreamUtil;
-import org.noear.solon.rx.SimpleSubscriber;
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -249,72 +250,67 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             log.debug("llm-request: {}", reqJson);
         }
 
-        return Flux.from(subscriber -> {
-            httpUtils.bodyOfJson(reqJson).execAsync("POST")
-                    .whenComplete((resp, err) -> {
-                        Subscriber<? super ChatResponse> subscriberProxy = ChatSubscriberProxy.of(subscriber);
-
-                        if (err == null) {
-                            try {
-                                if (resp.code() < 400) {
-                                    parseResp(req, resp, subscriberProxy);
-                                } else {
-                                    String message = resp.bodyAsString();
-
-                                    String description;
-                                    if (Utils.isEmpty(message)) {
-                                        description = "Error code:" + resp.code();
-                                    } else {
-                                        description = "Error code:" + resp.code() + ", message:" + message;
-                                    }
-
-                                    subscriberProxy.onError(new HttpException(description));
-                                }
-                            } catch (IOException e) {
-                                subscriberProxy.onError(e);
-                            }
+        return Mono.fromFuture(httpUtils.bodyOfJson(reqJson).execAsync("POST"))
+                .flatMapMany(resp -> {
+                    try {
+                        if (resp.code() < 400) {
+                            return parseResp(req, resp);
                         } else {
-                            subscriberProxy.onError(err);
+                            return Flux.error(createHttpException(resp));
                         }
-                    });
-        });
+                    } catch (IOException e) {
+                        return Flux.error(e);
+                    }
+                });
+
     }
 
-    private void parseResp(ChatRequest req, HttpResponse httpResp, Subscriber<? super ChatResponse> subscriber) throws IOException {
-        ChatResponseDefault resp = new ChatResponseDefault(req, true);
+    private Flux<ChatResponse> parseResp(ChatRequest req, HttpResponse httpResp) throws IOException {
+        ChatResponseDefault respDesc = new ChatResponseDefault(req, true);
         String contentType = httpResp.header("Content-Type");
 
-        try {
-            if (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE)) {
-                TextStreamUtil.parseSseStream(httpResp, new SimpleSubscriber<ServerSentEvent>()
-                        .doOnSubscribe(subscriber::onSubscribe)//不要做订阅（外部不支持多次触发）
-                        .doOnNext(event -> {
-                            return onEventStream(resp, event, subscriber);
-                        })
-                        .doOnComplete(() -> {
-                            onEventEnd(resp, subscriber);
-                        })
-                        .doOnError(subscriber::onError));
-            } else {
-                TextStreamUtil.parseLineStream(httpResp, new SimpleSubscriber<String>()
-                        .doOnSubscribe(subscriber::onSubscribe)
-                        .doOnNext(data -> {
-                            return onEventStream(resp, new ServerSentEvent(null, data), subscriber);
-                        })
-                        .doOnComplete(() -> {
-                            onEventEnd(resp, subscriber);
-                        })
-                        .doOnError(subscriber::onError));
-            }
-        } catch (Throwable ex) {
-            subscriber.onError(ex);
-        }
+        return Flux.<ChatResponse>create(sink -> {
+            Flux<?> source = (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE))
+                    ? TextStreamUtil.parseSseStream(httpResp)
+                    : TextStreamUtil.parseLineStream(httpResp);
+
+            // 使用原子引用管理订阅，以便内部控制终止
+            final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
+
+            Disposable disposable = source.subscribe(
+                    data -> {
+                        // [对接点]：检查 sink 状态，如果已经完成或取消，不再处理
+                        if (sink.isCancelled()) {
+                            return;
+                        }
+
+                        ServerSentEvent sse = (data instanceof ServerSentEvent)
+                                ? (ServerSentEvent) data : new ServerSentEvent(null, (String) data);
+
+                        // [对接点]：利用 onEventStream 的返回值
+                        if (!onEventStream(respDesc, sse, sink)) {
+                            // 返回 false 说明内部要求终止（如报错或逻辑中断）
+                            disposableRef.get().dispose();
+                        }
+                    },
+                    sink::error,
+                    () -> {
+                        // 只有在没有被手动 dispose 的情况下才执行 End 逻辑
+                        if (!sink.isCancelled()) {
+                            onEventEnd(respDesc, sink);
+                        }
+                    }
+            );
+
+            disposableRef.set(disposable);
+            sink.onDispose(disposable);
+        }, FluxSink.OverflowStrategy.BUFFER);
     }
 
-    private void onEventEnd(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
+    private void onEventEnd(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink) {
         if (resp.toolCallBuilders.size() > 0) {
-            if (buildStreamToolMessage(resp, subscriber) == false) {
-                return;
+            if (buildStreamToolMessage(resp, sink) == false) {
+                return; // 进入了内部递归流处理，不执行 complete
             }
         }
 
@@ -324,10 +320,13 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             session.addMessage(aggregationMessage);
         }
 
-        subscriber.onComplete();
+        sink.complete();
     }
 
-    private boolean onEventStream(ChatResponseDefault resp, ServerSentEvent event, Subscriber<? super ChatResponse> subscriber) {
+    /**
+     * @return 是否结束流
+     */
+    private boolean onEventStream(ChatResponseDefault resp, ServerSentEvent event, FluxSink<? super ChatResponse> sink) {
         if (log.isDebugEnabled()) {
             log.debug("llm-response: {}", event.data());
         }
@@ -341,7 +340,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         resp.reset();
         if (dialect.parseResponseJson(config, resp, event.data())) {
             if (resp.getError() != null) {
-                subscriber.onError(resp.getError());
+                sink.error(resp.getError());
                 return false;
             }
 
@@ -352,35 +351,25 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     buildToolCallBuilder(resp, choiceMessage);
                 }
 
-                if (choiceMessage != null) {
-                    if (resp.getChoices().size() > 1) {
-                        //有多个选择时，拆成多个。
-                        List<ChatChoice> choices = new ArrayList<>(resp.getChoices());
-                        for (ChatChoice choice : choices) {
-                            resp.reset();
-                            resp.addChoice(choice);
-                            publishResponse(subscriber, resp, choice);
-                        }
-                    } else {
-                        publishResponse(subscriber, resp, resp.getChoices().get(0));
-                    }
+                // 拆分 Choice 并在当前 Sink 中发射
+                List<ChatChoice> choices = new ArrayList<>(resp.getChoices());
+                for (ChatChoice choice : choices) {
+                    resp.reset();
+                    resp.addChoice(choice);
+                    publishResponse(sink, resp, choice);
                 }
             }
-
-//            if (resp.isFinished()) {
-//                if (resp.toolCallBuilders.size() > 0) {
-//                    return buildStreamToolMessage(resp, subscriber);
-//                }
-//            }
         }
 
         return true;
     }
 
-    private boolean buildStreamToolMessage(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
+    /**
+     * @return 是否结束流
+     */
+    private boolean buildStreamToolMessage(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink) {
         try {
             ONode oNode = dialect.buildAssistantMessageNode(resp.toolCallBuilders);
-
             List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
 
             // 如果没有消息，说明工具调用解析失败或没有工具需要处理，直接完成
@@ -396,8 +385,13 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
                 if (Utils.isEmpty(returnDirectMessages)) {
-                    //没有要求直接返回
-                    internalStream().subscribe(subscriber);
+                    Disposable disposable = internalStream().subscribe(
+                            sink::next,
+                            sink::error,
+                            sink::complete
+                    );
+                    sink.onDispose(disposable);
+
                     return false; //不触发外层的完成事件
                 } else {
                     //要求直接返回（转为新的响应消息）
@@ -405,7 +399,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                     resp.reset();
                     resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
                     //resp.aggregationMessageContent.setLength(0);
-                    publishResponse(subscriber, resp, resp.lastChoice());
+                    publishResponse(sink, resp, resp.lastChoice());
                     return true; //触发外层的完成事件
                 }
             } else {
@@ -414,7 +408,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
                 //resp.aggregationMessageContent.setLength(0);
 
-                publishResponse(subscriber, resp, resp.lastChoice());
+                publishResponse(sink, resp, resp.lastChoice());
                 return true; //触发外层的完成事件
             }
 
@@ -424,11 +418,23 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
     }
 
-    private void publishResponse(Subscriber<? super ChatResponse> subscriber, ChatResponseDefault resp, ChatChoice choice) {
+    private HttpException createHttpException(HttpResponse resp) {
+        try {
+            String message = resp.bodyAsString();
+            String description = Utils.isEmpty(message)
+                    ? "Error code:" + resp.code()
+                    : "Error code:" + resp.code() + ", message:" + message;
+            return new HttpException(description);
+        } catch (IOException e) {
+            return new HttpException("Error code:" + resp.code(), e);
+        }
+    }
+
+    private void publishResponse(FluxSink<? super ChatResponse> sink, ChatResponseDefault resp, ChatChoice choice) {
         if (choice.getMessage().hasContent()) {
             resp.aggregationMessageContent.append(choice.getMessage().getContent());
         }
-        subscriber.onNext(resp);
+        sink.next(resp);
     }
 
     private void buildToolCallBuilder(ChatResponseDefault resp, AssistantMessage acm) {
