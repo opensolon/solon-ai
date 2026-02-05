@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.skills.claudecode;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.intercept.HITL;
@@ -36,6 +37,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.File;
+import java.io.Serializable;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Scanner;
@@ -162,13 +164,8 @@ public class SolonCodeCLI implements Handler, Runnable {
         String mode = ctx.param("m");
 
         if (Assert.isNotEmpty(input)) {
-            System.out.println(input);
-
             if ("call".equals(mode)) {
                 String result = agent.prompt(input).call().getContent();
-                System.out.print(result);
-                System.out.println();
-                System.out.print("\n\uD83D\uDCBB > ");
                 ctx.output(result);
             } else {
                 ctx.contentType(MimeType.TEXT_EVENT_STREAM_UTF8_VALUE);
@@ -176,17 +173,20 @@ public class SolonCodeCLI implements Handler, Runnable {
                 Flux<String> stringFlux = agent.prompt(input)
                         .session(session)
                         .stream()
-                        .filter(chunk -> chunk instanceof ReasonChunk)
+                        .subscribeOn(Schedulers.boundedElastic())
                         .map(chunk -> {
-                            System.out.print(chunk.getContent());
-                            return chunk.getContent();
+                            if (chunk.hasContent()) {
+                                if (chunk instanceof ReasonChunk) {
+                                    return ONode.serialize(new Chunk("reason", chunk.getContent()));
+                                } else if (chunk instanceof ActionChunk) {
+                                    return ONode.serialize(new Chunk("action", chunk.getContent()));
+                                }
+                            }
+
+                            return null;
                         })
-                        .filter(content -> Assert.isNotEmpty(content))
-                        .concatWithValues("[DONE]")
-                        .doOnComplete(() -> {
-                            System.out.println();
-                            System.out.print("\n\uD83D\uDCBB > ");
-                        });
+                        .filter(c1 -> c1 != null)
+                        .concatWithValues("[DONE]");
 
                 ctx.returnValue(stringFlux);
             }
@@ -375,5 +375,15 @@ public class SolonCodeCLI implements Handler, Runnable {
         System.out.println("💡 输入 'exit' 退出, 'clear' 清屏");
         System.out.println("🛑 在输出时按 '回车(Enter)' 可中断回复"); // 新增提示
         System.out.println("==================================================");
+    }
+
+    public static class Chunk implements Serializable {
+        public final String type;
+        public final String text;
+
+        public Chunk(String type, String text) {
+            this.type = type;
+            this.text = text;
+        }
     }
 }
