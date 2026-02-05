@@ -128,7 +128,7 @@ public class ClaudeResponseParser {
             }
             if ("[DONE]".equals(jsonData)) {
                 if (resp.isFinished() == false) {
-                    resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                     resp.setFinished(true);
                 }
                 return true;
@@ -306,6 +306,7 @@ public class ClaudeResponseParser {
                     String finishReason = stopReason.get("stop_reason").getString();
                     if (Utils.isNotEmpty(finishReason)) {
                         resp.setFinished(true);
+                        resp.lastFinishReason = finishReason;
                     }
                 }
             } else if ("message_stop".equals(eventType)) {
@@ -331,7 +332,7 @@ public class ClaudeResponseParser {
     public boolean parseNonStreamResponse(ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) {
             if (resp.isFinished() == false) {
-                resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
             }
             return true;

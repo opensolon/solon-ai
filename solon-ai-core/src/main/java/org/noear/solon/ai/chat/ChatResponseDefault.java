@@ -245,6 +245,54 @@ public class ChatResponseDefault implements ChatResponse {
     public String lastToolCallId;
 
     /**
+     * 最后的 finishReason（保存 LLM 返回的原始值，使用时通过 normalizeFinishReason 归一化）
+     */
+    public String lastFinishReason;
+
+    /**
+     * 获取归一化后的 finishReason，如果没有则返回默认值 "stop"
+     *
+     * @return 归一化后的 finishReason
+     */
+    public String getLastFinishReasonNormalized() {
+        String normalized = normalizeFinishReason(lastFinishReason);
+        return normalized != null ? normalized : "stop";
+    }
+
+    /**
+     * 归一化 finishReason
+     *
+     * <p>将各 LLM 返回的不同值映射为框架统一定义的值：
+     * <ul>
+     *   <li>工具调用："tool"</li>
+     *   <li>正常结束："stop"</li>
+     * </ul>
+     *
+     * @param finishReason LLM 返回的原始 finishReason
+     * @return 归一化后的 finishReason
+     */
+    public static String normalizeFinishReason(String finishReason) {
+        if (finishReason == null || finishReason.isEmpty()) {
+            return finishReason;
+        }
+
+        String lower = finishReason.toLowerCase();
+
+        // 工具调用 → "tool"
+        if (lower.contains("tool") || lower.contains("function")) {
+            return "tool";
+        }
+
+        // 正常结束 → "stop"
+        if (lower.contains("stop") || lower.contains("end")) {
+            return "stop";
+        }
+
+        // 其他保持原值
+        return finishReason;
+    }
+
+    /**
      * 重置响应数据
      */
     public void reset() {

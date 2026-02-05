@@ -60,7 +60,7 @@ public class OpenaiChatDialect extends AbstractChatDialect {
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) { //不是数据结构
             if(resp.isFinished() == false) {
-                resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
             }
             return true;
@@ -100,12 +100,13 @@ public class OpenaiChatDialect extends AbstractChatDialect {
 
                 if (Utils.isNotEmpty(finish_reason)) {
                     resp.setFinished(true);
+                    resp.lastFinishReason = finish_reason;
                 }
             }
 
             if (resp.isFinished()) {
                 if (resp.hasChoices() == false) {
-                    resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage("")));
+                    resp.addChoice(new ChatChoice(0, created, resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 }
             }
 
