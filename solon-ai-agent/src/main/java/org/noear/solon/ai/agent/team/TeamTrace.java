@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
 import org.noear.solon.ai.chat.skill.SkillUtil;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.FlowContextInternal;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -169,6 +170,7 @@ public class TeamTrace implements AgentTrace {
         //每次执行重置中断状态
         this.pending = false;
         this.pendingReason = null;
+        ((FlowContextInternal)session.getSnapshot()).stopped(false);
     }
 
     protected void activeSkills() {

@@ -64,7 +64,7 @@ public class MultiAgentHitlTest {
         TeamResponse resp1 = financeTeam.prompt("查询余额并给张三转账 3000 元").session(session).call();
 
         // 验证：此时会计应该已经完成了工作，而出纳在转账时被拦截
-        Assertions.assertTrue(resp1.getTrace().getContext().isStopped(), "流程应在出纳节点中断");
+        Assertions.assertTrue(resp1.getTrace().isPending(), "流程应在出纳节点中断");
 
         // --- 第二步：人工干预（修改金额并批准） ---
         HITLTask task = HITL.getPendingTask(session);
