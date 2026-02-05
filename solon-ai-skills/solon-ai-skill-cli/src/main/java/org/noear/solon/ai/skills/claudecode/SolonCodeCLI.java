@@ -321,7 +321,7 @@ public class SolonCodeCLI implements Handler, Runnable {
     }
 
     private String clearThink(String chunk){
-        return chunk.replaceAll("</?think>", "");
+        return chunk.replaceAll("(?s)<\\s*/?think\\s*>", "");
     }
 
     /**
