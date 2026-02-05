@@ -43,6 +43,11 @@ public class RedisChatSession implements ChatSession {
     }
 
     @Override
+    public List<ChatMessage> getLatestMessages(int windowSize) {
+        return memSession.getLatestMessages(windowSize);
+    }
+
+    @Override
     public void addMessage(Collection<? extends ChatMessage> messages) {
         for (ChatMessage m : messages) {
             memSession.addMessage(m);
