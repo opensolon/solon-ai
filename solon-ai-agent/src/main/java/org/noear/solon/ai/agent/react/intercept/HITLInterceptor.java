@@ -77,6 +77,7 @@ public class HITLInterceptor implements ReActInterceptor {
         if (decision == null) {
             trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolName, new LinkedHashMap<>(args), comment));
             trace.interrupt(comment);
+            trace.setFinalAnswer("");
             return;
         }
 

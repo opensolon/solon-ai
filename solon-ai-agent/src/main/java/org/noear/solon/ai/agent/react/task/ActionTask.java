@@ -275,9 +275,9 @@ public class ActionTask implements NamedTaskComponent {
     private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
         if (FeedbackTool.TOOL_NAME.equals(name)) {
             String reason = (String) args.get("reason");
-            trace.setFinalAnswer(reason);
             trace.setRoute(Agent.ID_END);
             trace.interrupt(reason);
+            trace.setFinalAnswer(reason);
             return reason;
         }
 

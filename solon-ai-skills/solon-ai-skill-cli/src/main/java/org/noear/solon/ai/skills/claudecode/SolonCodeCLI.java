@@ -131,8 +131,11 @@ public class SolonCodeCLI implements Handler, Runnable {
             extraPools.forEach(skills::mountPool);
 
             ReActAgent.Builder agentBuilder = ReActAgent.of(chatModel)
-                    .role("你的名字叫 " + name + "。")
-                    .instruction("你是一个超级智能助手（什么都能干）。要严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
+                    .role("你的名字叫 " + name + "。你是一个超级智能助手（什么都能干）。")
+                    .instruction("【操作准则】\n" +
+                            "1. 严格遵守挂载技能中的交互规范执行任务。\n" +
+                            "2. 遇到 @pool 路径请阅读其 SKILL.md。\n" +
+                            "3. **关于授权（HITL）**：这属于系统底层协议，与你无关。你只需发起工具调用（Action），然后**静默等待**系统返回结果（Observation）。严禁在正文中询问用户是否允许或提及“人工审批”字样，否则会导致流程崩溃。")
                     .defaultSkillAdd(skills);
 
             if (enableHitl) {

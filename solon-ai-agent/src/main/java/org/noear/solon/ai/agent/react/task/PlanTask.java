@@ -127,9 +127,9 @@ public class PlanTask implements NamedTaskComponent {
             if (FeedbackTool.TOOL_NAME.equals(responseMessage.getMetadataAs("__tool"))) {
                 String source = responseMessage.getMetadataAs("source");
                 if (Assert.isNotEmpty(source)) {
-                    trace.setFinalAnswer(source);
                     trace.setRoute(Agent.ID_END);
                     trace.interrupt(source);
+                    trace.setFinalAnswer(source);
                     return;
                 }
             }
