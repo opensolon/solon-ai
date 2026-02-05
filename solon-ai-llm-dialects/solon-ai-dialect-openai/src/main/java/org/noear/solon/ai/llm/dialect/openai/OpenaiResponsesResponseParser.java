@@ -95,7 +95,7 @@ public class OpenaiResponsesResponseParser {
             if (jsonData.isEmpty() || "[DONE]".equals(jsonData)) {
                 if ("[DONE]".equals(jsonData)) {
                     if (!resp.isFinished()) {
-                        resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                        resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                         resp.setFinished(true);
                     }
                     return true;
@@ -265,7 +265,7 @@ public class OpenaiResponsesResponseParser {
     public boolean parseNonStreamResponse(ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) {
             if (!resp.isFinished()) {
-                resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
             }
             return true;
