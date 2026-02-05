@@ -33,11 +33,13 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.File;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -238,14 +240,14 @@ public class SolonCodeCLI implements Handler, Runnable {
         boolean isSubmittingDecision = false;
 
         while (true) {
-            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            CountDownLatch latch = new CountDownLatch(1);
             final AtomicBoolean isInterrupted = new AtomicBoolean(false);
 
             // 1. 启动流（注意：currentInput 在续传时为 null）
             reactor.core.Disposable disposable = agent.prompt(currentInput)
                     .session(session)
                     .stream()
-                    .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .subscribeOn(Schedulers.boundedElastic())
                     .doOnNext(chunk -> {
                         // 渲染逻辑：不依赖 latch 状态，确保最后一段话能打印完
                         if (chunk instanceof ReasonChunk) {
@@ -255,7 +257,7 @@ public class SolonCodeCLI implements Handler, Runnable {
                                 System.out.flush();
                             }
                         } else if (chunk instanceof ActionChunk) {
-                            System.out.println("\n" + YELLOW + "🛠️  " + chunk.getContent() + RESET);
+                            System.out.println("\n" + YELLOW + chunk.getContent() + RESET);
                         }
                     })
                     .doFinally(signal -> latch.countDown())
@@ -306,10 +308,6 @@ public class SolonCodeCLI implements Handler, Runnable {
                     System.out.println(RED + "❌ 已拒绝。" + RESET);
                     HITL.reject(session, task.getToolName());
                 }
-
-                // 【关键点 2】闭环清理：提交决策后，立即移除“任务挂起”标志位
-                // 这样可以确保下一轮循环开始时，isHitl(session) 初始必为 false
-                session.getSnapshot().remove(HITL.LAST_INTERVENED);
 
                 // 准备续传
                 currentInput = null;
