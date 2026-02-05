@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.intercept;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
@@ -78,6 +79,15 @@ public class HITLInterceptor implements ReActInterceptor {
             trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolName, new LinkedHashMap<>(args), comment));
             trace.interrupt(comment);
             trace.setFinalAnswer("");
+
+            TeamTrace teamTrace = TeamTrace.getCurrent(trace.getContext());
+            if (teamTrace != null) {
+                // 如果在团队模式下，则中断团队任务
+                teamTrace.interrupt(comment);
+                teamTrace.setFinalAnswer("");
+                trace.getContext().stop();
+            }
+
             return;
         }
 
