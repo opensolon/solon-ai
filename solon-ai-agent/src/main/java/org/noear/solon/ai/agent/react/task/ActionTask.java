@@ -160,11 +160,6 @@ public class ActionTask implements NamedTaskComponent {
         trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
         trace.getWorkingMemory().addMessage(toolMessage);
 
-        if (parentTeamTrace == null) {
-            trace.getSession().addMessage(trace.getLastReasonMessage());
-            trace.getSession().addMessage(toolMessage);
-        }
-
         if(trace.getOptions().getStreamSink() != null){
             trace.getOptions().getStreamSink().next(
                     new ActionChunk(node, trace, toolMessage));
@@ -267,11 +262,6 @@ public class ActionTask implements NamedTaskComponent {
             ChatMessage chatMessage = ChatMessage.ofUser(allObservations.toString().trim());
             trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
             trace.getWorkingMemory().addMessage(chatMessage);
-
-            if (parentTeamTrace == null) {
-                trace.getSession().addMessage(trace.getLastReasonMessage());
-                trace.getSession().addMessage(chatMessage);
-            }
 
             if (trace.getOptions().getStreamSink() != null) {
                 trace.getOptions().getStreamSink().next(
