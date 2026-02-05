@@ -126,6 +126,10 @@ public class OllamaChatDialect extends AbstractChatDialect {
                 resp.addChoice(new ChatChoice(0, created, done_reason, msg1));
             }
 
+            if (Utils.isNotEmpty(done_reason)) {
+                resp.lastFinishReason = done_reason;
+            }
+
             if (resp.isFinished()) {
                 long promptTokens = oResp.get("prompt_eval_count").getLong();
                 long completionTokens = oResp.get("eval_count").getLong();
@@ -134,7 +138,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
                 resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens, oResp));
 
                 if (resp.hasChoices() == false) {
-                    resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage("")));
+                    resp.addChoice(new ChatChoice(0, created, resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 }
             }
         }
