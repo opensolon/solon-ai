@@ -171,6 +171,7 @@ public class ReActTrace implements AgentTrace {
         this.options = options;
         this.session = session;
         this.protocol = protocol;
+        this.finalAnswer = null;
 
         //每次执行重置中断状态
         this.pending = false;

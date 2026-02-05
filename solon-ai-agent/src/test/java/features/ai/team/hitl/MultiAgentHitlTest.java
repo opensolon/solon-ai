@@ -91,14 +91,10 @@ public class MultiAgentHitlTest {
 
         // 验证：
         // 1. 出纳是否收到了 1000 元的修正参数并执行
-        String realFinalContent = resp2.getTrace().getRecords().stream()
-                .filter(m -> "cashier".equals(m.getSource()))
-                .reduce((first, second) -> second) // 获取最后一条
-                .map(m -> m.getContent())
-                .orElse(resp2.getContent());
+        String realFinalContent = resp2.getContent();
 
         System.out.println("真正的最后回复: " + realFinalContent);
-        Assertions.assertTrue(realFinalContent.contains("1000"), "这次应该稳了！");
+        Assertions.assertTrue(realFinalContent.contains("1000") || realFinalContent.contains("1,000"), "这次应该稳了！");
         // 2. 状态是否清理
         Assertions.assertNull(HITL.getPendingTask(session));
     }

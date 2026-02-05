@@ -166,6 +166,7 @@ public class TeamTrace implements AgentTrace {
         this.options = options;
         this.session = session;
         this.agentName = agentName;
+        this.finalAnswer = null;
 
         //每次执行重置中断状态
         this.pending = false;
