@@ -25,7 +25,7 @@ import org.noear.solon.lang.Preview;
 
 /**
  * 团队协作拦截器 (Team Interceptor)
- * * <p>核心职责：提供对 TeamAgent 协作全生命周期的观察与干预能力。支持团队、决策、成员三个维度的切面注入。</p>
+ * <p>核心职责：提供对 TeamAgent 协作全生命周期的观察与干预能力。支持团队、决策、成员三个维度的切面注入。</p>
  *
  * @author noear
  * @since 3.8.1
