@@ -36,7 +36,7 @@ public class InMemoryChatSession implements ChatSession {
     protected final int maxMessages;
 
     public InMemoryChatSession(String sessionId) {
-        this(sessionId, 0);
+        this(sessionId, 50);
     }
 
     public InMemoryChatSession(String sessionId, int maxMessages) {
