@@ -165,6 +165,7 @@ public class SolonCodeCLI implements Handler, Runnable {
 
         if (Assert.isNotEmpty(input)) {
             if ("call".equals(mode)) {
+                ctx.contentType(MimeType.TEXT_PLAIN_UTF8_VALUE);
                 String result = agent.prompt(input).call().getContent();
                 ctx.output(result);
             } else {
@@ -173,7 +174,6 @@ public class SolonCodeCLI implements Handler, Runnable {
                 Flux<String> stringFlux = agent.prompt(input)
                         .session(session)
                         .stream()
-                        .subscribeOn(Schedulers.boundedElastic())
                         .map(chunk -> {
                             if (chunk.hasContent()) {
                                 if (chunk instanceof ReasonChunk) {
@@ -183,9 +183,10 @@ public class SolonCodeCLI implements Handler, Runnable {
                                 }
                             }
 
-                            return null;
+                            return "";
                         })
-                        .filter(c1 -> c1 != null)
+                        .filter(Assert::isNotEmpty)
+                        .onErrorResume(e -> Flux.just(ONode.serialize(new Chunk("error", e.getMessage()))))
                         .concatWithValues("[DONE]");
 
                 ctx.returnValue(stringFlux);
