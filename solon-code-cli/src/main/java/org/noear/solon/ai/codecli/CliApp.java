@@ -16,6 +16,7 @@
 package org.noear.solon.ai.codecli;
 
 import org.noear.solon.Solon;
+import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.session.FileAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.skills.cli.CodeCLI;
@@ -48,8 +49,12 @@ public class CliApp {
                 .enableConsole(config.enableConsole)
                 .enableHitl(config.enableHitl)
                 .config(agent -> {
-                    agent.maxSteps(config.maxSteps)
-                            .sessionWindowSize(config.sessionWindowSize);
+                    //添加步数
+                    agent.maxSteps(config.maxSteps);
+                    //添加会话窗口大小
+                    agent.sessionWindowSize(config.sessionWindowSize);
+                    //语义保护型上下文压缩拦截器
+                    agent.defaultInterceptorAdd(new SummarizationInterceptor(12));
                 });
 
         if (Assert.isNotEmpty(config.mountPool)) {
