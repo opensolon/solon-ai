@@ -16,18 +16,36 @@
 * 新增 solon-ai-dialect-claude 插件
 * 新增 solon-ai-dialect-openai OpenaiResponses 方言适配
 * 新增 solon-ai-repo-weaviate 插件
-* 新增 solon-ai-skill-claudecode 插件
-* 新增 solon-ai-skill-text2sql 插件
-* 新增 solon-ai-skill-openapi 插件
-* 新增 solon-ai-skill-basics 插件
-* 新增 solon-ai-skill-web 插件
+* 新增 solon-ai-skill-cli 插件（含 CliSkill 和 SolonCodeCLI）
+* 新增 solon-ai-skill-data 插件（含 RedisSkill）
+* 新增 solon-ai-skill-file 插件（含 FileReadWriteSkill，ZipSkill）
+* 新增 solon-ai-skill-generation 插件（含 ImageGenerationSkill， VideoGenerationSkill）
+* 新增 solon-ai-skill-mail 插件（含 MailSkill）
+* 新增 solon-ai-skill-pdf 插件（含 PdfSkill）
+* 新增 solon-ai-skill-restapi 插件（含 RestApiSkill），内置 OpenApi3 和 swagger2 兼容适配（可扩展定制）
+* 新增 solon-ai-skill-social 插件（含 DingTalkSkill，FeishuSkill，WeComSkill）
+* 新增 solon-ai-skill-sys 插件（含 NodejsSkill，PythonSkill， ShellSkill，SystemClockSkill）
+* 新增 solon-ai-skill-text2sql 插件（含 Text2SqlSkill）
+* 新增 solon-ai-skill-web 插件（含 WebCrawlerSkill，WebSearchSkill）
 * 添加 solon-ai-core ChatModel role 和 instruction 支持（提供类似 SimpleAgent 效果）
+* 添加 solon-ai-core ChatModel.stream 背压流控支持
+* 添加 solon-ai-core FileChatSession，RedisChatSession 聊天会话实现
+* 添加 solon-ai-core ChatInterceptor.onPrepare 事件（勾子）
+* 添加 solon-ai-core Prompt.removeLastMessage, removeLastAssistantMessage 方法
+* 添加 solon-ai-agent FileAgentSession 智能体会话实现
+* 添加 solon-ai-agent ReActTrace, TeamTrace pending 机制（方便按需拦截挂机）
 * 添加 solon-ai-agent feedbackMode 模式（默认为 false）
+* 添加 solon-ai-agent ReActInterceptor.onObservation toolName 参数
+* 添加 solon-ai-agent HITL 专属接口，进一步优化人工机制（同意，拒绝，跳过）
+* 添加 solon-ai-agent stream 流式输出机制
 * 优化 solon-ai-agent ReActAgent 添加主动挂机的能力（处理无法完成的任务时，可避免幻觉轮询）
 * 优化 solon-ai-agent description + systemPrompt 标为弃用，改由 role + instruction 替代（简化了）
-* 优化 solon-ai-agent A2AProtocol 协议
+* 优化 solon-ai-agent 内置的 Team 协议（如 ReActProtocol，SwarmProtocol 等）
+* 优化 solon-ai-agent 内置的 ToolRetryInterceptor，ToolSanitizerInterceptor 等
+* 优化 solon-ai-agent AgentSession 接口 updateSnapshot 取消入参
+* 优化 solon-ai-agent ActionTask 取消正则匹配 json 方式，改用 json 流式读取方式
 * 调整 solon-ai-core InMemoryChatSession systemMessages 标为弃用（不建议放到会话里，不方便做结构化的管理）
-* 调整 solon-ai-agent 取消 title（减少迷惑）
+* 调整 solon-ai-agent 取消 title（减少迷惑），systemMessage 标为弃用。改用 role 和 instruction
 * 调整 solon-ai-core ChatModel.stream 返回由 Publisher 改为 Flux
 * 调整 solon-ai-agent enablePlanning 更名为 planningMode （前者标为弃用）
 * 修复 solon-ai-agent ReActAgent 新话题开始时， ReActTrace 没有重置干净的问题
