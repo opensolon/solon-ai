@@ -4,7 +4,7 @@ import demo.ai.skills.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.skills.claudecode.CliSkill;
+import org.noear.solon.ai.skills.cli.CliSkill;
 
 import java.io.InputStream;
 import java.net.URL;

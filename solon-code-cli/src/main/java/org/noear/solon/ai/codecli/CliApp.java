@@ -18,7 +18,7 @@ package org.noear.solon.ai.codecli;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.agent.session.FileAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.claudecode.SolonCodeCLI;
+import org.noear.solon.ai.skills.cli.CodeCLI;
 import org.noear.solon.core.util.Assert;
 
 /**
@@ -40,7 +40,7 @@ public class CliApp {
 
         ChatModel chatModel = ChatModel.of(config.chatModel).build();
 
-        SolonCodeCLI solonCodeCLI = new SolonCodeCLI(chatModel)
+        CodeCLI solonCodeCLI = new CodeCLI(chatModel)
                 .name(config.name)
                 .workDir(config.workDir)
                 .session(new FileAgentSession("cli", config.workDir))

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.skills.claudecode;
+package org.noear.solon.ai.skills.cli;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.AgentSession;
@@ -25,7 +25,6 @@ import org.noear.solon.ai.agent.react.task.ActionChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.cli.CliSkill;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Handler;
 import org.noear.solon.core.util.Assert;
@@ -51,12 +50,10 @@ import java.util.function.Consumer;
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 3.9.2 {@link org.noear.solon.ai.skills.cli.CodeCLI}
  */
-@Deprecated
 @Preview("3.9.1")
-public class SolonCodeCLI implements Handler, Runnable {
-    private final static Logger LOG = LoggerFactory.getLogger(SolonCodeCLI.class);
+public class CodeCLI implements Handler, Runnable {
+    private final static Logger LOG = LoggerFactory.getLogger(CodeCLI.class);
 
     private final ChatModel chatModel;
     private AgentSession session;
@@ -68,38 +65,38 @@ public class SolonCodeCLI implements Handler, Runnable {
     private boolean enableConsole = true;  // 默认启用控制台
     private boolean enableHitl = false;
 
-    public SolonCodeCLI(ChatModel chatModel) {
+    public CodeCLI(ChatModel chatModel) {
         this.chatModel = chatModel;
     }
 
     /**
      * 设置 Agent 名称 (同时也作为控制台输出前缀)
      */
-    public SolonCodeCLI name(String name) {
+    public CodeCLI name(String name) {
         if (name != null && !name.isEmpty()) {
             this.name = name;
         }
         return this;
     }
 
-    public SolonCodeCLI workDir(String workDir) {
+    public CodeCLI workDir(String workDir) {
         this.workDir = workDir;
         return this;
     }
 
-    public SolonCodeCLI mountPool(String alias, String dir) {
+    public CodeCLI mountPool(String alias, String dir) {
         if (dir != null) {
             this.extraPools.put(alias, dir);
         }
         return this;
     }
 
-    public SolonCodeCLI session(AgentSession session) {
+    public CodeCLI session(AgentSession session) {
         this.session = session;
         return this;
     }
 
-    public SolonCodeCLI config(Consumer<ReActAgent.Builder> configurator) {
+    public CodeCLI config(Consumer<ReActAgent.Builder> configurator) {
         this.configurator = configurator;
         return this;
     }
@@ -107,7 +104,7 @@ public class SolonCodeCLI implements Handler, Runnable {
     /**
      * 是否启用 Web 交互
      */
-    public SolonCodeCLI enableWeb(boolean enableWeb) {
+    public CodeCLI enableWeb(boolean enableWeb) {
         this.enableWeb = enableWeb;
         return this;
     }
@@ -115,7 +112,7 @@ public class SolonCodeCLI implements Handler, Runnable {
     /**
      * 是否启用控制台交互
      */
-    public SolonCodeCLI enableConsole(boolean enableConsole) {
+    public CodeCLI enableConsole(boolean enableConsole) {
         this.enableConsole = enableConsole;
         return this;
     }
@@ -123,7 +120,7 @@ public class SolonCodeCLI implements Handler, Runnable {
     /**
      * 是否启用 HITL 交互
      */
-    public SolonCodeCLI enableHitl(boolean enableHitl) {
+    public CodeCLI enableHitl(boolean enableHitl) {
         this.enableHitl = enableHitl;
         return this;
     }
@@ -136,7 +133,7 @@ public class SolonCodeCLI implements Handler, Runnable {
                 session = new InMemoryAgentSession("cli");
             }
 
-            org.noear.solon.ai.skills.cli.CliSkill skills = new CliSkill(session.getSessionId(), workDir);
+            CliSkill skills = new CliSkill(session.getSessionId(), workDir);
             extraPools.forEach(skills::mountPool);
 
             ReActAgent.Builder agentBuilder = ReActAgent.of(chatModel)

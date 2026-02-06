@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.skills.claudecode;
+package org.noear.solon.ai.skills.cli;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -26,9 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,9 +39,7 @@ import java.util.stream.Stream;
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 3.9.2 {@link org.noear.solon.ai.skills.cli.CliSkill}
  */
-@Deprecated
 @Preview("3.9.1")
 public class CliSkill extends AbsProcessSkill {
     private final static Logger LOG = LoggerFactory.getLogger(CliSkill.class);
