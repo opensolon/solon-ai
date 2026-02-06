@@ -57,7 +57,7 @@ public class CodeCLI implements Handler, Runnable {
 
     private final ChatModel chatModel;
     private AgentSession session;
-    private String name = "SolonCodeAgent"; // 默认名称
+    private String name = "CodeCLI"; // 默认名称
     private String workDir = ".";
     private final Map<String, String> extraPools = new LinkedHashMap<>();
     private Consumer<ReActAgent.Builder> configurator;
@@ -344,7 +344,12 @@ public class CodeCLI implements Handler, Runnable {
      */
     private boolean isSystemCommand(String input) {
         String cmd = input.trim().toLowerCase();
-        if ("exit".equals(cmd) || "quit".equals(cmd)) return true;
+        if ("exit".equals(cmd) || "quit".equals(cmd)) {
+            System.out.println("再见！");
+            System.exit(0); // 强制退出 JVM
+            return true;
+        }
+
         if ("clear".equals(cmd)) {
             System.out.print("\033[H\033[2J");
             System.out.flush();
