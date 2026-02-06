@@ -21,6 +21,7 @@
         <module>../../solon-ai-core</module>
         <module>../../solon-ai-agent</module>
         <module>../../solon-ai-a2a</module>
+        <module>../../solon-ai-acp</module>
         <module>../../solon-ai-flow</module>
         <module>../../solon-ai-mcp</module>
         <module>../../solon-ai-parent</module>
