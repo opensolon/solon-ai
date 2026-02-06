@@ -13,22 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent;
+package org.noear.solon.ai.chat;
 
 import org.noear.solon.lang.NonNull;
 import org.noear.solon.lang.Preview;
 
 /**
- * Agent 会话提供者（Session 工厂/加载器）
+ * Chat 会话提供者（Session 工厂/加载器）
  *
- * <p>核心职责：基于业务实例标识维护和检索 Agent 运行状态。</p>
+ * <p>核心职责：基于业务实例标识维护和检索 ChatModel 运行状态。</p>
  *
  * @author noear
  * @since 3.8.1
  */
 @Preview("3.8.1")
 @FunctionalInterface
-public interface AgentSessionProvider {
+public interface ChatSessionProvider {
     /**
      * 获取指定实例的会话
      *
@@ -38,9 +38,9 @@ public interface AgentSessionProvider {
      * <li>若不存在，则按需创建（Lazy loading）并初始化新会话。</li>
      * </ul>
      *
-     * @param instanceId instanceId 会话实例标识
-     * @return 关联的 AgentSession 实例（不应返回 null）
+     * @param instanceId 会话实例标识
+     * @return 关联的 ChatSession 实例
      */
     @NonNull
-    AgentSession getSession(String instanceId);
+    ChatSession getSession(String instanceId);
 }
