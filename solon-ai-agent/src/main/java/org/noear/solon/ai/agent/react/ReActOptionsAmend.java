@@ -68,6 +68,11 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
         return this;
     }
 
+    public ReActOptionsAmend maxStepsLimit(int val) {
+        options.setMaxStepsLimit(val);
+        return this;
+    }
+
     public ReActOptionsAmend outputSchema(String val) {
         options.setOutputSchema(val);
         return this;

@@ -20,6 +20,9 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.*;
+import org.noear.solon.ai.agent.react.intercept.HITL;
+import org.noear.solon.ai.agent.react.intercept.HITLDecision;
+import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -75,12 +78,65 @@ public class ReasonTask implements NamedTaskComponent {
                     config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps());
         }
 
-        // [逻辑 1: 安全限流] 防止无限循环，达到最大步数则强制终止并返回错误提示
-        if (trace.nextStep() > trace.getOptions().getMaxSteps()) {
-            LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), trace.getOptions().getMaxSteps());
+        // [逻辑 1: 安全限流 & 互动续航]
+        int currentStep = trace.nextStep(); // 这里会自增步数
+        int maxSteps = trace.getOptions().getMaxSteps();
+        int maxStepsLimit = trace.getOptions().getMaxStepsLimit();
+
+        // 1.1 绝对硬限熔断：超过 100 步（maxStepsLimit），无论如何都必须死掉
+        if (currentStep > maxStepsLimit) {
+            LOG.error("ReActAgent [{}] hard limit hit: {}", config.getName(), maxStepsLimit);
+            trace.setRoute(Agent.ID_END);
+            trace.setFinalAnswer("检测到异常推理循环，已达到硬性步数上限 (" + maxStepsLimit + ")。");
+            return;
+        }
+
+        // 1.2 软限熔断：超过了当前设定的 maxSteps (比如 8 步)
+        if (currentStep > maxSteps) {
+            // 真正超过最大步数，彻底终止
+            LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), maxSteps);
             trace.setRoute(Agent.ID_END);
             trace.setFinalAnswer("Agent error: Maximum iterations reached.");
             return;
+        }
+
+        // 1.3 临界预警：刚好到 80% 或最后 1 步时，且开启了反馈模式
+        int thresholdStep = Math.max(maxSteps - 1, (int)(maxSteps * 0.8));
+        if (currentStep >= thresholdStep && currentStep > 8 && trace.getOptions().isFeedbackMode()) {
+            // 检查用户是否已经通过 HITL 决策过“继续”
+            HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
+
+            if (decision == null) {
+                // 核心创新：伪造一个 Feedback 请求，挂起任务
+                String warningMsg = String.format("Agent 已执行 %d 步（上限 %d 步），任务尚未完成。是否允许继续执行？",
+                        currentStep, maxSteps);
+
+                // 1. 记录挂起任务
+                Map<String, Object> args = new HashMap<>();
+                args.put("reason", warningMsg);
+                args.put("type", "step_limit_warning");
+
+                trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(FeedbackTool.TOOL_NAME, args, warningMsg));
+
+                // 2. 设为挂起状态
+                trace.pending(warningMsg);
+                trace.setFinalAnswer(warningMsg); // 让前端能展示这个询问提示
+
+                LOG.info("ReActAgent [{}] paused at threshold step: {}/{}", config.getName(), currentStep, maxSteps);
+                return;
+            } else {
+                // 如果用户已经决策了（approve），则重置步数或扩大步数，让 Agent 继续跑
+                if (decision.isApproved()) {
+                    // 方案：给 Agent 续命，增加步数上限（或者简单地将 stepCount 减去一部分）
+                    trace.getOptions().setMaxSteps(maxSteps + 10); // 续 10 步
+                    LOG.info("ReActAgent [{}] approved to continue. New max steps: {}",
+                            config.getName(), trace.getOptions().getMaxSteps());
+
+                    // 清理决策状态，防止死循环
+                    trace.getContext().remove(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
+                    trace.getContext().remove(HITL.LAST_INTERVENED);
+                }
+            }
         }
 
         // [逻辑 2: 提示词工程] 融合系统角色、执行计划、输出格式约束及协议指令

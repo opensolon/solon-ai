@@ -426,6 +426,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
+        public Builder maxStepsLimit(int val) {
+            config.getDefaultOptions().setMaxStepsLimit(val);
+            return this;
+        }
+
         public Builder outputKey(String val) {
             config.setOutputKey(val);
             return this;
