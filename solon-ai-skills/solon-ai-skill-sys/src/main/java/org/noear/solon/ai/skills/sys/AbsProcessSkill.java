@@ -20,8 +20,12 @@ import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.*;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -41,6 +45,8 @@ public abstract class AbsProcessSkill extends AbsSkill {
 
     protected int maxOutputSize = 1024 * 1024; // 默认 1MB
     protected int timeoutSeconds = 30;         // 默认 30s
+    protected Charset scriptCharset = StandardCharsets.UTF_8;
+    protected Charset outputCharset = StandardCharsets.UTF_8;
 
     public AbsProcessSkill(String workDir) {
         this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
@@ -65,11 +71,13 @@ public abstract class AbsProcessSkill extends AbsSkill {
         Path tempScript = null;
         try {
             tempScript = Files.createTempFile(rootPath, "ai_script_", ext);
-            Files.write(tempScript, code.getBytes(StandardCharsets.UTF_8));
+            Files.write(tempScript, code.getBytes(scriptCharset));
 
-            ProcessBuilder pb = new ProcessBuilder(cmd.split(" "));
-            pb.command().add(tempScript.toAbsolutePath().toString());
+            // 1. 优化：更稳健的命令构建
+            List<String> fullCmd = new ArrayList<>(Arrays.asList(cmd.split("\\s+")));
+            fullCmd.add(tempScript.toAbsolutePath().toString());
 
+            ProcessBuilder pb = new ProcessBuilder(fullCmd);
             pb.directory(rootPath.toFile());
             pb.redirectErrorStream(true);
 
@@ -80,35 +88,43 @@ public abstract class AbsProcessSkill extends AbsSkill {
             Process process = pb.start();
             StringBuilder output = new StringBuilder();
 
-            // 使用多线程异步读取
+            // 2. 优化：改用字符缓冲区读取，防止单行过长撑爆内存
             Thread readerThread = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
+                try (InputStreamReader reader = new InputStreamReader(process.getInputStream(), outputCharset)) {
+                    char[] buffer = new char[4096];
+                    int n;
+                    while ((n = reader.read(buffer)) != -1) {
                         synchronized (output) {
-                            if (output.length() < maxOutputSize) {
-                                output.append(line).append("\n");
-                            } else if (!output.toString().endsWith("... [输出已截断]")) {
-                                output.append("... [输出已截断]");
-                                process.destroyForcibly();
-                                break;
+                            if (output.length() + n < maxOutputSize) {
+                                output.append(buffer, 0, n);
+                            } else {
+                                int remaining = maxOutputSize - output.length();
+                                if (remaining > 0) {
+                                    output.append(buffer, 0, remaining);
+                                }
+                                output.append("\n... [输出已截断]");
+                                process.destroyForcibly(); // 触发截断后立即强杀进程
+                                return;
                             }
                         }
                     }
                 } catch (IOException ignored) {}
             });
+            readerThread.setDaemon(true); // 设置为守护线程
             readerThread.start();
 
-            // 使用配置的超时时间
+            // 3. 超时控制
             if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
-                readerThread.interrupt();
                 return "执行超时：运行时间超过 " + timeoutSeconds + " 秒。";
             }
 
-            readerThread.join(1000);
+            // 等待读取线程结束（给一点点缓冲时间处理最后剩余的 buffer）
+            readerThread.join(500);
 
-            return output.length() == 0 ? "执行成功" : output.toString();
+            String result = output.toString().trim();
+            return result.isEmpty() ? "执行成功" : result;
+
         } catch (Exception e) {
             LOG.error("{} execution failed", name(), e);
             return "异常失败: " + e.getMessage();

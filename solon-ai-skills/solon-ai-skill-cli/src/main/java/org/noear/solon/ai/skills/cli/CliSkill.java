@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -51,6 +52,9 @@ public class CliSkill extends AbsProcessSkill {
     private final String envExample;
     private final Map<String, Path> skillPools = new HashMap<>();
     private final Map<String, String> undoHistory = new ConcurrentHashMap<>(); // 简易编辑撤销栈
+
+    protected Charset fileCharset = StandardCharsets.UTF_8;
+
 
     // 定义 100% 对齐的默认忽略列表
     private final List<String> DEFAULT_IGNORES = Arrays.asList(
@@ -216,7 +220,7 @@ public class CliSkill extends AbsProcessSkill {
         if (!Files.exists(md)) md = root.resolve("skill.md");
         if (Files.exists(md)) {
             try {
-                String content = new String(Files.readAllBytes(md), StandardCharsets.UTF_8);
+                String content = new String(Files.readAllBytes(md), fileCharset);
                 sb.append(title).append(content).append("\n\n");
             } catch (IOException e) {
                 LOG.warn("Failed to read SKILL.md from {}", root, e);
@@ -248,6 +252,11 @@ public class CliSkill extends AbsProcessSkill {
                 default:
                     placeholder = "$" + envKey;
                     break;
+            }
+
+            if (this.shellMode == ShellMode.CMD) {
+                // 这里的 chcp 65001 确保了此特定子进程的输出流编码
+                finalCmd = "chcp 65001 > nul && " + finalCmd;
             }
 
             // 自动将指令中的 @pool1 替换为环境对应的变量引用格式
@@ -331,7 +340,7 @@ public class CliSkill extends AbsProcessSkill {
 
         StringBuilder sb = new StringBuilder();
         // 使用流式读取，精准控制内存占用
-        try (Stream<String> stream = Files.lines(target, StandardCharsets.UTF_8)) {
+        try (Stream<String> stream = Files.lines(target, fileCharset)) {
             List<String> lines = stream.skip(start).limit(end - start).collect(Collectors.toList());
             if (lines.isEmpty() && start > 0) return "错误：指定的起始行超出文件范围。";
 
@@ -358,11 +367,11 @@ public class CliSkill extends AbsProcessSkill {
 
         // 关键细节：覆盖前备份，使 undo_edit 对 write 也生效
         if (Files.exists(target)) {
-            undoHistory.put(path, new String(Files.readAllBytes(target), StandardCharsets.UTF_8));
+            undoHistory.put(path, new String(Files.readAllBytes(target), fileCharset));
         }
 
         Files.createDirectories(target.getParent());
-        Files.write(target, content.getBytes(StandardCharsets.UTF_8));
+        Files.write(target, content.getBytes(fileCharset));
         return "文件成功写入: " + path;
     }
 
@@ -385,7 +394,7 @@ public class CliSkill extends AbsProcessSkill {
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                 if (isIgnored(file)) return FileVisitResult.CONTINUE;
 
-                try (Scanner scanner = new Scanner(Files.newInputStream(file), StandardCharsets.UTF_8.name())) {
+                try (Scanner scanner = new Scanner(Files.newInputStream(file), fileCharset.name())) {
                     int lineNum = 0;
                     while (scanner.hasNextLine()) {
                         lineNum++;
@@ -485,15 +494,17 @@ public class CliSkill extends AbsProcessSkill {
         Path target = resolvePath(path);
         if (!Files.exists(target)) return "错误：文件不存在 -> " + path;
 
-        String content = new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
+        String content = new String(Files.readAllBytes(target), fileCharset);
 
         // 自适应处理：如果模型传的是 \n 但文件是 \r\n
         String finalOld = oldStr;
         String finalNew = newStr;
-        if (!content.contains(oldStr) && oldStr.contains("\n") && !oldStr.contains("\r\n")) {
-            if (content.contains(oldStr.replace("\n", "\r\n"))) {
-                finalOld = oldStr.replace("\n", "\r\n");
-                finalNew = newStr.replace("\n", "\r\n");
+        if (content.contains("\r\n")) {
+            if (finalOld.contains("\n") && !finalOld.contains("\r\n")) {
+                finalOld = finalOld.replace("\n", "\r\n");
+            }
+            if (finalNew.contains("\n") && !finalNew.contains("\r\n")) {
+                finalNew = finalNew.replace("\n", "\r\n");
             }
         }
 
@@ -511,7 +522,7 @@ public class CliSkill extends AbsProcessSkill {
 
         undoHistory.put(path, content);
         String newContent = content.substring(0, firstIndex) + finalNew + content.substring(firstIndex + finalOld.length());
-        Files.write(target, newContent.getBytes(StandardCharsets.UTF_8));
+        Files.write(target, newContent.getBytes(fileCharset));
 
         return "文件成功修改: " + path;
     }
@@ -521,7 +532,7 @@ public class CliSkill extends AbsProcessSkill {
     public String undoEdit(@Param(value = "path", description = "要恢复的文件相对路径") String path) throws IOException {
         String history = undoHistory.remove(path);
         if (history == null) return "错误：该文件无撤销记录。";
-        Files.write(resolvePath(path), history.getBytes(StandardCharsets.UTF_8));
+        Files.write(resolvePath(path), history.getBytes(fileCharset));
         return "文件内容已恢复。";
     }
 
@@ -532,6 +543,23 @@ public class CliSkill extends AbsProcessSkill {
             String key = alias.startsWith("@") ? alias : "@" + alias;
             skillPools.put(key, Paths.get(dir).toAbsolutePath().normalize());
         }
+        return this;
+    }
+
+
+    public CliSkill fileCharset(Charset fileCharset) {
+        this.fileCharset = fileCharset;
+        return this;
+    }
+
+
+    public CliSkill scriptCharset(Charset scriptCharset) {
+        this.scriptCharset = scriptCharset;
+        return this;
+    }
+
+    public CliSkill outputCharset(Charset outputCharset) {
+        this.outputCharset = outputCharset;
         return this;
     }
 
