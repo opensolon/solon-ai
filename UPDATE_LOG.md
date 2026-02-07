@@ -14,6 +14,10 @@
 
 
 * 新增 solon-ai-acp 插件
+* 添加 solon-ai-core ChatSessionProvider
+* 优化 solon-ai-skill-cli CliSkill 进一步与 Claude Code 规范对齐（接近 100%）
+* 优化 solon-ai-skill-cli CodeCLI exit 改为进程退出
+* 调整 solon-ai-mcp 默认不启用心跳
 
 ### v3.9.1
 
