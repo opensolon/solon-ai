@@ -44,12 +44,11 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
     private final Prompt prompt;
     private AgentSession session;
     private TeamOptions options;
+    private Consumer<TeamOptionsAmend> optionsAdjustor;
 
     public TeamRequest(TeamAgent agent, Prompt prompt) {
         this.agent = agent;
         this.prompt = prompt;
-        // 拷贝默认配置，确保当前请求的选项修改不影响全局配置
-        this.options = agent.getConfig().getDefaultOptions().copy();
     }
 
     /**
@@ -64,9 +63,35 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
     /**
      * 修正运行时选项（如调整迭代次数、增加拦截器等）
      */
-    public TeamRequest options(Consumer<TeamOptionsAmend> optionsAmend) {
-        optionsAmend.accept(new TeamOptionsAmend(options));
+    public TeamRequest options(Consumer<TeamOptionsAmend> adjustor) {
+        optionsAdjustor = adjustor;
         return this;
+    }
+
+    private void init() {
+        if (options != null) {
+            return; // 已经初始化过了，不再重复逻辑
+        }
+
+        if (session == null) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("No session provided for TeamRequest, using temporary InMemoryAgentSession.");
+            }
+            session = InMemoryAgentSession.of();
+        }
+
+        TeamTrace trace = agent.getTrace(session);
+        if (trace != null) {
+            options = trace.getOptions();
+        }
+
+        if (options == null) {
+            options = agent.getConfig().getDefaultOptions().copy();
+        }
+
+        if (optionsAdjustor != null) {
+            optionsAdjustor.accept(new TeamOptionsAmend(options));
+        }
     }
 
     /**
@@ -76,32 +101,22 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
      */
     @Override
     public TeamResponse call() throws Throwable {
-        if (session == null) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("No session provided for TeamRequest, using temporary InMemoryAgentSession.");
-            }
-            session = InMemoryAgentSession.of();
-        }
+        init();
 
         AssistantMessage message = agent.call(prompt, session, options);
-        TeamTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+        TeamTrace trace = agent.getTrace(session);
 
         return new TeamResponse(session, trace, message);
     }
 
     public Flux<AgentChunk> stream() {
-        if (session == null) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("No session provided for TeamRequest, using temporary InMemoryAgentSession.");
-            }
-            session = InMemoryAgentSession.of();
-        }
+        init();
 
         return Flux.<AgentChunk>create(sink -> {
             try {
                 options.setStreamSink(sink);
                 AssistantMessage message = agent.call(prompt, session, options);
-                TeamTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+                TeamTrace trace = agent.getTrace(session);
 
                 TeamResponse resp = new TeamResponse(session, trace, message);
 
