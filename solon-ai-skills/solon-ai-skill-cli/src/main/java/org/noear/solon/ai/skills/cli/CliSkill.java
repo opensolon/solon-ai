@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -43,7 +44,7 @@ public class CliSkill extends AbsProcessSkill {
     private final String extension;
     private final boolean isWindows;
     private final Map<String, Path> skillPools = new HashMap<>();
-    private final Map<String, String> undoHistory = new HashMap<>(); // 简易编辑撤销栈
+    private final Map<String, String> undoHistory = new ConcurrentHashMap<>(); // 简易编辑撤销栈
 
     /**
      * @param boxId   当前盒子(任务空间)标识
