@@ -10,6 +10,11 @@
 
 *  mcp channel 概念改为 transport （并保持兼容）???
 
+### 3.9.2
+
+
+* 新增 solon-ai-acp 插件
+
 ### v3.9.1
 
 

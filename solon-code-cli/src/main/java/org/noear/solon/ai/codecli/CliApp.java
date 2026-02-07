@@ -49,6 +49,8 @@ public class CliApp {
                 .enableConsole(config.enableConsole)
                 .enableHitl(config.enableHitl)
                 .config(agent -> {
+                    //启用规划模式
+                    agent.planningMode(true);
                     //添加步数
                     agent.maxSteps(config.maxSteps);
                     //添加会话窗口大小

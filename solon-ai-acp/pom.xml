@@ -18,12 +18,34 @@
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-net</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-mcp</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>solon-ai-agent</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>snack4</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>java-websocket-ns</artifactId>
+            <version>1.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
