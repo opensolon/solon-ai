@@ -38,13 +38,65 @@ import java.util.stream.Stream;
  * @since 3.9.1
  */
 public class CliSkill extends AbsProcessSkill {
+    private enum ShellMode {
+        CMD, POWERSHELL, UNIX_SHELL
+    }
+
     private final static Logger LOG = LoggerFactory.getLogger(CliSkill.class);
     private final String boxId;
     private final String shellCmd;
     private final String extension;
     private final boolean isWindows;
+    private final ShellMode shellMode;
+    private final String envExample;
     private final Map<String, Path> skillPools = new HashMap<>();
     private final Map<String, String> undoHistory = new ConcurrentHashMap<>(); // 简易编辑撤销栈
+
+    // 定义 100% 对齐的默认忽略列表
+    private final List<String> DEFAULT_IGNORES = Arrays.asList(
+            ".git", ".svn", ".hg", "node_modules", "target", "bin", "build",
+            ".idea", ".vscode", ".DS_Store", "vnode", ".classpath", ".project"
+    );
+
+    // 定义二进制文件扩展名
+    private final Set<String> BINARY_EXTS = new HashSet<>(Arrays.asList(
+            "jpg", "jpeg", "png", "gif", "ico", "pdf", "exe", "dll", "class",
+            "zip", "tar", "gz", "7z", "rar", "pyc", "so", "o"
+    ));
+
+    /**
+     * 判断路径是否应该被忽略 (对齐 Claude Code 过滤规范)
+     */
+    private boolean isIgnored(Path path) {
+        if (path.getFileName() == null) return false; // 根目录不忽略
+
+        // 1. 基础判断 (文件名 & 扩展名)
+        String name = path.getFileName().toString();
+        if (DEFAULT_IGNORES.contains(name)) return true;
+        if (BINARY_EXTS.contains(getFileExtension(name).toLowerCase())) return true;
+
+        // 2. 仅对相对于根目录的部分进行路径段检查
+        try {
+            Path relative;
+            if (path.isAbsolute()) {
+                relative = rootPath.relativize(path);
+            } else {
+                relative = path;
+            }
+            for (Path segment : relative) {
+                if (DEFAULT_IGNORES.contains(segment.toString())) return true;
+            }
+        } catch (IllegalArgumentException e) {
+            // 说明 path 不在 rootPath 下，可能是 pool 路径
+            // 可以根据需要决定是否对 pool 路径也进行 ignore 检查
+        }
+        return false;
+    }
+
+    private String getFileExtension(String fileName) {
+        int lastIdx = fileName.lastIndexOf('.');
+        return (lastIdx == -1) ? "" : fileName.substring(lastIdx + 1);
+    }
 
     /**
      * @param boxId   当前盒子(任务空间)标识
@@ -56,11 +108,27 @@ public class CliSkill extends AbsProcessSkill {
         this.isWindows = System.getProperty("os.name").toLowerCase().contains("win");
 
         if (isWindows) {
-            this.shellCmd = "cmd /c";
-            this.extension = ".bat";
+            // 探测是否可能在用 PowerShell (简单判断 COMSPEC)
+            String comspec = System.getenv("COMSPEC");
+            if (comspec != null && comspec.toLowerCase().contains("powershell")) {
+                this.shellCmd = "powershell -Command";
+                this.extension = ".ps1";
+                this.shellMode = ShellMode.POWERSHELL;
+            } else {
+                this.shellCmd = "cmd /c";
+                this.extension = ".bat";
+                this.shellMode = ShellMode.CMD;
+            }
         } else {
             this.shellCmd = probeUnixShell();
             this.extension = ".sh";
+            this.shellMode = ShellMode.UNIX_SHELL;
+        }
+
+        switch (this.shellMode) {
+            case CMD: envExample = "%POOL1%"; break;
+            case POWERSHELL: envExample = "$env:POOL1"; break;
+            default: envExample = "$POOL1"; break;
         }
     }
 
@@ -116,7 +184,7 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("- **读后改**：进行 `str_replace_editor` 前必须先调用 `read_file` 获取带有行号的精确内容。对于大文件，必须先分页读取。\n");
         sb.append("- **原子操作**：`str_replace_editor` 要求 `old_str` 具有唯一性。若不唯一，请提供更多上下文行。\n");
         sb.append("- **验证验证验证**：代码修改后，请使用 `bash` 运行相关的测试脚本或构建指令。\n");
-        sb.append("- **环境变量**: 挂载池已注入为大写环境变量（如 @pool1 可用 $POOL1 访问）。在 `bash` 工具中建议优先使用变量。\n");
+        sb.append("- **环境变量**: 挂载池已注入为大写环境变量（如 @pool1 映射为 ").append(envExample).append("）。在 `bash` 工具中建议优先使用该变量。\n");
         sb.append("- **池限制**: 严禁对以 @ 开头的路径执行任何写入或编辑工具。\n\n");
 
         injectRootInstructions(sb, rootPath, "### 盒子业务规范 (Box Norms)\n");
@@ -167,9 +235,22 @@ public class CliSkill extends AbsProcessSkill {
             String envKey = key.substring(1).toUpperCase(); // POOL
             envs.put(envKey, entry.getValue().toString());
 
-            // 可选：将指令中的 @pool 简单替换为 $POOL (Unix) 或 %POOL% (Win)
-            // 这样 AI 即使输入 ls @pool，也能被 Shell 正确解析
-            String placeholder = isWindows ? "%" + envKey + "%" : "$" + envKey;
+            // 根据识别出的 shellMode 进行变量占位符转换
+            String placeholder;
+            switch (this.shellMode) {
+                case CMD:
+                    placeholder = "%" + envKey + "%";
+                    break;
+                case POWERSHELL:
+                    placeholder = "$env:" + envKey;
+                    break;
+                case UNIX_SHELL:
+                default:
+                    placeholder = "$" + envKey;
+                    break;
+            }
+
+            // 自动将指令中的 @pool1 替换为环境对应的变量引用格式
             finalCmd = finalCmd.replace(key, placeholder);
         }
 
@@ -186,41 +267,55 @@ public class CliSkill extends AbsProcessSkill {
 
         boolean finalShowHidden = (showHidden != null && showHidden);
         int maxDepth = (recursive != null && recursive) ? 5 : 1;
-
-        // 确定逻辑前缀（用于回显路径，如 @pool/abc）
         final String logicPrefix = (path != null && path.startsWith("@")) ? path.split("[/\\\\]")[0] : null;
 
-        try (Stream<Path> stream = Files.walk(target, maxDepth)) {
-            String result = stream
-                    .sorted()
-                    .map(p -> {
-                        if (p.equals(target)) return null;
+        List<String> lines = new ArrayList<>();
 
-                        // 计算相对于搜索起点的相对字符串
-                        String relStr = target.relativize(p).toString().replace("\\", "/");
-                        if (relStr.isEmpty()) return null; // 忽略起点目录自身
+        Files.walkFileTree(target, EnumSet.noneOf(FileVisitOption.class), maxDepth, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                // 物理过滤忽略目录
+                if (isIgnored(dir)) return FileVisitResult.SKIP_SUBTREE;
 
-                        // 隐藏文件检查逻辑
-                        boolean isHidden = Stream.of(relStr.split("/"))
-                                .anyMatch(s -> s.startsWith(".") && s.length() > 1);
+                if (dir.equals(target)) return FileVisitResult.CONTINUE;
 
-                        if (!finalShowHidden && isHidden) return null;
+                String relStr = target.relativize(dir).toString().replace("\\", "/");
+                if (!finalShowHidden && isHiddenPath(relStr)) return FileVisitResult.SKIP_SUBTREE;
 
-                        String prefix = Files.isDirectory(p) ? "[DIR] " : "[FILE] ";
-                        boolean isSkill = Files.isDirectory(p) && isSkillDir(p);
+                appendLine(dir, relStr);
+                return FileVisitResult.CONTINUE;
+            }
 
-                        // 构造 Agent 可用的逻辑路径
-                        String logicPath = (logicPrefix != null) ?
-                                logicPrefix + "/" + relStr :
-                                rootPath.relativize(p).toString().replace("\\", "/");
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                if (isIgnored(file)) return FileVisitResult.CONTINUE;
 
-                        return prefix + logicPath + (isSkill ? " (Skill)" : "");
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.joining("\n"));
+                String relStr = target.relativize(file).toString().replace("\\", "/");
+                if (!finalShowHidden && isHiddenPath(relStr)) return FileVisitResult.CONTINUE;
 
-            return result.isEmpty() ? "(目录为空)" : result;
-        }
+                appendLine(file, relStr);
+                return FileVisitResult.CONTINUE;
+            }
+
+            private void appendLine(Path p, String relStr) {
+                String prefix = Files.isDirectory(p) ? "[DIR] " : "[FILE] ";
+                boolean isSkill = Files.isDirectory(p) && isSkillDir(p);
+
+                String logicPath = (logicPrefix != null) ?
+                        logicPrefix + "/" + relStr :
+                        rootPath.relativize(p).toString().replace("\\", "/");
+
+                lines.add(prefix + logicPath + (isSkill ? " (Skill)" : ""));
+            }
+
+            private boolean isHiddenPath(String relPath) {
+                return Stream.of(relPath.split("/")).anyMatch(s -> s.startsWith(".") && s.length() > 1);
+            }
+        });
+
+        if (lines.isEmpty()) return "(目录为空)";
+        Collections.sort(lines); // 排序使结果稳定
+        return String.join("\n", lines);
     }
 
     // --- 3. 读取文件 (对齐 read_file) ---
@@ -276,47 +371,47 @@ public class CliSkill extends AbsProcessSkill {
     public String grepSearch(@Param(value ="query", description = "搜索关键字") String query,
                              @Param(value = "path", description = "起点相对路径（支持 @alias）") String path) throws IOException {
         Path target = resolvePathExtended(path);
-
-        // 识别逻辑前缀 (例如输入 @pool/src -> logicPrefix 为 @pool)
-        final String logicPrefix = (path != null && path.startsWith("@")) ?
-                path.split("[/\\\\]")[0] : null;
-
+        final String logicPrefix = (path != null && path.startsWith("@")) ? path.split("[/\\\\]")[0] : null;
         StringBuilder sb = new StringBuilder();
-        try (Stream<Path> walk = Files.walk(target)) {
-            walk.filter(Files::isRegularFile).forEach(file -> {
-                // 使用 Scanner 逐行读取流，避免大文件一次性入内存
+
+        Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                if (isIgnored(dir)) return FileVisitResult.SKIP_SUBTREE;
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                if (isIgnored(file)) return FileVisitResult.CONTINUE;
+
                 try (Scanner scanner = new Scanner(Files.newInputStream(file), StandardCharsets.UTF_8.name())) {
                     int lineNum = 0;
                     while (scanner.hasNextLine()) {
                         lineNum++;
                         String line = scanner.nextLine();
                         if (line.contains(query)) {
-                            // 计算逻辑展示路径， 统一路径分隔符为 /，消除 Windows 差异
                             String displayPath = (logicPrefix != null) ?
                                     logicPrefix + "/" + target.relativize(file).toString() :
                                     rootPath.relativize(file).toString();
 
                             String trimmedLine = line.trim();
-                            if (trimmedLine.length() > 500) {
-                                trimmedLine = trimmedLine.substring(0, 500) + "... (行内容过长已截断)";
-                            }
+                            if (trimmedLine.length() > 500) trimmedLine = trimmedLine.substring(0, 500) + "...";
 
                             sb.append(displayPath.replace("\\", "/"))
                                     .append(":").append(lineNum).append(": ")
                                     .append(trimmedLine).append("\n");
                         }
-                        // 保护机制：单次搜索结果过多时截断，防止 Token 爆炸
-                        if (sb.length() > 8000) {
-                            sb.append("... (结果过多已截断)");
-                            return;
-                        }
+                        if (sb.length() > 8000) return FileVisitResult.TERMINATE; // 结果过多保护
                     }
                 } catch (Exception ignored) {}
-            });
-        }
+                return FileVisitResult.CONTINUE;
+            }
+        });
 
         return sb.length() == 0 ? "未找到包含 '" + query + "' 的内容" : sb.toString();
     }
+
 
     // --- 5. 通配符搜索 (对齐 glob_search) ---
     @ToolMapping(name = "glob_search", description = "按通配符搜索文件名（如 **/*.js）。")
@@ -336,7 +431,19 @@ public class CliSkill extends AbsProcessSkill {
 
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                if (isIgnored(dir)) {
+                    return FileVisitResult.SKIP_SUBTREE; // 100% 对齐：彻底不进入忽略文件夹
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                if (isIgnored(file)) {
+                    return FileVisitResult.CONTINUE;
+                }
+
                 if (matcher.matches(target.relativize(file))) {
                     String displayPath = (pathPrefix != null) ?
                             pathPrefix + "/" + target.relativize(file).toString() :
