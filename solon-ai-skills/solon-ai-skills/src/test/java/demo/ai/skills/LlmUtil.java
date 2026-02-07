@@ -11,7 +11,7 @@ public class LlmUtil {
 
     public static ChatModel getChatModel() {
         return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
-                .apiKey("sk-19a568bbfc0248dfbac088a0a70fa74d")
+                .apiKey("sk-251740c893994c57a6536ecdbc33c189")
                 .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
                 .build();
 

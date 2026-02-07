@@ -19,28 +19,23 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.skills.sys.AbsProcessSkill;
 import org.noear.solon.annotation.Param;
-import org.noear.solon.core.util.Assert;
-import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * CLI 综合技能 (Pool-Box 模型)
- * <p>兼容 Claude Code Agent Skills 协议。支持多技能池挂载与任务盒环境隔离。</p>
+ * Claude Code 规范对齐的 CLI 综合技能 (Pool-Box 模型)
  *
  * @author noear
  * @since 3.9.1
  */
-@Preview("3.9.1")
 public class CliSkill extends AbsProcessSkill {
     private final static Logger LOG = LoggerFactory.getLogger(CliSkill.class);
     private final String boxId;
@@ -48,6 +43,7 @@ public class CliSkill extends AbsProcessSkill {
     private final String extension;
     private final boolean isWindows;
     private final Map<String, Path> skillPools = new HashMap<>();
+    private final Map<String, String> undoHistory = new HashMap<>(); // 简易编辑撤销栈
 
     /**
      * @param boxId   当前盒子(任务空间)标识
@@ -74,41 +70,24 @@ public class CliSkill extends AbsProcessSkill {
         this("default", workDir);
     }
 
-    /**
-     * 挂载技能池 (Pool)
-     *
-     * @param alias 别名 (建议以 @ 开头，如 @media, @ops, @shared)
-     * @param dir   池对应的物理目录
-     */
-    public CliSkill mountPool(String alias, String dir) {
-        if (dir != null) {
-            String key = alias.startsWith("@") ? alias : "@" + alias;
-            skillPools.put(key, Paths.get(dir).toAbsolutePath().normalize());
-        }
-        return this;
-    }
-
     @Override
     public String name() {
-        // 保持协议标识符兼容性，确保 LLM 能识别
         return "claude_code_agent_skills";
     }
 
     @Override
     public String description() {
-        return "提供符合 Claude Code 规范的 CLI 交互能力。支持基于 Pool-Box 模型的跨领域指令执行与文件管理。";
+        return "提供符合 Claude Code 规范的 CLI 交互能力，支持 Pool-Box 模型下的文件发现、读取、搜索和精准编辑。";
     }
 
     @Override
-    public boolean isSupported(Prompt prompt) {
-        return true;
-    }
+    public boolean isSupported(Prompt prompt) { return true; }
 
     @Override
     public String getInstruction(Prompt prompt) {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("### CLI Agent Skills 交互规范 (Claude Code Compatible)\n\n");
+        sb.append("### CLI Agent Skills 交互规范 (Claude Code Strict Mode)\n\n");
 
         // 1. 池盒环境声明
         sb.append("#### 1. 环境空间 (Pool-Box Context)\n");
@@ -122,19 +101,22 @@ public class CliSkill extends AbsProcessSkill {
         }
         sb.append("\n");
 
-        //  discovery
+        // 2. 技能发现索引
         sb.append("#### 2. 技能发现索引 (Discovery)\n");
         sb.append("- **盒子本地技能**: ").append(scanSkillNames(rootPath)).append("\n");
         skillPools.forEach((k, v) -> sb.append("- **池(").append(k).append(")技能**: ").append(scanSkillNames(v)).append("\n"));
-        sb.append("> 提示：标记为 (Claude Code Skill) 的目录包含 `SKILL.md`。请通过 `ls` 和 `cat` 读取规范以驱动任务。\n\n");
+        sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。请通过 `list_files` 和 `read_file` 读取规范以驱动任务。\n\n");
 
-        // Guidelines
-        sb.append("#### 3. 操作准则 (Guidelines)\n");
-        sb.append("- **搜索优先**：检索逻辑优先使用 `grep`。避免盲目 `cat` 大文件。\n");
-        sb.append("- **环境自查**：执行系统命令（如 ffmpeg, python, node）前必须先用 `exists_cmd` 确认环境可用。\n");
-        sb.append("- **递归发现**：技能目录可能嵌套。进入新目录后应再次检查是否存在新的技能规范。\n");
-        sb.append("- **自由组合**：你可以自由调用系统级 CLI 工具来处理跨领域的任务（如代码构建、视频渲染、调查研究）。\n");
-        sb.append("- **只读限制**: 以 @ 开头的池路径均为只读。严禁尝试 `write` 或 `edit` 池内文件。\n\n");
+        // 3. 官方策略对齐 (Action Guidelines)
+        sb.append("#### 3. 执行策略 (Action Patterns)\n");
+        sb.append("- **探测优先**：在操作前先用 `list_files` 或 `glob_search` 确认文件位置。\n");
+        sb.append("- **显示隐藏**：`list_files` 默认隐藏点号文件。若需查看 `.env` 或 `.gitignore`，请设置 `show_hidden: true`。\n");
+        sb.append("- **路径规范**: 必须使用相对于根目录的相对路径。严禁使用 `./` 前缀（例如：使用 `src/main.js` 而非 `./src/main.js`）。\n");
+        sb.append("- **读后改**：进行 `str_replace_editor` 前必须先调用 `read_file` 获取带有行号的精确内容。对于大文件，必须先分页读取。\n");
+        sb.append("- **原子操作**：`str_replace_editor` 要求 `old_str` 具有唯一性。若不唯一，请提供更多上下文行。\n");
+        sb.append("- **验证验证验证**：代码修改后，请使用 `bash` 运行相关的测试脚本或构建指令。\n");
+        sb.append("- **环境变量**: 挂载池已注入为大写环境变量（如 @pool1 可用 $POOL1 访问）。在 `bash` 工具中建议优先使用变量。\n");
+        sb.append("- **池限制**: 严禁对以 @ 开头的路径执行任何写入或编辑工具。\n\n");
 
         injectRootInstructions(sb, rootPath, "### 盒子业务规范 (Box Norms)\n");
 
@@ -173,176 +155,278 @@ public class CliSkill extends AbsProcessSkill {
         }
     }
 
-    // --- 工具映射 (兼容协议) ---
+    // --- 1. 执行命令 (对齐 bash) ---
+    @ToolMapping(name = "bash", description = "在 shell 中执行指令。支持 @alias 路径自动映射。")
+    public String bash(@Param(value = "command", description = "要执行的指令。") String command) {
+        Map<String, String> envs = new HashMap<>();
+        String finalCmd = command;
 
-    @ToolMapping(name = "ls", description = "列出目录。支持 @alias/ 格式访问挂载池。目录若标有 (Claude Code Skill) 则含有专项规范。")
-    public String ls(@Param("path") String path) throws IOException {
+        for (Map.Entry<String, Path> entry : skillPools.entrySet()) {
+            String key = entry.getKey(); // @pool
+            String envKey = key.substring(1).toUpperCase(); // POOL
+            envs.put(envKey, entry.getValue().toString());
+
+            // 可选：将指令中的 @pool 简单替换为 $POOL (Unix) 或 %POOL% (Win)
+            // 这样 AI 即使输入 ls @pool，也能被 Shell 正确解析
+            String placeholder = isWindows ? "%" + envKey + "%" : "$" + envKey;
+            finalCmd = finalCmd.replace(key, placeholder);
+        }
+
+        return runCode(finalCmd, shellCmd, extension, envs);
+    }
+
+    // --- 2. 列出文件 (对齐 list_files) ---
+    @ToolMapping(name = "list_files", description = "列出目录内容。目录若带 (Skill) 标记则含有业务规范。")
+    public String listFiles(@Param(value = "path", description = "目录相对路径（禁止以 ./ 开头）。'.' 表示当前根目录。") String path,
+                            @Param(value = "recursive", required = false, description = "是否递归列出（深度限制5）。") Boolean recursive,
+                            @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件（如 .env, .gitignore）。默认 false 以保持结果整洁。") Boolean showHidden) throws IOException {
         Path target = resolvePathExtended(path);
-        if (!Files.exists(target)) return "错误：路径不存在 -> " + path;
+        if (!Files.exists(target)) return "错误：路径不存在";
 
-        try (Stream<Path> stream = Files.list(target)) {
-            return stream.map(p -> {
-                String prefix = Files.isDirectory(p) ? "[DIR] " : "[FILE] ";
-                boolean isSkill = Files.isDirectory(p) && isSkillDir(p);
-                return prefix + p.getFileName() + (isSkill ? " (Claude Code Skill)" : "");
-            }).collect(Collectors.joining("\n"));
+        boolean finalShowHidden = (showHidden != null && showHidden);
+        int maxDepth = (recursive != null && recursive) ? 5 : 1;
+
+        // 确定逻辑前缀（用于回显路径，如 @pool/abc）
+        final String logicPrefix = (path != null && path.startsWith("@")) ? path.split("[/\\\\]")[0] : null;
+
+        try (Stream<Path> stream = Files.walk(target, maxDepth)) {
+            String result = stream
+                    .sorted()
+                    .map(p -> {
+                        // 计算相对于搜索起点的相对字符串
+                        String relStr = target.relativize(p).toString().replace("\\", "/");
+                        if (relStr.isEmpty()) return null; // 忽略起点目录自身
+
+                        // 隐藏文件检查逻辑
+                        boolean isHidden = Stream.of(relStr.split("/"))
+                                .anyMatch(s -> s.startsWith(".") && s.length() > 1);
+
+                        if (!finalShowHidden && isHidden) return null;
+
+                        String prefix = Files.isDirectory(p) ? "[DIR] " : "[FILE] ";
+                        boolean isSkill = Files.isDirectory(p) && isSkillDir(p);
+
+                        // 构造 Agent 可用的逻辑路径
+                        String logicPath = (logicPrefix != null) ?
+                                logicPrefix + "/" + relStr :
+                                rootPath.relativize(p).toString().replace("\\", "/");
+
+                        return prefix + logicPath + (isSkill ? " (Skill)" : "");
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.joining("\n"));
+
+            return result.isEmpty() ? "(目录为空)" : result;
         }
     }
 
-    @ToolMapping(name = "grep", description = "全文本递归搜索。支持本地盒子及挂载池。")
-    public String grep(@Param("pattern") String pattern, @Param("path") String path) throws IOException {
+    // --- 3. 读取文件 (对齐 read_file) ---
+    @ToolMapping(name = "read_file", description = "读取文件内容。对于大文件，必须使用分页读取以节省上下文空间。")
+    public String readFile(@Param(value = "path", description = "文件相对路径（禁止以 ./ 开头）。") String path,
+                           @Param(value = "start_line", required = false, description = "起始行号 (从1开始)。") Integer startLine,
+                           @Param(value = "end_line", required = false, description = "结束行号。") Integer endLine) throws IOException {
         Path target = resolvePathExtended(path);
-        // 获取用于显示的虚拟前缀（如果是 @pool 路径）
-        String virtualPrefix = (path != null && path.startsWith("@")) ? path.split("/")[0] + "/" : "";
-        // 获取规范化的显示路径
-        String displayPath = (path == null || path.isEmpty() || ".".equals(path)) ? "盒子根目录" : path;
+        if (!Files.exists(target)) return "错误：文件不存在";
+
+        int start = (startLine == null) ? 0 : Math.max(0, startLine - 1);
+        int end = (endLine == null) ? (start + 500) : endLine; // 默认给 500 行，防止模型盲目读全表
 
         StringBuilder sb = new StringBuilder();
-        try (Stream<Path> walk = Files.walk(target)) {
-            List<Path> files = walk.filter(Files::isRegularFile).collect(Collectors.toList());
-            for (Path file : files) {
-                try {
-                    List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-                    for (int i = 0; i < lines.size(); i++) {
-                        if (lines.get(i).contains(pattern)) {
-                            // 计算相对路径
-                            String relPath = virtualPrefix + target.relativize(file).toString();
-                            sb.append(relPath).append(":").append(i + 1).append(": ").append(lines.get(i).trim()).append("\n");
-                        }
-                    }
-                } catch (Exception ignored) {
-                    // 忽略二进制文件或无法读取的文件
-                }
+        // 使用流式读取，精准控制内存占用
+        try (Stream<String> stream = Files.lines(target, StandardCharsets.UTF_8)) {
+            List<String> lines = stream.skip(start).limit(end - start).collect(Collectors.toList());
+            if (lines.isEmpty() && start > 0) return "错误：指定的起始行超出文件范围。";
+
+            for (int i = 0; i < lines.size(); i++) {
+                sb.append(start + i + 1).append(": ").append(lines.get(i)).append("\n");
             }
         }
-
-        if (sb.length() == 0) {
-            // 增加更丰富的上下文反馈
-            return String.format("未找到匹配项 (搜索关键词: '%s', 搜索范围: %s)", pattern, displayPath);
-        }
-
-        return sb.toString();
+        return sb.length() == 0 ? "(文件内容为空)" : sb.toString();
     }
 
-    @ToolMapping(name = "cat", description = "读取文件（代码、规范等）。支持池路径。")
-    public String cat(@Param("path") String path) throws IOException {
-        Path target = resolvePathExtended(path);
-        byte[] bytes = Files.readAllBytes(target);
-        if (bytes.length > maxOutputSize) {
-            return new String(bytes, 0, maxOutputSize, StandardCharsets.UTF_8) + "\n... [已截断]";
-        }
-        return new String(bytes, StandardCharsets.UTF_8);
-    }
+    @ToolMapping(name = "write_to_file", description = "创建新文件或覆盖现有文件。严禁修改池(@)路径。")
+    public String writeToFile(@Param(value = "path", description = "文件的相对路径（禁止以 ./ 开头）。") String path,
+                              @Param(value = "content", description = "文件的完整文本内容") String content) throws IOException {
+        if (path.startsWith("@")) return "拒绝访问：技能池为只读。";
 
-    @ToolMapping(name = "write", description = "写入文件到盒子空间。禁止操作池路径。")
-    public String write(@Param("path") String path, @Param("content") String content) throws IOException {
-        if (isPoolPath(path)) return "拒绝访问：技能池 (@pool) 空间为只读。";
         Path target = resolvePath(path);
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(StandardCharsets.UTF_8));
-        return "写入成功: " + rootPath.relativize(target);
+        return "文件成功写入: " + path;
     }
 
-    @ToolMapping(name = "edit", description = "精准文本替换。禁止操作池路径。")
-    public String edit(@Param("path") String path, @Param("oldText") String oldText, @Param("newText") String newText) throws IOException {
-        if (isPoolPath(path)) return "拒绝访问：技能池 (@pool) 空间为只读。";
+    // --- 4. 文本搜索 (对齐 grep_search) ---
+    @ToolMapping(name = "grep_search", description = "递归搜索特定内容。返回格式为 '路径:行号: 内容'。")
+    public String grepSearch(@Param(value ="query", description = "搜索关键字") String query,
+                             @Param(value = "path", description = "起点相对路径（支持 @alias）") String path) throws IOException {
+        Path target = resolvePathExtended(path);
+
+        // 识别逻辑前缀 (例如输入 @pool/src -> logicPrefix 为 @pool)
+        final String logicPrefix = (path != null && path.startsWith("@")) ?
+                path.split("[/\\\\]")[0] : null;
+
+        StringBuilder sb = new StringBuilder();
+        try (Stream<Path> walk = Files.walk(target)) {
+            walk.filter(Files::isRegularFile).forEach(file -> {
+                // 使用 Scanner 逐行读取流，避免大文件一次性入内存
+                try (Scanner scanner = new Scanner(Files.newInputStream(file), StandardCharsets.UTF_8.name())) {
+                    int lineNum = 0;
+                    while (scanner.hasNextLine()) {
+                        lineNum++;
+                        String line = scanner.nextLine();
+                        if (line.contains(query)) {
+                            // 计算逻辑展示路径
+                            String displayPath = (logicPrefix != null) ?
+                                    logicPrefix + "/" + target.relativize(file) :
+                                    rootPath.relativize(file).toString();
+
+                            String trimmedLine = line.trim();
+                            if (trimmedLine.length() > 500) {
+                                trimmedLine = trimmedLine.substring(0, 500) + "... (行内容过长已截断)";
+                            }
+
+                            sb.append(displayPath.replace("\\", "/"))
+                                    .append(":").append(lineNum).append(": ")
+                                    .append(trimmedLine).append("\n");
+                        }
+                        // 保护机制：单次搜索结果过多时截断，防止 Token 爆炸
+                        if (sb.length() > 8000) {
+                            sb.append("... (结果过多已截断)");
+                            return;
+                        }
+                    }
+                } catch (Exception ignored) {}
+            });
+        }
+
+        return sb.length() == 0 ? "未找到包含 '" + query + "' 的内容" : sb.toString();
+    }
+
+    // --- 5. 通配符搜索 (对齐 glob_search) ---
+    @ToolMapping(name = "glob_search", description = "按通配符搜索文件名（如 **/*.js）。")
+    public String globSearch(@Param(value = "pattern", description = "glob 模式（如 **/*.java）") String pattern,
+                             @Param(value = "path", description = "搜索的起点目录（支持 @alias）") String path) throws IOException {
+        Path target = resolvePathExtended(path);
+        final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
+        List<String> results = new ArrayList<>();
+
+        // 确定“当前搜索前缀”，用于拼接回 Agent 可识别的路径
+        // 如果 path 以 @ 开头，提取其别名部分（如 @pool1）
+        final String pathPrefix = (path != null && path.startsWith("@")) ?
+                path.split("[/\\\\]")[0] : null;
+
+        // 增加搜索计数器，防止超大规模文件系统导致的性能崩塌
+        final int MAX_RESULTS = 500;
+
+        Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                if (matcher.matches(target.relativize(file))) {
+                    String displayPath = (pathPrefix != null) ?
+                            pathPrefix + "/" + target.relativize(file).toString() :
+                            rootPath.relativize(file).toString();
+
+                    results.add(displayPath.replace("\\", "/"));
+                }
+
+                // 结果过多保护
+                return results.size() >= MAX_RESULTS ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                return FileVisitResult.CONTINUE; // 忽略无法读取的单个文件
+            }
+        });
+
+        if (results.isEmpty()) return "未找到匹配 '" + pattern + "' 的文件";
+
+        String output = String.join("\n", results);
+        return results.size() >= MAX_RESULTS ? output + "\n... (搜索结果过多，已截断)" : output;
+    }
+
+    // --- 6. 代码编辑 (对齐 str_replace_editor) ---
+    /**
+     * 精准替换文件内容 (完全对齐 Claude Code str_replace_editor 规范)
+     */
+    @ToolMapping(name = "str_replace_editor", description = "通过精确匹配文本块并替换来编辑文件。注意：如果文件较大，请先通过 read_file 确认行号和内容。")
+    public String strReplaceEditor(@Param(value = "path", description = "文件相对路径（禁止以 ./ 开头）。") String path,
+                                   @Param(value = "old_str", description = "文件中唯一的、待替换的文本片段。必须包含精确的缩进和换行。") String oldStr,
+                                   @Param(value = "new_str", description = "替换后的新文本内容。") String newStr) throws IOException {
+        if (path.startsWith("@")) return "拒绝访问：技能池为只读。";
 
         Path target = resolvePath(path);
-        if (!Files.exists(target)) {
-            return "错误：文件不存在 -> " + path;
-        }
+        if (!Files.exists(target)) return "错误：文件不存在 -> " + path;
 
         String content = new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
 
-        // 1. 完全匹配
-        if (content.contains(oldText)) {
-            Files.write(target, content.replace(oldText, newText).getBytes(StandardCharsets.UTF_8));
-            return "更新成功: " + rootPath.relativize(target);
-        }
-
-        // 2. 模糊匹配尝试 (去除首尾空格)
-        String oldTrim = oldText.trim();
-        if (Assert.isNotEmpty(oldTrim) && content.contains(oldTrim)) {
-            Files.write(target, content.replace(oldTrim, newText).getBytes(StandardCharsets.UTF_8));
-            return "更新成功（通过忽略首尾空白字符匹配成功）";
-        }
-
-        // 3. 彻底匹配失败：提供详细的错误反馈
-        StringBuilder error = new StringBuilder();
-        error.append("错误：无法在文件中找到指定的文本片段。\n");
-        error.append("待匹配文本: [").append(oldText).append("]\n");
-
-        // 技巧：如果文件不大，可以引导 Agent 先 cat 一下
-        if (content.length() < 2000) {
-            error.append("提示：文件内容与你记忆中不符。建议先调用 'cat' 重新读取该文件以确认精确的缩进和格式。");
-        } else {
-            error.append("提示：请检查缩进、换行符或特殊字符是否完全一致。");
-        }
-
-        return error.toString();
-    }
-
-    @ToolMapping(name = "run_command", description = "执行系统指令。支持自动解析 @pool/ 虚拟路径映射。")
-    public String run(@Param("command") String command) {
-        String finalCmd = command;
-        for (Map.Entry<String, Path> entry : skillPools.entrySet()) {
-            String key = entry.getKey();
-            if (finalCmd.contains(key)) {
-                // 增强替换逻辑：兼容 @pool/path 和 @pool (根目录)
-                String replacement = entry.getValue().toString().replace("\\", "/");
-                finalCmd = finalCmd.replace(key + "/", replacement + "/")
-                        .replace(key + " ", replacement + " ")
-                        .replace(key + "\"", replacement + "\"");
+        // 自适应处理：如果模型传的是 \n 但文件是 \r\n
+        if (!content.contains(oldStr) && oldStr.contains("\n") && !oldStr.contains("\r\n")) {
+            String windowsOldStr = oldStr.replace("\n", "\r\n");
+            if (content.contains(windowsOldStr)) {
+                oldStr = windowsOldStr;
+                newStr = newStr.replace("\n", "\r\n"); // 保持一致
             }
         }
-        return runCode(finalCmd, shellCmd, extension, null);
-    }
 
-    @ToolMapping(name = "exists_cmd", description = "检查依赖（python, ffmpeg, git 等）。")
-    public boolean existsCmd(@Param("cmd") String cmd) {
-        String cleanCmd = cmd.trim().split("\\s+")[0];
-        String checkPattern = isWindows ? "where " + cleanCmd : "command -v " + cleanCmd;
-        try {
-            Process p = Runtime.getRuntime().exec(checkPattern);
-            return p.waitFor() == 0;
-        } catch (Exception e) {
-            return false;
+        int firstIndex = content.indexOf(oldStr);
+        if (firstIndex == -1) {
+            return "错误：无法在文件中匹配 'old_str'。建议重新 read_file 确认格式。";
         }
+
+        if (content.lastIndexOf(oldStr) != firstIndex) {
+            return "错误：'old_str' 不唯一。请包含更多前后的上下文行。";
+        }
+
+        undoHistory.put(path, content);
+        String newContent = content.substring(0, firstIndex) + newStr + content.substring(firstIndex + oldStr.length());
+        Files.write(target, newContent.getBytes(StandardCharsets.UTF_8));
+
+        return "文件修改成功：" + path;
     }
 
-    // --- 安全解析逻辑 ---
-
-    private boolean isPoolPath(String path) {
-        return path != null && path.startsWith("@");
+    // --- 7. 撤销编辑 (对齐 undo_edit) ---
+    @ToolMapping(name = "undo_edit", description = "撤销最后一次编辑")
+    public String undoEdit(@Param(value = "path", description = "要恢复的文件相对路径") String path) throws IOException {
+        String history = undoHistory.remove(path);
+        if (history == null) return "错误：该文件无撤销记录。";
+        Files.write(resolvePath(path), history.getBytes(StandardCharsets.UTF_8));
+        return "文件内容已恢复。";
     }
 
-    private Path resolvePathExtended(String pathStr) {
-        if (isPoolPath(pathStr)) {
+    // --- 辅助逻辑 ---
+
+    public CliSkill mountPool(String alias, String dir) {
+        if (dir != null) {
+            String key = alias.startsWith("@") ? alias : "@" + alias;
+            skillPools.put(key, Paths.get(dir).toAbsolutePath().normalize());
+        }
+        return this;
+    }
+
+    private Path resolvePathExtended(String pStr) {
+        String cleanPath = (pStr != null && pStr.startsWith("./")) ? pStr.substring(2) : pStr;
+        if (cleanPath == null || cleanPath.isEmpty() || ".".equals(cleanPath)) return rootPath;
+        if (cleanPath.startsWith("@")) {
             for (Map.Entry<String, Path> entry : skillPools.entrySet()) {
-                if (pathStr.startsWith(entry.getKey())) {
-                    String sub = pathStr.substring(entry.getKey().length()).replaceFirst("^[/\\\\]", "");
-                    Path p = entry.getValue().resolve(sub).normalize();
-                    if (!p.startsWith(entry.getValue())) throw new SecurityException("非法越界：池访问溢出");
-                    return p;
+                if (cleanPath.startsWith(entry.getKey())) {
+                    String sub = cleanPath.substring(entry.getKey().length()).replaceFirst("^[/\\\\]", "");
+                    return entry.getValue().resolve(sub).normalize();
                 }
             }
-            throw new IllegalArgumentException("未定义的技能池别名: " + pathStr);
         }
-        return resolvePath(pathStr);
+        return resolvePath(cleanPath);
     }
 
     private Path resolvePath(String pathStr) {
-        String safePath = (pathStr == null || pathStr.isEmpty()) ? "." : pathStr;
-        Path p = rootPath.resolve(safePath).normalize();
-        if (!p.startsWith(rootPath)) throw new SecurityException("访问受限：超出盒子(Box)空间");
+        String cleanPath = (pathStr != null && pathStr.startsWith("./")) ? pathStr.substring(2) : pathStr;
+        Path p = rootPath.resolve(cleanPath).normalize();
+        if (!p.startsWith(rootPath)) throw new SecurityException("越界访问");
         return p;
     }
 
     private static String probeUnixShell() {
-        try {
-            return Runtime.getRuntime().exec("bash --version").waitFor() == 0 ? "bash" : "/bin/sh";
-        } catch (Exception e) {
-            return "/bin/sh";
-        }
+        try { return Runtime.getRuntime().exec("bash --version").waitFor() == 0 ? "bash" : "/bin/sh"; }
+        catch (Exception e) { return "/bin/sh"; }
     }
 }
