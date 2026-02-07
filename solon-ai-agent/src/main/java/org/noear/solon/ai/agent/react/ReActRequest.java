@@ -45,12 +45,11 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
     private final Prompt prompt;
     private AgentSession session;
     private ReActOptions options;
+    private Consumer<ReActOptionsAmend> optionsAdjustor;
 
     public ReActRequest(ReActAgent agent, Prompt prompt) {
         this.agent = agent;
         this.prompt = prompt;
-        // 初始拷贝 Agent 的默认配置，实现请求级别的隔离
-        this.options = agent.getConfig().getDefaultOptions().copy();
     }
 
     /**
@@ -66,8 +65,34 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
      * 修改当前请求的运行选项
      */
     public ReActRequest options(Consumer<ReActOptionsAmend> adjustor) {
-        adjustor.accept(new ReActOptionsAmend(options));
+        optionsAdjustor = adjustor;
         return this;
+    }
+
+    private void init(){
+        if (options != null) {
+            return; // 已经初始化过了，不再重复逻辑
+        }
+
+        if (session == null) {
+            if (log.isDebugEnabled()) {
+                log.debug("No session provided for ReActRequest, using temporary InMemoryAgentSession.");
+            }
+            session = InMemoryAgentSession.of();
+        }
+
+        ReActTrace trace = agent.getTrace(session);
+        if (trace != null) {
+            options = trace.getOptions();
+        }
+
+        if(options == null){
+            options = agent.getConfig().getDefaultOptions().copy();
+        }
+
+        if(optionsAdjustor != null){
+            optionsAdjustor.accept(new ReActOptionsAmend(options));
+        }
     }
 
     /**
@@ -77,15 +102,10 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
      */
     @Override
     public ReActResponse call() throws Throwable {
-        if (session == null) {
-            if (log.isDebugEnabled()) {
-                log.debug("No session provided for ReActRequest, using temporary InMemoryAgentSession.");
-            }
-            session = InMemoryAgentSession.of();
-        }
+        init();
 
         AssistantMessage message = agent.call(prompt, session, options);
-        ReActTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+        ReActTrace trace = agent.getTrace(session);
 
         return new ReActResponse(session, trace, message);
     }
@@ -95,18 +115,13 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
      * 适用于 Web 端 SSE 或 WebSocket 实时展示思考过程
      */
     public Flux<AgentChunk> stream() {
-        if (session == null) {
-            if (log.isDebugEnabled()) {
-                log.debug("No session provided for ReActRequest, using temporary InMemoryAgentSession.");
-            }
-            session = InMemoryAgentSession.of();
-        }
+        init();
 
         return Flux.<AgentChunk>create(sink -> {
             try {
                 options.setStreamSink(sink);
                 AssistantMessage message = agent.call(prompt, session, options);
-                ReActTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+                ReActTrace trace = agent.getTrace(session);
 
                 ReActResponse resp = new ReActResponse(session, trace, message);
 

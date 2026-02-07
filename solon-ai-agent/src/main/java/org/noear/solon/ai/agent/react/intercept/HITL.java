@@ -118,4 +118,8 @@ public class HITL {
     public static HITLDecision getDecision(AgentSession session, HITLTask task) {
         return session.getSnapshot().getAs(DECISION_PREFIX + task.getToolName());
     }
+
+    public static HITLDecision getDecision(AgentSession session, String toolName) {
+        return session.getSnapshot().getAs(DECISION_PREFIX + toolName);
+    }
 }
