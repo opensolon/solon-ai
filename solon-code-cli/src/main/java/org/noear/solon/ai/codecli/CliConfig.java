@@ -34,7 +34,7 @@ public class CliConfig {
     public String workDir = "./work";
     public String webPath = "/cli";
 
-    public int maxSteps = 100;
+    public int maxSteps = 30;
     public int sessionWindowSize = 10;
 
     public boolean enableWeb = true;

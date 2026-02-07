@@ -144,7 +144,7 @@ public class CodeCLI implements Handler, Runnable {
 
             if (enableHitl) {
                 agentBuilder.defaultInterceptorAdd(new HITLInterceptor()
-                        .onSensitiveTool("write", "edit", "run_command"));
+                        .onTool("bash",new CodeHITLStrategy()));
             }
 
             if (configurator != null) {
@@ -303,7 +303,18 @@ public class CodeCLI implements Handler, Runnable {
             // 3. 处理人工介入逻辑
             if (HITL.isHitl(session)) {
                 HITLTask task = HITL.getPendingTask(session);
-                System.out.print(GREEN + "\n❓ 是否允许操作 [" + task.getToolName() + "] ？(y/n): " + RESET);
+
+                // 💡 改进：先打印风险评估报告 (Reason)
+                if (Assert.isNotEmpty(task.getComment())) {
+                    System.out.println(RED + "\n[安全风险评估]: " + task.getComment() + RESET);
+                }
+
+                // 💡 改进：如果是 bash，直接显示指令内容，用户不需要猜
+                if ("bash".equals(task.getToolName())) {
+                    System.out.println(YELLOW + "👉 待执行指令: " + task.getArgs().get("command") + RESET);
+                }
+
+                System.out.print(GREEN + "❓ 是否授权执行？(y/n): " + RESET);
 
                 String choice = scanner.nextLine().trim().toLowerCase();
                 if (choice.equals("y") || choice.equals("yes")) {
