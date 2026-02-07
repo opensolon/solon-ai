@@ -194,6 +194,8 @@ public class CliSkill extends AbsProcessSkill {
             String result = stream
                     .sorted()
                     .map(p -> {
+                        if (p.equals(target)) return null;
+
                         // 计算相对于搜索起点的相对字符串
                         String relStr = target.relativize(p).toString().replace("\\", "/");
                         if (relStr.isEmpty()) return null; // 忽略起点目录自身
@@ -239,7 +241,14 @@ public class CliSkill extends AbsProcessSkill {
             if (lines.isEmpty() && start > 0) return "错误：指定的起始行超出文件范围。";
 
             for (int i = 0; i < lines.size(); i++) {
-                sb.append(start + i + 1).append(": ").append(lines.get(i)).append("\n");
+                int lineNum = start + i + 1;
+                String content = lines.get(i);
+                sb.append(String.format("%6d: %s", lineNum, content)).append("\n");
+            }
+
+            // 建议：如果没读完，提示 AI 还有内容
+            if (lines.size() == (end - start)) {
+                sb.append("\n(提示：已达到读取行数限制，若需后续内容请调整 start_line)");
             }
         }
         return sb.length() == 0 ? "(文件内容为空)" : sb.toString();
@@ -251,6 +260,12 @@ public class CliSkill extends AbsProcessSkill {
         if (path.startsWith("@")) return "拒绝访问：技能池为只读。";
 
         Path target = resolvePath(path);
+
+        // 关键细节：覆盖前备份，使 undo_edit 对 write 也生效
+        if (Files.exists(target)) {
+            undoHistory.put(path, new String(Files.readAllBytes(target), StandardCharsets.UTF_8));
+        }
+
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(StandardCharsets.UTF_8));
         return "文件成功写入: " + path;
@@ -276,9 +291,9 @@ public class CliSkill extends AbsProcessSkill {
                         lineNum++;
                         String line = scanner.nextLine();
                         if (line.contains(query)) {
-                            // 计算逻辑展示路径
+                            // 计算逻辑展示路径， 统一路径分隔符为 /，消除 Windows 差异
                             String displayPath = (logicPrefix != null) ?
-                                    logicPrefix + "/" + target.relativize(file) :
+                                    logicPrefix + "/" + target.relativize(file).toString() :
                                     rootPath.relativize(file).toString();
 
                             String trimmedLine = line.trim();
@@ -356,34 +371,42 @@ public class CliSkill extends AbsProcessSkill {
                                    @Param(value = "new_str", description = "替换后的新文本内容。") String newStr) throws IOException {
         if (path.startsWith("@")) return "拒绝访问：技能池为只读。";
 
+        if (oldStr == null || oldStr.isEmpty()) {
+            return "错误：'old_str' 不能为空。";
+        }
+
         Path target = resolvePath(path);
         if (!Files.exists(target)) return "错误：文件不存在 -> " + path;
 
         String content = new String(Files.readAllBytes(target), StandardCharsets.UTF_8);
 
         // 自适应处理：如果模型传的是 \n 但文件是 \r\n
+        String finalOld = oldStr;
+        String finalNew = newStr;
         if (!content.contains(oldStr) && oldStr.contains("\n") && !oldStr.contains("\r\n")) {
-            String windowsOldStr = oldStr.replace("\n", "\r\n");
-            if (content.contains(windowsOldStr)) {
-                oldStr = windowsOldStr;
-                newStr = newStr.replace("\n", "\r\n"); // 保持一致
+            if (content.contains(oldStr.replace("\n", "\r\n"))) {
+                finalOld = oldStr.replace("\n", "\r\n");
+                finalNew = newStr.replace("\n", "\r\n");
             }
         }
 
-        int firstIndex = content.indexOf(oldStr);
+        int firstIndex = content.indexOf(finalOld);
         if (firstIndex == -1) {
-            return "错误：无法在文件中匹配 'old_str'。建议重新 read_file 确认格式。";
+            if (content.contains(finalOld.trim())) {
+                return "错误：无法精确匹配。请确保 old_str 的缩进（空格数量）与 read_file 返回的内容完全一致。";
+            }
+            return "错误：无法在文件中找到指定的文本块。请重新 read_file 确认内容。";
         }
 
-        if (content.lastIndexOf(oldStr) != firstIndex) {
-            return "错误：'old_str' 不唯一。请包含更多前后的上下文行。";
+        if (content.lastIndexOf(finalOld) != firstIndex) {
+            return "错误：该文本块在文件中不唯一（出现了多次）。请在 'old_str' 中包含更多前后的上下文行。";
         }
 
         undoHistory.put(path, content);
-        String newContent = content.substring(0, firstIndex) + newStr + content.substring(firstIndex + oldStr.length());
+        String newContent = content.substring(0, firstIndex) + finalNew + content.substring(firstIndex + finalOld.length());
         Files.write(target, newContent.getBytes(StandardCharsets.UTF_8));
 
-        return "文件修改成功：" + path;
+        return "文件成功修改: " + path;
     }
 
     // --- 7. 撤销编辑 (对齐 undo_edit) ---
@@ -406,17 +429,17 @@ public class CliSkill extends AbsProcessSkill {
     }
 
     private Path resolvePathExtended(String pStr) {
-        String cleanPath = (pStr != null && pStr.startsWith("./")) ? pStr.substring(2) : pStr;
-        if (cleanPath == null || cleanPath.isEmpty() || ".".equals(cleanPath)) return rootPath;
-        if (cleanPath.startsWith("@")) {
-            for (Map.Entry<String, Path> entry : skillPools.entrySet()) {
-                if (cleanPath.startsWith(entry.getKey())) {
-                    String sub = cleanPath.substring(entry.getKey().length()).replaceFirst("^[/\\\\]", "");
-                    return entry.getValue().resolve(sub).normalize();
+        String clearPath = (pStr != null && pStr.startsWith("./")) ? pStr.substring(2) : pStr;
+        if (clearPath == null || clearPath.isEmpty() || ".".equals(clearPath)) return rootPath;
+        if (clearPath.startsWith("@")) {
+            for (Map.Entry<String, Path> e : skillPools.entrySet()) {
+                if (clearPath.startsWith(e.getKey())) {
+                    String sub = clearPath.substring(e.getKey().length()).replaceFirst("^[/\\\\]", "");
+                    return e.getValue().resolve(sub).normalize();
                 }
             }
         }
-        return resolvePath(cleanPath);
+        return resolvePath(clearPath);
     }
 
     private Path resolvePath(String pathStr) {
