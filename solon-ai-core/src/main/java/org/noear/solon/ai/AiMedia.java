@@ -30,6 +30,11 @@ public interface AiMedia {
     Map<String, Object> metas();
 
     /**
+     * 获取多媒体类型
+     */
+    String getMimeType();
+
+    /**
      * 转为数据字符串
      */
     String toDataString(boolean useMime);
