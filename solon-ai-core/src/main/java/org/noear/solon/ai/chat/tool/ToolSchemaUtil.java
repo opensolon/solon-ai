@@ -16,7 +16,6 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.eggg.FieldEggg;
-import org.noear.eggg.ParamEggg;
 import org.noear.eggg.TypeEggg;
 import org.noear.snack4.ONode;
 import org.noear.snack4.annotation.ONodeAttrHolder;
@@ -240,5 +239,25 @@ public class ToolSchemaUtil {
         }
 
         return false;
+    }
+
+    /**
+     * 工具结果转换
+     */
+    public static String resultConvert(FunctionTool tool, Object result){
+        if(result == null){
+            return null;
+        }
+
+        if(result instanceof String){
+            return (String)result;
+        }
+
+        Type type = tool.returnType();
+        if(type == null){
+            type= result.getClass();
+        }
+
+        return tool.resultConverter().convert(result, type);
     }
 }

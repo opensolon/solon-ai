@@ -23,6 +23,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
@@ -115,7 +116,7 @@ public class StatefulToolRegistry implements McpPrimitivesRegistry<FunctionTool>
                                         if(rst instanceof McpSchema.Content){
                                             result = new McpSchema.CallToolResult(Arrays.asList((McpSchema.Content) rst), false);
                                         } else {
-                                            String rstStr = functionTool.resultConverter().convert(rst, functionTool.returnType());
+                                            String rstStr = ToolSchemaUtil.resultConvert(functionTool, rst);
 
                                             if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
                                                 Map<String, Object> map = ONode.ofBean(rst).toBean(Map.class);

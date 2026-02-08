@@ -160,19 +160,6 @@ public interface FunctionTool extends Tool {
     default String call(Map<String, Object> args) throws Throwable{
        Object rst = handle(args);
 
-       if(rst == null){
-           return null;
-       }
-
-       if(rst instanceof String){
-           return (String)rst;
-       }
-
-       Type type = returnType();
-       if(type == null){
-           type= rst.getClass();
-       }
-
-       return resultConverter().convert(rst, type);
+       return ToolSchemaUtil.resultConvert(this, rst);
     }
 }
