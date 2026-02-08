@@ -47,7 +47,7 @@ public class AgentDispatcher implements ToolProvider , AutoCloseable {
 
                     log.debug("agent-request: {agentName: {}, message: {}}", agentName, message);
 
-                    String result = agent.handle(Utils.asMap("message", message));
+                    String result = agent.call(Utils.asMap("message", message));
 
                     log.debug("agent-response: {agentName: {}, message: {}, result: {}}", agentName, message, result);
 

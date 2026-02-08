@@ -140,4 +140,11 @@ public interface FunctionTool extends Tool {
 
        return future;
    }
+
+   /**
+    * 调用
+    */
+   default String call(Map<String, Object> args) throws Throwable{
+       return handle(args);
+   }
 }

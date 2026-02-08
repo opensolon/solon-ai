@@ -307,7 +307,7 @@ public class ActionTask implements NamedTaskComponent {
                 final ToolRequest toolReq = new ToolRequest(null, trace.getOptions().getToolContext(), args);
                 final String result;
                 if (trace.getOptions().getInterceptors().isEmpty()) {
-                    result = tool.handle(toolReq.getArgs());
+                    result = tool.call(toolReq.getArgs());
                 } else {
                     result = new ToolChain(trace.getOptions().getInterceptors(), tool).doIntercept(toolReq);
                 }

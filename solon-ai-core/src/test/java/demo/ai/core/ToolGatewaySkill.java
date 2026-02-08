@@ -71,6 +71,6 @@ public class ToolGatewaySkill extends AbsSkill implements Skill {
             return "Execution failed: Tool [" + name + "] is no longer available.";
         }
 
-        return tool.handle(args);
+        return tool.call(args);
     }
 }
