@@ -169,17 +169,28 @@ public class MethodFunctionTool implements FunctionTool {
         return outputSchema;
     }
 
+
+    @Override
+    public Type returnType() {
+        return returnType;
+    }
+
+    @Override
+    public ToolCallResultConverter resultConverter() {
+        return resultConverter;
+    }
+
     /**
      * 执行处理
      */
     @Override
-    public String handle(Map<String, Object> args) throws Throwable {
+    public Object handle(Map<String, Object> args) throws Throwable {
         return handleAsync(args).get();
     }
 
     @Override
-    public CompletableFuture<String> handleAsync(Map<String, Object> args) {
-        CompletableFuture<String> returnFuture = new CompletableFuture<>();
+    public CompletableFuture<Object> handleAsync(Map<String, Object> args) {
+        CompletableFuture<Object> returnFuture = new CompletableFuture<>();
 
         try {
             Object handleR = doHandle(args);
@@ -193,7 +204,8 @@ public class MethodFunctionTool implements FunctionTool {
                         }
                         returnFuture.completeExceptionally(err);
                     } else {
-                        doConvert(rst1, returnFuture);
+                        returnFuture.complete(rst1);
+                        //doConvert(rst1, returnFuture);
                     }
                 });
             } else if (handleR instanceof Publisher) {
@@ -203,7 +215,8 @@ public class MethodFunctionTool implements FunctionTool {
                             subs.request(1);
                         })
                         .doOnNext(rst1 -> {
-                            doConvert(rst1, returnFuture);
+                            returnFuture.complete(rst1);
+                            //doConvert(rst1, returnFuture);
                         }).doOnError(err -> {
                             if (log.isWarnEnabled()) {
                                 log.warn("Tool handle error, name: '{}'", name, err);
@@ -211,7 +224,8 @@ public class MethodFunctionTool implements FunctionTool {
                             returnFuture.completeExceptionally(err);
                         }));
             } else {
-                doConvert(handleR, returnFuture);
+                returnFuture.complete(handleR);
+                //doConvert(handleR, returnFuture);
             }
         } catch (Throwable ex) {
             if (log.isWarnEnabled()) {
@@ -221,21 +235,6 @@ public class MethodFunctionTool implements FunctionTool {
         }
 
         return returnFuture;
-    }
-
-    private void doConvert(Object rst, CompletableFuture<String> returnFuture) {
-        try {
-            final String rst2;
-            if (resultConverter == null) {
-                rst2 = String.valueOf(rst);
-            } else {
-                rst2 = resultConverter.convert(rst, returnType);
-            }
-
-            returnFuture.complete(rst2);
-        } catch (Throwable ex2) {
-            returnFuture.completeExceptionally(ex2);
-        }
     }
 
     private Object doHandle(Map<String, Object> args) throws Throwable {

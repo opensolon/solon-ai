@@ -31,5 +31,5 @@ public interface ToolHandler {
      * @param args 参数
      *
      */
-    String handle(Map<String, Object> args) throws Throwable;
+    Object handle(Map<String, Object> args) throws Throwable;
 }

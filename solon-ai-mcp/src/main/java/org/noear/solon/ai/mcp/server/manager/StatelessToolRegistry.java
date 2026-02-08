@@ -110,12 +110,17 @@ public class StatelessToolRegistry implements McpPrimitivesRegistry<FunctionTool
                                         err = Utils.throwableUnwrap(err);
                                         result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(err.getMessage())), true);
                                     } else {
-
-                                        if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
-                                            Map<String, Object> map = ONode.deserialize(rst, Map.class);
-                                            result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false, map);
+                                        if(rst instanceof McpSchema.Content){
+                                            result = new McpSchema.CallToolResult(Arrays.asList((McpSchema.Content) rst), false);
                                         } else {
-                                            result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
+                                            String rstStr = functionTool.resultConverter().convert(rst, functionTool.returnType());
+
+                                            if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
+                                                Map<String, Object> map = ONode.ofBean(rst).toBean(Map.class);
+                                                result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false, map);
+                                            } else {
+                                                result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false);
+                                            }
                                         }
                                     }
 

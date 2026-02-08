@@ -280,11 +280,16 @@ public class FunctionToolDesc implements FunctionTool {
         return outputSchema;
     }
 
+    @Override
+    public Type returnType() {
+        return returnType;
+    }
+
     /**
      * 执行处理
      */
     @Override
-    public String handle(Map<String, Object> args) throws Throwable {
+    public Object handle(Map<String, Object> args) throws Throwable {
         try {
             return doHandle(args);
         } catch (Throwable ex) {
@@ -298,7 +303,7 @@ public class FunctionToolDesc implements FunctionTool {
         }
     }
 
-    private String doHandle(Map<String, Object> args) throws Throwable {
+    private Object doHandle(Map<String, Object> args) throws Throwable {
         if (params.size() > 0) {
             Map<String, Object> argsNew = new HashMap<>();
 

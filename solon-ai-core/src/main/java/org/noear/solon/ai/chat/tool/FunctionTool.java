@@ -17,6 +17,7 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.solon.core.util.Assert;
 
+import java.lang.reflect.Type;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -124,12 +125,24 @@ public interface FunctionTool extends Tool {
         return null;
     }
 
-    /**
-     * 处理
-     */
-    String handle(Map<String, Object> args) throws Throwable;
+    Type returnType();
 
-   default CompletableFuture<String> handleAsync(Map<String, Object> args){
+    /**
+     * 结果转换器
+     */
+    default ToolCallResultConverter resultConverter(){
+        return ToolCallResultConverterDefault.getInstance();
+    }
+
+    /**
+     * 同步处理
+     */
+    Object handle(Map<String, Object> args) throws Throwable;
+
+    /**
+     * 异步处理
+     */
+    default CompletableFuture<Object> handleAsync(Map<String, Object> args){
        CompletableFuture future = new CompletableFuture();
 
        try {
@@ -139,12 +152,27 @@ public interface FunctionTool extends Tool {
        }
 
        return future;
-   }
+    }
 
    /**
     * 调用
     */
-   default String call(Map<String, Object> args) throws Throwable{
-       return handle(args);
-   }
+    default String call(Map<String, Object> args) throws Throwable{
+       Object rst = handle(args);
+
+       if(rst == null){
+           return null;
+       }
+
+       if(rst instanceof String){
+           return (String)rst;
+       }
+
+       Type type = returnType();
+       if(type == null){
+           type= rst.getClass();
+       }
+
+       return resultConverter().convert(rst, type);
+    }
 }
