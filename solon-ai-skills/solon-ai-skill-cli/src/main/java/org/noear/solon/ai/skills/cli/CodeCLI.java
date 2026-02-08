@@ -273,7 +273,17 @@ public class CodeCLI implements Handler, Runnable {
                                 System.out.flush();
                             }
                         } else if (chunk instanceof ActionChunk) {
-                            System.out.println("\n" + YELLOW + chunk.getContent() + RESET);
+                            ActionChunk actionChunk = (ActionChunk) chunk;
+                            String toolName = actionChunk.getToolName();
+                            String content = chunk.getContent();
+
+                            if (Assert.isNotEmpty(toolName)) {
+                                System.out.print("\n" + YELLOW + "⚙️  [" + toolName + "] Observation: " + RESET);
+                                System.out.println(content);
+                            } else {
+                                System.out.println("\n" + YELLOW + "📝 " + content + RESET);
+                            }
+                            System.out.flush();
                         } else if(chunk instanceof ReActChunk ) {
                             System.out.println("\n-----------------\n" + chunk.getContent());
                         }
