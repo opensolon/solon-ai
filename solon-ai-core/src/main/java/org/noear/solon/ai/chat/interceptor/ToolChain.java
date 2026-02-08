@@ -51,7 +51,7 @@ public class ToolChain<T extends ToolInterceptor> {
             if (index < interceptorList.size()) {
                 return interceptorList.get(index++).target.interceptTool(req, this);
             } else {
-                return lastHandler.handleAsync(req.getArgs()).get();
+                return lastHandler.call(req.getArgs());
             }
         }
     }
