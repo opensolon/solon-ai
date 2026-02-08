@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.flow.Node;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -31,16 +32,22 @@ import org.noear.solon.lang.Preview;
 public class ActionChunk extends AbsAgentChunk {
     private final transient Node node;
     private final transient ReActTrace trace;
+    private final transient String toolName;
 
-    public ActionChunk(Node node, ReActTrace trace, ChatMessage message) {
+    public ActionChunk(Node node, ReActTrace trace,String toolName, ChatMessage message) {
         super(trace.getAgentName(), trace.getSession(), message);
 
         this.node = node;
         this.trace = trace;
+        this.toolName = toolName;
     }
 
     public Node getNode() {
         return node;
+    }
+
+    public @Nullable String getToolName() {
+        return toolName;
     }
 
     public ReActTrace getTrace() {

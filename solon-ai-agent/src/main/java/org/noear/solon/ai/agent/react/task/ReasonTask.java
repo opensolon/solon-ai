@@ -102,7 +102,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // 1.3 临界预警：刚好到 80% 或最后 1 步时，且开启了反馈模式
         int thresholdStep = Math.max(maxSteps - 1, (int)(maxSteps * 0.8));
-        if (currentStep >= thresholdStep && currentStep > 8 && trace.getOptions().isFeedbackMode()) {
+        if (currentStep >= thresholdStep && currentStep > 8) {
             // 检查用户是否已经通过 HITL 决策过“继续”
             HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
 

@@ -18,10 +18,12 @@ package org.noear.solon.ai.skills.cli;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActChunk;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.agent.react.task.ActionChunk;
+import org.noear.solon.ai.agent.react.task.PlanChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
@@ -180,10 +182,14 @@ public class CodeCLI implements Handler, Runnable {
                         .stream()
                         .map(chunk -> {
                             if (chunk.hasContent()) {
-                                if (chunk instanceof ReasonChunk) {
+                                if (chunk instanceof PlanChunk) {
+                                    return ONode.serialize(new Chunk("plan", chunk.getContent()));
+                                } else if (chunk instanceof ReasonChunk) {
                                     return ONode.serialize(new Chunk("reason", chunk.getContent()));
                                 } else if (chunk instanceof ActionChunk) {
                                     return ONode.serialize(new Chunk("action", chunk.getContent()));
+                                } else if (chunk instanceof ReActChunk) {
+                                    return ONode.serialize(new Chunk("agent", chunk.getContent()));
                                 }
                             }
 
@@ -239,7 +245,7 @@ public class CodeCLI implements Handler, Runnable {
      * 执行 Agent 任务（优化版：修复状态泄露与异步同步问题）
      */
     private void performAgentTask(String input, Scanner scanner) throws Exception {
-        final String YELLOW = "\033[33m", GREEN = "\033[32m", RED = "\033[31m", RESET = "\033[0m";
+        final String GRAY = "\033[90m", YELLOW = "\033[33m", GREEN = "\033[32m", RED = "\033[31m", RESET = "\033[0m";
 
         String currentInput = input;
         // 标记：是否刚提交完审核结果
@@ -256,13 +262,20 @@ public class CodeCLI implements Handler, Runnable {
                     .subscribeOn(Schedulers.boundedElastic())
                     .doOnNext(chunk -> {
                         // 渲染逻辑：不依赖 latch 状态，确保最后一段话能打印完
-                        if (chunk instanceof ReasonChunk) {
+                        if (chunk instanceof PlanChunk) {
                             if (chunk.hasContent()) {
-                                System.out.print(clearThink(chunk.getContent()));
+                                System.out.print(GRAY + clearThink(chunk.getContent()) + RESET);
+                                System.out.flush();
+                            }
+                        } else  if (chunk instanceof ReasonChunk) {
+                            if (chunk.hasContent()) {
+                                System.out.print(GRAY + clearThink(chunk.getContent()) + RESET);
                                 System.out.flush();
                             }
                         } else if (chunk instanceof ActionChunk) {
                             System.out.println("\n" + YELLOW + chunk.getContent() + RESET);
+                        } else if(chunk instanceof ReActChunk ) {
+                            System.out.println("\n-----------------\n" + chunk.getContent());
                         }
                     })
                     .doFinally(signal -> latch.countDown())
