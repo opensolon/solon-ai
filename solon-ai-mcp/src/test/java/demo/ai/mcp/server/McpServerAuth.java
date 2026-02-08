@@ -23,7 +23,7 @@ public class McpServerAuth implements Filter {
     @Override
     public void doFilter(Context ctx, FilterChain chain) throws Throwable {
         if (ctx.pathNew().endsWith("/auth/sse")) {
-            if (ctx.param("user").equals("1") == false) {
+            if ("1".equals(ctx.param("user")) == false) {
                 ctx.status(401);
                 return;
             }
