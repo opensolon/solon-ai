@@ -351,9 +351,15 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
     /**
      * 心跳处理
      */
+    private long currentDelay = -1; // 动态延迟时间
     private void heartbeatHandleDo() {
         if (heartbeatExecutor == null) {
             return;
+        }
+
+        // 首次运行时初始化延迟
+        if (currentDelay == -1) {
+            currentDelay = clientProps.getHeartbeatInterval().toMillis();
         }
 
         //单次延后执行
@@ -364,23 +370,30 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
 
 
-            if (isClosed.get() == false) {
-                //如果未关闭，尝试心跳
-                if (isStarted.get()) {
-                    //如果已开始，则心跳发送
-                    RunUtil.runAndTry(() -> {
-                        try {
-                            getClient().ping().block();
-                        } catch (Throwable ex) {
-                            //如果失败，重置（下次会尝试重连）
-                            this.reset();
-                        }
-                    });
-                }
+            if (isClosed.get()) return;
 
-                heartbeatHandleDo();
+            boolean success = false;
+            try {
+                if (isStarted.get()) {
+                    getClient().ping().block();
+                    success = true;
+                }
+            } catch (Throwable ex) {
+                log.warn("MCP Heartbeat failed, resetting client...");
+                this.reset();
             }
-        }, this.clientProps.getHeartbeatInterval().toMillis(), TimeUnit.MILLISECONDS);
+
+            if (success) {
+                // 成功：重置延迟时间为初始值
+                currentDelay = clientProps.getHeartbeatInterval().toMillis();
+            } else {
+                // 失败：延迟翻倍，最大不超过 10 分钟
+                currentDelay = Math.min(currentDelay * 2, TimeUnit.MINUTES.toMillis(10));
+            }
+
+            // 递归下一次任务
+            heartbeatHandleDo();
+        }, currentDelay, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -416,6 +429,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             if (isClosed.get()) {
                 //如果已关闭
                 isClosed.set(false);
+                // 重置动态延迟，让心跳立刻以初始频率尝试
+                currentDelay = -1;
                 getClient();
                 heartbeatHandle();
             }
