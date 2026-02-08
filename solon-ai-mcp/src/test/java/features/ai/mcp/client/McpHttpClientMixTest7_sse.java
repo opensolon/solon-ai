@@ -39,7 +39,7 @@ public class McpHttpClientMixTest7_sse {
     @Test
     public void tool1_model() throws Exception {
         //没有参数的工具
-        String response = mcpClient.callToolAsText("spotIntro", Collections.emptyMap()).getContent();
+        String response = mcpClient.callTool("spotIntro", Collections.emptyMap()).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -66,7 +66,7 @@ public class McpHttpClientMixTest7_sse {
         args.put("city", "杭州");
         args.put("userName", "xxx");
 
-        String response = mcpClient.callToolAsText("getCity", args).getContent();
+        String response = mcpClient.callTool("getCity", args).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -78,7 +78,7 @@ public class McpHttpClientMixTest7_sse {
         Map<String, Object> args = Utils.asMap("activityInfo",
                 Utils.asMap("activityId", "12"));
 
-        String response = mcpClient.callToolAsText("getDetails", args).getContent();
+        String response = mcpClient.callTool("getDetails", args).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -90,7 +90,7 @@ public class McpHttpClientMixTest7_sse {
         Map<String, Object> args = Utils.asMap("activityInfo",
                 Utils.asMap("activityId", "12"));
 
-        String response = mcpClient.callToolAsText("getDetailsResult", args).getContent();
+        String response = mcpClient.callTool("getDetailsResult", args).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -100,7 +100,7 @@ public class McpHttpClientMixTest7_sse {
 
     @Test
     public void tool4_getHeader() throws Exception {
-        String response = mcpClient.callToolAsText("getHeader", Utils.asMap()).getContent();
+        String response = mcpClient.callTool("getHeader", Utils.asMap()).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -109,7 +109,7 @@ public class McpHttpClientMixTest7_sse {
 
     @Test
     public void tool5_getParam() throws Exception {
-        String response = mcpClient.callToolAsText("getParam", Utils.asMap()).getContent();
+        String response = mcpClient.callTool("getParam", Utils.asMap()).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -118,7 +118,7 @@ public class McpHttpClientMixTest7_sse {
 
     @Test
     public void prompt1() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("splitMessage", Collections.emptyMap());
+        List<ChatMessage> prompt = mcpClient.getPrompt("splitMessage", Collections.emptyMap());
 
         assert Utils.isNotEmpty(prompt);
         log.warn("{}", prompt);

@@ -30,7 +30,7 @@ public class McpHttpClientTest8Body {
 
     @Test
     public void tool1() throws Exception {
-        String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+        String response = mcpClient.callTool("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         log.warn("{}", response);
         assert "晴，15度".equals(response);

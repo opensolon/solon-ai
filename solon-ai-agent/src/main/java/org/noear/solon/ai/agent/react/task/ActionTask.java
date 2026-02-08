@@ -315,7 +315,7 @@ public class ActionTask implements NamedTaskComponent {
                 trace.incrementToolCallCount();
 
 
-                return result.getText();
+                return result.getContent();
             } catch (IllegalArgumentException e) {
                 // 引导模型自愈：返回 Schema 错误提示
                 return "Invalid arguments for [" + name + "]. Expected Schema: " + tool.inputSchema() + ". Error: " + e.getMessage();

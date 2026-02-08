@@ -72,7 +72,6 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
     protected void buildChatMessageNodeDo(ONode oNode, ToolMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
-        oNode.set("content", msg.getContent());
 
         if (Utils.isNotEmpty(msg.getName())) {
             oNode.set("name", msg.getName());
@@ -81,11 +80,53 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (Utils.isNotEmpty(msg.getToolCallId())) {
             oNode.set("tool_call_id", msg.getToolCallId());
         }
+
+        if (msg.hasMedias() == false) {
+            oNode.set("content", msg.getContent());
+        } else {
+            oNode.getOrNew("content").then(n1 -> {
+                if (Utils.isNotEmpty(msg.getContent())) {
+                    n1.addNew().set("type", "text").set("text", msg.getContent());
+                }
+
+                for (AiMedia m1 : msg.getMedias()) {
+                    ONode m1Node = null;
+                    if (m1 instanceof Image) {
+                        m1Node = n1.addNew();
+
+                        m1Node.set("type", "image_url");
+                        m1Node.getOrNew("image_url").set("url", m1.toDataString(true));
+
+                    } else if (m1 instanceof Audio) {
+                        m1Node = n1.addNew();
+
+                        m1Node.set("type", "audio_url");
+                        m1Node.getOrNew("audio_url").set("url", m1.toDataString(true));
+                    } else if (m1 instanceof Video) {
+                        m1Node = n1.addNew();
+
+                        m1Node.set("type", "video_url");
+                        m1Node.getOrNew("video_url").set("url", m1.toDataString(true));
+                    }
+
+                    if (m1Node != null) {
+                        if (Utils.isNotEmpty(m1.metas())) {
+                            for (Map.Entry<String, Object> entry : m1.metas().entrySet()) {
+                                if (m1Node.hasKey(entry.getKey()) == false) {
+                                    m1Node.set(entry.getKey(), ONode.ofBean(entry.getValue()));
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 
     protected void buildChatMessageNodeDo(ONode oNode, UserMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
-        if (Utils.isEmpty(msg.getMedias())) {
+
+        if (msg.hasMedias() == false) {
             oNode.set("content", msg.getContent());
         } else {
             oNode.getOrNew("content").then(n1 -> {

@@ -38,7 +38,7 @@ public class McpHttpClientMixTest6_sse {
 
     @Test
     public void tool1() throws Exception {
-        String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+        String response = mcpClient.callTool("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -73,7 +73,7 @@ public class McpHttpClientMixTest6_sse {
 
     @Test
     public void resource() throws Exception {
-        String resource = mcpClient.readResourceAsText("config://app-version").getContent();
+        String resource = mcpClient.readResource("config://app-version").getContent();
 
         assert Utils.isNotEmpty(resource);
         log.warn("{}", resource);
@@ -89,7 +89,7 @@ public class McpHttpClientMixTest6_sse {
 
     @Test
     public void resource_tmpl() throws Exception {
-        String resource = mcpClient.readResourceAsText("db://users/12/email").getContent();
+        String resource = mcpClient.readResource("db://users/12/email").getContent();
 
         assert Utils.isNotEmpty(resource);
         log.warn("{}", resource);
@@ -114,7 +114,7 @@ public class McpHttpClientMixTest6_sse {
 
     @Test
     public void prompt() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("askQuestion", Collections.singletonMap("topic", "教育"));
+        List<ChatMessage> prompt = mcpClient.getPrompt("askQuestion", Collections.singletonMap("topic", "教育"));
 
         assert Utils.isNotEmpty(prompt);
         log.warn("{}", prompt);
@@ -123,7 +123,7 @@ public class McpHttpClientMixTest6_sse {
 
     @Test
     public void prompt2() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("debugSession", Collections.singletonMap("error", "太阳没出来"));
+        List<ChatMessage> prompt = mcpClient.getPrompt("debugSession", Collections.singletonMap("error", "太阳没出来"));
 
         assert Utils.isNotEmpty(prompt);
         log.warn("{}", prompt);

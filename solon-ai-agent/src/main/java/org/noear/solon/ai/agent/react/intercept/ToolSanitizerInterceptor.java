@@ -68,13 +68,13 @@ public class ToolSanitizerInterceptor implements ReActInterceptor {
         }
 
         // 3. 物理长度保护
-        if (result.getText().length() > maxObservationLength) {
+        if (result.getContent().length() > maxObservationLength) {
             if (log.isDebugEnabled()) {
                 log.debug("Tool [{}] output truncated: {} -> {} chars",
-                        chain.getTool().name(), result.getText().length(), maxObservationLength);
+                        chain.getTool().name(), result.getContent().length(), maxObservationLength);
             }
             // 拼接截断说明，告知模型数据不完整，引导其调整请求（如分页）
-            result = new ToolResult(result.getText().substring(0, maxObservationLength) + "... [Content Truncated due to length]");
+            result = new ToolResult(result.getContent().substring(0, maxObservationLength) + "... [Content Truncated due to length]");
         }
 
         return result;

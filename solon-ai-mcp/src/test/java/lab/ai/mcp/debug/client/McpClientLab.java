@@ -23,7 +23,7 @@ public class McpClientLab {
 
         while (true) {
             try {
-                String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+                String response = mcpClient.callTool("getWeather", Collections.singletonMap("location", "杭州")).getContent();
                 log.warn("{}", response);
                 Thread.sleep(6000);
                 //break;

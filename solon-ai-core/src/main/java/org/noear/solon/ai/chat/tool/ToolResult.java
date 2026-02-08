@@ -12,6 +12,7 @@ import java.util.Map;
 public class ToolResult implements Serializable {
     private final List<AiMedia> medias = new ArrayList<>();
     private String text;
+    private int testCount;
     private boolean isError;
     private Map<String, Object> metadata;
 
@@ -23,7 +24,7 @@ public class ToolResult implements Serializable {
         this.addText(text);
     }
 
-    public static boolean isEmpty(ToolResult result){
+    public static boolean isEmpty(ToolResult result) {
         return result == null || result.getMedias().isEmpty();
     }
 
@@ -47,7 +48,7 @@ public class ToolResult implements Serializable {
      * 添加媒体块（图像、音频、视频）
      */
     public ToolResult addText(String text) {
-        this.medias.add(Text.of(false, text));
+       addMedia(Text.of(false, text));
         return this;
     }
 
@@ -57,18 +58,19 @@ public class ToolResult implements Serializable {
     public ToolResult addMedia(AiMedia media) {
         if (media instanceof Text) {
             text = ((Text) media).getContent();
+            testCount++;
         }
 
         this.medias.add(media);
         return this;
     }
 
-    public String getText() {
+    public String getContent() {
         if (text != null) {
             return text;
         }
 
-        return "";
+        return null;
     }
 
     /**
@@ -76,6 +78,10 @@ public class ToolResult implements Serializable {
      */
     public List<AiMedia> getMedias() {
         return medias;
+    }
+
+    public boolean hasMedias(){
+        return medias.size() > testCount;
     }
 
     /**

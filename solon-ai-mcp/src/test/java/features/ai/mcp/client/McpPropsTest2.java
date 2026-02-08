@@ -25,7 +25,7 @@ public class McpPropsTest2 {
 
         try {
             String str = tmp.getProvider("server1")
-                    .callToolAsText("getWeather", Utils.asMap("location", "杭州"))
+                    .callTool("getWeather", Utils.asMap("location", "杭州"))
                     .getContent();
 
             System.out.println(str);
@@ -49,7 +49,7 @@ public class McpPropsTest2 {
 
         try {
             String str = tmp.getProvider("server1")
-                    .callToolAsText("getWeather", Utils.asMap("location", "杭州"))
+                    .callTool("getWeather", Utils.asMap("location", "杭州"))
                     .getContent();
 
             System.out.println(str);

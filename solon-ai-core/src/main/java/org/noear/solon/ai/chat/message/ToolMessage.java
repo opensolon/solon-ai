@@ -23,7 +23,6 @@ import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 聊天工具消息
@@ -60,7 +59,7 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
 
     @Override
     public String getContent() {
-        return toolResult.getText();
+        return toolResult.getContent();
     }
 
     @Nullable
@@ -69,7 +68,7 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
     }
 
     public boolean hasMedias(){
-        return Utils.isNotEmpty(toolResult.getMedias());
+        return toolResult.hasMedias();
     }
 
     /**
@@ -100,8 +99,8 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
 
         buf.append("role=").append(getRole().name().toLowerCase());
 
-        if (Utils.isNotEmpty(toolResult.getText())) {
-            buf.append(", content='").append(toolResult.getText()).append('\'');
+        if (Utils.isNotEmpty(toolResult.getContent())) {
+            buf.append(", content='").append(toolResult.getContent()).append('\'');
         }
 
         if (Utils.isNotEmpty(metadata)) {

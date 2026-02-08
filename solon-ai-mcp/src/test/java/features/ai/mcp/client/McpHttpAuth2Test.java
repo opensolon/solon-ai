@@ -23,7 +23,7 @@ public class McpHttpAuth2Test {
                 .cacheSeconds(30)
                 .build();
 
-        System.out.println(mcpClient.callToolAsText("getWeather", Utils.asMap("location", "杭州")));
+        System.out.println(mcpClient.callTool("getWeather", Utils.asMap("location", "杭州")));
         mcpClient.close();
     }
 
@@ -36,7 +36,7 @@ public class McpHttpAuth2Test {
                 .cacheSeconds(30)
                 .build();
 
-        String rst = mcpClient.callToolAsText("getWeather", Utils.asMap("location", "杭州"))
+        String rst = mcpClient.callTool("getWeather", Utils.asMap("location", "杭州"))
                 .getContent();
 
         assert rst.startsWith("Error:");
@@ -50,7 +50,7 @@ public class McpHttpAuth2Test {
                 .cacheSeconds(30)
                 .build();
 
-        String rst = mcpClient.callToolAsText("getWeather", Utils.asMap("location", "杭州"))
+        String rst = mcpClient.callTool("getWeather", Utils.asMap("location", "杭州"))
                 .getContent();
 
         assert rst.startsWith("Error:");
@@ -66,7 +66,7 @@ public class McpHttpAuth2Test {
 
         Throwable error = null;
         try {
-            String rst = mcpClient.callToolAsText("getWeather", Utils.asMap("location", "杭州"))
+            String rst = mcpClient.callTool("getWeather", Utils.asMap("location", "杭州"))
                     .getContent();
         } catch (Throwable e) {
             error = e;

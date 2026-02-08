@@ -23,7 +23,7 @@ public class ToolRetryInterceptorTest {
         when(chain.getTool()).thenReturn(tool);
         when(chain.doIntercept(req)).thenReturn(new ToolResult("Success"));
 
-        String result = interceptor.interceptTool(req, chain).getText();
+        String result = interceptor.interceptTool(req, chain).getContent();
         assertEquals("Success", result);
         verify(chain, times(1)).doIntercept(req);
     }
@@ -41,7 +41,7 @@ public class ToolRetryInterceptorTest {
         // 模拟参数异常
         when(chain.doIntercept(req)).thenThrow(new IllegalArgumentException("Missing 'a'"));
 
-        String result = interceptor.interceptTool(req, chain).getText();
+        String result = interceptor.interceptTool(req, chain).getContent();
 
         // 验证：包含提示信息，且只调用了一次（没有重试）
         assertTrue(result.contains("Invalid arguments"));
@@ -65,7 +65,7 @@ public class ToolRetryInterceptorTest {
                 .thenThrow(new RuntimeException("Network timeout"))
                 .thenReturn(new ToolResult("Sunny"));
 
-        String result = interceptor.interceptTool(req, chain).getText();
+        String result = interceptor.interceptTool(req, chain).getContent();
 
         assertEquals("Sunny", result);
         verify(chain, times(2)).doIntercept(req);
@@ -84,7 +84,7 @@ public class ToolRetryInterceptorTest {
         when(chain.getTool()).thenReturn(tool);
         when(chain.doIntercept(req)).thenThrow(new RuntimeException("DB Down"));
 
-        String result = interceptor.interceptTool(req, chain).getText();
+        String result = interceptor.interceptTool(req, chain).getContent();
 
         // 验证：包含重试耗尽后的错误提示
         assertTrue(result.contains("Execution error in tool [database]"));

@@ -29,7 +29,7 @@ public class McpHttpClientTest {
                 .getProp("solon.ai.mcp.client.demo2")
                 .toBean(McpClientProvider.class);
 
-        String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+        String response = mcpClient.callTool("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
@@ -37,7 +37,7 @@ public class McpHttpClientTest {
         mcpClient.close();
         mcpClient.reopen();
 
-        response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+        response = mcpClient.callTool("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);
@@ -52,7 +52,7 @@ public class McpHttpClientTest {
                 .url("http://localhost:8081/demo2/sse")
                 .build();
 
-        String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+        String response = mcpClient.callTool("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert Utils.isNotEmpty(response);
         log.warn("{}", response);

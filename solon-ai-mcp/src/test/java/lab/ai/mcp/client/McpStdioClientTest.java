@@ -4,7 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Collections;
@@ -26,7 +25,7 @@ public class McpStdioClientTest {
 
         //args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "dir")
 
-        String response = mcpClient.callToolAsText("get_weather", Collections.singletonMap("location", "杭州")).getContent();
+        String response = mcpClient.callTool("get_weather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert response != null;
         System.out.println(response);

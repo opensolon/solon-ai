@@ -21,12 +21,12 @@ public class ToolSanitizerInterceptorTest {
 
         // 模拟返回 null
         when(chain.doIntercept(req)).thenReturn(null);
-        String result = interceptor.interceptTool(req, chain).getText();
+        String result = interceptor.interceptTool(req, chain).getContent();
         assertEquals("[No output from tool]", result);
 
         // 模拟返回空字符串
         when(chain.doIntercept(req)).thenReturn(new ToolResult(""));
-        result = interceptor.interceptTool(req, chain).getText();
+        result = interceptor.interceptTool(req, chain).getContent();
         assertEquals("[No output from tool]", result);
     }
 
@@ -34,13 +34,13 @@ public class ToolSanitizerInterceptorTest {
     public void testCustomSanitizer() throws Throwable {
         // 验证自定义脱敏逻辑（如：隐藏 API Key）
         ToolSanitizerInterceptor interceptor = new ToolSanitizerInterceptor(2000);
-        interceptor.setCustomSanitizer(s -> new ToolResult(s.getText().replace("sk-123456", "sk-******")));
+        interceptor.setCustomSanitizer(s -> new ToolResult(s.getContent().replace("sk-123456", "sk-******")));
 
         ToolChain chain = mock(ToolChain.class);
         ToolRequest req = mock(ToolRequest.class);
         when(chain.doIntercept(req)).thenReturn(new ToolResult("The key is sk-123456."));
 
-        String result = interceptor.interceptTool(req, chain).getText();
+        String result = interceptor.interceptTool(req, chain).getContent();
         assertEquals("The key is sk-******.", result);
     }
 
@@ -59,7 +59,7 @@ public class ToolSanitizerInterceptorTest {
         // 返回一个超过 10 字符的字符串
         when(chain.doIntercept(req)).thenReturn(new ToolResult("1234567890ABCDE"));
 
-        String result = interceptor.interceptTool(req, chain).getText();
+        String result = interceptor.interceptTool(req, chain).getContent();
 
         // 验证：长度应被截断到 maxLength，并附带说明
         assertTrue(result.startsWith("1234567890"));
@@ -74,7 +74,7 @@ public class ToolSanitizerInterceptorTest {
         // 设最大长度为 10
         ToolSanitizerInterceptor interceptor = new ToolSanitizerInterceptor(10);
         // 让脱敏逻辑把长度 10 变成 11
-        interceptor.setCustomSanitizer(s -> new ToolResult(s.getText() + "!"));
+        interceptor.setCustomSanitizer(s -> new ToolResult(s.getContent() + "!"));
 
         ToolChain chain = mock(ToolChain.class);
         ToolRequest req = mock(ToolRequest.class);
@@ -85,7 +85,7 @@ public class ToolSanitizerInterceptorTest {
         // 原始结果刚好等于最大长度
         when(chain.doIntercept(req)).thenReturn(new ToolResult("0123456789"));
 
-        String result = interceptor.interceptTool(req, chain).getText();
+        String result = interceptor.interceptTool(req, chain).getContent();
 
         // 调试打印
         System.out.println("Final Result: " + result);

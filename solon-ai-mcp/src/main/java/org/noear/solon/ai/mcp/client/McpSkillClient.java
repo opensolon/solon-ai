@@ -54,7 +54,7 @@ public class McpSkillClient implements Skill {
         this.clientProvider = clientProvider;
 
         // 从远程加载静态元信息（通过预定义的 Resource URI）
-        String metadataJson = clientProvider.readResourceAsText("skill://metadataMcp")
+        String metadataJson = clientProvider.readResource("skill://metadataMcp")
                 .getContent();
 
         metadata = ONode.deserialize(metadataJson, SkillMetadata.class);
@@ -82,7 +82,7 @@ public class McpSkillClient implements Skill {
     public boolean isSupported(Prompt prompt) {
         String promptJson = ONode.serialize(prompt, Feature.Write_ClassName);
 
-        String result = clientProvider.callToolAsText("isSupportedMcp",
+        String result = clientProvider.callTool("isSupportedMcp",
                         Utils.asMap("promptJson", promptJson))
                 .getContent();
 
@@ -93,7 +93,7 @@ public class McpSkillClient implements Skill {
     public void onAttach(Prompt prompt) {
         String promptJson = ONode.serialize(prompt, Feature.Write_ClassName);
 
-        clientProvider.callToolAsText("onAttachMcp",
+        clientProvider.callTool("onAttachMcp",
                         Utils.asMap("promptJson", promptJson));
     }
 
@@ -104,7 +104,7 @@ public class McpSkillClient implements Skill {
     public String getInstruction(Prompt prompt) {
         String promptJson = ONode.serialize(prompt, Feature.Write_ClassName);
 
-        return clientProvider.callToolAsText("getInstructionMcp",
+        return clientProvider.callTool("getInstructionMcp",
                         Utils.asMap("promptJson", promptJson))
                 .getContent();
     }
@@ -125,7 +125,7 @@ public class McpSkillClient implements Skill {
     public Collection<FunctionTool> getTools(Prompt prompt) {
         String promptJson = ONode.serialize(prompt, Feature.Write_ClassName);
 
-        String toolsNameJson = clientProvider.callToolAsText("getToolsMcp",
+        String toolsNameJson = clientProvider.callTool("getToolsMcp",
                         Utils.asMap("promptJson", promptJson))
                 .getContent();
 

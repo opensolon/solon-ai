@@ -7,8 +7,6 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
-import org.noear.solon.net.http.impl.HttpSslSupplierAny;
-import org.noear.solon.net.http.impl.HttpSslSupplierDefault;
 import reactor.core.publisher.Mono;
 
 /**
@@ -29,7 +27,7 @@ public class SamplingDemo {
                 .build();
 
 
-        clientProvider.callToolAsText("demo", Utils.asMap("a", 1))
+        clientProvider.callTool("demo", Utils.asMap("a", 1))
                 .getContent();
     }
 

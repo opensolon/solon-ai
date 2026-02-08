@@ -23,7 +23,7 @@ public class McpToolMixTest {
                 .url("http://localhost:8081/mcp/WeatherTools/sse")
                 .build();
 
-        Text mediaText = mcpClient.readResourceAsText("weather://cities");
+        Text mediaText = mcpClient.readResource("weather://cities");
 
         System.out.println(mediaText);
 

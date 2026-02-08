@@ -67,7 +67,7 @@ public class OutputSchemaMcpToolTest {
 
     @Test
     public void getUserInfo_call() throws Exception {
-        String text = mcpClient.callToolAsText("getUserInfo", Utils.asMap("userId", 1L)).getContent();
+        String text = mcpClient.callTool("getUserInfo", Utils.asMap("userId", 1L)).getContent();
         log.warn(text);
 
         assert text.contains("2025-07-06");
