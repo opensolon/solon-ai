@@ -5,6 +5,7 @@ import org.noear.solon.ai.agent.react.intercept.ToolRetryInterceptor;
 import org.noear.solon.ai.chat.interceptor.ToolChain;
 import org.noear.solon.ai.chat.interceptor.ToolRequest;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolResult;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -20,9 +21,9 @@ public class ToolRetryInterceptorTest {
         FunctionTool tool = mock(FunctionTool.class);
 
         when(chain.getTool()).thenReturn(tool);
-        when(chain.doIntercept(req)).thenReturn("Success");
+        when(chain.doIntercept(req)).thenReturn(new ToolResult("Success"));
 
-        String result = interceptor.interceptTool(req, chain);
+        String result = interceptor.interceptTool(req, chain).getText();
         assertEquals("Success", result);
         verify(chain, times(1)).doIntercept(req);
     }
@@ -40,7 +41,7 @@ public class ToolRetryInterceptorTest {
         // 模拟参数异常
         when(chain.doIntercept(req)).thenThrow(new IllegalArgumentException("Missing 'a'"));
 
-        String result = interceptor.interceptTool(req, chain);
+        String result = interceptor.interceptTool(req, chain).getText();
 
         // 验证：包含提示信息，且只调用了一次（没有重试）
         assertTrue(result.contains("Invalid arguments"));
@@ -62,9 +63,9 @@ public class ToolRetryInterceptorTest {
         // 第一次抛异常，第二次返回成功
         when(chain.doIntercept(req))
                 .thenThrow(new RuntimeException("Network timeout"))
-                .thenReturn("Sunny");
+                .thenReturn(new ToolResult("Sunny"));
 
-        String result = interceptor.interceptTool(req, chain);
+        String result = interceptor.interceptTool(req, chain).getText();
 
         assertEquals("Sunny", result);
         verify(chain, times(2)).doIntercept(req);
@@ -83,7 +84,7 @@ public class ToolRetryInterceptorTest {
         when(chain.getTool()).thenReturn(tool);
         when(chain.doIntercept(req)).thenThrow(new RuntimeException("DB Down"));
 
-        String result = interceptor.interceptTool(req, chain);
+        String result = interceptor.interceptTool(req, chain).getText();
 
         // 验证：包含重试耗尽后的错误提示
         assertTrue(result.contains("Execution error in tool [database]"));

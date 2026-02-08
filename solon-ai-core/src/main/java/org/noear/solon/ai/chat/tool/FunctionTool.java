@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.chat.tool;
 
+import org.noear.solon.ai.AiMedia;
 import org.noear.solon.core.util.Assert;
 
 import java.lang.reflect.Type;
@@ -157,9 +158,17 @@ public interface FunctionTool extends Tool {
    /**
     * 调用
     */
-    default String call(Map<String, Object> args) throws Throwable{
+    default ToolResult call(Map<String, Object> args) throws Throwable{
        Object rst = handle(args);
 
-       return ToolSchemaUtil.resultConvert(this, rst);
+       if(rst instanceof  ToolResult){
+           return (ToolResult)rst;
+       }
+
+       if(rst instanceof AiMedia){
+           return new ToolResult().addMedia((AiMedia)rst);
+       }
+
+       return new ToolResult(ToolSchemaUtil.resultConvert(this, rst));
     }
 }

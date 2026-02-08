@@ -21,6 +21,7 @@ import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.Assert;
 
 import java.io.*;
@@ -134,14 +135,14 @@ public interface ChatMessage extends Serializable {
      * 构建工具消息
      */
     static ToolMessage ofTool(String content, String name, String toolCallId) {
-        return ofTool(content, name, toolCallId, false);
+        return ofTool(new ToolResult(content), name, toolCallId, false);
     }
 
     /**
      * 构建工具消息
      */
-    static ToolMessage ofTool(String content, String name, String toolCallId, boolean returnDirect) {
-        return new ToolMessage(content, name, toolCallId, returnDirect);
+    static ToolMessage ofTool(ToolResult toolResult, String name, String toolCallId, boolean returnDirect) {
+        return new ToolMessage(toolResult, name, toolCallId, returnDirect);
     }
 
     /// //////////////////

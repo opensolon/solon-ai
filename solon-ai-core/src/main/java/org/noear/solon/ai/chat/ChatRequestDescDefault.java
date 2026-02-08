@@ -24,12 +24,9 @@ import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.skill.SkillUtil;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolCall;
-import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.tool.ToolCallException;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.core.util.RankEntity;
@@ -473,8 +470,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             if (tool != null) {
                 try {
-                    String content = doToolCall(resp, tool, call.arguments());
-                    ToolMessage toolMessage = ChatMessage.ofTool(content, call.name(), call.id(), tool.returnDirect());
+                    ToolResult toolResult = doToolCall(resp, tool, call.arguments());
+                    ToolMessage toolMessage = ChatMessage.ofTool(toolResult, call.name(), call.id(), tool.returnDirect());
                     toolMessage.addMetadata(tool.meta());
                     toolMessage.addMetadata("__tool", tool.name());
 
@@ -500,7 +497,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     /**
      * 执行工具调用（支持拦截器）
      */
-    private String doToolCall(ChatResponseDefault resp, FunctionTool func, Map<String, Object> args) throws Throwable {
+    private ToolResult doToolCall(ChatResponseDefault resp, FunctionTool func, Map<String, Object> args) throws Throwable {
         //收集拦截器
         List<RankEntity<ChatInterceptor>> interceptorList = options.interceptors();
 

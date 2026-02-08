@@ -20,7 +20,11 @@ public class ToolResult implements Serializable {
     }
 
     public ToolResult(String text) {
-        this.addMedia(Text.of(false, text));
+        this.addText(text);
+    }
+
+    public static boolean isEmpty(ToolResult result){
+        return result == null || result.getMedias().isEmpty();
     }
 
     /**

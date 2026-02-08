@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.interceptor;
 
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.RankEntity;
 
 import java.util.List;
@@ -44,7 +45,7 @@ public class ToolChain<T extends ToolInterceptor> {
         return lastHandler;
     }
 
-    public String doIntercept(ToolRequest req) throws Throwable {
+    public ToolResult doIntercept(ToolRequest req) throws Throwable {
         if (lastHandler == null) {
             return interceptorList.get(index++).target.interceptTool(req, this);
         } else {

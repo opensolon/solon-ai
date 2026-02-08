@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.chat.interceptor;
 
+import org.noear.solon.ai.chat.tool.ToolResult;
+
 /**
  * 工具拦截器
  *
@@ -28,7 +30,7 @@ public interface ToolInterceptor {
      * @param req   请求
      * @param chain 拦截链
      */
-    default String interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
+    default ToolResult interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
         return chain.doIntercept(req);
     }
 }

@@ -50,8 +50,6 @@ public class ToolCallResultConverterDefault implements ToolCallResultConverter {
             return result.toString();
         } else if (result instanceof Date) {
             return result.toString();
-        } else if (result instanceof AiMedia) {
-            return serializeToJson(((AiMedia) result).toData(true));
         } else {
             return serializeToJson(result);
         }

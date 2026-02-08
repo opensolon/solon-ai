@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.interceptor.*;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 
@@ -27,7 +28,7 @@ public class ChatInterceptorTest implements ChatInterceptor {
     }
 
     @Override
-    public String interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
+    public ToolResult interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
         log.warn("ChatInterceptor-interceptTool: " + req.getRequest().getConfig().getModel());
 
         return chain.doIntercept(req);

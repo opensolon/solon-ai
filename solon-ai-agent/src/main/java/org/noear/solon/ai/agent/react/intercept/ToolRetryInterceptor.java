@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.intercept;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.chat.interceptor.ToolChain;
 import org.noear.solon.ai.chat.interceptor.ToolRequest;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +47,7 @@ public class ToolRetryInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public String interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
+    public ToolResult interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
         String toolName = chain.getTool().name();
 
         for (int i = 0; i < maxRetries; i++) {
@@ -59,13 +60,13 @@ public class ToolRetryInterceptor implements ReActInterceptor {
                 if (LOG.isWarnEnabled()) {
                     LOG.warn("Tool [{}] invalid arguments: {}", toolName, e.getMessage());
                 }
-                return "Invalid arguments for tool [" + toolName + "]: " + e.getMessage() + ". Please fix the arguments and try again.";
+                return new ToolResult("Invalid arguments for tool [" + toolName + "]: " + e.getMessage() + ". Please fix the arguments and try again.");
 
             } catch (Throwable e) {
                 // 2. 物理异常：执行退避重试
                 if (i == maxRetries - 1) {
                     LOG.error("Tool [{}] failed after {} attempts", toolName, maxRetries, e);
-                    return "Execution error in tool [" + toolName + "]: " + e.getMessage();
+                    return new ToolResult("Execution error in tool [" + toolName + "]: " + e.getMessage());
                 }
 
                 if (LOG.isDebugEnabled()) {
@@ -82,6 +83,6 @@ public class ToolRetryInterceptor implements ReActInterceptor {
             }
         }
 
-        return "Tool [" + toolName + "] failed with unknown error.";
+        return new ToolResult("Tool [" + toolName + "] failed with unknown error.");
     }
 }

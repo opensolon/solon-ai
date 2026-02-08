@@ -76,21 +76,6 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
         return Utils.isNotEmpty(medias);
     }
 
-    /**
-     * 获取图像
-     */
-    @Nullable
-    public <T extends AiMedia> T getMedia(Class<T> type) {
-        if (Utils.isNotEmpty(medias)) {
-            AiMedia media = medias.get(0);
-            if (type.isInstance(media)) {
-                return (T) media;
-            }
-        }
-
-        return null;
-    }
-
     @Override
     public String toString() {
         StringBuilder buf = new StringBuilder();

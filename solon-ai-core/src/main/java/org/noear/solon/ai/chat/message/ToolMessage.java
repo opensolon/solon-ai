@@ -16,9 +16,13 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
+import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -30,7 +34,7 @@ import java.util.Map;
 @Preview("3.1")
 public class ToolMessage extends ChatMessageBase<ToolMessage> {
     private final ChatRole role = ChatRole.TOOL;
-    private String content;
+    private ToolResult toolResult;
     private String name;
     private String toolCallId;
     private transient boolean returnDirect;
@@ -39,8 +43,8 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
         //用于序列化
     }
 
-    public ToolMessage(String content, String name, String toolCallId, boolean returnDirect) {
-        this.content = content;
+    public ToolMessage(ToolResult toolResult, String name, String toolCallId, boolean returnDirect) {
+        this.toolResult = toolResult;
         this.name = name;
         this.toolCallId = toolCallId;
         this.returnDirect = returnDirect;
@@ -56,7 +60,16 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
 
     @Override
     public String getContent() {
-        return content;
+        return toolResult.getText();
+    }
+
+    @Nullable
+    public List<AiMedia> getMedias() {
+        return toolResult.getMedias();
+    }
+
+    public boolean hasMedias(){
+        return Utils.isNotEmpty(toolResult.getMedias());
     }
 
     /**
@@ -87,12 +100,16 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
 
         buf.append("role=").append(getRole().name().toLowerCase());
 
-        if (content != null) {
-            buf.append(", content='").append(content).append('\'');
+        if (Utils.isNotEmpty(toolResult.getText())) {
+            buf.append(", content='").append(toolResult.getText()).append('\'');
         }
 
         if (Utils.isNotEmpty(metadata)) {
             buf.append(", metadata=").append(metadata);
+        }
+
+        if (Utils.isNotEmpty(toolResult.getMedias())) {
+            buf.append(", medias=").append(toolResult.getMedias());
         }
 
         if (name != null) {

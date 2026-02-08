@@ -18,7 +18,7 @@ package org.noear.solon.ai.agent.react.intercept;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.chat.interceptor.ToolChain;
 import org.noear.solon.ai.chat.interceptor.ToolRequest;
-import org.noear.solon.core.util.Assert;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,13 +34,13 @@ public class ToolSanitizerInterceptor implements ReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(ToolSanitizerInterceptor.class);
 
     private final int maxObservationLength;
-    private Function<String, String> customSanitizer;
+    private Function<ToolResult, ToolResult> customSanitizer;
 
     public ToolSanitizerInterceptor(int maxObservationLength) {
         this.maxObservationLength = maxObservationLength;
     }
 
-    public ToolSanitizerInterceptor(int maxObservationLength, Function<String, String> customSanitizer) {
+    public ToolSanitizerInterceptor(int maxObservationLength, Function<ToolResult, ToolResult> customSanitizer) {
         this.maxObservationLength = maxObservationLength;
         this.customSanitizer = customSanitizer;
     }
@@ -49,17 +49,17 @@ public class ToolSanitizerInterceptor implements ReActInterceptor {
         this(2000);
     }
 
-    public void setCustomSanitizer(Function<String, String> sanitizer) {
+    public void setCustomSanitizer(Function<ToolResult, ToolResult> sanitizer) {
         this.customSanitizer = sanitizer;
     }
 
     @Override
-    public String interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
-        String result = chain.doIntercept(req);
+    public ToolResult interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
+        ToolResult result = chain.doIntercept(req);
 
         // 1. 容错处理：避免给模型返回 null 导致推理异常
-        if (Assert.isEmpty(result)) {
-            return "[No output from tool]";
+        if (ToolResult.isEmpty(result)) {
+            return new ToolResult("[No output from tool]");
         }
 
         // 2. 业务逻辑净化（脱敏、格式化）
@@ -68,13 +68,13 @@ public class ToolSanitizerInterceptor implements ReActInterceptor {
         }
 
         // 3. 物理长度保护
-        if (result.length() > maxObservationLength) {
+        if (result.getText().length() > maxObservationLength) {
             if (log.isDebugEnabled()) {
                 log.debug("Tool [{}] output truncated: {} -> {} chars",
-                        chain.getTool().name(), result.length(), maxObservationLength);
+                        chain.getTool().name(), result.getText().length(), maxObservationLength);
             }
             // 拼接截断说明，告知模型数据不完整，引导其调整请求（如分页）
-            result = result.substring(0, maxObservationLength) + "... [Content Truncated due to length]";
+            result = new ToolResult(result.getText().substring(0, maxObservationLength) + "... [Content Truncated due to length]");
         }
 
         return result;

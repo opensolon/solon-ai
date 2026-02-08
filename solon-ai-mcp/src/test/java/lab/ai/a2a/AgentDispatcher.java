@@ -7,6 +7,7 @@ import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,7 +48,7 @@ public class AgentDispatcher implements ToolProvider , AutoCloseable {
 
                     log.debug("agent-request: {agentName: {}, message: {}}", agentName, message);
 
-                    String result = agent.call(Utils.asMap("message", message));
+                    ToolResult result = agent.call(Utils.asMap("message", message));
 
                     log.debug("agent-response: {agentName: {}, message: {}, result: {}}", agentName, message, result);
 
