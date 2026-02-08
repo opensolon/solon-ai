@@ -298,6 +298,14 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * 获取客户端
      */
     public McpAsyncClient getClient() {
+        if (isClosed.get()) {
+            throw new IllegalStateException("The current status has been closed.");
+        }
+
+        if (client != null && isStarted.get()) {
+            return client;
+        }
+
         LOCKER.lock();
 
         try {
@@ -314,13 +322,49 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
 
             if (client.isInitialized() == false) {
-                client.initialize().block();
+                try {
+                    client.initialize().block();
+                } catch (Throwable e) {
+                    this.reset();
+                    throw e;
+                }
             }
 
             return client;
         } finally {
             LOCKER.unlock();
         }
+    }
+
+    public  <T> T executeWithRetry(Function<McpAsyncClient,Mono<T>> action) {
+        try {
+            return action.apply(getClient()).block();
+        } catch (Throwable ex) {
+            if (isTransportError(ex)) {
+                log.warn("MCP transmission is abnormal, attempt to reconnect...");
+                this.reset();
+
+                try {
+                    return action.apply(getClient()).block();
+                } catch (Throwable ex2) {
+                    log.error("Retry still fails after reconnecting: {}", ex2.getMessage());
+                    throw ex2;
+                }
+            }
+
+            throw ex;
+        }
+    }
+
+    /**
+     * 判断是否为传输层错误（需要重连的错误）
+     */
+    private boolean isTransportError(Throwable ex) {
+        String msg = ex.toString();
+        return ex instanceof io.modelcontextprotocol.spec.McpTransportException ||
+                msg.contains("HttpResponseException") ||
+                msg.contains("Connection refused") ||
+                msg.contains("500 Internal Server Error");
     }
 
     /**
@@ -446,8 +490,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         LOCKER.lock();
         try {
             if (client != null) {
-                client.close();
+                RunUtil.runAndTry(client::close);
                 client = null;
+                isStarted.set(false);
             }
         } finally {
             LOCKER.unlock();
@@ -542,7 +587,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      */
     public McpSchema.CallToolResult callTool(String name, Map<String, Object> args) {
         McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
-        McpSchema.CallToolResult result = getClient().callTool(callToolRequest).block();
+        McpSchema.CallToolResult result = executeWithRetry(c -> c.callTool(callToolRequest));
 
         if (result.isError() != null && result.isError()) {
             log.warn("The tool result is error: {}", result);
@@ -584,7 +629,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      */
     public McpSchema.ReadResourceResult readResource(String uri) {
         McpSchema.ReadResourceRequest callToolRequest = new McpSchema.ReadResourceRequest(uri);
-        McpSchema.ReadResourceResult result = getClient().readResource(callToolRequest).block();
+        McpSchema.ReadResourceResult result = executeWithRetry(c -> c.readResource(callToolRequest));
 
         //方便调试看变量
         return result;
@@ -639,7 +684,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      */
     public McpSchema.GetPromptResult getPrompt(String name, Map<String, Object> args) {
         McpSchema.GetPromptRequest callToolRequest = new McpSchema.GetPromptRequest(name, args);
-        McpSchema.GetPromptResult result = getClient().getPrompt(callToolRequest).block();
+        McpSchema.GetPromptResult result = executeWithRetry(c -> c.getPrompt(callToolRequest));
 
         //方便调试看变量
         return result;
@@ -688,9 +733,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         McpSchema.ListToolsResult result = null;
         if (cursor == null) {
-            result = getClient().listTools().block();
+            result = executeWithRetry(c -> c.listTools());
         } else {
-            result = getClient().listTools(cursor).block();
+            result = executeWithRetry(c -> c.listTools(cursor));
         }
 
         for (McpSchema.Tool tool : result.tools()) {
@@ -742,9 +787,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         McpSchema.ListResourcesResult result = null;
         if (cursor == null) {
-            result = getClient().listResources().block();
+            result = executeWithRetry(c -> c.listResources());
         } else {
-            result = getClient().listResources(cursor).block();
+            result = executeWithRetry(c -> c.listResources(cursor));
         }
 
         for (McpSchema.Resource resource : result.resources()) {
@@ -784,9 +829,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         McpSchema.ListResourceTemplatesResult result = null;
         if (cursor == null) {
-            result = getClient().listResourceTemplates().block();
+            result = executeWithRetry(c -> c.listResourceTemplates());
         } else {
-            result = getClient().listResourceTemplates(cursor).block();
+            result = executeWithRetry(c -> c.listResourceTemplates(cursor));
         }
 
         for (McpSchema.ResourceTemplate resource : result.resourceTemplates()) {
@@ -827,9 +872,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         McpSchema.ListPromptsResult result = null;
         if (cursor == null) {
-            result = getClient().listPrompts().block();
+            result = executeWithRetry(c -> c.listPrompts());
         } else {
-            result = getClient().listPrompts(cursor).block();
+            result = executeWithRetry(c -> c.listPrompts(cursor));
         }
 
         for (McpSchema.Prompt prompt : result.prompts()) {

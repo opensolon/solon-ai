@@ -18,10 +18,20 @@ public class McpClientLab {
                 .channel(McpChannel.STREAMABLE)
                 .url("http://localhost:8081/mcp/")
                 .cacheSeconds(30)
+                .heartbeatInterval(null)
                 .build();
 
-        String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+        while (true) {
+            try {
+                String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+                log.warn("{}", response);
+                Thread.sleep(6000);
+                //break;
+            } catch (Throwable e) {
+                e.printStackTrace();
 
-        log.warn("{}", response);
+                Thread.sleep(6000);
+            }
+        }
     }
 }
