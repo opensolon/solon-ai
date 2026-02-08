@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
 import java.io.StringReader;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * ReAct 动作执行任务 (Action/Acting)
@@ -77,11 +78,12 @@ public class ActionTask implements NamedTaskComponent {
         }
 
         AssistantMessage lastAssistant = trace.getLastReasonMessage();
+        AtomicBoolean lastAssistantAdded = new AtomicBoolean(false);
 
         // 1. 优先处理原生工具调用（Native Tool Calls）
         if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
             for (ToolCall call : lastAssistant.getToolCalls()) {
-                processNativeToolCall(node, call, trace, parentTeamTrace);
+                processNativeToolCall(node, call, trace, parentTeamTrace, lastAssistantAdded);
                 if (Agent.ID_END.equals(trace.getRoute())) {
                     break;
                 }
@@ -90,7 +92,7 @@ public class ActionTask implements NamedTaskComponent {
         }
 
         // 2. 文本模式：解析模型输出中的 Action 块
-        processTextModeAction(node, trace, parentTeamTrace);
+        processTextModeAction(node, trace, parentTeamTrace, lastAssistantAdded);
     }
 
 
@@ -142,7 +144,7 @@ public class ActionTask implements NamedTaskComponent {
     /**
      * 处理标准 ToolCall 协议调用
      */
-    private void processNativeToolCall(Node node, ToolCall call, ReActTrace trace, TeamTrace parentTeamTrace) throws Throwable {
+    private void processNativeToolCall(Node node, ToolCall call, ReActTrace trace, TeamTrace parentTeamTrace, AtomicBoolean lastAssistantAdded) throws Throwable {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Processing native tool call for agent [{}]: {}.", config.getName(), call);
         }
@@ -157,7 +159,10 @@ public class ActionTask implements NamedTaskComponent {
 
         // 协议闭环：回填 ToolMessage
         ToolMessage toolMessage = ChatMessage.ofTool(result, call.name(), call.id());
-        trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
+        if(lastAssistantAdded.compareAndSet(false, true)) {
+            trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
+        }
+
         trace.getWorkingMemory().addMessage(toolMessage);
 
         if (trace.getOptions().getStreamSink() != null) {
@@ -173,7 +178,7 @@ public class ActionTask implements NamedTaskComponent {
      * 解析并执行文本模式下的 Action 指令
      * 核心逻辑优化：从“全执行后拼接”改为“逐个执行并即时回填与反馈”
      */
-    private void processTextModeAction(Node node, ReActTrace trace, TeamTrace parentTeamTrace) throws Throwable {
+    private void processTextModeAction(Node node, ReActTrace trace, TeamTrace parentTeamTrace, AtomicBoolean lastAssistantAdded) throws Throwable {
         AssistantMessage lastReason = trace.getLastReasonMessage();
         if (lastReason == null) {
             return;
@@ -213,11 +218,11 @@ public class ActionTask implements NamedTaskComponent {
                         Map<String, Object> args = argsNode.isObject() ? argsNode.toBean(Map.class) : new HashMap<>();
 
                         // 执行并即时处理 (优化点 1)
-                        handleSingleAction(node, trace, toolName, args);
+                        handleSingleAction(node, trace, toolName, args, lastAssistantAdded);
 
                     } catch (Exception e) {
                         // 解析异常回传 (优化点 2)
-                        handleSingleObservation(node, trace, null, "Observation: Error parsing Action JSON: " + e.getMessage());
+                        handleSingleObservation(node, trace, null, "Observation: Error parsing Action JSON: " + e.getMessage(), lastAssistantAdded);
                         foundAny = true;
                         break;
                     }
@@ -227,24 +232,24 @@ public class ActionTask implements NamedTaskComponent {
                 String toolName = lastContent.substring(actionLabelIndex + 7).trim();
                 if (trace.getOptions().getTool(toolName) != null || FeedbackTool.TOOL_NAME.equals(toolName)) {
                     foundAny = true;
-                    handleSingleAction(node, trace, toolName, new HashMap<>());
+                    handleSingleAction(node, trace, toolName, new HashMap<>(), lastAssistantAdded);
                 }
             }
         }
 
         // 容错处理：如果声明了 Action 但没解析成功，或模型说话不规整 (优化点 3)
         if (!foundAny && actionLabelIndex >= 0) {
-            handleSingleObservation(node, trace, null, "Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}");
+            handleSingleObservation(node, trace, null, "Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}", lastAssistantAdded);
         }
     }
 
     /**
      * 优化点 1：提取独立执行方法，确保 Observation 即时生成
      */
-    private void handleSingleAction(Node node, ReActTrace trace, String toolName, Map<String, Object> args) throws Throwable {
+    private void handleSingleAction(Node node, ReActTrace trace, String toolName, Map<String, Object> args, AtomicBoolean lastAssistantAdded) throws Throwable {
         String result = doAction(trace, toolName, args);
         if (result != null) {
-            handleSingleObservation(node, trace, toolName, "Observation: " + result);
+            handleSingleObservation(node, trace, toolName, "Observation: " + result, lastAssistantAdded);
         }
     }
 
@@ -252,12 +257,14 @@ public class ActionTask implements NamedTaskComponent {
      * 优化点 4：统一 Observation 落地逻辑。
      * 改变了原有 StringBuilder 拼接逻辑，直接进行 WorkingMemory 入库并触发流
      */
-    private void handleSingleObservation(Node node, ReActTrace trace, String toolName, String observationContent) {
+    private void handleSingleObservation(Node node, ReActTrace trace, String toolName, String observationContent, AtomicBoolean lastAssistantAdded) {
         ChatMessage chatMessage = ChatMessage.ofUser(observationContent);
 
         // 回填 Reason 和本次 Observation
         // 这样做能保证上下文的 Thought-Action-Observation 结构始终稳固
-        trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
+        if(lastAssistantAdded.compareAndSet(false, true)) {
+            trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
+        }
         trace.getWorkingMemory().addMessage(chatMessage);
 
         // 优化点 5：即时触发 StreamSink。
