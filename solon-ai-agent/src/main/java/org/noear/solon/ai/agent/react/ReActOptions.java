@@ -55,6 +55,8 @@ public class ReActOptions implements NonSerializable {
 
     private int maxStepsLimit = 100;
 
+    private boolean maxStepsExtensible = false;
+
     /**
      * 最大重试次数
      */
@@ -93,6 +95,7 @@ public class ReActOptions implements NonSerializable {
         tmp.modelOptions.putAll(modelOptions);
         tmp.maxSteps = maxSteps;
         tmp.maxStepsLimit = maxStepsLimit;
+        tmp.maxStepsExtensible = maxStepsExtensible;
         tmp.maxRetries = maxRetries;
         tmp.retryDelayMs = retryDelayMs;
         tmp.sessionWindowSize = sessionWindowSize;
@@ -143,6 +146,10 @@ public class ReActOptions implements NonSerializable {
 
     protected void setMaxStepsLimit(int val) {
         this.maxStepsLimit = val;
+    }
+
+    protected void setMaxStepsExtensible(boolean maxStepsExtensible) {
+        this.maxStepsExtensible = maxStepsExtensible;
     }
 
     protected void setOutputSchema(String val) {
@@ -206,6 +213,10 @@ public class ReActOptions implements NonSerializable {
 
     public int getMaxStepsLimit() {
         return maxStepsLimit;
+    }
+
+    public boolean isMaxStepsExtensible() {
+        return maxStepsExtensible;
     }
 
     public int getMaxRetries() {

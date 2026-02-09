@@ -431,6 +431,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
+        public Builder maxStepsExtensible(boolean val) {
+            config.getDefaultOptions().setMaxStepsExtensible(val);
+            return this;
+        }
+
         public Builder outputKey(String val) {
             config.setOutputKey(val);
             return this;

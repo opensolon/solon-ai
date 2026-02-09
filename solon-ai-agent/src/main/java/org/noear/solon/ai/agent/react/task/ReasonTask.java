@@ -101,40 +101,45 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         // 1.3 临界预警：刚好到 80% 或最后 1 步时，且开启了反馈模式
-        int thresholdStep = Math.max(maxSteps - 1, (int)(maxSteps * 0.8));
-        if (currentStep >= thresholdStep && currentStep > 8) {
-            // 检查用户是否已经通过 HITL 决策过“继续”
-            HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
+        if(trace.getOptions().isMaxStepsExtensible()) {
+            int thresholdStep = Math.max(maxSteps - 1, (int) (maxSteps * 0.8));
 
-            if (decision == null) {
-                // 核心创新：伪造一个 Feedback 请求，挂起任务
-                String warningMsg = String.format("Agent 已执行 %d 步（上限 %d 步），任务尚未完成。是否允许继续执行？",
-                        currentStep, maxSteps);
+            if (currentStep >= thresholdStep) {
+                // 检查用户是否已经通过 HITL 决策过“继续”
+                HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
 
-                // 1. 记录挂起任务
-                Map<String, Object> args = new HashMap<>();
-                args.put("reason", warningMsg);
-                args.put("type", "step_limit_warning");
+                if (decision == null) {
+                    // 核心创新：伪造一个 Feedback 请求，挂起任务
+                    String warningMsg = String.format("Agent 已执行 %d 步（上限 %d 步），任务尚未完成。是否允许继续执行？",
+                            currentStep, maxSteps);
 
-                trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(FeedbackTool.TOOL_NAME, args, warningMsg));
+                    // 1. 记录挂起任务
+                    Map<String, Object> args = new HashMap<>();
+                    args.put("reason", warningMsg);
+                    args.put("type", "step_limit_warning");
 
-                // 2. 设为挂起状态
-                trace.pending(warningMsg);
-                trace.setFinalAnswer(warningMsg); // 让前端能展示这个询问提示
+                    trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(FeedbackTool.TOOL_NAME, args, warningMsg));
 
-                LOG.info("ReActAgent [{}] paused at threshold step: {}/{}", config.getName(), currentStep, maxSteps);
-                return;
-            } else {
-                // 如果用户已经决策了（approve），则重置步数或扩大步数，让 Agent 继续跑
-                if (decision.isApproved()) {
-                    // 方案：给 Agent 续命，增加步数上限（或者简单地将 stepCount 减去一部分）
-                    trace.getOptions().setMaxSteps(maxSteps + 10); // 续 10 步
-                    LOG.info("ReActAgent [{}] approved to continue. New max steps: {}",
-                            config.getName(), trace.getOptions().getMaxSteps());
+                    // 2. 设为挂起状态
+                    trace.pending(warningMsg);
+                    trace.setFinalAnswer(warningMsg); // 让前端能展示这个询问提示
 
-                    // 清理决策状态，防止死循环
-                    trace.getContext().remove(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
-                    trace.getContext().remove(HITL.LAST_INTERVENED);
+                    LOG.info("ReActAgent [{}] paused at threshold step: {}/{}", config.getName(), currentStep, maxSteps);
+                    return;
+                } else {
+                    // 如果用户已经决策了（approve），则重置步数或扩大步数，让 Agent 继续跑
+                    if (decision.isApproved()) {
+                        // 方案：给 Agent 续命，增加步数上限（或者简单地将 stepCount 减去一部分）
+                        int nextMaxSteps = Math.min(maxSteps + 10, maxStepsLimit);
+                        trace.getOptions().setMaxSteps(nextMaxSteps);
+
+                        LOG.info("ReActAgent [{}] approved to continue. New max steps: {}",
+                                config.getName(), trace.getOptions().getMaxSteps());
+
+                        // 清理决策状态，防止死循环
+                        trace.getContext().remove(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
+                        trace.getContext().remove(HITL.LAST_INTERVENED);
+                    }
                 }
             }
         }
