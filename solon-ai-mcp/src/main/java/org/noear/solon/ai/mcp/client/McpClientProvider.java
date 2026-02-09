@@ -552,7 +552,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param args 调用参数
      */
     public ToolResult callTool(String name, Map<String, Object> args) {
-        McpSchema.CallToolResult mcpResult = callToolResult(name, args);
+        McpSchema.CallToolResult mcpResult = callToolRequest(name, args);
 
         ToolResult result = new ToolResult();
         result.setError(mcpResult.isError() != null && mcpResult.isError());
@@ -579,7 +579,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param name 工具名
      * @param args 调用参数
      */
-    public McpSchema.CallToolResult callToolResult(String name, Map<String, Object> args) {
+    public McpSchema.CallToolResult callToolRequest(String name, Map<String, Object> args) {
         McpSchema.CallToolRequest callToolRequest = new McpSchema.CallToolRequest(name, args);
         McpSchema.CallToolResult result = executeWithRetry(c -> c.callTool(callToolRequest));
 
@@ -599,7 +599,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param uri 资源地址
      */
     public TextBlock readResource(String uri) {
-        McpSchema.ReadResourceResult mcpResult = readResourceResult(uri);
+        McpSchema.ReadResourceResult mcpResult = readResourceRequest(uri);
 
         if (mcpResult.contents() != null) {
             for (McpSchema.ResourceContents c : mcpResult.contents()) {
@@ -618,7 +618,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      *
      * @param uri 资源地址
      */
-    public McpSchema.ReadResourceResult readResourceResult(String uri) {
+    public McpSchema.ReadResourceResult readResourceRequest(String uri) {
         McpSchema.ReadResourceRequest callToolRequest = new McpSchema.ReadResourceRequest(uri);
         McpSchema.ReadResourceResult result = executeWithRetry(c -> c.readResource(callToolRequest));
 
@@ -635,7 +635,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param args 参数
      */
     public List<ChatMessage> getPrompt(String name, Map<String, Object> args) {
-        McpSchema.GetPromptResult mcpResult = getPromptResult(name, args);
+        McpSchema.GetPromptResult mcpResult = getPromptRequest(name, args);
         List<ChatMessage> messages = new ArrayList<>();
 
         if (Utils.isNotEmpty(mcpResult.messages())) {
@@ -669,7 +669,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param name 名字
      * @param args 参数
      */
-    public McpSchema.GetPromptResult getPromptResult(String name, Map<String, Object> args) {
+    public McpSchema.GetPromptResult getPromptRequest(String name, Map<String, Object> args) {
         McpSchema.GetPromptRequest callToolRequest = new McpSchema.GetPromptRequest(name, args);
         McpSchema.GetPromptResult result = executeWithRetry(c -> c.getPrompt(callToolRequest));
 

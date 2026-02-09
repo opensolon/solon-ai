@@ -15,9 +15,49 @@
 
 * 新增 solon-ai-acp 插件
 * 添加 solon-ai-core ChatSessionProvider
+* 添加 solon-ai-core ToolSchemaUtil.resultConvert 方法（将 tool 转换从内部，转到外部）
+* 添加 solon-ai-agent ReActAgent maxStepsExtensible 配置，允许通过 HITL 扩容步数
+* 优化 solon-ai-core ChatModel 与 DeepSeek-R1 兼容性
+* 优化 solon-ai-agent ReActAgent 与 DeepSeek-R1 兼容性（手造的 AssistantMessage 需要自动补字段）
+* 优化 solon-ai-agent FunctionTool 增加 tool 多模态与单模态兼容处理
 * 优化 solon-ai-skill-cli CliSkill 进一步与 Claude Code 规范对齐（接近 100%）
 * 优化 solon-ai-skill-cli CodeCLI exit 改为进程退出
-* 调整 solon-ai-mcp 默认不启用心跳
+* 优化 solon-ai-mcp 无心跳时，支持自动复位尝试
+* 调整 solon-ai-mcp McpClientProvider 接口，优化多模态适配
+* 调整 solon-ai-core 多模态体系（AiMedia 更名为 ContentBlock，）
+* 调整 solon-ai-core UserMessage medias 更名为 blocks，hasMedias 更名为 isMultiModal
+* 调整 solon-ai-core ToolMessage 添加 blocks，isMultiModal（工具支持多模态）
+* 调整 solon-ai-core ChatDialect 接口，对多模态和 R1 更友好
+* 移除 solon-ai-core 移除 ImageModel 体系，由 GenerateModel 体系接替（v3.5 时增加)
+* 修复 solon-ai-agent ReActAgent 重试时会消息倍增的问题 
+* 修复 solon-ai-agent ReActAgent，TeamAgent 在恢复执行时，会重置 Options 的问题
+
+
+变更说明：
+
+| 旧名（强调多媒体）                              | 新名（强调多模态内容块）               |
+|----------------------------------------|----------------------------|
+| AiMedia                                | ContentBlock               |
+| Text                                   | TextBlock                  |
+| Image                                  | ImageBlock                 |
+| Audio                                  | AudioBlock                 |
+| Video                                  | VideoBlock                 |
+|                                        |                            |
+| UserMessage.getMedias()                | getBlocks()                |
+| UserMessage.hasMedias()                | isMultiModal()             |
+| /                                      | ToolMessage.getBlocks()    |
+| /                                      | ToolMessage.isMultiModal() |
+|                                        |                            |
+| McpClientProvider.callTool()           | callToolRequest()          |
+| McpClientProvider.callToolAsText()     | callTool()                 |
+| McpClientProvider.callToolAsImage()    | /                          |
+| McpClientProvider.callToolAsAudio()    | /                          |
+| McpClientProvider.readResource()       | readResourceRequest()      |
+| McpClientProvider.readResourceAsText() | readResource()             |
+| McpClientProvider.getPrompt()          | getPromptRequest()         |
+| McpClientProvider.getPromptAsMessage() | getPrompt()                |
+
+
 
 ### v3.9.1
 
