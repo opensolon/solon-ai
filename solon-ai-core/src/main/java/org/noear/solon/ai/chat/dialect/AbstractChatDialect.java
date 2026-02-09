@@ -17,14 +17,14 @@ package org.noear.solon.ai.chat.dialect;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.media.ContentBlock;
-import org.noear.solon.ai.chat.media.AudioBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.*;
-import org.noear.solon.ai.chat.media.ImageBlock;
-import org.noear.solon.ai.chat.media.TextBlock;
-import org.noear.solon.ai.chat.media.VideoBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.net.http.HttpUtils;
 
 import java.util.*;

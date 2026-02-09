@@ -13,24 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.media;
+package org.noear.solon.ai.chat.content;
 
-
+import org.noear.snack4.annotation.ONodeAttr;
 import org.noear.solon.Utils;
 
 import java.util.Base64;
 
 /**
- * 音频内容块
+ * 视频内容块
  *
  * @author noear
  * @since 3.1
  */
-public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
+public class VideoBlock extends AbsMedia<VideoBlock> implements MediaBlock {
+    @ONodeAttr(name = "@type")
+    private final String type = this.getClass().getName();
+
     @Override
     public String getMimeType() {
         if (Utils.isEmpty(mimeType)) {
-            return "audio/mpeg";
+            return "video/mpeg";
         } else {
             return mimeType;
         }
@@ -39,8 +42,8 @@ public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
     /**
      * 由 url 构建
      */
-    public static AudioBlock ofUrl(String url) {
-        AudioBlock tmp = new AudioBlock();
+    public static VideoBlock ofUrl(String url) {
+        VideoBlock tmp = new VideoBlock();
         tmp.url = url;
         return tmp;
     }
@@ -48,8 +51,8 @@ public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
     /**
      * 由 base64String 构建
      */
-    public static AudioBlock ofBase64(String base64String) {
-        AudioBlock tmp = new AudioBlock();
+    public static VideoBlock ofBase64(String base64String) {
+        VideoBlock tmp = new VideoBlock();
         tmp.b64_json = base64String;
         return tmp;
     }
@@ -57,8 +60,8 @@ public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
     /**
      * 由 base64 构建
      */
-    public static AudioBlock ofBase64(String base64String, String mimeType) {
-        AudioBlock tmp = new AudioBlock();
+    public static VideoBlock ofBase64(String base64String, String mimeType) {
+        VideoBlock tmp = new VideoBlock();
         tmp.b64_json = base64String;
         tmp.mimeType = mimeType;
         return tmp;
@@ -67,8 +70,8 @@ public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
     /**
      * 由 base64 构建
      */
-    public static AudioBlock ofBase64(byte[] base64, String mimeType) {
-        AudioBlock tmp = new AudioBlock();
+    public static VideoBlock ofBase64(byte[] base64, String mimeType) {
+        VideoBlock tmp = new VideoBlock();
         tmp.b64_json = Base64.getEncoder().encodeToString(base64);
         tmp.mimeType = mimeType;
         return tmp;
@@ -77,8 +80,8 @@ public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
     /**
      * 由 base64 构建
      */
-    public static AudioBlock ofBase64(byte[] base64) {
-        AudioBlock tmp = new AudioBlock();
+    public static VideoBlock ofBase64(byte[] base64) {
+        VideoBlock tmp = new VideoBlock();
         tmp.b64_json = Base64.getEncoder().encodeToString(base64);
         return tmp;
     }

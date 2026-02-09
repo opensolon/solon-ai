@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
-import org.noear.solon.ai.chat.media.TextBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;

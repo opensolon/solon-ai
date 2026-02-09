@@ -18,8 +18,12 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Preview;
+
+import java.util.List;
 
 /**
  * ReAct 思考块（Reasoning）：包含智能体对当前问题的逻辑分析流
@@ -50,5 +54,13 @@ public class ReasonChunk extends AbsAgentChunk {
 
     public ChatResponse getResponse() {
         return response;
+    }
+
+    public boolean isToolCalls() {
+        return Assert.isNotEmpty(response.getMessage().getToolCalls());
+    }
+
+    public List<ToolCall> getToolCalls() {
+        return response.getMessage().getToolCalls();
     }
 }

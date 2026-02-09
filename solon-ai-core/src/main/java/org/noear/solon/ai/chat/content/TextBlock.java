@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.media;
+package org.noear.solon.ai.chat.content;
 
+import org.noear.snack4.annotation.ONodeAttr;
 import org.noear.solon.Utils;
 
 import java.util.LinkedHashMap;
@@ -27,6 +28,9 @@ import java.util.Map;
  * @since 3.1
  */
 public class TextBlock implements ContentBlock {
+    @ONodeAttr(name = "@type")
+    private final String type = this.getClass().getName();
+
     private String content;
     private boolean isBase64;
     private String mimeType;

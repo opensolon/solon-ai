@@ -19,7 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.snack4.Feature;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.media.ContentBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.Assert;
@@ -206,7 +206,7 @@ public interface ChatMessage extends Serializable {
      * 从 json 反序列化为消息
      */
     static ChatMessage fromJson(String json) {
-        ONode oNode = ONode.ofJson(json);
+        ONode oNode = ONode.ofJson(json, Feature.Read_AutoType);
         return fromJson(oNode);
     }
 

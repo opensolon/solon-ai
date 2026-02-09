@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.media.ImageBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;

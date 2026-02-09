@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
-import org.noear.solon.ai.chat.media.TextBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

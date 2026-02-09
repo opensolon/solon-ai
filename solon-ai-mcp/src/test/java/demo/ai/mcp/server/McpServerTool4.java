@@ -6,7 +6,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
-import org.noear.solon.ai.chat.media.ImageBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.annotation.Header;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.handle.Context;

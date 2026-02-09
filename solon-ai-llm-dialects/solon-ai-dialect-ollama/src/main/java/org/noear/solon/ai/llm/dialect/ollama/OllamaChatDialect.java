@@ -17,9 +17,9 @@ package org.noear.solon.ai.llm.dialect.ollama;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.media.ContentBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.chat.media.AudioBlock;
+import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatException;
@@ -29,8 +29,8 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
-import org.noear.solon.ai.chat.media.ImageBlock;
-import org.noear.solon.ai.chat.media.VideoBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.core.util.DateUtil;
 
 import java.util.Date;

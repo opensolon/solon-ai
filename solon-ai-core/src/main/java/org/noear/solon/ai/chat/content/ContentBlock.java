@@ -13,13 +13,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.media;
+package org.noear.solon.ai.chat.content;
+
+import java.util.Map;
 
 /**
- * 多媒体内容块
+ * 内容块
  *
  * @author noear
+ * @since 3.1
  * @since 3.9.2
  */
-public interface MediaBlock extends ContentBlock {
+public interface ContentBlock {
+    /**
+     * 源信息
+     */
+    Map<String, Object> metas();
+
+    /**
+     * 获取多媒体类型
+     */
+    String getMimeType();
+
+    /**
+     * 转为数据字符串
+     */
+    String toDataString(boolean useMime);
+
+    /**
+     * 转为数据
+     */
+    Map<String, Object> toData(boolean useMime);
 }

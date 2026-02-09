@@ -2,12 +2,12 @@ package features.ai.chat;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
-import org.noear.solon.ai.chat.media.AudioBlock;
+import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.media.ImageBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;

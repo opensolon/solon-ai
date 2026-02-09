@@ -17,15 +17,15 @@ package org.noear.solon.ai.llm.dialect.dashscope;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.media.ContentBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.chat.media.AudioBlock;
+import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
-import org.noear.solon.ai.chat.media.ImageBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
 
 import java.util.Date;
 import java.util.List;

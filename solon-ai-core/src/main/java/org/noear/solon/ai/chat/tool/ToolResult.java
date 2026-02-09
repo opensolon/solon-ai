@@ -1,8 +1,7 @@
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.solon.ai.chat.media.ContentBlock;
-import org.noear.solon.ai.chat.media.TextBlock;
-import org.noear.solon.core.util.Assert;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 
 import java.io.Serializable;
 import java.util.ArrayList;

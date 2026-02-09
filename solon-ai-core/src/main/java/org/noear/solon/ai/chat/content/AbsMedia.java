@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.media;
+package org.noear.solon.ai.chat.content;
 
 import org.noear.solon.Utils;
 
@@ -30,8 +30,6 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
     protected String b64_json; //就是 base64-str
     protected String url;
     protected String mimeType;
-
-
     protected Map<String, Object> metadata;
 
     @Override

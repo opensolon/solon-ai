@@ -16,9 +16,9 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.media.ContentBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
-import org.noear.solon.ai.chat.media.TextBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;

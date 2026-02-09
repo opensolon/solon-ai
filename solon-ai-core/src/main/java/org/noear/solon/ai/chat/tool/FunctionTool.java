@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.solon.ai.chat.media.ContentBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.core.util.Assert;
 
 import java.lang.reflect.Type;

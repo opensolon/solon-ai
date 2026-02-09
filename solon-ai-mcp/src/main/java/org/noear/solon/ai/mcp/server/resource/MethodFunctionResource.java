@@ -20,7 +20,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.chat.tool.MethodExecuteHandler;
-import org.noear.solon.ai.chat.media.TextBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.annotation.Produces;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;

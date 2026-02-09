@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.media.ContentBlock;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.lang.Preview;
