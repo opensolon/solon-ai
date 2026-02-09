@@ -64,18 +64,19 @@ public class OllamaChatDialect extends AbstractChatDialect {
     @Override
     protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
-        if (msg.hasMedias() ==false) {
+        if (msg.hasMedias() == false) {
             oNode.set("content", msg.getContent());
         } else {
             oNode.set("content", msg.getContent());
 
-            AiMedia demo = msg.getMedias().get(0);
-            if (demo instanceof Image) {
-                oNode.set("images", msg.getMedias().stream().map(i -> i.toDataString(false)).collect(Collectors.toList()));
-            } else if (demo instanceof Audio) {
-                oNode.set("audios", msg.getMedias().stream().map(i -> i.toDataString(false)).collect(Collectors.toList()));
-            } else if (demo instanceof Video) {
-                oNode.set("videos", msg.getMedias().stream().map(i -> i.toDataString(false)).collect(Collectors.toList()));
+            for (AiMedia media : msg.getMedias()) {
+                if (media instanceof Image) {
+                    oNode.getOrNew("images").add(media.toDataString(false));
+                } else if (media instanceof Audio) {
+                    oNode.getOrNew("audios").add(media.toDataString(false));
+                } else if (media instanceof Video) {
+                    oNode.getOrNew("videos").add(media.toDataString(false));
+                }
             }
         }
     }
