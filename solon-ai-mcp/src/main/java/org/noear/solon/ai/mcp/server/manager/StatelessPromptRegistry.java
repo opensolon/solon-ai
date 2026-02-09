@@ -110,7 +110,7 @@ public class StatelessPromptRegistry implements McpPrimitivesRegistry<FunctionPr
                                             } else if (msg.getRole() == ChatRole.USER) {
                                                 UserMessage userMessage = (UserMessage) msg;
 
-                                                if (Utils.isEmpty(userMessage.getMedias())) {
+                                                if (userMessage.hasMedias() == false) {
                                                     //如果没有媒体
                                                     promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
                                                             new McpSchema.TextContent(msg.getContent())));

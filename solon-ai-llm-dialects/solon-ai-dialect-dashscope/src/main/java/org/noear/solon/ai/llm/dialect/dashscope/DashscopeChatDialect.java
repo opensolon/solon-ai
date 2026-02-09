@@ -159,15 +159,8 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
     @Override
     protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
-        List<AiMedia> medias = msg.getMedias();
-        String content = msg.getContent();
-
-        if (medias == null) {
-            medias = Arrays.asList();
-        }
-        final List<AiMedia> finalMedias = medias;
         ONode contentNode = new ONode().then(n -> {
-            for (AiMedia media : finalMedias) {
+            for (AiMedia media : msg.getMedias()) {
                 if (media instanceof Image) {
                     n.add(new ONode().then(n1 -> {
                         n1.set("image", media.toDataString(true));
@@ -179,9 +172,9 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                 }
             }
 
-            if (Utils.isNotEmpty(content)) {
+            if (Utils.isNotEmpty(msg.getContent())) {
                 n.add(new ONode().then(n1 -> {
-                    n1.set("text", content);
+                    n1.set("text", msg.getContent());
                 }));
             }
         });

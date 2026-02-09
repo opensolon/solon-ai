@@ -18,9 +18,12 @@ package org.noear.solon.ai.chat.message;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.media.Text;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -33,7 +36,7 @@ import java.util.List;
 public class UserMessage extends ChatMessageBase<UserMessage> {
     private final ChatRole role = ChatRole.USER;
     private String content;
-    private List<AiMedia> medias;
+    private List<AiMedia> medias = new ArrayList<>();
 
     public UserMessage() {
         //用于序列化
@@ -45,7 +48,14 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
 
     public UserMessage(String content, List<AiMedia> medias) {
         this.content = content;
-        this.medias = medias;
+
+        if (Utils.isNotEmpty(content)) {
+            this.medias.add(Text.of(false, content));
+        }
+
+        if (Utils.isNotEmpty(medias)) {
+            this.medias.addAll(medias);
+        }
     }
 
     /**
@@ -72,8 +82,12 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
         return medias;
     }
 
-    public boolean hasMedias(){
-        return Utils.isNotEmpty(medias);
+    public boolean hasMedias() {
+        if (Assert.isEmpty(content)) {
+            return medias.size() > 0;
+        } else {
+            return medias.size() > 1;
+        }
     }
 
     @Override

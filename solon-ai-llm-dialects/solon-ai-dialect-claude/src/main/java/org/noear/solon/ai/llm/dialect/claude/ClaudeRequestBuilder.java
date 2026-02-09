@@ -26,6 +26,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.media.Text;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -274,22 +275,21 @@ public class ClaudeRequestBuilder {
     private void buildNormalMessageNode(ONode node, ChatMessage message) {
         if (message instanceof UserMessage) {
             UserMessage userMessage = (UserMessage) message;
-            if (Utils.isEmpty(userMessage.getMedias())) {
+            if (userMessage.hasMedias() == false) {
                 // 纯文本消息
                 node.set("content", userMessage.getContent());
             } else {
                 // 多模态消息
                 ONode contentArray = node.getOrNew("content").asArray();
-                
-                // 添加文本内容（如果存在）
-                if (Utils.isNotEmpty(userMessage.getContent())) {
-                    contentArray.addNew()
-                        .set("type", "text")
-                        .set("text", userMessage.getContent());
-                }
-                
                 // Claude支持图像上传
                 for (AiMedia media : userMessage.getMedias()) {
+                    if(media instanceof Text){
+                        Text text = (Text) media;
+                        contentArray.addNew()
+                                .set("type", "text")
+                                .set("text", text.getContent());
+                    }
+
                     if (media instanceof Image) {
                         Image image = (Image) media;
 

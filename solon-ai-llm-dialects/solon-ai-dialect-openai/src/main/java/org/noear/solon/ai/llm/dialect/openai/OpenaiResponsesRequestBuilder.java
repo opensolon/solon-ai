@@ -141,7 +141,7 @@ public class OpenaiResponsesRequestBuilder {
             ONode msgNode = inputArray.addNew()
                     .set("type", "message")
                     .set("role", "user");
-            if (Utils.isEmpty(userMessage.getMedias())) {
+            if (userMessage.hasMedias() == false) {
                 // 纯文本消息
                 msgNode.set("content", userMessage.getContent());
             } else {

@@ -2,6 +2,7 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.solon.ai.AiMedia;
 import org.noear.solon.ai.media.Text;
+import org.noear.solon.core.util.Assert;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -12,7 +13,6 @@ import java.util.Map;
 public class ToolResult implements Serializable {
     private final List<AiMedia> medias = new ArrayList<>();
     private String text;
-    private int testCount;
     private boolean isError;
     private Map<String, Object> metadata;
 
@@ -21,7 +21,7 @@ public class ToolResult implements Serializable {
     }
 
     public ToolResult(String text) {
-        this.addText(text);
+        addMedia(Text.of(false, text));
     }
 
     public static boolean isEmpty(ToolResult result) {
@@ -47,18 +47,9 @@ public class ToolResult implements Serializable {
     /**
      * 添加媒体块（图像、音频、视频）
      */
-    public ToolResult addText(String text) {
-       addMedia(Text.of(false, text));
-        return this;
-    }
-
-    /**
-     * 添加媒体块（图像、音频、视频）
-     */
     public ToolResult addMedia(AiMedia media) {
         if (media instanceof Text) {
             text = ((Text) media).getContent();
-            testCount++;
         }
 
         this.medias.add(media);
@@ -80,8 +71,12 @@ public class ToolResult implements Serializable {
         return medias;
     }
 
-    public boolean hasMedias(){
-        return medias.size() > testCount;
+    public boolean hasMedias() {
+        if (Assert.isEmpty(text)) {
+            return medias.size() > 0;
+        } else {
+            return medias.size() > 1;
+        }
     }
 
     /**
