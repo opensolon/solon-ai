@@ -286,7 +286,7 @@ public class CodeCLI implements Handler, Runnable {
                             }
                             System.out.flush();
                         } else if(chunk instanceof ReActChunk ) {
-                            System.out.println("\n-----------------\n" + chunk.getContent());
+                            System.out.println("\n----------------------\n" + chunk.getContent());
                         }
                     })
                     .doFinally(signal -> latch.countDown())
