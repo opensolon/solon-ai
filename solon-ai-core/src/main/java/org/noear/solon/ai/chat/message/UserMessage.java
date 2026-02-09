@@ -104,16 +104,16 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
 
         buf.append("role=").append(getRole().name().toLowerCase());
 
-        if (content != null) {
+        if (Utils.isNotEmpty(content)) {
             buf.append(", content='").append(content).append('\'');
+        }
+
+        if (isMultiModal()) {
+            buf.append(", blocks=").append(blocks);
         }
 
         if (Utils.isNotEmpty(metadata)) {
             buf.append(", metadata=").append(metadata);
-        }
-
-        if (Utils.isNotEmpty(blocks)) {
-            buf.append(", medias=").append(blocks);
         }
 
         buf.append("}");

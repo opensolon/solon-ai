@@ -18,10 +18,13 @@ package org.noear.solon.ai.chat.message;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.media.TextBlock;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -33,7 +36,8 @@ import java.util.List;
 @Preview("3.1")
 public class ToolMessage extends ChatMessageBase<ToolMessage> {
     private final ChatRole role = ChatRole.TOOL;
-    private ToolResult toolResult;
+    private final List<ContentBlock> blocks = new ArrayList<>();
+    private String content;
     private String name;
     private String toolCallId;
     private transient boolean returnDirect;
@@ -43,10 +47,18 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
     }
 
     public ToolMessage(ToolResult toolResult, String name, String toolCallId, boolean returnDirect) {
-        this.toolResult = toolResult;
         this.name = name;
         this.toolCallId = toolCallId;
         this.returnDirect = returnDirect;
+
+        if (toolResult != null) {
+            this.blocks.addAll(toolResult.getBlocks());
+            this.content = toolResult.getContent();
+
+            if (Assert.isNotEmpty(toolResult.getMetadata())) {
+                this.getMetadata().putAll(toolResult.getMetadata());
+            }
+        }
     }
 
     /**
@@ -62,7 +74,7 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
      */
     @Override
     public String getContent() {
-        return toolResult.getContent();
+        return content;
     }
 
     /**
@@ -70,14 +82,23 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
      */
     @Nullable
     public List<ContentBlock> getBlocks() {
-        return toolResult.getBlocks();
+        return blocks;
     }
 
     /**
      * 是否为多模态
      */
-    public boolean isMultiModal(){
-        return toolResult.isMultiModal();
+    public boolean isMultiModal() {
+        int size = blocks.size();
+        if (size > 1) {
+            return true;
+        }
+
+        if (size == 1) {
+            return !(blocks.get(0) instanceof TextBlock);
+        }
+
+        return false;
     }
 
     /**
@@ -108,16 +129,16 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
 
         buf.append("role=").append(getRole().name().toLowerCase());
 
-        if (Utils.isNotEmpty(toolResult.getContent())) {
-            buf.append(", content='").append(toolResult.getContent()).append('\'');
+        if (Utils.isNotEmpty(content)) {
+            buf.append(", content='").append(content).append('\'');
+        }
+
+        if (isMultiModal()) {
+            buf.append(", blocks=").append(blocks);
         }
 
         if (Utils.isNotEmpty(metadata)) {
             buf.append(", metadata=").append(metadata);
-        }
-
-        if (Utils.isNotEmpty(toolResult.getBlocks())) {
-            buf.append(", medias=").append(toolResult.getBlocks());
         }
 
         if (name != null) {
