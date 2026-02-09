@@ -394,23 +394,4 @@ public class ClaudeRequestBuilder {
 
         return node;
     }
-
-    /**
-     * 构建助手消息（通过工具消息）
-     * @author oisin lu
-     * @date 2026年1月27日
-     * @param toolMessages 工具消息列表
-     * @return 助手消息
-     */
-    public AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage, List<ToolMessage> toolMessages) {
-        StringBuilder buf = new StringBuilder();
-        for (ToolMessage toolMessage : toolMessages) {
-            if (buf.length() > 0) {
-                buf.append('\n');
-            }
-            buf.append(toolMessage.getContent());
-        }
-
-        return ChatMessage.ofAssistant(buf.toString());
-    }
 }

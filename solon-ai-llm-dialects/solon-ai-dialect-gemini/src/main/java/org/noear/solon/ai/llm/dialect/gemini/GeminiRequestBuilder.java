@@ -261,24 +261,6 @@ public class GeminiRequestBuilder {
     }
 
     /**
-     * 构建助手消息（通过工具消息）
-     *
-     * @param toolMessages 工具消息列表
-     * @return 助手消息
-     */
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-        StringBuffer buf = new StringBuffer();
-        for (ToolMessage toolMessage : toolMessages) {
-            if (buf.length() > 0) {
-                buf.append('\n');
-            }
-            buf.append(toolMessage.getContent());
-        }
-
-        return ChatMessage.ofAssistant(buf.toString());
-    }
-
-    /**
      * 转换配置映射为 GenerationConfig 对象
      *
      * @param configMap 配置映射
