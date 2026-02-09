@@ -35,7 +35,9 @@ import java.util.*;
 public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     private final ChatRole role = ChatRole.ASSISTANT;
     private String content;
-    private String reasoning;
+    //适配 r1 需要
+    private transient String reasoning;
+    private String reasoningFieldName;
     private List<ToolCall> toolCalls;
     private List<Map> toolCallsRaw;
     private List<Map> searchResultsRaw;
@@ -61,6 +63,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     public AssistantMessage(String content, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
+        if(content == null){
+           content = "";
+        }
+
         this.content = content;
         this.isThinking = isThinking;
         this.toolCallsRaw = toolCallsRaw;
@@ -71,10 +77,6 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             this.contentRaw = content;
         } else {
             this.contentRaw = contentRaw;
-        }
-
-        if (isThinking) {
-            this.reasoning = content.replace("</?think>", "");
         }
     }
 
@@ -109,7 +111,23 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     public String getReasoning() {
+        if (reasoning == null) {
+            if (isThinking || content.contains("<think>")) {
+                reasoning = content.replace("</?think>", "");
+            } else {
+                reasoning = "";
+            }
+        }
+
         return reasoning;
+    }
+
+    public String getReasoningFieldName() {
+        return reasoningFieldName;
+    }
+
+    public void setReasoningFieldName(String reasoningFieldName) {
+        this.reasoningFieldName = reasoningFieldName;
     }
 
     /**

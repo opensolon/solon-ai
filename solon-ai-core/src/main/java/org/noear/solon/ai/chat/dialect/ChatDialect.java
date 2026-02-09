@@ -84,7 +84,7 @@ public interface ChatDialect extends AiModelDialect {
      *
      * @param toolCallBuilders 工具调用构建器集合
      */
-    ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders);
+    ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders);
 
     /**
      * 构建助理消息根据直接返回的工具消息

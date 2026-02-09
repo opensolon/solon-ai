@@ -83,10 +83,10 @@ public class OllamaChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
-        oNode.set("content", "");
+        oNode.set("content", resp.getAggregationContent());
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有

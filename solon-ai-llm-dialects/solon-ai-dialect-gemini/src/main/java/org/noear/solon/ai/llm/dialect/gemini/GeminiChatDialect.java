@@ -21,7 +21,6 @@ import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
@@ -183,8 +182,8 @@ public class GeminiChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
-        return requestBuilder.buildAssistantMessageNode(toolCallBuilders);
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
+        return requestBuilder.buildAssistantToolCallMessageNode(resp, toolCallBuilders);
     }
 
     @Override
@@ -197,9 +196,4 @@ public class GeminiChatDialect extends AbstractChatDialect {
             return super.parseAssistantMessage(resp, oMessage);
         }
     }
-// 没有改变，不需要重写
-//    @Override
-//    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-//        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
-//    }
 }

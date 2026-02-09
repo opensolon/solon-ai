@@ -306,7 +306,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
     private void onEventEnd(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink) {
         if (resp.toolCallBuilders.size() > 0) {
-            if (buildStreamToolMessage(resp, sink) == false) {
+            if (buildStreamToolCallMessage(resp, sink) == false) {
                 return; // 进入了内部递归流处理，不执行 complete
             }
         }
@@ -364,9 +364,9 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     /**
      * @return 是否结束流
      */
-    private boolean buildStreamToolMessage(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink) {
+    private boolean buildStreamToolCallMessage(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink) {
         try {
-            ONode oNode = dialect.buildAssistantMessageNode(resp.toolCallBuilders);
+            ONode oNode = dialect.buildAssistantToolCallMessageNode(resp, resp.toolCallBuilders);
             List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
 
             // 如果没有消息，说明工具调用解析失败或没有工具需要处理，直接完成

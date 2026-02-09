@@ -139,15 +139,7 @@ public class ChatResponseDefault implements ChatResponse {
     }
 
     public String getAggregationContent() {
-        if (hasChoices()) {
-            if (stream) {
-                return contentBuilder.toString();
-            } else {
-                return lastChoice().getMessage().getContent();
-            }
-        } else {
-            return contentBuilder.toString();
-        }
+        return contentBuilder.toString();
     }
 
     /**
@@ -237,6 +229,10 @@ public class ChatResponseDefault implements ChatResponse {
      * 有推理字段
      */
     public boolean has_reasoning_field;
+    /**
+     * 推理字段名
+     */
+    public String reasoning_field_name;
 
     /**
      * 最后的 callId

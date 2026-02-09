@@ -17,6 +17,7 @@ package org.noear.solon.ai.llm.dialect.claude;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
@@ -207,7 +208,7 @@ public class ClaudeRequestBuilder {
         if (message instanceof ToolMessage) {
             buildToolMessageNode(node, (ToolMessage) message);
         } else if (message instanceof AssistantMessage) {
-            buildAssistantMessageNode(node, (AssistantMessage) message);
+            buildAssistantToolCallMessageNode(node, (AssistantMessage) message);
         } else {
             buildNormalMessageNode(node, message);
         }
@@ -238,7 +239,7 @@ public class ClaudeRequestBuilder {
      * @param node 父节点
      * @param assistantMessage 助手消息
      */
-    private void buildAssistantMessageNode(ONode node, AssistantMessage assistantMessage) {
+    private void buildAssistantToolCallMessageNode(ONode node, AssistantMessage assistantMessage) {
         if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
             ONode contentArray = node.getOrNew("content").asArray();
             // 添加文本内容（如果有）
@@ -360,7 +361,7 @@ public class ClaudeRequestBuilder {
      * @param toolCallBuilders 工具调用构建器
      * @return 助手消息
      */
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode node = new ONode();
         node.set("role", "assistant");
 

@@ -23,7 +23,6 @@ import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.net.http.HttpUtils;
 
@@ -112,8 +111,8 @@ public class ClaudeChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
-        return requestBuilder.buildAssistantMessageNode(toolCallBuilders);
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
+        return requestBuilder.buildAssistantToolCallMessageNode(resp, toolCallBuilders);
     }
 
     @Override

@@ -20,9 +20,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
-import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 
 import java.util.List;
@@ -70,13 +68,14 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
 
     /**
      * 构建 Responses 规范的请求体
-     * @author oisin lu
-     * @date 2026年1月28日
+     *
      * @param config   聊天配置
      * @param options  聊天选项
      * @param messages 对话消息列表
      * @param isStream 是否使用流式模式
      * @return Responses 请求体
+     * @author oisin lu
+     * @date 2026年1月28日
      */
     @Override
     public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
@@ -85,21 +84,12 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
 
     /**
      * 构建助手消息（用于工具调用）
+     *
      * @author oisin lu
      * @date 2026年1月28日
      */
     @Override
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
-        return requestBuilder.buildAssistantMessageNode(toolCallBuilders);
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
+        return requestBuilder.buildAssistantToolCallMessageNode(resp, toolCallBuilders);
     }
-
-//    /**
-//     * 构建助手消息（通过工具消息）
-//     * @author oisin lu
-//     * @date 2026年1月28日
-//     */
-//    @Override
-//    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-//        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
-//    }
 }

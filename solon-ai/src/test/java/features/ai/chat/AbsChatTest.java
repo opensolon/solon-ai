@@ -203,7 +203,7 @@ public abstract class AbsChatTest {
                 .build();
 
         ChatResponse resp = chatModel
-                .prompt("solon 框架的作者是谁？")
+                .prompt("solon 框架的作者是谁（个人或公司）？")
                 .call();
 
         //打印消息
@@ -216,7 +216,7 @@ public abstract class AbsChatTest {
                 .build();
 
         ChatResponse resp = chatModel
-                .prompt(ChatMessage.ofUserAugment("solon 框架的作者是谁？", new Document()
+                .prompt(ChatMessage.ofUserAugment("solon 框架的作者是谁（个人或公司）？", new Document()
                         .title("概述")
                         .url("https://solon.noear.org/article/about")))
                 .call();
@@ -307,7 +307,7 @@ public abstract class AbsChatTest {
 
         //流返回(sse)
         publisher = chatModel
-                .prompt("搜索网络： solon 框架的作者是谁？")
+                .prompt("搜索网络： solon 框架的作者是谁（个人或公司）？")
                 .session(chatSession)
                 .options(o -> o.toolAdd(new Tools()))
                 .stream();

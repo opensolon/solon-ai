@@ -17,6 +17,7 @@ package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
@@ -258,7 +259,7 @@ public class OpenaiResponsesRequestBuilder {
      * @author oisin lu
      * @date 2026年1月28日
      */
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         // Responses API 中工具调用不需要显式的助手消息节点
         // 而是直接在 input 中添加 function_call 项
         // 这里返回一个兼容的结构
