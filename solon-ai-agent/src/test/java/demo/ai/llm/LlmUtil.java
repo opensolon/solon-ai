@@ -12,6 +12,7 @@ public class LlmUtil {
         return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
                 .apiKey("sk-251740c893994c57a6536ecdbc33c189")
                 .model("deepseek-reasoner") //deepseek-reasoner//deepseek-chat
+                .reasoningFieldName("reasoning_content")
                 .build();
     }
     public static ChatModel getChatModel() {
