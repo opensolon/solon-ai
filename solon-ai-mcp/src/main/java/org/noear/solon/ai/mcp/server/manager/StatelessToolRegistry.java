@@ -111,7 +111,9 @@ public class StatelessToolRegistry implements McpPrimitivesRegistry<FunctionTool
                                         err = Utils.throwableUnwrap(err);
                                         result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(err.getMessage())), true);
                                     } else {
-                                        if(rst instanceof McpSchema.Content){
+                                        if (rst instanceof McpSchema.CallToolResult) {
+                                            result = (McpSchema.CallToolResult) rst;
+                                        } else if (rst instanceof McpSchema.Content) {
                                             result = new McpSchema.CallToolResult(Arrays.asList((McpSchema.Content) rst), false);
                                         } else {
                                             String rstStr = ToolSchemaUtil.resultConvert(functionTool, rst);
