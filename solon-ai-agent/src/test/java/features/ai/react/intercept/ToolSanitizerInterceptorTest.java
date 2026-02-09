@@ -27,6 +27,7 @@ public class ToolSanitizerInterceptorTest {
         // 模拟返回空字符串
         when(chain.doIntercept(req)).thenReturn(new ToolResult(""));
         result = interceptor.interceptTool(req, chain).getContent();
+        System.out.println("result: " + result);
         assertEquals("[No output from tool]", result);
     }
 

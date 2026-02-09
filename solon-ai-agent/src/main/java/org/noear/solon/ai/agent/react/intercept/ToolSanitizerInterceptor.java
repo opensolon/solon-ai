@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.chat.interceptor.ToolChain;
 import org.noear.solon.ai.chat.interceptor.ToolRequest;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,7 +59,7 @@ public class ToolSanitizerInterceptor implements ReActInterceptor {
         ToolResult result = chain.doIntercept(req);
 
         // 1. 容错处理：避免给模型返回 null 导致推理异常
-        if (ToolResult.isEmpty(result)) {
+        if (ToolResult.isEmpty(result) || Assert.isEmpty(result.getContent())) {
             return new ToolResult("[No output from tool]");
         }
 
