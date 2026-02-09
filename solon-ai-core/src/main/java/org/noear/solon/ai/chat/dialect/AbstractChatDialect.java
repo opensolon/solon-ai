@@ -54,7 +54,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return httpUtils;
     }
 
-    protected void buildChatMessageNodeDo(ONode oNode, AssistantMessage msg) {
+    protected void buildAssistantMessageNodeDo(ONode oNode, AssistantMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
         if (Utils.isNotEmpty(msg.getResultContent())) {
@@ -66,12 +66,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
     }
 
-    protected void buildChatMessageNodeDo(ONode oNode, SystemMessage msg) {
+    protected void buildSystemMessageNodeDo(ONode oNode, SystemMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
         oNode.set("content", msg.getContent());
     }
 
-    protected void buildChatMessageNodeDo(ONode oNode, ToolMessage msg) {
+    protected void buildToolMessageNodeDo(ONode oNode, ToolMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
         if (Utils.isNotEmpty(msg.getName())) {
@@ -124,7 +124,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
     }
 
-    protected void buildChatMessageNodeDo(ONode oNode, UserMessage msg) {
+    protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
         if (msg.hasMedias() == false) {
@@ -173,13 +173,13 @@ public abstract class AbstractChatDialect implements ChatDialect {
     public ONode buildChatMessageNode(ChatMessage chatMessage) {
         ONode oNode = new ONode();
         if (chatMessage instanceof AssistantMessage) {
-            buildChatMessageNodeDo(oNode, (AssistantMessage) chatMessage);
+            buildAssistantMessageNodeDo(oNode, (AssistantMessage) chatMessage);
         } else if (chatMessage instanceof SystemMessage) {
-            buildChatMessageNodeDo(oNode, (SystemMessage) chatMessage);
+            buildSystemMessageNodeDo(oNode, (SystemMessage) chatMessage);
         } else if (chatMessage instanceof ToolMessage) {
-            buildChatMessageNodeDo(oNode, (ToolMessage) chatMessage);
+            buildToolMessageNodeDo(oNode, (ToolMessage) chatMessage);
         } else if (chatMessage instanceof UserMessage) {
-            buildChatMessageNodeDo(oNode, (UserMessage) chatMessage);
+            buildUserMessageNodeDo(oNode, (UserMessage) chatMessage);
         } else {
             throw new IllegalArgumentException("Unsupported chat message type: " + chatMessage.getClass());
         }

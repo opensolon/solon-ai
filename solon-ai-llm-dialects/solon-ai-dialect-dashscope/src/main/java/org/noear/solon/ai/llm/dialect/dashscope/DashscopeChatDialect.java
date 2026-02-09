@@ -158,7 +158,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    protected void buildChatMessageNodeDo(ONode oNode, UserMessage msg) {
+    protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
         List<AiMedia> medias = msg.getMedias();
         String content = msg.getContent();
 
