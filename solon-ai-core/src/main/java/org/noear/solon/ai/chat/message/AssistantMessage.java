@@ -35,6 +35,7 @@ import java.util.*;
 public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     private final ChatRole role = ChatRole.ASSISTANT;
     private String content;
+    private String reasoning;
     private List<ToolCall> toolCalls;
     private List<Map> toolCallsRaw;
     private List<Map> searchResultsRaw;
@@ -48,19 +49,20 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     public AssistantMessage(String content) {
-        this(content, false, null, null, null, null);
+        this(content, null, false, null, null, null, null);
     }
 
     public AssistantMessage(String content, boolean isThinking) {
-        this(content, isThinking, null, null, null, null);
+        this(content, null, isThinking, null, null, null, null);
     }
 
     public AssistantMessage(String content, boolean isThinking, List<Map> searchResultsRaw) {
-        this(content, isThinking, null, null, null, searchResultsRaw);
+        this(content, null, isThinking, null, null, null, searchResultsRaw);
     }
 
-    public AssistantMessage(String content, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
+    public AssistantMessage(String content, String reasoning, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
         this.content = content;
+        this.reasoning = reasoning;
         this.isThinking = isThinking;
         this.toolCallsRaw = toolCallsRaw;
         this.toolCalls = toolCalls;
@@ -101,6 +103,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     @Override
     public String getContent() {
         return content;
+    }
+
+    public String getReasoningContent() {
+        return reasoning;
     }
 
     /**
@@ -180,8 +186,12 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             buf.append(", is_thinking=true");
         }
 
-        if (content != null) {
+        if (Utils.isNotEmpty(content)) {
             buf.append(", content='").append(content).append('\'');
+        }
+
+        if (Utils.isNotEmpty(reasoning)) {
+            buf.append(", reasoning='").append(reasoning).append('\'');
         }
 
         if (contentRaw != null) {

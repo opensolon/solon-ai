@@ -49,6 +49,8 @@ public class CliApp {
                 .enableConsole(config.enableConsole)
                 .enableHitl(config.enableHitl)
                 .config(agent -> {
+                    // 添加步数扩展
+                    agent.maxStepsExtensible(config.enableHitl);
                     //添加步数
                     agent.maxSteps(config.maxSteps);
                     //添加会话窗口大小

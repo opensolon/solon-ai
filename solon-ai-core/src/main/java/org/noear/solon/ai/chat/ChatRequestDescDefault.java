@@ -429,7 +429,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
     private void publishResponse(FluxSink<? super ChatResponse> sink, ChatResponseDefault resp, ChatChoice choice) {
         if (choice.getMessage().hasContent()) {
-            resp.aggregationMessageContent.append(choice.getMessage().getContent());
+            resp.contentBuilder.append(choice.getMessage().getContent());
         }
         sink.next(resp);
     }
@@ -437,6 +437,14 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     private void buildToolCallBuilder(ChatResponseDefault resp, AssistantMessage acm) {
         if (Utils.isEmpty(acm.getToolCalls())) {
             return;
+        }
+
+        if (Utils.isNotEmpty(acm.getContent())) {
+            resp.contentBuilder.append(acm.getContent());
+        }
+
+        if (Utils.isNotEmpty(acm.getReasoningContent())) {
+            resp.reasoningBuilder.append(acm.getReasoningContent());
         }
 
         for (ToolCall call : acm.getToolCalls()) {

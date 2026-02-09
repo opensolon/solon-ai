@@ -406,13 +406,13 @@ public abstract class AbstractChatDialect implements ChatDialect {
          * 也可能和内容都为空: ...
          * */
 
+        String reasoning_content = oMessage.get("reasoning_content").getValueAs();
+        if (reasoning_content == null) {
+            reasoning_content = oMessage.get("reasoning").getValueAs();
+        }
+
         if (Utils.isEmpty(toolCallsRaw) && resp.hasToolCallBuilders() == false) {
             //如果没有工具调用（且没有工具构建）
-            String reasoning_content = oMessage.get("reasoning_content").getValueAs();
-            if (reasoning_content == null) {
-                reasoning_content = oMessage.get("reasoning").getValueAs();
-            }
-
             if (Utils.isNotEmpty(reasoning_content)) {
                 resp.has_reasoning_field = true;
                 //有思考专属内容的协议
@@ -481,7 +481,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (content != null || toolCallsRaw != null) {
             Object contentRaw = oContent.toBean();
-            messageList.add(new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw));
+            messageList.add(new AssistantMessage(content, reasoning_content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw));
         }
 
         return messageList;

@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 聊天响应实现
@@ -46,10 +45,10 @@ public class ChatResponseDefault implements ChatResponse {
     protected AiUsage usage;
     protected String model;
     protected boolean finished;
-    protected final Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
 
-    //取合消息内容
-    protected StringBuilder aggregationMessageContent = new StringBuilder();
+    protected final StringBuilder contentBuilder = new StringBuilder();
+    protected final StringBuilder reasoningBuilder = new StringBuilder();
+    protected final Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
 
     public ChatResponseDefault(ChatRequest req, boolean stream) {
         this.request = req;
@@ -142,12 +141,12 @@ public class ChatResponseDefault implements ChatResponse {
     public String getAggregationContent() {
         if (hasChoices()) {
             if (stream) {
-                return aggregationMessageContent.toString();
+                return contentBuilder.toString();
             } else {
                 return lastChoice().getMessage().getContent();
             }
         } else {
-            return aggregationMessageContent.toString();
+            return contentBuilder.toString();
         }
     }
 
@@ -158,13 +157,13 @@ public class ChatResponseDefault implements ChatResponse {
     public AssistantMessage getAggregationMessage() {
         if (hasChoices()) {
             if (stream) {
-                return new AssistantMessage(aggregationMessageContent.toString(), lastChoice().getMessage().isThinking());
+                return new AssistantMessage(contentBuilder.toString(), lastChoice().getMessage().isThinking());
             } else {
                 return lastChoice().getMessage();
             }
         } else {
-            if (aggregationMessageContent.length() > 0) {
-                return new AssistantMessage(aggregationMessageContent.toString(), false);
+            if (contentBuilder.length() > 0) {
+                return new AssistantMessage(contentBuilder.toString(), false);
             } else {
                 return null;
             }

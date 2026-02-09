@@ -280,7 +280,7 @@ public class ClaudeResponseParser {
 
                         List<ToolCall> toolCalls = new ArrayList<>();
                         toolCalls.add(toolCall);
-                        AssistantMessage assistantMessage = new AssistantMessage("",
+                        AssistantMessage assistantMessage = new AssistantMessage("",null,
                                 false, null, toolCallsRaw,
                                 toolCalls, null);
                         resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));
@@ -414,7 +414,7 @@ public class ClaudeResponseParser {
                     List<ToolCall> toolCalls = new ArrayList<>();
                     toolCalls.add(toolCall);
 
-                    AssistantMessage assistantMessage = new AssistantMessage("",
+                    AssistantMessage assistantMessage = new AssistantMessage("",null,
                             false, null, toolCallsRaw,
                             toolCalls, null);
                     messageList.add(assistantMessage);
@@ -428,13 +428,13 @@ public class ClaudeResponseParser {
                 Map<String, Object> contentRaw = new LinkedHashMap<>();
                 contentRaw.put("thinking", thinkingContent.toString());
                 contentRaw.put("content", normalContent.toString());
-                messageList.add(0, new AssistantMessage(fullContent, false, contentRaw, null, null, null));
+                messageList.add(0, new AssistantMessage(fullContent, null,false, contentRaw, null, null, null));
             } else if (thinkingContent.length() > 0) {
                 // 只有思考内容
                 String fullContent = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n";
                 Map<String, Object> contentRaw = new LinkedHashMap<>();
                 contentRaw.put("thinking", thinkingContent.toString());
-                messageList.add(0, new AssistantMessage(fullContent, false, contentRaw, null, null, null));
+                messageList.add(0, new AssistantMessage(fullContent, null,false, contentRaw, null, null, null));
             } else if (normalContent.length() > 0) {
                 // 只有普通内容
                 messageList.add(0, new AssistantMessage(normalContent.toString()));

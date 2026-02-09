@@ -207,7 +207,7 @@ public class OpenaiResponsesResponseParser {
                         toolCallsRaw.add(toolCallRaw);
                         List<ToolCall> toolCalls = new ArrayList<>();
                         toolCalls.add(toolCall);
-                        AssistantMessage assistantMessage = new AssistantMessage("",
+                        AssistantMessage assistantMessage = new AssistantMessage("",null,
                                 false, null,
                                 toolCallsRaw, toolCalls, null);
                         resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));
@@ -362,7 +362,7 @@ public class OpenaiResponsesResponseParser {
                     List<ToolCall> toolCalls = new ArrayList<>();
                     toolCalls.add(toolCall);
 
-                    AssistantMessage assistantMessage = new AssistantMessage("",
+                    AssistantMessage assistantMessage = new AssistantMessage("",null,
                             false, null,
                             toolCallsRaw, toolCalls, null);
                     messageList.add(assistantMessage);
