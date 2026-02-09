@@ -1,6 +1,6 @@
 solon.code.cli:
-  name: "小花（Java 架构师）"
-  workDir: "/Users/noear/WORK/work_github/solonlab/acp-java-sdk"
+  name: "小花"
+  workDir: "work"
   webPath: "/cli"
   maxSteps: 100
   sessionWindowSize: 10

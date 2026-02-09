@@ -268,7 +268,8 @@ public class CodeCLI implements Handler, Runnable {
                                 System.out.flush();
                             }
                         } else  if (chunk instanceof ReasonChunk) {
-                            if (chunk.hasContent()) {
+                            ReasonChunk reasonChunk = (ReasonChunk) chunk;
+                            if (chunk.hasContent() && reasonChunk.isToolCalls() == false) {
                                 System.out.print(GRAY + clearThink(chunk.getContent()) + RESET);
                                 System.out.flush();
                             }
@@ -278,10 +279,10 @@ public class CodeCLI implements Handler, Runnable {
                             String content = chunk.getContent();
 
                             if (Assert.isNotEmpty(toolName)) {
-                                System.out.print("\n" + YELLOW + "⚙️  [" + toolName + "] Observation: " + RESET);
-                                System.out.println(content);
+                                System.out.println("\n" + YELLOW + "⚙️  [" + toolName + "] Observation: " + RESET);
+                                System.out.println(YELLOW +  content + RESET);
                             } else {
-                                System.out.println("\n" + YELLOW + "📝 " + content + RESET);
+                                System.out.println("\n" + YELLOW +  content + RESET);
                             }
                             System.out.flush();
                         } else if(chunk instanceof ReActChunk ) {
