@@ -19,7 +19,6 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.flow.components.AbsAiComponent;
 import org.noear.solon.ai.flow.components.AiIoComponent;
 import org.noear.solon.ai.generate.GenerateResponse;
-import org.noear.solon.ai.image.ImageResponse;
 import org.noear.solon.annotation.Component;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.Node;
@@ -68,10 +67,6 @@ public class VarOutputCom extends AbsAiComponent implements AiIoComponent {
             ChatResponse resp = (ChatResponse) data;
 
             buf.append(resp.getMessage().getContent());
-        } else if (data instanceof ImageResponse) {
-            ImageResponse resp = (ImageResponse) data;
-
-            buf.append(resp.getImage().getUrl());
         } else if (data instanceof GenerateResponse) {
             GenerateResponse resp = (GenerateResponse) data;
 
