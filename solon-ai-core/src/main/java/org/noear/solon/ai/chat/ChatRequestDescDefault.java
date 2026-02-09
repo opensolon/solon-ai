@@ -44,6 +44,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -111,41 +112,42 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     /**
      * 准备
      */
-    private SystemMessage prepare() {
-        if (session == null) {
-            session = InMemoryChatSession.builder().build();
-        }
+    private void prepare() {
+        if (prepared.compareAndSet(false, true)) {
+            if (session == null) {
+                session = InMemoryChatSession.builder().build();
+            }
 
-        if (originalPrompt != null) {
-            session.addMessage(originalPrompt);
-        }
+            if (originalPrompt != null) {
+                session.addMessage(originalPrompt);
+            }
 
-        //---
+            //---
 
-        StringBuilder systemMessage = new StringBuilder();
+            StringBuilder instructionBuilder = new StringBuilder();
 
-        if (Assert.isNotEmpty(options.role())) {
-            systemMessage.append("## 你的角色\n").append(options.role()).append("\n\n");
-        }
+            if (Assert.isNotEmpty(options.role())) {
+                instructionBuilder.append("## 你的角色\n").append(options.role()).append("\n\n");
+            }
 
-        if (Assert.isNotEmpty(options.instruction())) {
-            systemMessage.append("## 执行指令\n").append(options.instruction()).append("\n");
-        }
+            if (Assert.isNotEmpty(options.instruction())) {
+                instructionBuilder.append("## 执行指令\n").append(options.instruction()).append("\n");
+            }
 
-        SkillUtil.activeSkills(options, originalPrompt, systemMessage);
+            SkillUtil.activeSkills(options, originalPrompt, instructionBuilder);
 
 
-        for (RankEntity<ChatInterceptor> item : options.interceptors()) {
-            item.target.onPrepare(session, options, originalPrompt, systemMessage);
-        }
+            for (RankEntity<ChatInterceptor> item : options.interceptors()) {
+                item.target.onPrepare(session, options, originalPrompt, instructionBuilder);
+            }
 
-        if (systemMessage.length() > 0) {
-            return ChatMessage.ofSystem(systemMessage.toString());
-        } else {
-            return null;
+            if (instructionBuilder.length() > 0) {
+                systemMessage = ChatMessage.ofSystem(instructionBuilder.toString());
+            }
         }
     }
 
+    private AtomicBoolean prepared = new AtomicBoolean(false);
     private SystemMessage systemMessage;
 
     /**
@@ -153,7 +155,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     @Override
     public ChatResponse call() throws IOException {
-        systemMessage = prepare();
+        prepare();
 
         return internalCall();
     }
@@ -221,7 +223,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     @Override
     public Flux<ChatResponse> stream() {
-        systemMessage = prepare();
+        prepare();
 
         return Flux.from(internalStream());
     }

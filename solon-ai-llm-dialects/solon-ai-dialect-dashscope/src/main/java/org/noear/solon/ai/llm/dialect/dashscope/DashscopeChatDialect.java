@@ -76,7 +76,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
             n.getOrNew("input").getOrNew("messages").then(n1 -> {
                 for (ChatMessage m1 : messages) {
                     if (m1.isThinking() == false) {
-                        n1.add(buildChatMessageNode(m1));
+                        n1.add(buildChatMessageNode(config, m1));
                     }
                 }
             });
@@ -157,7 +157,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
+    protected void buildUserMessageNodeDo(ChatConfig config, ONode oNode, UserMessage msg) {
         ONode contentNode = new ONode().then(n -> {
             for (ContentBlock block1 : msg.getBlocks()) {
                 if (block1 instanceof ImageBlock) {

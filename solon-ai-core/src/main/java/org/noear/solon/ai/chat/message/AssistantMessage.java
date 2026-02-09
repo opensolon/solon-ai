@@ -112,8 +112,17 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
 
     public String getReasoning() {
         if (reasoning == null) {
-            if (isThinking || content.contains("<think>")) {
-                reasoning = content.replace("</?think>", "");
+            if (isThinking) {
+                reasoning = content.replace("</?think>", "").trim();
+            } else if (content.contains("</think>")) {
+                int start = content.indexOf("<think>");
+                int end = content.indexOf("</think>");
+
+                if (start > -1 && end > -1) {
+                    reasoning = content.substring(start + 7, end).trim();
+                } else {
+                    reasoning = "";
+                }
             } else {
                 reasoning = "";
             }

@@ -31,6 +31,9 @@ import java.util.*;
  * @since 3.1
  */
 public class ChatConfig extends AiConfig {
+    //用于 r1 思考补位（手动构建 AssistantMessage 时用）
+    private String reasoningFieldName;
+
     //用于配置注入
     private Boolean defaultAutoToolCall;
     @Deprecated
@@ -70,6 +73,13 @@ public class ChatConfig extends AiConfig {
         return modelOptions;
     }
 
+    public void setReasoningFieldName(String reasoningFieldName) {
+        this.reasoningFieldName = reasoningFieldName;
+    }
+
+    public String getReasoningFieldName() {
+        return reasoningFieldName;
+    }
 
     public void setDefaultAutoToolCall(boolean defaultAutoToolCall) {
         getModelOptions().autoToolCall(defaultAutoToolCall);

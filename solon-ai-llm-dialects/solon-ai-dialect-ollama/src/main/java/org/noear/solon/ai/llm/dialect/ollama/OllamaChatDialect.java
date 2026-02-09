@@ -61,7 +61,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
+    protected void buildUserMessageNodeDo(ChatConfig config, ONode oNode, UserMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
         if (msg.isMultiModal() == false) {
             //单模态

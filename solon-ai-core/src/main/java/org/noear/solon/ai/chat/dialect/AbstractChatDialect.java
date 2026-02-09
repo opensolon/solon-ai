@@ -54,7 +54,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         return httpUtils;
     }
 
-    protected void buildAssistantMessageNodeDo(ONode oNode, AssistantMessage msg) {
+    protected void buildAssistantMessageNodeDo(ChatConfig config, ONode oNode, AssistantMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
         if (Utils.isNotEmpty(msg.getResultContent())) {
@@ -62,8 +62,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
 
         //兼容 r1 的 tool-call(可以再优化，只在最后一条加)
-        if (Utils.isNotEmpty(msg.getReasoningFieldName()) && Utils.isNotEmpty(msg.getReasoning())) {
+        if (Utils.isNotEmpty(msg.getReasoningFieldName())) {
             oNode.set(msg.getReasoningFieldName(), msg.getReasoning());
+        } else if (Utils.isNotEmpty(config.getReasoningFieldName())) {
+            oNode.set(config.getReasoningFieldName(), "");
         }
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
@@ -71,12 +73,12 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
     }
 
-    protected void buildSystemMessageNodeDo(ONode oNode, SystemMessage msg) {
+    protected void buildSystemMessageNodeDo(ChatConfig config, ONode oNode, SystemMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
         oNode.set("content", msg.getContent());
     }
 
-    protected void buildToolMessageNodeDo(ONode oNode, ToolMessage msg) {
+    protected void buildToolMessageNodeDo(ChatConfig config, ONode oNode, ToolMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
         if (Utils.isNotEmpty(msg.getName())) {
@@ -129,7 +131,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
     }
 
-    protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
+    protected void buildUserMessageNodeDo(ChatConfig config, ONode oNode, UserMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
         if (msg.isMultiModal() == false) {
@@ -177,16 +179,16 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
 
-    public ONode buildChatMessageNode(ChatMessage chatMessage) {
+    public ONode buildChatMessageNode(ChatConfig config, ChatMessage chatMessage) {
         ONode oNode = new ONode();
         if (chatMessage instanceof AssistantMessage) {
-            buildAssistantMessageNodeDo(oNode, (AssistantMessage) chatMessage);
+            buildAssistantMessageNodeDo(config, oNode, (AssistantMessage) chatMessage);
         } else if (chatMessage instanceof SystemMessage) {
-            buildSystemMessageNodeDo(oNode, (SystemMessage) chatMessage);
+            buildSystemMessageNodeDo(config, oNode, (SystemMessage) chatMessage);
         } else if (chatMessage instanceof ToolMessage) {
-            buildToolMessageNodeDo(oNode, (ToolMessage) chatMessage);
+            buildToolMessageNodeDo(config, oNode, (ToolMessage) chatMessage);
         } else if (chatMessage instanceof UserMessage) {
-            buildUserMessageNodeDo(oNode, (UserMessage) chatMessage);
+            buildUserMessageNodeDo(config, oNode, (UserMessage) chatMessage);
         } else {
             throw new IllegalArgumentException("Unsupported chat message type: " + chatMessage.getClass());
         }
@@ -231,7 +233,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             n.getOrNew("messages").then(n1 -> {
                 for (ChatMessage m1 : messages) {
                     if (m1.isThinking() == false) {
-                        n1.add(buildChatMessageNode(m1));
+                        n1.add(buildChatMessageNode(config, m1));
                     }
                 }
             });

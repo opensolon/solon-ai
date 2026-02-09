@@ -209,6 +209,11 @@ public class ChatModel implements AiModel {
             return this;
         }
 
+        public Builder reasoningFieldName(String reasoningFieldName) {
+            config.setReasoningFieldName(reasoningFieldName);
+            return this;
+        }
+
         /**
          * 默认工具添加（即每次请求都会带上）
          *

@@ -20,6 +20,7 @@ public class GiteeaiR1Test extends AbsThinkTest{
         return ChatModel.of(apiUrl)
                 .apiKey(apiKey)
                 .model(model)
+                .reasoningFieldName("reasoning_content")
                 .defaultInterceptorAdd(new ChatInterceptorTest());
     }
 }
