@@ -94,7 +94,7 @@ public class GeminiThoughtProcessor {
                 }
                 resp.in_thinking = false;
 
-                AssistantMessage msg = new AssistantMessage("", null,false, null, null, toolCalls, null);
+                AssistantMessage msg = new AssistantMessage("", false, null, null, toolCalls, null);
                 messageList.add(msg);
                 return messageList;
             }
@@ -205,7 +205,7 @@ public class GeminiThoughtProcessor {
                     contentRaw.put("thought", cleanedThought);
                     contentRaw.put("content", normalContent.toString());
 
-                    messageList.add(new AssistantMessage(fullContent, null,false, contentRaw, null, null, null));
+                    messageList.add(new AssistantMessage(fullContent, false, contentRaw, null, null, null));
                 } else if (thoughtContent.length() > 0) {
                     String cleanedThought = cleanThoughtContent(thoughtContent.toString());
 
@@ -214,7 +214,7 @@ public class GeminiThoughtProcessor {
                     Map<String, Object> contentRaw = new LinkedHashMap<>();
                     contentRaw.put("thought", cleanedThought);
 
-                    messageList.add(new AssistantMessage(fullContent, null,false, contentRaw, null, null, null));
+                    messageList.add(new AssistantMessage(fullContent, false, contentRaw, null, null, null));
                 } else if (normalContent.length() > 0) {
                     messageList.add(new AssistantMessage(normalContent.toString()));
                 }

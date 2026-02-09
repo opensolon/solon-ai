@@ -49,20 +49,19 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     public AssistantMessage(String content) {
-        this(content, null, false, null, null, null, null);
+        this(content, false, null, null, null, null);
     }
 
     public AssistantMessage(String content, boolean isThinking) {
-        this(content, null, isThinking, null, null, null, null);
+        this(content, isThinking, null, null, null, null);
     }
 
     public AssistantMessage(String content, boolean isThinking, List<Map> searchResultsRaw) {
-        this(content, null, isThinking, null, null, null, searchResultsRaw);
+        this(content, isThinking, null, null, null, searchResultsRaw);
     }
 
-    public AssistantMessage(String content, String reasoning, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
+    public AssistantMessage(String content, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
         this.content = content;
-        this.reasoning = reasoning;
         this.isThinking = isThinking;
         this.toolCallsRaw = toolCallsRaw;
         this.toolCalls = toolCalls;
@@ -72,6 +71,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             this.contentRaw = content;
         } else {
             this.contentRaw = contentRaw;
+        }
+
+        if (isThinking) {
+            this.reasoning = content.replace("</?think>", "");
         }
     }
 

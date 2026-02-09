@@ -481,7 +481,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (content != null || toolCallsRaw != null) {
             Object contentRaw = oContent.toBean();
-            messageList.add(new AssistantMessage(content, reasoning_content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw));
+            messageList.add(new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw));
         }
 
         return messageList;
