@@ -16,10 +16,7 @@
 package org.noear.solon.ai.agent.react.task;
 
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActAgentConfig;
-import org.noear.solon.ai.agent.react.ReActInterceptor;
-import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -84,10 +81,12 @@ public class PlanTask implements NamedTaskComponent {
         ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o->{
-                    if(trace.getOptions().isFeedbackMode()) {
-                        o.toolAdd(FeedbackTool.getTool(
-                                trace.getOptions().getFeedbackDescription(trace),
-                                trace.getOptions().getFeedbackReasonDescription(trace)));
+                    if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+                        if (trace.getOptions().isFeedbackMode()) {
+                            o.toolAdd(FeedbackTool.getTool(
+                                    trace.getOptions().getFeedbackDescription(trace),
+                                    trace.getOptions().getFeedbackReasonDescription(trace)));
+                        }
                     }
                 });
 
