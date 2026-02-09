@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.core.util.Assert;
 
 import java.lang.reflect.Type;
@@ -165,8 +165,8 @@ public interface FunctionTool extends Tool {
            return (ToolResult)rst;
        }
 
-       if(rst instanceof AiMedia){
-           return new ToolResult().addMedia((AiMedia)rst);
+       if(rst instanceof ContentBlock){
+           return new ToolResult().addBlock((ContentBlock)rst);
        }
 
        return new ToolResult(ToolSchemaUtil.resultConvert(this, rst));

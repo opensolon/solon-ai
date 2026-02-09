@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.media;
+package org.noear.solon.ai.chat.media;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -27,7 +26,7 @@ import java.util.Map;
  * @author noear
  * @since 3.2
  */
-public abstract class AbstractMedia<T extends AbstractMedia> implements AiMedia {
+public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
     protected String b64_json; //就是 base64-str
     protected String url;
     protected String mimeType;

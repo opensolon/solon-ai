@@ -196,7 +196,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         if (originalPrompt.getMessages().stream()
                 .filter(m -> m.getRole() == ChatRole.USER)
                 .map(m -> (UserMessage) m)
-                .anyMatch(UserMessage::hasMedias)) {
+                .anyMatch(UserMessage::isMultiModal)) {
             sb.append(isZh
                     ? "\n- [重要]：输入包含多媒体附件，请务必结合视觉或文件内容进行处理。"
                     : "\n- [IMPORTANT]: Multimodal content detected. Process based on the attachments.");

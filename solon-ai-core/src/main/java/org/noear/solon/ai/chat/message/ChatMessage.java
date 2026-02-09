@@ -19,7 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.snack4.Feature;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.Assert;
@@ -113,21 +113,21 @@ public interface ChatMessage extends Serializable {
     /**
      * 构建用户消息
      */
-    static UserMessage ofUser(String content, List<AiMedia> medias) {
+    static UserMessage ofUser(String content, List<ContentBlock> medias) {
         return new UserMessage(content, medias);
     }
 
     /**
      * 构建用户消息
      */
-    static UserMessage ofUser(String content, AiMedia... medias) {
+    static UserMessage ofUser(String content, ContentBlock... medias) {
         return new UserMessage(content, Arrays.asList(medias));
     }
 
     /**
      * 构建用户消息
      */
-    static UserMessage ofUser(AiMedia media) {
+    static UserMessage ofUser(ContentBlock media) {
         return new UserMessage("", Arrays.asList(media));
     }
 

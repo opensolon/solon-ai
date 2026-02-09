@@ -17,7 +17,6 @@ package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Solon;
-import org.noear.solon.ai.AiMedia;
 import org.noear.solon.core.exception.ConvertException;
 import org.noear.solon.core.serialize.Serializer;
 

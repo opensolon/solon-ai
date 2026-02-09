@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
-import org.noear.solon.ai.media.Text;
+import org.noear.solon.ai.chat.media.TextBlock;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -66,9 +66,9 @@ public interface FunctionResource {
     /**
      * 处理
      */
-    Text handle(String reqUri) throws Throwable;
+    TextBlock handle(String reqUri) throws Throwable;
 
-    default CompletableFuture<Text> handleAsync(String reqUri) {
+    default CompletableFuture<TextBlock> handleAsync(String reqUri) {
         CompletableFuture future = new CompletableFuture();
 
         try {

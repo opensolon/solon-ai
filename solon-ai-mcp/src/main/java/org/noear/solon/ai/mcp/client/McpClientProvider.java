@@ -26,7 +26,7 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
@@ -40,9 +40,9 @@ import org.noear.solon.ai.mcp.server.prompt.PromptProvider;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 import org.noear.solon.ai.mcp.server.resource.FunctionResourceDesc;
 import org.noear.solon.ai.mcp.server.resource.ResourceProvider;
-import org.noear.solon.ai.media.Audio;
-import org.noear.solon.ai.media.Image;
-import org.noear.solon.ai.media.Text;
+import org.noear.solon.ai.chat.media.AudioBlock;
+import org.noear.solon.ai.chat.media.ImageBlock;
+import org.noear.solon.ai.chat.media.TextBlock;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.util.Assert;
@@ -505,39 +505,39 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
     /// /////////////////////////////
 
-    private AiMedia toAiMedia(McpSchema.Content content, Boolean error) {
+    private ContentBlock toAiMedia(McpSchema.Content content, Boolean error) {
         if (content instanceof McpSchema.TextContent) {
             String text = ((McpSchema.TextContent) content).text();
             if (error != null && error && text.startsWith("Error: ") == false) {
                 text = "Error: " + text;
             }
 
-            return Text.of(false, text);
+            return TextBlock.of(false, text);
         } else if (content instanceof McpSchema.ImageContent) {
             McpSchema.ImageContent image = (McpSchema.ImageContent) content;
             if (image.data().contains("://")) {
-                return Image.ofUrl(image.data());
+                return ImageBlock.ofUrl(image.data());
             } else {
-                return Image.ofBase64(image.data(), image.mimeType());
+                return ImageBlock.ofBase64(image.data(), image.mimeType());
             }
         } else if (content instanceof McpSchema.AudioContent) {
             McpSchema.AudioContent audio = (McpSchema.AudioContent) content;
             if (audio.data().contains("://")) {
-                return Audio.ofUrl(audio.data());
+                return AudioBlock.ofUrl(audio.data());
             } else {
-                return Audio.ofBase64(audio.data(), audio.mimeType());
+                return AudioBlock.ofBase64(audio.data(), audio.mimeType());
             }
         }
 
         return null;
     }
 
-    private Text toAiText(McpSchema.ResourceContents content) {
+    private TextBlock toAiText(McpSchema.ResourceContents content) {
         if (content instanceof McpSchema.TextResourceContents) {
-            return Text.of(false, ((McpSchema.TextResourceContents) content).text());
+            return TextBlock.of(false, ((McpSchema.TextResourceContents) content).text());
         } else if (content instanceof McpSchema.BlobResourceContents) {
             McpSchema.BlobResourceContents blob = (McpSchema.BlobResourceContents) content;
-            return Text.of(true, blob.blob(), blob.mimeType());
+            return TextBlock.of(true, blob.blob(), blob.mimeType());
         } else {
             return null;
         }
@@ -559,9 +559,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         if (mcpResult.content() != null) {
             for (McpSchema.Content c : mcpResult.content()) {
-                AiMedia media = toAiMedia(c, mcpResult.isError());
+                ContentBlock media = toAiMedia(c, mcpResult.isError());
                 if (media != null) {
-                    result.addMedia(media);
+                    result.addBlock(media);
                 }
             }
         }
@@ -598,12 +598,12 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      *
      * @param uri 资源地址
      */
-    public Text readResource(String uri) {
+    public TextBlock readResource(String uri) {
         McpSchema.ReadResourceResult mcpResult = readResourceResult(uri);
 
         if (mcpResult.contents() != null) {
             for (McpSchema.ResourceContents c : mcpResult.contents()) {
-                Text text = toAiText(c); // ResourceContents 也是 Content 的子类
+                TextBlock text = toAiText(c); // ResourceContents 也是 Content 的子类
                 if (text != null) {
                     return text;
                 }
@@ -650,7 +650,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                         UserMessage msg = ChatMessage.ofUser(((McpSchema.TextContent) pm.content()).text());
                         messages.add(msg);
                     } else {
-                        AiMedia aiMedia = toAiMedia(pm.content(), false);
+                        ContentBlock aiMedia = toAiMedia(pm.content(), false);
                         if (aiMedia != null) {
                             UserMessage msg = ChatMessage.ofUser(aiMedia);
                             messages.add(msg);

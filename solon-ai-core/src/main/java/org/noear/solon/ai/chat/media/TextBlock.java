@@ -13,27 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.media;
+package org.noear.solon.ai.chat.media;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 文本媒体
+ * 文本内容块
  *
  * @author noear
  * @since 3.1
  */
-public class Text implements AiMedia {
+public class TextBlock implements ContentBlock {
     private String content;
     private boolean isBase64;
     private String mimeType;
 
-    public static Text of(boolean isBase64, String content) {
-        Text tmp = new Text();
+    public static TextBlock of(boolean isBase64, String content) {
+        TextBlock tmp = new TextBlock();
         tmp.isBase64 = isBase64;
         tmp.content = content;
         tmp.mimeType = null;
@@ -41,8 +40,8 @@ public class Text implements AiMedia {
         return tmp;
     }
 
-    public static Text of(boolean isBase64, String content, String mimeType) {
-        Text tmp = new Text();
+    public static TextBlock of(boolean isBase64, String content, String mimeType) {
+        TextBlock tmp = new TextBlock();
         tmp.isBase64 = isBase64;
         tmp.content = content;
         tmp.mimeType = mimeType;
@@ -107,27 +106,27 @@ public class Text implements AiMedia {
 
     /// ///////////////
 
-    public Image toImage() {
+    public ImageBlock toImage() {
         if (isBase64()) {
-            return Image.ofBase64(getContent(), getMimeType());
+            return ImageBlock.ofBase64(getContent(), getMimeType());
         } else {
-            return Image.ofUrl(getContent());
+            return ImageBlock.ofUrl(getContent());
         }
     }
 
-    public Audio toAudio() {
+    public AudioBlock toAudio() {
         if (isBase64()) {
-            return Audio.ofBase64(getContent(), getMimeType());
+            return AudioBlock.ofBase64(getContent(), getMimeType());
         } else {
-            return Audio.ofUrl(getContent());
+            return AudioBlock.ofUrl(getContent());
         }
     }
 
-    public Video toVideo() {
+    public VideoBlock toVideo() {
         if (isBase64()) {
-            return Video.ofBase64(getContent(), getMimeType());
+            return VideoBlock.ofBase64(getContent(), getMimeType());
         } else {
-            return Video.ofUrl(getContent());
+            return VideoBlock.ofUrl(getContent());
         }
     }
 }

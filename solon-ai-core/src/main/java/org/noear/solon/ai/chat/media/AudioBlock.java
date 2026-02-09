@@ -13,21 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.media;
+package org.noear.solon.ai.chat.media;
 
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
 
 import java.util.Base64;
 
 /**
- * 音频
+ * 音频内容块
  *
  * @author noear
  * @since 3.1
  */
-public class Audio extends AbstractMedia<Audio> implements AiMedia {
+public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
     @Override
     public String getMimeType() {
         if (Utils.isEmpty(mimeType)) {
@@ -40,8 +39,8 @@ public class Audio extends AbstractMedia<Audio> implements AiMedia {
     /**
      * 由 url 构建
      */
-    public static Audio ofUrl(String url) {
-        Audio tmp = new Audio();
+    public static AudioBlock ofUrl(String url) {
+        AudioBlock tmp = new AudioBlock();
         tmp.url = url;
         return tmp;
     }
@@ -49,8 +48,8 @@ public class Audio extends AbstractMedia<Audio> implements AiMedia {
     /**
      * 由 base64String 构建
      */
-    public static Audio ofBase64(String base64String) {
-        Audio tmp = new Audio();
+    public static AudioBlock ofBase64(String base64String) {
+        AudioBlock tmp = new AudioBlock();
         tmp.b64_json = base64String;
         return tmp;
     }
@@ -58,8 +57,8 @@ public class Audio extends AbstractMedia<Audio> implements AiMedia {
     /**
      * 由 base64 构建
      */
-    public static Audio ofBase64(String base64String, String mimeType) {
-        Audio tmp = new Audio();
+    public static AudioBlock ofBase64(String base64String, String mimeType) {
+        AudioBlock tmp = new AudioBlock();
         tmp.b64_json = base64String;
         tmp.mimeType = mimeType;
         return tmp;
@@ -68,8 +67,8 @@ public class Audio extends AbstractMedia<Audio> implements AiMedia {
     /**
      * 由 base64 构建
      */
-    public static Audio ofBase64(byte[] base64, String mimeType) {
-        Audio tmp = new Audio();
+    public static AudioBlock ofBase64(byte[] base64, String mimeType) {
+        AudioBlock tmp = new AudioBlock();
         tmp.b64_json = Base64.getEncoder().encodeToString(base64);
         tmp.mimeType = mimeType;
         return tmp;
@@ -78,8 +77,8 @@ public class Audio extends AbstractMedia<Audio> implements AiMedia {
     /**
      * 由 base64 构建
      */
-    public static Audio ofBase64(byte[] base64) {
-        Audio tmp = new Audio();
+    public static AudioBlock ofBase64(byte[] base64) {
+        AudioBlock tmp = new AudioBlock();
         tmp.b64_json = Base64.getEncoder().encodeToString(base64);
         return tmp;
     }

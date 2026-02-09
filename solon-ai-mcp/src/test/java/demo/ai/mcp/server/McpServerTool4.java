@@ -6,7 +6,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.media.ImageBlock;
 import org.noear.solon.annotation.Header;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.handle.Context;
@@ -55,7 +55,7 @@ public class McpServerTool4 {
         String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
 
         return Arrays.asList(
-                ChatMessage.ofUser("这图里有方块吗？", Image.ofUrl(imageUrl))
+                ChatMessage.ofUser("这图里有方块吗？", ImageBlock.ofUrl(imageUrl))
         );
     }
 

@@ -20,7 +20,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.chat.tool.MethodExecuteHandler;
-import org.noear.solon.ai.media.Text;
+import org.noear.solon.ai.chat.media.TextBlock;
 import org.noear.solon.annotation.Produces;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
@@ -140,13 +140,13 @@ public class MethodFunctionResource implements FunctionResource {
     }
 
     @Override
-    public Text handle(String reqUri) throws Throwable {
+    public TextBlock handle(String reqUri) throws Throwable {
         return handleAsync(reqUri).get();
     }
 
     @Override
-    public CompletableFuture<Text> handleAsync(String reqUri) {
-        CompletableFuture<Text> returnFuture = new CompletableFuture<>();
+    public CompletableFuture<TextBlock> handleAsync(String reqUri) {
+        CompletableFuture<TextBlock> returnFuture = new CompletableFuture<>();
 
         try {
             Object handleR = doHandle(reqUri);
@@ -191,17 +191,17 @@ public class MethodFunctionResource implements FunctionResource {
         return returnFuture;
     }
 
-    private void doConvert(Object rst, CompletableFuture<Text> returnFuture) {
+    private void doConvert(Object rst, CompletableFuture<TextBlock> returnFuture) {
         try {
-            final Text rst2;
-            if (rst instanceof Text) {
-                rst2 = (Text) rst;
+            final TextBlock rst2;
+            if (rst instanceof TextBlock) {
+                rst2 = (TextBlock) rst;
             } else if (rst instanceof byte[]) {
                 String blob = Base64.getEncoder().encodeToString((byte[]) rst);
-                rst2 = Text.of(true, blob);
+                rst2 = TextBlock.of(true, blob);
             } else {
                 String text = String.valueOf(rst);
-                rst2 = Text.of(false, text);
+                rst2 = TextBlock.of(false, text);
             }
 
             returnFuture.complete(rst2);

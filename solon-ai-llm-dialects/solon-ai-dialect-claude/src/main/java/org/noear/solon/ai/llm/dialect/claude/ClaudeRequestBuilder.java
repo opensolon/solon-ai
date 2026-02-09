@@ -17,7 +17,7 @@ package org.noear.solon.ai.llm.dialect.claude;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRole;
@@ -25,8 +25,8 @@ import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
-import org.noear.solon.ai.media.Image;
-import org.noear.solon.ai.media.Text;
+import org.noear.solon.ai.chat.media.ImageBlock;
+import org.noear.solon.ai.chat.media.TextBlock;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -275,23 +275,23 @@ public class ClaudeRequestBuilder {
     private void buildNormalMessageNode(ONode node, ChatMessage message) {
         if (message instanceof UserMessage) {
             UserMessage userMessage = (UserMessage) message;
-            if (userMessage.hasMedias() == false) {
+            if (userMessage.isMultiModal() == false) {
                 // 纯文本消息
                 node.set("content", userMessage.getContent());
             } else {
                 // 多模态消息
                 ONode contentArray = node.getOrNew("content").asArray();
                 // Claude支持图像上传
-                for (AiMedia media : userMessage.getMedias()) {
-                    if(media instanceof Text){
-                        Text text = (Text) media;
+                for (ContentBlock block1 : userMessage.getBlocks()) {
+                    if(block1 instanceof TextBlock){
+                        TextBlock text = (TextBlock) block1;
                         contentArray.addNew()
                                 .set("type", "text")
                                 .set("text", text.getContent());
                     }
 
-                    if (media instanceof Image) {
-                        Image image = (Image) media;
+                    if (block1 instanceof ImageBlock) {
+                        ImageBlock image = (ImageBlock) block1;
 
                         // 从Image对象获取实际的媒体类型
                         String mediaType = image.getMimeType();

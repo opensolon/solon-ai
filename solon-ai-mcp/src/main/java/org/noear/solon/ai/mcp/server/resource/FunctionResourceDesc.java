@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.mcp.server.resource;
 
-import org.noear.solon.ai.media.Text;
+import org.noear.solon.ai.chat.media.TextBlock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +35,7 @@ public class FunctionResourceDesc implements FunctionResource {
     private String title;
     private String description;
     private String mimeType;
-    private Function<String, Text> doHandler;
+    private Function<String, TextBlock> doHandler;
 
     public FunctionResourceDesc(String name) {
         this.name = name;
@@ -86,7 +86,7 @@ public class FunctionResourceDesc implements FunctionResource {
      *
      * @param handler 处理器
      */
-    public FunctionResourceDesc doHandle(Function<String, Text> handler) {
+    public FunctionResourceDesc doHandle(Function<String, TextBlock> handler) {
         this.doHandler = handler;
         return this;
     }
@@ -117,7 +117,7 @@ public class FunctionResourceDesc implements FunctionResource {
     }
 
     @Override
-    public Text handle(String reqUri) throws Throwable {
+    public TextBlock handle(String reqUri) throws Throwable {
         try {
             return doHandler.apply(reqUri);
         } catch (Throwable ex) {

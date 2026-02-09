@@ -17,17 +17,16 @@ package org.noear.solon.ai.llm.dialect.dashscope;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.media.Audio;
+import org.noear.solon.ai.chat.media.AudioBlock;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.media.ImageBlock;
 
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -160,14 +159,14 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     @Override
     protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
         ONode contentNode = new ONode().then(n -> {
-            for (AiMedia media : msg.getMedias()) {
-                if (media instanceof Image) {
+            for (ContentBlock block1 : msg.getBlocks()) {
+                if (block1 instanceof ImageBlock) {
                     n.add(new ONode().then(n1 -> {
-                        n1.set("image", media.toDataString(true));
+                        n1.set("image", block1.toDataString(true));
                     }));
-                }else if (media instanceof Audio) {
+                }else if (block1 instanceof AudioBlock) {
                     n.add(new ONode().then(n1 -> {
-                        n1.set("audio", media.toDataString(true));
+                        n1.set("audio", block1.toDataString(true));
                     }));
                 }
             }

@@ -1,7 +1,7 @@
 package org.noear.solon.ai.chat.tool;
 
-import org.noear.solon.ai.AiMedia;
-import org.noear.solon.ai.media.Text;
+import org.noear.solon.ai.chat.media.ContentBlock;
+import org.noear.solon.ai.chat.media.TextBlock;
 import org.noear.solon.core.util.Assert;
 
 import java.io.Serializable;
@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 public class ToolResult implements Serializable {
-    private final List<AiMedia> medias = new ArrayList<>();
+    private final List<ContentBlock> blocks = new ArrayList<>();
     private String text;
     private boolean isError;
     private Map<String, Object> metadata;
@@ -21,11 +21,11 @@ public class ToolResult implements Serializable {
     }
 
     public ToolResult(String text) {
-        addMedia(Text.of(false, text));
+        addBlock(TextBlock.of(false, text));
     }
 
     public static boolean isEmpty(ToolResult result) {
-        return result == null || result.getMedias().isEmpty();
+        return result == null || result.getBlocks().isEmpty();
     }
 
     /**
@@ -45,14 +45,14 @@ public class ToolResult implements Serializable {
     }
 
     /**
-     * 添加媒体块（图像、音频、视频）
+     * 添加内容块（图像、音频、视频）
      */
-    public ToolResult addMedia(AiMedia media) {
-        if (media instanceof Text) {
-            text = ((Text) media).getContent();
+    public ToolResult addBlock(ContentBlock media) {
+        if (media instanceof TextBlock) {
+            text = ((TextBlock) media).getContent();
         }
 
-        this.medias.add(media);
+        this.blocks.add(media);
         return this;
     }
 
@@ -67,16 +67,24 @@ public class ToolResult implements Serializable {
     /**
      * 获取所有内容块
      */
-    public List<AiMedia> getMedias() {
-        return medias;
+    public List<ContentBlock> getBlocks() {
+        return blocks;
     }
 
-    public boolean hasMedias() {
-        if (Assert.isEmpty(text)) {
-            return medias.size() > 0;
-        } else {
-            return medias.size() > 1;
+    /**
+     * 是否有多媒体
+     */
+    public boolean isMultiModal() {
+        int size = blocks.size();
+        if (size > 1) {
+            return true;
         }
+
+        if (size == 1) {
+            return !(blocks.get(0) instanceof TextBlock);
+        }
+
+        return false;
     }
 
     /**
@@ -106,11 +114,11 @@ public class ToolResult implements Serializable {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        for (AiMedia media : medias) {
-            if (media instanceof Text) {
-                sb.append(((Text) media).getContent());
+        for (ContentBlock block : blocks) {
+            if (block instanceof TextBlock) {
+                sb.append(((TextBlock) block).getContent());
             } else {
-                sb.append("[Media: ").append(media.getMimeType()).append("]");
+                sb.append("[Media: ").append(block.getMimeType()).append("]");
             }
         }
         return sb.toString();

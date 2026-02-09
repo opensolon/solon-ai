@@ -13,17 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai;
+package org.noear.solon.ai.chat.media;
 
 import java.util.Map;
 
 /**
- * Ai 媒体
+ * 内容块
  *
  * @author noear
  * @since 3.1
+ * @since 3.9.2
  */
-public interface AiMedia {
+public interface ContentBlock {
     /**
      * 源信息
      */

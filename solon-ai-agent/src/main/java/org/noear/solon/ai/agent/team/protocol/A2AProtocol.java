@@ -303,7 +303,7 @@ public class A2AProtocol extends TeamProtocolBase {
         boolean hasMedia = trace.getOriginalPrompt().getMessages().stream()
                 .filter(m -> m.getRole() == ChatRole.USER)
                 .map(m -> (UserMessage) m)
-                .anyMatch(UserMessage::hasMedias);
+                .anyMatch(UserMessage::isMultiModal);
 
         return !hasMedia || target.profile().getInputModes().stream().anyMatch(m -> !m.equalsIgnoreCase("text"));
     }

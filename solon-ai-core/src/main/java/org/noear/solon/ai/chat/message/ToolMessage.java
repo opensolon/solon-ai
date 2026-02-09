@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.lang.Nullable;
@@ -57,18 +57,27 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
         return role;
     }
 
+    /**
+     * 内容（兼容单模态LLM）
+     */
     @Override
     public String getContent() {
         return toolResult.getContent();
     }
 
+    /**
+     * 内容块集合（兼容多模态LLM）
+     */
     @Nullable
-    public List<AiMedia> getMedias() {
-        return toolResult.getMedias();
+    public List<ContentBlock> getBlocks() {
+        return toolResult.getBlocks();
     }
 
-    public boolean hasMedias(){
-        return toolResult.hasMedias();
+    /**
+     * 是否为多模态
+     */
+    public boolean isMultiModal(){
+        return toolResult.isMultiModal();
     }
 
     /**
@@ -107,8 +116,8 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
             buf.append(", metadata=").append(metadata);
         }
 
-        if (Utils.isNotEmpty(toolResult.getMedias())) {
-            buf.append(", medias=").append(toolResult.getMedias());
+        if (Utils.isNotEmpty(toolResult.getBlocks())) {
+            buf.append(", medias=").append(toolResult.getBlocks());
         }
 
         if (name != null) {

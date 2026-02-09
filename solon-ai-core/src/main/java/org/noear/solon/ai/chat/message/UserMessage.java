@@ -16,10 +16,9 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
-import org.noear.solon.ai.media.Text;
-import org.noear.solon.core.util.Assert;
+import org.noear.solon.ai.chat.media.TextBlock;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -35,8 +34,8 @@ import java.util.List;
 @Preview("3.1")
 public class UserMessage extends ChatMessageBase<UserMessage> {
     private final ChatRole role = ChatRole.USER;
+    private final List<ContentBlock> blocks = new ArrayList<>();
     private String content;
-    private List<AiMedia> medias = new ArrayList<>();
 
     public UserMessage() {
         //用于序列化
@@ -46,15 +45,15 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
         this(content, null);
     }
 
-    public UserMessage(String content, List<AiMedia> medias) {
+    public UserMessage(String content, List<ContentBlock> blocks) {
         this.content = content;
 
         if (Utils.isNotEmpty(content)) {
-            this.medias.add(Text.of(false, content));
+            this.blocks.add(TextBlock.of(false, content));
         }
 
-        if (Utils.isNotEmpty(medias)) {
-            this.medias.addAll(medias);
+        if (Utils.isNotEmpty(blocks)) {
+            this.blocks.addAll(blocks);
         }
     }
 
@@ -67,7 +66,7 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
     }
 
     /**
-     * 内容
+     * 内容（兼容单模态LLM）
      */
     @Override
     public String getContent() {
@@ -75,19 +74,27 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
     }
 
     /**
-     * 媒体集合
+     * 内容块集合（兼容多模态LLM）
      */
     @Nullable
-    public List<AiMedia> getMedias() {
-        return medias;
+    public List<ContentBlock> getBlocks() {
+        return blocks;
     }
 
-    public boolean hasMedias() {
-        if (Assert.isEmpty(content)) {
-            return medias.size() > 0;
-        } else {
-            return medias.size() > 1;
+    /**
+     * 是否为多模态
+     */
+    public boolean isMultiModal() {
+        int size = blocks.size();
+        if (size > 1) {
+            return true;
         }
+
+        if (size == 1) {
+            return !(blocks.get(0) instanceof TextBlock);
+        }
+
+        return false;
     }
 
     @Override
@@ -105,8 +112,8 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
             buf.append(", metadata=").append(metadata);
         }
 
-        if (Utils.isNotEmpty(medias)) {
-            buf.append(", medias=").append(medias);
+        if (Utils.isNotEmpty(blocks)) {
+            buf.append(", medias=").append(blocks);
         }
 
         buf.append("}");

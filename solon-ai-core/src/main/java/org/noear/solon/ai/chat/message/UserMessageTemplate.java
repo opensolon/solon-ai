@@ -16,7 +16,7 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.expression.snel.SnEL;
 import org.noear.solon.lang.Preview;
@@ -33,7 +33,7 @@ import java.util.*;
 public class UserMessageTemplate {
     private final String tmpl;
     private final Map<String, Object> params = new HashMap<>();
-    private List<AiMedia> medias;
+    private List<ContentBlock> medias;
 
 
     /**
@@ -76,7 +76,7 @@ public class UserMessageTemplate {
     /**
      * 配置感知媒体
      */
-    public UserMessageTemplate mediaAdd(AiMedia media) {
+    public UserMessageTemplate mediaAdd(ContentBlock media) {
         if (medias == null) {
             medias = new ArrayList<>();
         }

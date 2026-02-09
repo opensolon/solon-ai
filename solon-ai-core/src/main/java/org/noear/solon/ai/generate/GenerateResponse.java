@@ -17,7 +17,6 @@ package org.noear.solon.ai.generate;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.media.Image;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 

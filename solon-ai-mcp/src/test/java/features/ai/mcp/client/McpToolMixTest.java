@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.media.Text;
+import org.noear.solon.ai.chat.media.TextBlock;
 import org.noear.solon.test.SolonTest;
 
 /**
@@ -23,7 +23,7 @@ public class McpToolMixTest {
                 .url("http://localhost:8081/mcp/WeatherTools/sse")
                 .build();
 
-        Text mediaText = mcpClient.readResource("weather://cities");
+        TextBlock mediaText = mcpClient.readResource("weather://cities");
 
         System.out.println(mediaText);
 

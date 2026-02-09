@@ -4,8 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.media.ImageBlock;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
@@ -35,7 +34,7 @@ public class OllamaVisionTest {
         byte[] bytes = HttpUtils.http("https://solon.noear.org/img/solon/favicon256.png").exec("GET").bodyAsBytes();
 
         //一次性返回
-        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("图里有人像吗？", Image.ofBase64(bytes)))
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("图里有人像吗？", ImageBlock.ofBase64(bytes)))
                 .call();
 
         //打印消息
@@ -55,7 +54,7 @@ public class OllamaVisionTest {
 
         //一次性返回
         ChatResponse resp = chatModel.prompt(
-                        ChatMessage.ofUser(Image.ofBase64(bytes)),
+                        ChatMessage.ofUser(ImageBlock.ofBase64(bytes)),
                         ChatMessage.ofUser("这图里有人像吗？")
                 )
                 .call();

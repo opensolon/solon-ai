@@ -18,7 +18,7 @@ package org.noear.solon.ai.mcp.server.manager;
 import io.modelcontextprotocol.server.*;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
@@ -26,7 +26,7 @@ import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.media.ImageBlock;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.core.handle.Context;
 import reactor.core.publisher.Mono;
@@ -110,17 +110,17 @@ public class StatelessPromptRegistry implements McpPrimitivesRegistry<FunctionPr
                                             } else if (msg.getRole() == ChatRole.USER) {
                                                 UserMessage userMessage = (UserMessage) msg;
 
-                                                if (userMessage.hasMedias() == false) {
-                                                    //如果没有媒体
+                                                if (userMessage.isMultiModal() == false) {
+                                                    //单模态
                                                     promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
                                                             new McpSchema.TextContent(msg.getContent())));
                                                 } else {
-                                                    //如果有，分解消息
+                                                    //多模态
 
                                                     //1.先转媒体（如果是图片）
-                                                    for (AiMedia media : userMessage.getMedias()) {
-                                                        if (media instanceof Image) {
-                                                            Image mediaImage = (Image) media;
+                                                    for (ContentBlock block1 : userMessage.getBlocks()) {
+                                                        if (block1 instanceof ImageBlock) {
+                                                            ImageBlock mediaImage = (ImageBlock) block1;
                                                             if (mediaImage.getB64Json() != null) {
                                                                 promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
                                                                         new McpSchema.ImageContent(null, null,

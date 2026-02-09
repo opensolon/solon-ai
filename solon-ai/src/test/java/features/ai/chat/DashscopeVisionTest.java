@@ -2,12 +2,12 @@ package features.ai.chat;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
-import org.noear.solon.ai.media.Audio;
+import org.noear.solon.ai.chat.media.AudioBlock;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.media.ImageBlock;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
@@ -40,7 +40,7 @@ public class DashscopeVisionTest {
         byte[] bytes = HttpUtils.http(imageUrl).exec("GET").bodyAsBytes();
 
         //一次性返回
-        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", Image.ofBase64(bytes)))
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", ImageBlock.ofBase64(bytes)))
                 .call();
 
         //打印消息
@@ -60,7 +60,7 @@ public class DashscopeVisionTest {
 
         //一次性返回
         ChatResponse resp = chatModel.prompt(
-                        ChatMessage.ofUser(Image.ofBase64(bytes)),
+                        ChatMessage.ofUser(ImageBlock.ofBase64(bytes)),
                         ChatMessage.ofUser("这图里有方块吗？")
                 )
                 .call();
@@ -78,7 +78,7 @@ public class DashscopeVisionTest {
                 .build();
 
         String imageUrl = "https://solon.noear.org/img/solon/favicon256.png";
-        Image image = Image.ofUrl(imageUrl);
+        ImageBlock image = ImageBlock.ofUrl(imageUrl);
         //一次性返回
         ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？，这两张图片一样吗", image, image))
                 .call();
@@ -109,14 +109,14 @@ public class DashscopeVisionTest {
         // session会话
         ChatSession chatSession = InMemoryChatSession.builder().sessionId("sessionID").build();
 
-        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", Image.ofUrl(imageUrl)))
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", ImageBlock.ofUrl(imageUrl)))
                 .call();
         // 保存问答
         chatSession.addMessage(ChatMessage.ofUser("这图里有方块吗？"));
         chatSession.addMessage(resp.getMessage());
 
         // 切换模型类型
-        resp = chatModel2.prompt(ChatMessage.ofUser("可以把这一段话翻译成中文吗？", Audio.ofUrl(audioUrl)))
+        resp = chatModel2.prompt(ChatMessage.ofUser("可以把这一段话翻译成中文吗？", AudioBlock.ofUrl(audioUrl)))
                 .call();
         // 保存问答
         chatSession.addMessage(ChatMessage.ofUser("可以把这一段话翻译成中文吗？"));
@@ -148,7 +148,7 @@ public class DashscopeVisionTest {
 
         String audioUrl = "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20240916/spvfxd/es.mp3";
         byte[] bytes = HttpUtils.http(audioUrl).exec("GET").bodyAsBytes();
-        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("请把这一段话翻译成中文？", Audio.ofBase64(bytes)))
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("请把这一段话翻译成中文？", AudioBlock.ofBase64(bytes)))
                 .call();
 
         // 打印消息
@@ -166,7 +166,7 @@ public class DashscopeVisionTest {
         String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
 
         //一次性返回
-        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("把黑线框变成红的", Image.ofUrl(imageUrl)))
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("把黑线框变成红的", ImageBlock.ofUrl(imageUrl)))
                 .call();
 
         //打印消息

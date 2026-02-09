@@ -17,16 +17,15 @@ package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
-import org.noear.solon.ai.media.Audio;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.media.AudioBlock;
+import org.noear.solon.ai.chat.media.ImageBlock;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -141,7 +140,7 @@ public class OpenaiResponsesRequestBuilder {
             ONode msgNode = inputArray.addNew()
                     .set("type", "message")
                     .set("role", "user");
-            if (userMessage.hasMedias() == false) {
+            if (userMessage.isMultiModal() == false) {
                 // 纯文本消息
                 msgNode.set("content", userMessage.getContent());
             } else {
@@ -154,14 +153,14 @@ public class OpenaiResponsesRequestBuilder {
                             .set("text", userMessage.getContent());
                 }
                 // 添加媒体内容（图像、音频等）
-                for (AiMedia media : userMessage.getMedias()) {
-                    if (media instanceof Image) {
-                        Image image = (Image) media;
+                for (ContentBlock block1 : userMessage.getBlocks()) {
+                    if (block1 instanceof ImageBlock) {
+                        ImageBlock image = (ImageBlock) block1;
                         contentArray.addNew()
                                 .set("type", "input_image")
                                 .set("image_url", image.toDataString(true));
-                    } else if (media instanceof Audio) {
-                        Audio audio = (Audio) media;
+                    } else if (block1 instanceof AudioBlock) {
+                        AudioBlock audio = (AudioBlock) block1;
                         ONode audioNode = contentArray.addNew()
                                 .set("type", "input_audio");
                         // Responses API 音频格式：data (base64) 和 format

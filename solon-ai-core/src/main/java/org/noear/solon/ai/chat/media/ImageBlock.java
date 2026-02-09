@@ -13,20 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.media;
+package org.noear.solon.ai.chat.media;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
 
 import java.util.Base64;
 
 /**
- * 图像
+ * 图像内容块
  *
  * @author noear
  * @since 3.1
  */
-public class Image extends AbstractMedia<Image> implements AiMedia {
+public class ImageBlock extends AbsMedia<ImageBlock> implements MediaBlock {
     @Override
     public String getMimeType() {
         if (Utils.isEmpty(mimeType)) {
@@ -39,8 +38,8 @@ public class Image extends AbstractMedia<Image> implements AiMedia {
     /**
      * 由 url 构建
      */
-    public static Image ofUrl(String url) {
-        Image tmp = new Image();
+    public static ImageBlock ofUrl(String url) {
+        ImageBlock tmp = new ImageBlock();
         tmp.url = url;
         return tmp;
     }
@@ -48,8 +47,8 @@ public class Image extends AbstractMedia<Image> implements AiMedia {
     /**
      * 由 base64String 构建
      */
-    public static Image ofBase64(String base64String) {
-        Image tmp = new Image();
+    public static ImageBlock ofBase64(String base64String) {
+        ImageBlock tmp = new ImageBlock();
         tmp.b64_json = base64String;
         return tmp;
     }
@@ -57,8 +56,8 @@ public class Image extends AbstractMedia<Image> implements AiMedia {
     /**
      * 由 base64 构建
      */
-    public static Image ofBase64(String base64String, String mimeType) {
-        Image tmp = new Image();
+    public static ImageBlock ofBase64(String base64String, String mimeType) {
+        ImageBlock tmp = new ImageBlock();
         tmp.b64_json = base64String;
         tmp.mimeType = mimeType;
         return tmp;
@@ -67,8 +66,8 @@ public class Image extends AbstractMedia<Image> implements AiMedia {
     /**
      * 由 base64 构建
      */
-    public static Image ofBase64(byte[] base64, String mimeType) {
-        Image tmp = new Image();
+    public static ImageBlock ofBase64(byte[] base64, String mimeType) {
+        ImageBlock tmp = new ImageBlock();
         tmp.b64_json = Base64.getEncoder().encodeToString(base64);
         tmp.mimeType = mimeType;
         return tmp;
@@ -77,8 +76,8 @@ public class Image extends AbstractMedia<Image> implements AiMedia {
     /**
      * 由 base64 构建
      */
-    public static Image ofBase64(byte[] base64) {
-        Image tmp = new Image();
+    public static ImageBlock ofBase64(byte[] base64) {
+        ImageBlock tmp = new ImageBlock();
         tmp.b64_json = Base64.getEncoder().encodeToString(base64);
         return tmp;
     }

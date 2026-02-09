@@ -17,14 +17,14 @@ package org.noear.solon.ai.chat.dialect;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
-import org.noear.solon.ai.media.Audio;
+import org.noear.solon.ai.chat.media.ContentBlock;
+import org.noear.solon.ai.chat.media.AudioBlock;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.*;
-import org.noear.solon.ai.media.Image;
-import org.noear.solon.ai.media.Text;
-import org.noear.solon.ai.media.Video;
+import org.noear.solon.ai.chat.media.ImageBlock;
+import org.noear.solon.ai.chat.media.TextBlock;
+import org.noear.solon.ai.chat.media.VideoBlock;
 import org.noear.solon.net.http.HttpUtils;
 
 import java.util.*;
@@ -82,28 +82,28 @@ public abstract class AbstractChatDialect implements ChatDialect {
             oNode.set("tool_call_id", msg.getToolCallId());
         }
 
-        if (msg.hasMedias() == false) {
+        if (msg.isMultiModal() == false) {
             oNode.set("content", msg.getContent());
         } else {
             oNode.getOrNew("content").then(n1 -> {
-                for (AiMedia m1 : msg.getMedias()) {
+                for (ContentBlock m1 : msg.getBlocks()) {
                     ONode m1Node = null;
 
-                    if (m1 instanceof Text) {
-                        Text m1Text = (Text) m1;
+                    if (m1 instanceof TextBlock) {
+                        TextBlock m1Text = (TextBlock) m1;
                         n1.addNew().set("type", "text").set("text", m1Text.getContent());
-                    } else if (m1 instanceof Image) {
+                    } else if (m1 instanceof ImageBlock) {
                         m1Node = n1.addNew();
 
                         m1Node.set("type", "image_url");
                         m1Node.getOrNew("image_url").set("url", m1.toDataString(true));
 
-                    } else if (m1 instanceof Audio) {
+                    } else if (m1 instanceof AudioBlock) {
                         m1Node = n1.addNew();
 
                         m1Node.set("type", "audio_url");
                         m1Node.getOrNew("audio_url").set("url", m1.toDataString(true));
-                    } else if (m1 instanceof Video) {
+                    } else if (m1 instanceof VideoBlock) {
                         m1Node = n1.addNew();
 
                         m1Node.set("type", "video_url");
@@ -127,39 +127,39 @@ public abstract class AbstractChatDialect implements ChatDialect {
     protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
-        if (msg.hasMedias() == false) {
+        if (msg.isMultiModal() == false) {
             oNode.set("content", msg.getContent());
         } else {
             oNode.getOrNew("content").then(n1 -> {
-                for (AiMedia m1 : msg.getMedias()) {
-                    ONode m1Node = null;
+                for (ContentBlock block1 : msg.getBlocks()) {
+                    ONode oNode1 = null;
 
-                    if (m1 instanceof Text) {
-                        Text m1Text = (Text) m1;
+                    if (block1 instanceof TextBlock) {
+                        TextBlock m1Text = (TextBlock) block1;
                         n1.addNew().set("type", "text").set("text", m1Text.getContent());
-                    } else if (m1 instanceof Image) {
-                        m1Node = n1.addNew();
+                    } else if (block1 instanceof ImageBlock) {
+                        oNode1 = n1.addNew();
 
-                        m1Node.set("type", "image_url");
-                        m1Node.getOrNew("image_url").set("url", m1.toDataString(true));
+                        oNode1.set("type", "image_url");
+                        oNode1.getOrNew("image_url").set("url", block1.toDataString(true));
 
-                    } else if (m1 instanceof Audio) {
-                        m1Node = n1.addNew();
+                    } else if (block1 instanceof AudioBlock) {
+                        oNode1 = n1.addNew();
 
-                        m1Node.set("type", "audio_url");
-                        m1Node.getOrNew("audio_url").set("url", m1.toDataString(true));
-                    } else if (m1 instanceof Video) {
-                        m1Node = n1.addNew();
+                        oNode1.set("type", "audio_url");
+                        oNode1.getOrNew("audio_url").set("url", block1.toDataString(true));
+                    } else if (block1 instanceof VideoBlock) {
+                        oNode1 = n1.addNew();
 
-                        m1Node.set("type", "video_url");
-                        m1Node.getOrNew("video_url").set("url", m1.toDataString(true));
+                        oNode1.set("type", "video_url");
+                        oNode1.getOrNew("video_url").set("url", block1.toDataString(true));
                     }
 
-                    if (m1Node != null) {
-                        if (Utils.isNotEmpty(m1.metas())) {
-                            for (Map.Entry<String, Object> entry : m1.metas().entrySet()) {
-                                if (m1Node.hasKey(entry.getKey()) == false) {
-                                    m1Node.set(entry.getKey(), ONode.ofBean(entry.getValue()));
+                    if (oNode1 != null) {
+                        if (Utils.isNotEmpty(block1.metas())) {
+                            for (Map.Entry<String, Object> entry : block1.metas().entrySet()) {
+                                if (oNode1.hasKey(entry.getKey()) == false) {
+                                    oNode1.set(entry.getKey(), ONode.ofBean(entry.getValue()));
                                 }
                             }
                         }

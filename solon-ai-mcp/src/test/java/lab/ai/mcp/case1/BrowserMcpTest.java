@@ -6,7 +6,6 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.media.Text;
 import org.noear.solon.test.SolonTest;
 
 /**

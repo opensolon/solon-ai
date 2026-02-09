@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.media.ImageBlock;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.test.SolonTest;
 import org.slf4j.Logger;
@@ -36,7 +36,7 @@ public class GiteeaiVisionTest {
         byte[] bytes = HttpUtils.http(imageUrl).exec("GET").bodyAsBytes();
 
         //一次性返回
-        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", Image.ofUrl(imageUrl)))
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", ImageBlock.ofUrl(imageUrl)))
                 .call();
 
         //打印消息
@@ -57,7 +57,7 @@ public class GiteeaiVisionTest {
 
         //一次性返回
         ChatResponse resp = chatModel.prompt(
-                        ChatMessage.ofUser(Image.ofUrl(imageUrl)),
+                        ChatMessage.ofUser(ImageBlock.ofUrl(imageUrl)),
                         ChatMessage.ofUser("这图里有方块吗？")
                 )
                 .call();
@@ -77,7 +77,7 @@ public class GiteeaiVisionTest {
         String imageUrl = "https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png";
 
         //一次性返回
-        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", Image.ofUrl(imageUrl)))
+        ChatResponse resp = chatModel.prompt(ChatMessage.ofUser("这图里有方块吗？", ImageBlock.ofUrl(imageUrl)))
                 .call();
 
         //打印消息

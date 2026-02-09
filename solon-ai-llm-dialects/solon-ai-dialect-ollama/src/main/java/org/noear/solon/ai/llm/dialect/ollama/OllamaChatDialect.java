@@ -17,9 +17,9 @@ package org.noear.solon.ai.llm.dialect.ollama;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.media.Audio;
+import org.noear.solon.ai.chat.media.AudioBlock;
 import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatException;
@@ -29,14 +29,13 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
-import org.noear.solon.ai.media.Image;
-import org.noear.solon.ai.media.Video;
+import org.noear.solon.ai.chat.media.ImageBlock;
+import org.noear.solon.ai.chat.media.VideoBlock;
 import org.noear.solon.core.util.DateUtil;
 
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Ollama 聊天模型方言
@@ -64,18 +63,18 @@ public class OllamaChatDialect extends AbstractChatDialect {
     @Override
     protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
-        if (msg.hasMedias() == false) {
+        if (msg.isMultiModal() == false) {
             oNode.set("content", msg.getContent());
         } else {
             oNode.set("content", msg.getContent());
 
-            for (AiMedia media : msg.getMedias()) {
-                if (media instanceof Image) {
-                    oNode.getOrNew("images").add(media.toDataString(false));
-                } else if (media instanceof Audio) {
-                    oNode.getOrNew("audios").add(media.toDataString(false));
-                } else if (media instanceof Video) {
-                    oNode.getOrNew("videos").add(media.toDataString(false));
+            for (ContentBlock block1 : msg.getBlocks()) {
+                if (block1 instanceof ImageBlock) {
+                    oNode.getOrNew("images").add(block1.toDataString(false));
+                } else if (block1 instanceof AudioBlock) {
+                    oNode.getOrNew("audios").add(block1.toDataString(false));
+                } else if (block1 instanceof VideoBlock) {
+                    oNode.getOrNew("videos").add(block1.toDataString(false));
                 }
             }
         }
