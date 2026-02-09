@@ -276,32 +276,30 @@ public class ClaudeRequestBuilder {
         if (message instanceof UserMessage) {
             UserMessage userMessage = (UserMessage) message;
             if (userMessage.isMultiModal() == false) {
-                // 纯文本消息
+                //单模态
                 node.set("content", userMessage.getContent());
             } else {
-                // 多模态消息
+                //多模态
                 ONode contentArray = node.getOrNew("content").asArray();
                 // Claude支持图像上传
                 for (ContentBlock block1 : userMessage.getBlocks()) {
-                    if(block1 instanceof TextBlock){
+                    if (block1 instanceof TextBlock) {
                         TextBlock text = (TextBlock) block1;
                         contentArray.addNew()
                                 .set("type", "text")
                                 .set("text", text.getContent());
-                    }
-
-                    if (block1 instanceof ImageBlock) {
+                    } else if (block1 instanceof ImageBlock) {
                         ImageBlock image = (ImageBlock) block1;
 
                         // 从Image对象获取实际的媒体类型
                         String mediaType = image.getMimeType();
 
                         contentArray.addNew()
-                            .set("type", "image")
-                            .set("source", new ONode()
-                                .set("type", "base64")
-                                .set("media_type", mediaType)
-                                .set("data", image.toDataString(false)));
+                                .set("type", "image")
+                                .set("source", new ONode()
+                                        .set("type", "base64")
+                                        .set("media_type", mediaType)
+                                        .set("data", image.toDataString(false)));
                     }
                 }
             }

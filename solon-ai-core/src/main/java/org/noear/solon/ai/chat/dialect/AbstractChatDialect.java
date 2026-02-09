@@ -128,8 +128,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
         if (msg.isMultiModal() == false) {
+            //单模态
             oNode.set("content", msg.getContent());
         } else {
+            //多模态
             oNode.getOrNew("content").then(n1 -> {
                 for (ContentBlock block1 : msg.getBlocks()) {
                     ONode oNode1 = null;

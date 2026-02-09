@@ -64,8 +64,10 @@ public class OllamaChatDialect extends AbstractChatDialect {
     protected void buildUserMessageNodeDo(ONode oNode, UserMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
         if (msg.isMultiModal() == false) {
+            //单模态
             oNode.set("content", msg.getContent());
         } else {
+            //多模态
             oNode.set("content", msg.getContent());
 
             for (ContentBlock block1 : msg.getBlocks()) {

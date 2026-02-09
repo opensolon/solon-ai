@@ -110,11 +110,11 @@ public class StatefulPromptRegistry implements McpPrimitivesRegistry<FunctionPro
                                                 UserMessage userMessage = (UserMessage) msg;
 
                                                 if (userMessage.isMultiModal() == false) {
-                                                    //如果没有媒体
+                                                    //单模态
                                                     promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
                                                             new McpSchema.TextContent(msg.getContent())));
                                                 } else {
-                                                    //如果有，分解消息
+                                                    //多模态
 
                                                     //1.先转媒体（如果是图片）
                                                     for (ContentBlock block1 : userMessage.getBlocks()) {

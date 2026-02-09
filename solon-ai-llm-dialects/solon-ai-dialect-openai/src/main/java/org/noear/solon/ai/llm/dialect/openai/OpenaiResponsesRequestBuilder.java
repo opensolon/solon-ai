@@ -20,6 +20,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.media.ContentBlock;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.media.TextBlock;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -141,20 +142,19 @@ public class OpenaiResponsesRequestBuilder {
                     .set("type", "message")
                     .set("role", "user");
             if (userMessage.isMultiModal() == false) {
-                // 纯文本消息
+                //单模态
                 msgNode.set("content", userMessage.getContent());
             } else {
-                // 多模态消息
+                //多模态
                 ONode contentArray = msgNode.getOrNew("content").asArray();
-                // 添加文本内容（如果存在）
-                if (Utils.isNotEmpty(userMessage.getContent())) {
-                    contentArray.addNew()
-                            .set("type", "input_text")
-                            .set("text", userMessage.getContent());
-                }
-                // 添加媒体内容（图像、音频等）
+
                 for (ContentBlock block1 : userMessage.getBlocks()) {
-                    if (block1 instanceof ImageBlock) {
+                    if (block1 instanceof TextBlock) {
+                        TextBlock text = (TextBlock) block1;
+                        contentArray.addNew()
+                                .set("type", "input_text")
+                                .set("text", text.getContent());
+                    } else if (block1 instanceof ImageBlock) {
                         ImageBlock image = (ImageBlock) block1;
                         contentArray.addNew()
                                 .set("type", "input_image")
