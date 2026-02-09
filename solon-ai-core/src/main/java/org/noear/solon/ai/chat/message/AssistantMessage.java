@@ -105,7 +105,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         return content;
     }
 
-    public String getReasoningContent() {
+    public String getReasoning() {
         return reasoning;
     }
 

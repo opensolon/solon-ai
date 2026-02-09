@@ -443,8 +443,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             resp.contentBuilder.append(acm.getContent());
         }
 
-        if (Utils.isNotEmpty(acm.getReasoningContent())) {
-            resp.reasoningBuilder.append(acm.getReasoningContent());
+        if (Utils.isNotEmpty(acm.getReasoning())) {
+            resp.reasoningBuilder.append(acm.getReasoning());
         }
 
         for (ToolCall call : acm.getToolCalls()) {
