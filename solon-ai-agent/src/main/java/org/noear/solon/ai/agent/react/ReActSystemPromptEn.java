@@ -69,11 +69,11 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
                 .append(role).append(". ");
 
         if (trace.getConfig().getStyle() == ReActStyle.STRUCTURED_TEXT) {
-            sb.append("You must solve the problem using the ReAct pattern: ")
+            sb.append("You MUST use the ReAct pattern to solve the problem, ensuring each turn contains explicit labels: ")
                     .append("Thought -> Action -> Observation.\n\n");
         } else {
-            sb.append("You must solve the problem using the ReAct pattern: ")
-                    .append("Thought -> Action -> Observation.\n\n");
+            sb.append("You MUST follow the ReAct (Reasoning and Acting) logic to solve the problem: ")
+                    .append("perform a Thought, followed by an Action, and iterate based on the Observation.\n\n");
         }
 
         // 2. Instructions
@@ -128,7 +128,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         // A. Format constraints
         sb.append("## Output Format (Strictly Follow)\n")
                 .append("Thought: Briefly explain your reasoning (1-2 sentences).\n")
-                .append("Action: To use a tool, prioritize using the model's built-in Function Calling tool. If the environment does not support it, output ONLY a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown, no extra text.\n")
+                .append("Action: To use a tool, you MUST output a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown code blocks, no extra text.\n")
                 .append("Final Answer: Once the task is finished, start with ").append(config.getFinishMarker()).append(" followed by the answer.\n\n");
 
         // B. Completion specs
@@ -139,10 +139,9 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
         // C. Core behaviors
         sb.append("## Core Rules\n")
-                .append("1. Prioritize using the model's built-in Function Calling protocol.\n")
-                .append("2. Only use tools from the 'Available Tools' list.\n")
-                .append("3. Output ONLY one Action and STOP immediately to wait for Observation.\n")
-                .append("4. Completion is signaled ONLY by ").append(config.getFinishMarker()).append(".\n\n");
+                .append("1. Only use tools from the 'Available Tools' list.\n")
+                .append("2. Output ONLY one Action and STOP immediately to wait for Observation.\n")
+                .append("3. Completion is signaled ONLY by ").append(config.getFinishMarker()).append(".\n\n");
 
         // D. Business instructions
         appendBusinessInstructions(sb, trace);
@@ -161,8 +160,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
         } else {
             sb.append("\n## Available Tools\n");
-            // 同步中文版：明确使用内置函数调用
-            sb.append("You can also use the following tools, preferably via the model's built-in Function Calling feature:\n");
+            sb.append("You can invoke the following tools via the Action field:\n");
             trace.getOptions().getTools().forEach(t -> {
                 sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
                 if (Assert.isNotEmpty(t.inputSchema())) {

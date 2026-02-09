@@ -66,11 +66,11 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
                 .append(role).append("。");
 
         if (trace.getConfig().getStyle() == ReActStyle.STRUCTURED_TEXT) {
-            sb.append("你必须使用 ReAct 模式解决问题：")
+            sb.append("你必须使用 ReAct 模式解决问题，每一轮推理必须包含显式的标签：")
                     .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
         } else {
-            sb.append("你必须使用 ReAct 模式解决问题：")
-                    .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
+            sb.append("你必须遵循 ReAct（推理与行动）逻辑解决问题：")
+                    .append("先进行 Thought（思考），再执行 Action（行动），并依据 Observation（观察）结果进行迭代。\n\n");
         }
 
         // 2. 注入指令集（含格式、准则、示例）
@@ -126,7 +126,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         // A. 格式约束：ReAct 循环的语法基石
         sb.append("## 输出格式（必须遵守）\n")
                 .append("Thought: 简要解释你的思考过程（1-2句话）。\n")
-                .append("Action: 如果需要调用工具。优先使用模型内置的函数调用工具（Function Calling），若环境不支持则输出 JSON 对象：{\"name\": \"工具名\", \"arguments\": {...}}。不要使用代码块，不要有额外文本。\n")
+                .append("Action: 如果需要调用工具，必须输出 JSON 对象：{\"name\": \"工具名\", \"arguments\": {...}}。不要使用代码块，不要有额外文本。\n")
                 .append("Final Answer: 任务完成后，以 ").append(config.getFinishMarker()).append(" 开头给出回答。\n\n");
 
         // B. 结束规格：确保任务能被系统正确识别截断
@@ -137,10 +137,9 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
 
         // C. 行为准则：防止模型出现伪造 Observation 或死循环
         sb.append("## 核心规则\n")
-                .append("1. 优先使用模型内置的函数调用工具（Function Calling）。\n")
-                .append("2. 每次仅输出一个 Action，输出后立即停止等待 Observation。\n")
-                .append("3. 严禁伪造 Observation，严禁调用‘可用工具’之外的工具。\n")
-                .append("4. 最终回答未带上 ").append(config.getFinishMarker()).append(" 将被视为无效。\n\n");
+                .append("1. 每次仅输出一个 Action，输出后立即停止等待 Observation。\n")
+                .append("2. 严禁伪造 Observation，严禁调用‘可用工具’之外的工具。\n")
+                .append("3. 最终回答未带上 ").append(config.getFinishMarker()).append(" 将被视为无效。\n\n");
 
         // D. 业务指令注入
         appendBusinessInstructions(sb, trace);
@@ -158,7 +157,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
             sb.append("\n注意：当前没有可用工具。请直接给出 Final Answer。\n");
         } else {
             sb.append("\n## 可用工具\n");
-            sb.append("你也可以通过模型内置的函数调用工具（Function Calling）使用以下工具：\n");
+            sb.append("你可以通过 Action 字段调用以下工具：\n");
             trace.getOptions().getTools().forEach(t -> {
                 sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
                 // 必须告知模型参数 Schema 以便生成正确的 JSON
