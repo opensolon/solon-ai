@@ -29,7 +29,7 @@ import java.util.Map;
  */
 @Configuration
 @BindProps(prefix="solon.code.cli")
-public class CliConfig {
+public class Config {
     public String name;
     public String workDir = "./work";
 

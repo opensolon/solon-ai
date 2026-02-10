@@ -70,7 +70,7 @@
                 <groupId>org.noear</groupId>
                 <artifactId>solon-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>org.noear.solon.ai.codecli.CliApp</mainClass>
+                    <mainClass>org.noear.solon.ai.codecli.App</mainClass>
                 </configuration>
             </plugin>
         </plugins>

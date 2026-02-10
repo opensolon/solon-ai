@@ -26,7 +26,8 @@ import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.session.FileAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.cli.CodeCLI;
+import org.noear.solon.ai.codecli.impl.AcpConnector;
+import org.noear.solon.ai.codecli.impl.CodeCLI;
 import org.noear.solon.core.util.Assert;
 
 import java.util.Map;
@@ -38,11 +39,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author noear
  * @since 3.9.1
  */
-public class CliApp {
+public class App {
 
     public static void main(String[] args) {
-        Solon.start(CliApp.class, args, app -> {
-            CliConfig c = app.cfg().toBean("solon.code.cli", CliConfig.class);
+        Solon.start(App.class, args, app -> {
+            Config c = app.cfg().toBean("solon.code.cli", Config.class);
 
             app.enableHttp(false); //默认不启用 http
 
@@ -56,7 +57,7 @@ public class CliApp {
             }
         });
 
-        CliConfig config = Solon.context().getBean(CliConfig.class);
+        Config config = Solon.context().getBean(Config.class);
 
         if (config == null || config.chatModel == null) {
             throw new RuntimeException("ChatModel config not found");

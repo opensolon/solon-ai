@@ -1,10 +1,10 @@
 package features.ai.cli;
 
-import org.noear.solon.ai.codecli.CliApp;
+import org.noear.solon.ai.codecli.App;
 
 public class CliTest {
     public static void main(String[] args) {
         // 下载 skills： https://github.com/solonlab/opencode-skills
-        CliApp.main(args);
+        App.main(args);
     }
 }

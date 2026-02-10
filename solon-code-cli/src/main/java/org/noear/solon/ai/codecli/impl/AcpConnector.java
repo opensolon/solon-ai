@@ -1,4 +1,4 @@
-package org.noear.solon.ai.codecli;
+package org.noear.solon.ai.codecli.impl;
 
 import com.agentclientprotocol.sdk.agent.AcpAgent;
 import com.agentclientprotocol.sdk.agent.AcpAsyncAgent;
@@ -13,7 +13,6 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.skills.cli.CodeCLI;
 import org.noear.solon.core.util.Assert;
 import reactor.core.publisher.Mono;
 
