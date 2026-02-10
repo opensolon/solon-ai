@@ -36,7 +36,7 @@ public class InMemoryChatSession implements ChatSession {
     protected final List<ChatMessage> messages = new ArrayList<>();
     protected final int maxMessages;
 
-    private final transient Map<String, Object> attrs = new HashMap<>();
+    private final transient Map<String, Object> attrs = new ConcurrentHashMap<>();
 
     public InMemoryChatSession(String sessionId) {
         this(sessionId, 50);
