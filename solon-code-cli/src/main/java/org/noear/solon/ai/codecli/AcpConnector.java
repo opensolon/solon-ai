@@ -19,6 +19,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.UUID;
 
 public class AcpConnector {
     private final CodeCLI codeCLI; // CodeCLI 内部的 Agent
@@ -30,8 +31,7 @@ public class AcpConnector {
     public AcpAsyncAgent createAgent(AcpAgentTransport transport) {
         return AcpAgent.async(transport)
                 .requestTimeout(Duration.ofSeconds(60))
-                // 1. 初始化：告知 IDE 代理的能力
-                .initializeHandler(request -> {
+                .initializeHandler(req -> {
                     return Mono.just(new AcpSchema.InitializeResponse(
                             1,
                             new AcpSchema.AgentCapabilities(true,
@@ -40,7 +40,9 @@ public class AcpConnector {
                             Arrays.asList()
                     ));
                 })
-                // 2. 提示词处理：核心对接点
+                .newSessionHandler(req -> {
+                    return Mono.just(new AcpSchema.NewSessionResponse(UUID.randomUUID().toString(), null, null));
+                })
                 .promptHandler((request, acpContext) -> {
                     Prompt userInput = toPrompt(request);
                     String sessionId = request.sessionId();
