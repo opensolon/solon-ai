@@ -20,4 +20,8 @@
 
 ### 3、补充
 
-下载 skills 到 https://github.com/zrt-ai-lab/opencode-skills
+下载 skills 到：
+
+* https://github.com/zrt-ai-lab/opencode-skills
+* https://github.com/openclaw/skills
+* https://github.com/ComposioHQ/awesome-claude-skills
