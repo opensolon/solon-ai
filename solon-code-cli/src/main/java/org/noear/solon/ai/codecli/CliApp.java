@@ -44,8 +44,7 @@ public class CliApp {
         Solon.start(CliApp.class, args, app -> {
             CliConfig c = app.cfg().toBean("solon.code.cli", CliConfig.class);
 
-            //默认不启用 http
-            app.enableHttp(false);
+            app.enableHttp(false); //默认不启用 http
 
             if (c.enableWeb) {
                 app.enableHttp(true);
@@ -91,12 +90,12 @@ public class CliApp {
             });
         }
 
-        if (config.enableWeb) {
-            Solon.app().router().get(config.webPath, solonCodeCLI);
-        }
-
         if (config.enableConsole) {
             new Thread(solonCodeCLI, "CLI-Interactive-Thread").start();
+        }
+
+        if (config.enableWeb) {
+            Solon.app().router().get(config.webEndpoint, solonCodeCLI);
         }
 
         if (config.enableAcp) {
@@ -105,7 +104,7 @@ public class CliApp {
             if ("stdio".equals(config.acpTransport)) {
                 agentTransport = new StdioAcpAgentTransport();
             } else {
-                agentTransport = new WebSocketSolonAcpAgentTransport(McpJsonMapper.getDefault());
+                agentTransport = new WebSocketSolonAcpAgentTransport(config.acpEndpoint, McpJsonMapper.getDefault());
             }
 
 

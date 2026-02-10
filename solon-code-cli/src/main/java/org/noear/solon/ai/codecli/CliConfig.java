@@ -32,11 +32,14 @@ import java.util.Map;
 public class CliConfig {
     public String name;
     public String workDir = "./work";
-    public String webPath = "/cli";
 
     public int maxSteps = 30;
     public int sessionWindowSize = 10;
+
+
+    public String webEndpoint = "/cli";
     public String acpTransport = "stdio";
+    public String acpEndpoint = "/acp";
 
     public boolean enableConsole = true;
     public boolean enableWeb = false;
