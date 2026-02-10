@@ -1,18 +1,31 @@
+solon.logging.appender:
+  console:
+    enable: false
+  file:
+    level: INFO
+
 solon.code.cli:
   name: "小花"
-  workDir: "./work"
-  webPath: "/cli"
-  maxSteps: 100
+  workDir: "work"
+  maxSteps: 30
   sessionWindowSize: 10
-  enableWeb: true
   enableConsole: true
+  enableHitl: false
+
+  enableWeb: false
+  webEndpoint: "/cli"
+
+  enableAcp: false
+  acpTransport: "websocket" # "stdio" or "websocket"
+  acpEndpoint: "/acp"
+
   chatModel:
     apiUrl: "https://api.deepseek.com/v1/chat/completions"
-    apiKey: "******"
+    apiKey: "sk-******"
     model: "deepseek-chat"
   mountPool:
     "@shared": "${user.home}/WORK/work_github/solonlab/opencode-skills"
 
-# 1. chatModel 按需配置，不熟的看下 solon ai 官网资料 
+# 1. chatModel 按需配置，不熟的看下 solon ai 官网资料
 # 2. SolonCodeCLI 兼容 Claude Code Agent Skills
 # 3. skills 到处可以下载，比如：https://github.com/solonlab/opencode-skills
