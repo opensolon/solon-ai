@@ -16,7 +16,7 @@ import java.util.Collections;
  * @author noear 2026/2/10 created
  *
  */
-public class AcpClientTest {
+public class CliAcpClientTest {
     public static void main(String[] args) {
         WebSocketAcpClientTransport transport = new WebSocketAcpClientTransport(
                 URI.create("ws://localhost:8080/acp"),
