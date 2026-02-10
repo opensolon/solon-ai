@@ -8,13 +8,12 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
-import org.noear.solon.ai.mcp.server.prompt.PromptResult;
-import org.noear.solon.ai.mcp.server.resource.FunctionResource;
+import org.noear.solon.ai.mcp.primitives.prompt.FunctionPrompt;
+import org.noear.solon.ai.mcp.primitives.prompt.PromptResult;
+import org.noear.solon.ai.mcp.primitives.resource.FunctionResource;
 import org.noear.solon.test.SolonTest;
 
 import java.util.*;

@@ -17,16 +17,10 @@ package org.noear.solon.ai.mcp.server.manager;
 
 import io.modelcontextprotocol.server.*;
 import io.modelcontextprotocol.spec.McpSchema;
-import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.content.ContentBlock;
-import org.noear.solon.ai.chat.ChatRole;
-import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
-import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
-import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.mcp.primitives.prompt.FunctionPrompt;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.core.handle.Context;
 import reactor.core.publisher.Mono;

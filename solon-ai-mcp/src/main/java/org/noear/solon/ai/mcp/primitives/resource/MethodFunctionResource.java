@@ -13,21 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.server.prompt;
+package org.noear.solon.ai.mcp.primitives.resource;
 
 import org.noear.eggg.MethodEggg;
-import org.noear.eggg.ParamEggg;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.annotation.PromptMapping;
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.annotation.ResourceMapping;
 import org.noear.solon.ai.chat.tool.MethodExecuteHandler;
-import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
-import org.noear.solon.ai.util.ParamDesc;
+import org.noear.solon.annotation.Produces;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.PathMatcher;
+import org.noear.solon.core.util.PathUtil;
 import org.noear.solon.core.wrap.MethodWrap;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
@@ -36,55 +35,77 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Matcher;
 
 /**
- * 方法构建的函数提示语
+ * 方法构建的函数资源
  *
  * @author noear
  * @since 3.2
  */
-public class MethodFunctionPrompt implements FunctionPrompt {
-    static final Logger log = LoggerFactory.getLogger(MethodFunctionPrompt.class);
+public class MethodFunctionResource implements FunctionResource {
+    static final Logger log = LoggerFactory.getLogger(MethodFunctionResource.class);
 
     private final BeanWrap beanWrap;
     private final MethodWrap methodWrap;
 
     private final String name;
-    private final PromptMapping mapping;
+    private final String title;
+    private final ResourceMapping mapping;
     private final Map<String, Object> meta = new HashMap<>();
 
-    private final Map<String, ParamDesc> params;
+    private final String mimeType;
 
-    public MethodFunctionPrompt(BeanWrap beanWrap, MethodEggg methodEggg) {
+    //path 分析器
+    private PathMatcher pathKeysMatcher;//路径分析器
+    //path key 列表
+    private List<String> pathKeys;
+
+    public MethodFunctionResource(BeanWrap beanWrap, MethodEggg methodEggg) {
         this.beanWrap = beanWrap;
         this.methodWrap = new MethodWrap(beanWrap.context(), beanWrap.clz(), methodEggg);
-        this.mapping = methodEggg.getMethod().getAnnotation(PromptMapping.class);
+
+        this.mapping = methodEggg.getMethod().getAnnotation(ResourceMapping.class);
         this.name = Utils.annoAlias(mapping.name(), methodEggg.getName());
 
-        //断言
-        Assert.notNull(mapping, "@PromptMapping annotation is missing");
 
         //断言
-        //Assert.notEmpty(mapping.description(), "PromptMapping description cannot be empty");
+        Assert.notNull(mapping, "@ResourceMapping annotation is missing");
 
-        //检查返回类型
-        if (Collection.class.isAssignableFrom(methodEggg.getReturnTypeEggg().getType()) == false) {
-            throw new IllegalArgumentException("@PromptMapping return type is not Collection");
-        }
+        //断言
+        //Assert.notEmpty(mapping.description(), "ResourceMapping description cannot be empty");
 
-        if (Assert.isNotEmpty(mapping.meta()) && mapping.meta().length() > 3) {
+        if(Assert.isNotEmpty(mapping.meta()) && mapping.meta().length() > 3) {
             Map<String, Object> tmp = ONode.deserialize(mapping.meta(), Map.class);
             meta.putAll(tmp);
         }
 
-        this.params = new LinkedHashMap<>();
+        this.title = mapping.title();
 
-        for (ParamEggg p1 : methodEggg.getParamEgggAry()) {
-            Map<String, ParamDesc> paramMap = ToolSchemaUtil.buildInputParams(p1.getParam(), p1.getTypeEggg());
-            if (Utils.isNotEmpty(paramMap)) {
-                params.putAll(paramMap);
+        Produces producesAnno = methodEggg.getMethod().getAnnotation(Produces.class);
+        if (producesAnno != null) {
+            this.mimeType = producesAnno.value();
+        } else {
+            this.mimeType = mapping.mimeType();
+        }
+
+        //支持path变量
+        if (mapping.uri() != null && mapping.uri().indexOf('{') >= 0) {
+            pathKeys = new ArrayList<>();
+            Matcher pm = PathUtil.pathKeyExpr.matcher(mapping.uri());
+            while (pm.find()) {
+                pathKeys.add(pm.group(1));
+            }
+
+            if (pathKeys.size() > 0) {
+                pathKeysMatcher = PathMatcher.get(mapping.uri(), false);
             }
         }
+    }
+
+    @Override
+    public String uri() {
+        return mapping.uri();
     }
 
     @Override
@@ -94,7 +115,7 @@ public class MethodFunctionPrompt implements FunctionPrompt {
 
     @Override
     public String title() {
-        return mapping.title();
+        return title;
     }
 
     @Override
@@ -113,28 +134,28 @@ public class MethodFunctionPrompt implements FunctionPrompt {
     }
 
     @Override
-    public Collection<ParamDesc> params() {
-        return params.values();
+    public String mimeType() {
+        return mimeType;
     }
 
     @Override
-    public Object handle(Map<String, Object> args) throws Throwable {
-        return handleAsync(args).get();
+    public Object handle(String reqUri) throws Throwable {
+        return handleAsync(reqUri).get();
     }
 
     @Override
-    public CompletableFuture<Object> handleAsync(Map<String, Object> args) {
+    public CompletableFuture<Object> handleAsync(String reqUri) {
         CompletableFuture<Object> returnFuture = new CompletableFuture<>();
 
         try {
-            Object handleR = doHandle(args);
+            Object handleR = doHandle(reqUri);
 
             if (handleR instanceof CompletableFuture) {
                 CompletableFuture<Object> handleF = (CompletableFuture<Object>) handleR;
                 handleF.whenComplete((rst1, err) -> {
                     if (err != null) {
                         if (log.isWarnEnabled()) {
-                            log.warn("Prompt handle error, name: '{}'", name, err);
+                            log.warn("Resource handle error, name: '{}'", name, err);
                         }
                         returnFuture.completeExceptionally(err);
                     } else {
@@ -153,17 +174,18 @@ public class MethodFunctionPrompt implements FunctionPrompt {
                             //doConvert(rst1, returnFuture);
                         }).doOnError(err -> {
                             if (log.isWarnEnabled()) {
-                                log.warn("Prompt handle error, name: '{}'", name, err);
+                                log.warn("Resource handle error, name: '{}'", name, err);
                             }
                             returnFuture.completeExceptionally(err);
                         }));
             } else {
-                doConvert(handleR, returnFuture);
+                returnFuture.complete(handleR);
+                //doConvert(handleR, returnFuture);
             }
 
         } catch (Throwable ex) {
             if (log.isWarnEnabled()) {
-                log.warn("Prompt handle error, name: '{}'", name, ex);
+                log.warn("Resource handle error, name: '{}'", name, ex);
             }
             returnFuture.completeExceptionally(ex);
         }
@@ -171,21 +193,28 @@ public class MethodFunctionPrompt implements FunctionPrompt {
         return returnFuture;
     }
 
-    private void doConvert(Object rst, CompletableFuture<Object> returnFuture) {
-        returnFuture.complete(rst);
-    }
-
-    private Object doHandle(Map<String, Object> args) throws Throwable {
+    private Object doHandle(String reqUri) throws Throwable {
         Context ctx = Context.current();
         if (ctx == null) {
             ctx = new ContextEmpty();
         }
 
-        ctx.attrSet(MethodExecuteHandler.MCP_BODY_ATTR, args);
+        bindPathVarDo(ctx, reqUri);
 
         ctx.result = MethodExecuteHandler.getInstance()
                 .executeHandle(ctx, beanWrap.get(), methodWrap);
 
         return ctx.result;
+    }
+
+    private void bindPathVarDo(Context c, String reqUri) throws Throwable {
+        if (pathKeysMatcher != null) {
+            Matcher pm = pathKeysMatcher.matcher(reqUri);
+            if (pm.find()) {
+                for (int i = 0, len = pathKeys.size(); i < len; i++) {
+                    c.paramMap().add(pathKeys.get(i), pm.group(i + 1));//不采用group name,可解决_的问题
+                }
+            }
+        }
     }
 }

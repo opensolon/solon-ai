@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.server.prompt;
+package org.noear.solon.ai.mcp.primitives.prompt;
 
 import org.noear.solon.ai.chat.message.ChatMessage;
 

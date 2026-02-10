@@ -13,19 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.server.prompt;
+package org.noear.solon.ai.mcp.primitives.resource;
 
 import java.util.Collection;
 
 /**
- * 提示语提供者
+ * 资源提供者
  *
  * @author noear
  * @since 3.2
  */
-public interface PromptProvider {
+public interface ResourceProvider {
     /**
-     * 获取提示语
+     * 获取资源
      */
-    Collection<FunctionPrompt> getPrompts();
+    Collection<FunctionResource> getResources();
 }

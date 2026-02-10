@@ -13,9 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.server.resource;
-
-import org.noear.solon.ai.chat.content.TextBlock;
+package org.noear.solon.ai.mcp.primitives.resource;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
