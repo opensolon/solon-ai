@@ -111,12 +111,7 @@ public class CliApp {
 
             AcpAsyncAgent acpAgent = acpConnector.createAgent(agentTransport);
 
-            try {
-                System.err.println(">>> ACP 通信已就绪 (stdio 模式)");
-                acpAgent.start();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            acpAgent.start();
         }
 
         System.out.println(">>> Solon Code CLI 节点已全面启动。");
