@@ -16,9 +16,13 @@
 package org.noear.solon.ai.skills.cli;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.agent.AgentChunk;
+import org.noear.solon.ai.agent.AgentResponse;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
+import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
@@ -27,6 +31,7 @@ import org.noear.solon.ai.agent.react.task.PlanChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Handler;
 import org.noear.solon.core.util.Assert;
@@ -42,12 +47,13 @@ import java.io.Serializable;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
- * Solon Code CLI 终端 (Pool-Box 模型)
+ * Code CLI 终端 (Pool-Box 模型)
  * <p>基于 ReAct 模式的代码协作终端，提供多池挂载与任务盒隔离体验</p>
  *
  * @author noear
@@ -56,9 +62,10 @@ import java.util.function.Consumer;
 @Preview("3.9.1")
 public class CodeCLI implements Handler, Runnable {
     private final static Logger LOG = LoggerFactory.getLogger(CodeCLI.class);
+    private final static String SESSION_DEFAULT = "cli";
 
     private final ChatModel chatModel;
-    private AgentSession session;
+    private AgentSessionProvider sessionProvider;
     private String name = "CodeCLI"; // 默认名称
     private String workDir = ".";
     private final Map<String, String> extraPools = new LinkedHashMap<>();
@@ -93,8 +100,8 @@ public class CodeCLI implements Handler, Runnable {
         return this;
     }
 
-    public CodeCLI session(AgentSession session) {
-        this.session = session;
+    public CodeCLI session(AgentSessionProvider sessionProvider) {
+        this.sessionProvider = sessionProvider;
         return this;
     }
 
@@ -129,24 +136,30 @@ public class CodeCLI implements Handler, Runnable {
 
     private ReActAgent agent;
 
+    protected CliSkill getSkill(AgentSession session) {
+        String boxId = session.getSessionId();
+
+        return (CliSkill) session.attrs().computeIfAbsent("CliSkill", x -> {
+            CliSkill skill = new CliSkill(boxId, workDir + "/" + boxId);
+            extraPools.forEach(skill::mountPool);
+            return skill;
+        });
+    }
+
     protected void prepare() {
         if (agent == null) {
-            if (session == null) {
-                session = new InMemoryAgentSession("cli");
+            if (sessionProvider == null) {
+                Map<String, AgentSession> store = new ConcurrentHashMap<>();
+                sessionProvider = (k) -> store.computeIfAbsent(k, InMemoryAgentSession::new);
             }
-
-            CliSkill skills = new CliSkill(session.getSessionId(), workDir);
-            extraPools.forEach(skills::mountPool);
 
             ReActAgent.Builder agentBuilder = ReActAgent.of(chatModel)
                     .role("你的名字叫 " + name + "。")
-                    .instruction("你是一个超级智能助手（什么都能干），有记忆能力。要严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。")
-                    .defaultSkillAdd(skills);
-
+                    .instruction("你是一个超级智能助手（什么都能干），有记忆能力。要严格遵守挂载技能中的【交互规范】与【操作准则】执行任务。遇到 @pool 路径请阅读其 SKILL.md。");
 
             if (enableHitl) {
                 agentBuilder.defaultInterceptorAdd(new HITLInterceptor()
-                        .onTool("bash",new CodeHITLStrategy()));
+                        .onTool("bash", new CodeHITLStrategy()));
             }
 
             if (configurator != null) {
@@ -155,6 +168,29 @@ public class CodeCLI implements Handler, Runnable {
 
             agent = agentBuilder.build();
         }
+    }
+
+    private ReActRequest buildRequest(String sessonId, Prompt prompt) {
+        if (sessonId == null) {
+            sessonId = SESSION_DEFAULT;
+        }
+
+        AgentSession session = sessionProvider.getSession(sessonId);
+
+        return agent.prompt(prompt)
+                .session(session)
+                .options(o -> {
+                    o.skillAdd(getSkill(session));
+                });
+    }
+
+    public Flux<AgentChunk> stream(String sessionId, Prompt prompt) {
+        return buildRequest(sessionId, prompt)
+                .stream();
+    }
+
+    public AgentResponse call(String sessionId, Prompt prompt) throws Throwable {
+        return buildRequest(sessionId, prompt).call();
     }
 
     @Override
@@ -168,17 +204,27 @@ public class CodeCLI implements Handler, Runnable {
 
         String input = ctx.param("input");
         String mode = ctx.param("m");
+        String sessionId = ctx.headerOrDefault("X-Session-Id", SESSION_DEFAULT);
+
+        if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+            ctx.status(400);
+            ctx.output("Invalid Session ID");
+            return;
+        }
 
         if (Assert.isNotEmpty(input)) {
             if ("call".equals(mode)) {
                 ctx.contentType(MimeType.TEXT_PLAIN_UTF8_VALUE);
-                String result = agent.prompt(input).call().getContent();
+                String result = buildRequest(sessionId, Prompt.of(input))
+                        .call()
+                        .getContent();
+
                 ctx.output(result);
             } else {
                 ctx.contentType(MimeType.TEXT_EVENT_STREAM_UTF8_VALUE);
 
-                Flux<String> stringFlux = agent.prompt(input)
-                        .session(session)
+
+                Flux<String> stringFlux = buildRequest(sessionId, Prompt.of(input))
                         .stream()
                         .map(chunk -> {
                             if (chunk.hasContent()) {
@@ -214,11 +260,14 @@ public class CodeCLI implements Handler, Runnable {
         prepare();
         Scanner scanner = new Scanner(System.in);
         printWelcome();
+        AgentSession session = sessionProvider.getSession("cli");
 
         while (true) {
             try {
                 // 1. 清理输入缓冲区
-                while (System.in.available() > 0) { System.in.read(); }
+                while (System.in.available() > 0) {
+                    System.in.read();
+                }
 
                 System.out.print("\n\uD83D\uDCBB > ");
                 System.out.flush();
@@ -233,7 +282,7 @@ public class CodeCLI implements Handler, Runnable {
                 System.out.flush();
 
                 // 【优化点 1】调用封装好的任务执行方法
-                performAgentTask(input, scanner);
+                performAgentTask(session, input, scanner);
 
             } catch (Throwable e) {
                 System.err.println("\n[提示] " + (e.getMessage() == null ? "执行中断" : e.getMessage()));
@@ -244,7 +293,7 @@ public class CodeCLI implements Handler, Runnable {
     /**
      * 执行 Agent 任务（优化版：修复状态泄露与异步同步问题）
      */
-    private void performAgentTask(String input, Scanner scanner) throws Exception {
+    private void performAgentTask(AgentSession session, String input, Scanner scanner) throws Exception {
         final String GRAY = "\033[90m", YELLOW = "\033[33m", GREEN = "\033[32m", RED = "\033[31m", RESET = "\033[0m";
 
         String currentInput = input;
@@ -256,8 +305,7 @@ public class CodeCLI implements Handler, Runnable {
             final AtomicBoolean isInterrupted = new AtomicBoolean(false);
 
             // 1. 启动流（注意：currentInput 在续传时为 null）
-            reactor.core.Disposable disposable = agent.prompt(currentInput)
-                    .session(session)
+            reactor.core.Disposable disposable = buildRequest(session.getSessionId(), Prompt.of(input))
                     .stream()
                     .subscribeOn(Schedulers.boundedElastic())
                     .doOnNext(chunk -> {
@@ -267,7 +315,7 @@ public class CodeCLI implements Handler, Runnable {
                                 System.out.print(GRAY + clearThink(chunk.getContent()) + RESET);
                                 System.out.flush();
                             }
-                        } else  if (chunk instanceof ReasonChunk) {
+                        } else if (chunk instanceof ReasonChunk) {
                             ReasonChunk reasonChunk = (ReasonChunk) chunk;
                             if (chunk.hasContent() && reasonChunk.isToolCalls() == false) {
                                 System.out.print(GRAY + clearThink(chunk.getContent()) + RESET);
@@ -280,12 +328,12 @@ public class CodeCLI implements Handler, Runnable {
 
                             if (Assert.isNotEmpty(toolName)) {
                                 System.out.println("\n" + YELLOW + "⚙️  [" + toolName + "] Observation: " + RESET);
-                                System.out.println(YELLOW +  content + RESET);
+                                System.out.println(YELLOW + content + RESET);
                             } else {
-                                System.out.println("\n" + YELLOW +  content + RESET);
+                                System.out.println("\n" + YELLOW + content + RESET);
                             }
                             System.out.flush();
-                        } else if(chunk instanceof ReActChunk ) {
+                        } else if (chunk instanceof ReActChunk) {
                             System.out.println("\n----------------------\n" + chunk.getContent());
                         }
                     })
@@ -360,7 +408,7 @@ public class CodeCLI implements Handler, Runnable {
         }
     }
 
-    private String clearThink(String chunk){
+    private String clearThink(String chunk) {
         return chunk.replaceAll("(?s)<\\s*/?think\\s*>", "");
     }
 
