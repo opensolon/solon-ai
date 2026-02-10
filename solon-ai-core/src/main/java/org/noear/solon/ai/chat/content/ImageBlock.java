@@ -48,6 +48,13 @@ public class ImageBlock extends AbsMedia<ImageBlock> implements MediaBlock {
         return tmp;
     }
 
+    public static ImageBlock ofUrl(String url, String mimeType) {
+        ImageBlock tmp = new ImageBlock();
+        tmp.url = url;
+        tmp.mimeType = mimeType;
+        return tmp;
+    }
+
     /**
      * 由 base64String 构建
      */

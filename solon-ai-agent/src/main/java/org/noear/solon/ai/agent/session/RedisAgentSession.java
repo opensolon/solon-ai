@@ -138,6 +138,11 @@ public class RedisAgentSession implements AgentSession {
     }
 
     @Override
+    public Map<String, Object> attrs() {
+        return cache.attrs();
+    }
+
+    @Override
     public void updateSnapshot() {
         // 严格遵循原逻辑：使用 snapshotKey 持久化
         redisClient.getBucket().store(snapshotKey, cache.getSnapshot().toJson());

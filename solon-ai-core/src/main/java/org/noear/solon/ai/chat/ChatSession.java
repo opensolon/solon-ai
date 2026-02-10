@@ -17,14 +17,12 @@ package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.lang.NonNull;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 
 import java.io.*;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.function.Consumer;
 
 /**
@@ -91,6 +89,14 @@ public interface ChatSession extends NonSerializable {
      */
     void clear();
 
+
+    /// //////////////////////////////////////
+
+    /**
+     * 临时属性（不需要持久化）
+     */
+    @NonNull
+    Map<String, Object> attrs();
 
     /// //////////////////////////////////////
 

@@ -34,8 +34,6 @@ import java.util.*;
  */
 @Preview("3.9.1")
 public class RedisChatSession implements ChatSession {
-    private static final Logger LOG = LoggerFactory.getLogger(RedisChatSession.class);
-
     private final String instanceId;
     private final String messagesKey;
     private final RedisClient redisClient;
@@ -116,5 +114,10 @@ public class RedisChatSession implements ChatSession {
         redisClient.getList(messagesKey).clear();
         // 物理清理按照原逻辑涉及的 key
         redisClient.getBucket().remove(instanceId);
+    }
+
+    @Override
+    public Map<String, Object> attrs() {
+        return cache.attrs();
     }
 }

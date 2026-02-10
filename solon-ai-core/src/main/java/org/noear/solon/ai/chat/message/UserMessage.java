@@ -16,9 +16,11 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.content.Contents;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -41,19 +43,14 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
         //用于序列化
     }
 
-    public UserMessage(String content) {
-        this(content, null);
-    }
+    public UserMessage(Contents contents) {
+        if (contents != null) {
+            this.blocks.addAll(contents.getBlocks());
+            this.content = contents.getContent();
 
-    public UserMessage(String content, List<ContentBlock> blocks) {
-        this.content = content;
-
-        if (Utils.isNotEmpty(content)) {
-            this.blocks.add(TextBlock.of(false, content));
-        }
-
-        if (Utils.isNotEmpty(blocks)) {
-            this.blocks.addAll(blocks);
+            if (Assert.isNotEmpty(contents.getMetadata())) {
+                this.getMetadata().putAll(contents.getMetadata());
+            }
         }
     }
 

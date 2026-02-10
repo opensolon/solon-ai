@@ -141,6 +141,11 @@ public class FileAgentSession implements AgentSession {
     }
 
     @Override
+    public Map<String, Object> attrs() {
+        return cache.attrs();
+    }
+
+    @Override
     public void updateSnapshot() {
         try {
             // 将缓存中的快照全量持久化

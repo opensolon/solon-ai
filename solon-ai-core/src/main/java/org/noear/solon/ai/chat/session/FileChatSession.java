@@ -26,9 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 /**
  * 文件聊天会话 (带内存缓存层)
@@ -117,6 +115,10 @@ public class FileChatSession implements ChatSession {
         return cache.isEmpty();
     }
 
+    @Override
+    public Map<String, Object> attrs() {
+        return cache.attrs();
+    }
 
     public void clear() {
         cache.clear();

@@ -21,6 +21,7 @@ import org.noear.solon.Solon;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.content.Contents;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.Assert;
 
@@ -107,28 +108,32 @@ public interface ChatMessage extends Serializable {
      * 构建用户消息
      */
     static UserMessage ofUser(String content) {
-        return new UserMessage(content, null);
+        return new UserMessage(new Contents(content));
     }
 
     /**
      * 构建用户消息
      */
-    static UserMessage ofUser(String content, List<ContentBlock> medias) {
-        return new UserMessage(content, medias);
+    static UserMessage ofUser(String content, List<ContentBlock> blocks) {
+        return new UserMessage(new Contents(content).addBlocks(blocks));
     }
 
     /**
      * 构建用户消息
      */
-    static UserMessage ofUser(String content, ContentBlock... medias) {
-        return new UserMessage(content, Arrays.asList(medias));
+    static UserMessage ofUser(String content, ContentBlock... blocks) {
+        return new UserMessage(new Contents(content).addBlocks(Arrays.asList(blocks)));
     }
 
     /**
      * 构建用户消息
      */
-    static UserMessage ofUser(ContentBlock media) {
-        return new UserMessage("", Arrays.asList(media));
+    static UserMessage ofUser(ContentBlock block) {
+        return new UserMessage(new Contents().addBlock(block));
+    }
+
+    static UserMessage ofUser(Contents contents) {
+        return new UserMessage(contents);
     }
 
     /**
@@ -153,7 +158,7 @@ public interface ChatMessage extends Serializable {
     static UserMessage ofUserAugment(String message, Object context) {
         String newContent = String.format("%s\n\n Now: %s\n\n References: %s", message,
                 LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME), context);
-        return new UserMessage(newContent);
+        return ChatMessage.ofUser(newContent);
     }
 
     /**

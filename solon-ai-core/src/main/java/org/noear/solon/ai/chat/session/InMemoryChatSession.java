@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 内存聊天会话
@@ -34,6 +35,8 @@ public class InMemoryChatSession implements ChatSession {
     protected final String sessionId;
     protected final List<ChatMessage> messages = new ArrayList<>();
     protected final int maxMessages;
+
+    private final transient Map<String, Object> attrs = new HashMap<>();
 
     public InMemoryChatSession(String sessionId) {
         this(sessionId, 50);
@@ -188,6 +191,15 @@ public class InMemoryChatSession implements ChatSession {
     public void clear() {
         messages.clear();
     }
+
+    /// /////////////////
+
+    @Override
+    public Map<String, Object> attrs() {
+        return attrs;
+    }
+
+    /// /////////////////
 
     public static Builder builder() {
         return new Builder();

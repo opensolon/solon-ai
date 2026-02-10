@@ -33,7 +33,7 @@ import java.util.*;
 public class UserMessageTemplate {
     private final String tmpl;
     private final Map<String, Object> params = new HashMap<>();
-    private List<ContentBlock> medias;
+    private List<ContentBlock> blocks;
 
 
     /**
@@ -75,12 +75,24 @@ public class UserMessageTemplate {
 
     /**
      * 配置感知媒体
+     *
+     * @deprecated 3.9.2
      */
-    public UserMessageTemplate mediaAdd(ContentBlock media) {
-        if (medias == null) {
-            medias = new ArrayList<>();
+    @Deprecated
+    public UserMessageTemplate mediaAdd(ContentBlock block) {
+        return blockAdd(block);
+    }
+
+    /**
+     * 添加多模态内容块
+     *
+     * @since 3.9.2
+     */
+    public UserMessageTemplate blockAdd(ContentBlock block) {
+        if (blocks == null) {
+            blocks = new ArrayList<>();
         }
-        medias.add(media);
+        blocks.add(block);
         return this;
     }
 
@@ -89,6 +101,6 @@ public class UserMessageTemplate {
      */
     public UserMessage generate() {
         String content = SnEL.evalTmpl(tmpl, params);
-        return new UserMessage(content, medias);
+        return ChatMessage.ofUser(content, blocks);
     }
 }
