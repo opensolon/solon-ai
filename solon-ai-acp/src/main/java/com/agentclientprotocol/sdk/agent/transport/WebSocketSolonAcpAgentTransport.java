@@ -47,9 +47,9 @@ import java.util.function.Function;
  *
  * @author Mark Pollack
  */
-public class WebSocketAcpAgentTransport implements AcpAgentTransport {
+public class WebSocketSolonAcpAgentTransport implements AcpAgentTransport {
 
-	private static final Logger logger = LoggerFactory.getLogger(WebSocketAcpAgentTransport.class);
+	private static final Logger logger = LoggerFactory.getLogger(WebSocketSolonAcpAgentTransport.class);
 
 	/**
      * Default path for ACP WebSocket endpoints
@@ -57,8 +57,6 @@ public class WebSocketAcpAgentTransport implements AcpAgentTransport {
 	public static final String DEFAULT_ACP_PATH = "/acp";
 
 	private final McpJsonMapper jsonMapper;
-
-	private final int port;
 
 	private final String path;
 
@@ -85,26 +83,22 @@ public class WebSocketAcpAgentTransport implements AcpAgentTransport {
 	/**
      * Creates a new WebSocketAcpAgentTransport on the specified port with default path.
      *
-     * @param port       The port to listen on
      * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
      */
-	public WebSocketAcpAgentTransport(int port, McpJsonMapper jsonMapper) {
-		this(port, DEFAULT_ACP_PATH, jsonMapper);
+	public WebSocketSolonAcpAgentTransport(McpJsonMapper jsonMapper) {
+		this(DEFAULT_ACP_PATH, jsonMapper);
 	}
 
 	/**
      * Creates a new WebSocketAcpAgentTransport on the specified port and path.
      *
-     * @param port       The port to listen on
      * @param path       The WebSocket endpoint path (e.g., "/acp")
      * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
      */
-	public WebSocketAcpAgentTransport(int port, String path, McpJsonMapper jsonMapper) {
-		Assert.isTrue(port > 0, "Port must be positive");
+	public WebSocketSolonAcpAgentTransport(String path, McpJsonMapper jsonMapper) {
 		Assert.hasText(path, "Path must not be empty");
 		Assert.notNull(jsonMapper, "The JsonMapper can not be null");
 
-		this.port = port;
 		this.path = path;
 		this.jsonMapper = jsonMapper;
 
@@ -125,18 +119,9 @@ public class WebSocketAcpAgentTransport implements AcpAgentTransport {
      * @param timeout The idle timeout
      * @return This transport for chaining
      */
-	public WebSocketAcpAgentTransport idleTimeout(Duration timeout) {
+	public WebSocketSolonAcpAgentTransport idleTimeout(Duration timeout) {
 		this.idleTimeout = timeout;
 		return this;
-	}
-
-	/**
-     * Returns the port this transport is configured to listen on.
-     *
-     * @return The port number
-     */
-	public int getPort() {
-		return port;
 	}
 
 	@Override
@@ -146,7 +131,7 @@ public class WebSocketAcpAgentTransport implements AcpAgentTransport {
 		}
 
 		return Mono.fromCallable(() -> {
-			logger.info("Starting WebSocket agent server on port {} at path {}", port, path);
+			logger.info("Starting WebSocket agent server at path {}", path);
 
 			// Set up inbound message handling
 			handleIncomingMessages(handler);
@@ -156,7 +141,7 @@ public class WebSocketAcpAgentTransport implements AcpAgentTransport {
 
 			startOutboundProcessing();
 
-			logger.info("WebSocket agent server started on port {} at path {}", port, path);
+			logger.info("WebSocket agent server started at path {}", path);
 			return null;
 		}).then();
 	}

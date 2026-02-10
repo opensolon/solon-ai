@@ -1,12 +1,20 @@
+solon.logging.appender:
+  console:
+    enable: true
+  file:
+    level: INFO
+
 solon.code.cli:
   name: "小花"
   workDir: "work"
   webPath: "/cli"
   maxSteps: 100
   sessionWindowSize: 10
-  enableWeb: true
   enableConsole: true
+  enableWeb: false
+  enableAcp: false
   enableHitl: false
+  acpTransport: "stdio" # or "websocket"
   chatModel:
     apiUrl: "https://api.deepseek.com/v1/chat/completions"
     apiKey: "sk-251740c893994c57a6536ecdbc33c189"

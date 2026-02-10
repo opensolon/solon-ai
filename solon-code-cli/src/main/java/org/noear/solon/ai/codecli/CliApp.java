@@ -15,12 +15,22 @@
  */
 package org.noear.solon.ai.codecli;
 
+import com.agentclientprotocol.sdk.agent.AcpAsyncAgent;
+import com.agentclientprotocol.sdk.agent.transport.StdioAcpAgentTransport;
+import com.agentclientprotocol.sdk.agent.transport.WebSocketSolonAcpAgentTransport;
+import com.agentclientprotocol.sdk.spec.AcpAgentTransport;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import org.noear.solon.Solon;
+import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.session.FileAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.skills.cli.CodeCLI;
 import org.noear.solon.core.util.Assert;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Cli 应用
@@ -31,7 +41,21 @@ import org.noear.solon.core.util.Assert;
 public class CliApp {
 
     public static void main(String[] args) {
-        Solon.start(CliApp.class, args);
+        Solon.start(CliApp.class, args, app -> {
+            CliConfig c = app.cfg().getBean(CliConfig.class);
+
+            //默认不启用 http
+            app.enableHttp(false);
+
+            if (c.enableWeb) {
+                app.enableHttp(true);
+            }
+
+            if (c.enableAcp && "stdio".equals(c.acpTransport) == false) {
+                app.enableHttp(true);
+                app.enableWebSocket(true);
+            }
+        });
 
         CliConfig config = Solon.context().getBean(CliConfig.class);
 
@@ -40,11 +64,13 @@ public class CliApp {
         }
 
         ChatModel chatModel = ChatModel.of(config.chatModel).build();
+        Map<String, AgentSession> store = new ConcurrentHashMap<>();
+        AgentSessionProvider sessionProvider = (sessionId) -> store.computeIfAbsent(sessionId, key -> new FileAgentSession(key, config.workDir + "/" + key));
 
         CodeCLI solonCodeCLI = new CodeCLI(chatModel)
                 .name(config.name)
                 .workDir(config.workDir)
-                .session(new FileAgentSession("cli", config.workDir))
+                .session(sessionProvider)
                 .enableWeb(config.enableWeb)
                 .enableConsole(config.enableConsole)
                 .enableHitl(config.enableHitl)
@@ -71,6 +97,26 @@ public class CliApp {
 
         if (config.enableConsole) {
             new Thread(solonCodeCLI, "CLI-Interactive-Thread").start();
+        }
+
+        if (config.enableAcp) {
+            AcpConnector acpConnector = new AcpConnector(solonCodeCLI);
+            AcpAgentTransport agentTransport;
+            if ("stdio".equals(config.acpTransport)) {
+                agentTransport = new StdioAcpAgentTransport();
+            } else {
+                agentTransport = new WebSocketSolonAcpAgentTransport(McpJsonMapper.getDefault());
+            }
+
+
+            AcpAsyncAgent acpAgent = acpConnector.createAgent(agentTransport);
+
+            try {
+                System.err.println(">>> ACP 通信已就绪 (stdio 模式)");
+                acpAgent.start();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
         System.out.println(">>> Solon Code CLI 节点已全面启动。");

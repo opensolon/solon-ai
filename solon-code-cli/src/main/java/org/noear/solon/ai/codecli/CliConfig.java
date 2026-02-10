@@ -36,9 +36,11 @@ public class CliConfig {
 
     public int maxSteps = 30;
     public int sessionWindowSize = 10;
+    public String acpTransport = "stdio";
 
-    public boolean enableWeb = true;
     public boolean enableConsole = true;
+    public boolean enableWeb = false;
+    public boolean enableAcp = false;
     public boolean enableHitl = false;
 
     public ChatConfig chatModel;
