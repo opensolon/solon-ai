@@ -193,7 +193,7 @@ public class PromptImpl implements Prompt, Serializable {
     public String toString() {
         return "Prompt{" +
                 "attrs=" + attrs +
-                "messages=" + messages +
+                ", messages=" + messages +
                 '}';
     }
 }
