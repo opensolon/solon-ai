@@ -236,6 +236,7 @@ public class WebSocketSolonAcpAgentTransport implements AcpAgentTransport {
 		@Override
 		public void onOpen(WebSocket session) {
 			logger.info("WebSocket client connected from {}", session.remoteAddress());
+			session.setIdleTimeout(idleTimeout.toMillis());
 			clientSession = session;
 			connectionReady.tryEmitValue(null);
 		}

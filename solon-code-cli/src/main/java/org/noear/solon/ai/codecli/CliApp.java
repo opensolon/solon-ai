@@ -42,7 +42,7 @@ public class CliApp {
 
     public static void main(String[] args) {
         Solon.start(CliApp.class, args, app -> {
-            CliConfig c = app.cfg().getBean(CliConfig.class);
+            CliConfig c = app.cfg().toBean("solon.code.cli", CliConfig.class);
 
             //默认不启用 http
             app.enableHttp(false);
@@ -111,7 +111,7 @@ public class CliApp {
 
             AcpAsyncAgent acpAgent = acpConnector.createAgent(agentTransport);
 
-            acpAgent.start();
+            acpAgent.start().subscribe();
         }
 
         System.out.println(">>> Solon Code CLI 节点已全面启动。");
