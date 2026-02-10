@@ -36,6 +36,11 @@ public interface ContentBlock {
     String getMimeType();
 
     /**
+     * 获取内容
+     */
+    String getContent();
+
+    /**
      * 转为数据字符串
      */
     String toDataString(boolean useMime);

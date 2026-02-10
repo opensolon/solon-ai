@@ -72,7 +72,7 @@ public class MethodFunctionPrompt implements FunctionPrompt {
             throw new IllegalArgumentException("@PromptMapping return type is not Collection");
         }
 
-        if(Assert.isNotEmpty(mapping.meta()) && mapping.meta().length() > 3) {
+        if (Assert.isNotEmpty(mapping.meta()) && mapping.meta().length() > 3) {
             Map<String, Object> tmp = ONode.deserialize(mapping.meta(), Map.class);
             meta.putAll(tmp);
         }
@@ -118,13 +118,13 @@ public class MethodFunctionPrompt implements FunctionPrompt {
     }
 
     @Override
-    public Collection<ChatMessage> handle(Map<String, Object> args) throws Throwable {
+    public Object handle(Map<String, Object> args) throws Throwable {
         return handleAsync(args).get();
     }
 
     @Override
-    public CompletableFuture<Collection<ChatMessage>> handleAsync(Map<String, Object> args) {
-        CompletableFuture<Collection<ChatMessage>> returnFuture = new CompletableFuture<>();
+    public CompletableFuture<Object> handleAsync(Map<String, Object> args) {
+        CompletableFuture<Object> returnFuture = new CompletableFuture<>();
 
         try {
             Object handleR = doHandle(args);
@@ -138,7 +138,8 @@ public class MethodFunctionPrompt implements FunctionPrompt {
                         }
                         returnFuture.completeExceptionally(err);
                     } else {
-                        doConvert(rst1, returnFuture);
+                        returnFuture.complete(rst1);
+                        //doConvert(rst1, returnFuture);
                     }
                 });
             } else if (handleR instanceof Publisher) {
@@ -148,7 +149,8 @@ public class MethodFunctionPrompt implements FunctionPrompt {
                             subs.request(1);
                         })
                         .doOnNext(rst1 -> {
-                            doConvert(rst1, returnFuture);
+                            returnFuture.complete(rst1);
+                            //doConvert(rst1, returnFuture);
                         }).doOnError(err -> {
                             if (log.isWarnEnabled()) {
                                 log.warn("Prompt handle error, name: '{}'", name, err);
@@ -169,8 +171,8 @@ public class MethodFunctionPrompt implements FunctionPrompt {
         return returnFuture;
     }
 
-    private void doConvert(Object rst, CompletableFuture<Collection<ChatMessage>> returnFuture) {
-        returnFuture.complete((Collection<ChatMessage>) rst);
+    private void doConvert(Object rst, CompletableFuture<Object> returnFuture) {
+        returnFuture.complete(rst);
     }
 
     private Object doHandle(Map<String, Object> args) throws Throwable {

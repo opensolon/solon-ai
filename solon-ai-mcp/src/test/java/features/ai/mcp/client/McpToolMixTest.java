@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.mcp.server.resource.ResourceResult;
 import org.noear.solon.test.SolonTest;
 
 /**
@@ -23,7 +24,7 @@ public class McpToolMixTest {
                 .url("http://localhost:8081/mcp/WeatherTools/sse")
                 .build();
 
-        TextBlock mediaText = mcpClient.readResource("weather://cities");
+        ResourceResult mediaText = mcpClient.readResource("weather://cities");
 
         System.out.println(mediaText);
 

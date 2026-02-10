@@ -47,11 +47,11 @@ public interface FunctionPrompt {
     /**
      * 元信息
      */
-    default Map<String, Object> meta(){
+    default Map<String, Object> meta() {
         return null;
     }
 
-    default void metaPut(String key, Object value){
+    default void metaPut(String key, Object value) {
 
     }
 
@@ -63,9 +63,9 @@ public interface FunctionPrompt {
     /**
      * 处理
      */
-    Collection<ChatMessage> handle(Map<String, Object> args) throws Throwable;
+    Object handle(Map<String, Object> args) throws Throwable;
 
-    default CompletableFuture<Collection<ChatMessage>> handleAsync(Map<String, Object> args) {
+    default CompletableFuture<Object> handleAsync(Map<String, Object> args) {
         CompletableFuture future = new CompletableFuture();
 
         try {
@@ -75,5 +75,9 @@ public interface FunctionPrompt {
         }
 
         return future;
+    }
+
+    default PromptResult call(Map<String, Object> args) {
+        return null;
     }
 }

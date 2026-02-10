@@ -140,13 +140,13 @@ public class MethodFunctionResource implements FunctionResource {
     }
 
     @Override
-    public TextBlock handle(String reqUri) throws Throwable {
+    public Object handle(String reqUri) throws Throwable {
         return handleAsync(reqUri).get();
     }
 
     @Override
-    public CompletableFuture<TextBlock> handleAsync(String reqUri) {
-        CompletableFuture<TextBlock> returnFuture = new CompletableFuture<>();
+    public CompletableFuture<Object> handleAsync(String reqUri) {
+        CompletableFuture<Object> returnFuture = new CompletableFuture<>();
 
         try {
             Object handleR = doHandle(reqUri);
@@ -160,7 +160,8 @@ public class MethodFunctionResource implements FunctionResource {
                         }
                         returnFuture.completeExceptionally(err);
                     } else {
-                        doConvert(rst1, returnFuture);
+                        returnFuture.complete(rst1);
+                        //doConvert(rst1, returnFuture);
                     }
                 });
             } else if (handleR instanceof Publisher) {
@@ -170,7 +171,8 @@ public class MethodFunctionResource implements FunctionResource {
                             subs.request(1);
                         })
                         .doOnNext(rst1 -> {
-                            doConvert(rst1, returnFuture);
+                            returnFuture.complete(rst1);
+                            //doConvert(rst1, returnFuture);
                         }).doOnError(err -> {
                             if (log.isWarnEnabled()) {
                                 log.warn("Resource handle error, name: '{}'", name, err);
@@ -178,7 +180,8 @@ public class MethodFunctionResource implements FunctionResource {
                             returnFuture.completeExceptionally(err);
                         }));
             } else {
-                doConvert(handleR, returnFuture);
+                returnFuture.complete(handleR);
+                //doConvert(handleR, returnFuture);
             }
 
         } catch (Throwable ex) {
@@ -189,25 +192,6 @@ public class MethodFunctionResource implements FunctionResource {
         }
 
         return returnFuture;
-    }
-
-    private void doConvert(Object rst, CompletableFuture<TextBlock> returnFuture) {
-        try {
-            final TextBlock rst2;
-            if (rst instanceof TextBlock) {
-                rst2 = (TextBlock) rst;
-            } else if (rst instanceof byte[]) {
-                String blob = Base64.getEncoder().encodeToString((byte[]) rst);
-                rst2 = TextBlock.of(true, blob);
-            } else {
-                String text = String.valueOf(rst);
-                rst2 = TextBlock.of(false, text);
-            }
-
-            returnFuture.complete(rst2);
-        } catch (Throwable ex) {
-            returnFuture.completeExceptionally(ex);
-        }
     }
 
     private Object doHandle(String reqUri) throws Throwable {

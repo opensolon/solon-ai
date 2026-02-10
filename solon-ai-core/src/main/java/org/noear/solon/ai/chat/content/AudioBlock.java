@@ -49,6 +49,13 @@ public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
         return tmp;
     }
 
+    public static AudioBlock ofUrl(String url, String mimeType) {
+        AudioBlock tmp = new AudioBlock();
+        tmp.url = url;
+        tmp.mimeType = mimeType;
+        return tmp;
+    }
+
     /**
      * 由 base64String 构建
      */

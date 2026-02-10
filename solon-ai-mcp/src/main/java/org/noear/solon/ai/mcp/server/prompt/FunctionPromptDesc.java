@@ -38,7 +38,7 @@ public class FunctionPromptDesc implements FunctionPrompt {
 
     private String title;
     private String description;
-    private Function<Map<String, Object>, Collection<ChatMessage>> doHandler;
+    private Function<Map<String, Object>, Object> doHandler;
 
     public FunctionPromptDesc(String name) {
         this.name = name;
@@ -94,7 +94,7 @@ public class FunctionPromptDesc implements FunctionPrompt {
      *
      * @param handler 处理器
      */
-    public FunctionPromptDesc doHandle(Function<Map<String, Object>, Collection<ChatMessage>> handler) {
+    public FunctionPromptDesc doHandle(Function<Map<String, Object>, Object> handler) {
         this.doHandler = handler;
         return this;
     }
@@ -120,7 +120,7 @@ public class FunctionPromptDesc implements FunctionPrompt {
     }
 
     @Override
-    public Collection<ChatMessage> handle(Map<String, Object> args) throws Throwable {
+    public Object handle(Map<String, Object> args) throws Throwable {
         try {
             return doHandle(args);
         } catch (Throwable ex) {
@@ -132,7 +132,7 @@ public class FunctionPromptDesc implements FunctionPrompt {
         }
     }
 
-    private Collection<ChatMessage> doHandle(Map<String, Object> args) throws Throwable {
+    private Object doHandle(Map<String, Object> args) throws Throwable {
         Map<String, Object> argsNew = new HashMap<>();
 
         ONode argsNode = ONode.ofBean(args);

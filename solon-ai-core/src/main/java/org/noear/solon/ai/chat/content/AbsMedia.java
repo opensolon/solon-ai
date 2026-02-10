@@ -65,8 +65,21 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
     }
 
     /**
+     * 获取内容
+     */
+    @Override
+    public String getContent() {
+        if (url == null) {
+            return b64_json;
+        } else {
+            return url;
+        }
+    }
+
+    /**
      * 获取 mimeType
      */
+    @Override
     public String getMimeType() {
         return mimeType;
     }

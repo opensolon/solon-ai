@@ -21,5 +21,5 @@ package org.noear.solon.ai.chat.content;
  * @author noear
  * @since 3.9.2
  */
-public interface MediaBlock extends ContentBlock {
+public interface MediaBlock extends ContentBlock, MessageBlock {
 }

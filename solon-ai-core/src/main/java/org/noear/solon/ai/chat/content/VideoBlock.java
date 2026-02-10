@@ -48,6 +48,13 @@ public class VideoBlock extends AbsMedia<VideoBlock> implements MediaBlock {
         return tmp;
     }
 
+    public static VideoBlock ofUrl(String url, String mimeType) {
+        VideoBlock tmp = new VideoBlock();
+        tmp.url = url;
+        tmp.mimeType = mimeType;
+        return tmp;
+    }
+
     /**
      * 由 base64String 构建
      */

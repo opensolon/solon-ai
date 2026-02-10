@@ -21,14 +21,12 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.core.handle.Context;
 import reactor.core.publisher.Mono;
 
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -105,29 +103,7 @@ public class StatelessToolRegistry implements McpPrimitivesRegistry<FunctionTool
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(null, exchange), () -> {
                                 functionTool.handleAsync(request.arguments()).whenComplete((rst, err) -> {
-                                    final McpSchema.CallToolResult result;
-
-                                    if (err != null) {
-                                        err = Utils.throwableUnwrap(err);
-                                        result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(err.getMessage())), true);
-                                    } else {
-                                        if (rst instanceof McpSchema.CallToolResult) {
-                                            result = (McpSchema.CallToolResult) rst;
-                                        } else if (rst instanceof McpSchema.Content) {
-                                            result = new McpSchema.CallToolResult(Arrays.asList((McpSchema.Content) rst), false);
-                                        } else {
-                                            String rstStr = ToolSchemaUtil.resultConvert(functionTool, rst);
-
-                                            if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
-                                                Map<String, Object> map = ONode.ofBean(rst).toBean(Map.class);
-                                                result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false, map);
-                                            } else {
-                                                result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false);
-                                            }
-                                        }
-                                    }
-
-                                    sink.success(result);
+                                    McpConvertUtil.toolResultConvert(sink, mcpServerProps, functionTool, rst, err);
                                 });
                             });
                         });

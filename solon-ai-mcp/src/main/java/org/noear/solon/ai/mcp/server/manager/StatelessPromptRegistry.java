@@ -98,54 +98,8 @@ public class StatelessPromptRegistry implements McpPrimitivesRegistry<FunctionPr
                     (exchange, request) -> {
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(null,  exchange), () -> {
-                                functionPrompt.handleAsync(request.arguments()).whenComplete((prompts, err) -> {
-                                    if (err != null) {
-                                        err = Utils.throwableUnwrap(err);
-                                        sink.error(new McpException(err.getMessage(), err));
-                                    } else {
-                                        List<McpSchema.PromptMessage> promptMessages = new ArrayList<>();
-                                        for (ChatMessage msg : prompts) {
-                                            if (msg.getRole() == ChatRole.ASSISTANT) {
-                                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent(msg.getContent())));
-                                            } else if (msg.getRole() == ChatRole.USER) {
-                                                UserMessage userMessage = (UserMessage) msg;
-
-                                                if (userMessage.isMultiModal() == false) {
-                                                    //单模态
-                                                    promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                            new McpSchema.TextContent(msg.getContent())));
-                                                } else {
-                                                    //多模态
-
-                                                    //1.先转媒体（如果是图片）
-                                                    for (ContentBlock block1 : userMessage.getBlocks()) {
-                                                        if (block1 instanceof ImageBlock) {
-                                                            ImageBlock mediaImage = (ImageBlock) block1;
-                                                            if (mediaImage.getB64Json() != null) {
-                                                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                                        new McpSchema.ImageContent(null, null,
-                                                                                mediaImage.getB64Json(),
-                                                                                mediaImage.getMimeType())));
-                                                            } else {
-                                                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                                        new McpSchema.ImageContent(null, null,
-                                                                                mediaImage.getUrl(),
-                                                                                mediaImage.getMimeType())));
-                                                            }
-                                                        }
-                                                    }
-
-                                                    //2.再转文本
-                                                    if (Utils.isNotEmpty(msg.getContent())) {
-                                                        promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                                new McpSchema.TextContent(msg.getContent())));
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        sink.success(new McpSchema.GetPromptResult(functionPrompt.description(), promptMessages));
-                                    }
+                                functionPrompt.handleAsync(request.arguments()).whenComplete((rst, err) -> {
+                                    McpConvertUtil.promptResultConvert(sink, mcpServerProps, functionPrompt, rst, err);
                                 });
                             });
                         });

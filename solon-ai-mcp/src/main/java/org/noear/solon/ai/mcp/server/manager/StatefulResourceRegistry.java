@@ -100,28 +100,9 @@ public class StatefulResourceRegistry implements McpPrimitivesRegistry<FunctionR
                     (exchange, request) -> {
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
-                                functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
-
-                                    if (err != null) {
-                                        err = Utils.throwableUnwrap(err);
-                                        sink.error(new McpException(err.getMessage(), err));
-                                    } else {
-                                        final McpSchema.ReadResourceResult result;
-                                        if (res.isBase64()) {
-                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                                                    request.uri(),
-                                                    functionResource.mimeType(),
-                                                    res.getContent())));
-                                        } else {
-                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                                                    request.uri(),
-                                                    functionResource.mimeType(),
-                                                    res.getContent())));
-                                        }
-                                        sink.success(result);
-                                    }
+                                functionResource.handleAsync(request.uri()).whenComplete((rst, err) -> {
+                                    McpConvertUtil.resourceResultConvert(sink, mcpServerProps, request, functionResource, rst, err);
                                 });
-
                             });
                         });
                     });
@@ -149,28 +130,9 @@ public class StatefulResourceRegistry implements McpPrimitivesRegistry<FunctionR
                     (exchange, request) -> {
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
-                                functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
-
-                                    if (err != null) {
-                                        err = Utils.throwableUnwrap(err);
-                                        sink.error(new McpException(err.getMessage(), err));
-                                    } else {
-                                        final McpSchema.ReadResourceResult result;
-                                        if (res.isBase64()) {
-                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                                                    request.uri(),
-                                                    functionResource.mimeType(),
-                                                    res.getContent())));
-                                        } else {
-                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                                                    request.uri(),
-                                                    functionResource.mimeType(),
-                                                    res.getContent())));
-                                        }
-                                        sink.success(result);
-                                    }
+                                functionResource.handleAsync(request.uri()).whenComplete((rst, err) -> {
+                                    McpConvertUtil.resourceResultConvert(sink, mcpServerProps, request, functionResource, rst, err);
                                 });
-
                             });
                         });
                     });

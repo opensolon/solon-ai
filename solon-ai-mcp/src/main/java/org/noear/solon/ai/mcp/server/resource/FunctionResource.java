@@ -50,11 +50,11 @@ public interface FunctionResource {
     /**
      * 元信息
      */
-    default Map<String, Object> meta(){
+    default Map<String, Object> meta() {
         return null;
     }
 
-    default void metaPut(String key, Object value){
+    default void metaPut(String key, Object value) {
 
     }
 
@@ -66,9 +66,9 @@ public interface FunctionResource {
     /**
      * 处理
      */
-    TextBlock handle(String reqUri) throws Throwable;
+    Object handle(String reqUri) throws Throwable;
 
-    default CompletableFuture<TextBlock> handleAsync(String reqUri) {
+    default CompletableFuture<Object> handleAsync(String reqUri) {
         CompletableFuture future = new CompletableFuture();
 
         try {
@@ -78,5 +78,9 @@ public interface FunctionResource {
         }
 
         return future;
+    }
+
+    default ResourceResult call(String reqUri) {
+        return null;
     }
 }

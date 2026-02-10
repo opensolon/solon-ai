@@ -10,6 +10,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.mcp.server.prompt.PromptResult;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Collections;
@@ -118,12 +119,12 @@ public class McpHttpClientMixTest4 {
 
     @Test
     public void prompt1() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPrompt("splitMessage", Collections.emptyMap());
+        PromptResult prompt = mcpClient.getPrompt("splitMessage", Collections.emptyMap());
 
-        assert Utils.isNotEmpty(prompt);
+        assert Utils.isNotEmpty(prompt.getMessages());
         log.warn("{}", prompt);
         assert prompt.size() == 2;
-        assert "[{role=user, content='', medias=[Image{url='https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png', b64_json='null', mimeType='image/jpeg'}]}, {role=user, content='这图里有方块吗？'}]"
+        assert "[{role=user, content='这图里有方块吗？'}, {role=user, blocks=[ImageBlock{url='https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png', b64_json='null', mimeType='image/jpeg'}]}]"
                 .equals(prompt.toString());
     }
 }

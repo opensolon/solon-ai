@@ -35,7 +35,7 @@ public class FunctionResourceDesc implements FunctionResource {
     private String title;
     private String description;
     private String mimeType;
-    private Function<String, TextBlock> doHandler;
+    private Function<String, Object> doHandler;
 
     public FunctionResourceDesc(String name) {
         this.name = name;
@@ -86,7 +86,7 @@ public class FunctionResourceDesc implements FunctionResource {
      *
      * @param handler 处理器
      */
-    public FunctionResourceDesc doHandle(Function<String, TextBlock> handler) {
+    public FunctionResourceDesc doHandle(Function<String, Object> handler) {
         this.doHandler = handler;
         return this;
     }
@@ -117,7 +117,7 @@ public class FunctionResourceDesc implements FunctionResource {
     }
 
     @Override
-    public TextBlock handle(String reqUri) throws Throwable {
+    public Object handle(String reqUri) throws Throwable {
         try {
             return doHandler.apply(reqUri);
         } catch (Throwable ex) {

@@ -27,33 +27,41 @@ import java.util.Map;
  * @author noear
  * @since 3.1
  */
-public class TextBlock implements ContentBlock, ResourceBlock, MessageBlock {
+public class BlobBlock implements ContentBlock, ResourceBlock, MessageBlock {
     @ONodeAttr(name = "@type")
     private final String type = this.getClass().getName();
 
-    private String text;
+    private String url;
+    private String blob;
     private String mimeType;
 
-    public static TextBlock of(String text) {
-        TextBlock tmp = new TextBlock();
-        tmp.text = text;
-        tmp.mimeType = null;
 
-        return tmp;
-    }
-
-    public static TextBlock of(String text, String mimeType) {
-        TextBlock tmp = new TextBlock();
-        tmp.text = text;
+    public static BlobBlock of(String blob, String url, String mimeType) {
+        BlobBlock tmp = new BlobBlock();
+        tmp.url = url;
+        tmp.blob = blob;
         tmp.mimeType = mimeType;
 
         return tmp;
     }
 
-    public String getContent() {
-        return text;
+    public String getUrl() {
+        return url;
     }
 
+    public String getBlob() {
+        return blob;
+    }
+
+    public String getContent() {
+        if (url == null) {
+            return blob;
+        } else {
+            return url;
+        }
+    }
+
+    @Override
     public String getMimeType() {
         return mimeType;
     }
@@ -94,8 +102,8 @@ public class TextBlock implements ContentBlock, ResourceBlock, MessageBlock {
 
     @Override
     public String toString() {
-        return "TextBlock{" +
-                "text='" + text + '\'' +
+        return "BlobBlock{" +
+                "blob='" + blob + '\'' +
                 ", mimeType='" + mimeType + '\'' +
                 '}';
     }

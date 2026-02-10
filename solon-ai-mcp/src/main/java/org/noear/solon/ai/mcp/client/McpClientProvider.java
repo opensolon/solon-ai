@@ -26,7 +26,7 @@ import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
@@ -37,13 +37,12 @@ import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
 import org.noear.solon.ai.mcp.server.prompt.FunctionPromptDesc;
 import org.noear.solon.ai.mcp.server.prompt.PromptProvider;
+import org.noear.solon.ai.mcp.server.prompt.PromptResult;
 import org.noear.solon.ai.mcp.server.resource.FunctionResource;
 import org.noear.solon.ai.mcp.server.resource.FunctionResourceDesc;
 import org.noear.solon.ai.mcp.server.resource.ResourceProvider;
-import org.noear.solon.ai.chat.content.AudioBlock;
-import org.noear.solon.ai.chat.content.ImageBlock;
-import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.mcp.McpChannel;
+import org.noear.solon.ai.mcp.server.resource.ResourceResult;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RunUtil;
@@ -340,7 +339,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         }
     }
 
-    public  <T> T executeWithRetry(Function<McpAsyncClient,Mono<T>> action) {
+    public <T> T executeWithRetry(Function<McpAsyncClient, Mono<T>> action) {
         try {
             return action.apply(getClient()).block();
         } catch (Throwable ex) {
@@ -400,6 +399,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * 心跳处理
      */
     private long currentDelay = -1; // 动态延迟时间
+
     private void heartbeatHandleDo() {
         if (heartbeatExecutor == null) {
             return;
@@ -512,7 +512,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 text = "Error: " + text;
             }
 
-            return TextBlock.of(false, text);
+            return TextBlock.of(text);
         } else if (content instanceof McpSchema.ImageContent) {
             McpSchema.ImageContent image = (McpSchema.ImageContent) content;
             if (image.data().contains("://")) {
@@ -530,17 +530,6 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         }
 
         return null;
-    }
-
-    private TextBlock toAiText(McpSchema.ResourceContents content) {
-        if (content instanceof McpSchema.TextResourceContents) {
-            return TextBlock.of(false, ((McpSchema.TextResourceContents) content).text());
-        } else if (content instanceof McpSchema.BlobResourceContents) {
-            McpSchema.BlobResourceContents blob = (McpSchema.BlobResourceContents) content;
-            return TextBlock.of(true, blob.blob(), blob.mimeType());
-        } else {
-            return null;
-        }
     }
 
     /// ////////////////////////////
@@ -598,19 +587,34 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      *
      * @param uri 资源地址
      */
-    public TextBlock readResource(String uri) {
+    public ResourceResult readResource(String uri) {
         McpSchema.ReadResourceResult mcpResult = readResourceRequest(uri);
+        List<ResourceBlock> resourceList = new ArrayList<>();
 
         if (mcpResult.contents() != null) {
             for (McpSchema.ResourceContents c : mcpResult.contents()) {
-                TextBlock text = toAiText(c); // ResourceContents 也是 Content 的子类
-                if (text != null) {
-                    return text;
+                if (c instanceof McpSchema.TextResourceContents) {
+                    McpSchema.TextResourceContents tc = (McpSchema.TextResourceContents) c;
+
+                    TextBlock textBlock = TextBlock.of(tc.text(), tc.mimeType());
+                    if (Utils.isNotEmpty(tc.meta())) {
+                        textBlock.metas().putAll(tc.meta());
+                    }
+
+                    resourceList.add(textBlock);
+                } else if (c instanceof McpSchema.BlobResourceContents) {
+                    McpSchema.BlobResourceContents bc = (McpSchema.BlobResourceContents) c;
+
+                    BlobBlock blobBlock = BlobBlock.of(bc.blob(), bc.uri(), bc.mimeType());
+                    if (Utils.isNotEmpty(bc.meta())) {
+                        blobBlock.metas().putAll(bc.meta());
+                    }
+                    resourceList.add(blobBlock);
                 }
             }
         }
 
-        return null;
+        return new ResourceResult(resourceList);
     }
 
     /**
@@ -634,7 +638,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param name 名字
      * @param args 参数
      */
-    public List<ChatMessage> getPrompt(String name, Map<String, Object> args) {
+    public PromptResult getPrompt(String name, Map<String, Object> args) {
         McpSchema.GetPromptResult mcpResult = getPromptRequest(name, args);
         List<ChatMessage> messages = new ArrayList<>();
 
@@ -660,7 +664,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
         }
 
-        return messages;
+        return new PromptResult(messages);
     }
 
     /**

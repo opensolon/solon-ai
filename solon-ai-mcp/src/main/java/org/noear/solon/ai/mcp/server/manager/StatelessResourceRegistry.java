@@ -100,26 +100,8 @@ public class StatelessResourceRegistry implements McpPrimitivesRegistry<Function
                     (exchange, request) -> {
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(null, exchange), () -> {
-                                functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
-
-                                    if (err != null) {
-                                        err = Utils.throwableUnwrap(err);
-                                        sink.error(new McpException(err.getMessage(), err));
-                                    } else {
-                                        final McpSchema.ReadResourceResult result;
-                                        if (res.isBase64()) {
-                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                                                    request.uri(),
-                                                    functionResource.mimeType(),
-                                                    res.getContent())));
-                                        } else {
-                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                                                    request.uri(),
-                                                    functionResource.mimeType(),
-                                                    res.getContent())));
-                                        }
-                                        sink.success(result);
-                                    }
+                                functionResource.handleAsync(request.uri()).whenComplete((rst, err) -> {
+                                    McpConvertUtil.resourceResultConvert(sink, mcpServerProps, request, functionResource, rst, err);
                                 });
 
                             });
@@ -147,28 +129,9 @@ public class StatelessResourceRegistry implements McpPrimitivesRegistry<Function
                     (exchange, request) -> {
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(null, exchange), () -> {
-                                functionResource.handleAsync(request.uri()).whenComplete((res, err) -> {
-
-                                    if (err != null) {
-                                        err = Utils.throwableUnwrap(err);
-                                        sink.error(new McpException(err.getMessage(), err));
-                                    } else {
-                                        final McpSchema.ReadResourceResult result;
-                                        if (res.isBase64()) {
-                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                                                    request.uri(),
-                                                    functionResource.mimeType(),
-                                                    res.getContent())));
-                                        } else {
-                                            result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                                                    request.uri(),
-                                                    functionResource.mimeType(),
-                                                    res.getContent())));
-                                        }
-                                        sink.success(result);
-                                    }
+                                functionResource.handleAsync(request.uri()).whenComplete((rst, err) -> {
+                                    McpConvertUtil.resourceResultConvert(sink, mcpServerProps, request, functionResource, rst, err);
                                 });
-
                             });
                         });
                     });

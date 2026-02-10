@@ -19,7 +19,7 @@ public class Contents implements Serializable {
     }
 
     public Contents(String text) {
-        addBlock(TextBlock.of(false, text));
+        addBlock(TextBlock.of( text));
     }
 
 
@@ -107,7 +107,7 @@ public class Contents implements Serializable {
         StringBuilder sb = new StringBuilder();
         for (ContentBlock block : blocks) {
             if (block instanceof TextBlock) {
-                sb.append(((TextBlock) block).getContent());
+                sb.append(block.getContent());
             } else {
                 sb.append("[Media: ").append(block.getMimeType()).append("]");
             }
