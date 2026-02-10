@@ -11,8 +11,6 @@
 
     <modules>
         <module>__release</module>
-
-        <module>solon-code-cli</module>
     </modules>
 
     <build>
