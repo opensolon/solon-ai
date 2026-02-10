@@ -124,7 +124,7 @@ public class McpHttpClientMixTest7_sse {
         assert Utils.isNotEmpty(prompt.getMessages());
         log.warn("{}", prompt);
         assert prompt.size() == 2;
-        assert "[{role=user, content='这图里有方块吗？'}, {role=user, blocks=[ImageBlock{url='https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png', b64_json='null', mimeType='image/jpeg'}]}]"
+        assert "[{role=user, content='这图里有方块吗？'}, {role=user, blocks=[ImageBlock{url='https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png', data='null', mimeType='image/jpeg'}]}]"
                 .equals(prompt.toString());
     }
 }

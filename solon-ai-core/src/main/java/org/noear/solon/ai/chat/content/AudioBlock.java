@@ -61,7 +61,7 @@ public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
      */
     public static AudioBlock ofBase64(String base64String) {
         AudioBlock tmp = new AudioBlock();
-        tmp.b64_json = base64String;
+        tmp.data = base64String;
         return tmp;
     }
 
@@ -70,7 +70,7 @@ public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
      */
     public static AudioBlock ofBase64(String base64String, String mimeType) {
         AudioBlock tmp = new AudioBlock();
-        tmp.b64_json = base64String;
+        tmp.data = base64String;
         tmp.mimeType = mimeType;
         return tmp;
     }
@@ -80,7 +80,7 @@ public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
      */
     public static AudioBlock ofBase64(byte[] base64, String mimeType) {
         AudioBlock tmp = new AudioBlock();
-        tmp.b64_json = Base64.getEncoder().encodeToString(base64);
+        tmp.data = Base64.getEncoder().encodeToString(base64);
         tmp.mimeType = mimeType;
         return tmp;
     }
@@ -90,7 +90,7 @@ public class AudioBlock extends AbsMedia<AudioBlock> implements MediaBlock {
      */
     public static AudioBlock ofBase64(byte[] base64) {
         AudioBlock tmp = new AudioBlock();
-        tmp.b64_json = Base64.getEncoder().encodeToString(base64);
+        tmp.data = Base64.getEncoder().encodeToString(base64);
         return tmp;
     }
 }

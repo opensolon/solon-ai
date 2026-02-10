@@ -165,7 +165,7 @@ public class OpenaiResponsesRequestBuilder {
                         ONode audioNode = contentArray.addNew()
                                 .set("type", "input_audio");
                         // Responses API 音频格式：data (base64) 和 format
-                        audioNode.set("data", audio.getB64Json());
+                        audioNode.set("data", audio.getData());
                         // 从 mimeType 提取格式，如 audio/mp3 -> mp3
                         String mimeType = audio.getMimeType();
                         if (Utils.isNotEmpty(mimeType) && mimeType.startsWith("audio/")) {

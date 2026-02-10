@@ -25,7 +25,7 @@ import java.io.Serializable;
  */
 public class GenerateContent implements Serializable {
     private String text;
-    private String b64_json; //就是 base64-str
+    private String data; //就是 base64-str
     private String url;
     private String mimeType;
 
@@ -33,9 +33,9 @@ public class GenerateContent implements Serializable {
         //用于序列化
     }
 
-    public GenerateContent(String text, String b64_json, String url, String mimeType) {
+    public GenerateContent(String text, String data, String url, String mimeType) {
         this.text = text;
-        this.b64_json = b64_json;
+        this.data = data;
         this.url = url;
         this.mimeType = mimeType;
     }
@@ -44,8 +44,8 @@ public class GenerateContent implements Serializable {
         return text;
     }
 
-    public String getB64Json() {
-        return b64_json;
+    public String getData() {
+        return data;
     }
 
     public String getUrl() {
@@ -55,8 +55,8 @@ public class GenerateContent implements Serializable {
     public String getValue() {
         if (url != null) {
             return url;
-        } else if (b64_json != null) {
-            return b64_json;
+        } else if (data != null) {
+            return data;
         } else {
             return text;
         }
@@ -70,7 +70,7 @@ public class GenerateContent implements Serializable {
     public String toString() {
         return "{" +
                 "text='" + text + '\'' +
-                ", b64_json='" + b64_json + '\'' +
+                ", data='" + data + '\'' +
                 ", url='" + url + '\'' +
                 ", mimeType='" + mimeType + '\'' +
                 '}';
@@ -82,7 +82,7 @@ public class GenerateContent implements Serializable {
 
     public static class Builder {
         private String text;
-        private String b64_json;
+        private String data;
         private String url;
         private String mimeType;
 
@@ -91,8 +91,8 @@ public class GenerateContent implements Serializable {
             return this;
         }
 
-        public Builder b64_json(String b64_json) {
-            this.b64_json = b64_json;
+        public Builder data(String base64String) {
+            this.data = base64String;
             return this;
         }
 
@@ -107,7 +107,7 @@ public class GenerateContent implements Serializable {
         }
 
         public GenerateContent build() {
-            return new GenerateContent(text, b64_json, url, mimeType);
+            return new GenerateContent(text, data, url, mimeType);
         }
     }
 }

@@ -35,8 +35,8 @@ public class GiteeaiTest {
                 .options(o -> o.size("1024x1024"))
                 .call();
 
-        assert resp.getContent().getB64Json() != null;
-        assert resp.getContent().getB64Json().length() > 100;
+        assert resp.getContent().getData() != null;
+        assert resp.getContent().getData().length() > 100;
 
         //打印消息
         //log.info("{}", resp.getImage());

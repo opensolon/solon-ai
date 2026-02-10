@@ -27,7 +27,7 @@ import java.util.Map;
  * @since 3.2
  */
 public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
-    protected String b64_json; //就是 base64-str
+    protected String data; //就是 base64-str
     protected String url;
     protected String mimeType;
     protected Map<String, Object> metadata;
@@ -53,8 +53,8 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
     /**
      * 获取 base64
      */
-    public String getB64Json() {
-        return b64_json;
+    public String getData() {
+        return data;
     }
 
     /**
@@ -71,7 +71,7 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
     @Override
     public String getContent() {
         if (url == null) {
-            return b64_json;
+            return data;
         } else {
             return url;
         }
@@ -90,16 +90,16 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
      */
     @Override
     public String toDataString(boolean useMime) {
-        if (Utils.isEmpty(getB64Json())) {
+        if (Utils.isEmpty(getData())) {
             return getUrl();
         } else {
             if (useMime) {
                 if (Utils.isNotEmpty(getMimeType())) {
-                    return "data:" + getMimeType() + ";base64," + getB64Json();
+                    return "data:" + getMimeType() + ";base64," + getData();
                 }
             }
 
-            return getB64Json();
+            return getData();
         }
     }
 
@@ -107,7 +107,7 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
     public String toString() {
         return this.getClass().getSimpleName() + "{" +
                 "url='" + getUrl() + '\'' +
-                ", b64_json='" + getB64Json() + '\'' +
+                ", data='" + getData() + '\'' +
                 ", mimeType='" + getMimeType() + '\'' +
                 '}';
     }

@@ -60,7 +60,7 @@ public class ImageBlock extends AbsMedia<ImageBlock> implements MediaBlock {
      */
     public static ImageBlock ofBase64(String base64String) {
         ImageBlock tmp = new ImageBlock();
-        tmp.b64_json = base64String;
+        tmp.data = base64String;
         return tmp;
     }
 
@@ -69,7 +69,7 @@ public class ImageBlock extends AbsMedia<ImageBlock> implements MediaBlock {
      */
     public static ImageBlock ofBase64(String base64String, String mimeType) {
         ImageBlock tmp = new ImageBlock();
-        tmp.b64_json = base64String;
+        tmp.data = base64String;
         tmp.mimeType = mimeType;
         return tmp;
     }
@@ -79,7 +79,7 @@ public class ImageBlock extends AbsMedia<ImageBlock> implements MediaBlock {
      */
     public static ImageBlock ofBase64(byte[] base64, String mimeType) {
         ImageBlock tmp = new ImageBlock();
-        tmp.b64_json = Base64.getEncoder().encodeToString(base64);
+        tmp.data = Base64.getEncoder().encodeToString(base64);
         tmp.mimeType = mimeType;
         return tmp;
     }
@@ -89,7 +89,7 @@ public class ImageBlock extends AbsMedia<ImageBlock> implements MediaBlock {
      */
     public static ImageBlock ofBase64(byte[] base64) {
         ImageBlock tmp = new ImageBlock();
-        tmp.b64_json = Base64.getEncoder().encodeToString(base64);
+        tmp.data = Base64.getEncoder().encodeToString(base64);
         return tmp;
     }
 }
