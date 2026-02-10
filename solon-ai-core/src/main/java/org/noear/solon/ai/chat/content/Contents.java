@@ -19,7 +19,7 @@ public class Contents implements Serializable {
     }
 
     public Contents(String text) {
-        addBlock(TextBlock.of( text));
+        addBlock(TextBlock.of(text));
     }
 
 
@@ -36,7 +36,7 @@ public class Contents implements Serializable {
     }
 
     public Contents addBlocks(Collection<ContentBlock> blocks) {
-        for (ContentBlock block :  blocks){
+        for (ContentBlock block : blocks) {
             addBlock(block);
         }
 
@@ -46,7 +46,8 @@ public class Contents implements Serializable {
 
     /**
      * 单模态内容
-     * */
+     *
+     */
     public String getContent() {
         if (text != null) {
             return text;
@@ -60,6 +61,11 @@ public class Contents implements Serializable {
      */
     public List<ContentBlock> getBlocks() {
         return blocks;
+    }
+
+
+    public int size() {
+        return blocks.size();
     }
 
     /**

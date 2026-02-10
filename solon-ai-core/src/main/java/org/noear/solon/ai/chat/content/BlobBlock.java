@@ -22,17 +22,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 文本内容块
+ * 二进制内容块
  *
  * @author noear
- * @since 3.1
+ * @since 3.9.2
  */
 public class BlobBlock implements ContentBlock, ResourceBlock, MessageBlock {
     @ONodeAttr(name = "@type")
     private final String type = this.getClass().getName();
 
     private String url;
-    private String blob;
+    private String blob; //base64
     private String mimeType;
 
 
