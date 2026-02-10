@@ -49,22 +49,25 @@ public class AcpConnector {
 
                     // 将 ACP 的 Prompt 转发给 Solon ReActAgent
                     return codeCLI.stream(request.sessionId(), userInput)
-                            .doOnNext(chunk -> {
+                            .concatMap(chunk -> {
 
                                 // --- 规划阶段 ---
                                 if (chunk instanceof PlanChunk) {
-                                    acpContext.sendUpdate(sessionId, new AcpSchema.AgentThoughtChunk(
-                                            "agent_thought_chunk",
-                                            new AcpSchema.TextContent("📋 [规划]: " + chunk.getContent())));
+                                    return acpContext.sendUpdate(sessionId, new AcpSchema.AgentThoughtChunk(
+                                                    "agent_thought_chunk",
+                                                    new AcpSchema.TextContent("📋 [规划]: " + chunk.getContent())))
+                                            .thenReturn(chunk);
                                 }
                                 // --- 思考阶段 ---
                                 else if (chunk instanceof ReasonChunk) {
                                     ReasonChunk reasonChunk = (ReasonChunk) chunk;
                                     // 过滤掉包含工具调用的原始思考片段（让 UI 更整洁）
                                     if (chunk.hasContent() && !reasonChunk.isToolCalls()) {
-                                        acpContext.sendUpdate(sessionId, new AcpSchema.AgentThoughtChunk(
-                                                "agent_thought_chunk",
-                                                new AcpSchema.TextContent(chunk.getContent())));
+                                        return acpContext.sendUpdate(sessionId, new AcpSchema.AgentThoughtChunk(
+                                                        "agent_thought_chunk",
+                                                        new AcpSchema.TextContent(chunk.getContent())))
+
+                                                .thenReturn(chunk);
                                     }
                                 }
                                 // --- 工具执行阶段 (Action/Observation) ---
@@ -81,18 +84,24 @@ public class AcpConnector {
                                         output = "\n⚙️ " + content;
                                     }
 
-                                    acpContext.sendUpdate(sessionId, new AcpSchema.AgentMessageChunk(
-                                            "agent_message_chunk",
-                                            new AcpSchema.TextContent(output)));
+                                    return acpContext.sendUpdate(sessionId, new AcpSchema.AgentMessageChunk(
+                                                    "agent_message_chunk",
+                                                    new AcpSchema.TextContent(output)))
+
+                                            .thenReturn(chunk);
                                 }
                                 // --- 最终回复阶段 ---
                                 else if (chunk instanceof ReActChunk) {
                                     // 参考 CodeCLI 的分割线风格
                                     String finalContent = "\n----------------------\n" + chunk.getContent();
-                                    acpContext.sendUpdate(sessionId, new AcpSchema.AgentMessageChunk(
-                                            "agent_message_chunk",
-                                            new AcpSchema.TextContent(finalContent)));
+                                    return acpContext.sendUpdate(sessionId, new AcpSchema.AgentMessageChunk(
+                                                    "agent_message_chunk",
+                                                    new AcpSchema.TextContent(finalContent)))
+
+                                            .thenReturn(chunk);
                                 }
+
+                                return Mono.just(chunk);
                             })
                             .onErrorResume(e -> {
                                 // 向 IDE 发送错误消息块，避免界面假死

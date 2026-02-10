@@ -1,13 +1,10 @@
 package labs.ai.cli;
 
-import com.agentclientprotocol.sdk.client.AcpAsyncClient;
 import com.agentclientprotocol.sdk.client.AcpClient;
 import com.agentclientprotocol.sdk.client.AcpSyncClient;
 import com.agentclientprotocol.sdk.client.transport.WebSocketAcpClientTransport;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
-import com.sun.tools.javac.util.List;
 import io.modelcontextprotocol.json.McpJsonMapper;
-import reactor.core.publisher.Mono;
 
 import java.net.URI;
 import java.time.Duration;
@@ -19,7 +16,7 @@ import java.util.Collections;
  * @author noear 2026/2/10 created
  *
  */
-public class AcpTest {
+public class AcpClientTest {
     public static void main(String[] args) {
         WebSocketAcpClientTransport transport = new WebSocketAcpClientTransport(
                 URI.create("ws://localhost:8080/acp"),

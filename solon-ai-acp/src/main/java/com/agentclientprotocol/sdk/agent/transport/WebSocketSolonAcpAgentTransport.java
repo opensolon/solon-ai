@@ -1,5 +1,5 @@
 /*
- * Copyright 2025-2025 the original author or authors.
+ * Copyright 2025-2026 the original author or authors.
  */
 
 package com.agentclientprotocol.sdk.agent.transport;
@@ -21,104 +21,83 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * Implementation of the ACP WebSocket transport for agents that accepts WebSocket
- * connections from clients. Uses the Solon WebSocket server.
+ * 支持多租户的 ACP WebSocket 传输实现。
+ * 通过将会话上下文存储在 WebSocket 的属性（attr）中，支持多个客户端同时连接或重复连接。
  *
- * <p>
- * This transport starts an embedded Solon server that listens for WebSocket connections
- * on the configured port. When a client connects, messages are exchanged as JSON-RPC
- * messages over WebSocket text frames.
- * </p>
- *
- * <p>
- * Key features:
- * <ul>
- * <li>Embedded Solon WebSocket server</li>
- * <li>Thread-safe message processing with dedicated schedulers</li>
- * <li>Proper resource management and graceful shutdown</li>
- * <li>Backpressure support via Reactor Sinks</li>
- * </ul>
- *
- * @author Mark Pollack
+ * @author Gemini & noear
  */
 public class WebSocketSolonAcpAgentTransport implements AcpAgentTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebSocketSolonAcpAgentTransport.class);
 
-	/**
-     * Default path for ACP WebSocket endpoints
-     */
 	public static final String DEFAULT_ACP_PATH = "/acp";
+	private static final String ATTR_SESSION_CTX = "ACP_SESSION_CONTEXT";
 
 	private final McpJsonMapper jsonMapper;
-
 	private final String path;
-
-	private final Sinks.Many<JSONRPCMessage> inboundSink;
-
-	private final Sinks.Many<JSONRPCMessage> outboundSink;
-
-	private final Sinks.One<Void> connectionReady = Sinks.one();
-
+	private final AtomicBoolean isStarted = new AtomicBoolean(false);
+	private final AtomicBoolean isClosing = new AtomicBoolean(false);
 	private final Sinks.One<Void> terminationSink = Sinks.one();
 
-	private Scheduler outboundScheduler;
-
-	private final AtomicBoolean isClosing = new AtomicBoolean(false);
-
-	private final AtomicBoolean isStarted = new AtomicBoolean(false);
-
-	private Consumer<Throwable> exceptionHandler = t -> logger.error("Transport error", t);
-
-	private volatile WebSocket clientSession;
+	// 追踪所有活跃的会话上下文，用于优雅停机
+	private final Set<AcpSessionContext> activeContexts = ConcurrentHashMap.newKeySet();
 
 	private Duration idleTimeout = Duration.ofMinutes(30);
+	private Consumer<Throwable> exceptionHandler = t -> logger.error("Transport error", t);
+
+	// 业务处理函数，由 Agent 在 start 时注入，所有 Session 共享此逻辑
+	private Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> messageHandler;
 
 	/**
-     * Creates a new WebSocketAcpAgentTransport on the specified port with default path.
-     *
-     * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
-     */
+	 * 会话上下文：封装每个连接独立的资源
+	 */
+	private static class AcpSessionContext {
+		final Sinks.Many<JSONRPCMessage> inboundSink = Sinks.many().unicast().onBackpressureBuffer();
+		final Sinks.Many<JSONRPCMessage> outboundSink = Sinks.many().unicast().onBackpressureBuffer();
+		final Sinks.One<Void> connectionReady = Sinks.one();
+		final AtomicBoolean sessionClosing = new AtomicBoolean(false);
+		final Scheduler outboundScheduler;
+		final String socketId;
+
+		AcpSessionContext(String socketId) {
+			this.socketId = socketId;
+			// 为每个 Session 创建独立的单线程调度器，保证发送顺序
+			this.outboundScheduler = Schedulers.fromExecutorService(
+					Executors.newSingleThreadExecutor(r -> {
+						Thread t = new Thread(r, "acp-ws-out-" + socketId);
+						t.setDaemon(true);
+						return t;
+					}), "ws-out-" + socketId);
+		}
+
+		void dispose() {
+			if (sessionClosing.compareAndSet(false, true)) {
+				inboundSink.tryEmitComplete();
+				outboundSink.tryEmitComplete();
+				outboundScheduler.dispose();
+			}
+		}
+	}
+
 	public WebSocketSolonAcpAgentTransport(McpJsonMapper jsonMapper) {
 		this(DEFAULT_ACP_PATH, jsonMapper);
 	}
 
-	/**
-     * Creates a new WebSocketAcpAgentTransport on the specified port and path.
-     *
-     * @param path       The WebSocket endpoint path (e.g., "/acp")
-     * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
-     */
 	public WebSocketSolonAcpAgentTransport(String path, McpJsonMapper jsonMapper) {
 		Assert.hasText(path, "Path must not be empty");
 		Assert.notNull(jsonMapper, "The JsonMapper can not be null");
-
 		this.path = path;
 		this.jsonMapper = jsonMapper;
-
-		this.inboundSink = Sinks.many().unicast().onBackpressureBuffer();
-		this.outboundSink = Sinks.many().unicast().onBackpressureBuffer();
-		// Use daemon thread so JVM can exit if closeGracefully() isn't called
-		this.outboundScheduler = Schedulers.fromExecutorService(
-                Executors.newSingleThreadExecutor(r -> {
-                    Thread t = new Thread(r, "acp-ws-agent-outbound");
-                    t.setDaemon(true);
-                    return t;
-                }), "ws-agent-outbound");
 	}
 
-	/**
-     * Sets the WebSocket idle timeout.
-     *
-     * @param timeout The idle timeout
-     * @return This transport for chaining
-     */
 	public WebSocketSolonAcpAgentTransport idleTimeout(Duration timeout) {
 		this.idleTimeout = timeout;
 		return this;
@@ -127,90 +106,90 @@ public class WebSocketSolonAcpAgentTransport implements AcpAgentTransport {
 	@Override
 	public Mono<Void> start(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		if (!isStarted.compareAndSet(false, true)) {
-			return Mono.error(new IllegalStateException("Already started"));
+			return Mono.error(new IllegalStateException("Transport already started"));
 		}
 
+		this.messageHandler = handler;
+
 		return Mono.fromCallable(() -> {
-			logger.info("Starting WebSocket agent server at path {}", path);
-
-			// Set up inbound message handling
-			handleIncomingMessages(handler);
-
-			// Register to Solon
+			logger.info("Starting Multi-tenant WebSocket ACP Agent at path: {}", path);
+			// 注册 Solon WebSocket 路由
 			WebSocketRouter.getInstance().of(path, new AcpWebSocketEndpoint());
-
-			startOutboundProcessing();
-
-			logger.info("WebSocket agent server started at path {}", path);
 			return null;
 		}).then();
 	}
 
-	private void handleIncomingMessages(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
-		this.inboundSink.asFlux()
-                .flatMap(message -> Mono.just(message).transform(handler))
-                .doOnNext(response -> {
-                    if (response != null) {
-                        this.outboundSink.tryEmitNext(response);
-                    }
-                })
-                .doOnTerminate(() -> {
-                    this.outboundSink.tryEmitComplete();
-                })
-                .subscribe();
-	}
+	/**
+	 * 初始化特定会话的消息流处理管道
+	 */
+	private void initSessionPipeline(WebSocket session, AcpSessionContext ctx) {
+		activeContexts.add(ctx);
 
-	private void startOutboundProcessing() {
-		this.outboundSink.asFlux()
-                .publishOn(outboundScheduler)
-                .subscribe(message -> {
-                    if (message != null && !isClosing.get() && clientSession != null && clientSession.isValid()) {
-                        try {
-                            String jsonMessage = jsonMapper.writeValueAsString(message);
-                            logger.debug("Sending WebSocket message: {}", jsonMessage);
-                            clientSession.send(jsonMessage);
-                        } catch (Exception e) {
-                            if (!isClosing.get()) {
-                                logger.error("Error sending WebSocket message", e);
-                                exceptionHandler.accept(e);
-                            }
-                        }
-                    }
-                });
+		// 1. 处理入站消息：从 Client 到 Agent Handler
+		ctx.inboundSink.asFlux()
+				.flatMap(message ->
+						Mono.just(message)
+								.transform(messageHandler)
+								// 使用弹性调度器处理业务逻辑，防止阻塞 WebSocket IO 线程
+								.subscribeOn(Schedulers.boundedElastic())
+								.onErrorResume(e -> {
+									logger.error("Handler error on session {}", ctx.socketId, e);
+									return Mono.empty();
+								})
+				)
+				.doOnNext(response -> {
+					if (response != null) {
+						ctx.outboundSink.tryEmitNext(response);
+					}
+				})
+				.doFinally(signal -> activeContexts.remove(ctx))
+				.subscribe();
+
+		// 2. 处理出站消息：从 Sink 发送到物理 WebSocket
+		ctx.outboundSink.asFlux()
+				.publishOn(ctx.outboundScheduler)
+				.subscribe(message -> {
+					if (message != null && !ctx.sessionClosing.get() && session.isValid()) {
+						try {
+							String json = jsonMapper.writeValueAsString(message);
+							logger.debug("Pushing message to {}: {}", session.id(), json);
+							session.send(json);
+						} catch (Exception e) {
+							if (!ctx.sessionClosing.get()) {
+								logger.error("WebSocket send failed for session {}", session.id(), e);
+								exceptionHandler.accept(e);
+							}
+						}
+					}
+				});
 	}
 
 	@Override
 	public Mono<Void> sendMessage(JSONRPCMessage message) {
-		return connectionReady.asMono().then(Mono.defer(() -> {
-			if (outboundSink.tryEmitNext(message).isSuccess()) {
-				return Mono.empty();
-			} else {
-				return Mono.error(new RuntimeException("Failed to enqueue message"));
+		// 多租户模式下，若需主动推送，需遍历所有活跃 Session
+		// 这里提供一个广播逻辑作为示例（或维持 Unsupported）
+		return Mono.fromRunnable(() -> {
+			for (AcpSessionContext ctx : activeContexts) {
+				ctx.outboundSink.tryEmitNext(message);
 			}
-		}));
+		});
 	}
 
 	@Override
 	public Mono<Void> closeGracefully() {
 		return Mono.fromRunnable(() -> {
-			logger.debug("WebSocket agent transport closing gracefully");
-			isClosing.set(true);
-			inboundSink.tryEmitComplete();
-			outboundSink.tryEmitComplete();
-		}).then(Mono.fromCallable(() -> {
-			if (clientSession != null && clientSession.isValid()) {
-				clientSession.close();
-			}
+			if (isClosing.compareAndSet(false, true)) {
+				logger.info("Stopping WebSocket ACP transport and clearing {} active sessions...", activeContexts.size());
+				isStarted.set(false);
 
-			return null;
-		})).then(Mono.fromRunnable(() -> {
-			try {
-				outboundScheduler.dispose();
-				logger.debug("WebSocket agent transport closed");
-			} catch (Exception e) {
-				logger.error("Error during graceful shutdown", e);
+				// 清理所有活跃会话
+				activeContexts.forEach(AcpSessionContext::dispose);
+				activeContexts.clear();
+
+				// 触发 awaitTermination 的信号
+				terminationSink.tryEmitValue(null);
 			}
-		}));
+		});
 	}
 
 	@Override
@@ -229,55 +208,64 @@ public class WebSocketSolonAcpAgentTransport implements AcpAgentTransport {
 	}
 
 	/**
-     * Jetty WebSocket endpoint for handling client connections.
-     */
+	 * WebSocket 事件监听器实现
+	 */
 	public class AcpWebSocketEndpoint extends SimpleWebSocketListener {
 
 		@Override
 		public void onOpen(WebSocket session) {
-			logger.info("WebSocket client connected from {}", session.remoteAddress());
+			if (isClosing.get()) {
+				session.close();
+				return;
+			}
+
+			logger.info("ACP Client connected: {} (IP: {})", session.id(), session.remoteAddress());
 			session.setIdleTimeout(idleTimeout.toMillis());
-			clientSession = session;
-			connectionReady.tryEmitValue(null);
+
+			AcpSessionContext ctx = new AcpSessionContext(session.id());
+			session.attr(ATTR_SESSION_CTX, ctx);
+
+			initSessionPipeline(session, ctx);
+			ctx.connectionReady.tryEmitValue(null);
 		}
 
 		@Override
 		public void onMessage(WebSocket session, String message) {
-			logger.debug("Received WebSocket message: {}", message);
+			AcpSessionContext ctx = session.attr(ATTR_SESSION_CTX);
+			if (ctx == null || ctx.sessionClosing.get()) return;
 
+			logger.debug("Received from {}: {}", session.id(), message);
 			try {
 				JSONRPCMessage jsonRpcMessage = AcpSchema.deserializeJsonRpcMessage(jsonMapper, message);
-				if (!inboundSink.tryEmitNext(jsonRpcMessage).isSuccess()) {
-					if (!isClosing.get()) {
-						logger.error("Failed to enqueue inbound message");
-					}
+				if (!ctx.inboundSink.tryEmitNext(jsonRpcMessage).isSuccess()) {
+					logger.warn("Inbound buffer full or closed for session {}", session.id());
 				}
 			} catch (Exception e) {
-				if (!isClosing.get()) {
-					logger.error("Error processing inbound message", e);
-					exceptionHandler.accept(e);
-				}
+				logger.error("Deserialization error from {}", session.id(), e);
+				exceptionHandler.accept(e);
 			}
 		}
 
 		@Override
 		public void onClose(WebSocket session) {
-			//logger.info("WebSocket client disconnected: {} - {}", statusCode, reason);
-			clientSession = null;
-			isClosing.set(true);
-			inboundSink.tryEmitComplete();
-			terminationSink.tryEmitValue(null);  // Signal termination for awaitTermination()
+			AcpSessionContext ctx = session.attr(ATTR_SESSION_CTX);
+			if (ctx != null) {
+				session.attrMap().remove(ATTR_SESSION_CTX);
+				ctx.dispose();
+				activeContexts.remove(ctx);
+				logger.info("ACP Client disconnected: {}", session.id());
+			}
 		}
 
 		@Override
 		public void onError(WebSocket session, Throwable error) {
 			if (!isClosing.get()) {
-				logger.error("WebSocket error", error);
+				logger.error("WebSocket error on session {}", session != null ? session.id() : "unknown", error);
 				exceptionHandler.accept(error);
 			}
-			isClosing.set(true);
-			inboundSink.tryEmitComplete();
-			terminationSink.tryEmitValue(null);  // Signal termination for awaitTermination()
+			if (session != null) {
+				onClose(session);
+			}
 		}
 	}
 }
