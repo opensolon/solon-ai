@@ -1,7 +1,11 @@
 
 # Solon Code CLI
 
-体验上与 Claude Code CLI 类似。兼容 Claude Code Agent Skills。
+体验上与 Claude Code CLI（或 OpenCode） 类似。兼容 Claude Code Agent Skills。
+
+* 支持 cli 命令行交互
+* 支持 webapi 接口调用
+* 支持 acp 协议（可被支持 acp 协议的 IDE 链接）
 
 ### 1、修改配置
 
