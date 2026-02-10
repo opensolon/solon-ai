@@ -64,6 +64,7 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
         return url;
     }
 
+
     /**
      * 获取内容
      */
@@ -99,21 +100,6 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
             }
 
             return getB64Json();
-        }
-    }
-
-    @Override
-    public Map<String, Object> toData(boolean useMime) {
-        if (Utils.isEmpty(getB64Json())) {
-            return Utils.asMap("url", getUrl());
-        } else {
-            if (useMime) {
-                if (Utils.isNotEmpty(getMimeType())) {
-                    return Utils.asMap("mimeType", getMimeType(), "data", getB64Json());
-                }
-            }
-
-            return Utils.asMap("data", getB64Json());
         }
     }
 

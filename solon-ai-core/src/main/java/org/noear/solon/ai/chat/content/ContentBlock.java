@@ -44,9 +44,4 @@ public interface ContentBlock {
      * 转为数据字符串
      */
     String toDataString(boolean useMime);
-
-    /**
-     * 转为数据
-     */
-    Map<String, Object> toData(boolean useMime);
 }

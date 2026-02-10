@@ -82,17 +82,6 @@ public class TextBlock implements ContentBlock, ResourceBlock, MessageBlock {
     }
 
     @Override
-    public Map<String, Object> toData(boolean useMime) {
-        if (useMime) {
-            if (Utils.isNotEmpty(getMimeType())) {
-                return Utils.asMap("mimeType", getMimeType(), "data", getContent());
-            }
-        }
-
-        return Utils.asMap("data", getContent());
-    }
-
-    @Override
     public String toString() {
         return "TextBlock{" +
                 "text='" + text + '\'' +

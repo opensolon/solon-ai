@@ -82,7 +82,7 @@ public class BlobBlock implements ContentBlock, ResourceBlock, MessageBlock {
     public String toDataString(boolean useMime) {
         if (useMime) {
             if (Utils.isNotEmpty(getMimeType())) {
-                return "data:" + getMimeType() + ";base64," + getContent();
+                return "data:" + getMimeType() + ";base64," + getBlob();
             }
         }
 
@@ -90,20 +90,10 @@ public class BlobBlock implements ContentBlock, ResourceBlock, MessageBlock {
     }
 
     @Override
-    public Map<String, Object> toData(boolean useMime) {
-        if (useMime) {
-            if (Utils.isNotEmpty(getMimeType())) {
-                return Utils.asMap("mimeType", getMimeType(), "data", getContent());
-            }
-        }
-
-        return Utils.asMap("data", getContent());
-    }
-
-    @Override
     public String toString() {
         return "BlobBlock{" +
-                "blob='" + blob + '\'' +
+                "url='" + url + '\'' +
+                ", blob='" + blob + '\'' +
                 ", mimeType='" + mimeType + '\'' +
                 '}';
     }
