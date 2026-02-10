@@ -30,15 +30,15 @@ public abstract class AbsMedia<T extends AbsMedia> implements MediaBlock {
     protected String data; //就是 base64-str
     protected String url;
     protected String mimeType;
-    protected Map<String, Object> metadata;
+    protected Map<String, Object> metas;
 
     @Override
     public Map<String, Object> metas() {
-        if (metadata == null) {
-            metadata = new LinkedHashMap<>();
+        if (metas == null) {
+            metas = new LinkedHashMap<>();
         }
 
-        return metadata;
+        return metas;
     }
 
     /**

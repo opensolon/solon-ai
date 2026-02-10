@@ -12,7 +12,7 @@ public class Contents implements Serializable {
     protected final List<ContentBlock> blocks = new ArrayList<>();
     protected String text;
     protected boolean isError;
-    protected Map<String, Object> metadata;
+    protected Map<String, Object> metas;
 
     public Contents() {
         //用于反序列化
@@ -28,7 +28,7 @@ public class Contents implements Serializable {
      */
     public Contents addBlock(ContentBlock block) {
         if (block instanceof TextBlock) {
-            text = ((TextBlock) block).getContent();
+            text = block.getContent();
         }
 
         this.blocks.add(block);
@@ -98,11 +98,11 @@ public class Contents implements Serializable {
     /**
      * 元信息
      */
-    public Map<String, Object> getMetadata() {
-        if (metadata == null) {
-            metadata = new LinkedHashMap<>();
+    public Map<String, Object> metas() {
+        if (metas == null) {
+            metas = new LinkedHashMap<>();
         }
-        return metadata;
+        return metas;
     }
 
     /**

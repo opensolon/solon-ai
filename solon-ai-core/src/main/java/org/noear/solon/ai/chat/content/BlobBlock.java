@@ -31,22 +31,16 @@ public class BlobBlock implements ContentBlock, ResourceBlock, MessageBlock {
     @ONodeAttr(name = "@type")
     private final String type = this.getClass().getName();
 
-    private String url;
     private String blob; //base64
     private String mimeType;
 
 
-    public static BlobBlock of(String blob, String url, String mimeType) {
+    public static BlobBlock of(String blob, String mimeType) {
         BlobBlock tmp = new BlobBlock();
-        tmp.url = url;
         tmp.blob = blob;
         tmp.mimeType = mimeType;
 
         return tmp;
-    }
-
-    public String getUrl() {
-        return url;
     }
 
     public String getBlob() {
@@ -54,11 +48,7 @@ public class BlobBlock implements ContentBlock, ResourceBlock, MessageBlock {
     }
 
     public String getContent() {
-        if (url == null) {
-            return blob;
-        } else {
-            return url;
-        }
+        return blob;
     }
 
     @Override
@@ -66,15 +56,15 @@ public class BlobBlock implements ContentBlock, ResourceBlock, MessageBlock {
         return mimeType;
     }
 
-    protected Map<String, Object> metadata;
+    protected Map<String, Object> metas;
 
     @Override
     public Map<String, Object> metas() {
-        if (metadata == null) {
-            metadata = new LinkedHashMap<>();
+        if (metas == null) {
+            metas = new LinkedHashMap<>();
         }
 
-        return metadata;
+        return metas;
     }
 
 
@@ -92,8 +82,7 @@ public class BlobBlock implements ContentBlock, ResourceBlock, MessageBlock {
     @Override
     public String toString() {
         return "BlobBlock{" +
-                "url='" + url + '\'' +
-                ", blob='" + blob + '\'' +
+                "blob='" + blob + '\'' +
                 ", mimeType='" + mimeType + '\'' +
                 '}';
     }

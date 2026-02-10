@@ -55,8 +55,8 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
             this.blocks.addAll(toolResult.getBlocks());
             this.content = toolResult.getContent();
 
-            if (Assert.isNotEmpty(toolResult.getMetadata())) {
-                this.getMetadata().putAll(toolResult.getMetadata());
+            if (Assert.isNotEmpty(toolResult.metas())) {
+                this.getMetadata().putAll(toolResult.metas());
             }
         }
     }

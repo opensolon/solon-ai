@@ -22,9 +22,13 @@ import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.content.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.mcp.exception.McpException;
+import org.noear.solon.ai.mcp.primitives.prompt.PromptResult;
+import org.noear.solon.ai.mcp.primitives.resource.ResourceResult;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.mcp.primitives.prompt.FunctionPrompt;
 import org.noear.solon.ai.mcp.primitives.resource.FunctionResource;
@@ -50,6 +54,29 @@ public class McpConvertUtil {
                 result = (McpSchema.CallToolResult) rst;
             } else if (rst instanceof McpSchema.Content) {
                 result = new McpSchema.CallToolResult(Arrays.asList((McpSchema.Content) rst), false);
+            } else if (rst instanceof ToolResult) {
+                ToolResult toolResult = (ToolResult) rst;
+
+                List<McpSchema.Content> contentList = new ArrayList<>();
+                for (ContentBlock block1 : toolResult.getBlocks()) {
+                    if (block1 instanceof TextBlock) {
+                        contentList.add(new McpSchema.TextContent(null,
+                                block1.getContent(),
+                                block1.metas()));
+                    } else if (block1 instanceof ImageBlock) {
+                        contentList.add(new McpSchema.ImageContent(null,
+                                block1.getContent(),
+                                block1.getMimeType(),
+                                block1.metas()));
+                    } else if (block1 instanceof AudioBlock) {
+                        contentList.add(new McpSchema.AudioContent(null,
+                                block1.getContent(),
+                                block1.getMimeType(),
+                                block1.metas()));
+                    }
+                }
+
+                result = new McpSchema.CallToolResult(contentList, false);
             } else {
                 String rstStr = ToolSchemaUtil.resultConvert(fun, rst);
 
@@ -76,29 +103,46 @@ public class McpConvertUtil {
                 result = (McpSchema.ReadResourceResult) rst;
             } else if (rst instanceof McpSchema.ResourceContents) {
                 result = new McpSchema.ReadResourceResult(Arrays.asList((McpSchema.ResourceContents) rst));
+            } else if (rst instanceof ResourceResult) {
+                ResourceResult resourceResult = (ResourceResult) rst;
+
+                List<McpSchema.ResourceContents> resourceList = new ArrayList<>();
+                for (ResourceBlock block1 : resourceResult.getResources()) {
+                    if (block1 instanceof TextBlock) {
+                        resourceList.add(new McpSchema.TextResourceContents(req.uri(),
+                                block1.getContent(),
+                                block1.getMimeType(),
+                                block1.metas()));
+                    } else if (block1 instanceof BlobBlock) {
+                        resourceList.add(new McpSchema.BlobResourceContents(req.uri(),
+                                block1.getContent(),
+                                block1.getMimeType(),
+                                block1.metas()));
+                    }
+                }
+
+                result = new McpSchema.ReadResourceResult(resourceList);
             } else if (rst instanceof TextBlock) {
                 TextBlock res = (TextBlock) rst;
-                result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                        req.uri(),
+                result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(req.uri(),
                         fun.mimeType(),
-                        res.getContent())));
+                        res.getContent(),
+                        res.metas())));
             } else if (rst instanceof BlobBlock) {
                 BlobBlock res = (BlobBlock) rst;
-                result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                        req.uri(),
+                result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(req.uri(),
                         fun.mimeType(),
-                        res.getContent())));
+                        res.getContent(),
+                        res.metas())));
             } else if (rst instanceof byte[]) {
                 String blob = Base64.getEncoder().encodeToString((byte[]) rst);
 
-                result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(
-                        req.uri(),
+                result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(req.uri(),
                         fun.mimeType(),
                         blob)));
             } else {
                 String text = String.valueOf(rst);
-                result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(
-                        req.uri(),
+                result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(req.uri(),
                         fun.mimeType(),
                         text)));
             }
@@ -119,6 +163,14 @@ public class McpConvertUtil {
                 result = (McpSchema.GetPromptResult) rst;
             } else if (rst instanceof McpSchema.PromptMessage) {
                 promptMessages.add((McpSchema.PromptMessage) rst);
+            } else if (rst instanceof Prompt) {
+                Prompt promptResult = (Prompt) rst;
+
+                for (ChatMessage item : promptResult.getMessages()) {
+                    getMcpMessage(item, promptMessages);
+                }
+
+                result = new McpSchema.GetPromptResult(fun.description(), promptMessages, promptResult.attrs());
             } else if (rst instanceof ChatMessage) {
                 getMcpMessage((ChatMessage) rst, promptMessages);
             } else if (rst instanceof Collection) {
@@ -144,13 +196,17 @@ public class McpConvertUtil {
 
     private static void getMcpMessage(ChatMessage msg, List<McpSchema.PromptMessage> promptMessages) {
         if (msg.getRole() == ChatRole.ASSISTANT) {
-            promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent(msg.getContent())));
+            promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.ASSISTANT,
+                    new McpSchema.TextContent(null,
+                            msg.getContent(),
+                            msg.getMetadata())));
         } else if (msg.getRole() == ChatRole.USER) {
             UserMessage userMessage = (UserMessage) msg;
 
             if (userMessage.isMultiModal() == false) {
                 //单模态
-                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER, new McpSchema.TextContent(msg.getContent())));
+                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
+                        new McpSchema.TextContent(null, msg.getContent(), msg.getMetadata())));
             } else {
                 //多模态
                 for (ContentBlock block1 : userMessage.getBlocks()) {
@@ -158,21 +214,26 @@ public class McpConvertUtil {
                         //文本
                         TextBlock text = (TextBlock) block1;
 
-                        promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER, new McpSchema.TextContent(text.getContent())));
+                        promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
+                                new McpSchema.TextContent(null,
+                                        text.getContent(),
+                                        text.metas())));
                     } else if (block1 instanceof ImageBlock) {
                         //图片
                         ImageBlock image = (ImageBlock) block1;
 
                         if (image.getData() != null) {
                             promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                    new McpSchema.ImageContent(null, null,
+                                    new McpSchema.ImageContent(null,
                                             image.getData(),
-                                            image.getMimeType())));
+                                            image.getMimeType(),
+                                            image.metas())));
                         } else {
                             promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                    new McpSchema.ImageContent(null, null,
+                                    new McpSchema.ImageContent(null,
                                             image.getUrl(),
-                                            image.getMimeType())));
+                                            image.getMimeType(),
+                                            image.metas())));
                         }
                     } else if (block1 instanceof AudioBlock) {
                         AudioBlock audio = (AudioBlock) block1;
@@ -181,12 +242,14 @@ public class McpConvertUtil {
                             promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
                                     new McpSchema.AudioContent(null,
                                             audio.getData(),
-                                            audio.getMimeType())));
+                                            audio.getMimeType(),
+                                            audio.metas())));
                         } else {
                             promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
                                     new McpSchema.AudioContent(null,
                                             audio.getUrl(),
-                                            audio.getMimeType())));
+                                            audio.getMimeType(),
+                                            audio.metas())));
                         }
                     }
                 }

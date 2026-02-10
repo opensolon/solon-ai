@@ -17,8 +17,10 @@ package org.noear.solon.ai.mcp.primitives.resource;
 
 import org.noear.solon.ai.chat.content.ResourceBlock;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
 
 /**
  * 资源读取结果
@@ -28,6 +30,7 @@ import java.util.ArrayList;
  */
 public class ResourceResult {
     private final List<ResourceBlock> resources = new ArrayList<>();
+    private final Map<String, Object> metas = new LinkedHashMap<>();
 
     public ResourceResult() {
         //用于反序列化
@@ -35,6 +38,10 @@ public class ResourceResult {
 
     public ResourceResult(List<ResourceBlock> resources) {
         this.resources.addAll(resources);
+    }
+
+    public Map<String, Object> metas() {
+        return metas;
     }
 
     public String getContent() {

@@ -58,15 +58,15 @@ public class TextBlock implements ContentBlock, ResourceBlock, MessageBlock {
         return mimeType;
     }
 
-    protected Map<String, Object> metadata;
+    protected Map<String, Object> metas;
 
     @Override
     public Map<String, Object> metas() {
-        if (metadata == null) {
-            metadata = new LinkedHashMap<>();
+        if (metas == null) {
+            metas = new LinkedHashMap<>();
         }
 
-        return metadata;
+        return metas;
     }
 
 

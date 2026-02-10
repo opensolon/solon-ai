@@ -556,7 +556,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
         }
 
         if (mcpResult.meta() != null) {
-            result.getMetadata().putAll(mcpResult.meta());
+            result.metas().putAll(mcpResult.meta());
         }
 
         return result;
@@ -597,6 +597,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                     McpSchema.TextResourceContents tc = (McpSchema.TextResourceContents) c;
 
                     TextBlock textBlock = TextBlock.of(tc.text(), tc.mimeType());
+                    textBlock.metas().put("url", tc.uri());
                     if (Utils.isNotEmpty(tc.meta())) {
                         textBlock.metas().putAll(tc.meta());
                     }
@@ -605,7 +606,8 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                 } else if (c instanceof McpSchema.BlobResourceContents) {
                     McpSchema.BlobResourceContents bc = (McpSchema.BlobResourceContents) c;
 
-                    BlobBlock blobBlock = BlobBlock.of(bc.blob(), bc.uri(), bc.mimeType());
+                    BlobBlock blobBlock = BlobBlock.of(bc.blob(), bc.mimeType());
+                    blobBlock.metas().put("url", bc.uri());
                     if (Utils.isNotEmpty(bc.meta())) {
                         blobBlock.metas().putAll(bc.meta());
                     }
@@ -614,7 +616,12 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
         }
 
-        return new ResourceResult(resourceList);
+        ResourceResult resourceResult = new ResourceResult(resourceList);
+
+        if (Utils.isNotEmpty(mcpResult.meta())) {
+            resourceResult.metas().putAll(mcpResult.meta());
+        }
+        return resourceResult;
     }
 
     /**
@@ -664,7 +671,11 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
         }
 
-        return new PromptResult(messages);
+        PromptResult promptResult = new PromptResult(messages);
+        if (Utils.isNotEmpty(mcpResult.meta())) {
+            promptResult.attrPut(mcpResult.meta());
+        }
+        return promptResult;
     }
 
     /**

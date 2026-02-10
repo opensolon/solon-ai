@@ -48,8 +48,8 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
             this.blocks.addAll(contents.getBlocks());
             this.content = contents.getContent();
 
-            if (Assert.isNotEmpty(contents.getMetadata())) {
-                this.getMetadata().putAll(contents.getMetadata());
+            if (Assert.isNotEmpty(contents.metas())) {
+                this.getMetadata().putAll(contents.metas());
             }
         }
     }

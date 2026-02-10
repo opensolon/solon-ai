@@ -16,10 +16,10 @@
 package org.noear.solon.ai.mcp.primitives.prompt;
 
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.prompt.PromptImpl;
 
 import java.util.Collection;
-import java.util.List;
-import java.util.ArrayList;
 
 /**
  * 提示词获取结果
@@ -27,27 +27,14 @@ import java.util.ArrayList;
  * @author noear
  * @since 3.9.2
  */
-public class PromptResult {
-    private final List<ChatMessage> messages = new ArrayList<>();
-
+public class PromptResult extends PromptImpl implements Prompt {
     public PromptResult() {
         //用于反序列化
+        super();
     }
 
     public PromptResult(Collection<ChatMessage> messages) {
-        this.messages.addAll(messages);
-    }
-
-    public int size() {
-        return messages.size();
-    }
-
-    public List<ChatMessage> getMessages() {
-        return messages;
-    }
-
-    @Override
-    public String toString() {
-        return messages.toString();
+        super();
+        addMessage(messages);
     }
 }
