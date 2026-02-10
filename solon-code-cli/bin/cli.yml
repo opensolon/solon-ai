@@ -28,4 +28,4 @@ solon.code.cli:
 
 # 1. chatModel 按需配置，不熟的看下 solon ai 官网资料
 # 2. SolonCodeCLI 兼容 Claude Code Agent Skills
-# 3. skills 到处可以下载，比如：https://github.com/solonlab/opencode-skills
+# 3. skills 到处可以下载，比如：https://github.com/zrt-ai-lab/opencode-skills
