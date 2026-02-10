@@ -1,6 +1,6 @@
 solon.logging.appender:
   console:
-    enable: true
+    enable: false
   file:
     level: INFO
 
