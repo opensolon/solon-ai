@@ -172,7 +172,7 @@ public class ReasonTask implements NamedTaskComponent {
             if (currIdx < total) {
                 int nextIdx = currIdx + 2; // 因为展示是 1-based，所以是 currIdx + 1 + 1
 
-                sb.append("- 步骤 [").append(currIdx + 1).append("] 完成后，必须调用 `update_task_progress` ")
+                sb.append("- 步骤 [").append(currIdx + 1).append("] 完成后，必须调用 `update_plan_progress` ")
                         .append("并将参数 `next_plan_index` 设为 `").append(nextIdx).append("` ");
 
                 // 关键点：如果是最后一步，明确告诉它这是一个“终结信号”

@@ -70,18 +70,21 @@ public class PlanSkill extends AbsSkill {
             item.target.onPlan(trace, trace.getLastReasonMessage());
         }
 
-        return "SUCCESS: 计划已初始化，共 " + cleaned.size() + " 步。";
+        return "成功：计划已初始化，共 " + cleaned.size() + " 步。请开始执行第一步。";
     }
 
-    @ToolMapping(description = "更新任务进度。完成当前步骤准备进入下一步时，必须调用。")
-    public String update_task_progress(@Param(name = "next_plan_index", description = "下一个步骤索引（从 1 开始计数的数字）。") int next_plan_index) {
-        // 逻辑收口：在这里直接修改 trace
-        int safeIdx = Math.max(1, Math.min(next_plan_index, trace.getPlans().size() + 1));
+    @ToolMapping(description = "更新计划进度。完成当前步骤准备进入下一步时，必须调用。")
+    public String update_plan_progress(@Param(name = "next_plan_index", description = "下一个步骤索引（从 1 开始计数的数字）。") int next_plan_index) {
+        int totalSteps = trace.getPlans().size();
+        int safeIdx = Math.max(1, Math.min(next_plan_index, totalSteps + 1));
         trace.setPlanIndex(safeIdx - 1);
 
-        String nextStepDesc = trace.getPlans().size() >= safeIdx ?
-                " Next step is: " + trace.getPlans().get(safeIdx - 1) : "All steps completed.";
-        return "SUCCESS: Plan progress updated to step " + safeIdx + "." + nextStepDesc;
+        if (totalSteps >= safeIdx) {
+            String nextStepDesc = trace.getPlans().get(safeIdx - 1);
+            return "成功：计划进度已更新。下一步是：第 " + safeIdx + " 步 - " + nextStepDesc;
+        } else {
+            return "成功：所有计划步骤已执行完毕。";
+        }
     }
 
     @ToolMapping(description = "修订后续计划。当发现原计划有误或环境变化导致后续步骤不可行时调用。")
@@ -107,7 +110,7 @@ public class PlanSkill extends AbsSkill {
             trace.setPlanIndex(splitAt);
         }
 
-        return "SUCCESS: 计划已从第 " + from_index + " 步开始重组。";
+        return "成功：计划已从第 " + from_index + " 步开始重构。请按照新计划继续执行。";
     }
 
     /**
