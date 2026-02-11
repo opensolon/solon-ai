@@ -57,6 +57,11 @@ public class ToolResult extends Contents {
     }
 
     @Override
+    public ToolResult addText(String text) {
+        return (ToolResult) super.addText(text);
+    }
+
+    @Override
     public ToolResult addBlock(ContentBlock block) {
         return (ToolResult) super.addBlock(block);
     }

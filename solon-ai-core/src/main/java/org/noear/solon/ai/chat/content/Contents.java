@@ -1,5 +1,7 @@
 package org.noear.solon.ai.chat.content;
 
+import org.noear.solon.Utils;
+
 import java.io.Serializable;
 import java.util.*;
 
@@ -19,16 +21,24 @@ public class Contents implements Serializable {
     }
 
     public Contents(String text) {
-        addBlock(TextBlock.of(text));
+        addText(text);
     }
 
+    /**
+     * 添加文本块
+     */
+    public Contents addText(String text) {
+        return addBlock(TextBlock.of(text));
+    }
 
     /**
      * 添加内容块（图像、音频、视频）
      */
     public Contents addBlock(ContentBlock block) {
         if (block instanceof TextBlock) {
-            text = block.getContent();
+            if (Utils.isEmpty(text)) {
+                text = block.getContent();
+            }
         }
 
         this.blocks.add(block);

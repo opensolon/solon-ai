@@ -30,6 +30,7 @@ import org.noear.solon.ai.chat.content.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.ToolProvider;
@@ -37,7 +38,6 @@ import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.chat.prompt.FunctionPrompt;
 import org.noear.solon.ai.chat.prompt.FunctionPromptDesc;
 import org.noear.solon.ai.chat.prompt.PromptProvider;
-import org.noear.solon.ai.chat.prompt.PromptResult;
 import org.noear.solon.ai.chat.resource.FunctionResource;
 import org.noear.solon.ai.chat.resource.FunctionResourceDesc;
 import org.noear.solon.ai.chat.resource.ResourceProvider;
@@ -505,7 +505,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
     /// /////////////////////////////
 
-    private ContentBlock toAiMedia(McpSchema.Content content, Boolean error) {
+    private ContentBlock toBlock(McpSchema.Content content, Boolean error) {
         if (content instanceof McpSchema.TextContent) {
             String text = ((McpSchema.TextContent) content).text();
             if (error != null && error && text.startsWith("Error: ") == false) {
@@ -548,9 +548,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
 
         if (mcpResult.content() != null) {
             for (McpSchema.Content c : mcpResult.content()) {
-                ContentBlock media = toAiMedia(c, mcpResult.isError());
-                if (media != null) {
-                    result.addBlock(media);
+                ContentBlock block = toBlock(c, mcpResult.isError());
+                if (block != null) {
+                    result.addBlock(block);
                 }
             }
         }
@@ -645,7 +645,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      * @param name 名字
      * @param args 参数
      */
-    public PromptResult getPrompt(String name, Map<String, Object> args) {
+    public Prompt getPrompt(String name, Map<String, Object> args) {
         McpSchema.GetPromptResult mcpResult = getPromptRequest(name, args);
         List<ChatMessage> messages = new ArrayList<>();
 
@@ -661,9 +661,9 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
                         UserMessage msg = ChatMessage.ofUser(((McpSchema.TextContent) pm.content()).text());
                         messages.add(msg);
                     } else {
-                        ContentBlock aiMedia = toAiMedia(pm.content(), false);
-                        if (aiMedia != null) {
-                            UserMessage msg = ChatMessage.ofUser(aiMedia);
+                        ContentBlock block = toBlock(pm.content(), false);
+                        if (block != null) {
+                            UserMessage msg = ChatMessage.ofUser(block);
                             messages.add(msg);
                         }
                     }
@@ -671,7 +671,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
         }
 
-        PromptResult promptResult = new PromptResult(messages);
+        Prompt promptResult = Prompt.of(messages);
         if (Utils.isNotEmpty(mcpResult.meta())) {
             promptResult.attrPut(mcpResult.meta());
         }

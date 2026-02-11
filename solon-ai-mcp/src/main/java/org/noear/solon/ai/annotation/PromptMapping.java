@@ -40,7 +40,7 @@ public @interface PromptMapping {
     /**
      * 描述
      */
-    String description();
+    String description() default "";
 
     /**
      * 元数据（json）

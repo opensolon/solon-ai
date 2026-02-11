@@ -40,6 +40,11 @@ public class ResourceResult {
         this.resources.addAll(resources);
     }
 
+    public ResourceResult addResource(ResourceBlock resource) {
+        resources.add(resource);
+        return this;
+    }
+
     public Map<String, Object> metas() {
         return metas;
     }

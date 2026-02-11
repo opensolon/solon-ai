@@ -47,12 +47,12 @@ public class McpConvertUtil {
 
         if (err != null) {
             err = Utils.throwableUnwrap(err);
-            result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(err.getMessage())), true);
+            result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(err.getMessage())), true, fun.meta());
         } else {
             if (rst instanceof McpSchema.CallToolResult) {
                 result = (McpSchema.CallToolResult) rst;
             } else if (rst instanceof McpSchema.Content) {
-                result = new McpSchema.CallToolResult(Arrays.asList((McpSchema.Content) rst), false);
+                result = new McpSchema.CallToolResult(Arrays.asList((McpSchema.Content) rst), false, fun.meta());
             } else if (rst instanceof ToolResult) {
                 ToolResult toolResult = (ToolResult) rst;
 
@@ -75,15 +75,15 @@ public class McpConvertUtil {
                     }
                 }
 
-                result = new McpSchema.CallToolResult(contentList, false);
+                result = new McpSchema.CallToolResult(contentList, false, fun.meta());
             } else {
                 String rstStr = ToolSchemaUtil.resultConvert(fun, rst);
 
                 if (serverProps.isEnableOutputSchema() && Utils.isNotEmpty(fun.outputSchema())) {
                     Map<String, Object> map = ONode.ofBean(rst).toBean(Map.class);
-                    result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false, map);
+                    result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false, map, fun.meta());
                 } else {
-                    result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false);
+                    result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rstStr)), false, fun.meta());
                 }
             }
         }
@@ -101,7 +101,7 @@ public class McpConvertUtil {
             if (rst instanceof McpSchema.ReadResourceResult) {
                 result = (McpSchema.ReadResourceResult) rst;
             } else if (rst instanceof McpSchema.ResourceContents) {
-                result = new McpSchema.ReadResourceResult(Arrays.asList((McpSchema.ResourceContents) rst));
+                result = new McpSchema.ReadResourceResult(Arrays.asList((McpSchema.ResourceContents) rst), fun.meta());
             } else if (rst instanceof ResourceResult) {
                 ResourceResult resourceResult = (ResourceResult) rst;
 
@@ -120,30 +120,30 @@ public class McpConvertUtil {
                     }
                 }
 
-                result = new McpSchema.ReadResourceResult(resourceList);
+                result = new McpSchema.ReadResourceResult(resourceList, fun.meta());
             } else if (rst instanceof TextBlock) {
                 TextBlock res = (TextBlock) rst;
                 result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(req.uri(),
                         fun.mimeType(),
                         res.getContent(),
-                        res.metas())));
+                        res.metas())), fun.meta());
             } else if (rst instanceof BlobBlock) {
                 BlobBlock res = (BlobBlock) rst;
                 result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(req.uri(),
                         fun.mimeType(),
                         res.getContent(),
-                        res.metas())));
+                        res.metas())), fun.meta());
             } else if (rst instanceof byte[]) {
                 String blob = Base64.getEncoder().encodeToString((byte[]) rst);
 
                 result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.BlobResourceContents(req.uri(),
                         fun.mimeType(),
-                        blob)));
+                        blob)), fun.meta());
             } else {
                 String text = String.valueOf(rst);
                 result = new McpSchema.ReadResourceResult(Arrays.asList(new McpSchema.TextResourceContents(req.uri(),
                         fun.mimeType(),
-                        text)));
+                        text)), fun.meta());
             }
 
             sink.success(result);
@@ -186,7 +186,7 @@ public class McpConvertUtil {
             }
 
             if (result == null) {
-                result = new McpSchema.GetPromptResult(fun.description(), promptMessages);
+                result = new McpSchema.GetPromptResult(fun.description(), promptMessages, fun.meta());
             }
 
             sink.success(result);

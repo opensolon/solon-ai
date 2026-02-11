@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.mcp.primitives.resource.ResourceResult;
+import org.noear.solon.ai.chat.resource.ResourceResult;
 import org.noear.solon.test.SolonTest;
 
 /**

@@ -18,6 +18,7 @@ package org.noear.solon.ai.chat.content;
 import org.noear.snack4.annotation.ONodeAttr;
 import org.noear.solon.Utils;
 
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -38,6 +39,14 @@ public class BlobBlock implements ContentBlock, ResourceBlock, MessageBlock {
     public static BlobBlock of(String blob, String mimeType) {
         BlobBlock tmp = new BlobBlock();
         tmp.blob = blob;
+        tmp.mimeType = mimeType;
+
+        return tmp;
+    }
+
+    public static BlobBlock of(byte[] bytes, String mimeType) {
+        BlobBlock tmp = new BlobBlock();
+        tmp.blob = Base64.getEncoder().encodeToString(bytes);
         tmp.mimeType = mimeType;
 
         return tmp;

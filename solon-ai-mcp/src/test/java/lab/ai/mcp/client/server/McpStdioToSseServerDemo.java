@@ -6,8 +6,8 @@ import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
-import org.noear.solon.ai.mcp.primitives.resource.FunctionResource;
-import org.noear.solon.ai.mcp.primitives.resource.ResourceProvider;
+import org.noear.solon.ai.chat.resource.FunctionResource;
+import org.noear.solon.ai.chat.resource.ResourceProvider;
 
 import java.util.Collection;
 
