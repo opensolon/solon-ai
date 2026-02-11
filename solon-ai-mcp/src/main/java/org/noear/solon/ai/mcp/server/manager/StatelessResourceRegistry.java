@@ -99,7 +99,7 @@ public class StatelessResourceRegistry implements McpPrimitivesRegistry<Function
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(null, exchange), () -> {
                                 functionResource.handleAsync(request.uri()).whenComplete((rst, err) -> {
-                                    McpConvertUtil.resourceResultConvert(sink, mcpServerProps, request, functionResource, rst, err);
+                                    McpResultResponder.doResourceResultResponse(sink, mcpServerProps, request, functionResource, rst, err);
                                 });
 
                             });
@@ -128,7 +128,7 @@ public class StatelessResourceRegistry implements McpPrimitivesRegistry<Function
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(null, exchange), () -> {
                                 functionResource.handleAsync(request.uri()).whenComplete((rst, err) -> {
-                                    McpConvertUtil.resourceResultConvert(sink, mcpServerProps, request, functionResource, rst, err);
+                                    McpResultResponder.doResourceResultResponse(sink, mcpServerProps, request, functionResource, rst, err);
                                 });
                             });
                         });

@@ -36,13 +36,16 @@ import reactor.core.publisher.MonoSink;
 import java.util.*;
 
 /**
- * Mcp 结果转换工具
+ * Mcp 结果响应器
  *
  * @author noear
  * @since 3.9.2
  */
-public class McpConvertUtil {
-    public static void toolResultConvert(MonoSink<McpSchema.CallToolResult> sink, McpServerProperties serverProps, FunctionTool fun, Object rst, Throwable err) {
+public class McpResultResponder {
+    /**
+     * 工具调用结果响应
+     */
+    public static void doToolResultResponse(MonoSink<McpSchema.CallToolResult> sink, McpServerProperties serverProps, FunctionTool fun, Object rst, Throwable err) {
         final McpSchema.CallToolResult result;
 
         if (err != null) {
@@ -91,7 +94,10 @@ public class McpConvertUtil {
         sink.success(result);
     }
 
-    public static void resourceResultConvert(MonoSink<McpSchema.ReadResourceResult> sink, McpServerProperties serverProps, McpSchema.ReadResourceRequest req, FunctionResource fun, Object rst, Throwable err) {
+    /**
+     * 资源读取结果响应
+     */
+    public static void doResourceResultResponse(MonoSink<McpSchema.ReadResourceResult> sink, McpServerProperties serverProps, McpSchema.ReadResourceRequest req, FunctionResource fun, Object rst, Throwable err) {
         if (err != null) {
             err = Utils.throwableUnwrap(err);
             sink.error(new McpException(err.getMessage(), err));
@@ -150,7 +156,10 @@ public class McpConvertUtil {
         }
     }
 
-    public static void promptResultConvert(MonoSink<McpSchema.GetPromptResult> sink, McpServerProperties serverProps, FunctionPrompt fun, Object rst, Throwable err) {
+    /**
+     * 提示词获取结果响应
+     */
+    public static void doPromptResultResponse(MonoSink<McpSchema.GetPromptResult> sink, McpServerProperties serverProps, FunctionPrompt fun, Object rst, Throwable err) {
         if (err != null) {
             err = Utils.throwableUnwrap(err);
             sink.error(new McpException(err.getMessage(), err));

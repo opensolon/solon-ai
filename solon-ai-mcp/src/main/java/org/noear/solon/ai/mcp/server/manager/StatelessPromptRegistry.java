@@ -93,7 +93,7 @@ public class StatelessPromptRegistry implements McpPrimitivesRegistry<FunctionPr
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(null,  exchange), () -> {
                                 functionPrompt.handleAsync(request.arguments()).whenComplete((rst, err) -> {
-                                    McpConvertUtil.promptResultConvert(sink, mcpServerProps, functionPrompt, rst, err);
+                                    McpResultResponder.doPromptResultResponse(sink, mcpServerProps, functionPrompt, rst, err);
                                 });
                             });
                         });
