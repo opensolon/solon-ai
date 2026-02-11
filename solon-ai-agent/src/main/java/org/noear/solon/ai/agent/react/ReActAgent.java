@@ -18,10 +18,7 @@ package org.noear.solon.ai.agent.react;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.task.ActionTask;
-import org.noear.solon.ai.agent.react.task.PlanTask;
-import org.noear.solon.ai.agent.react.task.PlanTool;
-import org.noear.solon.ai.agent.react.task.ReasonTask;
+import org.noear.solon.ai.agent.react.task.*;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.util.FeedbackTool;
@@ -94,9 +91,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
      */
     protected Graph buildGraph() {
         return Graph.create(config.getTraceKey(), spec -> {
-            spec.addStart(Agent.ID_START).linkAdd(ReActAgent.ID_PLAN);
-            spec.addActivity(new PlanTask(config)).linkAdd(ID_REASON_BEF);
-
+            spec.addStart(Agent.ID_START).linkAdd(ReActAgent.ID_REASON_BEF);
             spec.addActivity(ID_REASON_BEF).title("Pre-Reasoning").linkAdd(ID_REASON);
 
             spec.addExclusive(new ReasonTask(config, this))
@@ -246,6 +241,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             }
         }
 
+        //添加模式技能（要在激活技能之前）
+        if(trace.getOptions().isPlanningMode()){
+            trace.getOptions().getModelOptions().skillAdd(new PlanSkill(trace));
+        }
+
         //如果提示词没问题，开始激活技能
         trace.activeSkills();
 
@@ -254,10 +254,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             trace.getOptions().getModelOptions().toolAdd(FeedbackTool.getTool(
                     trace.getOptions().getFeedbackDescription(trace),
                     trace.getOptions().getFeedbackReasonDescription(trace)));
-        }
-
-        if(trace.getOptions().isPlanningMode()){
-            trace.getOptions().getModelOptions().toolAdd(PlanTool.getTool(null,null));
         }
 
 

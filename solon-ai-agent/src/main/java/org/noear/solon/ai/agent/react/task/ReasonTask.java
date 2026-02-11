@@ -158,32 +158,24 @@ public class ReasonTask implements NamedTaskComponent {
         String systemPrompt = config.getSystemPromptFor(trace, context);
 
         if (trace.getOptions().isPlanningMode() && trace.hasPlans()) {
-            StringBuilder sb = new StringBuilder("\n\n[执行计划进度]\n");
+            StringBuilder sb = new StringBuilder("\n\n[执行计划进度看板]\n");
             List<String> plans = trace.getPlans();
             int currIdx = trace.getPlanIndex();
-            int totalPlans = plans.size();
+            int total = plans.size();
 
-            for (int i = 0; i < totalPlans; i++) {
+            for (int i = 0; i < total; i++) {
                 String status = (i < currIdx) ? "[√] " : (i == currIdx ? "[●] " : "[ ] ");
                 sb.append(i + 1).append(". ").append(status).append(plans.get(i)).append("\n");
             }
 
-            if (currIdx >= totalPlans) {
-                sb.append("\n**🎉 所有计划已全部完成！**\n")
-                        .append("- 请根据上述已确认的所有信息，直接为用户提供最终的详细回答。");
+            sb.append("\n**进度同步协议执行指令：**\n");
+            if (currIdx < total) {
+                // 关键：在这里直接计算出具体的数字，喂到模型嘴里
+                sb.append("- 步骤 [").append(currIdx + 1).append("] 完成后，必须调用 `update_task_progress` ")
+                        .append("并将参数 `next_plan_index` 设为 `").append(currIdx + 2).append("`。\n");
+                sb.append("- 在更新进度前，禁止提供最终答案。");
             } else {
-                sb.append("\n**计划进度同步协议：**\n");
-
-                if (currIdx < totalPlans - 1) {
-                    sb.append("- 当阶段任务 [").append(currIdx + 1).append("] 完成时，必须调用工具 `")
-                            .append(PlanTool.TOOL_NAME).append("` 更新至索引 `").append(currIdx + 2).append("`。\n");
-                } else {
-                    sb.append("- 当前为最后一项任务。完成后，必须调用工具 `")
-                            .append(PlanTool.TOOL_NAME).append("` 传入 `")
-                            .append(totalPlans + 1).append("`（代表所有计划已圆满完成）。\n");
-                }
-
-                sb.append("- 只有当所有计划项都标记为 [√] 且收到成功反馈后，才允许输出最终答案并结束任务。\n");
+                sb.append("- 计划已全部标记为 [√]。请根据上述已确认的所有信息，直接为用户提供最终的详细回答。");
             }
 
             systemPrompt += sb.toString();

@@ -287,30 +287,6 @@ public class ActionTask implements NamedTaskComponent {
      * @return 工具输出的字符串结果
      */
     private String executeTool(ReActTrace trace, String name, Map<String, Object> args) {
-        if (PlanTool.TOOL_NAME.equals(name)) {
-            Object val = args.get(PlanTool.PARAM_NAME);
-            if (val != null) {
-                try {
-                    int nextIdx = Integer.parseInt(val.toString()) - 1;
-                    int totalSteps = trace.getPlans().size();
-
-                    if (nextIdx >= 0 && nextIdx < totalSteps) { // 注意：索引边界通常是 < size
-                        trace.setPlanIndex(nextIdx);
-                        LOG.info("ReActAgent [{}] Plan updated to index: {}", config.getName(), nextIdx);
-                        // 返回 Observation 告诉模型它成功切换了
-                        return "SUCCESS: Progress updated. Current plan is now: " + trace.getPlans().get(nextIdx);
-                    } else if (nextIdx == totalSteps) {
-                        // 如果模型认为计划全做完了
-                        return "OBSERVATION: All planned steps reached. You can now provide the Final Answer.";
-                    } else {
-                        return "ERROR: Plan index " + (nextIdx + 1) + " is out of range.";
-                    }
-                } catch (Exception e) {
-                    return "ERROR: Invalid format for plan index.";
-                }
-            }
-        }
-
         if (FeedbackTool.TOOL_NAME.equals(name)) {
             String reason = (String) args.get("reason");
             trace.setRoute(Agent.ID_END);
@@ -319,10 +295,7 @@ public class ActionTask implements NamedTaskComponent {
             return reason;
         }
 
-
         FunctionTool tool = trace.getOptions().getTool(name);
-
-        // 如果配置中没有，尝试从协议工具集查找（如 __transfer_to__）
         if (tool == null) {
             tool = trace.getProtocolTool(name);
         }
