@@ -56,6 +56,10 @@ public class ReasonChunk extends AbsAgentChunk {
         return response;
     }
 
+    public boolean isFinished(){
+        return response.isFinished();
+    }
+
     public boolean isToolCalls() {
         return Assert.isNotEmpty(response.getMessage().getToolCalls());
     }

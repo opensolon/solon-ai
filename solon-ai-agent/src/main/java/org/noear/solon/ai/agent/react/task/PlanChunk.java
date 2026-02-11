@@ -52,4 +52,8 @@ public class PlanChunk extends AbsAgentChunk {
     public ChatResponse getResponse() {
         return response;
     }
+
+    public boolean isFinished(){
+        return response.isFinished();
+    }
 }
