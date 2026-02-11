@@ -96,7 +96,7 @@ public class ReasonTask implements NamedTaskComponent {
             // 真正超过最大步数，彻底终止
             LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), maxSteps);
             trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer("Agent error: Maximum iterations reached.");
+            trace.setFinalAnswer("Agent error: Maximum steps reached (" + maxSteps + ").");
             return;
         }
 
