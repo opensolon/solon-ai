@@ -15,6 +15,10 @@
  */
 package org.noear.solon.ai.chat.prompt;
 
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.util.ParamDesc;
 
 import java.util.Collection;
@@ -60,10 +64,13 @@ public interface FunctionPrompt {
     Collection<ParamDesc> params();
 
     /**
-     * 处理
+     * 同步处理
      */
     Object handle(Map<String, Object> args) throws Throwable;
 
+    /**
+     * 异步处理
+     */
     default CompletableFuture<Object> handleAsync(Map<String, Object> args) {
         CompletableFuture future = new CompletableFuture();
 
@@ -76,7 +83,35 @@ public interface FunctionPrompt {
         return future;
     }
 
-    default Prompt get(Map<String, Object> args) {
-        return null;
+    default Prompt get(Map<String, Object> args) throws Throwable {
+        Object rst = handle(args);
+
+        if(rst == null){
+            return Prompt.of();
+        }
+
+        if (rst instanceof Prompt) {
+            return (Prompt) rst;
+        }
+
+        if (rst instanceof ChatMessage) {
+            return Prompt.of((ChatMessage) rst);
+        }
+
+        Prompt prompt = Prompt.of();
+        if (rst instanceof Collection) {
+            for (Object item : (Collection) rst) {
+                if (item instanceof ChatMessage) {
+                    prompt.addMessage((ChatMessage) item);
+                }
+            }
+
+            if (prompt.size() > 0) {
+                return prompt;
+            }
+        }
+
+        String text = String.valueOf(rst);
+        return prompt.addMessage(text);
     }
 }

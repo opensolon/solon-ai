@@ -161,6 +161,10 @@ public interface FunctionTool extends Tool {
     default ToolResult call(Map<String, Object> args) throws Throwable{
        Object rst = handle(args);
 
+        if(rst == null){
+            return new ToolResult();
+        }
+
        if(rst instanceof  ToolResult){
            return (ToolResult)rst;
        }
@@ -169,6 +173,16 @@ public interface FunctionTool extends Tool {
            return new ToolResult().addBlock((ContentBlock)rst);
        }
 
-       return new ToolResult(ToolSchemaUtil.resultConvert(this, rst));
+        if(rst instanceof String){
+            return new ToolResult().addText((String)rst);
+        }
+
+        Type type = this.returnType();
+        if(type == null){
+            type= rst.getClass();
+        }
+
+        String rstStr = resultConverter().convert(rst, type);
+        return new ToolResult().addText(rstStr);
     }
 }

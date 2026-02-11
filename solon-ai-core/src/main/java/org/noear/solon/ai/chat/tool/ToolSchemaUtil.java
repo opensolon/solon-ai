@@ -244,7 +244,7 @@ public class ToolSchemaUtil {
     /**
      * 工具结果转换
      */
-    public static String resultConvert(FunctionTool tool, Object result){
+    public static String resultConvert(FunctionTool fun, Object result){
         if(result == null){
             return null;
         }
@@ -253,11 +253,11 @@ public class ToolSchemaUtil {
             return (String)result;
         }
 
-        Type type = tool.returnType();
+        Type type = fun.returnType();
         if(type == null){
             type= result.getClass();
         }
 
-        return tool.resultConverter().convert(result, type);
+        return fun.resultConverter().convert(result, type);
     }
 }
