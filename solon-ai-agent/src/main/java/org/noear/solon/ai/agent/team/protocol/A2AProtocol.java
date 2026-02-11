@@ -300,12 +300,12 @@ public class A2AProtocol extends TeamProtocolBase {
         Agent target = config.getAgentMap().get(targetName);
         if (target == null) return false;
 
-        boolean hasMedia = trace.getOriginalPrompt().getMessages().stream()
+        boolean isMultiModal = trace.getOriginalPrompt().getMessages().stream()
                 .filter(m -> m.getRole() == ChatRole.USER)
                 .map(m -> (UserMessage) m)
                 .anyMatch(UserMessage::isMultiModal);
 
-        return !hasMedia || target.profile().getInputModes().stream().anyMatch(m -> !m.equalsIgnoreCase("text"));
+        return !isMultiModal || target.profile().getInputModes().stream().anyMatch(m -> !m.equalsIgnoreCase("text"));
     }
 
     @Override

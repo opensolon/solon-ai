@@ -56,7 +56,7 @@ public class SequentialRoutingTask implements NamedTaskComponent {
         // 模态检查逻辑（保留旧代码细节）
         while (!Agent.ID_END.equals(next)) {
             Agent nextAgent = config.getAgentMap().get(next);
-            boolean hasImage = protocol.detectMediaPresence(trace);
+            boolean hasImage = protocol.detectMultiModalPresence(trace);
 
             if (hasImage && nextAgent.profile() != null) {
                 boolean supportImage = nextAgent.profile().getInputModes().contains("image");
