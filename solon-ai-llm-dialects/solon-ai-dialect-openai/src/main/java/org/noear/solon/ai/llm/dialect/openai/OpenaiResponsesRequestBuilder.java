@@ -126,9 +126,9 @@ public class OpenaiResponsesRequestBuilder {
                 for (ToolCall call : assistantMessage.getToolCalls()) {
                     inputArray.addNew()
                             .set("type", "function_call")
-                            .set("call_id", call.id())
-                            .set("name", call.name())
-                            .set("arguments", call.argumentsStr());
+                            .set("call_id", call.getId())
+                            .set("name", call.getName())
+                            .set("arguments", call.getArgumentsStr());
                 }
             } else {
                 // 普通助手消息

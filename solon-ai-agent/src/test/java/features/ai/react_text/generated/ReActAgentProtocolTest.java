@@ -166,7 +166,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
             if (msg instanceof AssistantMessage) {
                 AssistantMessage am = (AssistantMessage) msg;
                 if (Assert.isNotEmpty(am.getToolCalls())) {
-                    am.getToolCalls().forEach(c -> tools.add(c.name()));
+                    am.getToolCalls().forEach(c -> tools.add(c.getName()));
                 }
 
                 // 2. 适配文本 ReAct 模式 (从 AssistantMessage 的 content 文本中正则提取)

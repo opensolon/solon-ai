@@ -252,9 +252,9 @@ public class ClaudeRequestBuilder {
             for (ToolCall call : assistantMessage.getToolCalls()) {
                 contentArray.addNew()
                     .set("type", "tool_use")
-                    .set("id", call.id())
-                    .set("name", call.name())
-                    .set("input", ONode.ofBean(call.arguments()));
+                    .set("id", call.getId())
+                    .set("name", call.getName())
+                    .set("input", ONode.ofBean(call.getArguments()));
             }
         } else {
             String content = assistantMessage.getContent();

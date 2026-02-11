@@ -94,7 +94,7 @@ public class StopLoopInterceptor implements ReActInterceptor {
             StringBuilder sb = new StringBuilder("tool:");
             for (ToolCall call : message.getToolCalls()) {
                 // 使用默认序列化（Snack4 默认会对 Map 的 Key 排序，确保指纹一致性）
-                sb.append(call.name()).append(ONode.serialize(call.arguments()));
+                sb.append(call.getName()).append(ONode.serialize(call.getArguments()));
             }
             return sb.toString();
         } else if (Assert.isNotEmpty(message.getContent())) {

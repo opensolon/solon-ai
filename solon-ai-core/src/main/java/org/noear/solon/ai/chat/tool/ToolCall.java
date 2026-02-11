@@ -54,35 +54,35 @@ public class ToolCall implements Serializable {
     /**
      * 索引位（流式调用时）
      */
-    public String index() {
+    public String getIndex() {
         return index;
     }
 
     /**
      * 调用id（用于回传）
      */
-    public String id() {
+    public String getId() {
         return id;
     }
 
     /**
      * 函数名字
      */
-    public String name() {
+    public String getName() {
         return name;
     }
 
     /**
      * 调用参数（字符串型式）
      */
-    public String argumentsStr() {
+    public String getArgumentsStr() {
         return argumentsStr;
     }
 
     /**
      * 调用参数（字典型式）
      */
-    public Map<String, Object> arguments() {
+    public Map<String, Object> getArguments() {
         return arguments;
     }
 }

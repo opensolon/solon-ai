@@ -450,18 +450,18 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
 
         for (ToolCall call : acm.getToolCalls()) {
-            ToolCallBuilder callBuilder = resp.toolCallBuilders.computeIfAbsent(call.index(), k -> new ToolCallBuilder());
+            ToolCallBuilder callBuilder = resp.toolCallBuilders.computeIfAbsent(call.getIndex(), k -> new ToolCallBuilder());
 
-            if (call.id() != null) {
-                callBuilder.idBuilder.append(call.id());
+            if (call.getId() != null) {
+                callBuilder.idBuilder.append(call.getId());
             }
 
-            if (call.name() != null) {
-                callBuilder.nameBuilder.append(call.name());
+            if (call.getName() != null) {
+                callBuilder.nameBuilder.append(call.getName());
             }
 
-            if (call.argumentsStr() != null) {
-                callBuilder.argumentsBuilder.append(call.argumentsStr());
+            if (call.getArgumentsStr() != null) {
+                callBuilder.argumentsBuilder.append(call.getArgumentsStr());
             }
         }
     }
@@ -476,12 +476,12 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         List<ToolMessage> toolMessages = new ArrayList<>();
         for (ToolCall call : acm.getToolCalls()) {
-            FunctionTool tool = options.tool(call.name());
+            FunctionTool tool = options.tool(call.getName());
 
             if (tool != null) {
                 try {
-                    ToolResult toolResult = doToolCall(resp, tool, call.arguments());
-                    ToolMessage toolMessage = ChatMessage.ofTool(toolResult, call.name(), call.id(), tool.returnDirect());
+                    ToolResult toolResult = doToolCall(resp, tool, call.getArguments());
+                    ToolMessage toolMessage = ChatMessage.ofTool(toolResult, call.getName(), call.getId(), tool.returnDirect());
                     toolMessage.addMetadata(tool.meta());
                     toolMessage.addMetadata("__tool", tool.name());
 
@@ -492,7 +492,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 }
             } else {
                 //会存在调用的call实际上不存在的情况
-                log.warn("Tool call not found: {}", call.name());
+                log.warn("Tool call not found: {}", call.getName());
             }
         }
 

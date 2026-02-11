@@ -377,7 +377,7 @@ public class ReActTrace implements AgentTrace {
                 }
                 if (Assert.isNotEmpty(am.getToolCalls())) {
                     for (ToolCall call : am.getToolCalls()) {
-                        sb.append("[Action] ").append(call.name()).append(": ").append(call.arguments()).append("\n");
+                        sb.append("[Action] ").append(call.getName()).append(": ").append(call.getArguments()).append("\n");
                     }
                 }
             } else if (msg instanceof ToolMessage) {

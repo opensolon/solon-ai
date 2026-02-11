@@ -150,16 +150,16 @@ public class ActionTask implements NamedTaskComponent {
             LOG.debug("Processing native tool call for agent [{}]: {}.", config.getName(), call);
         }
 
-        Map<String, Object> args = (call.arguments() == null) ? new HashMap<>() : call.arguments();
+        Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
 
         // 触发 Action 生命周期拦截
-        String result = doAction(trace, call.name(), args);
+        String result = doAction(trace, call.getName(), args);
         if (result == null) {
             return;
         }
 
         // 协议闭环：回填 ToolMessage
-        ToolMessage toolMessage = ChatMessage.ofTool(result, call.name(), call.id());
+        ToolMessage toolMessage = ChatMessage.ofTool(result, call.getName(), call.getId());
         if(lastAssistantAdded.compareAndSet(false, true)) {
             trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
         }
@@ -168,7 +168,7 @@ public class ActionTask implements NamedTaskComponent {
 
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
-                    new ActionChunk(node, trace, call.name(), toolMessage));
+                    new ActionChunk(node, trace, call.getName(), toolMessage));
         }
     }
 

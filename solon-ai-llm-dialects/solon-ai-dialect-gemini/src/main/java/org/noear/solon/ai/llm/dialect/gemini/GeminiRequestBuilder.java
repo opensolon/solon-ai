@@ -153,13 +153,13 @@ public class GeminiRequestBuilder {
             node.getOrNew("parts").asArray().then(n1 -> {
                 for (ToolCall call : assistantMessage.getToolCalls()) {
                     n1.addNew().getOrNew("functionCall").then(n2 -> {
-                        n2.set("name", call.name());
-                        if (call.argumentsStr() != null) {
+                        n2.set("name", call.getName());
+                        if (call.getArgumentsStr() != null) {
                             try {
-                                ONode argsNode = ONode.ofJson(call.argumentsStr());
+                                ONode argsNode = ONode.ofJson(call.getArgumentsStr());
                                 n2.set("args", argsNode);
                             } catch (Exception e) {
-                                n2.set("args", ONode.ofBean(call.arguments()));
+                                n2.set("args", ONode.ofBean(call.getArguments()));
                             }
                         } else {
                             n2.set("args", new ONode());
