@@ -13,28 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.primitives.prompt;
-
-import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.prompt.PromptImpl;
+package org.noear.solon.ai.chat.prompt;
 
 import java.util.Collection;
 
 /**
- * 提示词获取结果
+ * 提示语提供者
  *
  * @author noear
- * @since 3.9.2
+ * @since 3.2
  */
-public class PromptResult extends PromptImpl implements Prompt {
-    public PromptResult() {
-        //用于反序列化
-        super();
-    }
-
-    public PromptResult(Collection<ChatMessage> messages) {
-        super();
-        addMessage(messages);
-    }
+public interface PromptProvider {
+    /**
+     * 获取提示语
+     */
+    Collection<FunctionPrompt> getPrompts();
 }

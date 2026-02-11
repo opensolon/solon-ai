@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.primitives.prompt;
+package org.noear.solon.ai.chat.prompt;
 
 import org.noear.eggg.MethodEggg;
 import org.noear.eggg.ParamEggg;

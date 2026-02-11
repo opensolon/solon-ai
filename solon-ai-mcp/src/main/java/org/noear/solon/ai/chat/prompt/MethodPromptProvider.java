@@ -13,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.primitives.resource;
+package org.noear.solon.ai.chat.prompt;
 
 import org.noear.eggg.ClassEggg;
 import org.noear.eggg.MethodEggg;
 import org.noear.solon.Solon;
-import org.noear.solon.ai.annotation.ResourceMapping;
+import org.noear.solon.ai.annotation.PromptMapping;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.util.EgggUtil;
 
@@ -32,37 +32,37 @@ import java.util.List;
  * @author noear
  * @since 3.2
  */
-public class MethodResourceProvider implements ResourceProvider {
-    private final List<FunctionResource> resources = new ArrayList<>();
+public class MethodPromptProvider implements PromptProvider {
+    private final List<FunctionPrompt> prompts = new ArrayList<>();
 
-    public MethodResourceProvider(Object toolObj) {
+    public MethodPromptProvider(Object toolObj) {
         this(toolObj.getClass(), toolObj);
     }
 
-    public MethodResourceProvider(Class<?> toolClz, Object toolObj) {
+    public MethodPromptProvider(Class<?> toolClz, Object toolObj) {
         this(new BeanWrap(Solon.context(), toolClz, toolObj));
     }
 
-    public MethodResourceProvider(BeanWrap beanWrap) {
+    public MethodPromptProvider(BeanWrap beanWrap) {
         //添加带注释的工具
         ClassEggg classEggg = EgggUtil.getClassEggg(beanWrap.clz());
         for (MethodEggg me : classEggg.getPublicMethodEgggs()) {
-            if (me.getMethod().isAnnotationPresent(ResourceMapping.class)) {
-                MethodFunctionResource resc = new MethodFunctionResource(beanWrap, me);
-                resources.add(resc);
+            if (me.getMethod().isAnnotationPresent(PromptMapping.class)) {
+                MethodFunctionPrompt resc = new MethodFunctionPrompt(beanWrap, me);
+                prompts.add(resc);
             }
         }
 
         //如果自己就是工具集，再添加
-        if (beanWrap.raw() instanceof ResourceProvider) {
-            for (FunctionResource t1 : ((ResourceProvider) beanWrap.raw()).getResources()) {
-                resources.add(t1);
+        if (beanWrap.raw() instanceof PromptProvider) {
+            for (FunctionPrompt t1 : ((PromptProvider) beanWrap.raw()).getPrompts()) {
+                prompts.add(t1);
             }
         }
     }
 
     @Override
-    public Collection<FunctionResource> getResources() {
-        return resources;
+    public Collection<FunctionPrompt> getPrompts() {
+        return prompts;
     }
 }

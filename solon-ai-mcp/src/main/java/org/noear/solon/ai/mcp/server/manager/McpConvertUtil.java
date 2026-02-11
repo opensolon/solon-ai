@@ -27,11 +27,10 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.mcp.exception.McpException;
-import org.noear.solon.ai.mcp.primitives.prompt.PromptResult;
-import org.noear.solon.ai.mcp.primitives.resource.ResourceResult;
+import org.noear.solon.ai.chat.resource.ResourceResult;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
-import org.noear.solon.ai.mcp.primitives.prompt.FunctionPrompt;
-import org.noear.solon.ai.mcp.primitives.resource.FunctionResource;
+import org.noear.solon.ai.chat.prompt.FunctionPrompt;
+import org.noear.solon.ai.chat.resource.FunctionResource;
 import reactor.core.publisher.MonoSink;
 
 import java.util.*;

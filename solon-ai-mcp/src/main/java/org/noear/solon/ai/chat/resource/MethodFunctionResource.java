@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.mcp.primitives.resource;
+package org.noear.solon.ai.chat.resource;
 
 import org.noear.eggg.MethodEggg;
 import org.noear.snack4.ONode;

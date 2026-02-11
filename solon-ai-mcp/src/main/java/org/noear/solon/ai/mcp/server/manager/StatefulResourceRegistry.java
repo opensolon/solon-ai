@@ -22,7 +22,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
-import org.noear.solon.ai.mcp.primitives.resource.FunctionResource;
+import org.noear.solon.ai.chat.resource.FunctionResource;
 import org.noear.solon.core.handle.Context;
 import reactor.core.publisher.Mono;
 
