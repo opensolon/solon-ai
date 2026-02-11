@@ -290,11 +290,13 @@ public class CodeCLI implements Handler, Runnable {
         }
     }
 
+    final static String GRAY = "\033[90m", YELLOW = "\033[33m", GREEN = "\033[32m",
+            RED = "\033[31m", CYAN = "\033[36m", RESET = "\033[0m";
+
     /**
      * 执行 Agent 任务（优化版：修复状态泄露与异步同步问题）
      */
     private void performAgentTask(AgentSession session, String input, Scanner scanner) throws Exception {
-        final String GRAY = "\033[90m", YELLOW = "\033[33m", GREEN = "\033[32m", RED = "\033[31m", RESET = "\033[0m";
 
         String currentInput = input;
         // 标记：是否刚提交完审核结果
@@ -305,36 +307,50 @@ public class CodeCLI implements Handler, Runnable {
             final AtomicBoolean isInterrupted = new AtomicBoolean(false);
 
             // 1. 启动流（注意：currentInput 在续传时为 null）
-            reactor.core.Disposable disposable = buildRequest(session.getSessionId(), Prompt.of(input))
+            reactor.core.Disposable disposable = buildRequest(session.getSessionId(), Prompt.of(currentInput))
                     .stream()
                     .subscribeOn(Schedulers.boundedElastic())
                     .doOnNext(chunk -> {
-                        // 渲染逻辑：不依赖 latch 状态，确保最后一段话能打印完
                         if (chunk instanceof PlanChunk) {
+                            // 计划逻辑：青色高亮
                             if (chunk.hasContent()) {
-                                System.out.print(GRAY + clearThink(chunk.getContent()) + RESET);
+                                System.out.print(CYAN + chunk.getContent() + RESET);
+                                if (((PlanChunk) chunk).isFinished()) {
+                                    System.out.println();
+                                }
                                 System.out.flush();
                             }
                         } else if (chunk instanceof ReasonChunk) {
+                            // 思考逻辑：灰色
                             ReasonChunk reasonChunk = (ReasonChunk) chunk;
-                            if (chunk.hasContent() && reasonChunk.isToolCalls() == false) {
+                            if (chunk.hasContent() && !reasonChunk.isToolCalls()) {
                                 System.out.print(GRAY + clearThink(chunk.getContent()) + RESET);
+                                if (reasonChunk.isFinished()) {
+                                    System.out.println();
+                                }
                                 System.out.flush();
                             }
                         } else if (chunk instanceof ActionChunk) {
+                            // 工具调用逻辑：黄色
                             ActionChunk actionChunk = (ActionChunk) chunk;
                             String toolName = actionChunk.getToolName();
                             String content = chunk.getContent();
 
                             if (Assert.isNotEmpty(toolName)) {
-                                System.out.println("\n" + YELLOW + "⚙️  [" + toolName + "] Observation: " + RESET);
-                                System.out.println(YELLOW + content + RESET);
+                                // 打印工具调用的 Observation 结果
+                                System.out.println("\n" + YELLOW + "🔨 [执行工具: " + toolName + "]" + RESET);
+                                System.out.print(GRAY + ">> Observation: " + RESET + YELLOW + content + RESET);
                             } else {
-                                System.out.println("\n" + YELLOW + content + RESET);
+                                // 兜底打印（非工具调用的 Action）
+                                System.out.print("\n" + YELLOW + content + RESET);
                             }
+                            // 统一在这里换行或 flush
+                            System.out.println();
                             System.out.flush();
                         } else if (chunk instanceof ReActChunk) {
-                            System.out.println("\n----------------------\n" + chunk.getContent());
+                            // 最终回复：增加分界线
+                            System.out.println("\n" + GREEN + "----------------------" + RESET);
+                            System.out.println(chunk.getContent());
                         }
                     })
                     .doFinally(signal -> latch.countDown())
