@@ -78,7 +78,7 @@ public interface FunctionResource {
         return future;
     }
 
-    default ResourceResult call(String reqUri) {
+    default ResourceResult read(String reqUri) {
         return null;
     }
 }

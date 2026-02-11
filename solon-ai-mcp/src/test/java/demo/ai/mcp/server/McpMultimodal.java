@@ -24,7 +24,7 @@ import java.util.Arrays;
  * @author noear 2026/2/11 created
  *
  */
-@McpServerEndpoint(channel = McpChannel.STREAMABLE, mcpEndpoint = "/multimodal/mc")
+@McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/multimodal/mc")
 public class McpMultimodal {
     @ToolMapping
     public String tool11(@Param("p1") String p1) {
@@ -95,37 +95,37 @@ public class McpMultimodal {
     }
 
     @ResourceMapping(uri = "res://resource11")
-    public String resource11(String p1) {
-        return p1;
+    public String resource11() {
+        return "p1";
     }
 
     @ResourceMapping(uri = "res://resource12")
-    public byte[] resource12(String p1) {
-        return p1.getBytes();
+    public byte[] resource12() {
+        return "p1".getBytes();
     }
 
     @ResourceMapping(uri = "res://resource13")
-    public McpSchema.TextResourceContents resource13(String p1) {
-        return new McpSchema.TextResourceContents("res://resource13", "text/plan", p1);
+    public McpSchema.TextResourceContents resource13() {
+        return new McpSchema.TextResourceContents("res://resource13", "text/plan", "p1");
     }
 
     @ResourceMapping(uri = "res://resource14")
-    public McpSchema.BlobResourceContents resource14(String p1) {
-        return new McpSchema.BlobResourceContents("res://resource14", "text/plan", Base64.getEncoder().encodeToString(p1.getBytes()));
+    public McpSchema.BlobResourceContents resource14() {
+        return new McpSchema.BlobResourceContents("res://resource14", "text/plan", Base64.getEncoder().encodeToString("p1".getBytes()));
     }
 
     @ResourceMapping(uri = "res://resource15")
-    public McpSchema.ReadResourceResult resource15(String p1) {
+    public McpSchema.ReadResourceResult resource15() {
         return new McpSchema.ReadResourceResult(
-                Arrays.asList(new McpSchema.TextResourceContents("res://resource13", "text/plan", p1))
+                Arrays.asList(new McpSchema.TextResourceContents("res://resource13", "text/plan", "p1"))
         );
     }
 
     @ResourceMapping(uri = "res://resource16")
-    public ResourceResult resource16(String p1) {
+    public ResourceResult resource16() {
         return new ResourceResult()
-                .addResource(TextBlock.of(p1))
-                .addResource(BlobBlock.of(p1.getBytes(), null));
+                .addResource(TextBlock.of("p1"))
+                .addResource(BlobBlock.of("p1".getBytes(), null));
     }
 
 
@@ -136,6 +136,14 @@ public class McpMultimodal {
         public User(int p1) {
             userId = p1;
             name = "a - " + p1;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public int getUserId() {
+            return userId;
         }
     }
 }

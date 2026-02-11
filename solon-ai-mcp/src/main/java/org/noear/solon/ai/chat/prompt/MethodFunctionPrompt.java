@@ -63,14 +63,6 @@ public class MethodFunctionPrompt implements FunctionPrompt {
         //断言
         Assert.notNull(mapping, "@PromptMapping annotation is missing");
 
-        //断言
-        //Assert.notEmpty(mapping.description(), "PromptMapping description cannot be empty");
-
-        //检查返回类型
-        if (Collection.class.isAssignableFrom(methodEggg.getReturnTypeEggg().getType()) == false) {
-            throw new IllegalArgumentException("@PromptMapping return type is not Collection");
-        }
-
         if (Assert.isNotEmpty(mapping.meta()) && mapping.meta().length() > 3) {
             Map<String, Object> tmp = ONode.deserialize(mapping.meta(), Map.class);
             meta.putAll(tmp);

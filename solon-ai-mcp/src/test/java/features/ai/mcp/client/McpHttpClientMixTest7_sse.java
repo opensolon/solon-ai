@@ -7,9 +7,9 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.chat.prompt.PromptResult;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Collections;
@@ -117,7 +117,7 @@ public class McpHttpClientMixTest7_sse {
 
     @Test
     public void prompt1() throws Exception {
-        PromptResult prompt = mcpClient.getPrompt("splitMessage", Collections.emptyMap());
+        Prompt prompt = mcpClient.getPrompt("splitMessage", Collections.emptyMap());
 
         assert Utils.isNotEmpty(prompt.getMessages());
         log.warn("{}", prompt);

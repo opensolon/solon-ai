@@ -109,13 +109,13 @@ public class McpConvertUtil {
                 for (ResourceBlock block1 : resourceResult.getResources()) {
                     if (block1 instanceof TextBlock) {
                         resourceList.add(new McpSchema.TextResourceContents(req.uri(),
-                                block1.getContent(),
                                 block1.getMimeType(),
+                                block1.getContent(),
                                 block1.metas()));
                     } else if (block1 instanceof BlobBlock) {
                         resourceList.add(new McpSchema.BlobResourceContents(req.uri(),
-                                block1.getContent(),
                                 block1.getMimeType(),
+                                block1.getContent(),
                                 block1.metas()));
                     }
                 }

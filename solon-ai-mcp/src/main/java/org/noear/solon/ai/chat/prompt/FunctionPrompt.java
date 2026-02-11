@@ -76,7 +76,7 @@ public interface FunctionPrompt {
         return future;
     }
 
-    default Prompt call(Map<String, Object> args) {
+    default Prompt get(Map<String, Object> args) {
         return null;
     }
 }

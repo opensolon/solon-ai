@@ -5,11 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.chat.prompt.FunctionPrompt;
-import org.noear.solon.ai.chat.prompt.PromptResult;
 import org.noear.solon.ai.chat.resource.FunctionResource;
 import org.noear.solon.test.SolonTest;
 
@@ -100,7 +100,7 @@ public class McpContextPathTest3 {
 
     @Test
     public void prompt() throws Exception {
-        PromptResult prompt = mcpClient.getPrompt("askQuestion", Collections.singletonMap("topic", "教育"));
+        Prompt prompt = mcpClient.getPrompt("askQuestion", Collections.singletonMap("topic", "教育"));
 
         assert Utils.isNotEmpty(prompt.getMessages());
         log.warn("{}", prompt);
@@ -109,7 +109,7 @@ public class McpContextPathTest3 {
 
     @Test
     public void prompt2() throws Exception {
-        PromptResult prompt = mcpClient.getPrompt("debugSession", Collections.singletonMap("error", "太阳没出来"));
+        Prompt prompt = mcpClient.getPrompt("debugSession", Collections.singletonMap("error", "太阳没出来"));
 
         assert Utils.isNotEmpty(prompt.getMessages());
         log.warn("{}", prompt);
