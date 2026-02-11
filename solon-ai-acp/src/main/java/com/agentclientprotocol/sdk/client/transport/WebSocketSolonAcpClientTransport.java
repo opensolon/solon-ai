@@ -46,9 +46,9 @@ import reactor.core.scheduler.Schedulers;
  *
  * @author Mark Pollack
  */
-public class WebSocketAcpClientTransport implements AcpClientTransport {
+public class WebSocketSolonAcpClientTransport implements AcpClientTransport {
 
-	private static final Logger logger = LoggerFactory.getLogger(WebSocketAcpClientTransport.class);
+	private static final Logger logger = LoggerFactory.getLogger(WebSocketSolonAcpClientTransport.class);
 
 	/**
 	 * Default path for ACP WebSocket endpoints
@@ -83,7 +83,7 @@ public class WebSocketAcpClientTransport implements AcpClientTransport {
 	 * @param serverUri  The WebSocket URI to connect to (e.g., "ws://localhost:8080/acp")
 	 * @param jsonMapper The JsonMapper to use for JSON serialization/deserialization
 	 */
-	public WebSocketAcpClientTransport(URI serverUri, McpJsonMapper jsonMapper) {
+	public WebSocketSolonAcpClientTransport(URI serverUri, McpJsonMapper jsonMapper) {
 		Assert.notNull(serverUri, "The serverUri can not be null");
 		Assert.notNull(jsonMapper, "The JsonMapper can not be null");
 
@@ -108,7 +108,7 @@ public class WebSocketAcpClientTransport implements AcpClientTransport {
 	 * @param timeout The connection timeout
 	 * @return This transport for chaining
 	 */
-	public WebSocketAcpClientTransport connectTimeout(Duration timeout) {
+	public WebSocketSolonAcpClientTransport connectTimeout(Duration timeout) {
 		this.connectTimeout = timeout;
 		return this;
 	}
