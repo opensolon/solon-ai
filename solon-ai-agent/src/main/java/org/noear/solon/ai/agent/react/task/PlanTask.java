@@ -15,9 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
-import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.react.*;
-import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -125,16 +123,26 @@ public class PlanTask implements NamedTaskComponent {
         List<String> cleanedPlans = new ArrayList<>(lines.length);
 
         for (String line : lines) {
-            String cleaned = PLAN_LINE_PREFIX_PATTERN.matcher(line).replaceAll("").trim();
+            String cleaned = PLAN_LINE_PREFIX_PATTERN.matcher(line).replaceAll("")
+                    .replace("**", "") // 去掉加粗
+                    .replace("`", "")  // 去掉行内代码格式
+                    .trim();
+
             if (!cleaned.isEmpty()) {
                 cleanedPlans.add(cleaned);
             }
         }
 
         trace.setPlans(cleanedPlans);
+        trace.setPlanIndex(0);
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] Plan generated: \n{}", config.getName(), planContent);
+            StringBuilder sb = new StringBuilder("Plan initialized (");
+            sb.append(cleanedPlans.size()).append(" steps):");
+            for (int i = 0; i < cleanedPlans.size(); i++) {
+                sb.append("\n  ").append(i + 1).append(". ").append(cleanedPlans.get(i));
+            }
+            LOG.debug("ReActAgent [{}] {}", config.getName(), sb.toString());
         }
     }
 }

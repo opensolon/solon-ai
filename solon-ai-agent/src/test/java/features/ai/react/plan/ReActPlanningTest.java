@@ -194,7 +194,6 @@ public class ReActPlanningTest {
         System.out.println("=====最终输出=====");
         System.out.println(resp.getContent());
 
-        List<String> plans = resp.getTrace().getPlans();
-        Assertions.assertEquals(0, plans.size(), "反馈模式没有生效");
+        Assertions.assertEquals(1, resp.getTrace().getStepCount(), "反馈模式没有生效");
     }
 }

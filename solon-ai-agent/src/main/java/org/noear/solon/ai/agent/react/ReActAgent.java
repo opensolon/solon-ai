@@ -20,9 +20,11 @@ import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.task.ActionTask;
 import org.noear.solon.ai.agent.react.task.PlanTask;
+import org.noear.solon.ai.agent.react.task.PlanTool;
 import org.noear.solon.ai.agent.react.task.ReasonTask;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -246,6 +248,17 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         //如果提示词没问题，开始激活技能
         trace.activeSkills();
+
+        //添加模式工具
+        if (trace.getOptions().isFeedbackMode()) {
+            trace.getOptions().getModelOptions().toolAdd(FeedbackTool.getTool(
+                    trace.getOptions().getFeedbackDescription(trace),
+                    trace.getOptions().getFeedbackReasonDescription(trace)));
+        }
+
+        if(trace.getOptions().isPlanningMode()){
+            trace.getOptions().getModelOptions().toolAdd(PlanTool.getTool(null,null));
+        }
 
 
         // 拦截器：任务开始事件

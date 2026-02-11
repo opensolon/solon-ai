@@ -38,6 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * ReAct 推理任务 (Reasoning)
@@ -74,8 +75,17 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] reasoning... Step: {}/{}",
-                    config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps());
+            if (trace.getOptions().isPlanningMode()) {
+                String planDesc = "";
+                if (trace.hasPlans() && trace.getPlanIndex() < trace.getPlans().size()) {
+                    planDesc = " | Plan[" + (trace.getPlanIndex() + 1) + "]: " + trace.getPlans().get(trace.getPlanIndex());
+                }
+                LOG.debug("ReActAgent [{}] reasoning... Step: {}/{}{}",
+                        config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps(), planDesc);
+            } else {
+                LOG.debug("ReActAgent [{}] reasoning... Step: {}/{}",
+                        config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps());
+            }
         }
 
         // [逻辑 1: 安全限流 & 互动续航]
@@ -148,8 +158,41 @@ public class ReasonTask implements NamedTaskComponent {
         String systemPrompt = config.getSystemPromptFor(trace, context);
 
         if (trace.getOptions().isPlanningMode() && trace.hasPlans()) {
-            systemPrompt += "\n\n[执行计划]\n" + String.join("\n", trace.getPlans()) +
-                    "\n请参考以上计划执行，当前已进行到第 " + trace.getStepCount() + " 轮推理。";
+            StringBuilder sb = new StringBuilder("\n\n[执行计划进度]\n");
+            List<String> plans = trace.getPlans();
+            int currIdx = trace.getPlanIndex();
+            int totalPlans = plans.size();
+
+            for (int i = 0; i < totalPlans; i++) {
+                String status = (i < currIdx) ? "[√] " : (i == currIdx ? "[●] " : "[ ] ");
+                sb.append(i + 1).append(". ").append(status).append(plans.get(i)).append("\n");
+            }
+
+            if (currIdx >= totalPlans) {
+                sb.append("\n**🎉 所有计划已全部完成！**\n")
+                        .append("- 请根据上述已确认的所有信息，直接为用户提供最终的详细回答。");
+            } else {
+                sb.append("\n**计划进度同步协议：**\n");
+
+                if (currIdx < totalPlans - 1) {
+                    sb.append("- 当阶段任务 [").append(currIdx + 1).append("] 完成时，必须调用工具 `")
+                            .append(PlanTool.TOOL_NAME).append("` 更新至索引 `").append(currIdx + 2).append("`。\n");
+                } else {
+                    sb.append("- 当前为最后一项任务。完成后，必须调用工具 `")
+                            .append(PlanTool.TOOL_NAME).append("` 传入 `")
+                            .append(totalPlans + 1).append("`（代表所有计划已圆满完成）。\n");
+                }
+
+                sb.append("- 只有当所有计划项都标记为 [√] 且收到成功反馈后，才允许输出最终答案并结束任务。\n");
+            }
+
+            systemPrompt += sb.toString();
+        }
+
+        if (trace.isPending()) {
+            // 如果是从挂起状态恢复（例如 HITL 后继续）
+            systemPrompt += "\n\n[Human-In-The-Loop Context]\n" +
+                    "用户已对你的执行流程进行了审核并准许继续。请结合最新的 Observation 反馈调整你的下一步策略。";
         }
 
         if (Assert.isNotEmpty(trace.getOptions().getOutputSchema())) {
@@ -282,12 +325,6 @@ public class ReasonTask implements NamedTaskComponent {
                 .prompt(messages)
                 .options(o -> {
                     if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-                        if (trace.getOptions().isFeedbackMode()) {
-                            o.toolAdd(FeedbackTool.getTool(
-                                    trace.getOptions().getFeedbackDescription(trace),
-                                    trace.getOptions().getFeedbackReasonDescription(trace)));
-                        }
-
                         o.toolAdd(trace.getOptions().getTools());
                         o.toolAdd(trace.getProtocolTools());
                     }

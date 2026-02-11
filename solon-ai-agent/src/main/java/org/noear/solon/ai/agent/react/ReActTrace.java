@@ -115,6 +115,7 @@ public class ReActTrace implements AgentTrace {
      * 计划
      */
     private final List<String> plans = new CopyOnWriteArrayList<>();
+    private int planIndex;
 
     /**
      * 是否处于挂起状态（如：等待人工介入、异步回调或逻辑暂存）
@@ -200,6 +201,7 @@ public class ReActTrace implements AgentTrace {
 
         // 3. 结构化数据重置
         plans.clear();
+        planIndex = 0;
         workingMemory.clear();
         extras.clear();
 
@@ -404,17 +406,17 @@ public class ReActTrace implements AgentTrace {
     //------------------
 
     /**
-     * 获取当前执行计划
-     */
-    public List<String> getPlans() {
-        return Collections.unmodifiableList(plans);
-    }
-
-    /**
      * 判断是否存在计划
      */
     public boolean hasPlans() {
         return !plans.isEmpty();
+    }
+
+    /**
+     * 获取当前执行计划
+     */
+    public List<String> getPlans() {
+        return Collections.unmodifiableList(plans);
     }
 
     /**
@@ -448,6 +450,14 @@ public class ReActTrace implements AgentTrace {
         if (Assert.isNotEmpty(step)) {
             plans.add(step.trim());
         }
+    }
+
+    public int getPlanIndex() {
+        return planIndex;
+    }
+
+    public void setPlanIndex(int planIndex) {
+        this.planIndex = planIndex;
     }
 
     /**

@@ -67,6 +67,7 @@ public class ReActPlanningTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
+                .style(ReActStyle.STRUCTURED_TEXT)
                 .planningMode(true)
                 .defaultToolAdd(new OrderTools())
                 .build();
@@ -144,7 +145,10 @@ public class ReActPlanningTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 1. Builder 默认关闭
-        ReActAgent agent = ReActAgent.of(chatModel).planningMode(false).build();
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .style(ReActStyle.STRUCTURED_TEXT)
+                .planningMode(false)
+                .build();
         AgentSession session = InMemoryAgentSession.of("dynamic_001");
 
         // 2. 在 call 级别动态开启
@@ -164,7 +168,9 @@ public class ReActPlanningTest {
     @Test
     public void testCustomPlanInstruction() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
-        ReActAgent agent = ReActAgent.of(chatModel).planningMode(true).build();
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .style(ReActStyle.STRUCTURED_TEXT)
+                .planningMode(true).build();
         AgentSession session = InMemoryAgentSession.of("custom_plan_001");
 
         // 注入一个极简的指令，强制模型只输出一步
@@ -185,6 +191,7 @@ public class ReActPlanningTest {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
+                .style(ReActStyle.STRUCTURED_TEXT)
                 .planningMode(true)
                 .feedbackMode(true)
                 .build();
@@ -197,7 +204,6 @@ public class ReActPlanningTest {
         System.out.println("=====最终输出=====");
         System.out.println(resp.getContent());
 
-        List<String> plans = resp.getTrace().getPlans();
-        Assertions.assertEquals(0, plans.size(), "反馈模式没有生效");
+        Assertions.assertEquals(1, resp.getTrace().getStepCount(), "反馈模式没有生效");
     }
 }
