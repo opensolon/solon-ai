@@ -79,16 +79,7 @@ public class PlanTask implements NamedTaskComponent {
 
         // 3. 调用模型生成计划
         ChatRequestDesc req = config.getChatModel()
-                .prompt(messages)
-                .options(o->{
-                    if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
-                        if (trace.getOptions().isFeedbackMode()) {
-                            o.toolAdd(FeedbackTool.getTool(
-                                    trace.getOptions().getFeedbackDescription(trace),
-                                    trace.getOptions().getFeedbackReasonDescription(trace)));
-                        }
-                    }
-                });
+                .prompt(messages);
 
         ChatResponse response;
 
