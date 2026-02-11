@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.resource;
 
 import org.noear.solon.ai.chat.content.ResourceBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,24 +24,29 @@ import java.util.ArrayList;
 import java.util.Map;
 
 /**
- * 资源读取结果
+ * 资源包
  *
  * @author noear
  * @since 3.9.2
  */
-public class ResourceResult {
+public class ResourcePack {
     private final List<ResourceBlock> resources = new ArrayList<>();
     private final Map<String, Object> metas = new LinkedHashMap<>();
 
-    public ResourceResult() {
+    public ResourcePack() {
         //用于反序列化
     }
 
-    public ResourceResult(List<ResourceBlock> resources) {
+    public ResourcePack(List<ResourceBlock> resources) {
         this.resources.addAll(resources);
     }
 
-    public ResourceResult addResource(ResourceBlock resource) {
+    public ResourcePack addText(String text) {
+        resources.add(TextBlock.of(text));
+        return this;
+    }
+
+    public ResourcePack addResource(ResourceBlock resource) {
         resources.add(resource);
         return this;
     }

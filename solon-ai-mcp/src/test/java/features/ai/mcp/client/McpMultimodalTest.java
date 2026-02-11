@@ -7,8 +7,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.content.ImageBlock;
-import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.resource.ResourceResult;
+import org.noear.solon.ai.chat.resource.ResourcePack;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
@@ -103,7 +102,7 @@ public class McpMultimodalTest {
         Assertions.assertEquals("p1", mcpClient.readResource("res://resource15").getContent());
 
         // resource16: ResourceResult
-        ResourceResult res16 = mcpClient.readResource("res://resource16");
+        ResourcePack res16 = mcpClient.readResource("res://resource16");
         Assertions.assertEquals(2, res16.getResources().size());
         Assertions.assertTrue(res16.getContent().contains("p1"));
     }

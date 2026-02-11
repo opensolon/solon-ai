@@ -27,7 +27,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.mcp.exception.McpException;
-import org.noear.solon.ai.chat.resource.ResourceResult;
+import org.noear.solon.ai.chat.resource.ResourcePack;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.ai.chat.prompt.FunctionPrompt;
 import org.noear.solon.ai.chat.resource.FunctionResource;
@@ -108,11 +108,11 @@ public class McpResultResponder {
                 result = (McpSchema.ReadResourceResult) rst;
             } else if (rst instanceof McpSchema.ResourceContents) {
                 result = new McpSchema.ReadResourceResult(Arrays.asList((McpSchema.ResourceContents) rst), fun.meta());
-            } else if (rst instanceof ResourceResult) {
-                ResourceResult resourceResult = (ResourceResult) rst;
+            } else if (rst instanceof ResourcePack) {
+                ResourcePack pack = (ResourcePack) rst;
 
                 List<McpSchema.ResourceContents> resourceList = new ArrayList<>();
-                for (ResourceBlock block1 : resourceResult.getResources()) {
+                for (ResourceBlock block1 : pack.getResources()) {
                     if (block1 instanceof TextBlock) {
                         resourceList.add(new McpSchema.TextResourceContents(req.uri(),
                                 block1.getMimeType(),
@@ -172,13 +172,13 @@ public class McpResultResponder {
             } else if (rst instanceof McpSchema.PromptMessage) {
                 promptMessages.add((McpSchema.PromptMessage) rst);
             } else if (rst instanceof Prompt) {
-                Prompt promptResult = (Prompt) rst;
+                Prompt prompt = (Prompt) rst;
 
-                for (ChatMessage item : promptResult.getMessages()) {
+                for (ChatMessage item : prompt.getMessages()) {
                     getMcpMessage(item, promptMessages);
                 }
 
-                result = new McpSchema.GetPromptResult(fun.description(), promptMessages, promptResult.attrs());
+                result = new McpSchema.GetPromptResult(fun.description(), promptMessages, prompt.attrs());
             } else if (rst instanceof ChatMessage) {
                 getMcpMessage((ChatMessage) rst, promptMessages);
             } else if (rst instanceof Collection) {

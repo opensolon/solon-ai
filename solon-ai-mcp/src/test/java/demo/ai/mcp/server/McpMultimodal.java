@@ -9,7 +9,7 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.resource.ResourceResult;
+import org.noear.solon.ai.chat.resource.ResourcePack;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.server.annotation.McpServerEndpoint;
@@ -122,8 +122,8 @@ public class McpMultimodal {
     }
 
     @ResourceMapping(uri = "res://resource16")
-    public ResourceResult resource16() {
-        return new ResourceResult()
+    public ResourcePack resource16() {
+        return new ResourcePack()
                 .addResource(TextBlock.of("p1"))
                 .addResource(BlobBlock.of("p1".getBytes(), null));
     }

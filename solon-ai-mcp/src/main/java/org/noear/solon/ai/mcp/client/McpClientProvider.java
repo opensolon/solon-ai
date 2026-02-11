@@ -42,7 +42,7 @@ import org.noear.solon.ai.chat.resource.FunctionResource;
 import org.noear.solon.ai.chat.resource.FunctionResourceDesc;
 import org.noear.solon.ai.chat.resource.ResourceProvider;
 import org.noear.solon.ai.mcp.McpChannel;
-import org.noear.solon.ai.chat.resource.ResourceResult;
+import org.noear.solon.ai.chat.resource.ResourcePack;
 import org.noear.solon.core.Props;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RunUtil;
@@ -587,7 +587,7 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
      *
      * @param uri 资源地址
      */
-    public ResourceResult readResource(String uri) {
+    public ResourcePack readResource(String uri) {
         McpSchema.ReadResourceResult mcpResult = readResourceRequest(uri);
         List<ResourceBlock> resourceList = new ArrayList<>();
 
@@ -616,12 +616,12 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
         }
 
-        ResourceResult resourceResult = new ResourceResult(resourceList);
+        ResourcePack pack = new ResourcePack(resourceList);
 
         if (Utils.isNotEmpty(mcpResult.meta())) {
-            resourceResult.metas().putAll(mcpResult.meta());
+            pack.metas().putAll(mcpResult.meta());
         }
-        return resourceResult;
+        return pack;
     }
 
     /**
@@ -671,11 +671,11 @@ public class McpClientProvider implements ToolProvider, ResourceProvider, Prompt
             }
         }
 
-        Prompt promptResult = Prompt.of(messages);
+        Prompt prompt = Prompt.of(messages);
         if (Utils.isNotEmpty(mcpResult.meta())) {
-            promptResult.attrPut(mcpResult.meta());
+            prompt.attrPut(mcpResult.meta());
         }
-        return promptResult;
+        return prompt;
     }
 
     /**
