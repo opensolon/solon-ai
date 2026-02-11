@@ -15,10 +15,7 @@
  */
 package org.noear.solon.ai.chat.prompt;
 
-import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.tool.ToolResult;
-import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.ai.util.ParamDesc;
 
 import java.util.Collection;

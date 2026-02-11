@@ -18,8 +18,6 @@ package org.noear.solon.ai.chat.resource;
 import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.content.ResourceBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
-import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.prompt.Prompt;
 
 import java.util.Collection;
 import java.util.Map;
@@ -85,30 +83,30 @@ public interface FunctionResource {
         return future;
     }
 
-    default ResourceResult read(String reqUri) throws Throwable {
+    default ResourcePack read(String reqUri) throws Throwable {
         Object rst = handle(reqUri);
 
         if(rst == null){
-            return new ResourceResult();
+            return new ResourcePack();
         }
 
-        if (rst instanceof ResourceResult) {
-            return (ResourceResult) rst;
+        if (rst instanceof ResourcePack) {
+            return (ResourcePack) rst;
         }
 
         if (rst instanceof ResourceBlock) {
-            return new ResourceResult().addResource((ResourceBlock) rst);
+            return new ResourcePack().addResource((ResourceBlock) rst);
         }
 
         if (rst instanceof String) {
-            return new ResourceResult().addResource(TextBlock.of((String) rst));
+            return new ResourcePack().addResource(TextBlock.of((String) rst));
         }
 
         if (rst instanceof byte[]) {
-            return new ResourceResult().addResource(BlobBlock.of((byte[]) rst, null));
+            return new ResourcePack().addResource(BlobBlock.of((byte[]) rst, null));
         }
 
-        ResourceResult resourceResult = new ResourceResult();
+        ResourcePack resourceResult = new ResourcePack();
         if (rst instanceof Collection) {
             for (Object item : (Collection) rst) {
                 if (item instanceof ResourceBlock) {
