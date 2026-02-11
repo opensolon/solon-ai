@@ -170,9 +170,18 @@ public class ReasonTask implements NamedTaskComponent {
 
             sb.append("\n**进度同步协议执行指令：**\n");
             if (currIdx < total) {
-                // 关键：在这里直接计算出具体的数字，喂到模型嘴里
+                int nextIdx = currIdx + 2; // 因为展示是 1-based，所以是 currIdx + 1 + 1
+
                 sb.append("- 步骤 [").append(currIdx + 1).append("] 完成后，必须调用 `update_task_progress` ")
-                        .append("并将参数 `next_plan_index` 设为 `").append(currIdx + 2).append("`。\n");
+                        .append("并将参数 `next_plan_index` 设为 `").append(nextIdx).append("` ");
+
+                // 关键点：如果是最后一步，明确告诉它这是一个“终结信号”
+                if (currIdx == total - 1) {
+                    sb.append("(代表所有计划步骤已执行完毕)。\n");
+                } else {
+                    sb.append("(切换至下一环节)。\n");
+                }
+
                 sb.append("- 在更新进度前，禁止提供最终答案。");
             } else {
                 sb.append("- 计划已全部标记为 [√]。请根据上述已确认的所有信息，直接为用户提供最终的详细回答。");
