@@ -49,13 +49,7 @@ public class WeaviateRepository implements RepositoryStorable, RepositoryLifecyc
 
     private WeaviateRepository(Builder config) {
         this.config = config;
-        if (config.token != null) {
-            this.client = new WeaviateClient(config.baseUrl, config.token);
-        } else if (config.username != null && config.password != null) {
-            this.client = new WeaviateClient(config.baseUrl, config.username, config.password);
-        } else {
-            this.client = new WeaviateClient(config.baseUrl);
-        }
+        this.client = config.client;
     }
 
     /**
@@ -555,22 +549,31 @@ public class WeaviateRepository implements RepositoryStorable, RepositoryLifecyc
      * 创建 Builder
      */
     public static Builder builder(EmbeddingModel embeddingModel, String baseUrl) {
-        return new Builder(embeddingModel, baseUrl);
+        return new Builder(embeddingModel, new WeaviateClient(baseUrl));
+    }
+
+    public static Builder builder(EmbeddingModel embeddingModel, String baseUrl, String token) {
+        return new Builder(embeddingModel, new WeaviateClient(baseUrl, token));
+    }
+
+    public static Builder builder(EmbeddingModel embeddingModel, String baseUrl, String username, String password) {
+        return new Builder(embeddingModel, new WeaviateClient(baseUrl, username, password));
+    }
+
+    public static Builder builder(EmbeddingModel embeddingModel, WeaviateClient client) {
+        return new Builder(embeddingModel, client);
     }
 
     public static class Builder {
         private final EmbeddingModel embeddingModel;
-        private final String baseUrl;
-        private String username;
-        private String password;
-        private String token;
+        private final WeaviateClient client;
 
         private String collectionName = DEFAULT_COLLECTION_NAME;
         private List<MetadataField> metadataFields = new ArrayList<>();
 
-        private Builder(EmbeddingModel embeddingModel, String baseUrl) {
+        private Builder(EmbeddingModel embeddingModel, WeaviateClient client) {
             this.embeddingModel = embeddingModel;
-            this.baseUrl = baseUrl;
+            this.client = client;
         }
 
         public Builder collectionName(String collectionName) {
@@ -578,20 +581,6 @@ public class WeaviateRepository implements RepositoryStorable, RepositoryLifecyc
             return this;
         }
 
-        public Builder username(String username) {
-            this.username = username;
-            return this;
-        }
-
-        public Builder password(String password) {
-            this.password = password;
-            return this;
-        }
-
-        public Builder token(String token) {
-            this.token = token;
-            return this;
-        }
 
         public Builder metadataFields(List<MetadataField> metadataFields) {
             this.metadataFields = metadataFields;
@@ -608,4 +597,3 @@ public class WeaviateRepository implements RepositoryStorable, RepositoryLifecyc
         }
     }
 }
-
