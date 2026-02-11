@@ -58,7 +58,7 @@ public class PlanSkill extends AbsSkill {
                 "3. **动态修订**: 发现计划有误时，通过 `revise_plan` 调整后续步骤。";
     }
 
-    @ToolMapping(description = "初始化执行计划。这是处理复合任务的第一步，用于拆解后续所有行动步骤。")
+    @ToolMapping(description = "初始化执行计划。这是处理复杂任务的第一步，用于拆解后续所有行动步骤。")
     public String create_plan(@Param(name = "steps", description = "结构化的步骤列表。") List<String> steps) {
         // 具体的 trace 更新逻辑会在 ActionTask 中拦截处理，这里仅做清洗后返回预览
         List<String> cleaned = cleanPlans(steps);

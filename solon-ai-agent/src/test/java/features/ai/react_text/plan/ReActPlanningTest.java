@@ -11,7 +11,9 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.prompt.FunctionPromptDesc;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.annotation.Param;
 
 import java.util.List;
@@ -96,27 +98,31 @@ public class ReActPlanningTest {
     public void testPlanResetOnNewPrompt() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
+        //"get_weather", "查询天气", args -> "晴天"
         ReActAgent agent = ReActAgent.of(chatModel)
                 .style(ReActStyle.STRUCTURED_TEXT)
                 .planningMode(true)
+                .defaultToolAdd(new FunctionToolDesc("get_weather")
+                        .description("查询天气")
+                        .stringParamAdd("city", "城市")
+                        .doHandle(args -> "晴天")) // 诱导它能做复杂任务
                 .build();
 
-        AgentSession session = InMemoryAgentSession.of("plan_003");
+        AgentSession session = InMemoryAgentSession.of("plan_reset_005");
 
-        // 第一轮：任务 A
-        agent.call(Prompt.of("计算 1+1"), session);
-        String firstPlans = agent.getTrace(session).getPlans().toString();
-        Assertions.assertFalse(firstPlans.isEmpty());
+        // 1. 第一轮：给一个它认为“需要规划”的复杂任务
+        // 任务：查天气并根据天气建议三个户外活动
+        ReActResponse resp1 = agent.prompt("查杭州天气并推荐3个户外活动").session(session).call();
 
-        // 第二轮：任务 B（此时应触发 call 中的 trace.setPlans(null)）
-        agent.call(Prompt.of("查询明天的天气"), session);
-        String secondPlans = agent.getTrace(session).getPlans().toString();
+        // 预期：产生了计划
+        Assertions.assertTrue(resp1.getTrace().hasPlans(), "复杂任务应该生成计划");
+        System.out.println("复杂任务计划数：" + resp1.getTrace().getPlans().size());
 
-        System.out.println("第一轮计划：" + firstPlans);
-        System.out.println("第二轮计划：" + secondPlans);
+        // 2. 第二轮：给一个“极简”任务
+        ReActResponse resp2 = agent.prompt("1+1=?").session(session).call();
 
-        // 验证计划已更新（不相等）
-        Assertions.assertNotEquals(firstPlans, secondPlans, "新问题应该生成新的计划");
+        // 预期：智能计划判断 1+1 不需要规划，且 trace 里的旧计划必须被 reset 掉
+        Assertions.assertFalse(resp2.getTrace().hasPlans(), "新任务开始时，旧计划必须被清空");
     }
 
     // --- 模拟工具类 ---
