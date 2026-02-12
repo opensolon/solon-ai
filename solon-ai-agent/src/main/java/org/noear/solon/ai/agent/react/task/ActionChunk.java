@@ -34,7 +34,7 @@ public class ActionChunk extends AbsAgentChunk {
     private final transient ReActTrace trace;
     private final transient String toolName;
 
-    public ActionChunk(Node node, ReActTrace trace,String toolName, ChatMessage message) {
+    public ActionChunk(Node node, ReActTrace trace, String toolName, ChatMessage message) {
         super(trace.getAgentName(), trace.getSession(), message);
 
         this.node = node;

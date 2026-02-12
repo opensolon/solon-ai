@@ -41,7 +41,7 @@ public class PlanSkill extends AbsSkill {
 
     private final ReActTrace trace;
 
-    public PlanSkill(ReActTrace trace){
+    public PlanSkill(ReActTrace trace) {
         this.trace = trace;
     }
 
@@ -57,11 +57,19 @@ public class PlanSkill extends AbsSkill {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        return "##### 任务规划指南 (Task Planning Guide)\n" +
+        String baseGuide = "##### 任务规划指南 (Task Planning Guide)\n" +
                 "1. **启动机制**: 复杂任务通过 `create_plan` 拆解步骤。若判定为简单任务，忽略计划并直接回复。\n" +
                 "2. **进度同步**: 所有索引从 1 开始。每完成一步，必须调用 `update_plan_progress` 切换至下一环节。\n" +
                 "3. **动态修订**: 发现计划有误或环境变化时，通过 `revise_plan` 实时调整后续步骤。\n" +
                 "4. **适用边界**: 不要为常识性提问、简单计算或单次工具调用创建计划。";
+
+        String dynamicInstruction = trace.getOptions().getPlanningInstruction(trace);
+
+        if (dynamicInstruction == null) {
+            return baseGuide;
+        } else {
+            return baseGuide + "\n**拆解策略建议**：\n" + dynamicInstruction;
+        }
     }
 
     @ToolMapping(description = "初始化执行计划。这是处理复杂任务的第一步，用于拆解后续所有行动步骤。")
@@ -81,6 +89,10 @@ public class PlanSkill extends AbsSkill {
                 item.target.onPlan(trace, trace.getLastReasonMessage());
             }
 
+            if (trace.getOptions().getStreamSink() != null) {
+                trace.getOptions().getStreamSink().next(new PlanChunk(trace, PlanEvent.CREATE, trace.getLastReasonMessage()));
+            }
+
             return "成功：计划已初始化，共 " + cleaned.size() + " 步。请开始执行第一步。";
         }
     }
@@ -95,12 +107,23 @@ public class PlanSkill extends AbsSkill {
         int safeIdx = Math.max(1, Math.min(next_plan_index, totalSteps + 1));
         trace.setPlanIndex(safeIdx - 1);
 
+        final String desc;
         if (totalSteps >= safeIdx) {
             String nextStepDesc = trace.getPlans().get(safeIdx - 1);
-            return "成功：计划进度已更新。下一步是：第 " + safeIdx + " 步 - " + nextStepDesc;
+            desc = "成功：计划进度已更新。下一步是：第 " + safeIdx + " 步 - " + nextStepDesc;
         } else {
-            return "成功：所有计划步骤已执行完毕。";
+            desc = "成功：所有计划步骤已执行完毕。";
         }
+
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onPlan(trace, trace.getLastReasonMessage());
+        }
+
+        if (trace.getOptions().getStreamSink() != null) {
+            trace.getOptions().getStreamSink().next(new PlanChunk(trace, PlanEvent.PROGRESS, trace.getLastReasonMessage()));
+        }
+
+        return desc;
     }
 
     @ToolMapping(description = "修订后续计划。当发现原计划有误或环境变化导致后续步骤不可行时调用。")
@@ -133,6 +156,14 @@ public class PlanSkill extends AbsSkill {
         // 只有当修订点在当前执行进度之前或相等时，才强制回退进度
         if (splitAt <= trace.getPlanIndex()) {
             trace.setPlanIndex(splitAt);
+        }
+
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onPlan(trace, trace.getLastReasonMessage());
+        }
+
+        if (trace.getOptions().getStreamSink() != null) {
+            trace.getOptions().getStreamSink().next(new PlanChunk(trace, PlanEvent.REVISE, trace.getLastReasonMessage()));
         }
 
         return "成功：计划已从第 " + from_index + " 步开始重构。请按照新计划继续执行。";

@@ -242,15 +242,8 @@ public class ReActOptions implements NonSerializable {
     public String getPlanningInstruction(ReActTrace trace) {
         if (planningInstructionProvider != null) {
             return planningInstructionProvider.apply(trace);
-        }
-
-        // 默认规划指令
-        if (Locale.CHINESE.getLanguage().equals(trace.getConfig().getLocale().getLanguage())) {
-            return "请根据用户目标，将其拆解为 3-5 个逻辑清晰的待办步骤（Plans）。\n" +
-                    "输出要求：每行一个步骤，以数字开头。不要输出任何多余的解释。";
         } else {
-            return "Please break down the user's goal into 3-5 logical steps (Plans).\n" +
-                    "Requirements: One step per line, starting with a number. Do not output any extra explanation.";
+            return null;
         }
     }
 

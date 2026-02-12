@@ -17,9 +17,10 @@ package org.noear.solon.ai.agent.react.task;
 
 import org.noear.solon.ai.agent.AbsAgentChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.flow.Node;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.lang.Preview;
+
+import java.util.List;
 
 /**
  * ReAct 计划块（Planning）：包含智能体生成的任务拆解或步骤规划
@@ -29,31 +30,29 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("3.9.1")
 public class PlanChunk extends AbsAgentChunk {
-    private final transient Node node;
     private final transient ReActTrace trace;
-    private final transient ChatResponse response;
+    private final transient PlanEvent event;
 
-    public PlanChunk(Node node, ReActTrace trace, ChatResponse response) {
-        super(trace.getAgentName(), trace.getSession(), response.getMessage());
+    public PlanChunk(ReActTrace trace, PlanEvent event, AssistantMessage message) {
+        super(trace.getAgentName(), trace.getSession(), message);
 
-        this.node = node;
         this.trace = trace;
-        this.response = response;
-    }
-
-    public Node getNode() {
-        return node;
+        this.event = event;
     }
 
     public ReActTrace getTrace() {
         return trace;
     }
 
-    public ChatResponse getResponse() {
-        return response;
+    public PlanEvent getEvent() {
+        return event;
     }
 
-    public boolean isFinished(){
-        return response.isFinished();
+    public List<String> getPlans() {
+        return trace.getPlans();
+    }
+
+    public int getPlanIndex() {
+        return trace.getPlanIndex();
     }
 }
