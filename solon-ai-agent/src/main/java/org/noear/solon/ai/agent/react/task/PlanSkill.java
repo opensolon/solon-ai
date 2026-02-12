@@ -46,35 +46,51 @@ public class PlanSkill extends AbsSkill {
     }
 
     @Override
+    public boolean isSupported(Prompt prompt) {
+        return trace.getOptions().isPlanningMode();
+    }
+
+    @Override
     public String description() {
-        return "提供复杂任务的拆解、进度跟踪及计划修订能力。";
+        return "提供复杂任务的拆解、进度跟踪及计划修订能力。适用于需要多步协作的长链路任务。";
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
         return "##### 任务规划指南 (Task Planning Guide)\n" +
-                "1. **初始化**: 复杂任务必须调用 `create_plan` 拆解步骤。\n" +
-                "2. **索引规范**: 所有索引（Index）均从 1 开始计数。\n" +
-                "3. **动态修订**: 发现计划有误时，通过 `revise_plan` 调整后续步骤。";
+                "1. **启动机制**: 复杂任务通过 `create_plan` 拆解步骤。若判定为简单任务，忽略计划并直接回复。\n" +
+                "2. **进度同步**: 所有索引从 1 开始。每完成一步，必须调用 `update_plan_progress` 切换至下一环节。\n" +
+                "3. **动态修订**: 发现计划有误或环境变化时，通过 `revise_plan` 实时调整后续步骤。\n" +
+                "4. **适用边界**: 不要为常识性提问、简单计算或单次工具调用创建计划。";
     }
 
     @ToolMapping(description = "初始化执行计划。这是处理复杂任务的第一步，用于拆解后续所有行动步骤。")
-    public String create_plan(@Param(name = "steps", description = "结构化的步骤列表。") List<String> steps) {
-        // 具体的 trace 更新逻辑会在 ActionTask 中拦截处理，这里仅做清洗后返回预览
+    public String create_plan(@Param(name = "steps", description = "结构化的步骤列表（每步应为一个独立的动作描述）。") List<String> steps) {
         List<String> cleaned = cleanPlans(steps);
 
-        trace.setPlans(cleaned); // 调 PlanSkill 里的清洗逻辑
-        trace.setPlanIndex(0);
+        if (cleaned.size() <= 1) {
+            trace.setPlans(null); // 清空计划，不触发看板逻辑
+            trace.setPlanIndex(0);
 
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onPlan(trace, trace.getLastReasonMessage());
+            return "成功：检测到任务逻辑简单，已忽略计划模式。请直接执行并给出最终答案，无需调用 update_plan_progress。";
+        } else {
+            trace.setPlans(cleaned);
+            trace.setPlanIndex(0);
+
+            for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+                item.target.onPlan(trace, trace.getLastReasonMessage());
+            }
+
+            return "成功：计划已初始化，共 " + cleaned.size() + " 步。请开始执行第一步。";
         }
-
-        return "成功：计划已初始化，共 " + cleaned.size() + " 步。请开始执行第一步。";
     }
 
     @ToolMapping(description = "更新计划进度。完成当前步骤准备进入下一步时，必须调用。")
     public String update_plan_progress(@Param(name = "next_plan_index", description = "下一个步骤索引（从 1 开始计数的数字）。") int next_plan_index) {
+        if (trace.getPlans() == null || trace.getPlans().isEmpty()) {
+            return "错误：当前不在计划模式中，请直接执行任务。";
+        }
+
         int totalSteps = trace.getPlans().size();
         int safeIdx = Math.max(1, Math.min(next_plan_index, totalSteps + 1));
         trace.setPlanIndex(safeIdx - 1);
@@ -92,6 +108,15 @@ public class PlanSkill extends AbsSkill {
             @Param(name = "new_steps", description = "新的后续计划步骤列表。") List<String> new_steps,
             @Param(name = "from_index", description = "从哪一步开始替换（从 1 开始）。") int from_index) {
 
+        if (trace.getPlans() == null) {
+            return "错误：计划尚未初始化，无法修订。";
+        }
+
+        List<String> nextSteps = cleanPlans(new_steps);
+        if (nextSteps.isEmpty()) {
+            return "反馈：未提供有效的修订步骤，计划保持不变。";
+        }
+
         List<String> currentPlans = new ArrayList<>(trace.getPlans());
 
         // 2. 索引边界收敛保护
@@ -101,7 +126,7 @@ public class PlanSkill extends AbsSkill {
 
         // 3. 构建新计划
         List<String> updated = new ArrayList<>(currentPlans.subList(0, splitAt));
-        updated.addAll(PlanSkill.cleanPlans(new_steps));
+        updated.addAll(nextSteps);
         trace.setPlans(updated);
 
         // 4. 进度同步
@@ -118,9 +143,18 @@ public class PlanSkill extends AbsSkill {
      */
     public static List<String> cleanPlans(List<String> rawSteps) {
         List<String> cleaned = new ArrayList<>();
+        if (rawSteps == null) return cleaned;
+
         for (String step : rawSteps) {
-            String c = PLAN_LINE_PREFIX_PATTERN.matcher(step).replaceAll("")
-                    .replace("**", "").replace("`", "").trim();
+            String c = PLAN_LINE_PREFIX_PATTERN.matcher(step)
+                    .replaceAll("")
+                    .replace("**", "")
+                    .replace("`", "").trim();
+
+            if (c.endsWith(".") || c.endsWith("。") || c.endsWith(",") || c.endsWith("，")) {
+                c = c.substring(0, c.length() - 1);
+            }
+
             if (!c.isEmpty()) cleaned.add(c);
         }
         return cleaned;

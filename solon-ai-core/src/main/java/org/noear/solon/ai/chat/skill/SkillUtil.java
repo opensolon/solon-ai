@@ -107,7 +107,7 @@ public class SkillUtil {
                 String toolNames = tools.stream()
                         .map(t -> "`" + t.name() + "`") // 给工具名加反引号，增强识别度
                         .collect(Collectors.joining(", "));
-                combinedInstruction.append("> **Tool Scope**: 此技能指令适用于以下工具的调用: ").append(toolNames).append("\n");
+                combinedInstruction.append("> **工具作用域**: 此技能指令适用于以下工具的调用: ").append(toolNames).append("\n");
             }
 
             combinedInstruction.append("---\n"); // 闭合分割线

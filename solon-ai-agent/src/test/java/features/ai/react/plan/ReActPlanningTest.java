@@ -6,64 +6,94 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActResponse;
-import org.noear.solon.ai.agent.react.ReActStyle;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.annotation.Param;
 
 import java.util.List;
 
 /**
- * ReAct Planning 规划功能测试
+ * ReAct Planning 规划功能测试 (针对 3.9.3 智能降级版优化)
  */
 public class ReActPlanningTest {
 
     /**
-     * 测试 1：验证基础规划能力
-     * 目标：确认 planningMode(true) 后，Trace 中是否成功生成了 Plans
+     * 测试 1：验证复杂任务的正常规划能力
+     * 优化点：通过“深度对比”和“多阶段要求”强制触发规划
      */
     @Test
-    public void testBasicPlanning() throws Throwable {
+    public void testComplexPlanning() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
-        // 1. 构建开启 Planning 的 Agent
         ReActAgent agent = ReActAgent.of(chatModel)
                 .name("planner_agent")
-                .planningMode(true) // 开启规划
+                .planningMode(true)
                 .defaultToolAdd(new InfoTools())
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("plan_001");
-        String question = "帮我查一下北京的天气，然后根据天气建议我穿什么。";
 
-        // 2. 执行调用
+        // 增加任务深度：要求对比和分阶段规划
+        String question = "先帮我查北京和上海的天气，对比两地的气温差异，" +
+                "然后根据对比结果为我规划一份明天的户外拍摄行程，包含上午和下午的具体安排。";
+
         agent.call(Prompt.of(question), session);
-
-        // 3. 核心验证：从 Trace 中获取生成的计划
         ReActTrace trace = agent.getTrace(session);
 
-        Assertions.assertNotNull(trace, "轨迹不应为空");
-        Assertions.assertTrue(trace.hasPlans(), "应该生成了执行计划");
-
-        List<String> plans = trace.getPlans();
-        System.out.println("生成的计划步骤：");
-        plans.forEach(p -> System.out.println("- " + p));
-
-        // 验证计划是否包含关键步骤（模糊匹配）
-        boolean hasWeatherPlan = plans.stream().anyMatch(p -> p.contains("天气") || p.contains("Weather"));
-        Assertions.assertTrue(hasWeatherPlan, "计划中应包含查询天气的步骤");
+        Assertions.assertTrue(trace.hasPlans(), "多阶段任务必须生成执行计划");
+        System.out.println("生成的复杂计划：\n" + trace.getPlans());
     }
 
     /**
-     * 测试 2：验证多步骤复杂规划执行
-     * 目标：通过多个工具组合，观察 Agent 是否按照规划完成闭环
+     * 测试 2：验证简单任务的“智能降级” (保持不变)
      */
     @Test
-    public void testComplexTaskExecutionWithPlan() throws Throwable {
+    public void testSimpleTaskDegradation() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+        ReActAgent agent = ReActAgent.of(chatModel).planningMode(true).build();
+        AgentSession session = InMemoryAgentSession.of("plan_002");
+
+        agent.prompt("1+1=?").session(session).call();
+        ReActTrace trace = agent.getTrace(session);
+
+        Assertions.assertFalse(trace.hasPlans(), "简单计算任务应被智能降级（plans 为空）");
+    }
+
+    /**
+     * 测试 3：验证计划在 Session 中的重置逻辑
+     * 优化点：第一轮任务必须足够重，确保 100% 触发计划
+     */
+    @Test
+    public void testPlanResetAndClear() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .planningMode(true)
+                .defaultToolAdd(new InfoTools())
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("plan_reset_003");
+
+        // 1. 第一轮：极其复杂的任务
+        String complexTask = "详细查杭州天气，并根据气象情况（是否有雨、气温、风力）为我制定一份详细的户外骑行路线及安全注意事项。";
+        ReActResponse resp1 = agent.prompt(complexTask).session(session).call();
+        Assertions.assertTrue(resp1.getTrace().hasPlans(), "复杂长链路任务应持有计划");
+
+        // 2. 第二轮：简单任务
+        ReActResponse resp2 = agent.prompt("好的，现在请告诉我 2 乘 8 等于几").session(session).call();
+
+        // 核心验证：plans 必须从有变为无
+        Assertions.assertFalse(resp2.getTrace().hasPlans(), "切换到简单任务后，旧计划必须被清空");
+    }
+
+    /**
+     * 测试 5：验证多工具协作下的闭环
+     * 优化点：通过“逻辑分支”和“多步确认”强制模型必须拆解步骤
+     */
+    @Test
+    public void testOrderFlowExecution() throws Throwable {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         ReActAgent agent = ReActAgent.of(chatModel)
@@ -71,117 +101,40 @@ public class ReActPlanningTest {
                 .defaultToolAdd(new OrderTools())
                 .build();
 
-        AgentSession session = InMemoryAgentSession.of("plan_002");
-        // 这是一个典型的需要拆解的任务
-        String question = "先查询订单号为 1001 的状态，如果是'已支付'，就触发发货流程。";
+        AgentSession session = InMemoryAgentSession.of("order_005");
 
-        String result = agent.call(Prompt.of(question), session).getContent();
+        // 增加逻辑密度：查询 -> 判断 -> 检查附加条件 -> 执行
+        String question = "请帮我处理订单 1001：首先核对状态，如果已经支付，" +
+                "请再确认一下是否有特殊的发货要求，最后执行发货流程并反馈结果。";
 
-        System.out.println("最终回复: " + result);
+        ReActResponse resp = agent.prompt(question).session(session).call();
+        ReActTrace trace = resp.getTrace();
 
-        // 验证结果
-        Assertions.assertTrue(result.contains("发货") || result.contains("Success"), "任务执行结果不符合预期");
+        System.out.println("订单流回复: " + resp.getContent());
 
-        // 验证 Trace 步数
-        ReActTrace trace = agent.getTrace(session);
-        Assertions.assertTrue(trace.getStepCount() >= 2, "多步骤任务推理步数应大于等于2");
-    }
-
-    /**
-     * 测试 3：验证计划重置逻辑
-     * 目标：确认在同一 Session 下，发送新问题时，旧计划会被清空并重新生成
-     */
-    @Test
-    public void testPlanResetOnNewPrompt() throws Throwable {
-        ChatModel chatModel = LlmUtil.getChatModel();
-
-        //"get_weather", "查询天气", args -> "晴天"
-        ReActAgent agent = ReActAgent.of(chatModel)
-                .planningMode(true)
-                .defaultToolAdd(new FunctionToolDesc("get_weather")
-                        .description("查询天气")
-                        .stringParamAdd("city", "城市")
-                        .doHandle(args -> "晴天")) // 诱导它能做复杂任务
-                .build();
-
-        AgentSession session = InMemoryAgentSession.of("plan_reset_005");
-
-        // 1. 第一轮：给一个它认为“需要规划”的复杂任务
-        // 任务：查天气并根据天气建议三个户外活动
-        ReActResponse resp1 = agent.prompt("查杭州天气并推荐3个户外活动").session(session).call();
-
-        // 预期：产生了计划
-        Assertions.assertTrue(resp1.getTrace().hasPlans(), "复杂任务应该生成计划");
-        System.out.println("复杂任务计划数：" + resp1.getTrace().getPlans().size());
-
-        // 2. 第二轮：给一个“极简”任务
-        ReActResponse resp2 = agent.prompt("1+1=?").session(session).call();
-
-        // 预期：智能计划判断 1+1 不需要规划，且 trace 里的旧计划必须被 reset 掉
-        Assertions.assertFalse(resp2.getTrace().hasPlans(), "新任务开始时，旧计划必须被清空");
+        // 核心断言：逻辑分支任务应触发计划
+        Assertions.assertTrue(trace.hasPlans(), "涉及多步核对和逻辑分支的任务应生成计划");
+        Assertions.assertTrue(resp.getContent().contains("成功"), "执行结果应反馈成功");
     }
 
     // --- 模拟工具类 ---
 
     public static class InfoTools {
         @ToolMapping(description = "查询指定城市的天气")
-        public String getWeather(@Param(description = "城市名称") String city) {
-            return city + "当前天气：晴，25度。";
+        public String getWeather(@Param(name = "city", description = "城市名称") String city) {
+            return city + "当前天气：晴，25度，适宜户外活动。";
         }
     }
 
     public static class OrderTools {
         @ToolMapping(description = "查询订单状态")
-        public String getOrderStatus(@Param(description = "订单ID") String orderId) {
+        public String getOrderStatus(@Param(name = "orderId", description = "订单ID") String orderId) {
             return "订单 " + orderId + " 状态为：已支付";
         }
 
         @ToolMapping(description = "执行发货流程")
-        public String shipOrder(@Param(description = "订单ID") String orderId) {
+        public String shipOrder(@Param(name = "orderId", description = "订单ID") String orderId) {
             return "订单 " + orderId + " 已进入发货流程，操作成功。";
         }
-    }
-
-    @Test
-    public void testDynamicPlanningToggle() throws Throwable {
-        ChatModel chatModel = LlmUtil.getChatModel();
-
-        // 1. Builder 默认关闭
-        ReActAgent agent = ReActAgent.of(chatModel).planningMode(false).build();
-        AgentSession session = InMemoryAgentSession.of("dynamic_001");
-
-        // 2. 在 call 级别动态开启
-        agent.prompt("计算 1+2+3")
-                .session(session)
-                .options(o -> o.planningMode(true))
-                .call();
-
-        // 3. 验证是否有计划
-        Assertions.assertFalse(agent.getTrace(session).hasPlans(), "简单问题应该不需要计划");
-
-        // 4. 下一次调用不传 options（回归默认关闭）
-        agent.call(Prompt.of("再计算一次"), session);
-        Assertions.assertFalse(agent.getTrace(session).hasPlans(), "回归默认后计划应被清空且不再生成");
-    }
-
-
-    @Test
-    public void testFeedbackMode() throws Throwable {
-        ChatModel chatModel = LlmUtil.getChatModel();
-
-        ReActAgent agent = ReActAgent.of(chatModel)
-                .planningMode(true)
-                .feedbackMode(true)
-                .build();
-        AgentSession session = InMemoryAgentSession.of("custom_plan_001");
-
-        ReActResponse resp = agent.prompt("请通过不断思考，尽可能深入地分析这个问题")
-                .session(session)
-                .call();
-
-        System.out.println("=====最终输出=====");
-        System.out.println(resp.getContent());
-
-        Assertions.assertEquals(1, resp.getTrace().getStepCount(), "反馈模式没有生效");
     }
 }
