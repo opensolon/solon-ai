@@ -137,4 +137,46 @@ public class ReActPlanningTest {
             return "订单 " + orderId + " 已进入发货流程，操作成功。";
         }
     }
+
+    /**
+     * 测试 6：验证计划修订能力 (revise_plan)
+     * 目标：模拟环境变化，验证模型能否动态重构后续计划
+     */
+    @Test
+    public void testPlanRevision() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        // 构造一个会根据第一个工具返回结果而发生“计划突变”的场景
+        ReActAgent agent = ReActAgent.of(chatModel)
+                .planningMode(true)
+                .defaultToolAdd(new RevisionTools())
+                .build();
+
+        AgentSession session = InMemoryAgentSession.of("plan_rev_006");
+
+        // 提示词诱导：给出一个复杂的户外计划
+        String question = "请帮我规划明天的户外骑行，先查下天气。如果是暴雨，请立即取消后续所有骑行计划，改为修订计划为：'1.在家室内运动' 和 '2.整理骑行装备'。";
+
+        ReActResponse resp = agent.prompt(question).session(session).call();
+        ReActTrace trace = resp.getTrace();
+
+        System.out.println("最终计划状态: " + trace.getPlans());
+        System.out.println("最终回复: " + resp.getContent());
+
+        // 核心验证：
+        // 1. 初始必须有计划
+        // 2. 最终的 plans 列表中应该包含修订后的内容，而不是原始的“骑行”
+        Assertions.assertTrue(trace.hasPlans());
+        boolean hasRevisedStep = trace.getPlans().stream().anyMatch(p -> p.contains("室内运动") || p.contains("整理"));
+        Assertions.assertTrue(hasRevisedStep, "当检测到暴雨时，计划应该被修订");
+    }
+
+    // --- 专门用于测试修订的工具类 ---
+    public static class RevisionTools {
+        @ToolMapping(description = "查询天气状况")
+        public String getWeather(@Param(name = "day", description = "日期") String day) {
+            // 模拟一个突发状况：暴雨
+            return "警告：明天天气预报为暴雨，伴有 8 级大风。";
+        }
+    }
 }

@@ -168,23 +168,25 @@ public class ReasonTask implements NamedTaskComponent {
                 sb.append(i + 1).append(". ").append(status).append(plans.get(i)).append("\n");
             }
 
-            sb.append("\n**进度同步协议执行指令：**\n");
+            sb.append("\n**计划进度同步协议 (Plan Sync Protocol)：**\n");
             if (currIdx < total) {
-                int nextIdx = currIdx + 2; // 因为展示是 1-based，所以是 currIdx + 1 + 1
+                int currentStepNum = currIdx + 1;
+                int nextStepNum = currIdx + 2;
 
-                sb.append("- 步骤 [").append(currIdx + 1).append("] 完成后，必须调用 `update_plan_progress` ")
-                        .append("并将参数 `next_plan_index` 设为 `").append(nextIdx).append("` ");
+                sb.append("- **当前状态**: 你正在执行步骤 [").append(currentStepNum).append("]。\n");
+                sb.append("- **正常推进**: 步骤完成后，若结果符合预期，必须调用 `update_plan_progress` 并将 `next_plan_index` 设为 `").append(nextStepNum).append("` ");
 
-                // 关键点：如果是最后一步，明确告诉它这是一个“终结信号”
                 if (currIdx == total - 1) {
-                    sb.append("(代表所有计划步骤已执行完毕)。\n");
+                    sb.append("(标志所有计划已达成)。\n");
                 } else {
                     sb.append("(切换至下一环节)。\n");
                 }
 
-                sb.append("- 在更新进度前，禁止提供最终答案。");
+                // 新增：修订引导，防止盲目推进
+                sb.append("- **动态调整**: 若观察结果（Observation）显示原计划已不可行，必须优先调用 `revise_plan` 修正后续步骤，严禁强行进入错误环节。\n");
+                sb.append("- **禁止跳步**: 在更新进度前，禁止直接提供最终回答。");
             } else {
-                sb.append("- 计划已全部标记为 [√]。请根据上述已确认的所有信息，直接为用户提供最终的详细回答。");
+                sb.append("- **目标达成**: 计划看板已全部标记为 [√]。请综合上述执行过程中的所有观察结果，直接给出最终的详细回答。");
             }
 
             systemPrompt += sb.toString();
