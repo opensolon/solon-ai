@@ -37,7 +37,7 @@ public class HITLStepLimitTest {
         System.out.println(">>> 启动任务：开始循环计数...");
         ReActResponse resp1 = agent.prompt("请开始循环计数")
                 .session(session)
-                .options(o -> o.maxSteps(10).feedbackMode(true)) // 开启反馈模式
+                .options(o -> o.maxSteps(10).maxStepsExtensible(true)) // 开启反馈模式
                 .call();
 
         // 验证被拦截：因为 currentStep 会触碰 thresholdStep (max(9, 8))

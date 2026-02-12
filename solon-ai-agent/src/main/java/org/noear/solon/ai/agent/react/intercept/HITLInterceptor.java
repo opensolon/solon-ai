@@ -85,15 +85,14 @@ public class HITLInterceptor implements ReActInterceptor {
         // 2. 阶段：已有决策 —— 执行决策指令
 
         // 既然已经到了这一步，说明已经有决策了，立即清理“挂起”标识，防止下一轮推理误判
-        trace.getContext().remove(HITL.LAST_INTERVENED);
-        trace.getContext().remove(HITL.DECISION_PREFIX + toolName);
+        trace.getContext().remove(HITL.LAST_INTERVENED); //挂起可以删了
+        //trace.getContext().remove(HITL.DECISION_PREFIX + toolName); //决策还不能删，要留到 onObservation
 
         if (decision.isApproved()) {
             // 情况：批准执行 —— 处理参数修正
             if (decision.getModifiedArgs() != null) {
                 args.putAll(decision.getModifiedArgs());
             }
-
         } else if (decision.isSkipped()) {
             String msg = decision.getCommentOrDefault("操作跳过：请继续下一步。");
             trace.setLastObservation(msg);
