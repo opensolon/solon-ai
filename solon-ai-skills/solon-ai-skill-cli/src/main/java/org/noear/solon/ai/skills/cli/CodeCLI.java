@@ -140,7 +140,7 @@ public class CodeCLI implements Handler, Runnable {
         String boxId = session.getSessionId();
 
         return (CliSkill) session.attrs().computeIfAbsent("CliSkill", x -> {
-            CliSkill skill = new CliSkill(boxId, workDir + "/" + boxId);
+            CliSkill skill = new CliSkill(boxId, workDir + "/boxes/" + boxId);
             extraPools.forEach(skill::mountPool);
             return skill;
         });
