@@ -27,10 +27,10 @@ import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.agent.react.task.ActionChunk;
-import org.noear.solon.ai.agent.react.task.PlanChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Handler;
@@ -228,9 +228,7 @@ public class CodeCLI implements Handler, Runnable {
                         .stream()
                         .map(chunk -> {
                             if (chunk.hasContent()) {
-                                if (chunk instanceof PlanChunk) {
-                                    return ONode.serialize(new Chunk("plan", chunk.getContent()));
-                                } else if (chunk instanceof ReasonChunk) {
+                                if (chunk instanceof ReasonChunk) {
                                     return ONode.serialize(new Chunk("reason", chunk.getContent()));
                                 } else if (chunk instanceof ActionChunk) {
                                     return ONode.serialize(new Chunk("action", chunk.getContent()));
@@ -311,16 +309,7 @@ public class CodeCLI implements Handler, Runnable {
                     .stream()
                     .subscribeOn(Schedulers.boundedElastic())
                     .doOnNext(chunk -> {
-                        if (chunk instanceof PlanChunk) {
-                            // 计划逻辑：青色高亮
-                            if (chunk.hasContent()) {
-                                System.out.print(CYAN + chunk.getContent() + RESET);
-                                if (((PlanChunk) chunk).isFinished()) {
-                                    System.out.println();
-                                }
-                                System.out.flush();
-                            }
-                        } else if (chunk instanceof ReasonChunk) {
+                        if (chunk instanceof ReasonChunk) {
                             // 思考逻辑：灰色
                             ReasonChunk reasonChunk = (ReasonChunk) chunk;
                             if (chunk.hasContent() && !reasonChunk.isToolCalls()) {
@@ -385,6 +374,9 @@ public class CodeCLI implements Handler, Runnable {
             // 处理用户手动中断
             if (isInterrupted.get()) {
                 cleanInputBuffer();
+                session.addMessage(ChatMessage.ofAssistant(
+                        "【执行摘要】：该任务已被用户手动中断。当前上下文已冻结，我将不再主动执行此任务的后续逻辑。已就绪，请下达新指令。"
+                ));
                 return;
             }
 

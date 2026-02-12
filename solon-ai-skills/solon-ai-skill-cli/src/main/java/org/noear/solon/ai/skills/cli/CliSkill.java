@@ -27,6 +27,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -130,9 +132,15 @@ public class CliSkill extends AbsProcessSkill {
         }
 
         switch (this.shellMode) {
-            case CMD: envExample = "%POOL1%"; break;
-            case POWERSHELL: envExample = "$env:POOL1"; break;
-            default: envExample = "$POOL1"; break;
+            case CMD:
+                envExample = "%POOL1%";
+                break;
+            case POWERSHELL:
+                envExample = "$env:POOL1";
+                break;
+            default:
+                envExample = "$POOL1";
+                break;
         }
     }
 
@@ -154,7 +162,9 @@ public class CliSkill extends AbsProcessSkill {
     }
 
     @Override
-    public boolean isSupported(Prompt prompt) { return true; }
+    public boolean isSupported(Prompt prompt) {
+        return true;
+    }
 
     @Override
     public String getInstruction(Prompt prompt) {
@@ -164,8 +174,17 @@ public class CliSkill extends AbsProcessSkill {
 
         // 1. 池盒环境声明
         sb.append("#### 1. 环境空间 (Pool-Box Context)\n");
+        sb.append("- **当前时间 (Current Time)**: ").append(ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss VV"))).append("\n");
         sb.append("- **当前盒子 (BoxID)**: ").append(boxId).append("\n");
         sb.append("- **操作系统 (OS)**: ").append(System.getProperty("os.name")).append("\n");
+        sb.append("- **系统用户 (User)**: ").append(System.getProperty("user.name")).append("\n");
+
+        String absPath = rootPath.toAbsolutePath().toString();
+        sb.append("- **工作目录 (WorkDir)**: ").append(absPath).append(" (仅供参考)\n");
+        sb.append("- **路径规范**: 必须使用相对于根目录的相对路径。即使你知道绝对路径，也禁止在工具参数中使用它。\n");
+        sb.append("  - 正确：`read_file(path=\"src/main.js\")` \n");
+        sb.append("  - 错误：`read_file(path=\"").append(absPath).append("/src/main.js\")` \n");
+
         sb.append("- **挂载池 (Skill Pools)**: \n");
         if (skillPools.isEmpty()) {
             sb.append("  - (暂无挂载池)\n");
@@ -291,7 +310,7 @@ public class CliSkill extends AbsProcessSkill {
                 String relStr = target.relativize(dir).toString().replace("\\", "/");
                 if (!finalShowHidden && isHiddenPath(relStr)) return FileVisitResult.SKIP_SUBTREE;
 
-                appendLine(dir, relStr);
+                appendLine(dir, relStr, attrs);
                 return FileVisitResult.CONTINUE;
             }
 
@@ -302,19 +321,32 @@ public class CliSkill extends AbsProcessSkill {
                 String relStr = target.relativize(file).toString().replace("\\", "/");
                 if (!finalShowHidden && isHiddenPath(relStr)) return FileVisitResult.CONTINUE;
 
-                appendLine(file, relStr);
+                appendLine(file, relStr, attrs);
                 return FileVisitResult.CONTINUE;
             }
 
-            private void appendLine(Path p, String relStr) {
-                String prefix = Files.isDirectory(p) ? "[DIR] " : "[FILE] ";
-                boolean isSkill = Files.isDirectory(p) && isSkillDir(p);
+            private void appendLine(Path p, String relStr, BasicFileAttributes attrs) {
+                boolean isDir = attrs.isDirectory();
+                String prefix = isDir ? "[DIR] " : "[FILE] ";
 
+                // 增加文件大小感知，引导 AI 决策（例如大文件自动分页读取）
+                String sizeSuffix = "";
+                if (!isDir) {
+                    long size = attrs.size();
+                    if (size < 1024) sizeSuffix = " (" + size + "B)";
+                    else if (size < 1024 * 1024) sizeSuffix = String.format(" (%.1fKB)", size / 1024.0);
+                    else sizeSuffix = String.format(" (%.1fMB)", size / (1024.0 * 1024.0));
+                }
+
+                // 业务标记感知。识别目录是否为“技能包”
+                boolean isSkill = isDir && isSkillDir(p);
+
+                // 统一逻辑路径输出
                 String logicPath = (logicPrefix != null) ?
                         logicPrefix + "/" + relStr :
                         rootPath.relativize(p).toString().replace("\\", "/");
 
-                lines.add(prefix + logicPath + (isSkill ? " (Skill)" : ""));
+                lines.add(prefix + logicPath + sizeSuffix + (isSkill ? " (Skill)" : ""));
             }
 
             private boolean isHiddenPath(String relPath) {
@@ -323,7 +355,11 @@ public class CliSkill extends AbsProcessSkill {
         });
 
         if (lines.isEmpty()) return "(目录为空)";
-        Collections.sort(lines); // 排序使结果稳定
+
+        if (lines.size() > 1) {
+            Collections.sort(lines); // 排序使结果稳定
+        }
+
         return String.join("\n", lines);
     }
 
@@ -377,7 +413,7 @@ public class CliSkill extends AbsProcessSkill {
 
     // --- 4. 文本搜索 (对齐 grep_search) ---
     @ToolMapping(name = "grep_search", description = "递归搜索特定内容。返回格式为 '路径:行号: 内容'。")
-    public String grepSearch(@Param(value ="query", description = "搜索关键字") String query,
+    public String grepSearch(@Param(value = "query", description = "搜索关键字") String query,
                              @Param(value = "path", description = "起点相对路径（支持 @alias）") String path) throws IOException {
         Path target = resolvePathExtended(path);
         final String logicPrefix = (path != null && path.startsWith("@")) ? path.split("[/\\\\]")[0] : null;
@@ -413,7 +449,8 @@ public class CliSkill extends AbsProcessSkill {
                         }
                         if (sb.length() > 8000) return FileVisitResult.TERMINATE; // 结果过多保护
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
                 return FileVisitResult.CONTINUE;
             }
         });
@@ -454,11 +491,19 @@ public class CliSkill extends AbsProcessSkill {
                 }
 
                 if (matcher.matches(target.relativize(file))) {
+                    String relPathStr = target.relativize(file).toString().replace("\\", "/");
                     String displayPath = (pathPrefix != null) ?
-                            pathPrefix + "/" + target.relativize(file).toString() :
-                            rootPath.relativize(file).toString();
+                            pathPrefix + "/" + relPathStr :
+                            rootPath.relativize(file).toString().replace("\\", "/");
 
-                    results.add(displayPath.replace("\\", "/"));
+                    // 同步优化 3: 增加文件大小感知
+                    long size = attrs.size();
+                    String sizeSuffix;
+                    if (size < 1024) sizeSuffix = " (" + size + "B)";
+                    else if (size < 1024 * 1024) sizeSuffix = String.format(" (%.1fKB)", size / 1024.0);
+                    else sizeSuffix = String.format(" (%.1fMB)", size / (1024.0 * 1024.0));
+
+                    results.add("[FILE] " + displayPath + sizeSuffix);
                 }
 
                 // 结果过多保护
@@ -473,11 +518,16 @@ public class CliSkill extends AbsProcessSkill {
 
         if (results.isEmpty()) return "未找到匹配 '" + pattern + "' 的文件";
 
+        if (results.size() > 1) {
+            Collections.sort(results);
+        }
+
         String output = String.join("\n", results);
         return results.size() >= MAX_RESULTS ? output + "\n... (搜索结果过多，已截断)" : output;
     }
 
     // --- 6. 代码编辑 (对齐 str_replace_editor) ---
+
     /**
      * 精准替换文件内容 (完全对齐 Claude Code str_replace_editor 规范)
      */
@@ -585,7 +635,10 @@ public class CliSkill extends AbsProcessSkill {
     }
 
     private static String probeUnixShell() {
-        try { return Runtime.getRuntime().exec("bash --version").waitFor() == 0 ? "bash" : "/bin/sh"; }
-        catch (Exception e) { return "/bin/sh"; }
+        try {
+            return Runtime.getRuntime().exec("bash --version").waitFor() == 0 ? "bash" : "/bin/sh";
+        } catch (Exception e) {
+            return "/bin/sh";
+        }
     }
 }
