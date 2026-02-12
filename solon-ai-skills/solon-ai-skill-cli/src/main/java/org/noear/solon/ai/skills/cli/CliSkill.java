@@ -372,55 +372,57 @@ public class CliSkill extends AbsProcessSkill {
         if (!Files.exists(target)) return "错误：文件不存在";
 
         long fileSize = Files.size(target);
+        if (fileSize == 0) return "(文件内容为空)"; // 快速返回
+
         long totalLines = -1;
         String totalLinesDesc;
 
-        // 只有小于 2MB 的文件才执行全量行数统计，防止大日志文件导致 IO 阻塞
         if (fileSize < 2 * 1024 * 1024) {
             try (Stream<String> lines = Files.lines(target, fileCharset)) {
                 totalLines = lines.count();
                 totalLinesDesc = String.valueOf(totalLines);
             }
         } else {
-            // 大文件：给出估算行数（按平均每行 80 字节计算），并标记为“估算”
             totalLinesDesc = String.format("~%d (大文件估算)", fileSize / 80);
         }
 
         int start = (startLine == null) ? 0 : Math.max(0, startLine - 1);
-        int end = (endLine == null) ? (start + 500) : endLine; // 默认给 500 行，防止模型盲目读全表
-        int displayEnd = (totalLines > 0) ? Math.min(end, (int) totalLines) : end;
+        int end = (endLine == null) ? (start + 500) : endLine;
 
-        StringBuilder sb = new StringBuilder();
-
-        sb.append(String.format("### 文件概览: %s (总行数: %s, 大小: %.2f KB)\n", path, totalLinesDesc, fileSize / 1024.0));
-        sb.append(String.format("### 当前显示: 第 %d 行 至 第 %d 行\n", start + 1, displayEnd));
-        sb.append("--------------------------------------------------\n");
-
-
-        // 使用流式读取，精准控制内存占用
+        // 真正的逻辑：先去读，再决定怎么写 Header
+        List<String> readLines;
         try (Stream<String> stream = Files.lines(target, fileCharset)) {
-            List<String> lines = stream.skip(start).limit(end - start).collect(Collectors.toList());
-
-            if (lines.isEmpty() && start > 0) {
-                return "错误：指定的起始行 (" + (start + 1) + ") 已超出文件范围。";
-            }
-
-            for (int i = 0; i < lines.size(); i++) {
-                int lineNum = start + i + 1;
-                sb.append(String.format("%6d: %s", lineNum, lines.get(i))).append("\n");
-            }
-
-            // 建议：如果没读完，提示 AI 还有内容
-            if (lines.size() == (end - start)) {
-                int nextStart = end + 1;
-                sb.append("\n(提示：已达到单次读取限制。若需继续阅读，请设置 start_line 为 ").append(nextStart).append(")");
-            } else if (totalLines > 0 && end < totalLines) {
-                // 针对计算过 totalLines 但 limit 没凑满的情况（理论上 skip/limit 会处理，但此处做防御性提示）
-                sb.append("\n(提示：已到达文件末尾)");
-            }
+            readLines = stream.skip(start).limit(end - start).collect(Collectors.toList());
         }
 
-        return sb.length() == 0 ? "(文件内容为空)" : sb.toString();
+        if (readLines.isEmpty()) {
+            return start > 0 ? "错误：指定的起始行 (" + (start + 1) + ") 已超出文件范围。" : "(文件内容为空)";
+        }
+
+        int actualEnd = start + readLines.size(); // 实际读到的最后一行行号
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("### 文件概览: %s (总行数: %s, 大小: %.2f KB)\n", path, totalLinesDesc, fileSize / 1024.0));
+        sb.append(String.format("### 当前显示: 第 %d 行 至 第 %d 行\n", start + 1, actualEnd));
+        sb.append("--------------------------------------------------\n");
+
+        for (int i = 0; i < readLines.size(); i++) {
+            sb.append(String.format("%6d: %s", start + i + 1, readLines.get(i))).append("\n");
+        }
+
+        // 翻页逻辑判断
+        boolean hasMore = (readLines.size() == (end - start));
+        if (hasMore && totalLines > 0 && actualEnd >= totalLines) {
+            hasMore = false;
+        }
+
+        if (hasMore) {
+            sb.append("\n(提示：已达到单次读取限制。若需继续阅读，请设置 start_line 为 ").append(actualEnd + 1).append(")");
+        } else {
+            sb.append("\n(提示：已到达文件末尾)");
+        }
+
+        return sb.toString();
     }
 
     @ToolMapping(name = "write_to_file", description = "创建新文件或覆盖现有文件。严禁修改池(@)路径。")
