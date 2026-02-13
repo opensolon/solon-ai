@@ -21,6 +21,7 @@ import org.noear.solon.ai.skills.restapi.ApiTool;
 import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -79,7 +80,16 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
                         ONode outNode = new ONode();
                         if (!content.isNull() && content.size() > 0) {
                             outNode = content.get("application/json").get("schema");
-                            if (outNode.isNull()) outNode = content.get(0).get("schema");
+                            if (outNode.isNull())
+                            {
+                                if (content.isArray())
+                                {
+                                    outNode = content.get(0).get("schema");
+                                }else{
+                                    Collection<ONode> values = content.getObject().values();
+                                    outNode = values.stream().findFirst().get().get("schema");
+                                }
+                            }
                         }
                         tool.setOutputSchema(resolveRef(root, outNode));
                     }
