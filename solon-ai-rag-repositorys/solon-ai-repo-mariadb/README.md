@@ -28,7 +28,6 @@
 <dependency>
     <groupId>org.noear</groupId>
     <artifactId>solon-ai-repo-mariadb</artifactId>
-    <version>3.9.2</version>
 </dependency>
 ```
 
