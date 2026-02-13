@@ -279,24 +279,30 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             Disposable disposable = source.subscribe(
                     data -> {
                         // [对接点]：检查 sink 状态，如果已经完成或取消，不再处理
-                        if (sink.isCancelled()) {
-                            return;
-                        }
+                        if (sink.isCancelled() == false) {
+                            try {
+                                ServerSentEvent sse = (data instanceof ServerSentEvent)
+                                        ? (ServerSentEvent) data : new ServerSentEvent(null, (String) data);
 
-                        ServerSentEvent sse = (data instanceof ServerSentEvent)
-                                ? (ServerSentEvent) data : new ServerSentEvent(null, (String) data);
-
-                        // [对接点]：利用 onEventStream 的返回值
-                        if (!onEventStream(respDesc, sse, sink)) {
-                            // 返回 false 说明内部要求终止（如报错或逻辑中断）
-                            disposableRef.get().dispose();
+                                // [对接点]：利用 onEventStream 的返回值
+                                if (!onEventStream(respDesc, sse, sink)) {
+                                    // 返回 false 说明内部要求终止（如报错或逻辑中断）
+                                    disposableRef.get().dispose();
+                                }
+                            } catch (Throwable e) {
+                                sink.error(e);
+                            }
                         }
                     },
                     sink::error,
                     () -> {
                         // 只有在没有被手动 dispose 的情况下才执行 End 逻辑
-                        if (!sink.isCancelled()) {
-                            onEventEnd(respDesc, sink);
+                        if (sink.isCancelled() == false) {
+                            try {
+                                onEventEnd(respDesc, sink);
+                            } catch (Throwable e) {
+                                sink.error(e);
+                            }
                         }
                     }
             );

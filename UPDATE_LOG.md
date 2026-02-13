@@ -10,6 +10,10 @@
 
 *  mcp channel 概念改为 transport （并保持兼容）???
 
+### 3.9.4
+
+* 修复 solon-ai-core ChatModel.stream 过程异常时会破坏流响应的问题
+
 ### 3.9.3
 
 * 重构 solon-ai-agent Plan-ReAct 模式（相对之前，新设计智能、态动、按需）
