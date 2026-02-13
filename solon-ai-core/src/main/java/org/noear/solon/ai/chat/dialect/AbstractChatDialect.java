@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.dialect;
 
 import org.noear.snack4.ONode;
+import org.noear.snack4.json.JsonReader;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.AudioBlock;
@@ -330,7 +331,17 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (n1fArgs.isString()) {
             //有可能是 json string（如果不是不用管，可能只是流的中间消息）
             if (hasNestedJsonBlock(argStr)) {
-                n1fArgs = ONode.ofJson(argStr);
+                JsonReader reader = new JsonReader(argStr);
+                ONode n1fArgsTmp = null;
+                while (true) {
+                    n1fArgsTmp = reader.readNext();
+
+                    if (n1fArgsTmp == null) {
+                        break;
+                    } else  {
+                        n1fArgs = n1fArgsTmp;
+                    }
+                }
             }
         }
 

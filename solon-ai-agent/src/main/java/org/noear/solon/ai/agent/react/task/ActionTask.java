@@ -213,7 +213,7 @@ public class ActionTask implements NamedTaskComponent {
 
                 while (true) {
                     try {
-                        ONode actionNode = jsonReader.streamRead();
+                        ONode actionNode = jsonReader.readNext();
                         if (actionNode == null || !actionNode.isObject()) {
                             break;
                         }
