@@ -18,8 +18,11 @@
 ### 3.9.2
 
 
-* 新增 solon-ai-acp 插件
+* 新增 solon-ai-acp 插件（可以对接支持 acp 协议的 IDE）
 * 添加 solon-ai-core ChatSessionProvider
+* 添加 solon-ai-core FunctionTool:call 方法
+* 添加 solon-ai-mcp FunctionPrompt:get 方法
+* 添加 solon-ai-mcp FunctionResource:read 方法
 * 添加 solon-ai-core ToolSchemaUtil.resultConvert 方法（将 tool 转换从内部，转到外部）
 * 添加 solon-ai-agent ReActAgent maxStepsExtensible 配置，允许通过 HITL 扩容步数
 * 优化 solon-ai-core ChatModel 与 DeepSeek-R1 兼容性
@@ -40,27 +43,29 @@
 
 变更说明：
 
-| 旧名（强调多媒体）                              | 新名（强调多模态内容块）               |
-|----------------------------------------|----------------------------|
-| AiMedia                                | ContentBlock               |
-| Text                                   | TextBlock                  |
-| Image                                  | ImageBlock                 |
-| Audio                                  | AudioBlock                 |
-| Video                                  | VideoBlock                 |
-|                                        |                            |
-| UserMessage.getMedias()                | getBlocks()                |
-| UserMessage.hasMedias()                | isMultiModal()             |
-| /                                      | ToolMessage.getBlocks()    |
-| /                                      | ToolMessage.isMultiModal() |
-|                                        |                            |
-| McpClientProvider.callTool()           | callToolRequest()          |
-| McpClientProvider.callToolAsText()     | callTool()                 |
-| McpClientProvider.callToolAsImage()    | /                          |
-| McpClientProvider.callToolAsAudio()    | /                          |
-| McpClientProvider.readResource()       | readResourceRequest()      |
-| McpClientProvider.readResourceAsText() | readResource()             |
-| McpClientProvider.getPrompt()          | getPromptRequest()         |
-| McpClientProvider.getPromptAsMessage() | getPrompt()                |
+| 旧名（强调多媒体）                                     | 新名（强调多模态内容块）                                          |
+|-----------------------------------------------|-------------------------------------------------------|
+| AiMedia                                       | ContentBlock                                          |
+| Text                                          | TextBlock                                             |
+| Image                                         | ImageBlock                                            |
+| Audio                                         | AudioBlock                                            |
+| Video                                         | VideoBlock                                            |
+|                                               |                                                       |
+| UserMessage.getMedias()                       | getBlocks()                                           |
+| UserMessage.hasMedias()                       | isMultiModal()                                        |
+| /                                             | ToolMessage.getBlocks()                               |
+| /                                             | ToolMessage.isMultiModal()                            |
+|                                               |                                                       |
+| McpClientProvider.callTool()                  | callToolRequest()                                     |
+| McpClientProvider.callToolAsText()            | callTool()                                            |
+| McpClientProvider.callToolAsImage()           | /                                                     |
+| McpClientProvider.callToolAsAudio()           | /                                                     |
+| McpClientProvider.readResource()              | readResourceRequest()                                 |
+| McpClientProvider.readResourceAsText()        | readResource()                                        |
+| McpClientProvider.getPrompt()                 | getPromptRequest()                                    |
+| McpClientProvider.getPromptAsMessage()        | getPrompt()                                           |
+| `org.noear.solon.ai.mcp.server.prompt.*`      | `org.noear.solon.ai.chat.prompt.*` （prompt 是公用元素）     | 
+| `org.noear.solon.ai.mcp.server.resource.*`    | `org.noear.solon.ai.chat.resource.*` （resource 是公用元素） | 
 
 
 
