@@ -28,14 +28,14 @@ import java.util.List;
 
 /**
  * 语义保护型上下文压缩拦截器 (Atomic & Semantic Context Compressor)
- * <p>确保 Action-Observation 原子对齐，并显式保留执行计划（Plans）以维持逻辑连贯性。</p>
  */
 @Preview("3.8.1")
 public class SummarizationInterceptor implements ReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(SummarizationInterceptor.class);
 
     private final int maxMessages;
-    private static final String TRIM_MARKER = "[Historical context trimmed for optimization]";
+    // 优化点 1: 提供更具引导性的标记，告诉模型历史已被压缩
+    private static final String TRIM_MARKER = "--- [Historical context trimmed for optimization. Refer to current execution plans for state.] ---";
 
     public SummarizationInterceptor(int maxMessages) {
         this.maxMessages = Math.max(6, maxMessages);
@@ -50,43 +50,60 @@ public class SummarizationInterceptor implements ReActInterceptor {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
         if (messages.size() <= maxMessages + 2) return;
 
-        // 1. 寻找核心锚点
-        ChatMessage firstUserMsg = messages.stream().filter(m -> m instanceof UserMessage).findFirst().orElse(null);
+        // 1. 寻找核心锚点（用户的初心）
+        ChatMessage firstUserMsg = null;
+        int firstUserIdx = -1;
+        for (int i = 0; i < messages.size(); i++) {
+            if (messages.get(i) instanceof UserMessage) {
+                firstUserMsg = messages.get(i);
+                firstUserIdx = i;
+                break;
+            }
+        }
 
         // 2. 确定截断起始点
         int targetIdx = messages.size() - maxMessages;
 
         // 3. 增强版原子对齐
-        while (targetIdx > 0) {
+        while (targetIdx > 0 && targetIdx > firstUserIdx + 1) {
             ChatMessage msg = messages.get(targetIdx);
             if (msg instanceof ToolMessage || isObservation(msg)) {
-                targetIdx--; // 是结果，往前退
+                targetIdx--;
             } else if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
-                targetIdx--; // 是动作发起，也要往前退，防止切断在动作和结果中间
+                targetIdx--;
             } else {
-                break; // 对齐到一个相对独立的 Thought 或 User 消息
+                break;
             }
         }
 
         // 4. 重构 WorkingMemory
         List<ChatMessage> compressed = new ArrayList<>();
 
-        // 策略 A: 保持系统角色
-        messages.stream().filter(m -> m instanceof SystemMessage).forEach(compressed::add);
+        // 策略 A: 保持全局系统角色（并去重，确保 WorkingMemory 只有一份基准指令）
+        messages.stream()
+                .filter(m -> m instanceof SystemMessage)
+                .findFirst()
+                .ifPresent(compressed::add);
 
         // 策略 B: 保持原始任务定义
         if (firstUserMsg != null && !compressed.contains(firstUserMsg)) {
             compressed.add(firstUserMsg);
         }
 
+        // 策略 C: 注入断裂标记
+        if (targetIdx > (firstUserIdx + 1)) {
+            compressed.add(ChatMessage.ofSystem(TRIM_MARKER));
+        }
+
         // 策略 D: 加入保留的滑动窗口消息
         compressed.addAll(messages.subList(targetIdx, messages.size()));
 
         if (log.isDebugEnabled()) {
-            log.debug("ReActAgent [{}] summarized context: dropped {} messages, preserved plans: {}",
-                    trace.getAgentName(), (messages.size() - compressed.size()), trace.hasPlans());
+            log.debug("ReActAgent [{}] memory optimized: kept {}/{} messages, start at idx: {}",
+                    trace.getAgentName(), compressed.size(), messages.size(), targetIdx);
         }
 
+        // 5. 写回记忆
         trace.getWorkingMemory().replaceMessages(compressed);
     }
 
@@ -94,6 +111,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
         if (msg instanceof ToolMessage) {
             return true;
         } else {
+            // 兼容非 NATIVE_TOOL 模式下的文本协议
             return msg instanceof UserMessage && msg.getContent() != null && msg.getContent().startsWith("Observation:");
         }
     }
