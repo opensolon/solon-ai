@@ -79,14 +79,6 @@ public class SummarizationInterceptor implements ReActInterceptor {
             compressed.add(firstUserMsg);
         }
 
-        // 策略 C: 显式注入执行计划（如果存在）
-        StringBuilder info = new StringBuilder(TRIM_MARKER);
-        if (trace.hasPlans()) {
-            info.append("\n[Current Execution Plans]\n");
-            info.append(String.join("\n", trace.getPlans()));
-        }
-        compressed.add(ChatMessage.ofSystem(info.toString()));
-
         // 策略 D: 加入保留的滑动窗口消息
         compressed.addAll(messages.subList(targetIdx, messages.size()));
 
@@ -99,6 +91,10 @@ public class SummarizationInterceptor implements ReActInterceptor {
     }
 
     private boolean isObservation(ChatMessage msg) {
-        return msg instanceof UserMessage && msg.getContent() != null && msg.getContent().startsWith("Observation:");
+        if (msg instanceof ToolMessage) {
+            return true;
+        } else {
+            return msg instanceof UserMessage && msg.getContent() != null && msg.getContent().startsWith("Observation:");
+        }
     }
 }
