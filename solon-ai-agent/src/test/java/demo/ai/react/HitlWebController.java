@@ -9,7 +9,9 @@ import org.noear.solon.ai.agent.react.intercept.*;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.core.handle.Result;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Controller
 @Mapping("/ai/hitl")
@@ -24,6 +26,12 @@ public class HitlWebController {
                     }))
             .build();
 
+    private final Map<String, AgentSession> agentSessionMap = new ConcurrentHashMap<>();
+
+    private final AgentSession getSession(String sid) {
+        return agentSessionMap.computeIfAbsent(sid, k -> InMemoryAgentSession.of(k));
+    }
+
     /**
      * 1. 提问接口：用户输入指令
      * 如果触发转账 > 1000，Response 会返回中断状态，前端应引导至审批流
@@ -31,7 +39,7 @@ public class HitlWebController {
     @Post
     @Mapping("ask")
     public Result ask(String sid, String prompt) throws Throwable {
-        AgentSession session = InMemoryAgentSession.of(sid);
+        AgentSession session = getSession(sid);
 
         // 执行 Agent 逻辑
         ReActResponse resp = agent.prompt(prompt).session(session).call();
@@ -49,19 +57,20 @@ public class HitlWebController {
     @Get
     @Mapping("task")
     public HITLTask getTask(String sid) {
-        AgentSession session = InMemoryAgentSession.of(sid);
+        AgentSession session = getSession(sid);
         return HITL.getPendingTask(session);
     }
 
     /**
      * 3. 决策提交：管理员进行操作
-     * @param action: approve / reject
+     *
+     * @param action:       approve / reject
      * @param modifiedArgs: 修正后的参数（可选）
      */
     @Post
     @Mapping("approve")
     public Result approve(String sid, String action, @Body Map<String, Object> modifiedArgs) throws Throwable {
-        AgentSession session = InMemoryAgentSession.of(sid);
+        AgentSession session = getSession(sid);
         HITLTask task = HITL.getPendingTask(session);
 
         if (task == null) return Result.failure("没有挂起的任务");
@@ -82,7 +91,10 @@ public class HitlWebController {
 
         // 提交后，通常自动触发一次“静默续传”，让 AI 完成后续动作
         try {
-            ReActResponse resp = agent.prompt().session(session).call();
+            ReActResponse resp = agent.prompt()
+                    .session(session)
+                    .call();
+
             return Result.succeed(resp.getContent());
         } catch (Exception e) {
             // 如果是拒绝产生的异常，直接返回拒绝理由
