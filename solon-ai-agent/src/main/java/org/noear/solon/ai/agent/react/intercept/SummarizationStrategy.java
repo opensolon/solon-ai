@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import java.util.List;
 
@@ -32,5 +33,5 @@ public interface SummarizationStrategy {
      * @param messagesToSummarize 判定为“过期”的消息段
      * @return 返回一条包含摘要的消息（通常是 SystemMessage），若返回 null 则仅执行物理截断
      */
-    ChatMessage summarize(List<ChatMessage> messagesToSummarize);
+    ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize);
 }

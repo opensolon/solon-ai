@@ -1,5 +1,6 @@
 package demo.ai.react_intercept;
 
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -31,7 +32,7 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
     }
 
     @Override
-    public ChatMessage summarize(List<ChatMessage> messagesToSummarize) {
+    public ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize) {
         if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
             return null;
         }

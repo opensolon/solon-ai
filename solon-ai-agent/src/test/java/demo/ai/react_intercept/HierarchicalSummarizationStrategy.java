@@ -1,5 +1,6 @@
 package demo.ai.react_intercept;
 
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -17,16 +18,21 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
     private static final Logger log = LoggerFactory.getLogger(HierarchicalSummarizationStrategy.class);
 
     private final ChatModel chatModel;
-    private String lastSummary = ""; // 持久化在策略对象中的“压缩包”
 
     private static final String SUMMARY_PREFIX = "--- [全局进度滚动摘要 (层级压缩)] ---";
+    private static final String STRATEGY_LASTSUMMARY_KEY = "agent:summary:hierarchical";
 
     public HierarchicalSummarizationStrategy(ChatModel chatModel) {
         this.chatModel = chatModel;
     }
 
     @Override
-    public ChatMessage summarize(List<ChatMessage> messagesToSummarize) {
+    public ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize) {
+        String lastSummary = trace.getExtraAs(STRATEGY_LASTSUMMARY_KEY);
+        if (lastSummary == null) {
+            lastSummary = "";
+        }
+
         if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
             return buildMessage(lastSummary);
         }
@@ -53,10 +59,10 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
             );
 
             // 3. 调用模型生成增量摘要
-            String updatedSummary = chatModel.prompt(prompt).call().getContent();
+            lastSummary = chatModel.prompt(prompt).call().getContent();
 
             // 4. 更新内部状态，实现层级滚动
-            this.lastSummary = updatedSummary;
+            trace.setExtra(STRATEGY_LASTSUMMARY_KEY, lastSummary);
 
             if (log.isDebugEnabled()) {
                 log.debug("Hierarchical summary updated. Length: {}", lastSummary.length());

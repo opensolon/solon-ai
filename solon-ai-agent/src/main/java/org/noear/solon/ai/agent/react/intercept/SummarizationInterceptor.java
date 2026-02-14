@@ -116,7 +116,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
             if (summarizationStrategy != null) {
                 // 提取裁减区进行摘要加工
                 List<ChatMessage> expired = messages.subList(firstUserIdx + 1, targetIdx);
-                ChatMessage summaryMsg = summarizationStrategy.summarize(expired);
+                ChatMessage summaryMsg = summarizationStrategy.summarize(trace, expired);
                 if (summaryMsg != null) {
                     compressed.add(summaryMsg);
                 }

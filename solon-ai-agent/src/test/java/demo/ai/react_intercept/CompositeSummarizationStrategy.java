@@ -1,5 +1,6 @@
 package demo.ai.react_intercept;
 
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.slf4j.Logger;
@@ -39,7 +40,7 @@ public class CompositeSummarizationStrategy implements SummarizationStrategy {
     }
 
     @Override
-    public ChatMessage summarize(List<ChatMessage> messagesToSummarize) {
+    public ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize) {
         if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
             return null;
         }
@@ -49,7 +50,7 @@ public class CompositeSummarizationStrategy implements SummarizationStrategy {
         for (SummarizationStrategy strategy : strategies) {
             try {
                 // 依次执行子策略
-                ChatMessage result = strategy.summarize(messagesToSummarize);
+                ChatMessage result = strategy.summarize(trace, messagesToSummarize);
 
                 if (result != null && result.getContent() != null) {
                     if (compositeContent.length() > 0) {
