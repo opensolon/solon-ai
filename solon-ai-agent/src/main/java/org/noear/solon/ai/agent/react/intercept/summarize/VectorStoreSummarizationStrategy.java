@@ -57,7 +57,7 @@ public class VectorStoreSummarizationStrategy implements SummarizationStrategy {
             // 2. 异步持久化到向量数据库 (冷记忆存入)
             // 在实际工程中，这里可以关联当前的 traceId 方便后续按对话隔离检索
             Document doc = new Document(contentToStore);
-            doc.metadata("traceKey", trace.getConfig().getTraceKey());
+            doc.metadata("sessionId", trace.getSession().getSessionId());
             doc.metadata("agentName", trace.getAgentName());
             doc.metadata("type", "historical_context");
             vectorRepository.save(doc);
