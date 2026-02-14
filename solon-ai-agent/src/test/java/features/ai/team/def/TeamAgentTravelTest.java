@@ -6,11 +6,10 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
-import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.team.TeamResponse;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.annotation.Param;
 
 /**
@@ -46,28 +45,26 @@ public class TeamAgentTravelTest {
 
         // 3. 执行协作任务
         String userQuery = "我现在在东京，请帮我规划一天的行程。";
-        // 修改为 agent.prompt(x).session(y).call() 风格
-        String result = travelTeam.prompt(Prompt.of(userQuery))
+        TeamResponse resp = travelTeam.prompt(userQuery)
                 .session(session)
-                .call()
-                .getContent();
+                .call();
 
-        System.out.println("--- 团队协作方案 ---\n" + result);
+        System.out.println("--- 团队协作方案 ---\n" + resp.getContent());
 
         // 4. 协作轨迹与决策检测
-        TeamTrace trace = travelTeam.getTrace(session);
-        Assertions.assertNotNull(trace, "未生成协作轨迹");
+        Assertions.assertNotNull(resp.getTrace(), "未生成协作轨迹");
 
         System.out.println("--- 协作步骤摘要 ---");
-        trace.getRecords().forEach(s -> System.out.println("[" + s.getSource() + "]: " + s.getContent()));
+        resp.getTrace().getRecords().forEach(s -> System.out.println("[" + s.getSource() + "]: " + s.getContent()));
 
         // 核心逻辑断言：检测 Planner 是否针对 WeatherService 返回的“特大暴雨”做出了规避动作
+        String result = resp.getContent();
         boolean isLogicCorrect = result.contains("室内") ||
                 result.contains("博物馆") ||
                 result.contains("商场") ||
                 result.contains("美术馆");
 
-        if(!isLogicCorrect) {
+        if (!isLogicCorrect) {
             System.err.println("决策失败：Planner 忽略了 Searcher 的暴雨警告，未能正确调整为室内行程！");
         }
 

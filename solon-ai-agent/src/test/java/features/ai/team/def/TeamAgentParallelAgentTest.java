@@ -8,10 +8,10 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
+import org.noear.solon.ai.agent.team.TeamResponse;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.prompt.Prompt;
 
 import java.util.stream.Collectors;
 
@@ -80,15 +80,16 @@ public class TeamAgentParallelAgentTest {
 
         // 3. 执行 (修改为新的 call 风格)
         AgentSession session = InMemoryAgentSession.of("sn_2026_para_01");
-        String result = team.prompt(Prompt.of("你好，世界")).session(session).call().getContent();
+        TeamResponse resp = team.prompt("你好，世界")
+                .session(session)
+                .call();
 
         // 4. 结果检测
-        System.out.println("=== 最终汇聚结果 ===\n" + result);
+        System.out.println("=== 最终汇聚结果 ===\n" + resp.getContent());
 
-        TeamTrace trace = team.getTrace(session);
-        Assertions.assertNotNull(trace);
-        Assertions.assertTrue(trace.getRecordCount() >= 2);
-        Assertions.assertTrue(result.contains("Hello") || result.contains("world"));
-        Assertions.assertTrue(result.contains("Monde") || result.contains("Bonjour"));
+        Assertions.assertNotNull(resp.getTrace());
+        Assertions.assertTrue(resp.getTrace().getRecordCount() >= 2);
+        Assertions.assertTrue(resp.getContent().contains("Hello") || resp.getContent().contains("world"));
+        Assertions.assertTrue(resp.getContent().contains("Monde") || resp.getContent().contains("Bonjour"));
     }
 }
