@@ -1,4 +1,19 @@
-package demo.ai.react_intercept;
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.noear.solon.ai.agent.react.intercept.summarize;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
@@ -14,6 +29,9 @@ import java.util.stream.Collectors;
 /**
  * 向量检索增强总结策略 (RAG-based Memory Strategy)
  * 核心逻辑：将裁减的消息持久化到向量库，并提取关键词或最新摘要作为上下文索引。
+ *
+ * @author noear
+ * @since 3.9.4
  */
 public class VectorStoreSummarizationStrategy implements SummarizationStrategy {
     private static final Logger log = LoggerFactory.getLogger(VectorStoreSummarizationStrategy.class);
@@ -38,7 +56,11 @@ public class VectorStoreSummarizationStrategy implements SummarizationStrategy {
 
             // 2. 异步持久化到向量数据库 (冷记忆存入)
             // 在实际工程中，这里可以关联当前的 traceId 方便后续按对话隔离检索
-            vectorRepository.save(new Document(contentToStore));
+            Document doc = new Document(contentToStore);
+            doc.metadata("traceKey", trace.getConfig().getTraceKey());
+            doc.metadata("agentName", trace.getAgentName());
+            doc.metadata("type", "historical_context");
+            vectorRepository.save(doc);
 
             // 3. 返回一个引导性提示
             // 告知模型：旧细节已存入库，你可以通过特定意图触发检索（如果 Agent 具备 RAG 工具）

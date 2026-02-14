@@ -1,4 +1,19 @@
-package demo.ai.react_intercept;
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.noear.solon.ai.agent.react.intercept.summarize;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
@@ -13,6 +28,9 @@ import java.util.stream.Collectors;
 /**
  * 基于 LLM 的关键信息提取策略实现
  * 相比于全文总结，该策略更侧重于提取“事实、参数、结论”，过滤掉无用的思考过程。
+ *
+ * @author noear
+ * @since 3.9.4
  */
 public class KeyInfoExtractionStrategy implements SummarizationStrategy {
     private static final Logger log = LoggerFactory.getLogger(KeyInfoExtractionStrategy.class);
@@ -50,7 +68,9 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
                     .collect(Collectors.joining("\n"));
 
             // 2. 调用模型提取关键信息
-            String requestText = prompt + "\n\n--- 对话历史 ---\n" + historyText;
+            String requestText = new StringBuilder(prompt.length() + historyText.length() + 20)
+                    .append(prompt).append("\n\n--- 对话历史 ---\n").append(historyText).toString();
+
             String keyInfo = chatModel.prompt(requestText).call().getContent();
 
             if (log.isDebugEnabled()) {
