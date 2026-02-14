@@ -6,7 +6,6 @@ package com.agentclientprotocol.sdk.agent;
 
 import com.agentclientprotocol.sdk.capabilities.NegotiatedCapabilities;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
-import io.modelcontextprotocol.json.TypeRef;
 import reactor.core.publisher.Mono;
 
 /**
