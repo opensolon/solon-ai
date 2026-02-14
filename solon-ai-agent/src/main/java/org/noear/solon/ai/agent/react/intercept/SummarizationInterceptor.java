@@ -66,7 +66,6 @@ public class SummarizationInterceptor implements ReActInterceptor {
         int targetIdx = messages.size() - maxMessages;
 
         // 3. 增强版原子对齐
-        // 策略：如果截断点落在 Action 或 Observation 中间，则不断前移，确保工具调用链完整
         while (targetIdx > 0 && targetIdx > firstUserIdx + 1) {
             ChatMessage msg = messages.get(targetIdx);
             if (msg instanceof ToolMessage || isObservation(msg)) {
@@ -79,7 +78,6 @@ public class SummarizationInterceptor implements ReActInterceptor {
         }
 
         // 4. 语义补齐：确保历史以 Thought 开始，而非以“结果”硬生生开始
-        // 优化点：如果前一条消息是纯 Thought（Assistant 且无工具调用），则将其包含进来
         if (targetIdx > firstUserIdx + 1) {
             ChatMessage prev = messages.get(targetIdx - 1);
             if (prev instanceof AssistantMessage && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())) {
