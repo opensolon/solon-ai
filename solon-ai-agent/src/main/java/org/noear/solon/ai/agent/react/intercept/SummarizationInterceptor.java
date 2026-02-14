@@ -48,9 +48,10 @@ public class SummarizationInterceptor implements ReActInterceptor {
     @Override
     public void onObservation(ReActTrace trace, String toolName, String result) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
+        // 预留缓冲位，防止频繁触发压缩
         if (messages.size() <= maxMessages + 2) return;
 
-        // 1. 寻找核心锚点（用户的初心）
+        // 1. 寻找核心锚点（定位首个 UserMessage 作为任务目标）
         ChatMessage firstUserMsg = null;
         int firstUserIdx = -1;
         for (int i = 0; i < messages.size(); i++) {
@@ -61,10 +62,11 @@ public class SummarizationInterceptor implements ReActInterceptor {
             }
         }
 
-        // 2. 确定截断起始点
+        // 2. 确定初始截断起始点
         int targetIdx = messages.size() - maxMessages;
 
         // 3. 增强版原子对齐
+        // 策略：如果截断点落在 Action 或 Observation 中间，则不断前移，确保工具调用链完整
         while (targetIdx > 0 && targetIdx > firstUserIdx + 1) {
             ChatMessage msg = messages.get(targetIdx);
             if (msg instanceof ToolMessage || isObservation(msg)) {
@@ -76,10 +78,19 @@ public class SummarizationInterceptor implements ReActInterceptor {
             }
         }
 
-        // 4. 重构 WorkingMemory
+        // 4. 语义补齐：确保历史以 Thought 开始，而非以“结果”硬生生开始
+        // 优化点：如果前一条消息是纯 Thought（Assistant 且无工具调用），则将其包含进来
+        if (targetIdx > firstUserIdx + 1) {
+            ChatMessage prev = messages.get(targetIdx - 1);
+            if (prev instanceof AssistantMessage && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())) {
+                targetIdx--;
+            }
+        }
+
+        // 5. 重构 WorkingMemory
         List<ChatMessage> compressed = new ArrayList<>();
 
-        // 策略 A: 保持全局系统角色（并去重，确保 WorkingMemory 只有一份基准指令）
+        // 策略 A: 保持全局系统角色（去重，只留第一条核心指令）
         messages.stream()
                 .filter(m -> m instanceof SystemMessage)
                 .findFirst()
@@ -90,7 +101,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
             compressed.add(firstUserMsg);
         }
 
-        // 策略 C: 注入断裂标记
+        // 策略 C: 注入断裂感知标记
         if (targetIdx > (firstUserIdx + 1)) {
             compressed.add(ChatMessage.ofSystem(TRIM_MARKER));
         }
@@ -99,11 +110,11 @@ public class SummarizationInterceptor implements ReActInterceptor {
         compressed.addAll(messages.subList(targetIdx, messages.size()));
 
         if (log.isDebugEnabled()) {
-            log.debug("ReActAgent [{}] memory optimized: kept {}/{} messages, start at idx: {}",
+            log.debug("ReActAgent [{}] summarized context: preserved {}/{} messages, aligned at idx: {}",
                     trace.getAgentName(), compressed.size(), messages.size(), targetIdx);
         }
 
-        // 5. 写回记忆
+        // 6.更新工作区记忆
         trace.getWorkingMemory().replaceMessages(compressed);
     }
 
