@@ -458,8 +458,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         for (ToolCall call : acm.getToolCalls()) {
             ToolCallBuilder callBuilder = resp.toolCallBuilders.computeIfAbsent(call.getIndex(), k -> new ToolCallBuilder());
 
-            if (call.getId() != null && call.getId().equals(callBuilder.idBuilder)
-                    && call.getName() != null && call.getName().equals(callBuilder.nameBuilder)) {
+            if (call.getId() != null && call.getId().contentEquals(callBuilder.idBuilder)
+                    && call.getName() != null && call.getName().contentEquals(callBuilder.nameBuilder)) {
                 //说明 id 和 name 在全量增加
             } else {
                 if (call.getId() != null) {

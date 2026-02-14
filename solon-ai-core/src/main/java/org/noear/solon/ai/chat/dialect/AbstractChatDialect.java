@@ -332,16 +332,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             //有可能是 json string（如果不是不用管，可能只是流的中间消息）
             if (hasNestedJsonBlock(argStr)) {
                 JsonReader reader = new JsonReader(argStr);
-                ONode n1fArgsTmp = null;
-                while (true) {
-                    n1fArgsTmp = reader.readNext();
-
-                    if (n1fArgsTmp == null) {
-                        break;
-                    } else  {
-                        n1fArgs = n1fArgsTmp;
-                    }
-                }
+                n1fArgs = reader.readLast();
             }
         }
 
