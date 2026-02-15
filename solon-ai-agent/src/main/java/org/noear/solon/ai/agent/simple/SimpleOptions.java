@@ -22,4 +22,13 @@ public class SimpleOptions extends ModelOptionsAmend<SimpleOptions, SimpleInterc
     public FluxSink<AgentChunk> getStreamSink() {
         return streamSink;
     }
+
+    protected SimpleOptions copy() {
+        SimpleOptions tmp = new SimpleOptions();
+        tmp.putAll(this);
+
+        //tmp.streamSink = streamSink;
+
+        return tmp;
+    }
 }

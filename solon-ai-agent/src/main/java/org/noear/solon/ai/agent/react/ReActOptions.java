@@ -105,6 +105,8 @@ public class ReActOptions implements NonSerializable {
         tmp.planningMode = planningMode;
         tmp.planningInstructionProvider = planningInstructionProvider;
 
+        //tmp.streamSink = streamSink;
+
         return tmp;
     }
 
