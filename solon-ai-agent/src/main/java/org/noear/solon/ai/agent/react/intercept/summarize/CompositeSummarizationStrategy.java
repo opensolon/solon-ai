@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.intercept.summarize;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,7 +70,7 @@ public class CompositeSummarizationStrategy implements SummarizationStrategy {
         for (SummarizationStrategy strategy : strategies) {
             try {
                 ChatMessage result = strategy.summarize(trace, messagesToSummarize);
-                if (result != null && result.getContent() != null) {
+                if (result != null && Assert.isNotEmpty(result.getContent())) {
                     if (buf.length() > 0) buf.append("\n\n");
                     buf.append(result.getContent());
                 }
