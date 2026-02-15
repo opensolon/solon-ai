@@ -66,7 +66,7 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
     }
 
     // --- Tool 实现（负责“取”） ---
-    @ToolMapping(name = "recall_history", description = "回溯本会话中早前已归档的长记忆、历史细节或事实事实")
+    @ToolMapping(name = "recall_history", description = "回溯本会话中早前已归档的长记忆、历史细节或事实")
     public String recall(@Param(name = "query", description = "检索关键词或核心短语") String query,
                          @Param(name = "limit", description = "返回记忆片段的数量", defaultValue = "3") int limit,
                          String __sessionId) {
@@ -107,9 +107,11 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
 
         try {
             // 1. 结构化历史记录
-            String contentToStore = messagesToSummarize.stream()
-                    .map(m -> String.format("%s: %s", m.getRole().name(), m.getContent()))
-                    .collect(Collectors.joining("\n"));
+            StringBuilder sb = new StringBuilder();
+            for (ChatMessage m : messagesToSummarize) {
+                sb.append(m.getRole().name()).append(": ").append(m.getContent()).append("\n");
+            }
+            String contentToStore = sb.toString();
 
             // 2. 异步持久化到向量数据库 (冷记忆存入)
             // 在实际工程中，这里可以关联当前的 traceId 方便后续按对话隔离检索
