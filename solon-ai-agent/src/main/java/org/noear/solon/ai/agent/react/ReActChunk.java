@@ -36,4 +36,8 @@ public class ReActChunk extends AbsAgentChunk {
     public ReActResponse getResponse() {
         return response;
     }
+
+    public ReActTrace getTrace() {
+        return response.getTrace();
+    }
 }

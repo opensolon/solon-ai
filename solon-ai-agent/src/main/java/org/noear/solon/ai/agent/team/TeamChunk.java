@@ -35,4 +35,8 @@ public class TeamChunk extends AbsAgentChunk {
     public TeamResponse getResponse() {
         return response;
     }
+
+    public TeamTrace getTrace() {
+        return response.getTrace();
+    }
 }
