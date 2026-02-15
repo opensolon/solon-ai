@@ -39,9 +39,6 @@ public class SummarizationInterceptor implements ReActInterceptor {
     private final int maxMessages;
     private final SummarizationStrategy summarizationStrategy;
 
-    // 默认的截断提示标记
-    private static final String DEFAULT_TRIM_MARKER = "--- [Historical context trimmed for optimization. Refer to current plans for state.] ---";
-
     public SummarizationInterceptor(int maxMessages, SummarizationStrategy summarizationStrategy) {
         this.maxMessages = Math.max(6, maxMessages);
         this.summarizationStrategy = summarizationStrategy;
@@ -120,8 +117,13 @@ public class SummarizationInterceptor implements ReActInterceptor {
                 if (summaryMsg != null) {
                     compressed.add(summaryMsg);
                 }
-            } else {
-                compressed.add(ChatMessage.ofSystem(DEFAULT_TRIM_MARKER));
+            } else {String marker = "--- [Historical context trimmed for optimization.";
+                if (trace.hasPlans()) {
+                    marker += " Refer to current plans for state.] ---";
+                } else {
+                    marker += " Focus on the latest conversation.] ---";
+                }
+                compressed.add(ChatMessage.ofSystem(marker));
             }
         }
 
