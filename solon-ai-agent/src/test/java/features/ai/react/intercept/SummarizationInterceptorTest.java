@@ -1,14 +1,21 @@
 package features.ai.react.intercept;
 
+import demo.ai.llm.LlmUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
+import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
+import org.noear.solon.ai.agent.react.intercept.summarize.*;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.ToolCall;
+import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
@@ -24,6 +31,7 @@ public class SummarizationInterceptorTest {
     private Prompt workingMemory;
     private List<ChatMessage> messageList;
     private SummarizationInterceptor interceptor;
+    private ChatModel chatModel;
 
     @BeforeEach
     public void setUp() {
@@ -34,6 +42,8 @@ public class SummarizationInterceptorTest {
         when(trace.getWorkingMemory()).thenReturn(workingMemory);
         when(workingMemory.getMessages()).thenReturn(messageList);
         when(trace.getAgentName()).thenReturn("TestAgent");
+
+        chatModel = LlmUtil.getChatModel();
 
         // 设置较小的阈值以便触发压缩逻辑
         interceptor = new SummarizationInterceptor(6);
@@ -56,7 +66,7 @@ public class SummarizationInterceptorTest {
 
         // 3. 关键原子对 (使用 AssistantMessage 的标准实现而非 Mock)
         // 这样 getContent() 默认返回空字符串而非 null，规避 NPE
-        List<ToolCall> toolCalls = Arrays.asList(new ToolCall("call_1","call_1", "tool_1", "{}", Utils.asMap()));
+        List<ToolCall> toolCalls = Arrays.asList(new ToolCall("call_1", "call_1", "tool_1", "{}", Utils.asMap()));
         // 参数含义：content, isThinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw
         AssistantMessage actionMsg = new AssistantMessage(
                 "Calling tool...",
@@ -187,5 +197,98 @@ public class SummarizationInterceptorTest {
 
         assertTrue(compressed.stream().anyMatch(m -> m.getContent().contains("trimmed")),
                 "With heavy history, trim marker must be present");
+    }
+
+    /**
+     * 测试 6：LLMSummarizationStrategy (真实模型集成)
+     */
+    @Test
+    public void testLLMSummarizationStrategy() throws Exception {
+        LLMSummarizationStrategy strategy = new LLMSummarizationStrategy(chatModel);
+        messageList.add(ChatMessage.ofUser("请总结：今天天气不错，我们要去郊游。"));
+        messageList.add(ChatMessage.ofAssistant("好的，出发吧。"));
+
+        ChatMessage result = strategy.summarize(trace, messageList);
+
+        assertNotNull(result);
+        assertTrue(result.getContent().contains("历史执行摘要"));
+        // 验证真实模型输出了非空内容
+        assertFalse(result.getContent().length() < 10);
+    }
+
+    /**
+     * 测试 7：KeyInfoExtractionStrategy (真实模型集成)
+     */
+    @Test
+    public void testKeyInfoExtractionStrategy() throws Exception {
+        KeyInfoExtractionStrategy strategy = new KeyInfoExtractionStrategy(chatModel);
+        messageList.add(ChatMessage.ofUser("记住我的订单号是 10086。"));
+
+        ChatMessage result = strategy.summarize(trace, messageList);
+
+        assertNotNull(result);
+        assertTrue(result.getContent().contains("关键信息看板"));
+        // 真实模型应该能提取出 10086
+        assertTrue(result.getContent().contains("10086"));
+    }
+
+    /**
+     * 测试 8：HierarchicalSummarizationStrategy (层级滚动)
+     */
+    @Test
+    public void testHierarchicalSummarizationStrategy() throws Exception {
+        String lastSummaryKey = "agent:summary:hierarchical";
+        // 模拟 Trace 中已有旧摘要
+        when(trace.getExtraAs(lastSummaryKey)).thenReturn("之前的对话讨论了足球。");
+
+        HierarchicalSummarizationStrategy strategy = new HierarchicalSummarizationStrategy(chatModel);
+        messageList.add(ChatMessage.ofUser("现在我们聊聊篮球。"));
+
+        ChatMessage result = strategy.summarize(trace, messageList);
+
+        assertNotNull(result);
+        // 验证是否触发了状态写回（这是该策略的核心逻辑）
+        verify(trace).setExtra(eq(lastSummaryKey), anyString());
+    }
+
+    /**
+     * 测试 9：VectorStoreSummarizationStrategy (修正 anyList 编译问题)
+     */
+    @Test
+    public void testVectorStoreSummarizationStrategy() throws Exception {
+        RepositoryStorable vectorRepository = mock(RepositoryStorable.class);
+        AgentSession session = mock(AgentSession.class);
+
+        when(trace.getSession()).thenReturn(session);
+        when(session.getSessionId()).thenReturn("test_sess_001");
+
+        VectorStoreSummarizationStrategy strategy = new VectorStoreSummarizationStrategy(vectorRepository);
+        messageList.add(ChatMessage.ofUser("存入向量库的内容"));
+
+        ChatMessage result = strategy.summarize(trace, messageList);
+
+        // 使用明确的 ArgumentMatchers 避免 any() 歧义
+        verify(vectorRepository).save(any(Document.class));
+
+        assertNotNull(result);
+        assertTrue(result.getContent().contains("已归档"));
+    }
+
+    /**
+     * 测试 10：CompositeSummarizationStrategy (策略合并)
+     */
+    @Test
+    public void testCompositeSummarizationStrategy() {
+        // 使用 Lambda 快速实现，验证合并逻辑
+        SummarizationStrategy s1 = (t, msgs) -> ChatMessage.ofSystem("摘要 A");
+        SummarizationStrategy s2 = (t, msgs) -> ChatMessage.ofSystem("摘要 B");
+
+        CompositeSummarizationStrategy composite = new CompositeSummarizationStrategy(s1, s2);
+
+        messageList.add(ChatMessage.ofUser("Trigger"));
+        ChatMessage result = composite.summarize(trace, messageList);
+
+        // 验证双换行符合并
+        assertEquals("摘要 A\n\n摘要 B", result.getContent());
     }
 }
