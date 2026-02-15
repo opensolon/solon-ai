@@ -167,6 +167,17 @@ public class Document implements Serializable {
         }
     }
 
+    /**
+     * 获取元数据
+     */
+    public <T> T getMetadataAs(String key) {
+        if (this.metadata == null) {
+            return null;
+        } else {
+            return (T) this.metadata.get(key);
+        }
+    }
+
     /// /////////////////////////////
     /**
      * 标题（可选）
