@@ -177,7 +177,7 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("- **当前时间 (Current Time)**: ").append(ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss VV"))).append("\n");
         sb.append("- **当前盒子 (BoxID)**: ").append(boxId).append("\n");
         sb.append("- **操作系统 (OS)**: ").append(System.getProperty("os.name")).append("\n");
-        sb.append("- **系统用户 (User)**: ").append(System.getProperty("user.name")).append("\n");
+        sb.append("- **工作目录状态**: 已锁定在当前盒子路径。禁止使用任何绝对路径。\n");
 
         String absPath = rootPath.toAbsolutePath().toString();
         sb.append("- **工作目录 (WorkDir)**: ").append(absPath).append(" (仅供参考)\n");
