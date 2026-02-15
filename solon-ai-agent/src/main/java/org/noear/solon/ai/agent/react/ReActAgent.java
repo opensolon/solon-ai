@@ -67,7 +67,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     public final static String ID_REASON = "reason";
     public final static String ID_REASON_BEF = "reason_bef";
     public final static String ID_REASON_AFT = "reason_aft";
-    public final static String ID_PLAN = "plan";
     public final static String ID_ACTION = "action";
     public final static String ID_ACTION_BEF = "action_bef";
     public final static String ID_ACTION_AFT = "action_aft";

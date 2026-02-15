@@ -33,6 +33,7 @@ import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -220,7 +221,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
         ChatResponse response = callWithRetry(node, trace, messages);
-        if(trace.isPending()){
+        if(response == null || trace.isPending()){
             return;
         }
 
@@ -317,7 +318,7 @@ public class ReasonTask implements NamedTaskComponent {
         trace.setFinalAnswer(extractFinalAnswer(clearContent));
     }
 
-    private ChatResponse callWithRetry(Node node, ReActTrace trace, List<ChatMessage> messages) {
+    private @Nullable ChatResponse callWithRetry(Node node, ReActTrace trace, List<ChatMessage> messages) throws RuntimeException {
         if(LOG.isTraceEnabled()){
             LOG.trace("ReActAgent [{}] calling model... messages: {}",
                     config.getName(),
@@ -353,33 +354,40 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         int maxRetries = trace.getOptions().getMaxRetries();
-        for (int i = 0; i < maxRetries; i++) {
+        Throwable lastException = null;
+
+        for (int i = 0; i <= maxRetries; i++) { // 注意是 <=，确保至少执行一次
             try {
                 if (trace.getOptions().getStreamSink() != null) {
-                    return req.stream().doOnNext(resp->{
+                    return req.stream().doOnNext(resp -> {
                         trace.getOptions().getStreamSink()
                                 .next(new ReasonChunk(node, trace, resp));
                     }).blockLast();
                 } else {
                     return req.call();
                 }
-            } catch (Exception e) {
-                if (i == maxRetries - 1) {
-                    LOG.error("ReActAgent [{}] failed after {} retries", config.getName(), maxRetries, e);
-                    throw new RuntimeException("Reasoning failed after max retries", e);
-                }
-
-                LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.getMessage());
-
-                try {
-                    Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException("Retry interrupted", ie);
+            } catch (Throwable e) {
+                lastException = e;
+                if (i < maxRetries) {
+                    LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.getMessage());
+                    try {
+                        Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 }
             }
         }
-        throw new RuntimeException("Unreachable");
+
+        // [核心优化]：如果到这里还没 return，说明全部失败了
+        LOG.error("ReActAgent [{}] totally failed after {} retries", config.getName(), maxRetries, lastException);
+
+        // 设置故障状态并终止路由
+        trace.setRoute(Agent.ID_END);
+        trace.setFinalAnswer("抱歉，暂时无法连接模型服务 (" + lastException.getMessage() + ")。请稍后重试。");
+
+        return null; // 返回 null，由 run 方法处理
     }
 
     /**
