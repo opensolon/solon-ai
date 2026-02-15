@@ -47,6 +47,7 @@
         <module>../../solon-ai-skills/solon-ai-skill-sys</module>
         <module>../../solon-ai-skills/solon-ai-skill-text2sql</module>
         <module>../../solon-ai-skills/solon-ai-skill-web</module>
+        <module>../../solon-ai-skills/solon-ai-skill-lucene</module>
 
         <module>../../solon-ai-rag-loaders/solon-ai-load-ddl</module>
         <module>../../solon-ai-rag-loaders/solon-ai-load-excel</module>

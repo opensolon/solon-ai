@@ -34,6 +34,8 @@
         <vectorex-client.version>1.5.3</vectorex-client.version>
         <tcvectordb.version>2.4.5</tcvectordb.version>
         <tika.version>2.9.3</tika.version>
+
+        <lucene.version>9.12.3</lucene.version>
     </properties>
 
     <dependencyManagement>
@@ -239,6 +241,12 @@
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-skill-generation</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-skill-lucene</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
