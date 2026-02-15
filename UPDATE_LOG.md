@@ -12,7 +12,15 @@
 
 ### 3.9.4
 
+* 新增 solon-ai-skill-lucene 插件
+* 新增 solon-ai-skill-diff 插件
+* 添加 solon-ai-agent ReActChunk, TeamChunk getTrace 方法
+* 添加 solon-ai-agent __sessionId 作为智能体的必要工具上下文（方便工具的会话数据隔离）
+* 优化 solon-ai-core chatModel 方言的（不规范的）兼容性处理
+* 优化 solon-ai-core buildToolCallBuilder 兼容（有些 llm stream ，会部分全量多次提供）
+* 优化 solon-ai-agent SummarizationInterceptor 增加策略机制并内置4个策略
 * 修复 solon-ai-core ChatModel.stream 过程异常时会破坏流响应的问题
+* 修复 solon-ai-agent ReasonTask.callWithRetry 网络异常时会中断工作流的问题
 
 ### 3.9.3
 

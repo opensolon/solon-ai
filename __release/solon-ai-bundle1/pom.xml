@@ -34,10 +34,10 @@
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-claude</module>
 
 
-
         <module>../../solon-ai-skills/solon-ai-skills</module>
         <module>../../solon-ai-skills/solon-ai-skill-cli</module>
         <module>../../solon-ai-skills/solon-ai-skill-data</module>
+        <module>../../solon-ai-skills/solon-ai-skill-diff</module>
         <module>../../solon-ai-skills/solon-ai-skill-file</module>
         <module>../../solon-ai-skills/solon-ai-skill-generation</module>
         <module>../../solon-ai-skills/solon-ai-skill-mail</module>
@@ -48,13 +48,5 @@
         <module>../../solon-ai-skills/solon-ai-skill-text2sql</module>
         <module>../../solon-ai-skills/solon-ai-skill-web</module>
         <module>../../solon-ai-skills/solon-ai-skill-lucene</module>
-
-        <module>../../solon-ai-rag-loaders/solon-ai-load-ddl</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-excel</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-html</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-markdown</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-pdf</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-ppt</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-word</module>
     </modules>
 </project>
