@@ -206,7 +206,6 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("- **路径一致性 (Path Integrity)**: 必须使用相对于根目录的相对路径，严禁使用 `./` 前缀。目录路径建议以 `/` 结尾以示区分。\n");
         sb.append("- **探测优先**：在操作前先用 `ls` 或 `glob_search` 确认文件位置。\n");
         sb.append("- **显示隐藏**：`ls` 默认隐藏点号文件。若需查看 `.env` 或 `.gitignore`，请设置 `show_hidden: true`。\n");
-        sb.append("- **路径规范**: 必须使用相对于根目录的相对路径。严禁使用 `./` 前缀（例如：使用 `src/main.js` 而非 `./src/main.js`）。\n");
         sb.append("- **读后改**：进行 `str_replace_editor` 前必须先调用 `read_file` 获取带有行号的精确内容。对于大文件，必须先分页读取。\n");
         sb.append("- **原子操作**：`str_replace_editor` 要求 `old_str` 具有唯一性。若不唯一，请提供更多上下文行。\n");
         sb.append("- **验证验证验证**：代码修改后，请使用 `bash` 运行相关的测试脚本或构建指令。\n");
