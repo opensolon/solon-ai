@@ -197,12 +197,15 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("#### 2. 技能发现索引 (Discovery)\n");
         sb.append("- **盒子本地技能**: ").append(scanSkillNames(rootPath)).append("\n");
         skillPools.forEach((k, v) -> sb.append("- **池(").append(k).append(")技能**: ").append(scanSkillNames(v)).append("\n"));
-        sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。请通过 `list_files` 和 `read_file` 读取规范以驱动任务。\n\n");
+        sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。请通过 `ls` 和 `read_file` 读取规范以驱动任务。\n\n");
 
         // 3. 官方策略对齐 (Action Guidelines)
         sb.append("#### 3. 执行策略 (Action Patterns)\n");
-        sb.append("- **探测优先**：在操作前先用 `list_files` 或 `glob_search` 确认文件位置。\n");
-        sb.append("- **显示隐藏**：`list_files` 默认隐藏点号文件。若需查看 `.env` 或 `.gitignore`，请设置 `show_hidden: true`。\n");
+        sb.append("- **极简主义 (Minimalism)**: 仅读取与任务直接相关的代码行。严禁无意义地全量读取大文件，以节省上下文空间并减少干扰。\n");
+        sb.append("- **环境纯净 (Context Purity)**: 每次编辑操作后，必须通过 `bash` 运行测试或构建指令来验证结果。若修改失败，**严禁凭空猜测**，应重新调用 `read_file` 确认文件的最新状态。\n");
+        sb.append("- **路径一致性 (Path Integrity)**: 必须使用相对于根目录的相对路径，严禁使用 `./` 前缀。目录路径建议以 `/` 结尾以示区分。\n");
+        sb.append("- **探测优先**：在操作前先用 `ls` 或 `glob_search` 确认文件位置。\n");
+        sb.append("- **显示隐藏**：`ls` 默认隐藏点号文件。若需查看 `.env` 或 `.gitignore`，请设置 `show_hidden: true`。\n");
         sb.append("- **路径规范**: 必须使用相对于根目录的相对路径。严禁使用 `./` 前缀（例如：使用 `src/main.js` 而非 `./src/main.js`）。\n");
         sb.append("- **读后改**：进行 `str_replace_editor` 前必须先调用 `read_file` 获取带有行号的精确内容。对于大文件，必须先分页读取。\n");
         sb.append("- **原子操作**：`str_replace_editor` 要求 `old_str` 具有唯一性。若不唯一，请提供更多上下文行。\n");
@@ -285,82 +288,121 @@ public class CliSkill extends AbsProcessSkill {
         return runCode(finalCmd, shellCmd, extension, envs);
     }
 
-    // --- 2. 列出文件 (对齐 list_files) ---
-    @ToolMapping(name = "list_files", description = "列出目录内容。目录若带 (Skill) 标记则含有业务规范。")
-    public String listFiles(@Param(value = "path", description = "目录相对路径（禁止以 ./ 开头）。'.' 表示当前根目录。") String path,
-                            @Param(value = "recursive", required = false, description = "是否递归列出（深度限制5）。") Boolean recursive,
-                            @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件（如 .env, .gitignore）。默认 false 以保持结果整洁。") Boolean showHidden) throws IOException {
+    @ToolMapping(name = "ls", description = "列出目录内容。支持递归模式，递归模式下将以树状结构(Tree)展示以节省空间并增强可读性。")
+    public String ls(@Param(value = "path", description = "目录相对路径（禁止以 ./ 开头）。'.' 表示当前根目录。") String path,
+                     @Param(value = "recursive", required = false, description = "是否递归列出。若为 true，则输出直观的树状结构（深度限制为 3）。") Boolean recursive,
+                     @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件（如 .env）。默认 false。") Boolean showHidden) throws IOException {
+
         Path target = resolvePathExtended(path);
         if (!Files.exists(target)) return "错误：路径不存在";
 
+        if (Boolean.TRUE.equals(recursive)) {
+            // 递归模式：直接输出树状结构 (对齐 Claude Code 的空间效率优化)
+            StringBuilder sb = new StringBuilder();
+            String displayName = (path == null || ".".equals(path)) ? "." : path;
+            sb.append(displayName).append("\n");
+
+            // 递归深度限制为 3，这是 Claude Code 在 ls -R 时的常用保护阈值
+            generateTreeInternal(target, 0, 3, "", sb, (showHidden != null && showHidden));
+            return sb.toString();
+        } else {
+            // 普通模式：扁平列表 (你原有的 ls 逻辑)
+            return flatListLogic(target, path, (showHidden != null && showHidden));
+        }
+    }
+
+    // 内部递归逻辑，复用 isIgnored
+    private void generateTreeInternal(Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden) throws IOException {
+        if (depth >= maxDepth) return;
+
+        try (Stream<Path> stream = Files.list(current)) {
+            List<Path> children = stream
+                    .filter(p -> !isIgnored(p))
+                    .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
+                    .sorted((a, b) -> {
+                        boolean aDir = Files.isDirectory(a);
+                        boolean bDir = Files.isDirectory(b);
+                        if (aDir != bDir) return aDir ? -1 : 1;
+                        return a.getFileName().compareTo(b.getFileName());
+                    })
+                    .collect(Collectors.toList());
+
+            for (int i = 0; i < children.size(); i++) {
+                Path child = children.get(i);
+                boolean isLast = (i == children.size() - 1);
+                boolean isDir = Files.isDirectory(child);
+
+                sb.append(indent).append(isLast ? "└── " : "├── ");
+                sb.append(child.getFileName());
+                if (isDir && isSkillDir(child)) sb.append(" (Skill)");
+                sb.append("\n");
+
+                if (isDir) {
+                    generateTreeInternal(child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden);
+                }
+            }
+        } catch (AccessDeniedException e) {
+            sb.append(indent).append("└── [拒绝访问]\n");
+        }
+    }
+
+    // --- 2. 列出文件 (对齐 ls) ---
+    public String flatListLogic(Path target, String path ,  Boolean showHidden) throws IOException {
         boolean finalShowHidden = (showHidden != null && showHidden);
-        int maxDepth = (recursive != null && recursive) ? 5 : 1;
         final String logicPrefix = (path != null && path.startsWith("@")) ? path.split("[/\\\\]")[0] : null;
 
-        List<String> lines = new ArrayList<>();
+        try (Stream<Path> stream = Files.list(target)) {
+            List<String> lines = stream
+                    .filter(p -> !isIgnored(p)) // 1. 过滤忽略文件
+                    .filter(p -> finalShowHidden || !p.getFileName().toString().startsWith(".")) // 2. 隐藏文件处理
+                    .map(p -> {
+                        try {
+                            BasicFileAttributes attrs = Files.readAttributes(p, BasicFileAttributes.class);
+                            boolean isDir = attrs.isDirectory();
+                            String prefix = isDir ? "[DIR] " : "[FILE] ";
+                            String suffix = isDir ? "/" : ""; // 目录加斜杠
 
-        Files.walkFileTree(target, EnumSet.noneOf(FileVisitOption.class), maxDepth, new SimpleFileVisitor<Path>() {
-            @Override
-            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                // 物理过滤忽略目录
-                if (isIgnored(dir)) return FileVisitResult.SKIP_SUBTREE;
+                            // 计算大小
+                            String sizeSuffix = "";
+                            if (!isDir) {
+                                long size = attrs.size();
+                                if (size < 1024) sizeSuffix = " (" + size + "B)";
+                                else if (size < 1024 * 1024) sizeSuffix = String.format(" (%.1fKB)", size / 1024.0);
+                                else sizeSuffix = String.format(" (%.1fMB)", size / (1024.0 * 1024.0));
+                            }
 
-                if (dir.equals(target)) return FileVisitResult.CONTINUE;
+                            // 业务标记
+                            boolean isSkill = isDir && isSkillDir(p);
 
-                String relStr = target.relativize(dir).toString().replace("\\", "/");
-                if (!finalShowHidden && isHiddenPath(relStr)) return FileVisitResult.SKIP_SUBTREE;
+                            // 逻辑路径转换
+                            String relStr = target.relativize(p).toString().replace("\\", "/");
+                            String logicPath = (logicPrefix != null) ?
+                                    logicPrefix + "/" + relStr :
+                                    rootPath.relativize(p).toString().replace("\\", "/");
 
-                appendLine(dir, relStr, attrs);
-                return FileVisitResult.CONTINUE;
+                            return prefix + logicPath + suffix + sizeSuffix + (isSkill ? " (Skill)" : "");
+                        } catch (IOException e) {
+                            return "[ERROR] " + p.getFileName();
+                        }
+                    })
+                    .sorted()
+                    .collect(Collectors.toList());
+
+            if (lines.isEmpty()) {
+                return "(目录为空)";
+            } else {
+                lines.sort((a, b) -> {
+                    boolean aIsDir = a.startsWith("[DIR]");
+                    boolean bIsDir = b.startsWith("[DIR]");
+                    if (aIsDir != bIsDir) return aIsDir ? -1 : 1;
+                    return a.compareTo(b);
+                });
+
+                return String.join("\n", lines);
             }
-
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(file)) return FileVisitResult.CONTINUE;
-
-                String relStr = target.relativize(file).toString().replace("\\", "/");
-                if (!finalShowHidden && isHiddenPath(relStr)) return FileVisitResult.CONTINUE;
-
-                appendLine(file, relStr, attrs);
-                return FileVisitResult.CONTINUE;
-            }
-
-            private void appendLine(Path p, String relStr, BasicFileAttributes attrs) {
-                boolean isDir = attrs.isDirectory();
-                String prefix = isDir ? "[DIR] " : "[FILE] ";
-
-                // 增加文件大小感知，引导 AI 决策（例如大文件自动分页读取）
-                String sizeSuffix = "";
-                if (!isDir) {
-                    long size = attrs.size();
-                    if (size < 1024) sizeSuffix = " (" + size + "B)";
-                    else if (size < 1024 * 1024) sizeSuffix = String.format(" (%.1fKB)", size / 1024.0);
-                    else sizeSuffix = String.format(" (%.1fMB)", size / (1024.0 * 1024.0));
-                }
-
-                // 业务标记感知。识别目录是否为“技能包”
-                boolean isSkill = isDir && isSkillDir(p);
-
-                // 统一逻辑路径输出
-                String logicPath = (logicPrefix != null) ?
-                        logicPrefix + "/" + relStr :
-                        rootPath.relativize(p).toString().replace("\\", "/");
-
-                lines.add(prefix + logicPath + sizeSuffix + (isSkill ? " (Skill)" : ""));
-            }
-
-            private boolean isHiddenPath(String relPath) {
-                return Stream.of(relPath.split("/")).anyMatch(s -> s.startsWith(".") && s.length() > 1);
-            }
-        });
-
-        if (lines.isEmpty()) return "(目录为空)";
-
-        if (lines.size() > 1) {
-            Collections.sort(lines); // 排序使结果稳定
+        } catch (AccessDeniedException e) {
+            return "错误：拒绝访问目录。";
         }
-
-        return String.join("\n", lines);
     }
 
     // --- 3. 读取文件 (对齐 read_file) ---
@@ -402,12 +444,12 @@ public class CliSkill extends AbsProcessSkill {
         int actualEnd = start + readLines.size(); // 实际读到的最后一行行号
 
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("### 文件概览: %s (总行数: %s, 大小: %.2f KB)\n", path, totalLinesDesc, fileSize / 1024.0));
-        sb.append(String.format("### 当前显示: 第 %d 行 至 第 %d 行\n", start + 1, actualEnd));
+        sb.append(String.format("[File: %s (%d - %d of %s lines, Size: %.2f KB)]\n",
+                path, start + 1, actualEnd, totalLinesDesc, fileSize / 1024.0));
         sb.append("--------------------------------------------------\n");
 
         for (int i = 0; i < readLines.size(); i++) {
-            sb.append(String.format("%6d: %s", start + i + 1, readLines.get(i))).append("\n");
+            sb.append(String.format("%6d | %s", start + i + 1, readLines.get(i))).append("\n");
         }
 
         // 翻页逻辑判断
@@ -591,10 +633,13 @@ public class CliSkill extends AbsProcessSkill {
 
         int firstIndex = content.indexOf(finalOld);
         if (firstIndex == -1) {
-            if (content.contains(finalOld.trim())) {
-                return "错误：无法精确匹配。请确保 old_str 的缩进（空格数量）与 read_file 返回的内容完全一致。";
+            String normalizedOld = oldStr.replace("\r\n", "\n");
+            String normalizedContent = content.replace("\r\n", "\n");
+            if (normalizedContent.contains(normalizedOld)) {
+                return "错误：内容匹配但换行符不一致（文件使用 " + (content.contains("\r\n") ? "CRLF" : "LF") +
+                        "）。请确保 old_str 的换行符与文件完全一致。";
             }
-            return "错误：无法在文件中找到指定的文本块。请重新 read_file 确认内容。";
+            return "错误：在文件中找不到指定的文本块。请注意：old_str 必须与文件内容（包括空格、缩进、空行）完全一致。";
         }
 
         if (content.lastIndexOf(finalOld) != firstIndex) {
