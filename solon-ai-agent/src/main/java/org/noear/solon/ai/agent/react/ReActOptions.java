@@ -146,7 +146,7 @@ public class ReActOptions implements NonSerializable {
         }
     }
 
-    protected void setMaxStepsLimit(int val) {
+    public void setMaxStepsLimit(int val) {
         this.maxStepsLimit = val;
     }
 

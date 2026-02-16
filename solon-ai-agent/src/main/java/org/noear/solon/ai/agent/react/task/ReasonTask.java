@@ -65,6 +65,47 @@ public class ReasonTask implements NamedTaskComponent {
         return ReActAgent.ID_REASON;
     }
 
+    private boolean handleHitlExtension(ReActTrace trace, int currentStep, int maxSteps, int maxStepsLimit){
+        // 检查用户是否已经通过 HITL 决策过“继续”
+        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
+
+        if (decision == null) {
+            // 核心创新：伪造一个 Feedback 请求，挂起任务
+            String warningMsg = String.format("Agent 已执行 %d 步（上限 %d 步），任务尚未完成。是否允许继续执行？",
+                    currentStep, maxSteps);
+
+            // 1. 记录挂起任务
+            Map<String, Object> args = new HashMap<>();
+            args.put("reason", warningMsg);
+            args.put("type", "step_limit_warning");
+
+            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(FeedbackTool.TOOL_NAME, args, warningMsg));
+
+            // 2. 设为挂起状态
+            trace.pending(warningMsg);
+            trace.setFinalAnswer(warningMsg); // 让前端能展示这个询问提示
+
+            LOG.info("ReActAgent [{}] paused at threshold step: {}/{}", config.getName(), currentStep, maxSteps);
+            return true;
+        } else {
+            // 如果用户已经决策了（approve），则重置步数或扩大步数，让 Agent 继续跑
+            if (decision.isApproved()) {
+                // 方案：给 Agent 续命，增加步数上限（或者简单地将 stepCount 减去一部分）
+                int nextMaxSteps = Math.min(maxSteps + 10, maxStepsLimit);
+                trace.getOptions().setMaxSteps(nextMaxSteps);
+
+                LOG.info("ReActAgent [{}] approved to continue. New max steps: {}",
+                        config.getName(), trace.getOptions().getMaxSteps());
+
+                // 清理决策状态，防止死循环
+                trace.getContext().remove(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
+                trace.getContext().remove(HITL.LAST_INTERVENED);
+            }
+        }
+
+        return false;
+    }
+
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
@@ -94,65 +135,62 @@ public class ReasonTask implements NamedTaskComponent {
         int maxSteps = trace.getOptions().getMaxSteps();
         int maxStepsLimit = trace.getOptions().getMaxStepsLimit();
 
-        // 1.1 绝对硬限熔断：超过 100 步（maxStepsLimit），无论如何都必须死掉
+        // 只有在不可扩展时，currentStep > maxStepsLimit 才触发硬熔断
         if (currentStep > maxStepsLimit) {
-            LOG.error("ReActAgent [{}] hard limit hit: {}", config.getName(), maxStepsLimit);
-            trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer("检测到异常推理循环，已达到硬性步数上限 (" + maxStepsLimit + ")。");
-            return;
+            if (trace.getOptions().isMaxStepsExtensible()) {
+                // 如果开启了续航，硬限自动向后推演，保持“无限”可能，但保留日志警告
+                LOG.warn("ReActAgent [{}] hard limit hit ({}), but extensible is ON. Pushing limit to {}",
+                        config.getName(), maxStepsLimit, maxStepsLimit + 20);
+                trace.getOptions().setMaxStepsLimit(maxStepsLimit + 20);
+            } else {
+                LOG.error("ReActAgent [{}] hard limit hit: {}", config.getName(), maxStepsLimit);
+                trace.setRoute(Agent.ID_END);
+                trace.setFinalAnswer("已达到硬性步数上限 (" + maxStepsLimit + ")，任务终止。");
+                return;
+            }
         }
 
-        // 1.2 软限熔断：超过了当前设定的 maxSteps (比如 8 步)
-        if (currentStep > maxSteps) {
-            // 真正超过最大步数，彻底终止
-            LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), maxSteps);
-            trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer("Agent error: Maximum steps reached (" + maxSteps + ").");
-            return;
-        }
-
-        // 1.3 临界预警：刚好到 80% 或最后 1 步时，且开启了反馈模式
+        //软限拦截与自动/人工分流
         if(trace.getOptions().isMaxStepsExtensible()) {
             int thresholdStep = Math.max(maxSteps - 1, (int) (maxSteps * 0.8));
 
             if (currentStep >= thresholdStep) {
-                // 检查用户是否已经通过 HITL 决策过“继续”
-                HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
+                // 检查是否有 HITL 拦截器（人工模式 vs 自动模式）
+                boolean hasHitl = trace.getOptions().getInterceptors().stream()
+                        .anyMatch(i -> i.target instanceof HITL);
 
-                if (decision == null) {
-                    // 核心创新：伪造一个 Feedback 请求，挂起任务
-                    String warningMsg = String.format("Agent 已执行 %d 步（上限 %d 步），任务尚未完成。是否允许继续执行？",
-                            currentStep, maxSteps);
-
-                    // 1. 记录挂起任务
-                    Map<String, Object> args = new HashMap<>();
-                    args.put("reason", warningMsg);
-                    args.put("type", "step_limit_warning");
-
-                    trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(FeedbackTool.TOOL_NAME, args, warningMsg));
-
-                    // 2. 设为挂起状态
-                    trace.pending(warningMsg);
-                    trace.setFinalAnswer(warningMsg); // 让前端能展示这个询问提示
-
-                    LOG.info("ReActAgent [{}] paused at threshold step: {}/{}", config.getName(), currentStep, maxSteps);
-                    return;
+                if (hasHitl) {
+                    // 模式 A：由人类判断是否继续。若返回 true 表示任务已挂起等待。
+                    if (handleHitlExtension(trace, currentStep, maxSteps, trace.getOptions().getMaxStepsLimit())) {
+                        return;
+                    }
                 } else {
-                    // 如果用户已经决策了（approve），则重置步数或扩大步数，让 Agent 继续跑
-                    if (decision.isApproved()) {
-                        // 方案：给 Agent 续命，增加步数上限（或者简单地将 stepCount 减去一部分）
-                        int nextMaxSteps = Math.min(maxSteps + 10, maxStepsLimit);
-                        trace.getOptions().setMaxSteps(nextMaxSteps);
+                    // 模式 B：真正的无限续航（自动模式）
+                    // 只要没到物理硬限，就自动延展
+                    if (maxSteps < trace.getOptions().getMaxStepsLimit()) {
+                        trace.getOptions().setMaxSteps(maxSteps + 10);
 
-                        LOG.info("ReActAgent [{}] approved to continue. New max steps: {}",
-                                config.getName(), trace.getOptions().getMaxSteps());
+                        String interventionPrompt = String.format(
+                                "【运行干预】任务执行时长已超出预期（当前第 %d 步）。\n" +
+                                        "请停止当前的常规推理循环，先执行以下自审：\n" +
+                                        "1. **核心目标检查**：你距离解决最初提出的问题还有多远？\n" +
+                                        "2. **有效性评估**：如果过去几步的 Observation 没有带来新信息，说明当前策略已失效，请立即更换思路或尝试其他工具。\n" +
+                                        "3. **强制收敛**：严禁在原地打转。若确定无法达成，请总结已发现的线索并在 Final Answer 中申请用户协助。\n" +
+                                        "请在下一轮 Thought 中简要陈述你的新策略，然后继续。",
+                                currentStep
+                        );
 
-                        // 清理决策状态，防止死循环
-                        trace.getContext().remove(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
-                        trace.getContext().remove(HITL.LAST_INTERVENED);
+                        trace.getWorkingMemory().addMessage(ChatMessage.ofUser(interventionPrompt));
+                        LOG.info("ReActAgent [{}] critical intervention injected (Claude-style) at step {}", config.getName(), currentStep);
                     }
                 }
             }
+        } else  if (currentStep > maxSteps) {
+            // 非续航模式下的标准熔断
+            LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), maxSteps);
+            trace.setRoute(Agent.ID_END);
+            trace.setFinalAnswer("Agent error: Maximum steps reached (" + maxSteps + ").");
+            return;
         }
 
         // [逻辑 2: 提示词工程] 融合系统角色、执行计划、输出格式约束及协议指令
