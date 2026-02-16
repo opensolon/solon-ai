@@ -88,12 +88,12 @@ public class LuceneSkill extends AbsSkill {
 
     @Override
     public String name() {
-        return "code_search_manager";
+        return "full_text_search_manager";
     }
 
     @Override
     public String description() {
-        return "通过 Lucene 索引提供全文检索。在大项目中快速定位逻辑。支持后缀: " + searchableExtensions;
+        return "高性能全文检索工具。支持后缀: " + searchableExtensions;
     }
 
     @Override
@@ -103,46 +103,70 @@ public class LuceneSkill extends AbsSkill {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        return "#### 搜索策略 (Search Patterns)\n" +
-                "- `code_search`: 全文检索。结果包含相关性评分。相比 grep，它能理解模糊意图。\n" +
-                "- `refresh_index`: 当你新增了大量文件，导致搜索不到时，使用此工具。\n";
+        return "#### 全文搜索协议 (Search Protocol)\n" +
+                "- **工具定位**：这是你在复杂环境中定位信息的“雷达”。当你不知道目标内容在哪个文件，或需要查找跨文件关联时使用。\n" +
+                "- **搜索策略**：支持模糊关键词。搜索结果会按相关性排序，并提供上下文预览以供参考。\n" +
+                "- **索引依赖**：搜索结果依赖于当前索引。若近期有大量文件变更，请务必先执行 `refresh_search_index`。\n" +
+                "- **避坑指南**：如果工作区文件极少（例如只有 1-2 个），直接 `read_file` 可能比搜索更快捷。";
     }
 
-    @ToolMapping(name = "code_search", description = "在项目中搜索代码逻辑。")
-    public String codeSearch(@Param(value = "query", description = "搜索关键字") String query) {
+    @ToolMapping(name = "full_text_search", description = "在项目文件中进行全文检索（支持代码、配置、文档）。")
+    public String full_text_search(@Param(value = "query", description = "搜索关键字或短语") String query) {
         try (IndexReader reader = DirectoryReader.open(indexDirectory)) {
             IndexSearcher searcher = new IndexSearcher(reader);
-            // 对输入进行转义，防止特殊符号导致 Lucene 解析报错
             QueryParser parser = new QueryParser("content", analyzer);
+            // 对输入进行转义，防止特殊符号导致 Lucene 解析报错
             Query q = parser.parse(QueryParser.escape(query));
 
             TopDocs docs = searcher.search(q, 20);
             if (docs.totalHits.value == 0) return "未找到匹配内容。";
 
             StringBuilder sb = new StringBuilder();
-            sb.append("找到 ").append(docs.totalHits.value).append(" 个结果：\n\n");
+            sb.append("找到 ").append(docs.totalHits.value).append(" 个结果 (按相关性排序)：\n\n");
 
             for (ScoreDoc sd : docs.scoreDocs) {
                 Document d = searcher.doc(sd.doc);
-                sb.append("📍 ").append(d.get("path")).append("\n");
                 String content = d.get("content");
-                // 简单的预览逻辑
+                String path = d.get("path");
+
+                // 1. 获取相关性评分 (归一化处理以便于阅读)
+                float score = sd.score;
+
+                // 2. 搜索关键词位置并计算行号
                 int idx = content.toLowerCase().indexOf(query.toLowerCase());
+                int lineNum = 1;
+                if (idx != -1) {
+                    // 计算行号：统计关键词之前的换行符数量
+                    for (int i = 0; i < idx; i++) {
+                        if (content.charAt(i) == '\n') lineNum++;
+                    }
+                }
+
+                // 3. 格式化输出：[得分] 路径 : 行号
+                sb.append(String.format("📍 %s (Score: %.2f, Line: ~%d)\n", path, score, lineNum));
+
+                // 4. 预览逻辑
                 if (idx != -1) {
                     int start = Math.max(0, idx - 60);
                     int end = Math.min(content.length(), idx + 120);
-                    sb.append("预览: ...").append(content.substring(start, end).replace("\n", " ")).append("...\n");
+                    String preview = content.substring(start, end).replace("\n", " ");
+                    sb.append("   预览: ...").append(preview).append("...\n");
+                } else {
+                    // 保底预览：显示文件开头
+                    String head = content.substring(0, Math.min(content.length(), 120)).replace("\n", " ");
+                    sb.append("   预览: ").append(head).append("...\n");
                 }
                 sb.append("\n");
             }
             return sb.toString();
         } catch (Exception e) {
+            LOG.error("Full text search error", e);
             return "搜索失败: " + e.getMessage();
         }
     }
 
-    @ToolMapping(name = "refresh_index", description = "刷新全文索引。")
-    public String refreshIndex() {
+    @ToolMapping(name = "refresh_search_index", description = "刷新全文索引。")
+    public String refreshSearchIndex() {
         long start = System.currentTimeMillis();
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
         config.setOpenMode(IndexWriterConfig.OpenMode.CREATE);

@@ -67,9 +67,11 @@ public class DiffSkill extends AbsSkill {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        return "#### 编辑协议 (Editing Protocol)\n" +
-                "- `apply_diff`: 传入相对路径和标准的 Unified Diff。补丁需包含上下文行以确保定位精度。\n" +
-                "- 格式规范: 必须符合 `@@ -l,s +l,s @@` 块定义。即便行号略微偏移，算法也会尝试基于上下文进行模糊匹配。\n";
+        return "#### 精准编辑协议 (Diff Edit Protocol)\n" +
+                "- **适用场景**：修改已有文件内容。当文件较大或需要多点修改时，严禁使用全量覆盖。调用 `apply_diff` 是唯一专业选择。\n" +
+                "- **原子流程**：必须遵循“读-比-改”闭环。即：先用 `read_file` 获取带有行号的源码 -> 在内心生成 Diff -> 调用 `apply_diff`。\n" +
+                "- **冲突规避**：如果收到“上下文不匹配”错误，说明你的本地副本已过期。必须立即重新执行 `read_file` 同步状态，再次生成补丁。\n" +
+                "- **补丁质量**：Diff 必须包含 @@ 块和足够的上下文行（Context Lines）。即使行号略有偏差，算法也能通过上下文精准定位。";
     }
 
     /**
