@@ -32,6 +32,7 @@ import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.core.exception.StatusException;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
@@ -318,7 +319,7 @@ public class ActionTask implements NamedTaskComponent {
 
 
                 return result.getContent();
-            } catch (IllegalArgumentException e) {
+            } catch (IllegalArgumentException | StatusException e) {
                 // 引导模型自愈：返回 Schema 错误提示
                 return "Invalid arguments for [" + name + "]. Expected Schema: " + tool.inputSchema() + ". Error: " + e.getMessage();
             } catch (Throwable e) {
