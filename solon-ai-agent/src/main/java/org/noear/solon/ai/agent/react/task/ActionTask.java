@@ -165,7 +165,7 @@ public class ActionTask implements NamedTaskComponent {
 
         // 协议闭环：回填 ToolMessage
         ToolMessage toolMessage = ChatMessage.ofTool(result, call.getName(), call.getId());
-        if(lastAssistantAdded.compareAndSet(false, true)) {
+        if (lastAssistantAdded.compareAndSet(false, true)) {
             trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
         }
 
@@ -173,7 +173,7 @@ public class ActionTask implements NamedTaskComponent {
 
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
-                    new ActionChunk(node, trace, call.getName(), toolMessage));
+                    new ActionChunk(node, trace, call.getName(), args, toolMessage));
         }
     }
 
@@ -228,7 +228,7 @@ public class ActionTask implements NamedTaskComponent {
 
                     } catch (Exception e) {
                         // 解析异常回传 (优化点 2)
-                        handleSingleObservation(node, trace, null, "Observation: Error parsing Action JSON: " + e.getMessage(), lastAssistantAdded);
+                        handleSingleObservation(node, trace, null, null, "Observation: Error parsing Action JSON: " + e.getMessage(), lastAssistantAdded);
                         foundAny = true;
                         break;
                     }
@@ -245,7 +245,7 @@ public class ActionTask implements NamedTaskComponent {
 
         // 容错处理：如果声明了 Action 但没解析成功，或模型说话不规整 (优化点 3)
         if (!foundAny && actionLabelIndex >= 0) {
-            handleSingleObservation(node, trace, null, "Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}", lastAssistantAdded);
+            handleSingleObservation(node, trace, null, null, "Observation: No valid Action format detected. Use JSON: {\"name\": \"...\", \"arguments\": {}}", lastAssistantAdded);
         }
     }
 
@@ -255,7 +255,7 @@ public class ActionTask implements NamedTaskComponent {
     private void handleSingleAction(Node node, ReActTrace trace, String toolName, Map<String, Object> args, AtomicBoolean lastAssistantAdded) throws Throwable {
         String result = doAction(trace, toolName, args);
         if (result != null) {
-            handleSingleObservation(node, trace, toolName, "Observation: " + result, lastAssistantAdded);
+            handleSingleObservation(node, trace, toolName, args, "Observation: " + result, lastAssistantAdded);
         }
     }
 
@@ -263,12 +263,12 @@ public class ActionTask implements NamedTaskComponent {
      * 优化点 4：统一 Observation 落地逻辑。
      * 改变了原有 StringBuilder 拼接逻辑，直接进行 WorkingMemory 入库并触发流
      */
-    private void handleSingleObservation(Node node, ReActTrace trace, String toolName, String observationContent, AtomicBoolean lastAssistantAdded) {
+    private void handleSingleObservation(Node node, ReActTrace trace, String toolName, Map<String, Object> args, String observationContent, AtomicBoolean lastAssistantAdded) {
         ChatMessage chatMessage = ChatMessage.ofUser(observationContent);
 
         // 回填 Reason 和本次 Observation
         // 这样做能保证上下文的 Thought-Action-Observation 结构始终稳固
-        if(lastAssistantAdded.compareAndSet(false, true)) {
+        if (lastAssistantAdded.compareAndSet(false, true)) {
             trace.getWorkingMemory().addMessage(trace.getLastReasonMessage());
         }
         trace.getWorkingMemory().addMessage(chatMessage);
@@ -277,7 +277,7 @@ public class ActionTask implements NamedTaskComponent {
         // 在旧逻辑中，多工具并发时用户只能看到最后的结果，现在可以逐个看到每个工具的输出
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
-                    new ActionChunk(node, trace, toolName, chatMessage));
+                    new ActionChunk(node, trace, toolName, args, chatMessage));
         }
     }
 

@@ -22,6 +22,9 @@ import org.noear.solon.flow.Node;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
+import java.util.Collections;
+import java.util.Map;
+
 /**
  * ReAct 动作块（Acting）：标识智能体正在调用外部工具或执行特定指令
  *
@@ -33,13 +36,19 @@ public class ActionChunk extends AbsAgentChunk {
     private final transient Node node;
     private final transient ReActTrace trace;
     private final transient String toolName;
+    private final transient Map<String, Object> args;
 
-    public ActionChunk(Node node, ReActTrace trace, String toolName, ChatMessage message) {
+    public ActionChunk(Node node, ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
         super(trace.getAgentName(), trace.getSession(), message);
 
         this.node = node;
         this.trace = trace;
         this.toolName = toolName;
+        if (args == null) {
+            this.args = Collections.EMPTY_MAP;
+        } else {
+            this.args = Collections.unmodifiableMap(args);
+        }
     }
 
     public Node getNode() {
@@ -48,6 +57,10 @@ public class ActionChunk extends AbsAgentChunk {
 
     public @Nullable String getToolName() {
         return toolName;
+    }
+
+    public @Nullable Map<String, Object> getArgs() {
+        return args;
     }
 
     public ReActTrace getTrace() {
