@@ -199,18 +199,17 @@ public class CliSkill extends AbsProcessSkill {
         skillPools.forEach((k, v) -> sb.append("- **池(").append(k).append(")技能**: ").append(scanSkillNames(v)).append("\n"));
         sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。请通过 `ls` 和 `read_file` 读取规范以驱动任务。\n\n");
 
-        // 3. 官方策略对齐 (Action Guidelines)
-        sb.append("#### 3. 执行策略 (Action Patterns)\n");
-        sb.append("- **极简主义 (Minimalism)**: 仅读取与任务直接相关的代码行。严禁无意义地全量读取大文件，以节省上下文空间并减少干扰。\n");
-        sb.append("- **环境纯净 (Context Purity)**: 每次编辑操作后，必须通过 `bash` 运行测试或构建指令来验证结果。若修改失败，**严禁凭空猜测**，应重新调用 `read_file` 确认文件的最新状态。\n");
-        sb.append("- **路径一致性 (Path Integrity)**: 必须使用相对于根目录的相对路径，严禁使用 `./` 前缀。目录路径建议以 `/` 结尾以示区分。\n");
-        sb.append("- **探测优先**：在操作前先用 `ls` 或 `glob_search` 确认文件位置。\n");
-        sb.append("- **显示隐藏**：`ls` 默认隐藏点号文件。若需查看 `.env` 或 `.gitignore`，请设置 `show_hidden: true`。\n");
-        sb.append("- **读后改**：进行 `str_replace_editor` 前必须先调用 `read_file` 获取带有行号的精确内容。对于大文件，必须先分页读取。\n");
-        sb.append("- **原子操作**：`str_replace_editor` 要求 `old_str` 具有唯一性。若不唯一，请提供更多上下文行。\n");
-        sb.append("- **验证验证验证**：代码修改后，请使用 `bash` 运行相关的测试脚本或构建指令。\n");
-        sb.append("- **环境变量**: 挂载池已注入为大写环境变量（如 @pool1 映射为 ").append(envExample).append("）。在 `bash` 工具中建议优先使用该变量。\n");
-        sb.append("- **池限制**: 严禁对以 @ 开头的路径执行任何写入或编辑工具。\n\n");
+        sb.append("#### 3. 核心工作流 (Standard Operating Procedures)\n");
+        sb.append("- **侦查阶段**: 任务开始必须先调用 `ls`。若寻找特定逻辑，优先使用 `grep_search`。\n");
+        sb.append("- **读取阶段**: 修改前必须调用 `read_file`。若文件超过 500 行，必须指定行号范围分页读取。\n");
+        sb.append("- **修改阶段**: `str_replace_editor` 的 `old_str` 必须包含足够的上下文以保证在文件中的**全局唯一性**。\n");
+        sb.append("- **验证阶段**: 任何文件写入后，必须立即通过 `bash` 运行构建或测试命令。禁止在未验证的情况下结束任务。\n");
+
+        sb.append("#### 4. 路径与安全性 (Path & Security)\n");
+        sb.append("- **路径格式**: 严禁使用 `./` 前缀或任何绝对路径。目录路径建议以 `/` 结尾。\n");
+        sb.append("- **环境变量**: 挂载池已注入为环境变量（如 @pool1 映射为 ").append(envExample).append("），在 `bash` 中优先使用。\n");
+        sb.append("- **原子操作**: 严禁在一次 `str_replace_editor` 中修改多处不连续代码，应拆分为多次精准调用。\n");
+        sb.append("- **只读保护**: 严禁对以 @ 开头的路径执行任何写入（write/edit）工具。\n");
 
         injectRootInstructions(sb, rootPath, "### 盒子业务规范 (Box Norms)\n");
 
