@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.regex.Matcher;
 
 /**
@@ -140,7 +141,11 @@ public class MethodFunctionResource implements FunctionResource {
 
     @Override
     public Object handle(String reqUri) throws Throwable {
-        return handleAsync(reqUri).get();
+        try {
+            return handleAsync(reqUri).get();
+        } catch (ExecutionException e) {
+            throw e.getCause();
+        }
     }
 
     @Override

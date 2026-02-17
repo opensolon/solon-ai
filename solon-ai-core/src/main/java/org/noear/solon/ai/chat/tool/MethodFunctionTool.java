@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Type;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 /**
  * 方法构建的函数工具
@@ -185,7 +186,11 @@ public class MethodFunctionTool implements FunctionTool {
      */
     @Override
     public Object handle(Map<String, Object> args) throws Throwable {
-        return handleAsync(args).get();
+        try {
+            return handleAsync(args).get();
+        } catch (ExecutionException e) {
+            throw e.getCause();
+        }
     }
 
     @Override

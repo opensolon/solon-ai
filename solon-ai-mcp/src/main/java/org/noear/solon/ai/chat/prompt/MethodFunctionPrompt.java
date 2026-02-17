@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 /**
  * 方法构建的函数提示语
@@ -110,7 +111,11 @@ public class MethodFunctionPrompt implements FunctionPrompt {
 
     @Override
     public Object handle(Map<String, Object> args) throws Throwable {
-        return handleAsync(args).get();
+        try {
+            return handleAsync(args).get();
+        } catch (ExecutionException e) {
+            throw e.getCause();
+        }
     }
 
     @Override
