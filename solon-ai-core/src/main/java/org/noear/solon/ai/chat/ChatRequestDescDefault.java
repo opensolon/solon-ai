@@ -134,8 +134,11 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 instructionBuilder.append("## 执行指令\n").append(options.instruction()).append("\n");
             }
 
-            SkillUtil.activeSkills(options, originalPrompt, instructionBuilder);
-
+            StringBuilder skillsInstruction = SkillUtil.activeSkills(options, originalPrompt, new StringBuilder());
+            if (skillsInstruction.length() > 0) {
+                instructionBuilder.append("## 补充业务准则\n");
+                instructionBuilder.append(skillsInstruction);
+            }
 
             for (RankEntity<ChatInterceptor> item : options.interceptors()) {
                 item.target.onPrepare(session, options, originalPrompt, instructionBuilder);

@@ -112,10 +112,10 @@ public class CliSkill extends AbsProcessSkill {
     public String getInstruction(Prompt prompt) {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("### CLI Agent Skills 交互规范 (Claude Code Compatible)\n\n");
+        sb.append("#### CLI Agent Skills 交互规范 (Claude Code Compatible)\n\n");
 
         // 1. 池盒环境声明
-        sb.append("#### 1. 环境空间 (Pool-Box Context)\n");
+        sb.append("##### 1. 环境空间 (Pool-Box Context)\n");
         sb.append("- **当前盒子 (BoxID)**: ").append(boxId).append("\n");
         sb.append("- **操作系统 (OS)**: ").append(System.getProperty("os.name")).append("\n");
         sb.append("- **挂载池 (Skill Pools)**: \n");
@@ -127,20 +127,20 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("\n");
 
         //  discovery
-        sb.append("#### 2. 技能发现索引 (Discovery)\n");
+        sb.append("##### 2. 技能发现索引 (Discovery)\n");
         sb.append("- **盒子本地技能**: ").append(scanSkillNames(rootPath)).append("\n");
         skillPools.forEach((k, v) -> sb.append("- **池(").append(k).append(")技能**: ").append(scanSkillNames(v)).append("\n"));
         sb.append("> 提示：标记为 (Claude Code Skill) 的目录包含 `SKILL.md`。请通过 `ls` 和 `cat` 读取规范以驱动任务。\n\n");
 
         // Guidelines
-        sb.append("#### 3. 操作准则 (Guidelines)\n");
+        sb.append("##### 3. 操作准则 (Guidelines)\n");
         sb.append("- **搜索优先**：检索逻辑优先使用 `grep`。避免盲目 `cat` 大文件。\n");
         sb.append("- **环境自查**：执行系统命令（如 ffmpeg, python, node）前必须先用 `exists_cmd` 确认环境可用。\n");
         sb.append("- **递归发现**：技能目录可能嵌套。进入新目录后应再次检查是否存在新的技能规范。\n");
         sb.append("- **自由组合**：你可以自由调用系统级 CLI 工具来处理跨领域的任务（如代码构建、视频渲染、调查研究）。\n");
         sb.append("- **只读限制**: 以 @ 开头的池路径均为只读。严禁尝试 `write` 或 `edit` 池内文件。\n\n");
 
-        injectRootInstructions(sb, rootPath, "### 盒子业务规范 (Box Norms)\n");
+        injectRootInstructions(sb, rootPath, "#### 盒子业务规范 (Box Norms)\n");
 
         return sb.toString();
     }

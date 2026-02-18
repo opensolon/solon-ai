@@ -57,7 +57,7 @@ public class PlanSkill extends AbsSkill {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        String baseGuide = "##### 任务规划指南 (Task Planning Guide)\n" +
+        String baseGuide = "#### 任务规划指南 (Task Planning Guide)\n" +
                 "1. **启动机制**: 复杂任务通过 `create_plan` 拆解步骤。若判定为简单任务，忽略计划并直接回复。\n" +
                 "2. **进度同步**: 所有索引从 1 开始。每完成一步，必须调用 `update_plan_progress` 切换至下一环节。\n" +
                 "3. **动态修订**: 发现计划有误或环境变化时，通过 `revise_plan` 实时调整后续步骤。\n" +

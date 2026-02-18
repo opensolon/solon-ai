@@ -179,14 +179,14 @@ public class Text2SqlSkill extends AbsSkill {
         String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         StringBuilder sb = new StringBuilder();
 
-        sb.append("##### 1. 环境上下文\n")
+        sb.append("#### 1. 环境上下文\n")
                 .append("- **数据库方言**: ").append(dialect.getName()).append("\n")
                 .append("- **系统时间**: ").append(now).append("\n\n");
 
         if (schemaMode == SchemaMode.FULL) {
-            sb.append("##### 2. 数据库结构 (Schema)\n").append(cachedSchemaInfo);
+            sb.append("#### 2. 数据库结构 (Schema)\n").append(cachedSchemaInfo);
         } else {
-            sb.append("##### 2. 数据库目录与关系地图\n");
+            sb.append("#### 2. 数据库目录与关系地图\n");
             for (String tableName : tableNames) {
                 String remarks = tableRemarksMap.getOrDefault(tableName, "");
                 sb.append("- **").append(tableName).append("**").append(Utils.isEmpty(remarks) ? "" : ": " + remarks);
@@ -197,7 +197,7 @@ public class Text2SqlSkill extends AbsSkill {
             sb.append("\n**注意**: 编写 SQL 前必须调用 `get_table_schema` 探测具体字段。\n");
         }
 
-        sb.append("\n##### 3. 执行准则\n")
+        sb.append("\n#### 3. 执行准则\n")
                 .append("1. **权限**: 只读模式，严禁写操作。\n")
                 .append("2. **方言特供指引**: ").append(dialect.getCustomInstruction()).append("\n")
                 .append("3. **结果截断**: 默认必须分页，仅展示前 ").append(maxRows).append(" 条。\n")

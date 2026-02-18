@@ -130,7 +130,7 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
             // Skill 级指令（增加一个子标题，强化感知）
             if (trace.getOptions().getSkillInstruction() != null) {
-                sb.append("\n### 补充业务准则\n");
+                sb.append("\n## 补充业务准则\n");
                 sb.append(trace.getOptions().getSkillInstruction()).append("\n");
             }
             sb.append("\n");

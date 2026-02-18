@@ -156,13 +156,13 @@ public class RestApiSkill extends AbsSkill {
     @Override
     public String getInstruction(Prompt prompt) {
         StringBuilder sb = new StringBuilder();
-        sb.append("##### 1. API 环境上下文\n")
+        sb.append("#### 1. API 环境上下文\n")
                 .append("- **Base URL**: ").append(apiBaseUrl).append("\n\n");
 
         if (schemaMode == SchemaMode.FULL) {
-            sb.append("##### 2. 接口详细定义 (API Specs)\n").append(formatApiDocs(dynamicTools));
+            sb.append("#### 2. 接口详细定义 (API Specs)\n").append(formatApiDocs(dynamicTools));
         } else {
-            sb.append("##### 2. 接口清单 (API List)\n")
+            sb.append("#### 2. 接口清单 (API List)\n")
                     .append("接口较多。**调用前必须通过 `get_api_detail` 确认具体的 Schema 定义**：\n\n");
             for (ApiTool t : dynamicTools) {
                 sb.append("- **").append(t.getName()).append("**: ").append(t.getDescription())
