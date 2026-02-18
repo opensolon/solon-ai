@@ -179,12 +179,6 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("- **操作系统 (OS)**: ").append(System.getProperty("os.name")).append("\n");
         sb.append("- **工作目录状态**: 已锁定在当前盒子路径。禁止使用任何绝对路径。\n");
 
-        String absPath = rootPath.toAbsolutePath().toString();
-        sb.append("- **工作目录 (WorkDir)**: ").append(absPath).append(" (仅供参考)\n");
-        sb.append("- **路径规范**: 必须使用相对于根目录的相对路径。即使你知道绝对路径，也禁止在工具参数中使用它。\n");
-        sb.append("  - 正确：`read_file(path=\"src/main.js\")` \n");
-        sb.append("  - 错误：`read_file(path=\"").append(absPath).append("/src/main.js\")` \n");
-
         sb.append("- **挂载池 (Skill Pools)**: \n");
         if (skillPools.isEmpty()) {
             sb.append("  - (暂无挂载池)\n");
@@ -237,7 +231,11 @@ public class CliSkill extends AbsProcessSkill {
 
     private void injectRootInstructions(StringBuilder sb, Path root, String title) {
         Path md = root.resolve("SKILL.md");
-        if (!Files.exists(md)) md = root.resolve("skill.md");
+
+        if (!Files.exists(md)) {
+            md = root.resolve("skill.md");
+        }
+
         if (Files.exists(md)) {
             try {
                 String content = new String(Files.readAllBytes(md), fileCharset);

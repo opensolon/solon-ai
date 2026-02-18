@@ -149,7 +149,14 @@ public class ChatResponseDefault implements ChatResponse {
     public AssistantMessage getAggregationMessage() {
         if (hasChoices()) {
             if (stream) {
-                return new AssistantMessage(contentBuilder.toString(), lastChoice().getMessage().isThinking());
+                AssistantMessage last = lastChoice().getMessage();
+                return new AssistantMessage(contentBuilder.toString(),
+                        last.isThinking(),
+                        last.getContentRaw(),
+                        last.getToolCallsRaw(),
+                        last.getToolCalls(),
+                        last.getSearchResultsRaw()
+                );
             } else {
                 return lastChoice().getMessage();
             }

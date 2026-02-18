@@ -263,9 +263,11 @@ public class ReasonTask implements NamedTaskComponent {
             return;
         }
 
-        AssistantMessage responseMessage = response.getMessage();
-        if(responseMessage == null){
+        final AssistantMessage responseMessage;
+        if (response.isStream() ) {
             responseMessage = response.getAggregationMessage();
+        } else {
+            responseMessage = response.getMessage();
         }
 
         if (response.getUsage() != null) {
