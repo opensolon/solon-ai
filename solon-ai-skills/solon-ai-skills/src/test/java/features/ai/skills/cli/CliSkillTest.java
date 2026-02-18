@@ -3,7 +3,9 @@ package features.ai.skills.cli;
 import demo.ai.skills.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.skills.cli.CliSkill;
 
 import java.io.InputStream;
@@ -36,6 +38,24 @@ public class CliSkillTest {
                 .defaultSkillAdd(new CliSkill(workDir))
                 .maxSteps(30) // 生产环境建议 30 步，以支持复杂的链式思考
                 .build();
+    }
+
+    @Test
+    public void case1() {
+        CliSkill cliSkill = new CliSkill("app");
+
+        FunctionTool tools = cliSkill.getTools(null).stream().filter(f -> f.name().equals("write_to_file"))
+                .findFirst().get();
+
+        try {
+            tools.call(Utils.asMap("content", "xxx"));
+        } catch (Throwable e) {
+            System.out.println(e.getMessage());
+
+            System.out.println("---------");
+
+            e.printStackTrace();
+        }
     }
 
     /**
