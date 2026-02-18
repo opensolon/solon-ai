@@ -26,7 +26,7 @@
 ### 3.9.3
 
 * 重构 solon-ai-agent Plan-ReAct 模式（相对之前，新设计智能、态动、按需）
-* 优化 solon-ai-skill-cliskill CliSkill
+* 优化 solon-ai-skill-cli CliSkill
 
 ### 3.9.2
 
