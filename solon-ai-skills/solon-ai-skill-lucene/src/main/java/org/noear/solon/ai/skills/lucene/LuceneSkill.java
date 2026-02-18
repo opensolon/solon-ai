@@ -46,9 +46,9 @@ import java.util.stream.Collectors;
 public class LuceneSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(LuceneSkill.class);
 
-    private final Path rootPath;
-    private final Directory indexDirectory;
-    private final Analyzer analyzer;
+    protected final Path rootPath;
+    protected final Directory indexDirectory;
+    protected final Analyzer analyzer;
 
     // 可配置的忽略列表
     private Set<String> ignoreNames = new HashSet<>(Arrays.asList(
