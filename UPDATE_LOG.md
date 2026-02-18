@@ -21,6 +21,7 @@
 * 优化 solon-ai-agent SummarizationInterceptor 增加策略机制并内置4个策略
 * 修复 solon-ai-core ChatModel.stream 过程异常时会破坏流响应的问题
 * 修复 solon-ai-agent ReasonTask.callWithRetry 网络异常时会中断工作流的问题
+* 修复 solon-ai-agent ReActAgent 流式请求时，可能无法记忆结果内容的问题
 
 ### 3.9.3
 
