@@ -52,7 +52,7 @@ public class LuceneSkill extends AbsSkill {
 
     // 可配置的忽略列表
     private Set<String> ignoreNames = new HashSet<>(Arrays.asList(
-            ".git", ".svn", "node_modules", "target", "bin", "build", ".idea", ".vscode", ".DS_Store"
+            ".git", ".svn", ".log", ".tmp", "node_modules", "target", "bin", "build", ".idea", ".vscode", ".DS_Store"
     ));
 
     // 可配置的可搜索后缀名
@@ -88,12 +88,12 @@ public class LuceneSkill extends AbsSkill {
 
     @Override
     public String name() {
-        return "full_text_search_manager";
+        return "local_full_text_search_manager";
     }
 
     @Override
     public String description() {
-        return "高性能全文检索工具。支持后缀: " + searchableExtensions;
+        return "高性能本地全文检索工具。支持后缀: " + searchableExtensions;
     }
 
     @Override
@@ -103,15 +103,23 @@ public class LuceneSkill extends AbsSkill {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        return "#### 全文搜索协议 (Search Protocol)\n" +
-                "- **工具定位**：这是你在复杂环境中定位信息的“雷达”。当你不知道目标内容在哪个文件，或需要查找跨文件关联时使用。\n" +
-                "- **搜索策略**：支持模糊关键词。搜索结果会按相关性排序，并提供上下文预览以供参考。\n" +
-                "- **索引依赖**：搜索结果依赖于当前索引。若近期有大量文件变更，请务必先执行 `refresh_search_index`。\n" +
-                "- **避坑指南**：如果工作区文件极少（例如只有 1-2 个），直接 `read_file` 可能比搜索更快捷。";
+        return "#### 本地全文搜索协议 (Local Search Protocol)\n" +
+                "- **工具定位**：这是你感知当前工作区内容的“本地雷达”。当你无法通过目录结构定位具体逻辑，或需要查找跨文件的符号引用时使用。\n" +
+                "- **数据边界**：搜索仅限于当前项目根目录及挂载的只读池。它是私有的、实时的、不依赖外部网络的。\n" +
+                "- **搜索策略**：支持模糊关键词。结果按 Lucene 相关性排序。若由于文件大幅改动导致搜索结果不自然，应立即执行 `refresh_search_index`。\n" +
+                "- **性能习惯**：对于已知路径的小文件，优先使用 `read_file`；对于“大海捞针”式的查询，必须使用此协议。";
     }
 
-    @ToolMapping(name = "full_text_search", description = "在项目文件中进行全文检索（支持代码、配置、文档）。")
+    @ToolMapping(name = "full_text_search", description = "在项目文件中进行本地全文检索（支持代码、配置、文档）。")
     public String full_text_search(@Param(value = "query", description = "搜索关键字或短语") String query) {
+        try {
+            if (!DirectoryReader.indexExists(indexDirectory)) {
+                return "本地索引尚未建立。请先执行 refresh_search_index 工具以初始化搜索环境。";
+            }
+        } catch (IOException e) {
+            return "检查索引状态失败: " + e.getMessage();
+        }
+
         try (IndexReader reader = DirectoryReader.open(indexDirectory)) {
             IndexSearcher searcher = new IndexSearcher(reader);
             QueryParser parser = new QueryParser("content", analyzer);
@@ -143,17 +151,17 @@ public class LuceneSkill extends AbsSkill {
                 }
 
                 // 3. 格式化输出：[得分] 路径 : 行号
-                sb.append(String.format("📍 %s (Score: %.2f, Line: ~%d)\n", path, score, lineNum));
+                sb.append(String.format("Path: %s (Score: %.2f, Line: ~%d)\n", path, score, lineNum));
 
                 // 4. 预览逻辑
                 if (idx != -1) {
                     int start = Math.max(0, idx - 60);
                     int end = Math.min(content.length(), idx + 120);
-                    String preview = content.substring(start, end).replace("\n", " ");
+                    String preview = content.substring(start, end).replace("\n", " ").trim();
                     sb.append("   预览: ...").append(preview).append("...\n");
                 } else {
                     // 保底预览：显示文件开头
-                    String head = content.substring(0, Math.min(content.length(), 120)).replace("\n", " ");
+                    String head = content.substring(0, Math.min(content.length(), 120)).replace("\n", " ").trim();
                     sb.append("   预览: ").append(head).append("...\n");
                 }
                 sb.append("\n");
@@ -165,17 +173,23 @@ public class LuceneSkill extends AbsSkill {
         }
     }
 
-    @ToolMapping(name = "refresh_search_index", description = "刷新全文索引。")
+    @ToolMapping(name = "refresh_search_index", description = "刷新本地全文索引。")
     public String refreshSearchIndex() {
         long start = System.currentTimeMillis();
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
-        config.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
+        config.setOpenMode(IndexWriterConfig.OpenMode.CREATE); // 重新构建索引
+
+        // 使用数组或 AtomicInteger 来绕过匿名内部类的变量捕获限制
+        int[] stats = {0};
 
         try (IndexWriter writer = new IndexWriter(indexDirectory, config)) {
             Files.walkFileTree(rootPath, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    if (ignoreNames.contains(dir.getFileName().toString())) return FileVisitResult.SKIP_SUBTREE;
+                    // 排除忽略目录
+                    if (ignoreNames.contains(dir.getFileName().toString())) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -186,18 +200,35 @@ public class LuceneSkill extends AbsSkill {
                     String ext = (lastDot == -1) ? "" : name.substring(lastDot + 1);
 
                     if (searchableExtensions.contains(ext)) {
-                        Document doc = new Document();
-                        doc.add(new StringField("path", rootPath.relativize(file).toString().replace("\\", "/"), Field.Store.YES));
-                        doc.add(new TextField("content", new String(Files.readAllBytes(file), StandardCharsets.UTF_8), Field.Store.YES));
-                        writer.addDocument(doc);
+                        try {
+                            byte[] bytes = Files.readAllBytes(file);
+                            String content = new String(bytes, StandardCharsets.UTF_8);
+
+                            Document doc = new Document();
+                            // StringField 不分词，用于路径存储
+                            doc.add(new StringField("path", rootPath.relativize(file).toString().replace("\\", "/"), Field.Store.YES));
+                            // TextField 会分词，用于全文搜索
+                            doc.add(new TextField("content", content, Field.Store.YES));
+
+                            writer.addDocument(doc);
+                            stats[0]++; // 计数增加
+                        } catch (Exception e) {
+                            LOG.warn("Failed to index file: " + file, e);
+                        }
                     }
                     return FileVisitResult.CONTINUE;
                 }
             });
+
             writer.commit();
-            return "索引刷新完成 (" + (System.currentTimeMillis() - start) + "ms)";
+            long duration = System.currentTimeMillis() - start;
+
+            // 返回更具象的信息，喂给 Agent 的“确定性”
+            return String.format("本地索引刷新成功！已扫描并收录 %d 个文件，耗时 %dms。", stats[0], duration);
+
         } catch (IOException e) {
-            return "刷新失败: " + e.getMessage();
+            LOG.error("Refresh search index failed", e);
+            return "刷新索引失败: " + e.getMessage();
         }
     }
 }
