@@ -41,6 +41,7 @@
         <module>../../solon-ai-skills/solon-ai-skill-file</module>
         <module>../../solon-ai-skills/solon-ai-skill-generation</module>
         <module>../../solon-ai-skills/solon-ai-skill-mail</module>
+        <module>../../solon-ai-skills/solon-ai-skill-memory</module>
         <module>../../solon-ai-skills/solon-ai-skill-pdf</module>
         <module>../../solon-ai-skills/solon-ai-skill-restapi</module>
         <module>../../solon-ai-skills/solon-ai-skill-social</module>
