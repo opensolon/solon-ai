@@ -180,19 +180,19 @@ public class MemSkill extends AbsSkill {
      * 对齐 MemSkill 的“压缩”思想，将事实进化为经验
      */
     @ToolMapping(name = "mem_consolidate",
-            description = "认知整合：将多个碎片的 Key 合并为一个高层级的总结记录。这能显著提升心智模型的质量。")
-    public String consolidate(@Param("old_keys") List<String> oldKeys,
+            description = "认知升维：将多个低层事实碎片整合为高层偏好模型，并清理冗余碎片。")
+    public String consolidate(@Param("keys_to_merge") List<String> oldKeys,
                               @Param("new_key") String newKey,
-                              @Param("summary") String summary) {
-        // 核心总结赋予最高重要度 10，确保持久存储
-        extract(newKey, "[认知总结] " + summary, 10);
+                              @Param("evolved_insight") String insight) {
+        // 原论文精神：通过整合减少上下文占用，提高信噪比
+        String fact = "[Evolved Insight] " + insight;
+        extract(newKey, fact, 10); // 核心洞察赋予最高重要度
 
         for (String k : oldKeys) {
-            redis.getBucket().remove(getFinalKey(k));
-            if (searchProvider != null) searchProvider.removeIndex(userId, k);
+            prune(k); // 彻底清理旧碎片，防止语义干扰
         }
-        LOG.info("MemSkill: {} 进行了心智模型演进 -> {}", userId, newKey);
-        return "整合完成。碎片信息已归纳，心智模型已升维。";
+
+        return "【心智进化成功】已将碎片认知升维为核心洞察，删除了冗余记录。";
     }
 
     /**
