@@ -191,17 +191,17 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("##### 2. 技能发现索引 (Discovery)\n");
         sb.append("- **盒子本地技能**: ").append(scanSkillNames(rootPath)).append("\n");
         skillPools.forEach((k, v) -> sb.append("- **池(").append(k).append(")技能**: ").append(scanSkillNames(v)).append("\n"));
-        sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。请通过 `ls` 和 `read_file` 读取规范以驱动任务。\n\n");
+        sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。请通过 `list_files` 和 `read_file` 读取规范以驱动任务。\n\n");
 
         sb.append("##### 3. 核心工作流 (Standard Operating Procedures)\n");
-        sb.append("- **侦查阶段**: 任务开始必须先调用 `ls`。若寻找特定逻辑，优先使用 `grep_search`。\n");
+        sb.append("- **侦查阶段**: 任务开始必须先调用 `list_files`。若寻找特定逻辑，优先使用 `grep_search`。\n");
         sb.append("- **读取阶段**: 修改前必须调用 `read_file`。若文件超过 500 行，必须指定行号范围分页读取。\n");
         sb.append("- **修改阶段**: `str_replace_editor` 的 `old_str` 必须包含足够的上下文以保证在文件中的**全局唯一性**。\n");
-        sb.append("- **验证阶段**: 任何文件写入后，必须立即通过 `bash` 运行构建或测试命令。禁止在未验证的情况下结束任务。\n");
+        sb.append("- **验证阶段**: 任何文件写入后，必须立即通过 `run_terminal_command` 运行构建或测试命令。禁止在未验证的情况下结束任务。\n");
 
         sb.append("##### 4. 路径与安全性 (Path & Security)\n");
         sb.append("- **路径格式**: 严禁使用 `./` 前缀或任何绝对路径。目录路径建议以 `/` 结尾。\n");
-        sb.append("- **环境变量**: 挂载池已注入为环境变量（如 @pool1 映射为 ").append(envExample).append("），在 `bash` 中优先使用。\n");
+        sb.append("- **环境变量**: 挂载池已注入为环境变量（如 @pool1 映射为 ").append(envExample).append("），在 `run_terminal_command` 中优先使用。\n");
         sb.append("- **原子操作**: 严禁在一次 `str_replace_editor` 中修改多处不连续代码，应拆分为多次精准调用。\n");
         sb.append("- **只读保护**: 严禁对以 @ 开头的路径执行任何写入（write/edit）工具。\n");
 
@@ -246,9 +246,9 @@ public class CliSkill extends AbsProcessSkill {
         }
     }
 
-    // --- 1. 执行命令 (对齐 bash) ---
-    @ToolMapping(name = "bash", description = "在 shell 中执行指令。支持 @alias 路径自动映射。")
-    public String bash(@Param(value = "command", description = "要执行的指令。") String command) {
+    // --- 1. 执行命令 (对齐 run_terminal_command) ---
+    @ToolMapping(name = "run_terminal_command", description = "在 shell 中执行指令。支持 @alias 路径自动映射。")
+    public String run_terminal_command(@Param(value = "command", description = "要执行的指令。") String command) {
         Map<String, String> envs = new HashMap<>();
         String finalCmd = command;
 
@@ -284,8 +284,8 @@ public class CliSkill extends AbsProcessSkill {
         return runCode(finalCmd, shellCmd, extension, envs);
     }
 
-    @ToolMapping(name = "ls", description = "列出目录内容。支持递归模式，递归模式下将以树状结构(Tree)展示以节省空间并增强可读性。")
-    public String ls(@Param(value = "path", description = "目录相对路径（禁止以 ./ 开头）。'.' 表示当前根目录。") String path,
+    @ToolMapping(name = "list_files", description = "列出目录内容。支持递归模式，递归模式下将以树状结构(Tree)展示以节省空间并增强可读性。")
+    public String list_files(@Param(value = "path", description = "目录相对路径（禁止以 ./ 开头）。'.' 表示当前根目录。") String path,
                      @Param(value = "recursive", required = false, description = "是否递归列出。若为 true，则输出直观的树状结构（深度限制为 3）。") Boolean recursive,
                      @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件（如 .env）。默认 false。") Boolean showHidden) throws IOException {
 
@@ -298,11 +298,9 @@ public class CliSkill extends AbsProcessSkill {
             String displayName = (path == null || ".".equals(path)) ? "." : path;
             sb.append(displayName).append("\n");
 
-            // 递归深度限制为 3，这是 Claude Code 在 ls -R 时的常用保护阈值
             generateTreeInternal(target, 0, 3, "", sb, (showHidden != null && showHidden));
             return sb.toString();
         } else {
-            // 普通模式：扁平列表 (你原有的 ls 逻辑)
             return flatListLogic(target, path, (showHidden != null && showHidden));
         }
     }
@@ -342,7 +340,7 @@ public class CliSkill extends AbsProcessSkill {
         }
     }
 
-    // --- 2. 列出文件 (对齐 ls) ---
+    // --- 2. 列出文件  ---
     public String flatListLogic(Path target, String path ,  Boolean showHidden) throws IOException {
         boolean finalShowHidden = (showHidden != null && showHidden);
         final String logicPrefix = (path != null && path.startsWith("@")) ? path.split("[/\\\\]")[0] : null;
