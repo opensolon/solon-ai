@@ -53,6 +53,11 @@
 
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-ai-skill-memory</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>solon-ai-skill-pdf</artifactId>
         </dependency>
 

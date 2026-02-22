@@ -75,7 +75,7 @@ public class MemSkill extends AbsSkill {
             if (!hot.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (MemSearchResult r : hot) {
-                    sb.append(String.format("- %s: %s (Time: %s)\n", r.key, r.content, r.time));
+                    sb.append(String.format("- %s: %s (Time: %s)\n", r.getKey(), r.getContent(), r.getTime()));
                 }
                 mentalModel = sb.toString();
             }
@@ -156,7 +156,7 @@ public class MemSkill extends AbsSkill {
         StringBuilder sb = new StringBuilder("匹配到以下认知参考（建议优先参考时间戳较近的记录）：\n");
         for (MemSearchResult res : results) {
             sb.append(String.format("- [%s] (Key: %s): %s\n",
-                    Utils.isNotEmpty(res.time) ? res.time : "未知时间", res.key, res.content));
+                    Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间", res.getKey(), res.getContent()));
         }
         return sb.toString();
     }

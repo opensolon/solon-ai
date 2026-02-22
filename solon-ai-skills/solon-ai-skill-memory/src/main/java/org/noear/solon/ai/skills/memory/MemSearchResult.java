@@ -22,15 +22,35 @@ package org.noear.solon.ai.skills.memory;
  * @since 3.9.4
  */
 public class MemSearchResult {
-    public String key;
-    public String content;
-    public int importance;
-    public String time; // 新增：记录时间，用于时序冲突判断
+    private String key;
+    private String content;
+    private int importance;
+    private String time; // 新增：记录时间，用于时序冲突判断
+
+    public MemSearchResult() {
+        //用于反序列化
+    }
 
     public MemSearchResult(String key, String content, int importance, String time) {
         this.key = key;
         this.content = content;
         this.importance = importance;
         this.time = time;
+    }
+
+    public String getKey() {
+        return key;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public int getImportance() {
+        return importance;
+    }
+
+    public String getTime() {
+        return time;
     }
 }
