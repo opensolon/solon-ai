@@ -143,7 +143,20 @@ public class FunctionToolDesc implements FunctionTool {
      * @param description 参数描述
      */
     public FunctionToolDesc paramAdd(String name, Type type, boolean required, String description) {
-        params.add(new ParamDesc(name, type, required, description));
+        return paramAdd(name, type, required, description, null);
+    }
+
+    /**
+     * 申明函数参数
+     *
+     * @param name         参数名字
+     * @param type         参数类型
+     * @param required     是否必须
+     * @param description  参数描述
+     * @param defaultValue 默认值
+     */
+    public FunctionToolDesc paramAdd(String name, Type type, boolean required, String description, String defaultValue) {
+        params.add(new ParamDesc(name, type, required, description, defaultValue));
         inputSchema = null;
         return this;
     }
@@ -242,7 +255,7 @@ public class FunctionToolDesc implements FunctionTool {
 
     @Override
     public void metaPut(String key, Object value) {
-        meta.put(key,value);
+        meta.put(key, value);
     }
 
     /**

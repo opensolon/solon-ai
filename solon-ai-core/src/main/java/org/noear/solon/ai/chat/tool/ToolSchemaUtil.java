@@ -31,6 +31,7 @@ import org.noear.solon.ai.chat.tool.impl.BodyAnnoDetector;
 import org.noear.solon.ai.chat.tool.impl.ParamAnnoResolver;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.Constants;
 import org.noear.solon.lang.Nullable;
 import org.reactivestreams.Publisher;
 
@@ -68,7 +69,9 @@ public class ToolSchemaUtil {
                 }
             }
 
-            return new ONodeAttrHolder(name, null, anno.description(), anno.required(), ae);
+            String defVal = (Constants.PARM_UNDEFINED_VALUE.equals(anno.defaultValue()) ? null : anno.defaultValue());
+
+            return new ONodeAttrHolder(name, null, anno.description(), anno.required(), defVal, ae);
         });
 
         bodyDetectors.add(new BodyAnnoDetector());
@@ -150,7 +153,7 @@ public class ToolSchemaUtil {
                     pd1 = getParamDesc(fg1.getField(), fg1.getTypeEggg());
 
                     if (pd1 == null) {
-                        pd1 = new ParamDesc(fg1.getAlias(), fg1.getGenericType(), false, "");
+                        pd1 = new ParamDesc(fg1.getAlias(), fg1.getGenericType(), false, "", null);
                     }
 
                     paramMap.put(pd1.name(), pd1);
@@ -176,6 +179,13 @@ public class ToolSchemaUtil {
             for (ParamDesc fp : paramAry) {
                 ONode paramNode = createSchema(fp.type());
                 paramNode.set(SchemaKeyword.DESCRIPTION, fp.description());
+
+                if (Utils.isNotEmpty(fp.defaultValue())) {
+                    Object defVal = ONode.ofBean(fp.defaultValue())
+                            .toBean(fp.type());
+                    paramNode.set(SchemaKeyword.DEFAULT, defVal);
+                }
+
                 propertiesNode.set(fp.name(), paramNode);
 
 

@@ -83,7 +83,18 @@ public class FunctionPromptDesc implements FunctionPrompt {
      * @param description 参数描述
      */
     public FunctionPromptDesc paramAdd(String name, boolean required, String description) {
-        params.add(new ParamDesc(name, String.class, required, description));
+        return paramAdd(name, required, description, null);
+    }
+
+    /**
+     * 申明函数参数
+     *
+     * @param name        参数名字
+     * @param required    是否必须
+     * @param description 参数描述
+     */
+    public FunctionPromptDesc paramAdd(String name, boolean required, String description, String defaultValue) {
+        params.add(new ParamDesc(name, String.class, required, description, defaultValue));
         return this;
     }
 
