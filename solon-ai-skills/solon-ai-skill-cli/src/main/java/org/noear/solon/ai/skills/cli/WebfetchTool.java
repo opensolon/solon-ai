@@ -5,6 +5,7 @@ import org.jsoup.Jsoup;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.annotation.Inject;
+import org.noear.solon.annotation.Param;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.HttpResponse;
 
@@ -18,12 +19,12 @@ public class WebfetchTool {
 
     @ToolMapping(
             name = "webfetch",
-            description = "从 URL 获取内容。支持将 HTML 转换为 Markdown、文本或保留原样。会自动处理图片并绕过简单的机器人检测。"
+            description = "从 URL 获取内容。当您需要检索和分析web内容时，请使用此工具。"
     )
     public Document webfetch(
-            @Inject("url") String url,
-            @Inject(value = "format", required = false) String format,
-            @Inject(value = "timeout", required = false) Integer timeoutSeconds
+            @Param(name="url",description = "The URL must be a fully-formed valid URL") String url,
+            @Param(name = "format", required = false, description = "Format options: 'markdown' (default), 'text', or 'html'") String format,
+            @Param(name = "timeout", required = false) Integer timeoutSeconds
     ) throws Exception {
 
         // 1. URL 合法性校验 (对齐 TypeScript 版)
