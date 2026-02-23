@@ -189,17 +189,17 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("\n");
 
         sb.append("##### 2. 核心行为准则 (Guiding Principles)\n");
-        sb.append("- **技能优先**: 你拥有一套专业技能（执行规约）库。在涉及具体业务实现、内容生成或配置前，**必须优先**通过 list_files 扫描并阅读相关目录下的 SKILL.md 规约。\n");
-        sb.append("- **权限边界**: 你的写权限（创建、修改、删除）仅被授予在当前盒子（BoxID: ").append(boxId).append("）的根路径内。严禁尝试修改、移动或删除任何位于挂载池（@pool）内的文件（该部分为只读共享资产）。\n\n");
+        sb.append("- **技能优先 (Skill-First)**: 你由一系列专业“技能”驱动。在执行任何具体任务前，**必须优先**扫描并阅读对应目录下的 `SKILL.md`（领域执行规约）。\n");
+        sb.append("- **权限边界**: 写权限（创建、修改、删除）仅限于当前盒子根路径。严禁修改挂载池（@pool）内的文件（该部分为只读共享资产）。\n\n");
 
-        sb.append("##### 3. 技能发现索引 (Discovery)\n");
+        sb.append("##### 3. 关联技能索引 (Connected Skills)\n");
         sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath)).append("\n");
         if (!skillPools.isEmpty()) {
             skillPools.forEach((k, v) -> sb
-                    .append("- **池(").append(k).append(")技能**: ")
+                    .append("- **共享池(").append(k).append(")技能**: ")
                     .append(scanSkillSpecs(v)).append("\n"));
         }
-        sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。请通过 `list_files` 和 `read_file` 读取规范以驱动任务。\n\n");
+        sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。必须通过 `list_files` 和 `read_file` 读取执行规约以驱动任务。\n\n");
 
         sb.append("##### 4. 核心工作流 (Standard Operating Procedures)\n");
         sb.append("- **侦查阶段**: 任务开始必须先调用 `list_files(recursive=true)`。若涉及特定技能，请务必读取该技能的 `SKILL.md`。\n");
@@ -221,18 +221,34 @@ public class CliSkill extends AbsProcessSkill {
     // --- 内部辅助 ---
 
     private String scanSkillSpecs(Path root) {
-        if (root == null || !Files.exists(root)) return "[]";
+        if (root == null || !Files.exists(root)) return " (无特定领域规约)";
+
         try (Stream<Path> stream = Files.list(root)) {
-            List<String> specs = stream
+            List<Path> skillDirs = stream
                     .filter(p -> Files.isDirectory(p) && isSkillDir(p))
-                    .map(p -> {
-                        String name = p.getFileName().toString();
-                        String desc = getSkillDescription(p);
-                        // OpenCode 风格：显式标记领域边界
-                        return String.format("\n  - %s: %s", name, desc.isEmpty() ? "遵循该目录下的规约" : desc);
-                    })
                     .collect(Collectors.toList());
-            return specs.isEmpty() ? " (无特定领域规约)" : String.join("", specs);
+
+            if (skillDirs.isEmpty()) {
+                return " (无特定领域规约)";
+            }
+
+            // 策略：如果技能过多（超过12个），切换为极简列表模式以节省 Token
+            if (skillDirs.size() > 12) {
+                String names = skillDirs.stream()
+                        .map(p -> p.getFileName().toString())
+                        .collect(Collectors.joining(", "));
+                return "\n  - [极简索引]: " + names + " (共 " + skillDirs.size() + " 项，详细规范请通过工具查阅)";
+            } else {
+                // 数量较少时，维持原有的描述提取模式
+                List<String> specs = skillDirs.stream()
+                        .map(p -> {
+                            String name = p.getFileName().toString();
+                            String desc = getSkillDescription(p);
+                            return String.format("\n  - %s: %s", name, desc.isEmpty() ? "遵循该目录下的执行规约" : desc);
+                        })
+                        .collect(Collectors.toList());
+                return String.join("", specs);
+            }
         } catch (IOException e) {
             return " []";
         }
