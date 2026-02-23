@@ -189,12 +189,16 @@ public class CliSkill extends AbsProcessSkill {
 
         // 2. 技能发现索引
         sb.append("##### 2. 技能发现索引 (Discovery)\n");
-        sb.append("- **盒子本地技能**: ").append(scanSkillNames(rootPath)).append("\n");
-        skillPools.forEach((k, v) -> sb.append("- **池(").append(k).append(")技能**: ").append(scanSkillNames(v)).append("\n"));
+        sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath)).append("\n");
+        if (!skillPools.isEmpty()) {
+            skillPools.forEach((k, v) -> sb
+                    .append("- **池(").append(k).append(")技能**: ")
+                    .append(scanSkillSpecs(v)).append("\n"));
+        }
         sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。请通过 `list_files` 和 `read_file` 读取规范以驱动任务。\n\n");
 
         sb.append("##### 3. 核心工作流 (Standard Operating Procedures)\n");
-        sb.append("- **侦查阶段**: 任务开始必须先调用 `list_files`。若寻找特定逻辑，优先使用 `grep_search`。\n");
+        sb.append("- **侦查阶段**: 任务开始必须先调用 `list_files(recursive=true)`。若寻找特定逻辑，优先使用 `grep_search`。\n");
         sb.append("- **读取阶段**: 修改前必须调用 `read_file`。若文件超过 500 行，必须指定行号范围分页读取。\n");
         sb.append("- **修改阶段**: `str_replace_editor` 的 `old_str` 必须包含足够的上下文以保证在文件中的**全局唯一性**。\n");
         sb.append("- **验证阶段**: 任何文件写入后，必须立即通过 `run_terminal_command` 运行构建或测试命令。禁止在未验证的情况下结束任务。\n");
@@ -212,21 +216,64 @@ public class CliSkill extends AbsProcessSkill {
 
     // --- 内部辅助 ---
 
-    private String scanSkillNames(Path root) {
+    private String scanSkillSpecs(Path root) {
         if (root == null || !Files.exists(root)) return "[]";
         try (Stream<Path> stream = Files.list(root)) {
-            List<String> names = stream
+            List<String> specs = stream
                     .filter(p -> Files.isDirectory(p) && isSkillDir(p))
-                    .map(p -> p.getFileName().toString())
+                    .map(p -> {
+                        String name = p.getFileName().toString();
+                        String desc = getSkillDescription(p);
+                        // OpenCode 风格：显式标记领域边界
+                        return String.format("\n  - %s: %s", name, desc.isEmpty() ? "遵循该目录下的规约" : desc);
+                    })
                     .collect(Collectors.toList());
-            return names.isEmpty() ? "[]" : names.toString();
+            return specs.isEmpty() ? " (无特定领域规约)" : String.join("", specs);
         } catch (IOException e) {
-            return "[]";
+            return " []";
         }
     }
 
+    private final Map<Path, String> descCache = new ConcurrentHashMap<>();
+
+    // 提取 SKILL.md 的第一行描述
+    private String getSkillDescription(Path dir) {
+        return descCache.computeIfAbsent(dir, this::realReadDescription);
+    }
+
+    private String realReadDescription(Path dir) {
+        Path md = dir.resolve("SKILL.md");
+        if (!Files.exists(md)) md = dir.resolve("skill.md");
+
+        if (Files.exists(md)) {
+            try (Stream<String> lines = Files.lines(md, fileCharset)) {
+                List<String> topLines = lines.limit(10).map(String::trim).collect(Collectors.toList());
+
+                // 1. 尝试解析 YAML Frontmatter 中的 description
+                if (!topLines.isEmpty() && topLines.get(0).equals("---")) {
+                    for (String line : topLines) {
+                        if (line.startsWith("description:")) {
+                            return line.substring(12).trim().replaceAll("^[\"']|[\"']$", "");
+                        }
+                    }
+                }
+
+                // 2. 回退逻辑：寻找第一个非标题的文本行
+                return topLines.stream()
+                        .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("-") && !l.equals("---"))
+                        .findFirst()
+                        .map(l -> l.length() > 80 ? l.substring(0, 77) + "..." : l)
+                        .orElse("");
+            } catch (IOException e) {
+                return "";
+            }
+        }
+        return "";
+    }
+
     private boolean isSkillDir(Path p) {
-        return Files.exists(p.resolve("SKILL.md")) || Files.exists(p.resolve("skill.md"));
+        return Files.exists(p.resolve("SKILL.md")) ||
+                Files.exists(p.resolve("skill.md"));
     }
 
     private void injectRootInstructions(StringBuilder sb, Path root, String title) {
