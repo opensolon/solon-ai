@@ -188,8 +188,11 @@ public class CliSkill extends AbsProcessSkill {
         }
         sb.append("\n");
 
-        // 2. 技能发现索引
-        sb.append("##### 2. 技能发现索引 (Discovery)\n");
+        sb.append("##### 2. 核心行为准则 (Guiding Principles)\n");
+        sb.append("- **技能优先**: 你拥有一套专业技能（执行规约）库。在涉及具体业务实现、内容生成或配置前，**必须优先**通过 list_files 扫描并阅读相关目录下的 SKILL.md 规约。\n");
+        sb.append("- **权限边界**: 你的写权限（创建、修改、删除）仅被授予在当前盒子（BoxID: ").append(boxId).append("）的根路径内。严禁尝试修改、移动或删除任何位于挂载池（@pool）内的文件（该部分为只读共享资产）。\n\n");
+
+        sb.append("##### 3. 技能发现索引 (Discovery)\n");
         sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath)).append("\n");
         if (!skillPools.isEmpty()) {
             skillPools.forEach((k, v) -> sb
@@ -198,13 +201,13 @@ public class CliSkill extends AbsProcessSkill {
         }
         sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。请通过 `list_files` 和 `read_file` 读取规范以驱动任务。\n\n");
 
-        sb.append("##### 3. 核心工作流 (Standard Operating Procedures)\n");
-        sb.append("- **侦查阶段**: 任务开始必须先调用 `list_files(recursive=true)`。若寻找特定逻辑，优先使用 `grep_search`。\n");
+        sb.append("##### 4. 核心工作流 (Standard Operating Procedures)\n");
+        sb.append("- **侦查阶段**: 任务开始必须先调用 `list_files(recursive=true)`。若涉及特定技能，请务必读取该技能的 `SKILL.md`。\n");
         sb.append("- **读取阶段**: 修改前必须调用 `read_file`。若文件超过 500 行，必须指定行号范围分页读取。\n");
         sb.append("- **修改阶段**: `str_replace_editor` 的 `old_str` 必须包含足够的上下文以保证在文件中的**全局唯一性**。\n");
         sb.append("- **验证阶段**: 任何文件写入后，必须立即通过 `run_terminal_command` 运行构建或测试命令。禁止在未验证的情况下结束任务。\n");
 
-        sb.append("##### 4. 路径与安全性 (Path & Security)\n");
+        sb.append("##### 5. 路径与安全性 (Path & Security)\n");
         sb.append("- **路径格式**: 严禁使用 `./` 前缀或任何绝对路径。目录路径建议以 `/` 结尾。\n");
         sb.append("- **环境变量**: 挂载池已注入为环境变量（如 @pool1 映射为 ").append(envExample).append("），在 `run_terminal_command` 中优先使用。\n");
         sb.append("- **原子操作**: 严禁在一次 `str_replace_editor` 中修改多处不连续代码，应拆分为多次精准调用。\n");
@@ -748,7 +751,10 @@ public class CliSkill extends AbsProcessSkill {
     private Path resolvePath(String pathStr) {
         String cleanPath = (pathStr != null && pathStr.startsWith("./")) ? pathStr.substring(2) : pathStr;
         Path p = rootPath.resolve(cleanPath).normalize();
-        if (!p.startsWith(rootPath)) throw new SecurityException("越界访问");
+        if (!p.startsWith(rootPath)) {
+            // 报错信息更明确，强化边界意识
+            throw new SecurityException("权限拒绝：检测到路径越界尝试。你当前仅被允许操作盒子目录: " + boxId);
+        }
         return p;
     }
 
