@@ -194,11 +194,11 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("- **只读保护**: 凡以 @ 开头的资产路径均为只读共享池。严禁任何写入或编辑尝试。\n\n");
 
         sb.append("##### 3. 关联技能索引 (Connected Skills)\n");
-        sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath, false)).append("\n");
+        sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath, ".", false)).append("\n");
         if (!skillPools.isEmpty()) {
             skillPools.forEach((k, v) -> {
                 // 对于池路径，启用“大列表折叠”逻辑
-                sb.append("- **共享池(").append(k).append(")技能**: ").append(scanSkillSpecs(v, true)).append("\n");
+                sb.append("- **共享技能池(").append(k).append(")**: ").append(scanSkillSpecs(v, k, true)).append("\n");
             });
         }
         sb.append("> **重要信号**：当你探测到标记为 `(Skill)` 的目录时，你的首要任务是 `read_file` 该目录下的 `SKILL.md` 以对齐操作逻辑，而非直接执行 Shell 命令。\n\n");
@@ -221,7 +221,7 @@ public class CliSkill extends AbsProcessSkill {
 
     // --- 内部辅助 ---
 
-    private String scanSkillSpecs(Path root, boolean isPool) {
+    private String scanSkillSpecs(Path root, String poolName, boolean isPool) {
         if (root == null || !Files.exists(root)) return " (无技能)";
 
         try (Stream<Path> stream = Files.list(root)) {
@@ -233,7 +233,7 @@ public class CliSkill extends AbsProcessSkill {
 
             // 调整点：池路径若技能 > 12，彻底折叠列表，仅保留探测提示
             if (isPool && skillDirs.size() > 12) {
-                return "\n  - [技能池已折叠]: 发现 " + skillDirs.size() + " 项技能。请通过 `list_files` 动态搜索所需技能。";
+                return "\n  - [技能池已折叠]: 发现 " + skillDirs.size() + " 项技能。请通过 `list_files path=" + poolName + "` 动态搜索所需技能。";
             }
 
             // 本地或数量较少时，展示列表
