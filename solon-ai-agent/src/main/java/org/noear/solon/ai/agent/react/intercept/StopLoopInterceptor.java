@@ -28,7 +28,8 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 
 /**
- * ReAct 逻辑死循环拦截器 (Loop Breaker)
+ * 避免逻辑死循环拦截器 (Loop Breaker)
+ *
  * <p>通过监控动作意图的滑动窗口频率，防止智能体陷入连续重复或 A-B-A-B 型往复迭代。</p>
  */
 @Preview("3.8.1")

@@ -24,7 +24,7 @@ import org.noear.solon.lang.Preview;
 import java.util.*;
 
 /**
- * 工业级人工介入拦截器 (Human-in-the-Loop Interceptor)
+ * 人工介入拦截器 (Human-in-the-Loop Interceptor)
  *
  * <p>该拦截器通过 ReAct 协议的生命周期钩子实现流程管控：</p>
  * <ul>
