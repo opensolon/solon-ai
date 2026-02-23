@@ -16,20 +16,20 @@ public class LlmUtil {
                 .build();
     }
     public static ChatModel getChatModel() {
-        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
-                .apiKey("sk-251740c893994c57a6536ecdbc33c189")
-                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
-                .build();
+//        return ChatModel.of("https://api.deepseek.com/v1/chat/completions")
+//                .apiKey("sk-251740c893994c57a6536ecdbc33c189")
+//                .model("deepseek-chat") //deepseek-reasoner//deepseek-chat
+//                .build();
 
 //        return ChatModel.of("https://apis.iflow.cn/v1/chat/completions")
 //                .apiKey("sk-663fb0149c999345efb114362ddba081")
 //                .model("qwen3-32b")
 //                .build();
 
-//        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
-//                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
-//                .model("Qwen3-32B") //Qwen3-32B, GLM-4.6
-//                .build();
+        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
+                .apiKey("PE6JVMP7UQI81GY6AZ0J8WEWWLFHWHROG15XUP18")
+                .model("Qwen3-32B") //Qwen3-32B, GLM-4.6
+                .build();
 
 //        return ChatModel.of("https://ai.gitee.com/v1/chat/completions")
 //                .apiKey("THTNIFWBERJYNJJMLLAZ5B05FNAAXWBZALVAIA17")
