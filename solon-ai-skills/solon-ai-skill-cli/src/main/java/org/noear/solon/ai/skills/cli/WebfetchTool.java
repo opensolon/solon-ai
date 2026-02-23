@@ -4,7 +4,6 @@ import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter;
 import org.jsoup.Jsoup;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.rag.Document;
-import org.noear.solon.annotation.Inject;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.HttpResponse;
@@ -17,14 +16,17 @@ public class WebfetchTool {
     private static final int DEFAULT_TIMEOUT_MS = 30000;
     private static final int MAX_TIMEOUT_MS = 120000;
 
-    @ToolMapping(
-            name = "webfetch",
-            description = "从 URL 获取内容。当您需要检索和分析web内容时，请使用此工具。"
-    )
+    private static final WebfetchTool instance = new WebfetchTool();
+
+    public static WebfetchTool getInstance() {
+        return instance;
+    }
+
+    @ToolMapping(name = "webfetch", description = "从 URL 获取内容。当您需要检索和分析web内容时，请使用此工具。")
     public Document webfetch(
-            @Param(name="url",description = "The URL must be a fully-formed valid URL") String url,
-            @Param(name = "format", required = false, description = "Format options: 'markdown' (default), 'text', or 'html'") String format,
-            @Param(name = "timeout", required = false) Integer timeoutSeconds
+            @Param(name = "url", description = "目标网页的完整 URL（必须包含 http:// 或 https://）") String url,
+            @Param(name = "format", required = false, defaultValue = "markdown", description = "返回内容的格式选项：'markdown' (默认，适合阅读结构)、'text' (纯文本，适合摘要提取) 或 'html' (原始结构)") String format,
+            @Param(name = "timeout", required = false, description = "请求超时时间（秒），最大允许 120 秒") Integer timeoutSeconds
     ) throws Exception {
 
         // 1. URL 合法性校验 (对齐 TypeScript 版)
