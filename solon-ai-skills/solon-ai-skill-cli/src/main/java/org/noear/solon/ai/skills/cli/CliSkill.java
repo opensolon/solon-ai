@@ -189,8 +189,9 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("\n");
 
         sb.append("##### 2. 核心行为准则 (Guiding Principles)\n");
-        sb.append("- **技能驱动**: 你由专业技能（领域执行规约）库驱动。执行特定任务前，**必须优先**动态探测并阅读对应目录下的 `SKILL.md` 执行规约。\n");
-        sb.append("- **只读保护**: 盒子外资产 (@ 开头) 均为只读。严禁尝试写操作。\n\n");
+        sb.append("- **规约先行 (Skill First)**: 该环境由领域技能驱动。**严禁**基于通用经验猜测指令。凡目录后缀标有 `(Skill)`，即受规约保护，执行变更前必须先 `read_file` 其中的 `SKILL.md`，否则操作将因逻辑不匹配而失败。\n");
+        sb.append("- **技能增效**: 优先使用规约内验证过的快捷指令。这能显著降低环境冲突风险并确保盒子安全。\n");
+        sb.append("- **只读保护**: 凡以 @ 开头的资产路径均为只读共享池。严禁任何写入或编辑尝试。\n\n");
 
         sb.append("##### 3. 关联技能索引 (Connected Skills)\n");
         sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath, false)).append("\n");
@@ -200,7 +201,7 @@ public class CliSkill extends AbsProcessSkill {
                 sb.append("- **共享池(").append(k).append(")技能**: ").append(scanSkillSpecs(v, true)).append("\n");
             });
         }
-        sb.append("> 提示：标记为 (Skill) 的目录含 `SKILL.md` 执行规约。必须通过 `list_files` 和 `read_file` 动态获取指令。\n\n");
+        sb.append("> **重要信号**：当你探测到标记为 `(Skill)` 的目录时，你的首要任务是 `read_file` 该目录下的 `SKILL.md` 以对齐操作逻辑，而非直接执行 Shell 命令。\n\n");
 
         sb.append("##### 4. 核心工作流 (Standard Operating Procedures)\n");
         sb.append("- **侦查**: 任务开始必先 `list_files`。涉及特定池技能，必读其 `SKILL.md`。\n");
