@@ -213,7 +213,7 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("- **原子操作**: 严禁在一次 `str_replace_editor` 中修改多处不连续代码，应拆分为多次精准调用。\n");
         sb.append("- **只读保护**: 严禁对以 @ 开头的路径执行任何写入（write/edit）工具。\n");
 
-        injectRootInstructions(sb, rootPath, "#### 盒子业务规范 (Box Norms)\n");
+        injectRootInstructions(sb, rootPath, "#### 盒子业务导向 (Box Orientation)\n");
 
         return sb.toString();
     }
@@ -251,9 +251,10 @@ public class CliSkill extends AbsProcessSkill {
 
         if (Files.exists(md)) {
             try (Stream<String> lines = Files.lines(md, fileCharset)) {
+                // 获取前10行进行解析
                 List<String> topLines = lines.limit(10).map(String::trim).collect(Collectors.toList());
 
-                // 1. 尝试解析 YAML Frontmatter 中的 description
+                // 1. 优先尝试 YAML Frontmatter
                 if (!topLines.isEmpty() && topLines.get(0).equals("---")) {
                     for (String line : topLines) {
                         if (line.startsWith("description:")) {
@@ -262,12 +263,12 @@ public class CliSkill extends AbsProcessSkill {
                     }
                 }
 
-                // 2. 回退逻辑：寻找第一个非标题的文本行
+                // 2. 次选：第一个非标题、非空行、非装饰线的文本
                 return topLines.stream()
                         .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("-") && !l.equals("---"))
                         .findFirst()
-                        .map(l -> l.length() > 80 ? l.substring(0, 77) + "..." : l)
-                        .orElse("");
+                        .map(l -> l.length() > 100 ? l.substring(0, 97) + "..." : l)
+                        .orElse("遵循该目录下的规约");
             } catch (IOException e) {
                 return "";
             }
@@ -281,19 +282,15 @@ public class CliSkill extends AbsProcessSkill {
     }
 
     private void injectRootInstructions(StringBuilder sb, Path root, String title) {
-        Path md = root.resolve("SKILL.md");
+        if (root == null || !Files.exists(root)) return;
 
-        if (!Files.exists(md)) {
-            md = root.resolve("skill.md");
-        }
+        // 获取 SKILL.md 的精简描述
+        String desc = realReadDescription(root);
 
-        if (Files.exists(md)) {
-            try {
-                String content = new String(Files.readAllBytes(md), fileCharset);
-                sb.append(title).append(content).append("\n\n");
-            } catch (IOException e) {
-                LOG.warn("Failed to read SKILL.md from {}", root, e);
-            }
+        if (desc != null && !desc.isEmpty()) {
+            sb.append(title);
+            sb.append("- **核心目标**: ").append(desc).append("\n");
+            sb.append("- **操作指引**: 根目录存在 `SKILL.md` 完整规约，在执行任何变更前，请务必先通过 `read_file` 阅读该文件以对齐业务标准。\n\n");
         }
     }
 
