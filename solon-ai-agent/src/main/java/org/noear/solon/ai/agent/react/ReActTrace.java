@@ -181,6 +181,10 @@ public class ReActTrace implements AgentTrace {
     }
 
     protected void activeSkills() {
+        if (originalPrompt != null && Assert.isNotEmpty(getOptions().getToolContext())) {
+            originalPrompt.attrs().putAll(getOptions().getToolContext());
+        }
+
         //设置指令
         StringBuilder skillsInstruction = SkillUtil.activeSkills(options.getModelOptions(), originalPrompt, new StringBuilder());
         if (skillsInstruction.length() > 0) {

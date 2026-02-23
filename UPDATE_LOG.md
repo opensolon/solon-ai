@@ -15,6 +15,7 @@
 * 新增 solon-ai-skill-lucene 插件
 * 新增 solon-ai-skill-diff 插件
 * 新增 solon-ai-skill-memory 插件
+* 添加 solon-ai-core toolContext 自动转为 Prompt.attrs 的机制（方便 skill 传递）
 * 添加 solon-ai-agent ReActChunk, TeamChunk getTrace 方法
 * 添加 solon-ai-agent __sessionId 作为智能体的必要工具上下文（方便工具的会话数据隔离）
 * 优化 solon-ai-core chatModel 方言的（不规范的）兼容性处理

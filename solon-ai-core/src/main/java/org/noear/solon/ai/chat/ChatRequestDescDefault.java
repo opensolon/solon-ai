@@ -16,7 +16,6 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.snack4.ONode;
-import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.message.SystemMessage;
@@ -134,6 +133,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 instructionBuilder.append("## 执行指令\n").append(options.instruction()).append("\n");
             }
 
+            if (originalPrompt != null && Assert.isNotEmpty(options.toolContext())) {
+                originalPrompt.attrs().putAll(options.toolContext());
+            }
+
             StringBuilder skillsInstruction = SkillUtil.activeSkills(options, originalPrompt, new StringBuilder());
             if (skillsInstruction.length() > 0) {
                 instructionBuilder.append("## 补充业务准则\n");
@@ -202,10 +205,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             AssistantMessage choiceMessage = resp.getMessage();
             session.addMessage(choiceMessage); //添加到记忆
 
-            if (options.isAutoToolCall() && Utils.isNotEmpty(choiceMessage.getToolCalls())) {
+            if (options.isAutoToolCall() && Assert.isNotEmpty(choiceMessage.getToolCalls())) {
                 List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
-                if (Utils.isEmpty(returnDirectMessages)) {
+                if (Assert.isEmpty(returnDirectMessages)) {
                     //没有直接返回的消息
                     return internalCall();
                 } else {
@@ -341,7 +344,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         resp.setResponseData(event.data());
 
-        if (Utils.isEmpty(event.data())) {
+        if (Assert.isEmpty(event.data())) {
             return true;
         }
 
@@ -354,7 +357,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             if (resp.hasChoices()) {
                 AssistantMessage choiceMessage = resp.getMessage();
-                if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
+                if (Assert.isNotEmpty(choiceMessage.getToolCalls())) {
                     //messages.add(choiceMessage);
                     buildToolCallBuilder(resp, choiceMessage);
                 }
@@ -392,7 +395,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 AssistantMessage choiceMessage = assistantMessages.get(0);
                 List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
-                if (Utils.isEmpty(returnDirectMessages)) {
+                if (Assert.isEmpty(returnDirectMessages)) {
                     Disposable disposable = internalStream().subscribe(
                             sink::next,
                             sink::error,
@@ -429,7 +432,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     private HttpException createHttpException(HttpResponse resp) {
         try {
             String message = resp.bodyAsString();
-            String description = Utils.isEmpty(message)
+            String description = Assert.isEmpty(message)
                     ? "Error code:" + resp.code()
                     : "Error code:" + resp.code() + ", message:" + message;
             return new HttpException(description);
@@ -446,15 +449,15 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private void buildToolCallBuilder(ChatResponseDefault resp, AssistantMessage acm) {
-        if (Utils.isEmpty(acm.getToolCalls())) {
+        if (Assert.isEmpty(acm.getToolCalls())) {
             return;
         }
 
-        if (Utils.isNotEmpty(acm.getContent())) {
+        if (Assert.isNotEmpty(acm.getContent())) {
             resp.contentBuilder.append(acm.getContent());
         }
 
-        if (Utils.isNotEmpty(acm.getReasoning())) {
+        if (Assert.isNotEmpty(acm.getReasoning())) {
             resp.reasoningBuilder.append(acm.getReasoning());
         }
 
@@ -484,7 +487,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      * @return returnDirect
      */
     private List<ToolMessage> buildToolMessage(ChatResponseDefault resp, AssistantMessage acm) throws ChatException {
-        if (Utils.isEmpty(acm.getToolCalls())) {
+        if (Assert.isEmpty(acm.getToolCalls())) {
             return null;
         }
 
