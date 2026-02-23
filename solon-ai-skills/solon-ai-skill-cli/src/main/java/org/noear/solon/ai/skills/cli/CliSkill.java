@@ -105,8 +105,6 @@ public class CliSkill extends AbsProcessSkill {
         return (lastIdx == -1) ? "" : fileName.substring(lastIdx + 1);
     }
 
-    private final ApplyPatchTool applyPatchTool;
-
     /**
      * @param boxId   当前盒子(任务空间)标识
      * @param workDir 盒子物理根目录
@@ -115,7 +113,6 @@ public class CliSkill extends AbsProcessSkill {
         super(workDir);
         this.boxId = boxId;
         this.isWindows = System.getProperty("os.name").toLowerCase().contains("win");
-        this.applyPatchTool = new ApplyPatchTool(workDir);
 
         if (isWindows) {
             // 探测是否可能在用 PowerShell (简单判断 COMSPEC)
@@ -761,59 +758,5 @@ public class CliSkill extends AbsProcessSkill {
         } catch (Exception e) {
             return "/bin/sh";
         }
-    }
-
-    /// ///////
-
-    @ToolMapping(name = "webfetch", description = "从 URL 获取内容。当您需要检索和分析web内容时，请使用此工具。")
-    public Document webfetch(
-            @Param(name = "url", description = "目标网页的完整 URL（必须包含 http:// 或 https://）") String url,
-            @Param(name = "format", required = false, defaultValue = "markdown", description = "返回内容的格式选项：'markdown' (默认，适合阅读结构)、'text' (纯文本，适合摘要提取) 或 'html' (原始结构)") String format,
-            @Param(name = "timeout", required = false, description = "请求超时时间（秒），最大允许 120 秒") Integer timeoutSeconds
-    ) throws Exception {
-        return WebfetchTool.getInstance().webfetch(url, format, timeoutSeconds);
-    }
-
-    @ToolMapping(name = "websearch", description = "执行实时web搜索")
-    public Document websearch(
-            @Param(name = "query", description = "查询关键字") String query,
-            @Param(name = "numResults", required = false, defaultValue = "8", description = "返回的结果数量") Integer numResults,
-            @Param(name = "livecrawl", required = false, defaultValue = "fallback", description = "实时爬行模式 (fallback/preferred)") String livecrawl,
-            @Param(name = "type", required = false, defaultValue = "auto", description = "搜索类型 (auto/fast/deep)") String type,
-            @Param(name = "contextMaxCharacters", required = false, defaultValue = "10000", description = "针对LLM优化的最大字符数") Integer contextMaxCharacters
-    ) throws Exception {
-        return WebsearchTool.getInstance().websearch(query, numResults, livecrawl, type, contextMaxCharacters);
-    }
-
-    @ToolMapping(name = "codesearch", description = "搜索并获取任何编程任务的相关上下文。" +
-            "为库、SDK 和 API 提供高质量、新鲜的上下文。适用于任何与编程相关的问题。" +
-            "返回全面的代码示例、文档和 API 参考。优化用于查找特定编程模式和解决方案。"
-    )
-    public Document codesearch(
-            @Param(name = "query", description = "查找 API、库和 SDK 相关上下文的搜索查询。例如：'React useState hook examples', 'Python pandas dataframe filtering'") String query,
-            @Param(name = "tokensNum", required = false, defaultValue = "5000", description = "返回的 Token 数量 (1000-50000)。默认 5000。针对具体问题使用较小值，针对全面文档使用较大值。") Integer tokensNum
-    ) throws Exception {
-        return CodeSearchTool.getInstance().codesearch(query, tokensNum);
-    }
-
-    @ToolMapping(
-            name = "apply_patch",
-            description = "原子化地对多个文件进行批量编辑。支持新建、修改、移动或删除操作。"
-    )
-    public Document applyPatch(
-            @Param(name = "patchText", description = "必须包含在 *** Begin Patch 和 *** End Patch 之间。\n" +
-                    "格式规范：\n" +
-                    "1. *** Add File: <path>\n   后续行以 + 开头，代表文件内容。\n" +
-                    "2. *** Delete File: <path>\n" +
-                    "3. *** Update File: <path>\n" +
-                    "   必须配合以下块使用（SEARCH 内容必须与原文件完全一致）：\n" +
-                    "   <<<<<<< SEARCH\n" +
-                    "   [待替换代码]\n" +
-                    "   =======\n" +
-                    "   [新代码]\n" +
-                    "   >>>>>>> REPLACE\n" +
-                    "4. *** Move to: <path>\n   (可选) 仅限在 Update File 指令下使用，实现重命名。")
-            String patchText) throws Exception {
-        return applyPatchTool.applyPatch(patchText);
     }
 }
