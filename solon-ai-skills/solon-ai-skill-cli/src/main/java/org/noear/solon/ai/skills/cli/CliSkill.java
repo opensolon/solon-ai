@@ -189,28 +189,29 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("\n");
 
         sb.append("##### 2. 核心行为准则 (Guiding Principles)\n");
-        sb.append("- **技能驱动 (Skill-Driven)**: 你由专业技能库驱动。执行任何具体任务前，**必须优先**扫描并阅读对应目录下的 `SKILL.md`（领域执行规约）。\n");
-        sb.append("- **权限边界**: 盒子外资产均为只读。严禁尝试对 `@pool` 路径进行任何写操作。\n\n");
+        sb.append("- **技能驱动**: 你由专业技能库驱动。执行特定任务前，**必须优先**动态探测并阅读对应目录下的 `SKILL.md`。\n");
+        sb.append("- **权限边界**: 盒子外资产 (@ 开头) 均为只读。严禁尝试写操作。\n\n");
 
         sb.append("##### 3. 关联技能索引 (Connected Skills)\n");
-        sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath)).append("\n");
+        sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath, false)).append("\n");
         if (!skillPools.isEmpty()) {
-            skillPools.forEach((k, v) -> sb
-                    .append("- **共享池(").append(k).append(")技能**: ")
-                    .append(scanSkillSpecs(v)).append("\n"));
+            skillPools.forEach((k, v) -> {
+                // 对于池路径，启用“大列表折叠”逻辑
+                sb.append("- **共享池(").append(k).append(")技能**: ").append(scanSkillSpecs(v, true)).append("\n");
+            });
         }
-        sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`（领域执行规约）。必须通过 `list_files` 和 `read_file` 读取执行规约以驱动任务。\n\n");
+        sb.append("> 提示：标记为 (Skill) 的目录含 `SKILL.md` 执行规约。必须通过 `list_files` 和 `read_file` 动态获取指令。\n\n");
 
         sb.append("##### 4. 核心工作流 (Standard Operating Procedures)\n");
-        sb.append("- **侦查**: 任务开始必先 `list_files`。若涉及特定技能目录，必读其 `SKILL.md`。\n");
-        sb.append("- **读取**: 修改前必调用 `read_file`。大文件必须分页，禁止盲目编辑。\n");
-        sb.append("- **编辑**: `str_replace_editor` 的 `old_str` 必须全局唯一，确保原子化变更。\n");
+        sb.append("- **侦查**: 任务开始必先 `list_files`。涉及特定池技能，必读其 `SKILL.md`。\n");
+        sb.append("- **编辑**: 修改前必 `read_file`。`str_replace_editor` 必须全局唯一，确保原子化。\n\n");
 
         sb.append("##### 5. 路径与安全性 (Path & Security)\n");
         sb.append("- **路径格式**: 严禁使用 `./` 前缀或任何绝对路径。目录路径建议以 `/` 结尾。\n");
         sb.append("- **环境变量**: 挂载池已注入为环境变量（如 @pool1 映射为 ").append(envExample).append("），在 `run_terminal_command` 中优先使用。\n");
         sb.append("- **原子操作**: 严禁在一次 `str_replace_editor` 中修改多处不连续代码，应拆分为多次精准调用。\n");
         sb.append("- **只读保护**: 严禁对以 @ 开头的路径执行任何写入（write/edit）工具。\n");
+        sb.append("- **确定性路径**: 严禁操作未经 list_files或grep_search 确认过的路径。严禁假设文件存在。\n");
 
         injectRootInstructions(sb, rootPath, "#### 盒子业务导向 (Box Orientation)\n");
 
@@ -219,7 +220,7 @@ public class CliSkill extends AbsProcessSkill {
 
     // --- 内部辅助 ---
 
-    private String scanSkillSpecs(Path root) {
+    private String scanSkillSpecs(Path root, boolean isPool) {
         if (root == null || !Files.exists(root)) return " (无特定领域规约)";
 
         try (Stream<Path> stream = Files.list(root)) {
@@ -227,18 +228,18 @@ public class CliSkill extends AbsProcessSkill {
                     .filter(p -> Files.isDirectory(p) && isSkillDir(p))
                     .collect(Collectors.toList());
 
-            if (skillDirs.isEmpty()) {
-                return " (无特定领域规约)";
+            if (skillDirs.isEmpty()) return " (无特定领域规约)";
+
+            // 调整点：池路径若技能 > 12，彻底折叠列表，仅保留探测提示
+            if (isPool && skillDirs.size() > 12) {
+                return "\n  - [技能池已折叠]: 检测到共 " + skillDirs.size() + " 项规约。请通过 `list_files` 动态搜索所需技能。";
             }
 
-            // 策略：如果技能过多（超过12个），切换为极简列表模式以节省 Token
-            if (skillDirs.size() > 12) {
-                String names = skillDirs.stream()
-                        .map(p -> p.getFileName().toString())
-                        .collect(Collectors.joining(", "));
-                return "\n  - [极简索引]: " + names + " (共 " + skillDirs.size() + " 项，详细规范请通过工具查阅)";
+            // 本地或数量较少时，展示列表
+            if (skillDirs.size() > 15) {
+                String names = skillDirs.stream().limit(15).map(p -> p.getFileName().toString()).collect(Collectors.joining(", "));
+                return "\n  - [精简索引]: " + names + "... (等 " + skillDirs.size() + " 项)";
             } else {
-                // 数量较少时，维持原有的描述提取模式
                 List<String> specs = skillDirs.stream()
                         .map(p -> {
                             String name = p.getFileName().toString();
@@ -305,7 +306,7 @@ public class CliSkill extends AbsProcessSkill {
         if (desc != null && !desc.isEmpty()) {
             sb.append(title);
             sb.append("- **核心目标**: ").append(desc).append("\n");
-            sb.append("- **操作指引**: 根目录存在 `SKILL.md` 完整规约，在执行任何变更前，请务必先通过 `read_file` 阅读该文件以对齐业务标准。\n\n");
+            sb.append("- **操作指引**: 根目录存在 `SKILL.md`，执行变更前必读以对齐标准。\n\n");
         }
     }
 
