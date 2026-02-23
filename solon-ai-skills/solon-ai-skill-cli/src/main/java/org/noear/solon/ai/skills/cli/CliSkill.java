@@ -189,8 +189,8 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("\n");
 
         sb.append("##### 2. 核心行为准则 (Guiding Principles)\n");
-        sb.append("- **技能优先 (Skill-First)**: 你由一系列专业“技能”驱动。在执行任何具体任务前，**必须优先**扫描并阅读对应目录下的 `SKILL.md`（领域执行规约）。\n");
-        sb.append("- **权限边界**: 写权限（创建、修改、删除）仅限于当前盒子根路径。严禁修改挂载池（@pool）内的文件（该部分为只读共享资产）。\n\n");
+        sb.append("- **技能驱动 (Skill-Driven)**: 你由专业技能库驱动。执行任何具体任务前，**必须优先**扫描并阅读对应目录下的 `SKILL.md`（领域执行规约）。\n");
+        sb.append("- **权限边界**: 盒子外资产均为只读。严禁尝试对 `@pool` 路径进行任何写操作。\n\n");
 
         sb.append("##### 3. 关联技能索引 (Connected Skills)\n");
         sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath)).append("\n");
@@ -199,13 +199,12 @@ public class CliSkill extends AbsProcessSkill {
                     .append("- **共享池(").append(k).append(")技能**: ")
                     .append(scanSkillSpecs(v)).append("\n"));
         }
-        sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`。必须通过 `list_files` 和 `read_file` 读取执行规约以驱动任务。\n\n");
+        sb.append("> 提示：带有 (Skill) 标记的目录包含 `SKILL.md`（领域执行规约）。必须通过 `list_files` 和 `read_file` 读取执行规约以驱动任务。\n\n");
 
         sb.append("##### 4. 核心工作流 (Standard Operating Procedures)\n");
-        sb.append("- **侦查阶段**: 任务开始必须先调用 `list_files(recursive=true)`。若涉及特定技能，请务必读取该技能的 `SKILL.md`。\n");
-        sb.append("- **读取阶段**: 修改前必须调用 `read_file`。若文件超过 500 行，必须指定行号范围分页读取。\n");
-        sb.append("- **修改阶段**: `str_replace_editor` 的 `old_str` 必须包含足够的上下文以保证在文件中的**全局唯一性**。\n");
-        sb.append("- **验证阶段**: 任何文件写入后，必须立即通过 `run_terminal_command` 运行构建或测试命令。禁止在未验证的情况下结束任务。\n");
+        sb.append("- **侦查**: 任务开始必先 `list_files`。若涉及特定技能目录，必读其 `SKILL.md`。\n");
+        sb.append("- **读取**: 修改前必调用 `read_file`。大文件必须分页，禁止盲目编辑。\n");
+        sb.append("- **编辑**: `str_replace_editor` 的 `old_str` 必须全局唯一，确保原子化变更。\n");
 
         sb.append("##### 5. 路径与安全性 (Path & Security)\n");
         sb.append("- **路径格式**: 严禁使用 `./` 前缀或任何绝对路径。目录路径建议以 `/` 结尾。\n");
