@@ -189,8 +189,8 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("\n");
 
         sb.append("##### 2. 核心行为准则 (Guiding Principles)\n");
-        sb.append("- **技能驱动**: 你由专业技能库驱动。执行特定任务前，**必须优先**动态探测并阅读对应目录下的 `SKILL.md`。\n");
-        sb.append("- **权限边界**: 盒子外资产 (@ 开头) 均为只读。严禁尝试写操作。\n\n");
+        sb.append("- **技能驱动**: 你由专业技能（领域执行规约）库驱动。执行特定任务前，**必须优先**动态探测并阅读对应目录下的 `SKILL.md` 执行规约。\n");
+        sb.append("- **只读保护**: 盒子外资产 (@ 开头) 均为只读。严禁尝试写操作。\n\n");
 
         sb.append("##### 3. 关联技能索引 (Connected Skills)\n");
         sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath, false)).append("\n");
@@ -221,18 +221,18 @@ public class CliSkill extends AbsProcessSkill {
     // --- 内部辅助 ---
 
     private String scanSkillSpecs(Path root, boolean isPool) {
-        if (root == null || !Files.exists(root)) return " (无特定领域规约)";
+        if (root == null || !Files.exists(root)) return " (无技能)";
 
         try (Stream<Path> stream = Files.list(root)) {
             List<Path> skillDirs = stream
                     .filter(p -> Files.isDirectory(p) && isSkillDir(p))
                     .collect(Collectors.toList());
 
-            if (skillDirs.isEmpty()) return " (无特定领域规约)";
+            if (skillDirs.isEmpty()) return " (无技能)";
 
             // 调整点：池路径若技能 > 12，彻底折叠列表，仅保留探测提示
             if (isPool && skillDirs.size() > 12) {
-                return "\n  - [技能池已折叠]: 检测到共 " + skillDirs.size() + " 项规约。请通过 `list_files` 动态搜索所需技能。";
+                return "\n  - [技能池已折叠]: 发现 " + skillDirs.size() + " 项技能。请通过 `list_files` 动态搜索所需技能。";
             }
 
             // 本地或数量较少时，展示列表
@@ -284,7 +284,7 @@ public class CliSkill extends AbsProcessSkill {
                         .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("-") && !l.equals("---"))
                         .findFirst()
                         .map(l -> l.length() > 100 ? l.substring(0, 97) + "..." : l)
-                        .orElse("遵循该目录下的规约");
+                        .orElse("遵循该目录下的执行规约");
             } catch (IOException e) {
                 return "";
             }
