@@ -77,11 +77,6 @@ public class GeminiChatDialect extends AbstractChatDialect {
         return "gemini".equals(config.getProvider());
     }
 
-    @Override
-    public HttpUtils createHttpUtils(ChatConfig config) {
-        return createHttpUtils(config, false);
-    }
-
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
         String apiUrl = buildApiUrl(config.getApiUrl().toString(), config.getModel(), isStream);
 
@@ -98,6 +93,10 @@ public class GeminiChatDialect extends AbstractChatDialect {
 
         if (isStream) {
             httpUtils.header("Accept", "text/event-stream");
+        }
+
+        if (Utils.isNotEmpty(config.getUserAgent())) {
+            httpUtils.userAgent(config.getUserAgent());
         }
 
         httpUtils.headers(config.getHeaders());

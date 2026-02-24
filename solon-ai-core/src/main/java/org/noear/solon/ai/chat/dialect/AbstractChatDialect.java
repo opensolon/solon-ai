@@ -37,7 +37,7 @@ import java.util.*;
  * @since 3.1
  */
 public abstract class AbstractChatDialect implements ChatDialect {
-    public HttpUtils createHttpUtils(ChatConfig config) {
+    public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
         HttpUtils httpUtils = HttpUtils
                 .http(config.getApiUrl())
                 .timeout((int) config.getTimeout().getSeconds());
@@ -48,6 +48,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (Utils.isNotEmpty(config.getApiKey())) {
             httpUtils.header("Authorization", "Bearer " + config.getApiKey());
+        }
+
+        if (Utils.isNotEmpty(config.getUserAgent())) {
+            httpUtils.userAgent(config.getUserAgent());
         }
 
         httpUtils.headers(config.getHeaders());

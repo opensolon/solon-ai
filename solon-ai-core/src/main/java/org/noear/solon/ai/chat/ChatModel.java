@@ -186,6 +186,14 @@ public class ChatModel implements AiModel {
         }
 
         /**
+         *  User-Agent
+         */
+        public Builder userAgent(String userAgent){
+            config.setUserAgent(userAgent);
+            return this;
+        }
+
+        /**
          * 角色
          */
         public Builder role(String role) {

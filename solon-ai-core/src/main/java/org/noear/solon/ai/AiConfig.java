@@ -37,6 +37,7 @@ public class AiConfig {
     protected String provider;
     protected String model;
     protected final Map<String, String> headers = new LinkedHashMap<>();
+    protected String userAgent;
     protected Duration timeout = Duration.ofSeconds(60);
     protected ProxyDesc proxy;
     protected Proxy proxyInstance;
@@ -61,6 +62,10 @@ public class AiConfig {
 
     public Map<String, String> getHeaders() {
         return headers;
+    }
+
+    public String getUserAgent() {
+        return userAgent;
     }
 
     public Duration getTimeout() {
@@ -105,6 +110,10 @@ public class AiConfig {
         headers.put(key, value);
     }
 
+    public void setUserAgent(String userAgent) {
+        this.userAgent = userAgent;
+    }
+
     public void setTimeout(Duration timeout) {
         if (timeout != null) {
             this.timeout = timeout;
@@ -130,6 +139,10 @@ public class AiConfig {
 
         if (Utils.isNotEmpty(getApiKey())) {
             httpUtils.header("Authorization", "Bearer " + getApiKey());
+        }
+
+        if (Utils.isNotEmpty(getUserAgent())) {
+            httpUtils.userAgent(getUserAgent());
         }
 
         httpUtils.headers(getHeaders());

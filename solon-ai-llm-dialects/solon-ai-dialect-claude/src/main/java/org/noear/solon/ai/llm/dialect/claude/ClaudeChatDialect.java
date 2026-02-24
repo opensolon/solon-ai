@@ -59,11 +59,6 @@ public class ClaudeChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public HttpUtils createHttpUtils(ChatConfig config) {
-        return createHttpUtils(config, false);
-    }
-
-    @Override
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
         String apiUrl = config.getApiUrl().toString();
 
@@ -83,6 +78,10 @@ public class ClaudeChatDialect extends AbstractChatDialect {
         httpUtils.header("Content-Type", "application/json");
         if (isStream) {
             httpUtils.header("Accept", "text/event-stream");
+        }
+
+        if (Utils.isNotEmpty(config.getUserAgent())) {
+            httpUtils.userAgent(config.getUserAgent());
         }
 
         httpUtils.headers(config.getHeaders());
