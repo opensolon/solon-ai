@@ -19,6 +19,9 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.core.util.RankEntity;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -32,8 +35,12 @@ public class ToolChain<T extends ToolInterceptor> {
     private final FunctionTool lastHandler;
     private int index;
 
-    public ToolChain(List<RankEntity<T>> interceptorList, FunctionTool lastHandler) {
-        this.interceptorList = interceptorList;
+    public ToolChain(Collection<RankEntity<T>> interceptors, FunctionTool lastHandler) {
+        this.interceptorList = new ArrayList<>(interceptors);
+        if (interceptorList.size() > 1) {
+            Collections.sort(interceptorList);
+        }
+
         this.lastHandler = lastHandler;
         this.index = 0;
     }

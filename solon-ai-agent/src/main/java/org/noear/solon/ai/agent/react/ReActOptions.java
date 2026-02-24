@@ -205,7 +205,7 @@ public class ReActOptions implements NonSerializable {
         return skillInstruction;
     }
 
-    public List<RankEntity<ReActInterceptor>> getInterceptors() {
+    public Collection<RankEntity<ReActInterceptor>> getInterceptors() {
         return modelOptions.interceptors();
     }
 

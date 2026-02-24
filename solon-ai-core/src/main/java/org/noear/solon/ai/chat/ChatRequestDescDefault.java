@@ -526,12 +526,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      */
     private ToolResult doToolCall(ChatResponseDefault resp, FunctionTool func, Map<String, Object> args) throws Throwable {
         //收集拦截器
-        List<RankEntity<ChatInterceptor>> interceptorList = options.interceptors();
-
         ToolRequest req = new ToolRequest(resp.getRequest(), resp.getOptions().toolContext(), args);
 
         //构建请求数据
-        ToolChain chain = new ToolChain(interceptorList, func);
+        ToolChain chain = new ToolChain(options.interceptors(), func);
 
         return chain.doIntercept(req);
     }

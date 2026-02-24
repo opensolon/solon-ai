@@ -159,7 +159,7 @@ public class ChatConfig extends AiConfig {
     /**
      * 添加默认工具（即每次请求都会带上）
      *
-     * @deprecated 3.8.4 {@link #addDefaultTool(FunctionTool)}
+     * @deprecated 3.8.4 {@link #addDefaultTool(FunctionTool...)}
      */
     @Deprecated
     public void addDefaultTools(FunctionTool tool) {
@@ -215,7 +215,7 @@ public class ChatConfig extends AiConfig {
      * @deprecated 3.8.4 {@link #getModelOptions()}
      */
     @Deprecated
-    public List<RankEntity<ChatInterceptor>> getDefaultInterceptors() {
+    public Collection<RankEntity<ChatInterceptor>> getDefaultInterceptors() {
         return getModelOptions().interceptors();
     }
 
@@ -235,7 +235,7 @@ public class ChatConfig extends AiConfig {
      * @deprecated 3.8.4 {@link #getModelOptions()}
      */
     @Deprecated
-    public List<RankEntity<Skill>> getDefaultSkills() {
+    public Collection<RankEntity<Skill>> getDefaultSkills() {
         return getModelOptions().skills();
     }
 

@@ -122,4 +122,14 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
         options.setFeedbackReasonDescriptionProvider(provider);
         return this;
     }
+
+    public ReActOptionsAmend interceptorAdd(ReActInterceptor interceptor) {
+        options.getModelOptions().interceptorAdd(interceptor);
+        return this;
+    }
+
+    public ReActOptionsAmend interceptorAdd(ReActInterceptor interceptor, int index) {
+        options.getModelOptions().interceptorAdd(index, interceptor);
+        return this;
+    }
 }

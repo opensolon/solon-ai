@@ -64,7 +64,7 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
         return this;
     }
 
-    public TeamOptionsAmend feedbackMode(boolean feedbackMode){
+    public TeamOptionsAmend feedbackMode(boolean feedbackMode) {
         options.setFeedbackMode(feedbackMode);
         return this;
     }
@@ -93,7 +93,7 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
      * 动态追加拦截器
      */
     public TeamOptionsAmend interceptorAdd(TeamInterceptor interceptor) {
-        options.addInterceptor(interceptor, 0);
+        options.getModelOptions().interceptorAdd(interceptor);
         return this;
     }
 
@@ -101,7 +101,7 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
      * 动态追加拦截器（带排序权重）
      */
     public TeamOptionsAmend interceptorAdd(TeamInterceptor interceptor, int index) {
-        options.addInterceptor(interceptor, index);
+        options.getModelOptions().interceptorAdd(index, interceptor);
         return this;
     }
 }

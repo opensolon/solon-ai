@@ -71,15 +71,10 @@ public class TeamOptions implements NonSerializable {
      * 模型选项
      */
     private final ModelOptionsAmend<?, TeamInterceptor> modelOptions = new ModelOptionsAmend<>();
-    /**
-     * 团队协作拦截器链（支持排序，用于审计、监控或干预）
-     */
-    private final List<RankEntity<TeamInterceptor>> interceptors = new ArrayList<>();
 
 
     public TeamOptions copy() {
         TeamOptions tmp = new TeamOptions();
-        tmp.interceptors.addAll(this.interceptors);
         tmp.modelOptions.putAll(this.modelOptions);
         tmp.maxTurns = this.maxTurns;
         tmp.maxRetries = this.maxRetries;
@@ -148,25 +143,6 @@ public class TeamOptions implements NonSerializable {
         this.feedbackReasonDescriptionProvider = provider;
     }
 
-    /**
-     * 注册团队拦截器
-     *
-     * @param interceptor 拦截器实例
-     * @param index       权重索引（数值越小优先级越高）
-     */
-    protected void addInterceptor(TeamInterceptor interceptor, int index) {
-        this.interceptors.add(new RankEntity<>(interceptor, index));
-
-        if (interceptors.size() > 1) {
-            Collections.sort(interceptors);
-        }
-
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamOptions register interceptor: {}, index: {}",
-                    interceptor.getClass().getSimpleName(), index);
-        }
-    }
-
 
     // --- 参数获取 (Public) ---
 
@@ -183,8 +159,8 @@ public class TeamOptions implements NonSerializable {
 
     public FunctionTool getTool(String name) { return modelOptions.tool(name); }
 
-    public List<RankEntity<TeamInterceptor>> getInterceptors() {
-        return interceptors;
+    public Collection<RankEntity<TeamInterceptor>> getInterceptors() {
+        return modelOptions.interceptors();
     }
 
     public int getMaxTurns() {

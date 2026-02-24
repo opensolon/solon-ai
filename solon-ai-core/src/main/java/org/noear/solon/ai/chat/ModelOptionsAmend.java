@@ -51,9 +51,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     protected final Map<String, Object> options;
 
     protected final Map<String, FunctionTool> tools;
-    protected final List<RankEntity<Skill>> skills;
-
-    protected final List<RankEntity<X>> interceptors;
+    protected final Map<String, RankEntity<Skill>> skills;
+    protected final Map<Class<?>, RankEntity<X>> interceptors;
 
     public ModelOptionsAmend() {
         this.autoToolCall = new AtomicBoolean(true);
@@ -62,12 +61,11 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
         this.options = new LinkedHashMap<>();
 
         this.tools = new LinkedHashMap<>();
-        this.skills = new ArrayList<>();
-
-        this.interceptors = new ArrayList<>();
+        this.skills = new LinkedHashMap<>();
+        this.interceptors = new LinkedHashMap<>();
     }
 
-    public ModelOptionsAmend(ModelOptionsAmend<?,X> real) {
+    public ModelOptionsAmend(ModelOptionsAmend<?, X> real) {
         this.autoToolCall = real.autoToolCall;
         this.toolContext = real.toolContext;
         this.options = real.options;
@@ -78,7 +76,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
         this.interceptors = real.interceptors;
     }
 
-    public void putAll(ModelOptionsAmend<?,X> from) {
+    public void putAll(ModelOptionsAmend<?, X> from) {
         if (from != null) {
             autoToolCall.set(from.autoToolCall.get());
 
@@ -86,9 +84,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
             options.putAll(from.options);
 
             tools.putAll(from.tools);
-            skills.addAll(from.skills);
-
-            interceptors.addAll(from.interceptors);
+            skills.putAll(from.skills);
+            interceptors.putAll(from.interceptors);
         }
     }
 
@@ -138,10 +135,10 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     /**
      * 添加函数工具
      */
-    public T toolAdd(Iterable<FunctionTool> toolColl) {
-        if (toolColl != null) {
-            for (FunctionTool f : toolColl) {
-                tools.put(f.name(), f);
+    public T toolAdd(Collection<FunctionTool> items) {
+        if (Assert.isNotEmpty(items)) {
+            for (FunctionTool item : items) {
+                tools.put(item.name(), item);
             }
         }
 
@@ -192,10 +189,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      */
     public T skillAdd(Collection<RankEntity<Skill>> items) {
         if (Assert.isNotEmpty(items)) {
-            skills.addAll(items);
-
-            if (skills.size() > 0) {
-                Collections.sort(skills);
+            for (RankEntity<Skill> item : items) {
+                skills.put(item.target.name(), item);
             }
         }
 
@@ -209,11 +204,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      */
     public T skillAdd(Skill... skills) {
         for (Skill s : skills) {
-            this.skills.add(new RankEntity<>(s, 0));
-        }
-
-        if (this.skills.size() > 1) {
-            Collections.sort(this.skills);
+            this.skills.put(s.name(), new RankEntity<>(s, 0));
         }
 
         return (T) this;
@@ -225,10 +216,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      * @since 3.8.4
      */
     public T skillAdd(int index, Skill skill) {
-        skills.add(new RankEntity<>(skill, index));
-        if (skills.size() > 1) {
-            Collections.sort(skills);
-        }
+        skills.put(skill.name(), new RankEntity<>(skill, index));
 
         return (T) this;
     }
@@ -236,8 +224,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     /**
      * 获取所有技能
      */
-    public List<RankEntity<Skill>> skills() {
-        return skills;
+    public Collection<RankEntity<Skill>> skills() {
+        return skills.values();
     }
 
 
@@ -287,32 +275,26 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      * @param interceptor 拦截器
      */
     public T interceptorAdd(int index, X interceptor) {
-        interceptors.add(new RankEntity<>(interceptor, index));
+        interceptors.put(interceptor.getClass(), new RankEntity<>(interceptor, index));
 
-        if (interceptors.size() > 0) {
-            Collections.sort(interceptors);
-        }
-
-        return (T)this;
+        return (T) this;
     }
 
     public T interceptorAdd(Collection<RankEntity<X>> items) {
         if (Assert.isNotEmpty(items)) {
-            interceptors.addAll(items);
-
-            if (interceptors.size() > 0) {
-                Collections.sort(interceptors);
+            for (RankEntity<X> item : items) {
+                interceptors.put(item.target.getClass(), item);
             }
         }
 
-        return (T)this;
+        return (T) this;
     }
 
     /**
      * 获取所有拦截器
      */
-    public List<RankEntity<X>> interceptors() {
-        return interceptors;
+    public Collection<RankEntity<X>> interceptors() {
+        return interceptors.values();
     }
 
 

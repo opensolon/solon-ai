@@ -513,13 +513,13 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
         public Builder defaultInterceptorAdd(TeamInterceptor... interceptors) {
             for (TeamInterceptor interceptor : interceptors) {
-                config.getDefaultOptions().addInterceptor(interceptor, 0);
+                config.getDefaultOptions().getModelOptions().interceptorAdd(interceptor);
             }
             return this;
         }
 
         public Builder defaultInterceptorAdd(TeamInterceptor interceptor, int index) {
-            config.getDefaultOptions().addInterceptor(interceptor, index);
+            config.getDefaultOptions().getModelOptions().interceptorAdd(index, interceptor);
             return this;
         }
 

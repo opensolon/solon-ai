@@ -19,9 +19,11 @@ import org.noear.solon.ai.AiHandler;
 import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.core.util.RankEntity;
-import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -35,8 +37,13 @@ public class StreamChain {
     private final AiHandler<ChatRequest, Flux<ChatResponse>, RuntimeException> lastHandler;
     private int index;
 
-    public StreamChain(List<RankEntity<ChatInterceptor>> interceptorList, AiHandler<ChatRequest, Flux<ChatResponse>, RuntimeException> lastHandler) {
-        this.interceptorList = interceptorList;
+    public StreamChain(Collection<RankEntity<ChatInterceptor>> interceptors, AiHandler<ChatRequest, Flux<ChatResponse>, RuntimeException> lastHandler) {
+        this.interceptorList = new ArrayList<>(interceptors);
+
+        if (interceptorList.size() > 1) {
+            Collections.sort(interceptorList);
+        }
+
         this.lastHandler = lastHandler;
         this.index = 0;
     }
