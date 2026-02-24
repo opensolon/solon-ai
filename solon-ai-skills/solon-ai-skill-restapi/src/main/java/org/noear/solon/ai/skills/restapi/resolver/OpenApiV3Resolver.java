@@ -62,7 +62,13 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
                         ONode content = detail.get("requestBody").get("content");
                         ONode bodySchema = content.get("application/json").get("schema");
                         if (bodySchema.isNull() && content.size() > 0) {
-                            bodySchema = content.get(0).get("schema");
+                            if(content.isArray())
+                            {
+                                bodySchema = content.get(0).get("schema");
+                            }else {
+                                Collection<ONode> values = content.getObject().values();
+                                bodySchema = values.stream().findFirst().get().get("schema");
+                            }
                         }
                         if (!bodySchema.isNull()) {
                             if (input.length() > 0) input.append(" + ");
