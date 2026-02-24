@@ -1,3 +1,5 @@
+server.port: 9801
+
 solon.dataSources:
   h2:
     class: "org.noear.solon.data.datasource.UnpooledDataSource"
