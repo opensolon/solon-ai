@@ -40,69 +40,72 @@ public class StopLoopInterceptor implements ReActInterceptor {
     private final int maxRepeatCount;
     private final int windowSize;
 
-    /**
-     * @param maxRepeatCount 在窗口内允许同一动作出现的次数阈值
-     * @param windowSize     监控最近的 N 个动作
-     */
     public StopLoopInterceptor(int maxRepeatCount, int windowSize) {
         this.maxRepeatCount = Math.max(2, maxRepeatCount);
         this.windowSize = Math.max(4, windowSize);
     }
 
     public StopLoopInterceptor() {
-        this(3, 6);
+        this(3, 8); // 稍微放大窗口，增加容错
     }
 
     @Override
     public void onReason(ReActTrace trace, AssistantMessage message) {
         if (message == null) return;
 
-        // 1. 生成标准化指纹 (Arguments 排序序列化，防止 key 顺序导致的指纹失效)
         String fingerprint = generateNormalizedFingerprint(message);
         if (fingerprint == null) return;
 
-        // 2. 使用 Trace 内部的 extras 维护滑动窗口历史
         LinkedList<String> history = trace.getExtraAs(EXTRAS_HISTORY_KEY);
         if (history == null) {
             history = new LinkedList<>();
             trace.setExtra(EXTRAS_HISTORY_KEY, history);
         }
 
-        // 3. 判定重复频率
         history.add(fingerprint);
         if (history.size() > windowSize) {
             history.removeFirst();
         }
 
-        // 统计当前指纹在窗口内的出现次数
         long count = history.stream().filter(fp -> fp.equals(fingerprint)).count();
 
         if (count >= maxRepeatCount) {
-            String errorMsg = String.format(
-                    "Detected ReAct loop in agent [%s]: Action intent repeated %d times in recent %d steps.",
-                    trace.getAgentName(), count, history.size()
+            // --- 核心优化点：软中断策略 ---
+
+            // 1. 构造一个引导模型收尾的提示语，而不是直接停止
+            String breakMsg = String.format(
+                    "SYSTEM ALERT: Potential loop detected. You have called the same action %d times. " +
+                            "Please STOP further actions and provide a Final Answer based on the information you currently have.",
+                    count
             );
 
-            log.warn(errorMsg);
+            log.warn("ReAct Loop detected for agent [{}], injecting break command.", trace.getAgentName());
 
-            // 触发中断逻辑
-            trace.pending(errorMsg);
+            // 2. 将其注入为下一次的 Observation，给模型“自省”和“总结”的机会
+            trace.pending(breakMsg);
+
+            // 3. 清理该 trace 的历史，防止在收尾阶段再次触发
+            history.clear();
         }
     }
 
     private String generateNormalizedFingerprint(AssistantMessage message) {
         if (Assert.isNotEmpty(message.getToolCalls())) {
-            StringBuilder sb = new StringBuilder("tool:");
+            StringBuilder sb = new StringBuilder();
             for (ToolCall call : message.getToolCalls()) {
-                // 使用默认序列化（Snack4 默认会对 Map 的 Key 排序，确保指纹一致性）
-                sb.append(call.getName()).append(ONode.serialize(call.getArguments()));
+                // 仅对工具名+参数进行指纹化
+                sb.append(call.getName()).append(":").append(ONode.serialize(call.getArguments()));
             }
             return sb.toString();
         } else if (Assert.isNotEmpty(message.getContent())) {
             String content = message.getContent();
-            // 针对文本模式：只关注 Action 部分，过滤 Thought 部分的波动
+            // 提取 Action 块，忽略 Thought 的微小差异
             int actionIdx = content.indexOf("Action:");
-            return (actionIdx >= 0) ? content.substring(actionIdx).trim() : content.trim();
+            if (actionIdx >= 0) {
+                return content.substring(actionIdx).trim();
+            }
+            // 如果只有内容，取前 50 个字符作为特征，防止文本生成死循环
+            return content.length() > 50 ? content.substring(0, 50) : content;
         }
         return null;
     }
