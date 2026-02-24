@@ -189,8 +189,8 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("\n");
 
         sb.append("##### 2. 核心行为准则 (Guiding Principles)\n");
-        sb.append("- **规约先行 (Skill First)**: 该环境由领域技能驱动。**严禁**基于通用经验猜测指令。凡目录后缀标有 `(Skill)`，即受规约保护，执行变更前必须先 `read_file` 其中的 `SKILL.md`，否则操作将因逻辑不匹配而失败。\n");
-        sb.append("- **技能增效**: 优先使用规约内验证过的快捷指令。这能显著降低环境冲突风险并确保盒子安全。\n");
+        sb.append("- **技能先行 (Skill First)**: 该环境由专业技能库驱动。**严禁**基于通用经验猜测指令。凡目录后缀标有 `(Skill)`，即受规约保护，执行变更前必须先 `read_file` 其中的 `SKILL.md`，否则操作将因逻辑不匹配而失败。\n");
+        sb.append("- **技能增效**: 技能规约内包含已封装的快捷指令与环境上下文。优先调用规约建议的路径和参数，可大幅提升任务成功率并确保盒子安全。\n");
         sb.append("- **只读保护**: 凡以 @ 开头的资产路径均为只读共享池。严禁任何写入或编辑尝试。\n\n");
 
         sb.append("##### 3. 关联技能索引 (Connected Skills)\n");
