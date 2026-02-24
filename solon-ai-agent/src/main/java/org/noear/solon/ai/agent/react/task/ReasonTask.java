@@ -264,7 +264,7 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         final AssistantMessage responseMessage;
-        if (response.isStream() ) {
+        if (response.isStream()) {
             responseMessage = response.getAggregationMessage();
         } else {
             responseMessage = response.getMessage();
