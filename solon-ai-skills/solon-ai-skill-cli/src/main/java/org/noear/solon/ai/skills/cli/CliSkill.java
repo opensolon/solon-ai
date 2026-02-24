@@ -189,9 +189,43 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("\n");
 
         sb.append("##### 2. 核心行为准则 (Guiding Principles)\n");
-        sb.append("- **技能先行 (Skill First)**: 该环境由专业技能库驱动。**严禁**基于通用经验猜测指令。凡目录后缀标有 `(Skill)`，即受规约保护，执行变更前必须先 `read_file` 其中的 `SKILL.md`，否则操作将因逻辑不匹配而失败。\n");
-        sb.append("- **技能增效**: 技能规约内包含已封装的快捷指令与环境上下文。优先调用规约建议的路径和参数，可大幅提升任务成功率并确保盒子安全。\n");
-        sb.append("- **只读保护**: 凡以 @ 开头的资产路径均为只读共享池。严禁任何写入或编辑尝试。\n\n");
+        sb.append("- **技能先行 (Skill First)**: \n");
+        sb.append("  - **触发条件**（满足任一即触发）：\n");
+        sb.append("    1. **明确动作词**： \n");
+        sb.append("      - 代码工程: 生成、创建、构建、编译、打包、部署、发布 \n");
+        sb.append("      - 多媒体: 生成/制作/转换 视频/音频/图片、剪辑、渲染、合成 \n");
+        sb.append("      - 文档: 制作/生成/导出 PPT/PDF/Word/报告 \n");
+        sb.append("      - 数据: 转换、解析、分析、清洗、导入、导出、可视化 \n");
+        sb.append("      - AI 模型: 文生图、语音合成、翻译、识别、预测 \n");
+        sb.append("      - 自动化: 爬取、抓取、批量处理、执行脚本、定时任务 \n");
+        sb.append("      - 运行测试: 执行、运行、启动、测试、验证、调试 \n");
+        sb.append("      - 环境配置: 安装、配置、设置、初始化 \n");
+        sb.append("    2. **句式特征**： \n");
+        sb.append("      - \"帮我做...\"、\"帮我把...\"、\"帮我用...\" \n");
+        sb.append("      - \"用 [工具名] ...\"（如\"用 FFmpeg 转换\"） \n");
+        sb.append("      -- \"调用 [API/模型/服务] ...\" \n");
+        sb.append("    3. **兜底规则**： \n");
+        sb.append("      - 请求中提到具体工具名（Maven、Docker、FFmpeg、Pandas 等） \n");
+        sb.append("      - 无法通过纯文本回复完成的任务 \n");
+        sb.append("  - **排除场景**（不触发技能探测）：\n");
+        sb.append("    * 纯信息查询: \"这是什么？\"、\"为什么？\"、\"怎么理解？\" \n");
+        sb.append("    * 代码解释: \"这段代码是干什么的？\" \n");
+        sb.append("    * 文件读取: \"帮我看看这个文件\" \n");
+        sb.append("    * 简单计算: \"1+1 等于几？\" \n");
+        sb.append("  - **强制流程**: \n");
+        sb.append("    1. 必须先 `list_files` 探测可用技能 \n");
+        sb.append("    2. 若发现相关技能目录，必须 `read_file` 其 SKILL.md \n");
+        sb.append("    3. 严禁凭经验直接执行 `run_terminal_command` \n");
+        sb.append("  - **违规信号**: 若第一个工具调用不是 list_files，视为流程错误 \n");
+        sb.append("  - **违规处理**:   \n");
+        sb.append("    - **预防机制**: 在调用 run_terminal_command 前，必须先完成检查清单 \n");
+        sb.append("    - **检测信号**: 若发现检查项未完成，触发内部警告 \n");
+        sb.append("    - **修正流程**: 立即补充执行缺失的检查项，再调用命令 \n");
+        sb.append("    - **严禁行为**: 先调用命令再补救（此时已无法回滚） \n");
+        sb.append("- **只读保护**: \n");
+        sb.append("  - 凡以 @ 开头的路径均为只读 \n");
+        sb.append("  - 违规操作将被系统拦截并报错 \n\n");
+
 
         sb.append("##### 3. 关联技能索引 (Connected Skills)\n");
         sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath, ".", false)).append("\n");
@@ -204,8 +238,20 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("> **重要信号**：当你探测到标记为 `(Skill)` 的目录时，你的首要任务是 `read_file` 该目录下的 `SKILL.md` 以对齐操作逻辑，而非直接执行 Shell 命令。\n\n");
 
         sb.append("##### 4. 核心工作流 (Standard Operating Procedures)\n");
-        sb.append("- **侦查**: 任务开始必先 `list_files`。涉及特定池技能，必读其 `SKILL.md`。\n");
-        sb.append("- **编辑**: 修改前必 `read_file`。`str_replace_editor` 必须全局唯一，确保原子化。\n\n");
+        sb.append("- **探测**: \n");
+        sb.append("  - 任务开始必先 `list_files` \n");
+        sb.append("  - **自检**: 在调用任何 `run_terminal_command` 前，必须完成以下检查：\n");
+        sb.append("    * [ ] 已执行 `list_files` 探测环境 \n");
+        sb.append("    * [ ] 若涉及技能目录，已读取 `SKILL.md` \n");
+        sb.append("    * [ ] 命令参数符合规约要求 \n");
+        sb.append("  - **强制性**: 若任一检查项未完成，禁止调用 `run_terminal_command` \n");
+        sb.append("  - **违规处理**: 若检测到跳过检查，立即回滚并补充执行 \n");
+        sb.append("- **编辑**: \n\n");
+        sb.append("  - 修改前必 `read_file` \n");
+        sb.append("  - **自检**: 在调用 `str_replace_editor` 前，问自己： \n");
+        sb.append("    * \"我是否已读取最新的文件内容？\" \n");
+        sb.append("    * \"我要修改的内容是否在同一个连续块中？\" \n");
+        sb.append("  - 若答案为\"否\"，调整策略 \n");
 
         sb.append("##### 5. 路径与安全性 (Path & Security)\n");
         sb.append("- **路径格式**: 严禁使用 `./` 前缀或任何绝对路径。目录路径建议以 `/` 结尾。\n");
