@@ -356,17 +356,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        @Deprecated
         public Builder systemPrompt(TeamSystemPrompt promptProvider) {
             config.setSystemPrompt(promptProvider);
-            return this;
-        }
-
-        @Deprecated
-        public Builder systemPrompt(Consumer<TeamSystemPrompt.Builder> promptBuilder) {
-            TeamSystemPrompt.Builder builder = TeamSystemPrompt.builder();
-            promptBuilder.accept(builder);
-            config.setSystemPrompt(builder.build());
             return this;
         }
 

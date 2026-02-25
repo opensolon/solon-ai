@@ -390,17 +390,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        @Deprecated
         public Builder systemPrompt(ReActSystemPrompt val) {
             config.setSystemPrompt(val);
-            return this;
-        }
-
-        @Deprecated
-        public Builder systemPrompt(Consumer<ReActSystemPrompt.Builder> promptBuilder) {
-            ReActSystemPrompt.Builder builder = ReActSystemPrompt.builder();
-            promptBuilder.accept(builder);
-            config.setSystemPrompt(builder.build());
             return this;
         }
 
