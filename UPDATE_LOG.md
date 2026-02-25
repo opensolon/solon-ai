@@ -10,6 +10,11 @@
 
 *  mcp channel 概念改为 transport （并保持兼容）???
 
+
+### 3.9.5
+
+* 优化 solon-ai-skill-memory MemSkill 取消 userId 参数，自动从上下文中取
+
 ### 3.9.4
 
 * 新增 solon-ai-skill-lucene 插件

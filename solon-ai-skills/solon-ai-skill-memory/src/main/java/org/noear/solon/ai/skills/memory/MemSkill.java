@@ -19,6 +19,7 @@ import org.noear.redisx.RedisClient;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.annotation.Param;
@@ -46,17 +47,30 @@ public class MemSkill extends AbsSkill {
     private static final String BASE_PREFIX = "ai:memskill:";
 
     private final RedisClient redis;
-    private final String userId;
     private final MemSearchProvider searchProvider;
 
-    public MemSkill(RedisClient redis, String userId, MemSearchProvider searchProvider) {
+    public MemSkill(RedisClient redis, MemSearchProvider searchProvider) {
         this.redis = redis;
-        this.userId = userId;
         this.searchProvider = searchProvider;
     }
 
+
+    private String getSessoinId(Prompt prompt) {
+        return prompt.attrOrDefault(ChatSession.ATTR_SESSIONID, "tmp");
+    }
+
+    private String getFinalKey(String __sessionId, String key) {
+        return BASE_PREFIX + __sessionId + ":" + key;
+    }
+
+    private String getNow() {
+        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    }
+
     @Override
-    public String name() { return "mem_skill"; }
+    public String name() {
+        return "mem_skill";
+    }
 
     @Override
     public String description() {
@@ -71,7 +85,9 @@ public class MemSkill extends AbsSkill {
         String mentalModel = "";
         if (searchProvider != null) {
             // 获取核心认知碎片（通常是重要度高或最近更新的）
-            List<MemSearchResult> hot = searchProvider.getHotMemories(userId, 5);
+            String sessionId = getSessoinId(prompt);
+
+            List<MemSearchResult> hot = searchProvider.getHotMemories(sessionId, 5);
             if (!hot.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (MemSearchResult r : hot) {
@@ -91,9 +107,6 @@ public class MemSkill extends AbsSkill {
                 "   - **归纳升维**：当认知库出现冗余时，主动使用 `mem_consolidate` 将低层事实归纳为高层偏好。";
     }
 
-    private String getFinalKey(String key) { return BASE_PREFIX + userId + ":" + key; }
-
-    private String getNow() { return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")); }
 
     /**
      * EXTRACT & UPDATE: 提取与覆盖
@@ -103,9 +116,10 @@ public class MemSkill extends AbsSkill {
             description = "将事实、偏好或进度存入用户心智模型。若存在同名 Key，系统将返回旧记录以供你对比反思。")
     public String extract(@Param("key") String key,
                           @Param("fact") String fact,
-                          @Param("importance") int importance) {
+                          @Param("importance") int importance,
+                          String __sessionId) {
         try {
-            String finalKey = getFinalKey(key);
+            String finalKey = getFinalKey(__sessionId, key);
             String oldJson = redis.getBucket().get(finalKey);
             String now = getNow();
 
@@ -132,7 +146,7 @@ public class MemSkill extends AbsSkill {
             redis.getBucket().store(finalKey, ONode.serialize(data), ttl);
 
             if (searchProvider != null) {
-                searchProvider.updateIndex(userId, key, fact, importance, now);
+                searchProvider.updateIndex(__sessionId, key, fact, importance, now);
             }
 
             return feedback.toString();
@@ -147,11 +161,15 @@ public class MemSkill extends AbsSkill {
      */
     @ToolMapping(name = "mem_search",
             description = "语义检索：通过自然语言描述在心智模型中寻找相关的记忆碎片，辅助找回背景信息。")
-    public String search(@Param("query") String query) {
-        if (searchProvider == null) return "搜索适配器未配置。";
+    public String search(@Param("query") String query, String __sessionId) {
+        if (searchProvider == null) {
+            return "搜索适配器未配置。";
+        }
 
-        List<MemSearchResult> results = searchProvider.search(userId, query, 3);
-        if (results.isEmpty()) return "未发现相关认知片段。";
+        List<MemSearchResult> results = searchProvider.search(__sessionId, query, 3);
+        if (results.isEmpty()) {
+            return "未发现相关认知片段。";
+        }
 
         StringBuilder sb = new StringBuilder("匹配到以下认知参考（建议优先参考时间戳较近的记录）：\n");
         for (MemSearchResult res : results) {
@@ -165,14 +183,19 @@ public class MemSkill extends AbsSkill {
      * RECALL: 精确召回
      */
     @ToolMapping(name = "mem_recall", description = "精确召回：通过 Key 获取该认知条目的完整细节。")
-    public String recall(@Param("key") String key) {
+    public String recall(@Param("key") String key, String __sessionId) {
         try {
-            String val = redis.getBucket().get(getFinalKey(key));
-            if (Utils.isEmpty(val)) return "未找到认知条目 [" + key + "]。";
+            String val = redis.getBucket().get(getFinalKey(__sessionId, key));
+            if (Utils.isEmpty(val)) {
+                return "未找到认知条目 [" + key + "]。";
+            }
+
             ONode node = ONode.ofJson(val);
             return String.format("【认知详情】内容：%s | 记录时间：%s | 重要度：%s",
                     node.get("content").getString(), node.get("time").getString(), node.get("importance").getString());
-        } catch (Exception e) { return "读取异常。"; }
+        } catch (Exception e) {
+            return "读取异常。";
+        }
     }
 
     /**
@@ -183,13 +206,14 @@ public class MemSkill extends AbsSkill {
             description = "认知升维：将多个低层事实碎片整合为高层偏好模型，并清理冗余碎片。")
     public String consolidate(@Param("keys_to_merge") List<String> oldKeys,
                               @Param("new_key") String newKey,
-                              @Param("evolved_insight") String insight) {
+                              @Param("evolved_insight") String insight,
+                              String __sessionId) {
         // 原论文精神：通过整合减少上下文占用，提高信噪比
         String fact = "[Evolved Insight] " + insight;
-        extract(newKey, fact, 10); // 核心洞察赋予最高重要度
+        extract(newKey, fact, 10, __sessionId); // 核心洞察赋予最高重要度
 
         for (String k : oldKeys) {
-            prune(k); // 彻底清理旧碎片，防止语义干扰
+            prune(k, __sessionId); // 彻底清理旧碎片，防止语义干扰
         }
 
         return "【心智进化成功】已将碎片认知升维为核心洞察，删除了冗余记录。";
@@ -199,9 +223,12 @@ public class MemSkill extends AbsSkill {
      * PRUNE: 记忆修剪
      */
     @ToolMapping(name = "mem_prune", description = "认知修正：删除错误、重复或过时的认知。")
-    public String prune(@Param("key") String key) {
-        redis.getBucket().remove(getFinalKey(key));
-        if (searchProvider != null) searchProvider.removeIndex(userId, key);
+    public String prune(@Param("key") String key, String __sessionId) {
+        redis.getBucket().remove(getFinalKey(__sessionId, key));
+        if (searchProvider != null) {
+            searchProvider.removeIndex(__sessionId, key);
+        }
+
         return "已从模型中清理 Key: " + key;
     }
 }
