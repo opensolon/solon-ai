@@ -83,6 +83,11 @@ Solon AI 是 Solon 项目核心子项目之一。它是一个全场景的 Java A
 * 等等...
 
 
+## 综合示例项目（可直接用于生产或定制）
+
+* [SolonCode（基于 Java8 实现的 "Claude Code" 或 "OpenCode"）](../../../../opensolon/soloncode)
+
+
 ## 核心模块体验
 
 * ChatModel（通用大语言模型 LLM 调用接口）

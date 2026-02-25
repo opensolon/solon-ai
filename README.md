@@ -83,6 +83,12 @@ Examples of embeddings (including third-party frameworks) for solon-ai:
 * Low-Code/Visual AI Workflow Platforms (e.g., LangFlow, Flowise)
 * And more...
 
+
+
+## Synthetic sample project (can be used directly for production or customization)
+
+* [SolonCode（Java8 impl version of "Claude Code" or  "OpenCode"](../../../../opensolon/soloncode)
+
 ## Core Module Experience
 
 * ChatModel(General Purpose LLM call interface)
