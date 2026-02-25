@@ -55,7 +55,8 @@ public class ClaudeChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "claude".equals(config.getProvider());
+        return "claude".equals(config.getProvider()) ||
+                "anthropic".equals(config.getProvider()) ;
     }
 
     @Override
