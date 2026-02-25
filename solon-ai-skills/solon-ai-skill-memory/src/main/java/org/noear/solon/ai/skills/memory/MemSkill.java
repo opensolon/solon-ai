@@ -117,7 +117,9 @@ public class MemSkill extends AbsSkill {
             }
         }
 
-        return "### 长期记忆自演进指南 (当前系统时间: " + getNow() + ")\n" +
+        String scope = sessionIsolation ? "当前用户私有" : "全局共享";
+
+        return "### 长期记忆自演进指南 (模式: " + scope + " | 当前时间: " + getNow() + ")\n" +
                 "你具备自主管理和演进用户心智模型的能力，请遵循以下原则：\n" +
                 "1. **核心心智模型**：这是你对当前用户的既有认知，请基于此进行对话：\n" +
                 (Assert.isEmpty(mentalModel) ? "- (心智模型构建中，请多提问以了解用户)" : mentalModel) +
