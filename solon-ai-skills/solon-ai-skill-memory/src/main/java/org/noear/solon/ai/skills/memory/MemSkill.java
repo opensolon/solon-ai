@@ -48,15 +48,35 @@ public class MemSkill extends AbsSkill {
 
     private final RedisClient redis;
     private final MemSearchProvider searchProvider;
+    private boolean sessionIsolation = true; // 默认开启会话隔离
 
     public MemSkill(RedisClient redis, MemSearchProvider searchProvider) {
         this.redis = redis;
         this.searchProvider = searchProvider;
     }
 
+    /**
+     * 设置是否启用会话隔离
+     */
+    public MemSkill sessionIsolation(boolean sessionIsolation) {
+        this.sessionIsolation = sessionIsolation;
+        return this;
+    }
+
+    private String getEffectiveSessionId(String __sessionId) {
+        if (sessionIsolation) {
+            return __sessionId == null ? "tmp" : __sessionId;
+        } else {
+            return "shared";
+        }
+    }
 
     private String getSessoinId(Prompt prompt) {
-        return prompt.attrOrDefault(ChatSession.ATTR_SESSIONID, "tmp");
+        if (sessionIsolation) {
+            return prompt.attrOrDefault(ChatSession.ATTR_SESSIONID, "tmp");
+        } else {
+            return "shared";
+        }
     }
 
     private String getFinalKey(String __sessionId, String key) {
@@ -118,6 +138,8 @@ public class MemSkill extends AbsSkill {
                           @Param("fact") String fact,
                           @Param("importance") int importance,
                           String __sessionId) {
+        __sessionId = getEffectiveSessionId(__sessionId);
+
         try {
             String finalKey = getFinalKey(__sessionId, key);
             String oldJson = redis.getBucket().get(finalKey);
@@ -166,6 +188,8 @@ public class MemSkill extends AbsSkill {
             return "搜索适配器未配置。";
         }
 
+        __sessionId = getEffectiveSessionId(__sessionId);
+
         List<MemSearchResult> results = searchProvider.search(__sessionId, query, 3);
         if (results.isEmpty()) {
             return "未发现相关认知片段。";
@@ -184,6 +208,8 @@ public class MemSkill extends AbsSkill {
      */
     @ToolMapping(name = "mem_recall", description = "精确召回：通过 Key 获取该认知条目的完整细节。")
     public String recall(@Param("key") String key, String __sessionId) {
+        __sessionId = getEffectiveSessionId(__sessionId);
+
         try {
             String val = redis.getBucket().get(getFinalKey(__sessionId, key));
             if (Utils.isEmpty(val)) {
@@ -208,6 +234,8 @@ public class MemSkill extends AbsSkill {
                               @Param("new_key") String newKey,
                               @Param("evolved_insight") String insight,
                               String __sessionId) {
+        __sessionId = getEffectiveSessionId(__sessionId);
+
         // 原论文精神：通过整合减少上下文占用，提高信噪比
         String fact = "[Evolved Insight] " + insight;
         extract(newKey, fact, 10, __sessionId); // 核心洞察赋予最高重要度
@@ -224,6 +252,8 @@ public class MemSkill extends AbsSkill {
      */
     @ToolMapping(name = "mem_prune", description = "认知修正：删除错误、重复或过时的认知。")
     public String prune(@Param("key") String key, String __sessionId) {
+        __sessionId = getEffectiveSessionId(__sessionId);
+
         redis.getBucket().remove(getFinalKey(__sessionId, key));
         if (searchProvider != null) {
             searchProvider.removeIndex(__sessionId, key);

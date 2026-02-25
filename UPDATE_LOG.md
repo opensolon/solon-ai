@@ -15,6 +15,7 @@
 
 * 优化 solon-ai-skill-memory MemSkill 取消 userId 参数，自动从上下文中取
 * 添加 solon-ai-core __sessionId 自动作为工具上下文和提示词属性（用于传递会话id）
+* 添加 solon-ai-skill-memory MemSkill 支持会话隔离与共享
 
 ### 3.9.4
 
