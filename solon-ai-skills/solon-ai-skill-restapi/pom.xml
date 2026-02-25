@@ -26,6 +26,12 @@
             <artifactId>snack4-jsonpath</artifactId>
             <version>${snack4.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>
