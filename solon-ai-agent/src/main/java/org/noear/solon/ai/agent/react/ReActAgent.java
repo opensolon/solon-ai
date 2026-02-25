@@ -23,6 +23,7 @@ import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -202,7 +203,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         //添加必要的工具上下文
-        options.getToolContext().put("__sessionId", session.getSessionId());
+        options.getToolContext().put(ChatSession.ATTR_SESSIONID, session.getSessionId());
 
         trace.prepare(config, options, session, protocol);
 

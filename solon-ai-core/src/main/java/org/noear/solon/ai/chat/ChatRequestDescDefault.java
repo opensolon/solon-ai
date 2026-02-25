@@ -121,6 +121,10 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 session.addMessage(originalPrompt);
             }
 
+            // 如果没有 sessionId 则推入
+            options.toolContext().computeIfAbsent(ChatSession.ATTR_SESSIONID,
+                    k -> session.getSessionId());
+
             //---
 
             StringBuilder instructionBuilder = new StringBuilder();

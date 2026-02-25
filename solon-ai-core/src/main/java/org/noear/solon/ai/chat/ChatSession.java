@@ -36,6 +36,8 @@ import java.util.function.Consumer;
  */
 @Preview("3.1")
 public interface ChatSession extends NonSerializable {
+    static String ATTR_SESSIONID = "__sessionId";
+
     /**
      * 获取会话id
      */

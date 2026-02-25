@@ -131,7 +131,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         //添加必要的工具上下文
-        options.toolContextPut("__sessionId", session.getSessionId());
+        options.toolContextPut(ChatSession.ATTR_SESSIONID, session.getSessionId());
 
         trace.prepare(config, options, session, protocol);
 
