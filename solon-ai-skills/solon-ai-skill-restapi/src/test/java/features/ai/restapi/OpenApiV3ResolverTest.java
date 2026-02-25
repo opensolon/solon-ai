@@ -235,6 +235,29 @@ public class OpenApiV3ResolverTest {
     }
 
     @Test
+    @DisplayName("RequestBody 深度覆盖：application/json 优先逻辑")
+    void testRequestBodyStandard() {
+        String json = "{" +
+                "  \"openapi\": \"3.0.0\"," +
+                "  \"paths\": {" +
+                "    \"/save\": {" +
+                "      \"post\": {" +
+                "        \"requestBody\": {" +
+                "          \"content\": {" +
+                "            \"application/json\": {\"schema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"integer\"}}}}" +
+                "          }" +
+                "        }" +
+                "      }" +
+                "    }" +
+                "  }" +
+                "}";
+
+        List<ApiTool> tools = resolver.resolve(null, json);
+        String input = tools.get(0).getInputSchema();
+        assertTrue(input.contains("\"id\""));
+    }
+
+    @Test
     @DisplayName("Responses 覆盖：处理 content 为数组的情况")
     void testResponseContentAsArray() {
         // 触发源码中 responses 里的 content.isArray() 分支
