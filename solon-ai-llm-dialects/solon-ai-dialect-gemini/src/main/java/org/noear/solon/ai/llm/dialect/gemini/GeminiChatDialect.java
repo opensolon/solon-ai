@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,6 +82,7 @@ public class GeminiChatDialect extends AbstractChatDialect {
         String apiUrl = buildApiUrl(config.getApiUrl().toString(), config.getModel(), isStream);
 
         HttpUtils httpUtils = HttpUtils.http(apiUrl)
+                .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) config.getTimeout().getSeconds());
 
         if (config.getProxy() != null) {

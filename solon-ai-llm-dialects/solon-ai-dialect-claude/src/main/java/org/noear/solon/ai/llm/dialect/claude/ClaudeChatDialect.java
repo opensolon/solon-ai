@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
 import java.util.List;
 import java.util.Map;
@@ -64,6 +65,7 @@ public class ClaudeChatDialect extends AbstractChatDialect {
         String apiUrl = config.getApiUrl().toString();
 
         HttpUtils httpUtils = HttpUtils.http(apiUrl)
+                .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) config.getTimeout().getSeconds());
 
         if (config.getProxy() != null) {

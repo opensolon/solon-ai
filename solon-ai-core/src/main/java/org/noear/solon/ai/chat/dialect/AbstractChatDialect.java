@@ -27,6 +27,7 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
 import java.util.*;
 
@@ -38,8 +39,8 @@ import java.util.*;
  */
 public abstract class AbstractChatDialect implements ChatDialect {
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
-        HttpUtils httpUtils = HttpUtils
-                .http(config.getApiUrl())
+        HttpUtils httpUtils = HttpUtils.http(config.getApiUrl())
+                .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) config.getTimeout().getSeconds());
 
         if (config.getProxy() != null) {

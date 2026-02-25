@@ -18,6 +18,7 @@ package org.noear.solon.ai;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.util.ProxyDesc;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
 import java.net.InetSocketAddress;
 import java.net.Proxy;
@@ -131,6 +132,7 @@ public class AiConfig {
     public HttpUtils createHttpUtils() {
         HttpUtils httpUtils = HttpUtils
                 .http(getApiUrl())
+                .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) getTimeout().getSeconds());
 
         if (getProxy() != null) {
