@@ -28,7 +28,13 @@ public class ApiTool {
     private String description;
     private String path;
     private String method;
+    /**
+     * input jsonSchema
+     * */
     private String inputSchema;
+    /**
+     * output jsonSchema
+     * */
     private String outputSchema;
     private boolean isDeprecated;
 

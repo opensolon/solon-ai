@@ -68,7 +68,9 @@ public abstract class AbsOpenApiResolver implements ApiResolver {
             ONode cleanNode = new ONode().asObject();
             node.getObjectUnsafe().forEach((k, v) -> {
                 if ("type".equals(k) || "properties".equals(k) || "items".equals(k) ||
-                        "required".equals(k) || "description".equals(k) || "enum".equals(k) || k.contains("Of")) {
+                        "required".equals(k) || "description".equals(k) || "enum".equals(k) ||
+                        "name".equals(k) || "in".equals(k) ||
+                        k.contains("Of")) {
 
                     if ("properties".equals(k)) {
                         ONode props = cleanNode.getOrNew("properties").asObject();
