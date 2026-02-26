@@ -20,6 +20,7 @@ import org.noear.solon.ai.skills.restapi.ApiTool;
 import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -45,37 +46,62 @@ public class OpenApiV2Resolver extends AbsOpenApiResolver {
         List<ApiTool> tools = new ArrayList<>();
         root.get("paths").getObject().forEach((path, methods) -> {
             methods.getObject().forEach((method, detail) -> {
-                if (isValidMethod(method)) {
-                    ApiTool tool = new ApiTool();
-                    tool.setPath(path);
-                    tool.setMethod(method.toUpperCase());
-                    tool.setName(generateName(detail, tool.getMethod(), path));
-                    tool.setDescription(extractDescription(detail));
+                if (!isValidMethod(method)) return;
 
-                    if (detail.hasKey("responses")) {
-                        ONode node200 = detail.get("responses").get("200");
-                        if (node200.isNull()) node200 = detail.get("responses").get("201");
+                ApiTool tool = new ApiTool();
+                tool.setPath(path);
+                tool.setMethod(method.toUpperCase());
+                tool.setName(generateName(detail, tool.getMethod(), path));
+                tool.setDescription(extractDescription(detail));
+
+                // 准备双 Schema 容器
+                ONode pathProps = new ONode().asObject();
+                ONode dataProps = new ONode().asObject();
+
+                ONode params = detail.get("parameters");
+                if (params.isArray()) {
+                    for (ONode p : params.getArrayUnsafe()) {
+                        // 解析引用
+                        ONode pNode = resolveRefNode(root, p, new HashSet<>());
+                        String in = pNode.get("in").getString();
+                        String name = pNode.get("name").getString();
+
+                        if ("path".equals(in)) {
+                            pathProps.set(name, pNode);
+                        } else if ("body".equals(in)) {
+                            // V2 的 Body 通常包含一个 Schema
+                            ONode bodySchema = resolveRefNode(root, pNode.get("schema"), new HashSet<>());
+                            if (bodySchema.hasKey("properties")) {
+                                dataProps.getOrNew("properties").setAll(bodySchema.get("properties").getObject());
+                            } else {
+                                // 处理非对象类型的 Body
+                                dataProps.set(name, bodySchema);
+                            }
+                        } else if ("query".equals(in) || "formData".equals(in)) {
+                            // Query 和 FormData 都合并到 dataProps
+                            dataProps.set(name, pNode);
+                        }
+                    }
+                }
+
+                if (pathProps.size() > 0) {
+                    tool.setPathSchema(pathProps.toJson());
+                }
+                if (dataProps.size() > 0) {
+                    tool.setDataSchema(dataProps.toJson());
+                }
+
+                // 3. 输出结果解析 (V2 结构更深一层)
+                if (detail.hasKey("responses")) {
+                    ONode node200 = detail.get("responses").get("200");
+                    if (node200.isNull()) node200 = detail.get("responses").get("201");
+                    if (!node200.isNull()) {
                         tool.setOutputSchema(resolveRef(root, node200.get("schema")));
                     }
-
-                    ONode params = detail.get("parameters");
-                    if (params.isArray()) {
-                        StringBuilder inputSb = new StringBuilder();
-                        for (ONode p : params.getArrayUnsafe()) {
-                            if (p.hasKey("schema")) {
-                                inputSb.append("Body: ").append(resolveRef(root, p.get("schema")));
-                            } else {
-                                inputSb.append(p.toJson());
-                            }
-                        }
-                        tool.setInputSchema(inputSb.toString());
-                    } else {
-                        tool.setInputSchema(resolveRef(root, params));
-                    }
-
-                    tool.setDeprecated(detail.get("deprecated").getBoolean());
-                    tools.add(tool);
                 }
+
+                tool.setDeprecated(detail.get("deprecated").getBoolean());
+                tools.add(tool);
             });
         });
 

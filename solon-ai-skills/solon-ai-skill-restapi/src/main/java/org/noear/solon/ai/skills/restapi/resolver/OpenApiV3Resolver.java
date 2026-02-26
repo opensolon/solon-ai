@@ -16,12 +16,11 @@
 package org.noear.solon.ai.skills.restapi.resolver;
 
 import org.noear.snack4.ONode;
-import org.noear.solon.Utils;
 import org.noear.solon.ai.skills.restapi.ApiTool;
 import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -47,84 +46,69 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
         List<ApiTool> tools = new ArrayList<>();
         root.get("paths").getObject().forEach((path, methods) -> {
             methods.getObject().forEach((method, detail) -> {
-                if (isValidMethod(method)) {
-                    ApiTool tool = new ApiTool();
-                    tool.setPath(path);
-                    tool.setMethod(method.toUpperCase());
-                    tool.setName(generateName(detail, tool.getMethod(), path));
-                    tool.setDescription(extractDescription(detail));
+                if (!isValidMethod(method)) return;
 
-                    String params = resolveRef(root, detail.get("parameters"));
-                    StringBuilder input = new StringBuilder();
-                    if (!"[]".equals(params) && !"{}".equals(params) && !Utils.isEmpty(params)) {
-                        input.append(params);
-                    }
+                ApiTool tool = new ApiTool();
+                tool.setPath(path);
+                tool.setMethod(method.toUpperCase());
+                tool.setName(generateName(detail, tool.getMethod(), path));
+                tool.setDescription(extractDescription(detail));
 
-                    if (detail.hasKey("requestBody")) {
-                        ONode content = detail.get("requestBody").get("content");
-                        ONode bodySchema = null;
+                // 1. 分解 Parameters (Path vs Query)
+                ONode parameters = detail.get("parameters");
+                ONode pathProps = new ONode().asObject();
+                ONode queryProps = new ONode().asObject();
 
-                        if (content.isArray()) {
-                            bodySchema = content.get(0).get("schema");
-                        } else if (content.isObject()) {
-                            if (content.hasKey("application/json")) {
-                                bodySchema = content.get("application/json").get("schema");
-                            } else {
-                                bodySchema = content.getObject().values().stream()
-                                        .filter(n -> !n.get("schema").isNull())
-                                        .findFirst()
-                                        .map(n -> n.get("schema"))
-                                        .orElse(new ONode());
-                            }
-                        } else {
-                            bodySchema = new ONode();
-                        }
+                if (parameters.isArray()) {
+                    for (ONode param : parameters.getArrayUnsafe()) {
+                        // 解析引用（如果参数本身是引用）
+                        ONode pNode = resolveRefNode(root, param, new HashSet<>());
+                        String in = pNode.get("in").getString();
+                        String name = pNode.get("name").getString();
 
-                        if (!bodySchema.isNull()) {
-                            if (input.length() > 0) {
-                                input.append(" + ");
-                            }
-
-                            input.append("Body:").append(resolveRef(root, bodySchema));
+                        if ("path".equals(in)) {
+                            pathProps.set(name, pNode);
+                        } else if ("query".equals(in)) {
+                            queryProps.set(name, pNode);
                         }
                     }
-
-                    tool.setInputSchema(input.toString());
-
-                    if (detail.hasKey("responses")) {
-                        ONode resps = detail.get("responses");
-                        ONode node200 = resps.get("200");
-                        if (node200.isNull()) node200 = resps.get("default");
-
-                        ONode content = node200.get("content");
-                        ONode outNode = new ONode();
-                        if (!content.isNull() && content.size() > 0) {
-
-                            if (content.isArray()) {
-                                outNode = content.get(0).get("schema");
-                            } else if (content.isObject()) {
-                                if (content.hasKey("application/json")) {
-                                    outNode = content.get("application/json").get("schema");
-                                } else {
-                                    outNode = content.getObject().values().stream()
-                                            .findFirst()
-                                            .map(n -> n.get("schema"))
-                                            .orElse(new ONode());
-                                }
-                            } else {
-                                outNode = new ONode();
-                            }
-                        }
-
-                        tool.setOutputSchema(resolveRef(root, outNode));
-                    }
-
-                    tool.setDeprecated(detail.get("deprecated").getBoolean());
-                    tools.add(tool);
                 }
+
+                // 2. 解析 Body 并入 DataSchema
+                if (detail.hasKey("requestBody")) {
+                    ONode bodySchema = extractBodySchema(root, detail.get("requestBody"));
+                    if (!bodySchema.isNull()) {
+                        // 如果既有 Query 又有 Body，合并到 dataSchema
+                        queryProps.getOrNew("properties").setAll(bodySchema.get("properties").getObject());
+                    }
+                }
+
+                if (pathProps.size() > 0) {
+                    tool.setPathSchema(pathProps.toJson());
+                }
+                if (queryProps.size() > 0) {
+                    tool.setDataSchema(queryProps.toJson());
+                }
+
+                // 3. 输出 Schema
+                if (detail.hasKey("responses")) {
+                    tool.setOutputSchema(resolveRef(root, detail.get("responses").get("200").get("content").get("application/json").get("schema")));
+                }
+
+                tool.setDeprecated(detail.get("deprecated").getBoolean());
+                tools.add(tool);
             });
         });
 
         return tools;
+    }
+
+    private ONode extractBodySchema(ONode root, ONode requestBody) {
+        ONode content = requestBody.get("content");
+        ONode schemaNode = content.get("application/json").get("schema");
+        if (schemaNode.isNull()) {
+            schemaNode = content.getObject().values().stream().findFirst().map(n -> n.get("schema")).orElse(new ONode());
+        }
+        return resolveRefNode(root, schemaNode, new HashSet<>());
     }
 }

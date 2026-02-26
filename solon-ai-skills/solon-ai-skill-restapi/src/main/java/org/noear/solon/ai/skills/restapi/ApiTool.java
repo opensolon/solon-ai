@@ -30,13 +30,21 @@ public class ApiTool {
     private String path;
     private String method;
     /**
-     * input jsonSchema
-     * */
-    private String inputSchema;
+     * path jsonSchema
+     *
+     */
+    private String pathSchema;
+    /**
+     * data jsonSchema
+     *
+     */
+    private String dataSchema;
     /**
      * output jsonSchema
-     * */
+     *
+     */
     private String outputSchema;
+
     private boolean isDeprecated;
 
     // --- Getter 方法 (公开) ---
@@ -62,15 +70,28 @@ public class ApiTool {
         return method;
     }
 
-    public String getInputSchema() {
-        return inputSchema;
+
+    public String getPathSchema() {
+        return pathSchema;
     }
 
-    public String getInputSchemaOr(String defVal) {
-        if (Assert.isEmpty(inputSchema)) {
+    public String getPathSchemaOr(String defVal) {
+        if (Assert.isEmpty(pathSchema)) {
             return defVal;
         } else {
-            return inputSchema;
+            return pathSchema;
+        }
+    }
+
+    public String getDataSchema() {
+        return dataSchema;
+    }
+
+    public String getDataSchemaOr(String defVal) {
+        if (Assert.isEmpty(dataSchema)) {
+            return defVal;
+        } else {
+            return dataSchema;
         }
     }
 
@@ -113,8 +134,12 @@ public class ApiTool {
         this.method = method;
     }
 
-    public void setInputSchema(String inputSchema) {
-        this.inputSchema = inputSchema;
+    public void setPathSchema(String pathSchema) {
+        this.pathSchema = pathSchema;
+    }
+
+    public void setDataSchema(String dataSchema) {
+        this.dataSchema = dataSchema;
     }
 
     public void setOutputSchema(String outputSchema) {

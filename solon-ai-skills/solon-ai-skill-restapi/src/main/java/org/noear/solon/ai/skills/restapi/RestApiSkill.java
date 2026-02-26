@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.skills.restapi.resolver.OpenApiResolver;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
@@ -30,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -229,9 +231,16 @@ public class RestApiSkill extends AbsSkill {
         String finalPath = tool.getPath();
 
         // 路径参数替换
-        if (pathParams != null) {
+        if (Assert.isNotEmpty(pathParams)) {
             for (Map.Entry<String, Object> entry : pathParams.entrySet()) {
-                finalPath = finalPath.replace("{" + entry.getKey() + "}", String.valueOf(entry.getValue()));
+                String val = String.valueOf(entry.getValue());
+                try {
+                    // 使用 UTF-8 进行编码
+                    String encodedVal = URLEncoder.encode(val, "UTF-8");
+                    finalPath = finalPath.replace("{" + entry.getKey() + "}", encodedVal);
+                } catch (java.io.UnsupportedEncodingException e) {
+                    finalPath = finalPath.replace("{" + entry.getKey() + "}", val);
+                }
             }
         }
 
@@ -294,9 +303,18 @@ public class RestApiSkill extends AbsSkill {
         for (ApiTool tool : tools) {
             sb.append("---\n").append("* **API: ").append(tool.getName()).append("**\n")
                     .append("  - 功能: ").append(tool.getDescription()).append("\n")
-                    .append("  - 路径: ").append(tool.getMethod()).append(" ").append(tool.getPath()).append("\n")
-                    .append("  - 入参 Schema: ").append(tool.getInputSchemaOr("{}")).append("\n")
-                    .append("  - 返回 Schema: ").append(tool.getOutputSchemaOr("{}")).append("\n");
+                    .append("  - 路径: ").append(tool.getMethod()).append(" ").append(tool.getPath()).append("\n");
+
+            if (Utils.isNotEmpty(tool.getPathSchema())) {
+                sb.append("  - Path 参数 (填充路径 {}): ").append(tool.getPathSchema()).append("\n");
+            }
+
+            if (Utils.isNotEmpty(tool.getDataSchema())) {
+                String label = "GET".equalsIgnoreCase(tool.getMethod()) ? "Query 参数" : "Body/Query 参数";
+                sb.append("  - ").append(label).append(": ").append(tool.getDataSchema()).append("\n");
+            }
+
+            sb.append("  - 返回结果: ").append(tool.getOutputSchemaOr("{}")).append("\n");
         }
         return sb.toString();
     }
