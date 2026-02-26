@@ -1,6 +1,7 @@
 package features.ai.core;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -12,120 +13,129 @@ import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 工具网关技能单元测试
+ * 覆盖：FULL模式、DYNAMIC模式、SEARCH模式、搜索引导、代理执行
+ */
 public class ToolGatewaySkillTest {
     private ToolGatewaySkill gatewaySkill;
     private List<FunctionTool> mockTools;
 
     @BeforeEach
     void setUp() {
-        // 模拟一些业务工具
         mockTools = new ArrayList<>();
+        // 准备 3 个基础工具用于日常测试
+        mockTools.add(createMockTool("adder", "执行加法计算", "{\"type\":\"object\"}"));
+        mockTools.add(createMockTool("weather_report", "查询城市天气预报", "{\"type\":\"object\"}"));
+        mockTools.add(createMockTool("stock_price", "查询实时股票价格", "{\"type\":\"object\"}"));
 
-        // 工具 1: 简易加法器
-        mockTools.add(createMockTool("adder", "执行加法计算", "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}}}"));
-        // 工具 2: 天气查询
-        mockTools.add(createMockTool("weather", "查询城市天气", "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}"));
-
-        // 初始化网关
-        gatewaySkill = new ToolGatewaySkill(); // 此处传 null，通过 addTool 手动添加
+        gatewaySkill = new ToolGatewaySkill();
         for (FunctionTool tool : mockTools) {
             gatewaySkill.addTool(tool);
         }
     }
 
-    /**
-     * 测试 FULL 模式：工具数量少于阈值，直接返回业务工具定义
-     */
     @Test
+    @DisplayName("测试 FULL 模式：工具少于阈值，直接平铺定义")
     void testFullMode() {
-        gatewaySkill.dynamicThreshold(5); // 阈值为 5，当前只有 2 个工具
+        gatewaySkill.dynamicThreshold(5); // 3 < 5
 
         Collection<FunctionTool> tools = gatewaySkill.getTools(Prompt.of(""));
 
-        // 断言：返回的是业务工具本身，不包含网关管理工具（如 call_tool）
-        assertEquals(2, tools.size());
+        // 断言：FULL模式下直接暴露业务工具
+        assertEquals(3, tools.size());
         assertTrue(tools.stream().anyMatch(t -> t.name().equals("adder")));
 
         String instruction = gatewaySkill.getInstruction(Prompt.of(""));
-        assertTrue(instruction.contains("直接按需调用"));
+        assertTrue(instruction.contains("直接调用"), "FULL模式指令应提示直接调用");
     }
 
-    /**
-     * 测试 DYNAMIC 模式：工具数量触发阈值，进入按需发现模式
-     */
     @Test
+    @DisplayName("测试 DYNAMIC 模式：工具较多，展示摘要清单并开启代理")
     void testDynamicMode() {
-        gatewaySkill.dynamicThreshold(1); // 阈值为 1，触发 DYNAMIC 模式
+        gatewaySkill.dynamicThreshold(1); // 3 > 1，进入 DYNAMIC
+        gatewaySkill.searchThreshold(5);  // 3 < 5
 
         Collection<FunctionTool> tools = gatewaySkill.getTools(Prompt.of(""));
 
-        // 断言：getTools 此时返回的是网关内部的管理工具 (get_tool_detail, call_tool, get_tool_list)
-        // 注意：AbsSkill 内部的 tools 是通过反射解析当前类的 @ToolMapping 得到的
+        // 断言：业务工具被物理屏蔽，只剩下网关管理工具
         assertFalse(tools.stream().anyMatch(t -> t.name().equals("adder")));
         assertTrue(tools.stream().anyMatch(t -> t.name().equals("call_tool")));
 
         String instruction = gatewaySkill.getInstruction(Prompt.of(""));
-        assertTrue(instruction.contains("开启**按需发现**模式"));
-        assertTrue(instruction.contains("call_tool"));
+        assertTrue(instruction.contains("可用业务清单"), "DYNAMIC模式应展示清单摘要");
+        assertTrue(instruction.contains("Step 2 (详情)"), "应引导AI走详情查询流程");
     }
 
-    /**
-     * 测试工具详情查询
-     */
     @Test
+    @DisplayName("测试 SEARCH 模式：工具海量，折叠清单强制搜索")
+    void testSearchMode() {
+        gatewaySkill.dynamicThreshold(1);
+        gatewaySkill.searchThreshold(2); // 3 > 2，触发 SEARCH 模式
+
+        String instruction = gatewaySkill.getInstruction(Prompt.of(""));
+
+        // 断言：清单被折叠
+        assertFalse(instruction.contains("### 可用业务清单"));
+        assertTrue(instruction.contains("业务清单已折叠"), "SEARCH模式应提示清单已折叠");
+        assertTrue(instruction.contains("search_tools"), "应强调使用搜索工具");
+    }
+
+    @Test
+    @DisplayName("测试模糊搜索功能：关键词匹配")
+    void testSearchTools() {
+        // 搜索 "weather" 应该匹配到 "weather_report"
+        Object result = gatewaySkill.searchTools("weather");
+
+        assertTrue(result instanceof List);
+        List<Map<String, String>> list = (List<Map<String, String>>) result;
+        assertEquals(1, list.size());
+        assertEquals("weather_report", list.get(0).get("tool_name"));
+
+        // 搜索不存在的关键词
+        Object emptyResult = gatewaySkill.searchTools("unknown_keyword");
+        assertTrue(emptyResult instanceof String);
+        assertTrue(emptyResult.toString().contains("建议：尝试更通用的词汇"), "搜索为空时应返回引导语");
+    }
+
+    @Test
+    @DisplayName("测试工具详情查询")
     void testGetToolDetail() {
         String detail = gatewaySkill.getToolDetail("adder");
 
         assertNotNull(detail);
         assertTrue(detail.contains("### 工具详情: adder"));
         assertTrue(detail.contains("执行加法计算"));
-        assertTrue(detail.contains("JSON Schema"));
+        assertTrue(detail.contains("```json"), "详情应包含 JSON 代码块引导");
     }
 
-    /**
-     * 测试工具清单查询
-     */
     @Test
-    void testGetToolList() {
-        List<Map<String, String>> list = gatewaySkill.getToolList();
-
-        assertEquals(2, list.size());
-        assertEquals("adder", list.get(0).get("tool_name"));
-    }
-
-    /**
-     * 测试通过 call_tool 代理执行业务工具
-     */
-    @Test
+    @DisplayName("测试代理执行业务工具")
     void testCallTool() {
         Map<String, Object> args = new HashMap<>();
-        args.put("a", 10);
+        args.put("a", 100);
 
         ToolResult result = gatewaySkill.callTool("adder", args);
 
-        // 断言：由于 mockTool 的 call 返回了字符串，这里校验结果
-        assertEquals("adder_executed_with_10", result.getContent());
+        assertEquals("adder_executed_with_100", result.getContent());
     }
 
-    /**
-     * 测试调用不存在的工具
-     */
     @Test
-    void testCallNonExistentTool() {
-        Object result = gatewaySkill.callTool("unknown_api", new HashMap<>());
-        assertTrue(result.toString().contains("未找到工具"));
+    @DisplayName("测试调用逻辑：大小写不敏感")
+    void testCaseInsensitivity() {
+        // 注册时是小写，调用时用大写
+        ToolResult result = gatewaySkill.callTool("ADDER", new HashMap<>());
+        assertFalse(result.getContent().contains("未找到工具"));
     }
 
-    // --- 辅助方法：快速创建一个模拟工具 ---
+    // --- 辅助方法 ---
     private FunctionTool createMockTool(String name, String desc, String schema) {
         return new FunctionToolDesc(name)
                 .description(desc)
                 .inputSchema(schema)
                 .doHandle(args -> {
-                    // 模拟执行逻辑：返回 工具名 + 参数值
-                    Object val = args.getOrDefault("a", args.getOrDefault("city", "none"));
+                    Object val = args.getOrDefault("a", "none");
                     return name + "_executed_with_" + val;
                 });
-
     }
 }
