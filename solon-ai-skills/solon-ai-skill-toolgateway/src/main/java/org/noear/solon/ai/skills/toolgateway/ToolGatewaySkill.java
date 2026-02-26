@@ -72,7 +72,7 @@ public class ToolGatewaySkill extends AbsSkill {
             return "#### 工具网关\n当前暂无业务工具。";
         }
 
-        int size = dynamicTools.size();
+        final int size = dynamicTools.size();
         StringBuilder sb = new StringBuilder();
         sb.append("#### 业务工具发现规范 (共 ").append(size).append(" 个工具)\n");
 

@@ -11,7 +11,7 @@ public class Demo {
         String baseUrl = "http://api.example.com";
 
         // 2. 创建技能
-        RestApiSkill apiSkill = new RestApiSkill(docUrl, baseUrl);
+        RestApiSkill apiSkill = new RestApiSkill().addApi(docUrl, baseUrl);
 
         // 3. 构建 Agent 或 ChatModel
         SimpleAgent agent = SimpleAgent.of(chatModel)

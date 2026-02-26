@@ -36,41 +36,39 @@ import java.util.stream.Collectors;
 /**
  * 智能 REST API 接入技能：实现从 API 定义到 AI 自动化调用的桥梁。
  *
- * <p>该技能通过解析 Swagger/OpenAPI 定义，将企业的业务接口动态转化为 AI 的可调用工具。
- * 核心特性：
- * <ul>
- * <li><b>自适应 Schema 模式</b>：支持 FULL（全量加载）与 DYNAMIC（按需加载）模式，自动应对数百个接口导致的 Prompt 爆炸。</li>
- * <li><b>智能协议解析</b>：内置 {@link OpenApiResolver}，支持对复杂嵌套模型和深层 Schema 的递归展开。</li>
- * <li><b>灵活鉴权</b>：通过 {@link ApiAuthenticator} 统一处理 Token、OAuth2 或 Header 注入。</li>
- * <li><b>上下文保护</b>：自动处理响应体截断，防止由于 API 返回大数据量导致的模型上下文溢出。</li>
- * </ul>
- * </p>
+ * 支持三阶段模式自动切换：
+ * 1. FULL: 数量 <= dynamicThreshold，全量平铺。
+ * 2. DYNAMIC: 数量 <= searchThreshold，指令内展示清单。
+ * 3. SEARCH: 数量 > searchThreshold，强制搜索。
+ *
+ * 注意：不能有同名同方式接口
  *
  * @author noear
- * @since 3.9.1
+ * @since 3.9.5
  */
-@Preview("3.9.1")
+@Preview("3.9.5")
 public class RestApiSkill extends AbsSkill {
     private static final Logger log = LoggerFactory.getLogger(RestApiSkill.class);
 
-    private final String definitionUrl;
-    private final String apiBaseUrl;
+    private final Map<String, String> toolToBaseUrlMap = new HashMap<>();
+    private final List<ApiTool> dynamicTools = new ArrayList<>();
 
-    private ApiResolver resolver;
-    private List<ApiTool> dynamicTools;
+    private ApiResolver resolver = OpenApiResolver.getInstance();
     private ApiAuthenticator authenticator;
 
-    private SchemaMode schemaMode = null;
+    private int dynamicThreshold = 15; // 超过此值，不再平铺 Schema，进入清单模式
+    private int searchThreshold = 50;  // 超过此值，不再展示清单，进入强制搜索模式
     private int maxContextLength = 8000;
 
-    public RestApiSkill(String definitionUrl, String apiBaseUrl) {
-        this.definitionUrl = definitionUrl;
-        this.apiBaseUrl = apiBaseUrl;
+    // --- 配置方法 ---
 
+    public RestApiSkill dynamicThreshold(int dynamicThreshold) {
+        this.dynamicThreshold = dynamicThreshold;
+        return this;
     }
 
-    public RestApiSkill schemaMode(SchemaMode mode) {
-        this.schemaMode = mode;
+    public RestApiSkill searchThreshold(int searchThreshold) {
+        this.searchThreshold = searchThreshold;
         return this;
     }
 
@@ -85,137 +83,155 @@ public class RestApiSkill extends AbsSkill {
     }
 
     public RestApiSkill resolver(ApiResolver resolver) {
-        this.resolver = resolver;
+        if (resolver != null) {
+            this.resolver = resolver;
+        }
         return this;
     }
 
-    private void init() {
-        if (dynamicTools != null) return;
-
-        Utils.locker().lock();
-        try {
-            if (dynamicTools != null) return;
-
-            if (resolver == null) {
-                resolver = OpenApiResolver.getInstance();
-            }
-
-            log.info("RestApiSkill: Using {} for {}", resolver.getName(), definitionUrl);
-
-            final String source ;
-
-            if(definitionUrl.startsWith("http://") || definitionUrl.startsWith("https://")) {
-                //网络地址（http://..., https://...）
-                HttpUtils http = HttpUtils.http(definitionUrl);
-                if (authenticator != null) {
-                    authenticator.apply(http, null);
-                }
-                source = http.get();
-            } else {
-                //资源地址（"classpath:demo.xxx" or "file:./demo.xxx" or "./demo.xxx" or "demo.xxx"）
-                source = ResourceUtil.findResourceAsString(definitionUrl);
-            }
-
-            if (Utils.isEmpty(source)) {
-                throw new IllegalArgumentException("API definition source is empty from: " + definitionUrl);
-            }
-
-            List<ApiTool> allTools = resolver.resolve(definitionUrl, source);
-
-            this.dynamicTools = allTools.stream()
-                    .filter(t -> !t.isDeprecated())
-                    .collect(Collectors.toList());
-
-            if (schemaMode == null) {
-                this.schemaMode = dynamicTools.size() > 30 ? SchemaMode.DYNAMIC : SchemaMode.FULL;
-            }
-        } catch (Exception e) {
-            log.error("Api schema loading failed: {}", definitionUrl, e);
-            this.schemaMode = SchemaMode.DYNAMIC;
-            this.dynamicTools = new ArrayList<>();
-        } finally {
-            Utils.locker().unlock();
-        }
-    }
-
-    @Override
-    public String name() {
-        return "api_expert";
+    /**
+     * 添加 API 组
+     * @param definitionUrl OpenAPI 定义地址 (http://... 或 classpath:...)
+     * @param apiBaseUrl 实际接口执行基地址
+     */
+    public RestApiSkill addApi(String definitionUrl, String apiBaseUrl) {
+        ApiDefinition def = new ApiDefinition(definitionUrl, apiBaseUrl);
+        loadApiFromDefinition(def);
+        return this;
     }
 
     @Override
     public String description() {
-        return "业务 API 专家：支持 REST 接口精准调用，能够自动解析复杂的模型嵌套。";
-    }
-
-    @Override
-    public void onAttach(Prompt prompt) {
-        init();
+        return "多源业务 API 专家：能够整合并精准调用多个微服务的 REST 接口。";
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("#### 1. API 环境上下文\n")
-                .append("- **Base URL**: ").append(apiBaseUrl).append("\n\n");
+        if (dynamicTools.isEmpty()) {
+            return "#### API 专家 (RestApiSkill)\n" +
+                    "**警告：当前系统未加载任何业务 API 定义。**\n" +
+                    "- 严禁尝试猜测或伪造任何 API 名称。\n" +
+                    "- 如果用户提问涉及业务数据查询，请直接回答：'抱歉，当前未配置相关的业务接口，无法为您执行查询。'";
+        }
 
-        if (schemaMode == SchemaMode.FULL) {
-            sb.append("#### 2. 接口详细定义 (API Specs)\n").append(formatApiDocs(dynamicTools));
+        final int size = dynamicTools.size();
+        StringBuilder sb = new StringBuilder();
+        sb.append("#### 业务 API 发现规范 (共 ").append(size).append(" 个接口)\n");
+
+        if (size <= dynamicThreshold) {
+            // FULL 模式
+            sb.append("当前已加载全量接口定义。请分析需求并直接调用 `call_api`。\n\n")
+                    .append("### 接口详细定义 (API Specs):\n")
+                    .append(formatApiDocs(dynamicTools));
         } else {
-            sb.append("#### 2. 接口清单 (API List)\n")
-                    .append("接口较多。**调用前必须通过 `get_api_detail` 确认具体的 Schema 定义**：\n\n");
-            for (ApiTool t : dynamicTools) {
-                sb.append("- **").append(t.getName()).append("**: ").append(t.getDescription())
-                        .append(" (").append(t.getMethod()).append(" ").append(t.getPath()).append(")\n");
+            // 路由模式引导
+            sb.append("由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：\n");
+
+            if (size > searchThreshold) {
+                // SEARCH 模式
+                sb.append("- **Step 1 (搜索)**: 业务清单已折叠。请务必先使用 `search_apis` 寻找匹配的接口名。\n");
+            } else {
+                // LIST 模式
+                sb.append("- **Step 1 (锁定)**: 从下方清单确定接口名。如描述模糊，可使用 `search_apis` 进一步搜索。\n");
+            }
+
+            sb.append("- **Step 2 (详情)**: 使用 `get_api_detail` 获取选定接口的参数定义 (JSON Schema)。\n")
+                    .append("- **Step 3 (执行)**: **必须**通过 `call_api` 执行。禁止直接猜测参数或接口名调用。\n\n");
+
+            if (size <= searchThreshold) {
+                // 展示摘要清单
+                sb.append("### 可用业务接口清单:\n");
+                for (ApiTool t : dynamicTools) {
+                    sb.append("- **").append(t.getName()).append("**: ").append(t.getDescription())
+                            .append(" (").append(t.getMethod()).append(" ").append(t.getPath()).append(")\n");
+                }
+            } else {
+                sb.append("> **搜索提示**: 接口较多，建议通过关键词搜索，例如：`search_apis('订单')`。");
             }
         }
 
-        sb.append("\n##### 3. 调用规范\n")
-                .append("1. **必须尝试**: 只要接口 Description 与需求相关，即使 Request/Response Schema 为空 {}，也必须调用。真实接口往往返回比 Schema 定义更多的动态字段。\n")
-                .append("2. **数据提取**: 调用返回后，请从原始 JSON 中提取用户询问的字段（如 status, env 等），不要因为 Schema 没写就认为没有这些数据。\n")
-                .append("3. **认证逻辑**: 若返回 401，说明 token 无效，请直接告知。");
+        sb.append("\n\n##### 执行约束\n")
+                .append("1. **响应处理**: 如果返回数据带 `[Data truncated]` 标记，请基于现有部分分析，不要尝试重复调用获取全量。\n")
+                .append("2. **失败重试**: 若接口报错，请检查参数是否符合 Step 2 获取的 Schema，不要盲目重试。");
 
         return sb.toString();
     }
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        if (schemaMode == SchemaMode.FULL) {
-            return tools.stream().filter(t -> "call_api".equals(t.name())).collect(Collectors.toList());
+        // FULL 模式下只暴露执行工具，减少 AI 干扰
+        if (dynamicTools.size() <= dynamicThreshold) {
+            return tools.stream()
+                    .filter(t -> "call_api".equals(t.name()))
+                    .collect(Collectors.toList());
         }
+        // LIST/SEARCH 模式下暴露 search_apis, get_api_detail, call_api
         return super.getTools(prompt);
     }
 
-    @ToolMapping(name = "get_api_detail", description = "获取特定 API 的参数 Schema 和返回值定义（含模型深度展开）")
-    public String getApiDetail(@Param("api_name") String apiName) {
-        return dynamicTools.stream()
-                .filter(t -> t.getName().equalsIgnoreCase(apiName))
-                .map(t -> formatApiDocs(Collections.singletonList(t)))
-                .findFirst()
-                .orElse("Error: API '" + apiName + "' not found.");
+    // --- 内置工具映射 ---
+
+    @ToolMapping(name = "search_apis", description = "在海量 API 库中通过关键词模糊搜索接口名和描述")
+    public Object searchApis(@Param("keyword") String keyword) {
+        if (Utils.isEmpty(keyword)) return "错误：搜索关键词不能为空。";
+
+        String k = keyword.toLowerCase().trim();
+        List<Map<String, String>> results = dynamicTools.stream()
+                .filter(t -> t.getName().toLowerCase().contains(k) || t.getDescription().toLowerCase().contains(k))
+                .limit(10)
+                .map(t -> {
+                    Map<String, String> map = new HashMap<>();
+                    map.put("api_name", t.getName());
+                    map.put("description", t.getDescription());
+                    map.put("endpoint", t.getMethod() + " " + t.getPath());
+                    return map;
+                })
+                .collect(Collectors.toList());
+
+        if (results.isEmpty()) {
+            return "未找到匹配 '" + keyword + "' 的业务接口。请尝试更通用的关键词。";
+        }
+        return results;
     }
 
-    @ToolMapping(name = "call_api", description = "执行 REST 接口请求")
+    @ToolMapping(name = "get_api_detail", description = "获取特定 API 的参数 Schema 和返回值定义")
+    public String getApiDetail(@Param("api_name") String apiName) {
+        if (Utils.isEmpty(apiName)) return "错误：api_name 不能为空";
+
+        return dynamicTools.stream()
+                .filter(t -> t.getName().equalsIgnoreCase(apiName.trim()))
+                .map(t -> formatApiDocs(Collections.singletonList(t)))
+                .findFirst()
+                .orElse("错误: 未找到 API '" + apiName + "'。请先通过 search_apis 确认名称。");
+    }
+
+    @ToolMapping(name = "call_api", description = "代理执行特定的 REST 业务接口")
     public String callApi(
             @Param("api_name") String apiName,
             @Param("path_params") Map<String, Object> pathParams,
             @Param("query_or_body_params") Map<String, Object> dataParams) throws IOException {
 
+        String nameKey = apiName.trim().toLowerCase();
         ApiTool tool = dynamicTools.stream()
-                .filter(t -> t.getName().equalsIgnoreCase(apiName))
+                .filter(t -> t.getName().equalsIgnoreCase(nameKey))
                 .findFirst()
                 .orElse(null);
 
-        if (tool == null) return "Error: API [" + apiName + "] not found.";
+        if (tool == null) {
+            return "Error: API [" + apiName + "] not found. Please use 'search_apis' to confirm the correct name.";
+        }
 
+        String baseUrl = toolToBaseUrlMap.get(nameKey);
         String finalPath = tool.getPath();
+
+        // 路径参数替换
         if (pathParams != null) {
             for (Map.Entry<String, Object> entry : pathParams.entrySet()) {
                 finalPath = finalPath.replace("{" + entry.getKey() + "}", String.valueOf(entry.getValue()));
             }
         }
 
-        HttpUtils http = HttpUtils.http(apiBaseUrl + finalPath);
+        HttpUtils http = HttpUtils.http(baseUrl + finalPath);
         if (authenticator != null) {
             authenticator.apply(http, tool);
         }
@@ -231,10 +247,49 @@ public class RestApiSkill extends AbsSkill {
             if (result.length() > maxContextLength) {
                 return result.substring(0, maxContextLength) + "... [Data truncated]";
             }
-            return Utils.isEmpty(result) ? "Success: No content returned." : result;
+            return Utils.isEmpty(result) ? "Success: API executed, no content returned." : result;
         } catch (Exception e) {
-            log.warn("API 调用失败: {} {}", tool.getName(), e.getMessage());
-            return "HTTP Execution Error: " + e.getMessage();
+            log.warn("API Call Failed: {} - {}", tool.getName(), e.getMessage());
+            return "Execution Error: " + (e.getMessage() != null ? e.getMessage() : "HTTP transport failure");
+        }
+    }
+
+    // --- 私有辅助 ---
+
+    private void loadApiFromDefinition(ApiDefinition def) {
+        try {
+            final String source;
+            String url = def.getDefinitionUrl();
+
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                HttpUtils http = HttpUtils.http(url);
+                if (authenticator != null) {
+                    authenticator.apply(http, null);
+                }
+                source = http.get();
+            } else {
+                source = ResourceUtil.findResourceAsString(url);
+            }
+
+            if (Utils.isEmpty(source)) {
+                log.warn("RestApiSkill: Source empty for {}", url);
+                return;
+            }
+
+            List<ApiTool> tools = resolver.resolve(url, source);
+            for (ApiTool tool : tools) {
+                if (!tool.isDeprecated()) {
+                    String toolNameKey = tool.getName().toLowerCase();
+                    if(toolToBaseUrlMap.containsKey(toolNameKey)){
+                        log.warn("RestApiSkill: Duplicate tool [{}] overwritten.", tool.getName());
+                    }
+                    this.dynamicTools.add(tool);
+                    this.toolToBaseUrlMap.put(toolNameKey, def.getApiBaseUrl());
+                }
+            }
+            log.info("RestApiSkill: Loaded {} tools from {}", tools.size(), url);
+        } catch (Exception e) {
+            log.error("RestApiSkill: Loading failed for {}", def.getDefinitionUrl(), e);
         }
     }
 
@@ -242,11 +297,24 @@ public class RestApiSkill extends AbsSkill {
         StringBuilder sb = new StringBuilder();
         for (ApiTool tool : tools) {
             sb.append("* **API: ").append(tool.getName()).append("**\n")
-                    .append("  - Description: ").append(tool.getDescription()).append("\n")
-                    .append("  - Endpoint: ").append(tool.getMethod()).append(" ").append(tool.getPath()).append("\n")
-                    .append("  - Request Schema: ").append(tool.getInputSchemaOr("{}")).append("\n")
-                    .append("  - Response Schema: ").append(tool.getOutputSchemaOr("{}")).append("\n");
+                    .append("  - 功能: ").append(tool.getDescription()).append("\n")
+                    .append("  - 路径: ").append(tool.getMethod()).append(" ").append(tool.getPath()).append("\n")
+                    .append("  - 入参 Schema: ").append(tool.getInputSchemaOr("{}")).append("\n")
+                    .append("  - 返回 Schema: ").append(tool.getOutputSchemaOr("{}")).append("\n");
         }
         return sb.toString();
+    }
+
+    // 内部类：维护定义与基地址
+    private static class ApiDefinition {
+        private final String definitionUrl;
+        private final String apiBaseUrl;
+
+        public ApiDefinition(String definitionUrl, String apiBaseUrl) {
+            this.definitionUrl = definitionUrl;
+            this.apiBaseUrl = apiBaseUrl;
+        }
+        public String getDefinitionUrl() { return definitionUrl; }
+        public String getApiBaseUrl() { return apiBaseUrl; }
     }
 }

@@ -21,7 +21,8 @@ public class Openapi3Test_case1 {
         String apiBaseUrl = "http://localhost:9081";
 
         // 实例化 Skill 并指定模式（自适应 v2/v3 及解引用）
-        RestApiSkill apiSkill = new RestApiSkill(mockApiDocsUrl, apiBaseUrl)
+        RestApiSkill apiSkill = new RestApiSkill()
+                .addApi(mockApiDocsUrl, apiBaseUrl)
                 .schemaMode(mode);
 
         ChatModel chatModel = LlmUtil.getChatModel();

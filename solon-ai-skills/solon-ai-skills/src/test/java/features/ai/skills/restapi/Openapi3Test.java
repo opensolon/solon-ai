@@ -22,7 +22,8 @@ public class Openapi3Test {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 实例化 Skill 并指定模式（自适应 v2/v3 及解引用）
-        RestApiSkill apiSkill = new RestApiSkill(mockApiDocsUrl, apiBaseUrl)
+        RestApiSkill apiSkill = new RestApiSkill()
+                .addApi(mockApiDocsUrl, apiBaseUrl)
                 .schemaMode(mode);
 
         return ReActAgent.of(chatModel)

@@ -30,7 +30,8 @@ public class RestApiSkillTests extends HttpTester {
         ChatModel chatModel = LlmUtil.getChatModel();
 
         // 实例化 Skill 并指定模式（自适应 v2/v3 及解引用）
-        RestApiSkill apiSkill = new RestApiSkill(mockApiDocsUrl, apiBaseUrl)
+        RestApiSkill apiSkill = new RestApiSkill()
+                .addApi(mockApiDocsUrl, apiBaseUrl)
                 .schemaMode(mode);
 
         return SimpleAgent.of(chatModel)
@@ -97,7 +98,8 @@ public class RestApiSkillTests extends HttpTester {
     public void testModeSwitch_DynamicTools() throws Throwable {
         // 验证在 DYNAMIC 模式下，Tool 列表是否包含探测工具
         String mockApiDocsUrl = "http://localhost:8080/swagger/v3/api-docs";
-        RestApiSkill apiSkill = new RestApiSkill(mockApiDocsUrl, "http://localhost:8080")
+        RestApiSkill apiSkill = new RestApiSkill()
+                .addApi(mockApiDocsUrl, "http://localhost:8080")
                 .schemaMode(SchemaMode.DYNAMIC);
 
         // getTools 应该包含探测工具 get_api_detail
@@ -122,7 +124,8 @@ public class RestApiSkillTests extends HttpTester {
     @Test
     public void testInitFailure_Resilience() throws Throwable {
         // 给一个错误的文档地址
-        RestApiSkill errorSkill = new RestApiSkill("http://localhost:8080/404-json", "http://localhost:8080");
+        RestApiSkill errorSkill = new RestApiSkill()
+                .addApi("http://localhost:8080/404-json", "http://localhost:8080");
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel()).defaultSkillAdd(errorSkill).build();
 
         // 验证即使文档加载失败，Agent 依然能正常对话（虽然无法调用 API）
@@ -149,7 +152,8 @@ public class RestApiSkillTests extends HttpTester {
         String apiBaseUrl = "http://localhost:8080";
 
         // 1. 配置 Bearer 认证
-        RestApiSkill authSkill = new RestApiSkill(mockApiDocsUrl, apiBaseUrl)
+        RestApiSkill authSkill = new RestApiSkill()
+                .addApi(mockApiDocsUrl, apiBaseUrl)
                 .authenticator((http, tool) -> http.header("Authorization", "Bearer mock-token"));
 
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
