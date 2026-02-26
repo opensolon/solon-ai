@@ -24,6 +24,7 @@ import org.noear.solon.core.util.Assert;
  * @since 3.9.1
  */
 public class ApiTool {
+    private String baseUrl;
     private String name;
     private String description;
     private String path;
@@ -39,6 +40,11 @@ public class ApiTool {
     private boolean isDeprecated;
 
     // --- Getter 方法 (公开) ---
+
+
+    public String getBaseUrl() {
+        return baseUrl;
+    }
 
     public String getName() {
         return name;
@@ -85,6 +91,11 @@ public class ApiTool {
     }
 
     // --- Setter 方法 (内部权限) ---
+
+
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
 
     public void setName(String name) {
         this.name = name;

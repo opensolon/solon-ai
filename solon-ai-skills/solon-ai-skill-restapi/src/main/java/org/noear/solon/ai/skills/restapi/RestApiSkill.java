@@ -51,8 +51,7 @@ import java.util.stream.Collectors;
 public class RestApiSkill extends AbsSkill {
     private static final Logger log = LoggerFactory.getLogger(RestApiSkill.class);
 
-    private final Map<String, String> toolToBaseUrlMap = new HashMap<>();
-    private final List<ApiTool> dynamicTools = new ArrayList<>();
+    private final Map<String, ApiTool> dynamicTools = new LinkedHashMap<>();
 
     private ApiResolver resolver = OpenApiResolver.getInstance();
     private ApiAuthenticator authenticator;
@@ -127,7 +126,7 @@ public class RestApiSkill extends AbsSkill {
             // FULL 模式
             sb.append("当前已加载全量接口定义。请分析需求并直接调用 `call_api`。\n\n")
                     .append("### 接口详细定义 (API Specs):\n")
-                    .append(formatApiDocs(dynamicTools));
+                    .append(formatApiDocs(dynamicTools.values()));
         } else {
             // 路由模式引导
             sb.append("由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：\n");
@@ -146,7 +145,7 @@ public class RestApiSkill extends AbsSkill {
             if (size <= searchThreshold) {
                 // 展示摘要清单
                 sb.append("### 可用业务接口清单:\n");
-                for (ApiTool t : dynamicTools) {
+                for (ApiTool t : dynamicTools.values()) {
                     sb.append("- **").append(t.getName()).append("**: ").append(t.getDescription())
                             .append(" (").append(t.getMethod()).append(" ").append(t.getPath()).append(")\n");
                 }
@@ -164,14 +163,15 @@ public class RestApiSkill extends AbsSkill {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        // FULL 模式下只暴露执行工具，减少 AI 干扰
         if (dynamicTools.size() <= dynamicThreshold) {
+            // FULL 模式下只暴露执行工具，减少 AI 干扰
             return tools.stream()
                     .filter(t -> "call_api".equals(t.name()))
                     .collect(Collectors.toList());
+        } else {
+            // LIST/SEARCH 模式下暴露 search_apis, get_api_detail, call_api
+            return tools;
         }
-        // LIST/SEARCH 模式下暴露 search_apis, get_api_detail, call_api
-        return super.getTools(prompt);
     }
 
     // --- 内置工具映射 ---
@@ -181,7 +181,7 @@ public class RestApiSkill extends AbsSkill {
         if (Utils.isEmpty(keyword)) return "错误：搜索关键词不能为空。";
 
         String k = keyword.toLowerCase().trim();
-        List<Map<String, String>> results = dynamicTools.stream()
+        List<Map<String, String>> results = dynamicTools.values().stream()
                 .filter(t -> t.getName().toLowerCase().contains(k) || t.getDescription().toLowerCase().contains(k))
                 .limit(10)
                 .map(t -> {
@@ -196,6 +196,7 @@ public class RestApiSkill extends AbsSkill {
         if (results.isEmpty()) {
             return "未找到匹配 '" + keyword + "' 的业务接口。请尝试更通用的关键词。";
         }
+
         return results;
     }
 
@@ -203,11 +204,13 @@ public class RestApiSkill extends AbsSkill {
     public String getApiDetail(@Param("api_name") String apiName) {
         if (Utils.isEmpty(apiName)) return "错误：api_name 不能为空";
 
-        return dynamicTools.stream()
-                .filter(t -> t.getName().equalsIgnoreCase(apiName.trim()))
-                .map(t -> formatApiDocs(Collections.singletonList(t)))
-                .findFirst()
-                .orElse("错误: 未找到 API '" + apiName + "'。请先通过 search_apis 确认名称。");
+        ApiTool tool = dynamicTools.get(apiName.trim().toLowerCase());
+
+        if (tool != null) {
+            return formatApiDocs(Collections.singletonList(tool));
+        } else {
+            return "错误: 未找到 API '" + apiName + "'。请先通过 search_apis 确认名称。";
+        }
     }
 
     @ToolMapping(name = "call_api", description = "代理执行特定的 REST 业务接口")
@@ -216,17 +219,13 @@ public class RestApiSkill extends AbsSkill {
             @Param("path_params") Map<String, Object> pathParams,
             @Param("query_or_body_params") Map<String, Object> dataParams) throws IOException {
 
-        String nameKey = apiName.trim().toLowerCase();
-        ApiTool tool = dynamicTools.stream()
-                .filter(t -> t.getName().equalsIgnoreCase(nameKey))
-                .findFirst()
-                .orElse(null);
+        ApiTool tool = dynamicTools.get(apiName.trim().toLowerCase());
 
         if (tool == null) {
             return "Error: API [" + apiName + "] not found. Please use 'search_apis' to confirm the correct name.";
         }
 
-        String baseUrl = toolToBaseUrlMap.get(nameKey);
+        String baseUrl = tool.getBaseUrl();
         String finalPath = tool.getPath();
 
         // 路径参数替换
@@ -282,22 +281,18 @@ public class RestApiSkill extends AbsSkill {
         List<ApiTool> tools = resolver.resolve(definitionUrl, source);
         for (ApiTool tool : tools) {
             if (!tool.isDeprecated()) {
-                String toolNameKey = tool.getName().toLowerCase();
-                if (toolToBaseUrlMap.containsKey(toolNameKey)) {
-                    log.warn("RestApiSkill: Duplicate tool [{}] overwritten.", tool.getName());
-                }
-                this.dynamicTools.add(tool);
-                this.toolToBaseUrlMap.put(toolNameKey, apiBaseUrl);
+                tool.setBaseUrl(apiBaseUrl);
+                this.dynamicTools.put(tool.getName().toLowerCase(), tool);
             }
         }
 
         log.info("RestApiSkill: Loaded {} tools from {}", tools.size(), definitionUrl);
     }
 
-    private String formatApiDocs(List<ApiTool> tools) {
+    private String formatApiDocs(Collection<ApiTool> tools) {
         StringBuilder sb = new StringBuilder();
         for (ApiTool tool : tools) {
-            sb.append("* **API: ").append(tool.getName()).append("**\n")
+            sb.append("---\n").append("* **API: ").append(tool.getName()).append("**\n")
                     .append("  - 功能: ").append(tool.getDescription()).append("\n")
                     .append("  - 路径: ").append(tool.getMethod()).append(" ").append(tool.getPath()).append("\n")
                     .append("  - 入参 Schema: ").append(tool.getInputSchemaOr("{}")).append("\n")
