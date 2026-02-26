@@ -93,8 +93,9 @@ public class OpenApiV2ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getInputSchema();
+        String input = tools.get(0).getDataSchema();
 
+        System.out.println(input);
         // 验证数组展开
         assertTrue(input.contains("\"items\""));
         // 验证二级引用展开
@@ -131,7 +132,7 @@ public class OpenApiV2ResolverTest {
 
         // 验证 null 参数处理
         ApiTool noParamTool = tools.stream().filter(t -> t.getPath().equals("/no-params")).findFirst().get();
-        assertNotNull(noParamTool.getInputSchema());
+        assertNotNull(noParamTool.getDataSchema());
     }
 
     @Test
@@ -156,7 +157,7 @@ public class OpenApiV2ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getInputSchema();
+        String input = tools.get(0).getDataSchema();
 
         // 验证保留了有效字段
         assertTrue(input.contains("\"required\":[\"name\"]"));
@@ -206,8 +207,8 @@ public class OpenApiV2ResolverTest {
 
         List<ApiTool> tools = resolver.resolve(null, json);
         // 触发了 tool.setInputSchema(resolveRef(root, params)) 逻辑
-        System.out.println(tools.get(0).getInputSchema());
-        assertTrue(tools.get(0).getInputSchema().contains("token"));
+        System.out.println(tools.get(0).getDataSchema());
+        assertTrue(tools.get(0).getDataSchema().contains("token"));
     }
 
     @Test

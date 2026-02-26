@@ -67,11 +67,10 @@ public class OpenApiV3ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getInputSchema();
+        String input = tools.get(0).getDataSchema();
 
         // 验证即使 application/json 不是第一个，也能被正确选中
-        assertTrue(input.contains("Body:"));
-        assertTrue(input.contains("\"properties\":{\"id\":{\"type\":\"int\"}}"));
+        assertTrue(input.contains("{\"properties\":{\"id\":{\"type\":\"int\"}}"));
     }
 
     @Test
@@ -95,7 +94,7 @@ public class OpenApiV3ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getInputSchema();
+        String input = tools.get(0).getDataSchema();
 
         assertTrue(input.contains("file_data"));
     }
@@ -142,7 +141,7 @@ public class OpenApiV3ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getInputSchema();
+        String input = tools.get(0).getDataSchema();
 
         // 验证拼接逻辑 "Parameters + Body:..."
         assertTrue(input.contains("\"name\":\"id\""));
@@ -178,7 +177,7 @@ public class OpenApiV3ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getInputSchema();
+        String input = tools.get(0).getDataSchema();
 
         // 验证 oneOf 是否被保留
         assertTrue(input.contains("\"oneOf\""));
@@ -207,7 +206,7 @@ public class OpenApiV3ResolverTest {
         List<ApiTool> tools = resolver.resolve(null, json);
         ApiTool tool = tools.get(0);
 
-        assertEquals("{}", tool.getInputSchema());
+        assertEquals("{}", tool.getDataSchema());
         assertEquals("{}", tool.getOutputSchema());
     }
 
@@ -231,7 +230,7 @@ public class OpenApiV3ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        assertTrue(tools.get(0).getInputSchema().contains("array_style"));
+        assertTrue(tools.get(0).getDataSchema().contains("array_style"));
     }
 
     @Test
@@ -253,7 +252,7 @@ public class OpenApiV3ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getInputSchema();
+        String input = tools.get(0).getDataSchema();
         assertTrue(input.contains("\"id\""));
     }
 
@@ -302,6 +301,6 @@ public class OpenApiV3ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        assertTrue(tools.get(0).getInputSchema().contains("_Circular_Reference_"));
+        assertTrue(tools.get(0).getDataSchema().contains("_Circular_Reference_"));
     }
 }

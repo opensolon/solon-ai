@@ -48,63 +48,78 @@ public class OpenApiV2Resolver extends AbsOpenApiResolver {
             methods.getObject().forEach((method, detail) -> {
                 if (!isValidMethod(method)) return;
 
-                ApiTool tool = new ApiTool();
-                tool.setPath(path);
-                tool.setMethod(method.toUpperCase());
-                tool.setName(generateName(detail, tool.getMethod(), path));
-                tool.setDescription(extractDescription(detail));
-
-                // 准备双 Schema 容器
-                ONode pathProps = new ONode().asObject();
-                ONode dataProps = new ONode().asObject();
-
-                ONode params = detail.get("parameters");
-                if (params.isArray()) {
-                    for (ONode p : params.getArrayUnsafe()) {
-                        // 解析引用
-                        ONode pNode = resolveRefNode(root, p, new HashSet<>());
-                        String in = pNode.get("in").getString();
-                        String name = pNode.get("name").getString();
-
-                        if ("path".equals(in)) {
-                            pathProps.set(name, pNode);
-                        } else if ("body".equals(in)) {
-                            // V2 的 Body 通常包含一个 Schema
-                            ONode bodySchema = resolveRefNode(root, pNode.get("schema"), new HashSet<>());
-                            if (bodySchema.hasKey("properties")) {
-                                dataProps.getOrNew("properties").setAll(bodySchema.get("properties").getObject());
-                            } else {
-                                // 处理非对象类型的 Body
-                                dataProps.set(name, bodySchema);
-                            }
-                        } else if ("query".equals(in) || "formData".equals(in)) {
-                            // Query 和 FormData 都合并到 dataProps
-                            dataProps.set(name, pNode);
-                        }
-                    }
-                }
-
-                if (pathProps.size() > 0) {
-                    tool.setPathSchema(pathProps.toJson());
-                }
-                if (dataProps.size() > 0) {
-                    tool.setDataSchema(dataProps.toJson());
-                }
-
-                // 3. 输出结果解析 (V2 结构更深一层)
-                if (detail.hasKey("responses")) {
-                    ONode node200 = detail.get("responses").get("200");
-                    if (node200.isNull()) node200 = detail.get("responses").get("201");
-                    if (!node200.isNull()) {
-                        tool.setOutputSchema(resolveRef(root, node200.get("schema")));
-                    }
-                }
-
-                tool.setDeprecated(detail.get("deprecated").getBoolean());
-                tools.add(tool);
+                doResolveMethod(tools, root, path, method, detail);
             });
         });
 
         return tools;
+    }
+
+    protected void doResolveMethod(List<ApiTool> tools, ONode root, String path, String method, ONode detail) {
+        ApiTool tool = new ApiTool();
+        tool.setPath(path);
+        tool.setMethod(method.toUpperCase());
+        tool.setName(generateName(detail, tool.getMethod(), path));
+        tool.setDescription(extractDescription(detail));
+
+        // 1. Path 参数容器 (平铺)
+        ONode pathProps = new ONode().asObject();
+        // 2. Data 参数容器 (JSON Schema 对象结构)
+        ONode dataSchema = new ONode().asObject().set("type", "object");
+        ONode dataProps = dataSchema.getOrNew("properties");
+
+        ONode params = detail.get("parameters");
+
+        // 兼容非数组引用
+        if (!params.isNull() && !params.isArray()) {
+            ONode wrapper = new ONode().asArray();
+            wrapper.add(params);
+            params = wrapper;
+        }
+
+        if (params.isArray()) {
+            for (ONode p : params.getArrayUnsafe()) {
+                ONode pNode = resolveRefNode(root, p, new HashSet<>());
+                String in = pNode.get("in").getString();
+                String name = pNode.get("name").getString();
+
+                if ("path".equals(in)) {
+                    pathProps.set(name, pNode);
+                } else if ("body".equals(in)) {
+                    ONode bodySchema = resolveRefNode(root, pNode.get("schema"), new HashSet<>());
+                    if (bodySchema.hasKey("properties")) {
+                        // 合并 body 内的属性到 dataProps
+                        dataProps.setAll(bodySchema.get("properties").getObject());
+                        if (bodySchema.hasKey("required")) {
+                            dataSchema.getOrNew("required").addAll(bodySchema.get("required").getArray());
+                        }
+                    } else {
+                        // 非对象 body，以参数名作为 key
+                        dataProps.set(name, bodySchema);
+                    }
+                } else if ("query".equals(in) || "formData".equals(in)) {
+                    dataProps.set(name, pNode);
+                }
+            }
+        }
+
+        if (pathProps.size() > 0) {
+            tool.setPathSchema(pathProps.toJson());
+        }
+        if (dataProps.size() > 0) {
+            tool.setDataSchema(dataSchema.toJson());
+        }
+
+        // 3. 输出解析
+        if (detail.hasKey("responses")) {
+            ONode node200 = detail.get("responses").get("200");
+            if (node200.isNull()) node200 = detail.get("responses").get("201");
+            if (!node200.isNull()) {
+                tool.setOutputSchema(resolveRef(root, node200.get("schema")));
+            }
+        }
+
+        tool.setDeprecated(detail.get("deprecated").getBoolean());
+        tools.add(tool);
     }
 }

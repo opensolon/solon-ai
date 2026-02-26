@@ -48,59 +48,63 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
             methods.getObject().forEach((method, detail) -> {
                 if (!isValidMethod(method)) return;
 
-                ApiTool tool = new ApiTool();
-                tool.setPath(path);
-                tool.setMethod(method.toUpperCase());
-                tool.setName(generateName(detail, tool.getMethod(), path));
-                tool.setDescription(extractDescription(detail));
-
-                // 1. 分解 Parameters (Path vs Query)
-                ONode parameters = detail.get("parameters");
-                ONode pathProps = new ONode().asObject();
-                ONode queryProps = new ONode().asObject();
-
-                if (parameters.isArray()) {
-                    for (ONode param : parameters.getArrayUnsafe()) {
-                        // 解析引用（如果参数本身是引用）
-                        ONode pNode = resolveRefNode(root, param, new HashSet<>());
-                        String in = pNode.get("in").getString();
-                        String name = pNode.get("name").getString();
-
-                        if ("path".equals(in)) {
-                            pathProps.set(name, pNode);
-                        } else if ("query".equals(in)) {
-                            queryProps.set(name, pNode);
-                        }
-                    }
-                }
-
-                // 2. 解析 Body 并入 DataSchema
-                if (detail.hasKey("requestBody")) {
-                    ONode bodySchema = extractBodySchema(root, detail.get("requestBody"));
-                    if (!bodySchema.isNull()) {
-                        // 如果既有 Query 又有 Body，合并到 dataSchema
-                        queryProps.getOrNew("properties").setAll(bodySchema.get("properties").getObject());
-                    }
-                }
-
-                if (pathProps.size() > 0) {
-                    tool.setPathSchema(pathProps.toJson());
-                }
-                if (queryProps.size() > 0) {
-                    tool.setDataSchema(queryProps.toJson());
-                }
-
-                // 3. 输出 Schema
-                if (detail.hasKey("responses")) {
-                    tool.setOutputSchema(resolveRef(root, detail.get("responses").get("200").get("content").get("application/json").get("schema")));
-                }
-
-                tool.setDeprecated(detail.get("deprecated").getBoolean());
-                tools.add(tool);
+                doResolveMethod(tools, root, path, method, detail);
             });
         });
 
         return tools;
+    }
+
+    protected void doResolveMethod(List<ApiTool> tools, ONode root, String path, String method, ONode detail){
+        ApiTool tool = new ApiTool();
+        tool.setPath(path);
+        tool.setMethod(method.toUpperCase());
+        tool.setName(generateName(detail, tool.getMethod(), path));
+        tool.setDescription(extractDescription(detail));
+
+        // 1. 分解 Parameters (Path vs Query)
+        ONode parameters = detail.get("parameters");
+        ONode pathProps = new ONode().asObject();
+        ONode queryProps = new ONode().asObject();
+
+        if (parameters.isArray()) {
+            for (ONode param : parameters.getArrayUnsafe()) {
+                // 解析引用（如果参数本身是引用）
+                ONode pNode = resolveRefNode(root, param, new HashSet<>());
+                String in = pNode.get("in").getString();
+                String name = pNode.get("name").getString();
+
+                if ("path".equals(in)) {
+                    pathProps.set(name, pNode);
+                } else if ("query".equals(in)) {
+                    queryProps.set(name, pNode);
+                }
+            }
+        }
+
+        // 2. 解析 Body 并入 DataSchema
+        if (detail.hasKey("requestBody")) {
+            ONode bodySchema = extractBodySchema(root, detail.get("requestBody"));
+            if (!bodySchema.isNull()) {
+                // 如果既有 Query 又有 Body，合并到 dataSchema
+                queryProps.getOrNew("properties").setAll(bodySchema.get("properties").getObject());
+            }
+        }
+
+        if (pathProps.size() > 0) {
+            tool.setPathSchema(pathProps.toJson());
+        }
+        if (queryProps.size() > 0) {
+            tool.setDataSchema(queryProps.toJson());
+        }
+
+        // 3. 输出 Schema
+        if (detail.hasKey("responses")) {
+            tool.setOutputSchema(resolveRef(root, detail.get("responses").get("200").get("content").get("application/json").get("schema")));
+        }
+
+        tool.setDeprecated(detail.get("deprecated").getBoolean());
+        tools.add(tool);
     }
 
     private ONode extractBodySchema(ONode root, ONode requestBody) {
