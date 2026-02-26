@@ -56,7 +56,7 @@ public class RestApiSkill extends AbsSkill {
     private ApiResolver resolver = OpenApiResolver.getInstance();
     private ApiAuthenticator authenticator;
 
-    private int dynamicThreshold = 15; // 超过此值，不再平铺 Schema，进入清单模式
+    private int dynamicThreshold = 8; // 超过此值，不再平铺 Schema，进入清单模式
     private int searchThreshold = 50;  // 超过此值，不再展示清单，进入强制搜索模式
     private int maxContextLength = 8000;
 
