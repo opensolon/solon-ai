@@ -56,7 +56,9 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
 
                     String params = resolveRef(root, detail.get("parameters"));
                     StringBuilder input = new StringBuilder();
-                    if (!"[]".equals(params) && !Utils.isEmpty(params)) input.append(params);
+                    if (!"[]".equals(params) && !"{}".equals(params) && !Utils.isEmpty(params)) {
+                        input.append(params);
+                    }
 
                     if (detail.hasKey("requestBody")) {
                         ONode content = detail.get("requestBody").get("content");
@@ -79,7 +81,10 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
                         }
 
                         if (!bodySchema.isNull()) {
-                            if (input.length() > 0) input.append(" + ");
+                            if (input.length() > 0) {
+                                input.append(" + ");
+                            }
+
                             input.append("Body:").append(resolveRef(root, bodySchema));
                         }
                     }

@@ -19,6 +19,8 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.skills.restapi.ApiResolver;
 import org.noear.solon.lang.Preview;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -32,6 +34,7 @@ import java.util.Set;
  */
 @Preview("3.9.1")
 public abstract class AbsOpenApiResolver implements ApiResolver {
+    private static final Logger LOG = LoggerFactory.getLogger(AbsOpenApiResolver.class);
     /**
      * 解析引用节点
      *
@@ -58,8 +61,16 @@ public abstract class AbsOpenApiResolver implements ApiResolver {
             }
             visited.add(ref);
 
-            String jsonPath = ref.replace("#/", "$.").replace("/", ".");
-            ONode refNode = root.select(jsonPath);
+            String[] parts = ref.split("/");
+            ONode refNode = null;
+            for (String p1 : parts) {
+                if ("#".equals(p1)) {
+                    refNode = root;
+                } else {
+                    refNode = refNode.get(p1);
+                }
+            }
+
             return resolveRefNode(root, refNode, visited);
         }
 

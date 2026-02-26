@@ -7,7 +7,6 @@ import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleResponse;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.skills.restapi.RestApiSkill;
-import org.noear.solon.ai.skills.restapi.SchemaMode;
 import org.noear.solon.test.HttpTester;
 import org.noear.solon.test.SolonTest;
 
@@ -18,12 +17,7 @@ import org.noear.solon.test.SolonTest;
 @SolonTest(MockApp.class)
 public class RestApiSkillTests extends HttpTester {
 
-    /**
-     * 通用 Agent 构建器
-     * @param version "v2" 或 "v3"
-     * @param mode FULL 或 DYNAMIC
-     */
-    private SimpleAgent getAgent(String version, SchemaMode mode) {
+    private SimpleAgent getAgent(String version, int dynamicThreshold) {
         String mockApiDocsUrl = "http://localhost:8080/swagger/" + version + "/api-docs";
         String apiBaseUrl = "http://localhost:8080";
 
@@ -32,7 +26,7 @@ public class RestApiSkillTests extends HttpTester {
         // 实例化 Skill 并指定模式（自适应 v2/v3 及解引用）
         RestApiSkill apiSkill = new RestApiSkill()
                 .addApi(mockApiDocsUrl, apiBaseUrl)
-                .schemaMode(mode);
+                .dynamicThreshold(dynamicThreshold);
 
         return SimpleAgent.of(chatModel)
                 .role("业务助手")
@@ -44,7 +38,7 @@ public class RestApiSkillTests extends HttpTester {
 
     @Test
     public void testV3_Full_RefResolution() throws Throwable {
-        SimpleAgent agent = getAgent("v3", SchemaMode.FULL);
+        SimpleAgent agent = getAgent("v3", 100);
         String query = "查询 ID 为 123 的用户状态是什么？";
 
         System.out.println("[V3 FULL 测试]: " + query);
@@ -56,7 +50,7 @@ public class RestApiSkillTests extends HttpTester {
 
     @Test
     public void testV3_Dynamic_Discovery() throws Throwable {
-        SimpleAgent agent = getAgent("v3", SchemaMode.DYNAMIC);
+        SimpleAgent agent = getAgent("v3", 1);
         String query = "帮我订购一个 'MacBook Pro'";
 
         System.out.println("[V3 DYNAMIC 测试]: " + query);
@@ -70,7 +64,7 @@ public class RestApiSkillTests extends HttpTester {
 
     @Test
     public void testV2_Full_RefResolution() throws Throwable {
-        SimpleAgent agent = getAgent("v2", SchemaMode.FULL);
+        SimpleAgent agent = getAgent("v2", 100);
         String query = "在 v2 系统里查询用户 202 状态";
 
         System.out.println("[V2 FULL 测试]: " + query);
@@ -82,7 +76,7 @@ public class RestApiSkillTests extends HttpTester {
 
     @Test
     public void testV2_Dynamic_Discovery() throws Throwable {
-        SimpleAgent agent = getAgent("v2", SchemaMode.DYNAMIC);
+        SimpleAgent agent = getAgent("v2", 1);
         String query = "帮我创建一个产品为 'ThinkPad' 的订单";
 
         System.out.println("[V2 DYNAMIC 测试]: " + query);
@@ -100,7 +94,7 @@ public class RestApiSkillTests extends HttpTester {
         String mockApiDocsUrl = "http://localhost:8080/swagger/v3/api-docs";
         RestApiSkill apiSkill = new RestApiSkill()
                 .addApi(mockApiDocsUrl, "http://localhost:8080")
-                .schemaMode(SchemaMode.DYNAMIC);
+                .dynamicThreshold(1);
 
         // getTools 应该包含探测工具 get_api_detail
         boolean hasDetailTool = apiSkill.getTools(null).stream()
@@ -111,7 +105,7 @@ public class RestApiSkillTests extends HttpTester {
 
     @Test
     public void testErrorHandling() throws Throwable {
-        SimpleAgent agent = getAgent("v3", SchemaMode.FULL);
+        SimpleAgent agent = getAgent("v3", 100);
         String query = "执行 error_test 接口，不传 age 参数";
 
         System.out.println("[错误处理测试]: " + query);
@@ -135,7 +129,7 @@ public class RestApiSkillTests extends HttpTester {
 
     @Test
     public void testCircularReference_Safety() throws Throwable {
-        SimpleAgent agent = getAgent("v3", SchemaMode.FULL);
+        SimpleAgent agent = getAgent("v3", 100);
         // getUser 接口在 MockApp 中定义了 User -> Group -> User 的循环
         String query = "详细描述 getUser 接口返回的 User 模型结构";
 

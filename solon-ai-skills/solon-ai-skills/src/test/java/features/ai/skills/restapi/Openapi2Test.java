@@ -4,10 +4,8 @@ import demo.ai.skills.LlmUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.skills.restapi.RestApiSkill;
-import org.noear.solon.ai.skills.restapi.SchemaMode;
 
 /**
  *
@@ -16,7 +14,7 @@ import org.noear.solon.ai.skills.restapi.SchemaMode;
  */
 public class Openapi2Test {
 
-    private ReActAgent getAgent(SchemaMode mode) {
+    private ReActAgent getAgent(int dynamicThreshold) {
         String mockApiDocsUrl = "http://localhost:8081/swagger/v2?group=appApi";
         String apiBaseUrl = "http://localhost:8081";
 
@@ -25,46 +23,64 @@ public class Openapi2Test {
         // 实例化 Skill 并指定模式（自适应 v2/v3 及解引用）
         RestApiSkill apiSkill = new RestApiSkill()
                 .addApi(mockApiDocsUrl, apiBaseUrl)
-                .schemaMode(mode);
+                .dynamicThreshold(dynamicThreshold);
 
         return ReActAgent.of(chatModel)
                 .role("业务助手")
-                .instruction("如果工具返回是 json ，则直接返回 json。禁止加工，禁止用 Markdown 格式包裹")
+                .instruction("最后答复时，直接返回工具结果，禁止加工！！")
                 .defaultSkillAdd(apiSkill)
                 .build();
     }
 
     @Test
     public void case11() throws Throwable {
-        ReActAgent agent = getAgent(SchemaMode.DYNAMIC);
+        ReActAgent agent = getAgent(1);
 
         String tmp = agent.prompt("我们有哪些接口中可用？").call().getContent();
         System.out.println(tmp);
+    }
 
+    @Test
+    public void case12() throws Throwable {
+        ReActAgent agent = getAgent(1);
 
-        tmp = agent.prompt("查询用户列表").call().getContent();
+        String tmp = agent.prompt("查询用户列表").call().getContent();
         System.out.println(tmp);
-        Assertions.assertEquals("[{\"userId\":12}]",tmp);
+        Assertions.assertEquals("[{\"userId\":12}]", tmp);
+    }
 
-        tmp = agent.prompt("查询用户 id = 13 的信息").call().getContent();
+    @Test
+    public void case13() throws Throwable {
+        ReActAgent agent = getAgent(1);
+
+        String tmp = agent.prompt("查询用户 id = 13 的信息").call().getContent();
         System.out.println(tmp);
-        Assertions.assertEquals("{\"userId\":13}",tmp);
+        Assertions.assertEquals("{\"userId\":13}", tmp);
     }
 
     @Test
     public void case21() throws Throwable {
-        ReActAgent agent = getAgent(SchemaMode.FULL);
+        ReActAgent agent = getAgent(100);
 
         String tmp = agent.prompt("我们有哪些接口中可用？").call().getContent();
         System.out.println(tmp);
+    }
 
+    @Test
+    public void case22() throws Throwable {
+        ReActAgent agent = getAgent(100);
 
-        tmp = agent.prompt("查询用户列表").call().getContent();
+        String tmp = agent.prompt("查询用户列表").call().getContent();
         System.out.println(tmp);
-        Assertions.assertEquals("[{\"userId\":12}]",tmp);
+        Assertions.assertEquals("[{\"userId\":12}]", tmp);
+    }
 
-        tmp = agent.prompt("查询用户 id = 13 的信息").call().getContent();
+    @Test
+    public void case23() throws Throwable {
+        ReActAgent agent = getAgent(100);
+
+        String tmp = agent.prompt("查询用户 id = 13 的信息").call().getContent();
         System.out.println(tmp);
-        Assertions.assertEquals("{\"userId\":13}",tmp);
+        Assertions.assertEquals("{\"userId\":13}", tmp);
     }
 }

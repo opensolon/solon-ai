@@ -44,9 +44,10 @@ import java.util.stream.Collectors;
  * 注意：不能有同名同方式接口
  *
  * @author noear
+ * @since 3.9.1
  * @since 3.9.5
  */
-@Preview("3.9.5")
+@Preview("3.9.1")
 public class RestApiSkill extends AbsSkill {
     private static final Logger log = LoggerFactory.getLogger(RestApiSkill.class);
 
@@ -91,13 +92,17 @@ public class RestApiSkill extends AbsSkill {
 
     /**
      * 添加 API 组
+     *
      * @param definitionUrl OpenAPI 定义地址 (http://... 或 classpath:...)
-     * @param apiBaseUrl 实际接口执行基地址
+     * @param apiBaseUrl    实际接口执行基地址
      */
     public RestApiSkill addApi(String definitionUrl, String apiBaseUrl) {
-        ApiDefinition def = new ApiDefinition(definitionUrl, apiBaseUrl);
-        loadApiFromDefinition(def);
-        return this;
+        try {
+            loadApiFromDefinition(definitionUrl, apiBaseUrl);
+            return this;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -256,41 +261,37 @@ public class RestApiSkill extends AbsSkill {
 
     // --- 私有辅助 ---
 
-    private void loadApiFromDefinition(ApiDefinition def) {
-        try {
-            final String source;
-            String url = def.getDefinitionUrl();
+    private void loadApiFromDefinition(String definitionUrl, String apiBaseUrl) throws IOException {
+        final String source;
 
-            if (url.startsWith("http://") || url.startsWith("https://")) {
-                HttpUtils http = HttpUtils.http(url);
-                if (authenticator != null) {
-                    authenticator.apply(http, null);
-                }
-                source = http.get();
-            } else {
-                source = ResourceUtil.findResourceAsString(url);
+        if (definitionUrl.startsWith("http://") || definitionUrl.startsWith("https://")) {
+            HttpUtils http = HttpUtils.http(definitionUrl);
+            if (authenticator != null) {
+                authenticator.apply(http, null);
             }
-
-            if (Utils.isEmpty(source)) {
-                log.warn("RestApiSkill: Source empty for {}", url);
-                return;
-            }
-
-            List<ApiTool> tools = resolver.resolve(url, source);
-            for (ApiTool tool : tools) {
-                if (!tool.isDeprecated()) {
-                    String toolNameKey = tool.getName().toLowerCase();
-                    if(toolToBaseUrlMap.containsKey(toolNameKey)){
-                        log.warn("RestApiSkill: Duplicate tool [{}] overwritten.", tool.getName());
-                    }
-                    this.dynamicTools.add(tool);
-                    this.toolToBaseUrlMap.put(toolNameKey, def.getApiBaseUrl());
-                }
-            }
-            log.info("RestApiSkill: Loaded {} tools from {}", tools.size(), url);
-        } catch (Exception e) {
-            log.error("RestApiSkill: Loading failed for {}", def.getDefinitionUrl(), e);
+            source = http.get();
+        } else {
+            source = ResourceUtil.findResourceAsString(definitionUrl);
         }
+
+        if (Utils.isEmpty(source)) {
+            log.warn("RestApiSkill: Source empty for {}", definitionUrl);
+            return;
+        }
+
+        List<ApiTool> tools = resolver.resolve(definitionUrl, source);
+        for (ApiTool tool : tools) {
+            if (!tool.isDeprecated()) {
+                String toolNameKey = tool.getName().toLowerCase();
+                if (toolToBaseUrlMap.containsKey(toolNameKey)) {
+                    log.warn("RestApiSkill: Duplicate tool [{}] overwritten.", tool.getName());
+                }
+                this.dynamicTools.add(tool);
+                this.toolToBaseUrlMap.put(toolNameKey, apiBaseUrl);
+            }
+        }
+
+        log.info("RestApiSkill: Loaded {} tools from {}", tools.size(), definitionUrl);
     }
 
     private String formatApiDocs(List<ApiTool> tools) {
@@ -303,18 +304,5 @@ public class RestApiSkill extends AbsSkill {
                     .append("  - 返回 Schema: ").append(tool.getOutputSchemaOr("{}")).append("\n");
         }
         return sb.toString();
-    }
-
-    // 内部类：维护定义与基地址
-    private static class ApiDefinition {
-        private final String definitionUrl;
-        private final String apiBaseUrl;
-
-        public ApiDefinition(String definitionUrl, String apiBaseUrl) {
-            this.definitionUrl = definitionUrl;
-            this.apiBaseUrl = apiBaseUrl;
-        }
-        public String getDefinitionUrl() { return definitionUrl; }
-        public String getApiBaseUrl() { return apiBaseUrl; }
     }
 }
