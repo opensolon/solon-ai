@@ -1,4 +1,4 @@
-package features.ai.core;
+package features.ai.toolgateway;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
-import org.noear.solon.ai.chat.tool.ToolGatewaySkill;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.ai.skills.toolgateway.ToolGatewaySkill;
 
 import java.util.*;
 

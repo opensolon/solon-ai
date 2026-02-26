@@ -1,9 +1,12 @@
-package org.noear.solon.ai.chat.tool;
+package org.noear.solon.ai.skills.toolgateway;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.annotation.Param;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +21,8 @@ import java.util.stream.Collectors;
  * 1. FULL: 数量 <= dynamicThreshold，全量平铺。
  * 2. DYNAMIC: 数量 <= searchThreshold，指令内展示清单。
  * 3. SEARCH: 数量 > searchThreshold，强制搜索。
+ *
+ * 注意：不能有同名工具
  *
  * @author noear
  * @since 3.9.5
