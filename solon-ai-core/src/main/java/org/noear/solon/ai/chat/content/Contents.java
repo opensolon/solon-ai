@@ -46,6 +46,10 @@ public class Contents implements Serializable {
     }
 
     public Contents addBlocks(Collection<ContentBlock> blocks) {
+        if (blocks == null) {
+            return this;
+        }
+
         for (ContentBlock block : blocks) {
             addBlock(block);
         }
