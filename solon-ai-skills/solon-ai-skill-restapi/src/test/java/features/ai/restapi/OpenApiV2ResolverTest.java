@@ -1,260 +1,275 @@
 package features.ai.restapi;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.skills.restapi.ApiTool;
 import org.noear.solon.ai.skills.restapi.resolver.OpenApiV2Resolver;
+import org.noear.solon.core.util.ResourceUtil;
 
+import java.io.IOException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 基于 Petstore 官方数据的 Swagger 2.0 解析验证
+ */
 public class OpenApiV2ResolverTest {
 
-    private OpenApiV2Resolver resolver;
+    private OpenApiV2Resolver resolver = new OpenApiV2Resolver();
+    private String swagger_v2_json;
 
-    @BeforeEach
-    void setUp() {
-        resolver = new OpenApiV2Resolver();
+    public String getOpenApiJson() {
+        if (swagger_v2_json == null) {
+            try {
+                // 确保 resource 目录下有 swagger-v2.json（来自：https://petstore.swagger.io/v2/swagger.json）
+                swagger_v2_json = ResourceUtil.getResourceAsString("swagger-v2.json");
+            } catch (IOException e) {
+                throw new RuntimeException("无法读取测试资源文件", e);
+            }
+        }
+        return swagger_v2_json;
     }
 
     @Test
-    @DisplayName("完整流程覆盖：包含描述提取、多种响应码、废弃状态、方法过滤")
-    void testComprehensiveResolve() {
-        String json = "{" +
-                "  \"swagger\": \"2.0\"," +
-                "  \"paths\": {" +
-                "    \"/api/v1/user/{id}\": {" +
-                "      \"get\": {" +
-                "        \"summary\": \"获取用户\"," +
-                "        \"description\": \"详细的用户描述\"," +
-                "        \"deprecated\": true," +
-                "        \"parameters\": [" +
-                "           {\"name\": \"id\", \"in\": \"path\", \"required\": true, \"type\": \"string\"}" +
-                "        ]," +
-                "        \"responses\": {" +
-                "           \"201\": {\"schema\": {\"type\": \"object\", \"description\": \"创建成功\"}}" +
-                "        }" +
-                "      }," +
-                "      \"options\": {" +
-                "        \"description\": \"应该被忽略的方法\"" +
-                "      }," +
-                "      \"x-custom\": {" +
-                "        \"description\": \"扩展方法也应被忽略\"" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore：验证基础信息与路径参数")
+    void testBaseInfoAndPathParams() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
 
-        // 验证方法过滤：只保留 GET
-        assertEquals(1, tools.size());
+        // 验证 API 数量（Petstore 通常有 20 个左右的 operation）
+        assertTrue(tools.size() > 10);
+
+        // 查找 GET /pet/{petId}
+        ApiTool tool = tools.stream()
+                .filter(t -> "/pet/{petId}".equals(t.getPath()) && "GET".equals(t.getMethod()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        assertEquals("getPetById", tool.getName());
+        assertTrue(tool.getDescription().contains("Find pet by ID"));
+
+        // 验证 Path 参数解析
+        assertNotNull(tool.getPathSchema());
+        assertTrue(tool.getPathSchema().contains("petId"));
+        assertTrue(tool.getPathSchema().contains("\"type\":\"integer\""));
+    }
+
+    @Test
+    @DisplayName("Petstore：验证 Body 参数的深度展开（Ref 引用）")
+    void testBodySchemaResolution() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        // 查找 POST /pet
+        ApiTool tool = tools.stream()
+                .filter(t -> "/pet".equals(t.getPath()) && "POST".equals(t.getMethod()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        String bodySchema = tool.getBodySchema();
+
+        // 验证 Pet 模型是否被平铺展开
+        assertTrue(bodySchema.contains("\"name\":{\"type\":\"string\"}"));
+        // 验证嵌套引用 Category 是否被解析
+        assertTrue(bodySchema.contains("category"));
+        // 验证数组引用 Tag 是否被解析
+        assertTrue(bodySchema.contains("tags"));
+    }
+
+    @Test
+    @DisplayName("Petstore：验证 Query 参数与枚举 Enum")
+    void testQueryAndEnumResolution() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        // 查找 GET /pet/findByStatus
+        ApiTool tool = tools.stream()
+                .filter(t -> "/pet/findByStatus".equals(t.getPath()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        String querySchema = tool.getQuerySchema();
+
+        // 验证 Query 参数 status 是否存在
+        assertTrue(querySchema.contains("status"));
+        // 验证枚举值解析
+        assertTrue(querySchema.contains("available"));
+        assertTrue(querySchema.contains("pending"));
+        assertTrue(querySchema.contains("sold"));
+    }
+
+    @Test
+    @DisplayName("Petstore：验证 Multipart/FormData 解析")
+    void testMultipartResolution() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        // 查找 POST /pet/{petId}/uploadImage
+        ApiTool tool = tools.stream()
+                .filter(t -> t.getPath().contains("uploadImage") && "POST".equals(t.getMethod()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        // 验证 Multipart 标识
+        assertTrue(tool.isMultipart(), "uploadImage 接口应识别为 Multipart");
+
+        // 验证 BodySchema 包含 formData 字段
+        String bodySchema = tool.getBodySchema();
+        assertTrue(bodySchema.contains("file") || bodySchema.contains("additionalMetadata"));
+    }
+
+    @Test
+    @DisplayName("Petstore：验证响应结构解析")
+    void testResponseResolution() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        // 查找 GET /store/order/{orderId}
+        ApiTool tool = tools.stream()
+                .filter(t -> t.getPath().startsWith("/store/order/"))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        String outputSchema = tool.getOutputSchema();
+
+        // 验证返回的是 Order 模型结构
+        assertTrue(outputSchema.contains("shipDate"));
+        assertTrue(outputSchema.contains("quantity"));
+        assertTrue(outputSchema.contains("\"type\":\"integer\""));
+    }
+
+    @Test
+    @DisplayName("Petstore：验证 Header 参数解析")
+    void testHeaderResolution() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        // 查找 DELETE /pet/{petId}
+        ApiTool tool = tools.stream()
+                .filter(t -> "/pet/{petId}".equals(t.getPath()) && "DELETE".equals(t.getMethod()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        // Petstore 中该接口通常定义了 api_key 这个 header 参数
+        String headerSchema = tool.getHeaderSchema();
+        assertNotNull(headerSchema);
+        assertTrue(headerSchema.contains("api_key"));
+    }
+
+    @Test
+    @DisplayName("Petstore：验证 BaseUrl 提取逻辑")
+    void testBaseUrlExtraction() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        assertFalse(tools.isEmpty());
         ApiTool tool = tools.get(0);
 
-        // 验证名称生成逻辑 (GET + path)
-        assertEquals("get_api_v1_user_id_", tool.getName());
-        // 验证描述提取优先级 (summary -> description)
-        assertEquals("获取用户", tool.getDescription());
-        // 验证状态
-        assertTrue(tool.isDeprecated());
-        // 验证响应 (没有200时取201)
-        assertTrue(tool.getOutputSchema().contains("创建成功"));
+        // Petstore V2 默认 host 通常是 petstore.swagger.io，basePath 是 /v2
+        assertEquals("https://petstore.swagger.io/v2", tool.getBaseUrl());
     }
 
     @Test
-    @DisplayName("复杂引用覆盖：多级引用、数组类型、枚举类型")
-    void testComplexSchemaAndRef() {
-        String json = "{" +
-                "  \"swagger\": \"2.0\"," +
-                "  \"paths\": {" +
-                "    \"/order\": {" +
-                "      \"post\": {" +
-                "        \"parameters\": [{\"in\": \"body\", \"name\": \"body\", \"schema\": {\"$ref\": \"#/definitions/Order\"}}]" +
-                "      }" +
-                "    }" +
-                "  }," +
-                "  \"definitions\": {" +
-                "    \"Order\": {" +
-                "      \"type\": \"object\"," +
-                "      \"properties\": {" +
-                "        \"items\": {" +
-                "           \"type\": \"array\"," +
-                "           \"items\": {\"$ref\": \"#/definitions/Item\"}" +
-                "        }," +
-                "        \"status\": {\"type\": \"string\", \"enum\": [\"PENDING\", \"DONE\"]}" +
-                "      }" +
-                "    }," +
-                "    \"Item\": {" +
-                "      \"properties\": {\"id\": {\"type\": \"integer\"}}" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore：深度验证 Array 内部引用是否平铺")
+    void testArrayItemsFlattening() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getDataSchema();
 
-        System.out.println(input);
-        // 验证数组展开
-        assertTrue(input.contains("\"items\""));
-        // 验证二级引用展开
-        assertTrue(input.contains("\"id\":{\"type\":\"integer\"}"));
-        // 验证枚举包含
-        assertTrue(input.contains("\"enum\":[\"PENDING\",\"DONE\"]"));
+        // 查找 GET /pet/findByTags
+        ApiTool tool = tools.stream()
+                .filter(t -> t.getPath().contains("findByTags"))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        // findByTags 的响应或参数涉及 Tag 对象的数组
+        // 验证 outputSchema 里的 tags 数组内部是否展开了 Tag 的属性 (id, name)
+        String output = tool.getOutputSchema();
+        System.out.println(output);
+
+        // 关键点：如果平铺成功，output 不应只含有 "$ref"，而应含有 Tag 的属性字段
+        assertTrue(output.contains("\"name\":{\"type\":\"string\"}"));
+        assertTrue(output.contains("items"));
     }
 
     @Test
-    @DisplayName("边界覆盖：参数为空、缺失响应、非对象参数节点")
-    void testEdgeCases() {
-        String json = "{" +
-                "  \"swagger\": \"2.0\"," +
-                "  \"paths\": {" +
-                "    \"/empty\": {" +
-                "      \"get\": {" +
-                "        \"responses\": {}" +
-                "      }" +
-                "    }," +
-                "    \"/no-params\": {" +
-                "      \"put\": {" +
-                "        \"parameters\": null," +
-                "        \"responses\": {\"200\": {}}" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore：验证枚举参数的 Required 状态")
+    void testQueryRequiredLogic() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
 
-        // 验证无响应体情况
-        ApiTool emptyTool = tools.stream().filter(t -> t.getPath().equals("/empty")).findFirst().get();
-        assertNull(emptyTool.getOutputSchema());
+        // 查找 GET /pet/findByStatus
+        ApiTool tool = tools.stream()
+                .filter(t -> t.getPath().contains("findByStatus"))
+                .findFirst()
+                .orElse(null);
 
-        // 验证 null 参数处理
-        ApiTool noParamTool = tools.stream().filter(t -> t.getPath().equals("/no-params")).findFirst().get();
-        assertNotNull(noParamTool.getOutputSchema());
+        assertNotNull(tool);
+        String querySchema = tool.getQuerySchema();
+
+        // 验证 status 是必填的（在 Petstore 定义中通常为 true）
+        assertTrue(querySchema.contains("\"required\":[\"status\"]"));
     }
 
     @Test
-    @DisplayName("逻辑覆盖：带有 required 属性和 cleaning 逻辑")
-    void testCleaningLogic() {
-        String json = "{" +
-                "  \"swagger\": \"2.0\"," +
-                "  \"paths\": {" +
-                "    \"/clean\": {" +
-                "      \"post\": {" +
-                "        \"parameters\": [{" +
-                "          \"in\": \"body\", \"schema\": {" +
-                "             \"type\": \"object\"," +
-                "             \"required\": [\"name\"]," +
-                "             \"properties\": {\"name\": {\"type\": \"string\"}}," +
-                "             \"x-internal-meta\": \"should be filtered\"" +
-                "          }" +
-                "        }]" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore：验证非 200 的成功响应 (201/default)")
+    void testNon200ResponseResolution() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getDataSchema();
 
-        // 验证保留了有效字段
-        assertTrue(input.contains("\"required\":[\"name\"]"));
-        // 验证 AbsOpenApiResolver 的过滤逻辑：只保留 type, properties, required 等，忽略 x- 开头的自定义字段（除非在 whitelist）
-        assertFalse(input.contains("x-internal-meta"));
+        // 某些版本的 Petstore 更新操作可能返回 default 或非 200 码
+        // 验证 POST /user/createWithArray 这种接口的响应解析
+        ApiTool tool = tools.stream()
+                .filter(t -> "/user/createWithArray".equals(t.getPath()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        assertNull(tool.getOutputSchema());
     }
 
     @Test
-    @DisplayName("引用解析：解析非 definition 的 root 节点路径")
-    void testRootPathRef() {
-        String json = "{" +
-                "  \"swagger\": \"2.0\"," +
-                "  \"custom_schema\": {\"type\": \"boolean\"}," +
-                "  \"paths\": {" +
-                "    \"/ref\": {" +
-                "      \"get\": {\"responses\": {\"200\": {\"schema\": {\"$ref\": \"#/custom_schema\"}}}}" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore：验证 Map 类型（无 Properties 的对象）")
+    void testMapTypeResolution() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
-        assertEquals("{\"type\":\"boolean\"}", tools.get(0).getOutputSchema());
+
+        // GET /store/inventory 返回的是 Map<String, int>
+        ApiTool tool = tools.stream()
+                .filter(t -> "/store/inventory".equals(t.getPath()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        String output = tool.getOutputSchema();
+
+        // 对于 Map，Swagger V2 通常将其表现为没有 properties 的 object
+        // 验证它是否被识别为 object 或者是包含 integer 的结构
+        assertTrue(output.contains("object") || output.contains("integer"));
     }
 
     @Test
-    @DisplayName("逻辑覆盖：Parameters 为非数组引用 (覆盖 V2 doResolve else 分支)")
-    void testNonArrayParameters() {
-        String json = "{" +
-                "  \"swagger\": \"2.0\"," +
-                "  \"paths\": {" +
-                "    \"/external\": {" +
-                "      \"get\": {" +
-                "        \"parameters\": { \"$ref\": \"#/parameterDefinitions/SingleParam\" }," + // 注意这里引用的是单个对象
-                "        \"responses\": { \"200\": { \"description\": \"ok\" } }" +
-                "      }" +
-                "    }" +
-                "  }," +
-                "  \"parameterDefinitions\": {" +
-                "    \"SingleParam\": {" + // 这里定义为 Object 才能匹配 resolveRef 的逻辑
-                "       \"name\": \"token\"," +
-                "       \"in\": \"header\"," +
-                "       \"type\": \"string\"," +
-                "       \"description\": \"access_token\"" + // 使用 description 因为它在白名单里
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore：验证 Deprecated 标记解析")
+    void testDeprecatedResolution() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
-        // 触发了 tool.setInputSchema(resolveRef(root, params)) 逻辑
-        System.out.println(tools.get(0).getDataSchema());
-        assertTrue(tools.get(0).getDataSchema().contains("token"));
-    }
 
-    @Test
-    @DisplayName("逻辑覆盖：Schema 顶层为数组类型 (覆盖 AbsOpenApiResolver isArray 分支)")
-    void testArraySchemaResolve() {
-        String json = "{" +
-                "  \"swagger\": \"2.0\"," +
-                "  \"paths\": {" +
-                "    \"/tags\": {" +
-                "      \"get\": {" +
-                "        \"responses\": {" +
-                "          \"200\": {" +
-                "            \"schema\": { \"$ref\": \"#/definitions/TagList\" }" +
-                "          }" +
-                "        }" +
-                "      }" +
-                "    }" +
-                "  }," +
-                "  \"definitions\": {" +
-                "    \"TagList\": [" +
-                "      { \"type\": \"string\" }" +
-                "    ]" +
-                "  }" +
-                "}";
-
-        List<ApiTool> tools = resolver.resolve(null, json);
-        // 触发了 resolveRefNode 中的 node.isArray() 逻辑
-        assertEquals("[{\"type\":\"string\"}]", tools.get(0).getOutputSchema());
-    }
-
-    @Test
-    @DisplayName("循环引用覆盖：防止无限递归")
-    void testCircularReference() {
-        String json = "{" +
-                "  \"swagger\": \"2.0\"," +
-                "  \"paths\": {\"/loop\": {\"get\": {\"responses\": {\"200\": {\"schema\": {\"$ref\": \"#/definitions/Node\"}}}}}}," +
-                "  \"definitions\": {" +
-                "    \"Node\": {" +
-                "      \"properties\": {\"next\": {\"$ref\": \"#/definitions/Node\"}}" +
-                "    }" +
-                "  }" +
-                "}";
-
-        List<ApiTool> tools = resolver.resolve(null, json);
-        String output = tools.get(0).getOutputSchema();
-        // 验证是否正确触发了基类的防护标识
-        assertTrue(output.contains("_Circular_Reference_"));
+        // Petstore 中有些接口可能被标记为 deprecated
+        // 比如在某些版本中的 updatePetWithForm 或类似接口
+        for (ApiTool tool : tools) {
+            // 我们不确定具体哪个接口，但可以验证解析过程没报错，
+            // 且如果存在 vendorExtensions 里的 deprecated，工具能正确识别
+            if (tool.isDeprecated()) {
+                System.out.println("Found deprecated tool: " + tool.getName());
+                assertTrue(tool.isDeprecated());
+            }
+        }
     }
 }

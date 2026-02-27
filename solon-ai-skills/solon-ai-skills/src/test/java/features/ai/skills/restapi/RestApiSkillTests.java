@@ -18,8 +18,8 @@ import org.noear.solon.test.SolonTest;
 public class RestApiSkillTests extends HttpTester {
 
     private SimpleAgent getAgent(String version, int dynamicThreshold) {
-        String mockApiDocsUrl = "http://localhost:8080/swagger/" + version + "/api-docs";
-        String apiBaseUrl = "http://localhost:8080";
+        String mockApiDocsUrl = "http://localhost:9801/swagger/" + version + "/api-docs";
+        String apiBaseUrl = "http://localhost:9801";
 
         ChatModel chatModel = LlmUtil.getChatModel();
 

@@ -3,7 +3,8 @@ package org.noear.solon.ai.skills.restapi.resolver;
 import io.swagger.models.*;
 import io.swagger.models.parameters.BodyParameter;
 import io.swagger.models.parameters.Parameter;
-import io.swagger.parser.Swagger20Parser;
+import io.swagger.models.properties.*;
+import io.swagger.parser.SwaggerParser;
 import io.swagger.util.Json;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
@@ -13,7 +14,9 @@ import org.noear.solon.lang.Preview;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Swagger 2.0 (OpenAPI V2) 规范解析器
@@ -31,7 +34,9 @@ public class OpenApiV2Resolver implements ApiResolver {
 
     @Override
     public List<ApiTool> resolve(String definitionUrl, String source) throws IOException {
-        Swagger swagger = new Swagger20Parser().parse(source);
+        Swagger swagger = new SwaggerParser()
+                .readWithInfo(source)
+                .getSwagger();
 
         List<ApiTool> tools = new ArrayList<>();
         if (swagger == null || swagger.getPaths() == null) {
@@ -43,7 +48,7 @@ public class OpenApiV2Resolver implements ApiResolver {
         swagger.getPaths().forEach((path, pathItem) -> {
             pathItem.getOperationMap().forEach((method, operation) -> {
                 if (operation != null) {
-                    tools.add(convertToTool(path, method.name(), operation, baseUrl));
+                    tools.add(convertToTool(swagger, path, method.name(), operation, baseUrl));
                 }
             });
         });
@@ -51,7 +56,7 @@ public class OpenApiV2Resolver implements ApiResolver {
         return tools;
     }
 
-    private ApiTool convertToTool(String path, String method, Operation op, String baseUrl) {
+    private ApiTool convertToTool(Swagger swagger, String path, String method, Operation op, String baseUrl) {
         ApiTool tool = new ApiTool();
         tool.setBaseUrl(baseUrl);
         tool.setPath(path);
@@ -103,6 +108,8 @@ public class OpenApiV2Resolver implements ApiResolver {
                 if ("body".equals(in) && p instanceof BodyParameter) {
                     Model model = ((BodyParameter) p).getSchema();
                     if (model != null) {
+                        model = resolveModel(swagger.getDefinitions(), model, new ArrayList<>());
+
                         ONode modelNode = ONode.ofJson(Json.pretty(model));
                         if ("object".equals(modelNode.get("type").getString()) && modelNode.hasKey("properties")) {
                             bodyProps.setAll(modelNode.get("properties").getObject());
@@ -142,11 +149,15 @@ public class OpenApiV2Resolver implements ApiResolver {
         }
 
         // --- D. Response 解析 ---
-        Response ok = op.getResponses().get("200");
-        if (ok == null) ok = op.getResponses().get("201");
-        if (ok == null) ok = op.getResponses().get("default");
-        if (ok != null && ok.getSchema() != null) {
-            tool.setOutputSchema(Json.pretty(ok.getSchema()));
+        if(op.getResponses() != null) {
+            Response ok = op.getResponses().get("200");
+            if (ok == null) ok = op.getResponses().get("201");
+            if (ok == null) ok = op.getResponses().get("default");
+            if (ok != null && ok.getResponseSchema() != null) {
+                Model model = resolveModel(swagger.getDefinitions(), ok.getResponseSchema(), new ArrayList<>());
+
+                tool.setOutputSchema(ONode.ofJson(Json.pretty(model)).toJson());
+            }
         }
 
         // --- E. 结果构建 ---
@@ -169,6 +180,86 @@ public class OpenApiV2Resolver implements ApiResolver {
 
         return tool;
     }
+
+    private Model resolveModel(Map<String, Model> definitions, Model model, List<String> refs) {
+        if (model instanceof RefModel) {
+            String refName = ((RefModel) model).getSimpleRef();
+            if (refs.contains(refName)) {
+                ModelImpl loopModel = new ModelImpl();
+                loopModel.setDescription("_Circular_Reference_");
+                return loopModel;
+            }
+
+            refs.add(refName);
+            Model realModel = (definitions == null) ? null : definitions.get(refName);
+            return resolveModel(definitions, realModel, refs);
+        }
+
+        if (model instanceof ArrayModel) {
+            ArrayModel arrayModel = (ArrayModel) model;
+            if (arrayModel.getItems() != null) {
+                // 深度解析数组项的属性
+                arrayModel.setItems(resolveProperty(definitions, arrayModel.getItems(), new ArrayList<>(refs)));
+            }
+        }
+
+        if (model instanceof ModelImpl) {
+            ModelImpl modelImpl = (ModelImpl) model;
+            if (modelImpl.getProperties() != null) {
+                Map<String, Property> newProps = new LinkedHashMap<>();
+                for (Map.Entry<String, Property> entry : modelImpl.getProperties().entrySet()) {
+                    newProps.put(entry.getKey(), resolveProperty(definitions, entry.getValue(), new ArrayList<>(refs)));
+                }
+                modelImpl.setProperties(newProps);
+            }
+        }
+
+        return model;
+    }
+
+    /**
+     * 辅助方法：深度解析属性中的引用
+     */
+    private Property resolveProperty(Map<String, Model> definitions, Property prop, List<String> refs) {
+        // A. 处理属性引用 (RefProperty)
+        if (prop instanceof RefProperty) {
+            String refName = ((RefProperty) prop).getSimpleRef();
+
+            if (refs.contains(refName)) {
+                StringProperty loopProp = new StringProperty();
+                loopProp.setDescription("_Circular_Reference_");
+                return loopProp;
+            }
+
+            Model realModel = (definitions == null) ? null : definitions.get(refName);
+            if (realModel != null) {
+                // 将 Model 转换为 Property 以便嵌入属性列表
+                // 这里使用特殊的扩展逻辑或转换为 ObjectProperty
+                Model resolved = resolveModel(definitions, realModel, refs);
+
+                ObjectProperty objProp = new ObjectProperty();
+                if (resolved instanceof ModelImpl) {
+                    ModelImpl mi = (ModelImpl) resolved;
+                    objProp.setProperties(mi.getProperties());
+                    objProp.setDescription(mi.getDescription());
+                }
+                return objProp;
+            }
+        }
+
+        // B. 处理数组中的引用 (ArrayProperty)
+        if (prop instanceof ArrayProperty) {
+            ArrayProperty arrayProp = (ArrayProperty) prop;
+            if (arrayProp.getItems() != null) {
+                arrayProp.setItems(resolveProperty(definitions, arrayProp.getItems(), refs));
+            }
+            return arrayProp;
+        }
+
+        return prop;
+    }
+
+
 
     private String extractBaseUrl(Swagger swagger) {
         StringBuilder sb = new StringBuilder();

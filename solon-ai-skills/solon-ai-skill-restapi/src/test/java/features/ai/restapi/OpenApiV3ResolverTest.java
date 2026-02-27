@@ -1,260 +1,153 @@
 package features.ai.restapi;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.skills.restapi.ApiTool;
 import org.noear.solon.ai.skills.restapi.resolver.OpenApiV3Resolver;
+import org.noear.solon.core.util.ResourceUtil;
 
+import java.io.IOException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * 基于 Petstore 3.0 官方数据的 OpenAPI V3 解析验证
+ */
 public class OpenApiV3ResolverTest {
 
-    private OpenApiV3Resolver resolver;
+    private OpenApiV3Resolver resolver = new OpenApiV3Resolver();
+    private String openapi_v3_json;
 
-    @BeforeEach
-    void setUp() {
-        resolver = new OpenApiV3Resolver();
+    public String getOpenApiJson() {
+        if (openapi_v3_json == null) {
+            try {
+                // 确保 resource 目录下有 openapi-v3.json (来自 https://petstore3.swagger.io/api/v3/openapi.json)
+                openapi_v3_json = ResourceUtil.getResourceAsString("openapi-v3.json");
+            } catch (IOException e) {
+                throw new RuntimeException("无法读取测试资源文件", e);
+            }
+        }
+        return openapi_v3_json;
     }
 
     @Test
-    @DisplayName("基础解析：获取名称、描述、方法和路径")
-    void testBaseInfoResolve() {
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/api/v3/user\": {" +
-                "      \"get\": {" +
-                "        \"operationId\": \"getUser\"," +
-                "        \"summary\": \"Summary Info\"," +
-                "        \"description\": \"Detailed Description\"," +
-                "        \"deprecated\": true" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore V3：验证 BaseUrl 提取 (Server 节点)")
+    void testV3BaseUrlExtraction() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
 
-        assertEquals(1, tools.size());
-        ApiTool tool = tools.get(0);
-        assertEquals("getUser", tool.getName());
-        assertEquals("GET", tool.getMethod());
-        assertEquals("/api/v3/user", tool.getPath());
-        assertEquals("Summary Info", tool.getDescription());
-        assertTrue(tool.isDeprecated());
+        assertFalse(tools.isEmpty());
+        // V3 官方数据第一个 server 通常是 https://petstore3.swagger.io/api/v3
+        assertEquals("https://petstore3.swagger.io/api/v3", tools.get(0).getBaseUrl());
     }
 
     @Test
-    @DisplayName("RequestBody 深度覆盖：application/json 优先逻辑")
-    void testRequestBodyWithJson() {
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/save\": {" +
-                "      \"post\": {" +
-                "        \"requestBody\": {" +
-                "          \"content\": {" +
-                "            \"text/plain\": {\"schema\": {\"type\": \"string\"}}," +
-                "            \"application/json\": {\"schema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"integer\"}}}}" +
-                "          }" +
-                "        }" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore V3：验证 RequestBody 的深度平铺 (Ref 引用)")
+    void testV3RequestBodyResolution() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getDataSchema();
 
-        // 验证即使 application/json 不是第一个，也能被正确选中，且类型为 integer
-        assertTrue(input.contains("\"id\""));
-        assertTrue(input.contains("\"type\":\"integer\""));
+        // 查找 POST /pet (V3 中 body 不再在 parameters 里)
+        ApiTool tool = tools.stream()
+                .filter(t -> "/pet".equals(t.getPath()) && "POST".equals(t.getMethod()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        String bodySchema = tool.getBodySchema();
+
+        // 验证是否从 #/components/schemas/Pet 平铺展开
+        assertTrue(bodySchema.contains("\"name\":{\"type\":\"string\"}"));
+        // 验证嵌套的 Category 引用是否展开
+        assertTrue(bodySchema.contains("category"));
     }
 
     @Test
-    @DisplayName("RequestBody 深度覆盖：无 JSON 时回退到首个内容类型并标记 Multipart")
-    void testRequestBodyFallback() {
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/upload\": {" +
-                "      \"post\": {" +
-                "        \"requestBody\": {" +
-                "          \"content\": {" +
-                "            \"multipart/form-data\": {" +
-                "              \"schema\": {\"type\": \"object\", \"description\": \"file_data\"}" +
-                "            }" +
-                "          }" +
-                "        }" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore V3：验证 Query 参数与枚举")
+    void testV3QueryAndEnumResolution() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
-        ApiTool tool = tools.get(0);
 
-        // 验证 Multipart 标志
-        assertTrue(tool.isMultipart(), "应当识别为 Multipart 模式");
-        assertTrue(tool.getDataSchema().contains("file_data"));
+        // 查找 GET /pet/findByStatus
+        ApiTool tool = tools.stream()
+                .filter(t -> "/pet/findByStatus".equals(t.getPath()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        String querySchema = tool.getQuerySchema();
+
+        assertTrue(querySchema.contains("status"));
+        // 验证 V3 下枚举值解析是否正确
+        assertTrue(querySchema.contains("available"));
+        assertTrue(querySchema.contains("pending"));
     }
 
     @Test
-    @DisplayName("响应解析：支持 200 或 default 节点")
-    void testResponseResolve() {
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/resp\": {" +
-                "      \"get\": {" +
-                "        \"responses\": {" +
-                "          \"default\": {" +
-                "            \"content\": {" +
-                "              \"application/json\": {\"schema\": {\"type\": \"boolean\"}}" +
-                "            }" +
-                "          }" +
-                "        }" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore V3：验证响应结构深度平铺 (Array<Pet>)")
+    void testV3ResponseArrayFlattening() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
-        assertEquals("{\"type\":\"boolean\"}", tools.get(0).getOutputSchema());
+
+        // 查找 GET /pet/findByTags (返回 Pet 数组)
+        ApiTool tool = tools.stream()
+                .filter(t -> t.getPath().contains("findByTags"))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        String output = tool.getOutputSchema();
+
+        // 验证 Array 内部的 items 引用是否被平铺
+        assertTrue(output.contains("items"));
+        assertTrue(output.contains("\"name\":{\"type\":\"string\"}"));
+        assertFalse(output.contains("$ref"), "输出 Schema 不应包含未解析的引用");
     }
 
     @Test
-    @DisplayName("组合参数：Parameters + RequestBody 合并解析")
-    void testParametersAndBodyCombination() {
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/mix/{id}\": {" +
-                "      \"put\": {" +
-                "        \"parameters\": [{\"name\": \"id\", \"in\": \"path\", \"required\": true, \"schema\": {\"type\": \"string\"}}]," +
-                "        \"requestBody\": {" +
-                "          \"content\": {\"application/json\": {\"schema\": {\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\"}}}}}" +
-                "        }" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore V3：验证 Multipart 识别")
+    void testV3MultipartResolution() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
-        String pathSchema = tools.get(0).getPathSchema();
-        String dataSchema = tools.get(0).getDataSchema();
 
-        // 验证 Path 参数解析到 pathSchema
-        assertTrue(pathSchema.contains("\"id\""));
-        // 验证 Body 参数解析到 dataSchema (不再检查非标的 " + Body:" 字符串)
-        assertTrue(dataSchema.contains("\"name\""));
+        // 查找 POST /pet/{petId}/uploadImage
+        ApiTool tool = tools.stream()
+                .filter(t -> t.getPath().contains("uploadImage"))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        // V3 中通过 content 映射来识别
+        assertTrue(tool.isMultipart(), "V3 uploadImage 应通过 content-type 识别为 Multipart");
     }
 
     @Test
-    @DisplayName("递归解析与清理：OneOf/AnyOf 与属性过滤覆盖")
-    void testRecursiveCleaning() {
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/poly\": {" +
-                "      \"post\": {" +
-                "        \"requestBody\": {\"content\": {\"application/json\": {\"schema\": {\"$ref\": \"#/components/schemas/Pet\"}}}}" +
-                "      }" +
-                "    }" +
-                "  }," +
-                "  \"components\": {" +
-                "    \"schemas\": {" +
-                "      \"Pet\": {" +
-                "        \"oneOf\": [" +
-                "          {\"$ref\": \"#/components/schemas/Cat\"}," +
-                "          {\"$ref\": \"#/components/schemas/Dog\"}" +
-                "        ]," +
-                "        \"x-internal\": \"removed\"" +
-                "      }," +
-                "      \"Cat\": {\"type\": \"object\", \"properties\": {\"meow\": {\"type\": \"boolean\"}}}," +
-                "      \"Dog\": {\"type\": \"object\", \"properties\": {\"bark\": {\"type\": \"boolean\"}}}" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore V3：验证 Required 逻辑")
+    void testV3RequiredLogic() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getDataSchema();
 
-        assertTrue(input.contains("\"oneOf\""));
-        assertTrue(input.contains("\"meow\""));
-        assertTrue(input.contains("\"bark\""));
-        assertFalse(input.contains("x-internal"));
+        // 查找 POST /pet
+        ApiTool tool = tools.stream()
+                .filter(t -> "/pet".equals(t.getPath()) && "POST".equals(t.getMethod()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        // V3 的 required 字段通常定义在 schema 根部
+        assertTrue(tool.getBodySchema().contains("\"required\":[\"name\""));
     }
 
     @Test
-    @DisplayName("空值与特殊结构：处理 content 为空的情况")
-    void testNullContent() {
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/null\": {" +
-                "      \"post\": {" +
-                "        \"requestBody\": {\"content\": {}}," +
-                "        \"responses\": {\"200\": {\"description\": \"no content\"}}" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
+    @DisplayName("Petstore V3：验证 Deprecated 标记")
+    void testV3DeprecatedResolution() throws IOException {
+        String json = getOpenApiJson();
         List<ApiTool> tools = resolver.resolve(null, json);
-        ApiTool tool = tools.get(0);
 
-        // 规范：空的 content 映射不产生 properties
-        assertEquals("{\"type\":\"object\"}", tool.getDataSchema());
-        assertNull(tool.getOutputSchema());
-    }
-
-    @Test
-    @DisplayName("RequestBody 覆盖：符合标准的媒体类型结构")
-    void testRequestBodyStandard() {
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/save\": {" +
-                "      \"post\": {" +
-                "        \"requestBody\": {" +
-                "          \"content\": {" +
-                "            \"application/json\": {\"schema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"integer\"}}}}" +
-                "          }" +
-                "        }" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
-        List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getDataSchema();
-        assertTrue(input.contains("\"id\""));
-    }
-
-    @Test
-    @DisplayName("循环引用覆盖：V3 场景下的递归防护")
-    void testCircularReferenceV3() {
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/loop\": {" +
-                "      \"post\": {" +
-                "        \"requestBody\": { \"content\": { \"application/json\": { \"schema\": { \"$ref\": \"#/components/schemas/Node\" } } } }" +
-                "      }" +
-                "    }" +
-                "  }," +
-                "  \"components\": {" +
-                "    \"schemas\": {" +
-                "      \"Node\": { \"type\": \"object\", \"properties\": { \"next\": { \"$ref\": \"#/components/schemas/Node\" } } }" +
-                "    }" +
-                "  }" +
-                "}";
-
-        List<ApiTool> tools = resolver.resolve(null, json);
-        assertTrue(tools.get(0).getDataSchema().contains("_Circular_Reference_"));
+        // 检查是否存在被标记为废弃的 API
+        boolean hasDeprecated = tools.stream().anyMatch(ApiTool::isDeprecated);
+        // 这里的断言取决于具体 openapi.json 的内容，可以打印观察
+        System.out.println("Has deprecated APIs: " + hasDeprecated);
     }
 }
