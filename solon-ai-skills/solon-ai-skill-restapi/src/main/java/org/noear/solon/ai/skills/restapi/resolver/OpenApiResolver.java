@@ -5,6 +5,7 @@ import org.noear.solon.ai.skills.restapi.ApiResolver;
 import org.noear.solon.ai.skills.restapi.ApiTool;
 import org.noear.solon.lang.Preview;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -16,6 +17,7 @@ import java.util.List;
 @Preview("3.9.1")
 public class OpenApiResolver implements ApiResolver {
     private static final OpenApiResolver instance = new OpenApiResolver();
+
     public static OpenApiResolver getInstance() {
         return instance;
     }
@@ -29,12 +31,12 @@ public class OpenApiResolver implements ApiResolver {
     }
 
     @Override
-    public List<ApiTool> resolve(String definitionUrl, String source) {
+    public List<ApiTool> resolve(String definitionUrl, String source) throws IOException {
         ONode root = ONode.ofJson(source);
         if (root.hasKey("openapi")) {
-            return v3Resolver.doResolve(root);
+            return v3Resolver.resolve(definitionUrl, source);
         }
 
-        return v2Resolver.doResolve(root);
+        return v2Resolver.resolve(definitionUrl, source);
     }
 }

@@ -238,58 +238,86 @@ public class RestApiSkill extends AbsSkill {
             @Param("api_name") String apiName,
             @Param("header_params") Map<String, Object> headerParams,
             @Param("path_params") Map<String, Object> pathParams,
-            @Param("query_or_body_params") Map<String, Object> dataParams) throws IOException {
+            @Param("query_params") Map<String, Object> queryParams,
+            @Param("body_params") Map<String, Object> bodyParams) throws IOException {
 
         ApiTool tool = dynamicTools.get(apiName.trim().toLowerCase());
 
         if (tool == null) {
-            return "Error: API [" + apiName + "] not found. Please use 'search_apis' to confirm the correct name.";
+            return "错误: 未找到名为 [" + apiName + "] 的 API。请先通过 'search_apis' 确认正确的名称。";
         }
 
         String baseUrl = tool.getBaseUrl();
         String finalPath = tool.getPath();
 
-        // 路径参数替换
+        // 1. 路径参数替换 (Path Parameters)
         if (Assert.isNotEmpty(pathParams)) {
             for (Map.Entry<String, Object> entry : pathParams.entrySet()) {
-                String val = String.valueOf(entry.getValue());
+                Object value = entry.getValue();
+                if (value == null) continue;
+
+                String valStr = String.valueOf(value);
                 try {
-                    // 使用 UTF-8 进行编码
-                    String encodedVal = URLEncoder.encode(val, "UTF-8");
+                    // 必须进行 URL 编码，防止路径参数中包含特殊字符或中文
+                    String encodedVal = URLEncoder.encode(valStr, "UTF-8");
                     finalPath = finalPath.replace("{" + entry.getKey() + "}", encodedVal);
                 } catch (java.io.UnsupportedEncodingException e) {
-                    finalPath = finalPath.replace("{" + entry.getKey() + "}", val);
+                    finalPath = finalPath.replace("{" + entry.getKey() + "}", valStr);
                 }
             }
         }
 
+        // 如果 finalPath 依然包含 {xxx}，说明 AI 漏传了 pathSchema 中定义的必填路径参数
+        if (finalPath.contains("{") && finalPath.contains("}")) {
+            return "执行失败: 缺少必要的路径参数。当前路径仍存在占位符: " + finalPath +
+                    "。请检查 'path_params' 是否提供了所有必需的变量。";
+        }
+
+        // 构建请求对象
         HttpUtils http = HttpUtils.http(baseUrl + finalPath);
 
+        // 2. Header 参数设置
         if (Assert.isNotEmpty(headerParams)) {
             http.headers(headerParams);
         }
 
+        // 3. 认证处理
         if (authenticator != null) {
             authenticator.apply(http, tool);
         }
 
-        if ("GET".equalsIgnoreCase(tool.getMethod())) {
-            http.data(dataParams);
-        } else if (tool.isMultipart()) {
-            http.data(dataParams).multipart(true);
-        } else {
-            http.bodyOfJson(ONode.serialize(dataParams));
+        // 4. Query 参数设置 (URL 查询参数)
+        if (Assert.isNotEmpty(queryParams)) {
+            http.data(queryParams);
         }
 
+        // 5. Body 参数设置
+        if (Assert.isNotEmpty(bodyParams)) {
+            if (tool.isMultipart()) {
+                // 表单或多部分对象提交
+                http.data(bodyParams).multipart(true);
+            } else {
+                // 标准 JSON 提交 (使用 ONode 序列化处理)
+                http.bodyOfJson(ONode.serialize(bodyParams));
+            }
+        }
+
+        // 6. 执行并处理响应
         try {
+            log.debug("RestApiSkill calling: {} {} (API: {})", tool.getMethod(), baseUrl + finalPath, apiName);
+
             String result = http.exec(tool.getMethod()).bodyAsString();
-            if (result.length() > maxContextLength) {
+
+            // 结果截断处理，防止撑爆 AI 上下文
+            if (result != null && result.length() > maxContextLength) {
                 return result.substring(0, maxContextLength) + "... [Data truncated]";
             }
-            return Utils.isEmpty(result) ? "Success: API executed, no content returned." : result;
+
+            return Utils.isEmpty(result) ? "Success: API executed, but returned an empty response." : result;
         } catch (Exception e) {
             log.warn("API Call Failed: {} - {}", tool.getName(), e.getMessage());
-            return "Execution Error: " + (e.getMessage() != null ? e.getMessage() : "HTTP transport failure");
+            String errorMsg = e.getMessage() != null ? e.getMessage() : "远程服务未响应";
+            return "接口执行异常: " + errorMsg + " (请检查服务可用性或参数正确性)";
         }
     }
 
@@ -331,7 +359,6 @@ public class RestApiSkill extends AbsSkill {
                     .append("  - 功能: ").append(tool.getDescription()).append("\n")
                     .append("  - 路径: ").append(tool.getMethod()).append(" ").append(tool.getPath()).append("\n");
 
-            // 3. 增加 Header 说明 (核心改动)
             if (Utils.isNotEmpty(tool.getHeaderSchema())) {
                 sb.append("  - Header 参数: ").append(tool.getHeaderSchema()).append("\n");
             }
@@ -340,9 +367,14 @@ public class RestApiSkill extends AbsSkill {
                 sb.append("  - Path 参数 (填充路径 {}): ").append(tool.getPathSchema()).append("\n");
             }
 
-            if (Utils.isNotEmpty(tool.getDataSchema())) {
-                String label = "GET".equalsIgnoreCase(tool.getMethod()) ? "Query 参数" : "Body/Query 参数";
-                sb.append("  - ").append(label).append(": ").append(tool.getDataSchema()).append("\n");
+            // 分开展示 Query 和 Body
+            if (Utils.isNotEmpty(tool.getQuerySchema())) {
+                sb.append("  - Query 参数 (URL): ").append(tool.getQuerySchema()).append("\n");
+            }
+
+            if (Utils.isNotEmpty(tool.getBodySchema())) {
+                String label = tool.isMultipart() ? "Body 参数 (Multipart/Form)" : "Body 参数 (JSON)";
+                sb.append("  - ").append(label).append(": ").append(tool.getBodySchema()).append("\n");
             }
 
             sb.append("  - 返回结果: ").append(tool.getOutputSchemaOr("{}")).append("\n");

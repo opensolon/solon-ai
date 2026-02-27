@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2025 noear.org and authors
+ * Copyright 2017-2026 noear.org and authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,29 +33,28 @@ public class ApiTool {
 
     /**
      * header jsonSchema
-     *
      */
     private String headerSchema;
     /**
      * path jsonSchema
-     *
      */
     private String pathSchema;
     /**
-     * data jsonSchema
-     *
+     * query jsonSchema (URL 参数)
      */
-    private String dataSchema;
+    private String querySchema;
+    /**
+     * body jsonSchema (请求体参数)
+     */
+    private String bodySchema;
     /**
      * output jsonSchema
-     *
      */
     private String outputSchema;
 
     private boolean isDeprecated;
 
-    // --- Getter 方法 (公开) ---
-
+    // --- Getter 方法 ---
 
     public String getBaseUrl() {
         return baseUrl;
@@ -89,38 +88,35 @@ public class ApiTool {
         return pathSchema;
     }
 
-
-    public String getDataSchema() {
-        return dataSchema;
+    public String getQuerySchema() {
+        return querySchema;
     }
 
-    public String getDataSchemaOr(String defVal) {
-        if (Assert.isEmpty(dataSchema)) {
-            return defVal;
-        } else {
-            return dataSchema;
-        }
+    public String getQuerySchemaOr(String defVal) {
+        return Assert.isEmpty(querySchema) ? defVal : querySchema;
     }
 
+    public String getBodySchema() {
+        return bodySchema;
+    }
+
+    public String getBodySchemaOr(String defVal) {
+        return Assert.isEmpty(bodySchema) ? defVal : bodySchema;
+    }
 
     public String getOutputSchema() {
         return outputSchema;
     }
 
     public String getOutputSchemaOr(String defVal) {
-        if (Assert.isEmpty(outputSchema)) {
-            return defVal;
-        } else {
-            return outputSchema;
-        }
+        return Assert.isEmpty(outputSchema) ? defVal : outputSchema;
     }
 
     public boolean isDeprecated() {
         return isDeprecated;
     }
 
-    // --- Setter 方法 (内部权限) ---
-
+    // --- Setter 方法 ---
 
     public void setBaseUrl(String baseUrl) {
         this.baseUrl = baseUrl;
@@ -154,8 +150,12 @@ public class ApiTool {
         this.pathSchema = pathSchema;
     }
 
-    public void setDataSchema(String dataSchema) {
-        this.dataSchema = dataSchema;
+    public void setQuerySchema(String querySchema) {
+        this.querySchema = querySchema;
+    }
+
+    public void setBodySchema(String bodySchema) {
+        this.bodySchema = bodySchema;
     }
 
     public void setOutputSchema(String outputSchema) {
@@ -174,11 +174,12 @@ public class ApiTool {
                 ", description='" + description + '\'' +
                 ", path='" + path + '\'' +
                 ", method='" + method + '\'' +
+                ", isMultipart=" + isMultipart +
                 ", headerSchema='" + headerSchema + '\'' +
                 ", pathSchema='" + pathSchema + '\'' +
-                ", dataSchema='" + dataSchema + '\'' +
+                ", querySchema='" + querySchema + '\'' +
+                ", bodySchema='" + bodySchema + '\'' +
                 ", outputSchema='" + outputSchema + '\'' +
-                ", isMultipart=" + isMultipart + // 打印输出增加此项
                 ", isDeprecated=" + isDeprecated +
                 '}';
     }

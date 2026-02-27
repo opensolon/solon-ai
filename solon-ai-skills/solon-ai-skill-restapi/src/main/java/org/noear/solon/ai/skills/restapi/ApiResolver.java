@@ -17,6 +17,7 @@ package org.noear.solon.ai.skills.restapi;
 
 import org.noear.solon.lang.Preview;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -30,5 +31,5 @@ public interface ApiResolver {
 
     String getName();
 
-    List<ApiTool> resolve(String definitionUrl, String source);
+    List<ApiTool> resolve(String definitionUrl, String source) throws IOException;
 }

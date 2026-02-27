@@ -1,159 +1,199 @@
-/*
- * Copyright 2017-2025 noear.org and authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package org.noear.solon.ai.skills.restapi.resolver;
 
+import io.swagger.models.*;
+import io.swagger.models.parameters.BodyParameter;
+import io.swagger.models.parameters.Parameter;
+import io.swagger.parser.Swagger20Parser;
+import io.swagger.util.Json;
 import org.noear.snack4.ONode;
+import org.noear.solon.Utils;
+import org.noear.solon.ai.skills.restapi.ApiResolver;
 import org.noear.solon.ai.skills.restapi.ApiTool;
 import org.noear.solon.lang.Preview;
 
-import java.util.*;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Swagger 2.0 (OpenAPI V2) 规范解析器
- * <p>适配旧版规范，清洗非标准元数据，提取标准 JSON Schema 供 AI 使用</p>
  *
  * @author noear
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class OpenApiV2Resolver extends AbsOpenApiResolver {
-    public String getName() { return "Swagger 2.0 Resolver"; }
+public class OpenApiV2Resolver implements ApiResolver {
 
     @Override
-    public List<ApiTool> resolve(String definitionUrl, String source) {
-        ONode root = ONode.ofJson(source);
-        return doResolve(root);
+    public String getName() {
+        return "Swagger 2.0 Resolver";
     }
 
-    protected List<ApiTool> doResolve(ONode root) {
+    @Override
+    public List<ApiTool> resolve(String definitionUrl, String source) throws IOException {
+        Swagger swagger = new Swagger20Parser().parse(source);
+
         List<ApiTool> tools = new ArrayList<>();
-        root.get("paths").getObject().forEach((path, pathNode) -> {
-            // 提取路径级别的全局参数 (V2 规范支持)
-            ONode pathCommonParams = pathNode.get("parameters");
+        if (swagger == null || swagger.getPaths() == null) {
+            return tools;
+        }
 
-            pathNode.getObject().forEach((method, detail) -> {
-                if (!isValidMethod(method)) return;
+        String baseUrl = extractBaseUrl(swagger);
 
-                // 将路径级参数与方法级参数合并
-                ONode mergedParams = mergeParameters(pathCommonParams, detail.get("parameters"));
-                doResolveMethod(tools, root, path, method, detail, mergedParams);
+        swagger.getPaths().forEach((path, pathItem) -> {
+            pathItem.getOperationMap().forEach((method, operation) -> {
+                if (operation != null) {
+                    tools.add(convertToTool(path, method.name(), operation, baseUrl));
+                }
             });
         });
+
         return tools;
     }
 
-    /**
-     * 根据规范合并参数：方法级参数优先于路径级参数
-     */
-    private ONode mergeParameters(ONode common, ONode specific) {
-        if (common.isNull() || !common.isArray()) return specific;
-        if (specific.isNull() || !specific.isArray()) return common;
-
-        ONode result = ONode.ofJson(specific.toJson());
-        Set<String> specificNames = new HashSet<>();
-        specific.getArrayUnsafe().forEach(p -> specificNames.add(p.get("name").getString() + "_" + p.get("in").getString()));
-
-        common.getArrayUnsafe().forEach(p -> {
-            String identifier = p.get("name").getString() + "_" + p.get("in").getString();
-            if (!specificNames.contains(identifier)) {
-                result.add(p);
-            }
-        });
-        return result;
-    }
-
-    protected void doResolveMethod(List<ApiTool> tools, ONode root, String path, String method, ONode detail, ONode params) {
+    private ApiTool convertToTool(String path, String method, Operation op, String baseUrl) {
         ApiTool tool = new ApiTool();
+        tool.setBaseUrl(baseUrl);
         tool.setPath(path);
         tool.setMethod(method.toUpperCase());
-        tool.setName(generateName(detail, tool.getMethod(), path));
-        tool.setDescription(extractDescription(detail));
 
-        ONode headerProps = new ONode().asObject();
-        ONode pathProps = new ONode().asObject();
-        ONode dataSchema = new ONode().asObject().set("type", "object");
-        ONode dataProps = dataSchema.getOrNew("properties");
-        ONode dataRequired = dataSchema.getOrNew("required").asArray();
+        String opId = op.getOperationId();
+        tool.setName(Utils.isNotEmpty(opId) ? opId : generateName(method, path));
 
-        if (params.isArray()) {
-            for (ONode p : params.getArrayUnsafe()) {
-                ONode pNode = resolveRefNode(root, p, new HashSet<>());
-                String in = pNode.get("in").getString();
-                String name = pNode.get("name").getString();
-                boolean isRequired = pNode.get("required").getBoolean();
+        String desc = op.getSummary();
+        if (Utils.isEmpty(desc)) desc = op.getDescription();
+        tool.setDescription(Utils.isEmpty(desc) ? "" : desc);
 
-                if ("header".equals(in)) {
-                    headerProps.set(name, cleanMeta(pNode));
-                } else if ("path".equals(in)) {
-                    pathProps.set(name, cleanMeta(pNode));
-                } else if ("body".equals(in)) {
-                    ONode bodySchema = resolveRefNode(root, pNode.get("schema"), new HashSet<>());
-                    if (bodySchema.hasKey("properties")) {
-                        dataProps.setAll(bodySchema.get("properties").getObject());
-                        if (bodySchema.hasKey("required")) {
-                            dataRequired.addAll(bodySchema.get("required").getArray());
-                        }
-                    } else {
-                        dataProps.set(name, bodySchema);
-                        if (isRequired) dataRequired.add(name);
-                    }
-                } else {
-                    if("formData".equals(in)){
-                        tool.setMultipart(true);
-                    }
+        Object dep = op.getVendorExtensions().get("deprecated");
+        tool.setDeprecated(Boolean.TRUE.equals(dep));
 
-                    // query, formData
-                    dataProps.set(name, cleanMeta(pNode));
-                    if (isRequired) dataRequired.add(name);
+        // 预检查 Consumes
+        if (op.getConsumes() != null) {
+            for (String c : op.getConsumes()) {
+                if (c.contains("multipart") || c.contains("form-urlencoded")) {
+                    tool.setMultipart(true);
+                    break;
                 }
             }
         }
 
-        if (dataRequired.size() == 0) dataSchema.remove("required");
-        if (headerProps.size() > 0) tool.setHeaderSchema(headerProps.toJson());
-        if (pathProps.size() > 0) tool.setPathSchema(pathProps.toJson());
-        if (dataProps.size() > 0) tool.setDataSchema(dataSchema.toJson());
+        // --- B. 容器准备 ---
+        ONode headerProps = new ONode().asObject();
 
-        // 响应解析保持不变...
-        parseResponses(root, detail, tool);
+        // Path 容器 (升级为完整 Object 结构)
+        ONode pathSchemaRoot = new ONode().asObject().set("type", "object");
+        ONode pathProps = pathSchemaRoot.getOrNew("properties");
+        ONode pathRequired = pathSchemaRoot.getOrNew("required").asArray();
 
-        tool.setDeprecated(detail.get("deprecated").getBoolean());
-        tools.add(tool);
-    }
+        // Query 容器
+        ONode querySchemaRoot = new ONode().asObject().set("type", "object");
+        ONode queryProps = querySchemaRoot.getOrNew("properties");
+        ONode queryRequired = querySchemaRoot.getOrNew("required").asArray();
 
-    private void parseResponses(ONode root, ONode detail, ApiTool tool) {
-        ONode responses = detail.get("responses");
-        if (!responses.isNull()) {
-            ONode okRes = responses.get("200");
-            if (okRes.isNull()) okRes = responses.get("201");
-            if (okRes.isNull()) okRes = responses.get("default");
+        // Body 容器
+        ONode bodySchemaRoot = new ONode().asObject().set("type", "object");
+        ONode bodyProps = bodySchemaRoot.getOrNew("properties");
+        ONode bodyRequired = bodySchemaRoot.getOrNew("required").asArray();
 
-            if (!okRes.isNull()) {
-                okRes = resolveRefNode(root, okRes, new HashSet<>());
-                tool.setOutputSchema(resolveRef(root, okRes.get("schema")));
+        if (op.getParameters() != null) {
+            for (Parameter p : op.getParameters()) {
+                String in = p.getIn();
+                String name = p.getName();
+
+                if ("body".equals(in) && p instanceof BodyParameter) {
+                    Model model = ((BodyParameter) p).getSchema();
+                    if (model != null) {
+                        ONode modelNode = ONode.ofJson(Json.pretty(model));
+                        if ("object".equals(modelNode.get("type").getString()) && modelNode.hasKey("properties")) {
+                            bodyProps.setAll(modelNode.get("properties").getObject());
+                            if (modelNode.hasKey("required")) {
+                                bodyRequired.addAll(modelNode.get("required").getArray());
+                            }
+                        } else {
+                            bodyProps.set(name, modelNode);
+                            if (p.getRequired()) bodyRequired.add(name);
+                        }
+                    }
+                } else {
+                    ONode pNode = ONode.ofJson(Json.pretty(p));
+                    pNode.remove("in");
+                    pNode.remove("name");
+                    pNode.remove("required");
+
+                    if ("header".equals(in)) {
+                        headerProps.set(name, pNode);
+                    } else if ("path".equals(in)) {
+                        // 1. 放入 Path 容器并标记必填
+                        pathProps.set(name, pNode);
+                        pathRequired.add(name);
+                        // 2. 冗余放入 Query 容器以便 AI 感知，同时标记必填
+                        queryProps.set(name, pNode);
+                        queryRequired.add(name);
+                    } else if ("query".equals(in)) {
+                        queryProps.set(name, pNode);
+                        if (p.getRequired()) queryRequired.add(name);
+                    } else if ("formData".equals(in)) {
+                        tool.setMultipart(true);
+                        bodyProps.set(name, pNode);
+                        if (p.getRequired()) bodyRequired.add(name);
+                    }
+                }
             }
         }
+
+        // --- D. Response 解析 ---
+        Response ok = op.getResponses().get("200");
+        if (ok == null) ok = op.getResponses().get("201");
+        if (ok == null) ok = op.getResponses().get("default");
+        if (ok != null && ok.getSchema() != null) {
+            tool.setOutputSchema(Json.pretty(ok.getSchema()));
+        }
+
+        // --- E. 结果构建 ---
+        if (headerProps.size() > 0) tool.setHeaderSchema(headerProps.toJson());
+
+        if (pathProps.size() > 0) {
+            if (pathRequired.size() == 0) pathSchemaRoot.remove("required");
+            tool.setPathSchema(pathSchemaRoot.toJson());
+        }
+
+        if (queryProps.size() > 0) {
+            if (queryRequired.size() == 0) querySchemaRoot.remove("required");
+            tool.setQuerySchema(querySchemaRoot.toJson());
+        }
+
+        if (bodyProps.size() > 0) {
+            if (bodyRequired.size() == 0) bodySchemaRoot.remove("required");
+            tool.setBodySchema(bodySchemaRoot.toJson());
+        }
+
+        return tool;
     }
 
-    private ONode cleanMeta(ONode pNode) {
-        ONode meta = new ONode().asObject();
-        String[] keys = {"type", "description", "format", "items", "enum", "default", "maximum", "minimum"};
-        for (String k : keys) {
-            if (pNode.hasKey(k)) meta.set(k, pNode.get(k));
+    private String extractBaseUrl(Swagger swagger) {
+        StringBuilder sb = new StringBuilder();
+        String host = swagger.getHost();
+        if (Utils.isNotEmpty(host)) {
+            String scheme = "http";
+            if (swagger.getSchemes() != null && !swagger.getSchemes().isEmpty()) {
+                scheme = swagger.getSchemes().get(0).toValue();
+            }
+            sb.append(scheme).append("://").append(host);
         }
-        return meta;
+
+        String basePath = swagger.getBasePath();
+        if (Utils.isNotEmpty(basePath)) {
+            if (!basePath.startsWith("/")) sb.append("/");
+            sb.append(basePath);
+            if (sb.charAt(sb.length() - 1) == '/') {
+                sb.setLength(sb.length() - 1);
+            }
+        }
+        return sb.toString();
+    }
+
+    private String generateName(String method, String path) {
+        String name = method + "_" + path.replace("/", "_").replace("{", "").replace("}", "");
+        return name.replaceAll("_+", "_");
     }
 }

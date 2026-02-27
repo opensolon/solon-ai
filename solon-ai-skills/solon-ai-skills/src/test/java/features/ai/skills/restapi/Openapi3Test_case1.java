@@ -26,7 +26,7 @@ public class Openapi3Test_case1 {
         ChatModel chatModel = LlmUtil.getChatModel();
         return ReActAgent.of(chatModel)
                 .role("业务助手")
-                .instruction("最后答复时，直接返回工具结果，禁止加工！！")
+                .instruction("最后答复时，必须直接返回工具结果，禁止加工！")
                 .defaultSkillAdd(apiSkill)
                 .build();
     }

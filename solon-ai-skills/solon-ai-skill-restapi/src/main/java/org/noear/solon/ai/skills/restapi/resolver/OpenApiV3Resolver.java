@@ -1,220 +1,204 @@
-/*
- * Copyright 2017-2025 noear.org and authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package org.noear.solon.ai.skills.restapi.resolver;
 
+import io.swagger.parser.OpenAPIParser;
+import io.swagger.v3.core.util.Json;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.media.Content;
+import io.swagger.v3.oas.models.media.MediaType;
+import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.parameters.Parameter;
+import io.swagger.v3.oas.models.parameters.RequestBody;
+import io.swagger.v3.oas.models.responses.ApiResponse;
 import org.noear.snack4.ONode;
+import org.noear.solon.Utils;
+import org.noear.solon.ai.skills.restapi.ApiResolver;
 import org.noear.solon.ai.skills.restapi.ApiTool;
 import org.noear.solon.lang.Preview;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * OpenAPI 3.0 规范解析器
- * <p>适配新版规范，支持路径级参数继承、requestBody 解析以及标准 JSON Schema 提取</p>
  *
  * @author noear
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class OpenApiV3Resolver extends AbsOpenApiResolver {
-    public String getName() { return "OpenApi 3.0 Resolver"; }
+public class OpenApiV3Resolver implements ApiResolver {
+
+    @Override
+    public String getName() {
+        return "OpenApi 3.0 Resolver";
+    }
 
     @Override
     public List<ApiTool> resolve(String definitionUrl, String source) {
-        ONode root = ONode.ofJson(source);
-        return doResolve(root);
-    }
+        OpenAPI openAPI = new OpenAPIParser()
+                .readContents(source, null, null)
+                .getOpenAPI();
 
-    protected List<ApiTool> doResolve(ONode root) {
         List<ApiTool> tools = new ArrayList<>();
-        ONode paths = root.get("paths");
-        if (paths.isNull()) return tools;
+        if (openAPI == null || openAPI.getPaths() == null) {
+            return tools;
+        }
 
-        paths.getObject().forEach((path, pathNode) -> {
-            // 规范对齐：提取 Path Item 级别的公共参数
-            ONode pathCommonParams = pathNode.get("parameters");
+        String baseUrl = "";
+        if (openAPI.getServers() != null && !openAPI.getServers().isEmpty()) {
+            baseUrl = openAPI.getServers().get(0).getUrl();
+        }
 
-            pathNode.getObject().forEach((method, detail) -> {
-                if (!isValidMethod(method)) return;
-
-                // 规范对齐：合并参数（方法级覆盖路径级）
-                ONode mergedParams = mergeParameters(pathCommonParams, detail.get("parameters"));
-                doResolveMethod(tools, root, path, method, detail, mergedParams);
+        final String finalBaseUrl = baseUrl;
+        openAPI.getPaths().forEach((path, pathItem) -> {
+            pathItem.readOperationsMap().forEach((method, operation) -> {
+                if (operation != null) {
+                    tools.add(convertToTool(path, method.name(), operation, finalBaseUrl));
+                }
             });
         });
+
         return tools;
     }
 
-    /**
-     * 规范合并逻辑：如果方法级参数与路径级参数的 name 和 in 均相同，则忽略路径级参数
-     */
-    private ONode mergeParameters(ONode common, ONode specific) {
-        if (common.isNull() || !common.isArray()) return specific;
-        if (specific.isNull() || !specific.isArray()) return common;
-
-        ONode result = ONode.ofJson(specific.toJson());
-        Set<String> specificKeys = new HashSet<>();
-        specific.getArrayUnsafe().forEach(p ->
-                specificKeys.add(p.get("name").getString() + ":" + p.get("in").getString()));
-
-        common.getArrayUnsafe().forEach(p -> {
-            String key = p.get("name").getString() + ":" + p.get("in").getString();
-            if (!specificKeys.contains(key)) {
-                result.add(p);
-            }
-        });
-        return result;
-    }
-
-    protected void doResolveMethod(List<ApiTool> tools, ONode root, String path, String method, ONode detail, ONode parameters) {
+    private ApiTool convertToTool(String path, String method, Operation op, String baseUrl) {
         ApiTool tool = new ApiTool();
+        tool.setBaseUrl(baseUrl);
         tool.setPath(path);
         tool.setMethod(method.toUpperCase());
-        tool.setName(generateName(detail, tool.getMethod(), path));
-        tool.setDescription(extractDescription(detail));
 
+        String opId = op.getOperationId();
+        tool.setName(Utils.isNotEmpty(opId) ? opId : generateName(method, path));
+
+        String desc = op.getSummary();
+        if (Utils.isEmpty(desc)) desc = op.getDescription();
+        tool.setDescription(Utils.isEmpty(desc) ? "" : desc);
+
+        tool.setDeprecated(Boolean.TRUE.equals(op.getDeprecated()));
+
+        // --- 容器准备 ---
         ONode headerProps = new ONode().asObject();
-        ONode pathProps = new ONode().asObject();
-        ONode dataSchema = new ONode().asObject().set("type", "object");
-        ONode dataProps = dataSchema.getOrNew("properties");
-        ONode dataRequired = dataSchema.getOrNew("required").asArray();
 
-        // 1. 解析合并后的 Parameters
-        if (parameters.isArray()) {
-            for (ONode param : parameters.getArrayUnsafe()) {
-                ONode pNode = resolveRefNode(root, param, new HashSet<>());
-                String in = pNode.get("in").getString();
-                String name = pNode.get("name").getString();
-                boolean isRequired = pNode.get("required").getBoolean();
+        // Path 容器 (改为完整 Object 结构)
+        ONode pathSchemaRoot = new ONode().asObject().set("type", "object");
+        ONode pathProps = pathSchemaRoot.getOrNew("properties");
+        ONode pathRequired = pathSchemaRoot.getOrNew("required").asArray();
 
-                ONode schema = pNode.get("schema");
-                if (schema.isNull()) continue;
+        // Query 容器
+        ONode querySchemaRoot = new ONode().asObject().set("type", "object");
+        ONode queryProps = querySchemaRoot.getOrNew("properties");
+        ONode queryRequired = querySchemaRoot.getOrNew("required").asArray();
 
-                // 补充描述信息
-                if (!pNode.get("description").isNull() && schema.get("description").isNull()) {
-                    schema.set("description", pNode.get("description").getString());
+        // Body 容器
+        ONode bodySchemaRoot = new ONode().asObject().set("type", "object");
+        ONode bodyProps = bodySchemaRoot.getOrNew("properties");
+        ONode bodyRequired = bodySchemaRoot.getOrNew("required").asArray();
+
+        // --- C. Parameters 解析 (Query, Path, Header) ---
+        if (op.getParameters() != null) {
+            for (Parameter p : op.getParameters()) {
+                String in = p.getIn();
+                String name = p.getName();
+                Schema<?> schema = p.getSchema();
+                if (schema == null) continue;
+
+                ONode schemaNode = ONode.ofJson(Json.pretty(schema));
+                if (Utils.isNotEmpty(p.getDescription()) && schemaNode.get("description").isNull()) {
+                    schemaNode.set("description", p.getDescription());
                 }
 
                 if ("header".equals(in)) {
-                    headerProps.set(name, schema);
+                    headerProps.set(name, schemaNode);
                 } else if ("path".equals(in)) {
-                    pathProps.set(name, schema);
-                    dataProps.set(name, schema);
+                    // 1. 放入 Path 专用容器并标记必填
+                    pathProps.set(name, schemaNode);
+                    pathRequired.add(name);
+                    // 2. 冗余放入 Query 容器以便 AI 统一查看，同时也标记必填
+                    queryProps.set(name, schemaNode);
+                    queryRequired.add(name);
                 } else if ("query".equals(in)) {
-                    dataProps.set(name, schema);
-                    if (isRequired) dataRequired.add(name);
+                    queryProps.set(name, schemaNode);
+                    if (Boolean.TRUE.equals(p.getRequired())) {
+                        queryRequired.add(name);
+                    }
                 }
             }
         }
 
-        // 2. 解析 requestBody
-        if (detail.hasKey("requestBody")) {
-            ONode bodyNode = resolveRefNode(root, detail.get("requestBody"), new HashSet<>());
-            boolean isBodyRequired = bodyNode.get("required").getBoolean();
+        // --- D. RequestBody 解析 ---
+        RequestBody rb = op.getRequestBody();
+        if (rb != null && rb.getContent() != null) {
+            MediaType mt = selectMediaType(rb.getContent(), tool);
+            if (mt != null && mt.getSchema() != null) {
+                ONode tempBodySchema = ONode.ofJson(Json.pretty(mt.getSchema()));
 
-            ONode bodySchema = extractBodySchema(root, detail.get("requestBody"), tool);
-            if (!bodySchema.isNull()) {
-                if (bodySchema.hasKey("properties")) {
-                    dataProps.setAll(bodySchema.get("properties").getObject());
-                    if (bodySchema.hasKey("required")) {
-                        dataRequired.addAll(bodySchema.get("required").getArray());
+                if ("object".equals(tempBodySchema.get("type").getString())) {
+                    if (tempBodySchema.hasKey("properties")) {
+                        bodyProps.setAll(tempBodySchema.get("properties").getObject());
+                    }
+                    if (tempBodySchema.hasKey("required")) {
+                        bodyRequired.addAll(tempBodySchema.get("required").getArray());
                     }
                 } else {
-                    // 如果 Body 是必填的，但不是 object 结构（如纯 string/binary）
-                    dataProps.set("body", bodySchema);
-                    if (isBodyRequired) {
-                        dataRequired.add("body");
+                    bodyProps.set("body", tempBodySchema);
+                    if (Boolean.TRUE.equals(rb.getRequired())) {
+                        bodyRequired.add("body");
                     }
                 }
             }
         }
 
-        // 3. 序列化赋值
-        if (dataRequired.size() == 0) dataSchema.remove("required");
-        if (headerProps.size() > 0) tool.setHeaderSchema(headerProps.toJson());
-        if (pathProps.size() > 0) tool.setPathSchema(pathProps.toJson());
-        if (dataProps.size() > 0) tool.setDataSchema(dataSchema.toJson());
+        // --- E. Response 解析 ---
+        if (op.getResponses() != null) {
+            ApiResponse res = op.getResponses().get("200");
+            if (res == null) res = op.getResponses().get("201");
+            if (res == null) res = op.getResponses().get("default");
 
-        // 4. 解析 Responses
-        parseResponses(root, detail, tool);
-
-        tool.setDeprecated(detail.get("deprecated").getBoolean());
-        tools.add(tool);
-    }
-
-    private void parseResponses(ONode root, ONode detail, ApiTool tool) {
-        ONode responses = detail.get("responses");
-        if (responses.isNull()) return;
-
-        ONode okRes = responses.get("200");
-        if (okRes.isNull()) okRes = responses.get("201");
-        if (okRes.isNull()) okRes = responses.get("default");
-
-        if (!okRes.isNull()) {
-            okRes = resolveRefNode(root, okRes, new HashSet<>());
-            ONode content = okRes.get("content");
-            if (!content.isNull() && content.isObject()) {
-                ONode mediaType = content.get("application/json");
-                if (mediaType.isNull() && content.size() > 0) {
-                    mediaType = content.getObject().values().iterator().next();
-                }
-                if (!mediaType.isNull()) {
-                    tool.setOutputSchema(resolveRef(root, mediaType.get("schema")));
+            if (res != null && res.getContent() != null) {
+                MediaType resMt = selectMediaType(res.getContent(), null);
+                if (resMt != null && resMt.getSchema() != null) {
+                    tool.setOutputSchema(Json.pretty(resMt.getSchema()));
                 }
             }
         }
+
+        // --- F. 结果构建 ---
+        if (headerProps.size() > 0) tool.setHeaderSchema(headerProps.toJson());
+
+        if (pathProps.size() > 0) {
+            if (pathRequired.size() == 0) pathSchemaRoot.remove("required");
+            tool.setPathSchema(pathSchemaRoot.toJson());
+        }
+
+        if (queryProps.size() > 0) {
+            if (queryRequired.size() == 0) querySchemaRoot.remove("required");
+            tool.setQuerySchema(querySchemaRoot.toJson());
+        }
+
+        if (bodyProps.size() > 0) {
+            if (bodyRequired.size() == 0) bodySchemaRoot.remove("required");
+            tool.setBodySchema(bodySchemaRoot.toJson());
+        }
+
+        return tool;
     }
 
-    private ONode extractBodySchema(ONode root, ONode requestBody, ApiTool tool) {
-        ONode bodyNode = resolveRefNode(root, requestBody, new HashSet<>());
-        ONode content = bodyNode.get("content");
+    private MediaType selectMediaType(Content content, ApiTool tool) {
+        if (content.containsKey("application/json")) {
+            return content.get("application/json");
+        }
+        for (String type : content.keySet()) {
+            String lowerType = type.toLowerCase();
+            if (lowerType.contains("multipart") || lowerType.contains("form-urlencoded")) {
+                if (tool != null) tool.setMultipart(true);
+                return content.get(type);
+            }
+        }
+        return content.isEmpty() ? null : content.values().iterator().next();
+    }
 
-        if (content.isNull() || !content.isObject()) {
-            return new ONode();
-        }
-
-        ONode schemaNode = null;
-
-        // 优先级 1: application/json (AI 交互的最优选)
-        if (content.hasKey("application/json")) {
-            schemaNode = content.get("application/json").get("schema");
-            tool.setMultipart(false);
-        }
-        // 优先级 2: multipart/form-data (文件上传)
-        else if (content.hasKey("multipart/form-data")) {
-            schemaNode = content.get("multipart/form-data").get("schema");
-            tool.setMultipart(true);
-        }
-        // 优先级 3: application/x-www-form-urlencoded (普通表单)
-        else if (content.hasKey("application/x-www-form-urlencoded")) {
-            schemaNode = content.get("application/x-www-form-urlencoded").get("schema");
-            tool.setMultipart(true);
-        }
-        // 优先级 4: 兜底逻辑，取第一个存在的媒体类型
-        else if (content.size() > 0) {
-            String firstMediaType = content.getObject().keySet().iterator().next();
-            schemaNode = content.get(firstMediaType).get("schema");
-            // 根据媒体类型名称判断
-            tool.setMultipart(firstMediaType.contains("multipart") ||
-                    firstMediaType.contains("form-urlencoded"));
-        }
-
-        return resolveRefNode(root, schemaNode, new HashSet<>());
+    private String generateName(String method, String path) {
+        String name = method + "_" + path.replace("/", "_").replace("{", "").replace("}", "");
+        return name.replaceAll("_+", "_");
     }
 }
