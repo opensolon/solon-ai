@@ -31,8 +31,8 @@ public class ToolGatewaySkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(ToolGatewaySkill.class);
 
     private final Map<String, FunctionTool> dynamicTools = new LinkedHashMap<>();
-    private int dynamicThreshold = 8; // 超过此值，不再平铺 Schema，进入清单模式
-    private int searchThreshold = 50;  // 超过此值，不再展示清单，进入强制搜索模式
+    private int dynamicThreshold = 10; // 超过此值，不再平铺 Schema，进入清单模式
+    private int searchThreshold = 100;  // 超过此值，不再展示清单，进入强制搜索模式
 
     public ToolGatewaySkill dynamicThreshold(int dynamicThreshold) {
         this.dynamicThreshold = dynamicThreshold;
