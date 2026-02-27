@@ -19,6 +19,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,7 +80,7 @@ public class SkillUtil {
         Collection<FunctionTool> tools = skill.getTools(prompt);
 
         // 1. 如果有工具，进行元信息染色（借鉴 MCP 思想）
-        if (tools != null && !tools.isEmpty()) {
+        if (Assert.isNotEmpty(tools)) {
             for (FunctionTool tool : tools) {
                 // 将所属 Skill 的名字注入工具的 meta
                 tool.metaPut("skill", skill.name());
@@ -87,7 +88,7 @@ public class SkillUtil {
         }
 
         // 2. 构建 System Prompt 指令块
-        if (Utils.isNotEmpty(ins) || (tools != null && !tools.isEmpty())) {
+        if (Assert.isNotEmpty(ins) || Assert.isNotEmpty(tools)) {
             combinedInstruction.append("\n---\n"); // 使用分割线开启独立空间
 
             // 技能标题行：### [Skill: Name] Description
@@ -98,12 +99,12 @@ public class SkillUtil {
             combinedInstruction.append("\n\n");
 
             // 注入技能特有的指令（如数据库结构、API 限制等）
-            if (Utils.isNotEmpty(ins)) {
+            if (Assert.isNotEmpty(ins)) {
                 combinedInstruction.append(ins.trim()).append("\n");
             }
 
             // 显式声明该技能控制的工具范围
-            if (tools != null && !tools.isEmpty()) {
+            if (Assert.isNotEmpty(tools)) {
                 String toolNames = tools.stream()
                         .map(t -> "`" + t.name() + "`") // 给工具名加反引号，增强识别度
                         .collect(Collectors.joining(", "));

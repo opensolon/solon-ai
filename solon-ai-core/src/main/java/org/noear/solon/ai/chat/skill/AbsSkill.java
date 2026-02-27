@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
- * 基于注解的技能（基类）
+ * 技能定制基类
  *
  * @author noear
  * @since 3.8.4
