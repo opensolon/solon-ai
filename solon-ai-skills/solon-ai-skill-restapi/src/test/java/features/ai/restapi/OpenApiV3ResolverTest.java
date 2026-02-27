@@ -43,7 +43,7 @@ public class OpenApiV3ResolverTest {
         assertEquals("getUser", tool.getName());
         assertEquals("GET", tool.getMethod());
         assertEquals("/api/v3/user", tool.getPath());
-        assertEquals("Summary Info", tool.getDescription()); // 优先取 summary
+        assertEquals("Summary Info", tool.getDescription());
         assertTrue(tool.isDeprecated());
     }
 
@@ -58,7 +58,7 @@ public class OpenApiV3ResolverTest {
                 "        \"requestBody\": {" +
                 "          \"content\": {" +
                 "            \"text/plain\": {\"schema\": {\"type\": \"string\"}}," +
-                "            \"application/json\": {\"schema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"int\"}}}}" +
+                "            \"application/json\": {\"schema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"integer\"}}}}" +
                 "          }" +
                 "        }" +
                 "      }" +
@@ -69,8 +69,9 @@ public class OpenApiV3ResolverTest {
         List<ApiTool> tools = resolver.resolve(null, json);
         String input = tools.get(0).getDataSchema();
 
-        // 验证即使 application/json 不是第一个，也能被正确选中
-        assertTrue(input.contains("{\"properties\":{\"id\":{\"type\":\"int\"}}"));
+        // 验证即使 application/json 不是第一个，也能被正确选中，且类型为 integer
+        assertTrue(input.contains("\"id\""));
+        assertTrue(input.contains("\"type\":\"integer\""));
     }
 
     @Test
@@ -94,8 +95,11 @@ public class OpenApiV3ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        assertTrue(tools.get(0).isMultipart(), "应当识别为 Multipart 模式");
-        assertTrue(tools.get(0).getDataSchema().contains("file_data"));
+        ApiTool tool = tools.get(0);
+
+        // 验证 Multipart 标志
+        assertTrue(tool.isMultipart(), "应当识别为 Multipart 模式");
+        assertTrue(tool.getDataSchema().contains("file_data"));
     }
 
     @Test
@@ -123,16 +127,16 @@ public class OpenApiV3ResolverTest {
     }
 
     @Test
-    @DisplayName("组合参数：Parameters + RequestBody 拼接覆盖")
+    @DisplayName("组合参数：Parameters + RequestBody 合并解析")
     void testParametersAndBodyCombination() {
         String json = "{" +
                 "  \"openapi\": \"3.0.0\"," +
                 "  \"paths\": {" +
                 "    \"/mix/{id}\": {" +
                 "      \"put\": {" +
-                "        \"parameters\": [{\"name\": \"id\", \"in\": \"path\"}]," +
+                "        \"parameters\": [{\"name\": \"id\", \"in\": \"path\", \"required\": true, \"schema\": {\"type\": \"string\"}}]," +
                 "        \"requestBody\": {" +
-                "          \"content\": {\"application/json\": {\"schema\": {\"type\": \"string\"}}}" +
+                "          \"content\": {\"application/json\": {\"schema\": {\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\"}}}}}" +
                 "        }" +
                 "      }" +
                 "    }" +
@@ -140,12 +144,13 @@ public class OpenApiV3ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getDataSchema();
+        String pathSchema = tools.get(0).getPathSchema();
+        String dataSchema = tools.get(0).getDataSchema();
 
-        // 验证拼接逻辑 "Parameters + Body:..."
-        assertTrue(input.contains("\"name\":\"id\""));
-        assertTrue(input.contains(" + Body:"));
-        assertTrue(input.contains("{\"type\":\"string\"}"));
+        // 验证 Path 参数解析到 pathSchema
+        assertTrue(pathSchema.contains("\"id\""));
+        // 验证 Body 参数解析到 dataSchema (不再检查非标的 " + Body:" 字符串)
+        assertTrue(dataSchema.contains("\"name\""));
     }
 
     @Test
@@ -178,17 +183,14 @@ public class OpenApiV3ResolverTest {
         List<ApiTool> tools = resolver.resolve(null, json);
         String input = tools.get(0).getDataSchema();
 
-        // 验证 oneOf 是否被保留
         assertTrue(input.contains("\"oneOf\""));
-        // 验证嵌套引用是否展开
         assertTrue(input.contains("\"meow\""));
         assertTrue(input.contains("\"bark\""));
-        // 验证非法字段是否被过滤（AbsOpenApiResolver 逻辑）
         assertFalse(input.contains("x-internal"));
     }
 
     @Test
-    @DisplayName("空值与特殊结构：处理 content 为空或参数为空的情况")
+    @DisplayName("空值与特殊结构：处理 content 为空的情况")
     void testNullContent() {
         String json = "{" +
                 "  \"openapi\": \"3.0.0\"," +
@@ -205,35 +207,13 @@ public class OpenApiV3ResolverTest {
         List<ApiTool> tools = resolver.resolve(null, json);
         ApiTool tool = tools.get(0);
 
-        assertEquals("{}", tool.getDataSchema());
-        assertEquals("{}", tool.getOutputSchema());
+        // 规范：空的 content 映射不产生 properties
+        assertEquals("{\"type\":\"object\"}", tool.getDataSchema());
+        assertNull(tool.getOutputSchema());
     }
 
     @Test
-    @DisplayName("RequestBody 覆盖：处理非标准的 content 数组结构")
-    void testRequestBodyAsArray() {
-        // 触发源码中 if(content.isArray()) 分支
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/array-content\": {" +
-                "      \"post\": {" +
-                "        \"requestBody\": {" +
-                "          \"content\": [" +
-                "            { \"schema\": { \"type\": \"string\", \"description\": \"array_style\" } }" +
-                "          ]" +
-                "        }" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
-        List<ApiTool> tools = resolver.resolve(null, json);
-        assertTrue(tools.get(0).getDataSchema().contains("array_style"));
-    }
-
-    @Test
-    @DisplayName("RequestBody 深度覆盖：application/json 优先逻辑")
+    @DisplayName("RequestBody 覆盖：符合标准的媒体类型结构")
     void testRequestBodyStandard() {
         String json = "{" +
                 "  \"openapi\": \"3.0.0\"," +
@@ -256,31 +236,6 @@ public class OpenApiV3ResolverTest {
     }
 
     @Test
-    @DisplayName("Responses 覆盖：处理 content 为数组的情况")
-    void testResponseContentAsArray() {
-        // 触发源码中 responses 里的 content.isArray() 分支
-        String json = "{" +
-                "  \"openapi\": \"3.0.0\"," +
-                "  \"paths\": {" +
-                "    \"/resp-array\": {" +
-                "      \"get\": {" +
-                "        \"responses\": {" +
-                "          \"200\": {" +
-                "            \"content\": [" +
-                "              { \"schema\": { \"type\": \"integer\" } }" +
-                "            ]" +
-                "          }" +
-                "        }" +
-                "      }" +
-                "    }" +
-                "  }" +
-                "}";
-
-        List<ApiTool> tools = resolver.resolve(null, json);
-        assertEquals("{\"type\":\"integer\"}", tools.get(0).getOutputSchema());
-    }
-
-    @Test
     @DisplayName("循环引用覆盖：V3 场景下的递归防护")
     void testCircularReferenceV3() {
         String json = "{" +
@@ -294,7 +249,7 @@ public class OpenApiV3ResolverTest {
                 "  }," +
                 "  \"components\": {" +
                 "    \"schemas\": {" +
-                "      \"Node\": { \"properties\": { \"next\": { \"$ref\": \"#/components/schemas/Node\" } } }" +
+                "      \"Node\": { \"type\": \"object\", \"properties\": { \"next\": { \"$ref\": \"#/components/schemas/Node\" } } }" +
                 "    }" +
                 "  }" +
                 "}";

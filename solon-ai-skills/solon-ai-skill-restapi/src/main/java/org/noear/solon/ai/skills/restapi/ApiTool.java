@@ -94,6 +94,14 @@ public class ApiTool {
         return dataSchema;
     }
 
+    public String getDataSchemaOr(String defVal) {
+        if (Assert.isEmpty(dataSchema)) {
+            return defVal;
+        } else {
+            return dataSchema;
+        }
+    }
+
 
     public String getOutputSchema() {
         return outputSchema;

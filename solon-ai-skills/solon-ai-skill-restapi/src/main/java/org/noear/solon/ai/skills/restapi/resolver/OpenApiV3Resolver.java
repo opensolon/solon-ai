@@ -115,6 +115,7 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
                     headerProps.set(name, schema);
                 } else if ("path".equals(in)) {
                     pathProps.set(name, schema);
+                    dataProps.set(name, schema);
                 } else if ("query".equals(in)) {
                     dataProps.set(name, schema);
                     if (isRequired) dataRequired.add(name);
