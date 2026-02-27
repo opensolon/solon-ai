@@ -99,6 +99,7 @@ public class OpenApiV3ResolverTest {
         assertNotNull(tool);
         String output = tool.getOutputSchema();
 
+        System.out.println(output);
         // 验证 Array 内部的 items 引用是否被平铺
         assertTrue(output.contains("items"));
         assertTrue(output.contains("\"name\":{\"type\":\"string\"}"));
@@ -149,5 +150,51 @@ public class OpenApiV3ResolverTest {
         boolean hasDeprecated = tools.stream().anyMatch(ApiTool::isDeprecated);
         // 这里的断言取决于具体 openapi.json 的内容，可以打印观察
         System.out.println("Has deprecated APIs: " + hasDeprecated);
+    }
+
+    @Test
+    @DisplayName("Petstore V3：验证 Path 参数解析")
+    void testV3PathParameterResolution() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        // 查找 GET /pet/{petId}
+        ApiTool tool = tools.stream()
+                .filter(t -> t.getPath().contains("/{petId}") && "GET".equals(t.getMethod()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        String pathSchema = tool.getPathSchema();
+
+        // 验证 pathSchema 是否包含 petId 且标记为必填
+        assertTrue(pathSchema.contains("petId"));
+        assertTrue(pathSchema.contains("\"required\":[\"petId\""));
+    }
+
+    @Test
+    @DisplayName("Petstore V3：验证 API 总数加载")
+    void testV3TotalApiCount() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        // Petstore V3 官方数据大约有 19 个左右的操作节点
+        assertTrue(tools.size() >= 18, "解析到的 API 数量不应少于 18 个");
+    }
+
+    @Test
+    @DisplayName("Petstore V3：验证 Name(OperationId) 提取")
+    void testV3OperationIdNaming() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        ApiTool tool = tools.stream()
+                .filter(t -> "/pet".equals(t.getPath()) && "PUT".equals(t.getMethod()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        // 官方 Petstore V3 中 PUT /pet 的 operationId 是 updatePet
+        assertEquals("updatePet", tool.getName());
     }
 }

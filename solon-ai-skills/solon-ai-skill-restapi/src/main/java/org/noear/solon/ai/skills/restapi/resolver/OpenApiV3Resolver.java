@@ -88,6 +88,10 @@ public class OpenApiV3Resolver implements ApiResolver {
         tool.setDeprecated(Boolean.TRUE.equals(op.getDeprecated()));
 
         // 容器准备
+        ONode pathSchemaRoot = new ONode().asObject().set("type", "object");
+        ONode pathProps = pathSchemaRoot.getOrNew("properties");
+        ONode pathRequired = pathSchemaRoot.getOrNew("required").asArray();
+
         ONode querySchemaRoot = new ONode().asObject().set("type", "object");
         ONode queryProps = querySchemaRoot.getOrNew("properties");
         ONode queryRequired = querySchemaRoot.getOrNew("required").asArray();
@@ -95,6 +99,7 @@ public class OpenApiV3Resolver implements ApiResolver {
         ONode bodySchemaRoot = new ONode().asObject().set("type", "object");
         ONode bodyProps = bodySchemaRoot.getOrNew("properties");
         ONode bodyRequired = bodySchemaRoot.getOrNew("required").asArray();
+
 
         // --- 参数解析 ---
         if (op.getParameters() != null) {
@@ -106,7 +111,9 @@ public class OpenApiV3Resolver implements ApiResolver {
                     queryProps.set(p.getName(), pNode);
                     if (Boolean.TRUE.equals(p.getRequired())) queryRequired.add(p.getName());
                 } else if ("path".equals(p.getIn())) {
-                    // Path 参数处理...
+                    // 【填充 Path 解析】
+                    pathProps.set(p.getName(), pNode);
+                    pathRequired.add(p.getName()); // Path 参数在 REST 规范中默认必填
                 }
             }
         }
@@ -131,19 +138,33 @@ public class OpenApiV3Resolver implements ApiResolver {
         // --- Response 解析 (解决 testV3ResponseArrayFlattening) ---
         if (op.getResponses() != null) {
             ApiResponse res = op.getResponses().get("200");
+            if (res == null) res = op.getResponses().get("201");
             if (res == null) res = op.getResponses().get("default");
+
             if (res != null && res.getContent() != null) {
                 MediaType resMt = selectMediaType(res.getContent(), null);
                 if (resMt != null && resMt.getSchema() != null) {
+                    // 深度解析响应结构
                     Schema<?> resolved = resolveSchema(openAPI, resMt.getSchema(), new ArrayList<>());
-                    tool.setOutputSchema(Json.pretty(resolved));
+                    tool.setOutputSchema(ONode.ofJson(Json.pretty(resolved)).toJson());
                 }
             }
         }
 
         // 最终构建 Schema 字符串
-        if (queryProps.size() > 0) tool.setQuerySchema(querySchemaRoot.toJson());
-        if (bodyProps.size() > 0) tool.setBodySchema(bodySchemaRoot.toJson());
+        if (queryProps.size() > 0) {
+            if (queryRequired.size() == 0) querySchemaRoot.remove("required");
+            tool.setQuerySchema(querySchemaRoot.toJson());
+        }
+
+        if (bodyProps.size() > 0) {
+            if (bodyRequired.size() == 0) bodySchemaRoot.remove("required");
+            tool.setBodySchema(bodySchemaRoot.toJson());
+        }
+
+        if (pathProps.size() > 0) {
+            tool.setPathSchema(pathSchemaRoot.toJson());
+        }
 
         return tool;
     }
@@ -152,7 +173,7 @@ public class OpenApiV3Resolver implements ApiResolver {
     private Schema<?> resolveSchema(OpenAPI openAPI, Schema<?> schema, List<String> refs) {
         if (schema == null) return null;
 
-        // 处理引用
+        // 1. 处理引用 $ref
         if (Utils.isNotEmpty(schema.get$ref())) {
             String refName = schema.get$ref().replace("#/components/schemas/", "");
             if (refs.contains(refName)) {
@@ -162,10 +183,21 @@ public class OpenApiV3Resolver implements ApiResolver {
             }
             refs.add(refName);
             Schema<?> realSchema = openAPI.getComponents().getSchemas().get(refName);
+            // 递归解析引用的真实模型，并继承原有的描述等信息
             return resolveSchema(openAPI, realSchema, refs);
         }
 
-        // 处理对象属性
+        // 2. 处理数组 Array (对应 testV3ResponseArrayFlattening 的核心修复)
+        if (schema instanceof ArraySchema) {
+            ArraySchema as = (ArraySchema) schema;
+            if (as.getItems() != null) {
+                // 这里必须递归解析 items，并将解析后的 Schema 对象重新设置回去
+                Schema<?> resolvedItems = resolveSchema(openAPI, as.getItems(), new ArrayList<>(refs));
+                as.setItems(resolvedItems);
+            }
+        }
+
+        // 3. 处理对象属性 Object
         if (schema.getProperties() != null) {
             Map<String, Schema> resolvedProps = new LinkedHashMap<>();
             schema.getProperties().forEach((k, v) -> {
@@ -174,25 +206,30 @@ public class OpenApiV3Resolver implements ApiResolver {
             schema.setProperties(resolvedProps);
         }
 
-        // 处理数组项
-        if (schema instanceof ArraySchema) {
-            ArraySchema as = (ArraySchema) schema;
-            as.setItems(resolveSchema(openAPI, as.getItems(), new ArrayList<>(refs)));
-        }
-
         return schema;
     }
 
     private MediaType selectMediaType(Content content, ApiTool tool) {
-        if (content.containsKey("application/json")) return content.get("application/json");
-        // 解决 testV3MultipartResolution: 识别 multipart/form-data
+        if (content == null || content.isEmpty()) return null;
+
+        // 优先检查是否存在 Multipart 或 Form 相关的 Key
         for (String type : content.keySet()) {
-            if (type.toLowerCase().contains("multipart")) {
-                if (tool != null) tool.setMultipart(true);
+            String lowerType = type.toLowerCase();
+            if (lowerType.contains("multipart") || lowerType.contains("form-urlencoded") || lowerType.contains("octet-stream")) {
+                if (tool != null) {
+                    tool.setMultipart(true);
+                }
                 return content.get(type);
             }
         }
-        return content.isEmpty() ? null : content.values().iterator().next();
+
+        // 其次尝试 JSON
+        if (content.containsKey("application/json")) {
+            return content.get("application/json");
+        }
+
+        // 最后保底取第一个
+        return content.values().iterator().next();
     }
 
     private String generateName(String method, String path) {
