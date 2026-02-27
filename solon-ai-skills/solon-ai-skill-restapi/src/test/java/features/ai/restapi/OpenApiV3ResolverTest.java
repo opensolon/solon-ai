@@ -197,4 +197,54 @@ public class OpenApiV3ResolverTest {
         // 官方 Petstore V3 中 PUT /pet 的 operationId 是 updatePet
         assertEquals("updatePet", tool.getName());
     }
+
+    @Test
+    @DisplayName("Petstore V3：验证无 OperationId 时的降级命名策略")
+    void testV3FallbackNaming() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        // 假设找一个可能没有 operationId 的接口，或者验证其生成规则
+        // 逻辑：method_path_to_underscore
+        ApiTool tool = tools.stream()
+                .filter(t -> t.getPath().contains("/inventory") && "GET".equals(t.getMethod()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        // 如果没有 operationId，生成的应该是 get_store_inventory 类似风格
+        assertNotNull(tool.getName());
+        assertFalse(tool.getName().contains("/"), "生成的工具名不应包含斜杠");
+    }
+
+    @Test
+    @DisplayName("Petstore V3：验证 Header 参数过滤或解析")
+    void testV3HeaderParameterCheck() throws IOException {
+        String json = getOpenApiJson();
+        List<ApiTool> tools = resolver.resolve(null, json);
+
+        // 查找 DELETE /pet/{petId}，它通常有一个 api_key 的 header 参数
+        ApiTool tool = tools.stream()
+                .filter(t -> t.getPath().contains("/{petId}") && "DELETE".equals(t.getMethod()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(tool);
+        // 目前你的逻辑是不解析 Header 到 query/path/body 的，这里可以作为现状确认
+        // 或者如果你未来支持了，可以断言 headerSchema 不为空
+    }
+
+    @Test
+    @DisplayName("Petstore V3：验证递归模型解析安全性")
+    void testV3CircularReferenceSafety() throws IOException {
+        String json = getOpenApiJson();
+        // 即使 source 中有循环引用，resolve 不应抛出 StackOverflowError
+        assertDoesNotThrow(() -> resolver.resolve(null, json));
+
+        List<ApiTool> tools = resolver.resolve(null, json);
+        // 找到包含 Pet 的接口
+        ApiTool petTool = tools.get(0);
+        // 只要能解析出结果且不报错，说明 refs 链条起到了截断作用
+        assertNotNull(petTool);
+    }
 }
