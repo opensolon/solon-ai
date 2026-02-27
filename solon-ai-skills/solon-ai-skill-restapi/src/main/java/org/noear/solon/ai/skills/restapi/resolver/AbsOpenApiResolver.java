@@ -99,7 +99,10 @@ public abstract class AbsOpenApiResolver implements ApiResolver {
         return "type".equals(k) || "properties".equals(k) || "items".equals(k) ||
                 "required".equals(k) || "description".equals(k) || "enum".equals(k) ||
                 "name".equals(k) || "in".equals(k) || "format".equals(k) ||
-                "default".equals(k) || k.contains("Of");
+                "default".equals(k) || "example".equals(k) || // 增加 example 辅助 AI 理解
+                "maximum".equals(k) || "minimum".equals(k) || // 增加数值约束
+                "maxLength".equals(k) || "minLength".equals(k) || // 增加长度约束
+                "pattern".equals(k) || k.contains("Of");
     }
 
     /**

@@ -124,7 +124,7 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
 
         // 2. 解析 requestBody
         if (detail.hasKey("requestBody")) {
-            ONode bodySchema = extractBodySchema(root, detail.get("requestBody"));
+            ONode bodySchema = extractBodySchema(root, detail.get("requestBody"), tool);
             if (!bodySchema.isNull()) {
                 if (bodySchema.hasKey("properties")) {
                     dataProps.setAll(bodySchema.get("properties").getObject());
@@ -174,15 +174,48 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
         }
     }
 
-    private ONode extractBodySchema(ONode root, ONode requestBody) {
+    private ONode extractBodySchema(ONode root, ONode requestBody, ApiTool tool) {
         ONode bodyNode = resolveRefNode(root, requestBody, new HashSet<>());
         ONode content = bodyNode.get("content");
-        if (content.isNull() || !content.isObject()) return new ONode();
 
-        ONode schemaNode = content.get("application/json").get("schema");
-        if (schemaNode.isNull() && content.size() > 0) {
-            schemaNode = content.getObject().values().iterator().next().get("schema");
+        if (content.isNull() || !content.isObject()) {
+            return new ONode();
         }
+
+        ONode schemaNode = null;
+        String selectedMedia = null;
+
+        // 规范优先级策略：
+        // 1. 优先找 JSON (AI 最友好)
+        if (content.hasKey("application/json")) {
+            selectedMedia = "application/json";
+            schemaNode = content.get("application/json").get("schema");
+            tool.setMultipart(false); // 明确为 false
+        }
+        // 2. 其次找 Multipart 或 Form
+        else if (content.hasKey("multipart/form-data")) {
+            selectedMedia = "multipart/form-data";
+            schemaNode = content.get("multipart/form-data").get("schema");
+            tool.setMultipart(true);
+        }
+        else if (content.hasKey("application/x-www-form-urlencoded")) {
+            selectedMedia = "application/x-www-form-urlencoded";
+            schemaNode = content.get("application/x-www-form-urlencoded").get("schema");
+            tool.setMultipart(true);
+        }
+        // 3. 最后兜底：取第一个
+        else if (content.size() > 0) {
+            selectedMedia = content.getObject().keySet().iterator().next();
+            schemaNode = content.get(selectedMedia).get("schema");
+            // 如果兜底的类型包含 multipart 关键字则设为 true
+            tool.setMultipart(selectedMedia.contains("multipart") || selectedMedia.contains("form-urlencoded"));
+        }
+
+        // 补充：处理 requestBody 整体的必填属性
+        if (bodyNode.get("required").getBoolean()) {
+            // 可以在此处记录，或者在 doResolveMethod 中通过 dataRequired 处理
+        }
+
         return resolveRefNode(root, schemaNode, new HashSet<>());
     }
 }

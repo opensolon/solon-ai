@@ -29,6 +29,8 @@ public class ApiTool {
     private String description;
     private String path;
     private String method;
+    private boolean isMultipart;
+
     /**
      * header jsonSchema
      *
@@ -73,6 +75,10 @@ public class ApiTool {
 
     public String getMethod() {
         return method;
+    }
+
+    public boolean isMultipart() {
+        return isMultipart;
     }
 
     public String getHeaderSchema() {
@@ -128,6 +134,10 @@ public class ApiTool {
         this.method = method;
     }
 
+    public void setMultipart(boolean multipart) {
+        isMultipart = multipart;
+    }
+
     public void setHeaderSchema(String headerSchema) {
         this.headerSchema = headerSchema;
     }
@@ -160,6 +170,7 @@ public class ApiTool {
                 ", pathSchema='" + pathSchema + '\'' +
                 ", dataSchema='" + dataSchema + '\'' +
                 ", outputSchema='" + outputSchema + '\'' +
+                ", isMultipart=" + isMultipart + // 打印输出增加此项
                 ", isDeprecated=" + isDeprecated +
                 '}';
     }

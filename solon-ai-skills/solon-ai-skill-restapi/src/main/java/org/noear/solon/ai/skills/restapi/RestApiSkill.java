@@ -275,6 +275,8 @@ public class RestApiSkill extends AbsSkill {
 
         if ("GET".equalsIgnoreCase(tool.getMethod())) {
             http.data(dataParams);
+        } else if (tool.isMultipart()) {
+            http.data(dataParams).multipart(true);
         } else {
             http.bodyOfJson(ONode.serialize(dataParams));
         }

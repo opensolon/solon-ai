@@ -111,6 +111,10 @@ public class OpenApiV2Resolver extends AbsOpenApiResolver {
                         if (isRequired) dataRequired.add(name);
                     }
                 } else {
+                    if("formData".equals(in)){
+                        tool.setMultipart(true);
+                    }
+
                     // query, formData
                     dataProps.set(name, cleanMeta(pNode));
                     if (isRequired) dataRequired.add(name);
