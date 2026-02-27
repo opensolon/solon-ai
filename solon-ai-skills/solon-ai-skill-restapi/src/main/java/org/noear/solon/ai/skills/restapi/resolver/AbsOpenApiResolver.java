@@ -53,41 +53,31 @@ public abstract class AbsOpenApiResolver implements ApiResolver {
     protected ONode resolveRefNode(ONode root, ONode node, Set<String> visited) {
         if (node == null || node.isNull()) return new ONode();
 
-        // 逻辑保持原版：处理引用
+        // 1. 解析 $ref (规范支持：JSON Pointer)
         if (node.hasKey("$ref")) {
             String ref = node.get("$ref").getString();
-            if (visited.contains(ref)) {
-                return ONode.ofBean("_Circular_Reference_");
-            }
+            if (visited.contains(ref)) return ONode.ofBean("_Circular_Reference_");
             visited.add(ref);
 
             String[] parts = ref.split("/");
             ONode refNode = null;
-            for (String p1 : parts) {
-                if ("#".equals(p1)) {
-                    refNode = root;
-                } else {
-                    refNode = refNode.get(p1);
-                }
+            for (String p : parts) {
+                if ("#".equals(p)) refNode = root;
+                else if (refNode != null) refNode = refNode.get(p);
             }
-
             return resolveRefNode(root, refNode, visited);
         }
 
-        // 逻辑保持原版：处理对象与递归字段映射
+        // 2. 数据清洗：仅保留符合 JSON Schema 子集规范的字段
         if (node.isObject()) {
             ONode cleanNode = new ONode().asObject();
             node.getObjectUnsafe().forEach((k, v) -> {
-                if ("type".equals(k) || "properties".equals(k) || "items".equals(k) ||
-                        "required".equals(k) || "description".equals(k) || "enum".equals(k) ||
-                        "name".equals(k) || "in".equals(k) ||
-                        k.contains("Of")) {
-
+                // 重点：k.contains("Of") 用于支持 oneOf, anyOf, allOf 规范
+                if (isValidSchemaKey(k)) {
                     if ("properties".equals(k)) {
                         ONode props = cleanNode.getOrNew("properties").asObject();
-                        v.getObjectUnsafe().forEach((pk, pv) -> {
-                            props.set(pk, resolveRefNode(root, pv, new HashSet<>(visited)));
-                        });
+                        v.getObjectUnsafe().forEach((pk, pv) ->
+                                props.set(pk, resolveRefNode(root, pv, new HashSet<>(visited))));
                     } else if ("items".equals(k)) {
                         cleanNode.set("items", resolveRefNode(root, v, new HashSet<>(visited)));
                     } else {
@@ -98,10 +88,18 @@ public abstract class AbsOpenApiResolver implements ApiResolver {
             return cleanNode;
         } else if (node.isArray()) {
             ONode cleanArray = new ONode().asArray();
-            node.getArrayUnsafe().forEach(n -> cleanArray.add(resolveRefNode(root, n, new HashSet<>(visited))));
+            node.getArrayUnsafe().forEach(n ->
+                    cleanArray.add(resolveRefNode(root, n, new HashSet<>(visited))));
             return cleanArray;
         }
         return node;
+    }
+
+    private boolean isValidSchemaKey(String k) {
+        return "type".equals(k) || "properties".equals(k) || "items".equals(k) ||
+                "required".equals(k) || "description".equals(k) || "enum".equals(k) ||
+                "name".equals(k) || "in".equals(k) || "format".equals(k) ||
+                "default".equals(k) || k.contains("Of");
     }
 
     /**
