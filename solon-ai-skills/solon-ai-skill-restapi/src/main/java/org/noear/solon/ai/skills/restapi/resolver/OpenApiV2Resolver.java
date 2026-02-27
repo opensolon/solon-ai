@@ -62,9 +62,11 @@ public class OpenApiV2Resolver extends AbsOpenApiResolver {
         tool.setName(generateName(detail, tool.getMethod(), path));
         tool.setDescription(extractDescription(detail));
 
-        // 1. Path 参数容器 (平铺)
+        // 1. Header 参数容器 (平铺)
+        ONode headerProps = new ONode().asObject();
+        // 2. Path 参数容器 (平铺)
         ONode pathProps = new ONode().asObject();
-        // 2. Data 参数容器 (JSON Schema 对象结构)
+        // 3. Data 参数容器 (JSON Schema 对象结构)
         ONode dataSchema = new ONode().asObject().set("type", "object");
         ONode dataProps = dataSchema.getOrNew("properties");
 
@@ -83,12 +85,13 @@ public class OpenApiV2Resolver extends AbsOpenApiResolver {
                 String in = pNode.get("in").getString();
                 String name = pNode.get("name").getString();
 
-                if ("path".equals(in)) {
+                if ("header".equals(in)) {
+                    headerProps.set(name, pNode);
+                } else if ("path".equals(in)) {
                     pathProps.set(name, pNode);
                 } else if ("body".equals(in)) {
-                    ONode bodySchema = resolveRefNode(root, pNode.get("schema"), new HashSet<>());
+                    ONode bodySchema = resolveRefNode(root, p.get("schema"), new HashSet<>());
                     if (bodySchema.hasKey("properties")) {
-                        // 合并 body 内的属性到 dataProps
                         dataProps.setAll(bodySchema.get("properties").getObject());
                         if (bodySchema.hasKey("required")) {
                             dataSchema.getOrNew("required").addAll(bodySchema.get("required").getArray());
@@ -97,10 +100,14 @@ public class OpenApiV2Resolver extends AbsOpenApiResolver {
                         // 非对象 body，以参数名作为 key
                         dataProps.set(name, bodySchema);
                     }
-                } else if ("query".equals(in) || "formData".equals(in)) {
+                } else {
                     dataProps.set(name, pNode);
                 }
             }
+        }
+
+        if (headerProps.size() > 0) {
+            tool.setHeaderSchema(headerProps.toJson());
         }
 
         if (pathProps.size() > 0) {

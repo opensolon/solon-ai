@@ -236,6 +236,7 @@ public class RestApiSkill extends AbsSkill {
     @ToolMapping(name = "call_api", description = "代理执行特定的 REST 业务接口")
     public String callApi(
             @Param("api_name") String apiName,
+            @Param("header_params") Map<String, Object> headerParams,
             @Param("path_params") Map<String, Object> pathParams,
             @Param("query_or_body_params") Map<String, Object> dataParams) throws IOException {
 
@@ -263,6 +264,11 @@ public class RestApiSkill extends AbsSkill {
         }
 
         HttpUtils http = HttpUtils.http(baseUrl + finalPath);
+
+        if (Assert.isNotEmpty(headerParams)) {
+            http.headers(headerParams);
+        }
+
         if (authenticator != null) {
             authenticator.apply(http, tool);
         }
@@ -322,6 +328,11 @@ public class RestApiSkill extends AbsSkill {
             sb.append("---\n").append("* **API: ").append(tool.getName()).append("**\n")
                     .append("  - 功能: ").append(tool.getDescription()).append("\n")
                     .append("  - 路径: ").append(tool.getMethod()).append(" ").append(tool.getPath()).append("\n");
+
+            // 3. 增加 Header 说明 (核心改动)
+            if (Utils.isNotEmpty(tool.getHeaderSchema())) {
+                sb.append("  - Header 参数: ").append(tool.getHeaderSchema()).append("\n");
+            }
 
             if (Utils.isNotEmpty(tool.getPathSchema())) {
                 sb.append("  - Path 参数 (填充路径 {}): ").append(tool.getPathSchema()).append("\n");

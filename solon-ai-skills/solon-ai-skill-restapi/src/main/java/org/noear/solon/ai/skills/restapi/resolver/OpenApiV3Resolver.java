@@ -55,7 +55,7 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
         return tools;
     }
 
-    protected void doResolveMethod(List<ApiTool> tools, ONode root, String path, String method, ONode detail){
+    protected void doResolveMethod(List<ApiTool> tools, ONode root, String path, String method, ONode detail) {
         ApiTool tool = new ApiTool();
         tool.setPath(path);
         tool.setMethod(method.toUpperCase());
@@ -64,8 +64,9 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
 
         // 1. 分解 Parameters (Path vs Query)
         ONode parameters = detail.get("parameters");
+        ONode headerProps = new ONode().asObject();
         ONode pathProps = new ONode().asObject();
-        ONode queryProps = new ONode().asObject();
+        ONode dataProps = new ONode().asObject();
 
         if (parameters.isArray()) {
             for (ONode param : parameters.getArrayUnsafe()) {
@@ -74,10 +75,12 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
                 String in = pNode.get("in").getString();
                 String name = pNode.get("name").getString();
 
-                if ("path".equals(in)) {
+                if ("header".equals(in)) {
+                    headerProps.set(name, pNode);
+                } else if ("path".equals(in)) {
                     pathProps.set(name, pNode);
                 } else if ("query".equals(in)) {
-                    queryProps.set(name, pNode);
+                    dataProps.set(name, pNode);
                 }
             }
         }
@@ -87,15 +90,20 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
             ONode bodySchema = extractBodySchema(root, detail.get("requestBody"));
             if (!bodySchema.isNull()) {
                 // 如果既有 Query 又有 Body，合并到 dataSchema
-                queryProps.getOrNew("properties").setAll(bodySchema.get("properties").getObject());
+                dataProps.getOrNew("properties").setAll(bodySchema.get("properties").getObject());
             }
+        }
+
+        if (headerProps.size() > 0) {
+            tool.setHeaderSchema(headerProps.toJson());
         }
 
         if (pathProps.size() > 0) {
             tool.setPathSchema(pathProps.toJson());
         }
-        if (queryProps.size() > 0) {
-            tool.setDataSchema(queryProps.toJson());
+
+        if (dataProps.size() > 0) {
+            tool.setDataSchema(dataProps.toJson());
         }
 
         // 3. 输出 Schema
@@ -111,7 +119,10 @@ public class OpenApiV3Resolver extends AbsOpenApiResolver {
         ONode content = requestBody.get("content");
         ONode schemaNode = content.get("application/json").get("schema");
         if (schemaNode.isNull()) {
-            schemaNode = content.getObject().values().stream().findFirst().map(n -> n.get("schema")).orElse(new ONode());
+            schemaNode = content.getObject().values().stream()
+                    .findFirst()
+                    .map(n -> n.get("schema"))
+                    .orElse(new ONode());
         }
         return resolveRefNode(root, schemaNode, new HashSet<>());
     }

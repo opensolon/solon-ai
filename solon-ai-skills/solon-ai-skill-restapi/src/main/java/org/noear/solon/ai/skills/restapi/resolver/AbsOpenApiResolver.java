@@ -124,6 +124,9 @@ public abstract class AbsOpenApiResolver implements ApiResolver {
      * 提取 API 描述信息
      */
     protected String extractDescription(ONode detail) {
-        return Utils.valueOr(detail.get("summary").getString(), detail.get("description").getString(), "No summary available");
+        return Utils.valueOr(
+                detail.get("summary").getString(),
+                detail.get("description").getString(),
+                "");
     }
 }

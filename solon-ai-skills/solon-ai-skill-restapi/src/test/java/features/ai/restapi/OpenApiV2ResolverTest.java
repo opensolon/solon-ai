@@ -128,11 +128,11 @@ public class OpenApiV2ResolverTest {
 
         // 验证无响应体情况
         ApiTool emptyTool = tools.stream().filter(t -> t.getPath().equals("/empty")).findFirst().get();
-        assertEquals("{}", emptyTool.getOutputSchema());
+        assertNull(emptyTool.getOutputSchema());
 
         // 验证 null 参数处理
         ApiTool noParamTool = tools.stream().filter(t -> t.getPath().equals("/no-params")).findFirst().get();
-        assertNotNull(noParamTool.getDataSchema());
+        assertNotNull(noParamTool.getOutputSchema());
     }
 
     @Test

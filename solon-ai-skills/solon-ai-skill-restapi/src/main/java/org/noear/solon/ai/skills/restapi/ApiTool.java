@@ -30,6 +30,11 @@ public class ApiTool {
     private String path;
     private String method;
     /**
+     * header jsonSchema
+     *
+     */
+    private String headerSchema;
+    /**
      * path jsonSchema
      *
      */
@@ -70,30 +75,19 @@ public class ApiTool {
         return method;
     }
 
+    public String getHeaderSchema() {
+        return headerSchema;
+    }
 
     public String getPathSchema() {
         return pathSchema;
     }
 
-    public String getPathSchemaOr(String defVal) {
-        if (Assert.isEmpty(pathSchema)) {
-            return defVal;
-        } else {
-            return pathSchema;
-        }
-    }
 
     public String getDataSchema() {
         return dataSchema;
     }
 
-    public String getDataSchemaOr(String defVal) {
-        if (Assert.isEmpty(dataSchema)) {
-            return defVal;
-        } else {
-            return dataSchema;
-        }
-    }
 
     public String getOutputSchema() {
         return outputSchema;
@@ -134,6 +128,10 @@ public class ApiTool {
         this.method = method;
     }
 
+    public void setHeaderSchema(String headerSchema) {
+        this.headerSchema = headerSchema;
+    }
+
     public void setPathSchema(String pathSchema) {
         this.pathSchema = pathSchema;
     }
@@ -148,5 +146,21 @@ public class ApiTool {
 
     public void setDeprecated(boolean deprecated) {
         isDeprecated = deprecated;
+    }
+
+    @Override
+    public String toString() {
+        return "ApiTool{" +
+                "baseUrl='" + baseUrl + '\'' +
+                ", name='" + name + '\'' +
+                ", description='" + description + '\'' +
+                ", path='" + path + '\'' +
+                ", method='" + method + '\'' +
+                ", headerSchema='" + headerSchema + '\'' +
+                ", pathSchema='" + pathSchema + '\'' +
+                ", dataSchema='" + dataSchema + '\'' +
+                ", outputSchema='" + outputSchema + '\'' +
+                ", isDeprecated=" + isDeprecated +
+                '}';
     }
 }
