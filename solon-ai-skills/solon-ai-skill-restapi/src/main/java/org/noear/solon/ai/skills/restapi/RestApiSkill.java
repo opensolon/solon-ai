@@ -58,8 +58,8 @@ public class RestApiSkill extends AbsSkill {
     private ApiResolver resolver = OpenApiResolver.getInstance();
     private ApiAuthenticator authenticator;
 
-    private int dynamicThreshold = 8; // 超过此值，不再平铺 Schema，进入清单模式
-    private int searchThreshold = 50;  // 超过此值，不再展示清单，进入强制搜索模式
+    private int dynamicThreshold = 10; // 超过此值，不再平铺 Schema，进入清单模式
+    private int searchThreshold = 100;  // 超过此值，不再展示清单，进入强制搜索模式
     private int maxContextLength = 8000;
 
     // --- 配置方法 ---
@@ -134,11 +134,11 @@ public class RestApiSkill extends AbsSkill {
             sb.append("由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：\n");
 
             if (size > searchThreshold) {
-                // SEARCH 模式
+                // SEARCH 模式：引导搜索
                 sb.append("- **Step 1 (搜索)**: 业务清单已折叠。请务必先使用 `search_apis` 寻找匹配的接口名。\n");
             } else {
-                // LIST 模式
-                sb.append("- **Step 1 (锁定)**: 从下方清单确定接口名。如描述模糊，可使用 `search_apis` 进一步搜索。\n");
+                // DYNAMIC 模式：引导阅读清单
+                sb.append("- **Step 1 (锁定)**: 从下方“可用业务接口清单”中直接根据描述选定接口名。\n");
             }
 
             sb.append("- **Step 2 (详情)**: 使用 `get_api_detail` 获取选定接口的参数定义 (JSON Schema)。\n")
@@ -152,7 +152,7 @@ public class RestApiSkill extends AbsSkill {
                             .append(" (").append(t.getMethod()).append(" ").append(t.getPath()).append(")\n");
                 }
             } else {
-                sb.append("> **搜索提示**: 接口较多，建议通过关键词搜索，例如：`search_apis('订单')`。");
+                sb.append("> **搜索提示**: 接口较多，建议通过关键词搜索，多个关键词请用空格分隔。例如：`search_apis('订单 查询')`。");
             }
         }
 
@@ -165,26 +165,40 @@ public class RestApiSkill extends AbsSkill {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        if (dynamicTools.size() <= dynamicThreshold) {
-            // FULL 模式下只暴露执行工具，减少 AI 干扰
+        int size = dynamicTools.size();
+        if (size <= dynamicThreshold) {
+            // FULL 模式下只暴露执行工具
             return tools.stream()
                     .filter(t -> "call_api".equals(t.name()))
                     .collect(Collectors.toList());
         } else {
-            // LIST/SEARCH 模式下暴露 search_apis, get_api_detail, call_api
-            return tools;
+            if (size > searchThreshold) {
+                // SEARCH 模式下暴露全量元工具 (search_apis, get_api_detail, call_api)
+                return tools;
+            } else {
+                // DYNAMIC 模式下隐藏 search_apis
+                return tools.stream()
+                        .filter(t -> !"search_apis".equals(t.name()))
+                        .collect(Collectors.toList());
+            }
         }
     }
 
     // --- 内置工具映射 ---
 
-    @ToolMapping(name = "search_apis", description = "在海量 API 库中通过关键词模糊搜索接口名和描述")
+    @ToolMapping(name = "search_apis", description = "在海量 API 库中通过关键词模糊搜索。支持多个关键词用空格隔开（如：'订单 查询'）")
     public Object searchApis(@Param("keyword") String keyword) {
         if (Utils.isEmpty(keyword)) return "错误：搜索关键词不能为空。";
 
-        String k = keyword.toLowerCase().trim();
+        // 按空格及常见分隔符拆分关键词
+        String[] keys = keyword.toLowerCase().split("[\\s,;，；]+");
+
         List<Map<String, String>> results = dynamicTools.values().stream()
-                .filter(t -> t.getName().toLowerCase().contains(k) || t.getDescription().toLowerCase().contains(k))
+                .filter(t -> {
+                    String content = (t.getName() + " " + t.getDescription() + " " + t.getPath()).toLowerCase();
+                    // 多词 AND 匹配
+                    return Arrays.stream(keys).allMatch(content::contains);
+                })
                 .limit(10)
                 .map(t -> {
                     Map<String, String> map = new HashMap<>();
@@ -196,7 +210,11 @@ public class RestApiSkill extends AbsSkill {
                 .collect(Collectors.toList());
 
         if (results.isEmpty()) {
-            return "未找到匹配 '" + keyword + "' 的业务接口。请尝试更通用的关键词。";
+            return "提醒：未找到完全匹配关键词 '" + keyword + "' 的业务接口。\n" +
+                    "您可以尝试：\n" +
+                    "1. 检查关键词是否使用了空格分隔（如：'杭州 旅游'）。\n" +
+                    "2. 换用更通用的词汇，或减少关键词数量重新搜索。\n" +
+                    "3. 如果确定系统无此功能，请告知用户。禁止重复尝试相似关键词搜索。";
         }
 
         return results;

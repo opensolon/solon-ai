@@ -95,7 +95,7 @@ public class OpenApiV3ResolverTest {
 
         List<ApiTool> tools = resolver.resolve(null, json);
         String input = tools.get(0).getDataSchema();
-
+        System.out.println(input);
         assertTrue(input.contains("file_data"));
     }
 
