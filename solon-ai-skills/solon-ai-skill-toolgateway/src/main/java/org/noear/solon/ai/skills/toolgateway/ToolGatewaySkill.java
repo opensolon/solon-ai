@@ -84,21 +84,22 @@ public class ToolGatewaySkill extends AbsSkill {
             sb.append("由于业务工具库较多，已开启**动态路由**模式。请严格遵循以下步骤：\n");
 
             if (size > searchThreshold) {
-                // 优化点 1: SEARCH 模式指令，强调必须搜索
-                sb.append("- **Step 1 (搜索)**: 业务清单已折叠。请务必先使用 `search_tools` 寻找匹配的工具名。\n");
+                // SEARCH 模式：瞎子摸象，必须先搜
+                sb.append("- **Step 1 (搜索)**: 业务清单已折叠。请先使用 `search_tools` 寻找匹配的工具名。\n");
+                sb.append("- **Step 2 (详情)**: 使用 `get_tool_detail` 获取参数定义。\n");
             } else {
-                // 优化点 2: DYNAMIC 模式指令，清单可见，搜索作为辅助
-                sb.append("- **Step 1 (锁定)**: 从下方清单确定工具名。如描述模糊，可使用 `search_tools` 进一步搜索。\n");
+                // DYNAMIC 模式：看清单，直接查详情
+                sb.append("- **Step 1 (锁定)**: 从下方“可用业务清单”中直接根据描述选定工具名。\n");
+                sb.append("- **Step 2 (详情)**: 使用 `get_tool_detail` 获取该工具的参数定义 (JSON Schema)。\n");
             }
 
-            sb.append("- **Step 2 (详情)**: 使用 `get_tool_detail` 获取选定工具的参数定义 (JSON Schema)。\n");
-            sb.append("- **Step 3 (执行)**: **必须**通过 `call_tool` 执行。禁止直接调用业务工具名。\n\n");
+            sb.append("- **Step 3 (执行)**: 必须通过 `call_tool` 提交参数并执行。\n\n");
 
             if (size > searchThreshold) {
-                sb.append("> **提示**: 工具量大，建议通过关键词搜索，例如：search_tools('天气')。");
+                sb.append("> **提示**: 业务工具量大，建议通过关键词搜索，例如：search_tools('天气')。");
             } else {
                 // 展示摘要清单
-                sb.append("### 可用业务清单:\n");
+                sb.append("### 可用业务工具清单:\n");
                 for (FunctionTool tool : dynamicTools.values()) {
                     sb.append("- **").append(tool.name()).append("**: ").append(tool.description()).append("\n");
                 }
@@ -110,27 +111,43 @@ public class ToolGatewaySkill extends AbsSkill {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        if (dynamicTools.size() <= dynamicThreshold) {
+        int size = dynamicTools.size();
+        if (size <= dynamicThreshold) {
             return dynamicTools.values();
         } else {
-            return this.tools;
+            if (size > searchThreshold) {
+                // SEARCH 模式：返回 search_tools, get_tool_detail, call_tool
+                return this.tools;
+            } else {
+                // DYNAMIC 模式：排除 search_tools
+                return this.tools.stream()
+                        .filter(f -> !"search_tools".equals(f.name()))
+                        .collect(Collectors.toList());
+            }
         }
     }
 
-    @ToolMapping(name = "search_tools", description = "在海量工具库中通过关键词模糊搜索工具名和描述")
+    @ToolMapping(name = "search_tools", description = "搜索业务工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）")
     public Object searchTools(@Param("keyword") String keyword) {
         if (Utils.isEmpty(keyword)) return "错误：搜索关键词不能为空。";
 
-        String k = keyword.toLowerCase().trim();
+        String[] keys = keyword.toLowerCase().split("[\\s,;，；]+");
+
         List<Map<String, String>> results = dynamicTools.values().stream()
-                .filter(t -> t.name().toLowerCase().contains(k) || t.description().toLowerCase().contains(k))
+                .filter(t -> {
+                    String content = (t.name() + " " + t.description()).toLowerCase();
+                    return Arrays.stream(keys).allMatch(content::contains);
+                })
                 .limit(10)
                 .map(this::mapToolBrief)
                 .collect(Collectors.toList());
 
         if (results.isEmpty()) {
-            return "未找到与关键词 '" + keyword + "' 相关的业务工具。\n" +
-                    "建议：尝试更通用的词汇（如用'天气'代替'下雨'），或确认功能是否超出目前支持范围。";
+            return "提醒：未找到完全匹配关键词 '" + keyword + "' 的业务工具。\n" +
+                    "您可以尝试：\n" +
+                    "1. 检查关键词是否使用了空格分隔（如：'杭州 旅游'）。\n" +
+                    "2. 换用更通用的词汇，或减少关键词数量。\n" +
+                    "3. 如果确定无此功能，请告知用户。禁止重复尝试相似搜索。";
         }
 
         return results;
