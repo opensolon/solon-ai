@@ -74,7 +74,7 @@ public class OpenApiV3ResolverTest {
     }
 
     @Test
-    @DisplayName("RequestBody 深度覆盖：无 JSON 时回退到首个内容类型")
+    @DisplayName("RequestBody 深度覆盖：无 JSON 时回退到首个内容类型并标记 Multipart")
     void testRequestBodyFallback() {
         String json = "{" +
                 "  \"openapi\": \"3.0.0\"," +
@@ -94,9 +94,8 @@ public class OpenApiV3ResolverTest {
                 "}";
 
         List<ApiTool> tools = resolver.resolve(null, json);
-        String input = tools.get(0).getDataSchema();
-        System.out.println(input);
-        assertTrue(input.contains("file_data"));
+        assertTrue(tools.get(0).isMultipart(), "应当识别为 Multipart 模式");
+        assertTrue(tools.get(0).getDataSchema().contains("file_data"));
     }
 
     @Test
