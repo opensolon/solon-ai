@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import jdk.nashorn.internal.ir.CallNode;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
@@ -105,6 +106,7 @@ public class ReActTrace implements AgentTrace {
      * 最终回答内容 (Final Answer)
      */
     private volatile String finalAnswer;
+    private volatile boolean normal;
     /**
      * 模型最近一次原始思考内容
      */
@@ -173,6 +175,7 @@ public class ReActTrace implements AgentTrace {
         this.session = session;
         this.protocol = protocol;
         this.finalAnswer = null;
+        this.normal = false;
 
         //每次执行重置中断状态
         this.pending = false;
@@ -344,12 +347,23 @@ public class ReActTrace implements AgentTrace {
         this.route = route;
     }
 
+    public boolean isNormal() {
+        return normal;
+    }
+
     public String getFinalAnswer() {
         return finalAnswer;
     }
 
+
     public void setFinalAnswer(String finalAnswer) {
         this.finalAnswer = finalAnswer;
+        this.normal = false;
+    }
+
+    public void setFinalAnswer(String finalAnswer, boolean normal) {
+        this.finalAnswer = finalAnswer;
+        this.normal = normal;
     }
 
     public AssistantMessage getLastReasonMessage() {

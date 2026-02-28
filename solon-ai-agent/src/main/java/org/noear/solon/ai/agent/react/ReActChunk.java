@@ -40,4 +40,8 @@ public class ReActChunk extends AbsAgentChunk {
     public ReActTrace getTrace() {
         return response.getTrace();
     }
+
+    public boolean isNormal() {
+        return response.getTrace().isNormal();
+    }
 }

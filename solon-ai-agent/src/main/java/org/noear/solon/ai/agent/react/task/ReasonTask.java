@@ -270,6 +270,10 @@ public class ReasonTask implements NamedTaskComponent {
             responseMessage = response.getMessage();
         }
 
+        if(responseMessage == null){
+            return;
+        }
+
         if (response.getUsage() != null) {
             trace.getMetrics().addUsage(response.getUsage());
         }
@@ -328,7 +332,7 @@ public class ReasonTask implements NamedTaskComponent {
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             if (Assert.isNotEmpty(clearContent)) {
                 trace.setRoute(Agent.ID_END);
-                trace.setFinalAnswer(clearContent); // 直接取干净的正文
+                trace.setFinalAnswer(clearContent, true); // 直接取干净的正文
                 return;
             }
         }
@@ -340,7 +344,7 @@ public class ReasonTask implements NamedTaskComponent {
         // 1. 优先判断任务是否结束（Finish）
         if (clearContent.contains(config.getFinishMarker())) {
             trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer(extractFinalAnswer(clearContent));
+            trace.setFinalAnswer(extractFinalAnswer(clearContent), true);
             return;
         }
 
@@ -355,7 +359,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // 3. 兜底逻辑：既无明确工具调用也无完成标识，视为直接回复 Final Answer
         trace.setRoute(Agent.ID_END);
-        trace.setFinalAnswer(extractFinalAnswer(clearContent));
+        trace.setFinalAnswer(extractFinalAnswer(clearContent), true);
     }
 
     private @Nullable ChatResponse callWithRetry(Node node, ReActTrace trace, List<ChatMessage> messages) throws RuntimeException {
