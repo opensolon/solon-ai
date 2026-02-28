@@ -78,6 +78,12 @@ public class ChatConfig extends AiConfig {
     }
 
     public String getReasoningFieldName() {
+        if (reasoningFieldName == null) {
+            if (getModel().toLowerCase().contains("deepseek")) {
+                reasoningFieldName = "reasoning_content";
+            }
+        }
+
         return reasoningFieldName;
     }
 
