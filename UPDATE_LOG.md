@@ -20,7 +20,6 @@
 * 添加 solon-ai-agent ReActInterceptor.onObservation durationMs 参数（时长毫秒数）
 * 添加 solon-ai-agent ReActChunk isNormal(用于识别是否为正常结束)
 * 添加 solon-ai-skill-memory MemSkill 支持会话隔离与共享
-* 调整 solon-ai-agent ReActSystemPromptCn 去掉原生模式的行为准则（清爽些，减少逻辑混乱）
 
 ### 3.9.4
 
