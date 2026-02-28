@@ -107,7 +107,7 @@ public class HITLInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onObservation(ReActTrace trace, String toolName, String result) {
+    public void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
         try {
             HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + toolName);
             if (decision != null && decision.isApproved()) {

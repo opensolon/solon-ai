@@ -53,7 +53,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
     }
 
     @Override
-    public void onObservation(ReActTrace trace, String toolName, String result) {
+    public void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
         // 预留缓冲，避免频繁重构
         if (messages.size() <= maxMessages + 2) return;
