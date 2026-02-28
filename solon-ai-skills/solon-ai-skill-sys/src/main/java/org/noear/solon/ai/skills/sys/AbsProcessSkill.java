@@ -35,7 +35,7 @@ import java.util.Map;
 public abstract class AbsProcessSkill extends AbsSkill {
 
     protected final Path rootPath;
-    protected final CliExecutor executor = new CliExecutor();
+    protected final ProcessExecutor executor = new ProcessExecutor();
 
     public AbsProcessSkill(String workDir) {
         this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
@@ -62,7 +62,7 @@ public abstract class AbsProcessSkill extends AbsSkill {
     }
 
     protected String runCode(String code, String cmd, String ext, Map<String, String> envs) {
-        return executor.execute(rootPath, code, cmd, ext, envs);
+        return executor.executeCode(rootPath, code, cmd, ext, envs);
     }
 
     private void ensureDir() {

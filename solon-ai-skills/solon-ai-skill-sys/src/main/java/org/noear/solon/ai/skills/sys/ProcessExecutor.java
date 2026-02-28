@@ -43,8 +43,8 @@ import java.util.concurrent.TimeUnit;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class CliExecutor {
-    private static final Logger LOG = LoggerFactory.getLogger(CliExecutor.class);
+public class ProcessExecutor {
+    private static final Logger LOG = LoggerFactory.getLogger(ProcessExecutor.class);
 
     private int maxOutputSize = 1024 * 1024; // 默认 1MB
     private int timeoutSeconds = 30;         // 默认 30s
@@ -89,17 +89,38 @@ public class CliExecutor {
         this.outputCharset = outputCharset;
     }
 
-    public String execute(Path rootPath, String code, String cmd, String ext, Map<String, String> envs) {
+    /**
+     * 执行代码脚本（持久化为临时文件后执行）
+     */
+    public String executeCode(Path rootPath, String code, String cmd, String ext, Map<String, String> envs) {
         Path tempScript = null;
-
         try {
-            tempScript = Files.createTempFile(rootPath, "ai_script_", ext);
+            // 1. 持久化脚本
+            tempScript = Files.createTempFile(rootPath, "_script_", ext);
             Files.write(tempScript, code.getBytes(scriptCharset));
 
-            // 1. 优化：更稳健的命令构建
+            // 2. 构建完整命令（处理带空格的命令字符串）
             List<String> fullCmd = new ArrayList<>(Arrays.asList(cmd.split("\\s+")));
             fullCmd.add(tempScript.toAbsolutePath().toString());
 
+            return executeCmd(rootPath, fullCmd, envs);
+        } catch (Exception e) {
+            LOG.error("Code execution failed", e);
+            return "代码执行失败: " + e.getMessage();
+        } finally {
+            if (tempScript != null) {
+                try {
+                    Files.deleteIfExists(tempScript);
+                } catch (IOException ignored) {}
+            }
+        }
+    }
+
+    /**
+     * 执行完整命令，支持实时输出回调
+     */
+    public String executeCmd(Path rootPath, List<String> fullCmd, Map<String, String> envs) {
+        try {
             ProcessBuilder pb = new ProcessBuilder(fullCmd);
             pb.directory(rootPath.toFile());
             pb.redirectErrorStream(true);
@@ -110,8 +131,7 @@ public class CliExecutor {
 
             Process process = pb.start();
 
-
-            // 2. 优化：改用字符缓冲区读取，防止单行过长撑爆内存
+            // 1. 异步读取输出
             CompletableFuture<String> outputFuture = RunUtil.async(() -> {
                 StringBuilder sb = new StringBuilder();
                 try (InputStreamReader reader = new InputStreamReader(process.getInputStream(), outputCharset)) {
@@ -126,7 +146,7 @@ public class CliExecutor {
                                 sb.append(buffer, 0, remaining);
                             }
                             sb.append("\n... [输出已截断]");
-                            process.destroyForcibly(); // 强制结束
+                            process.destroyForcibly();
                             break;
                         }
                     }
@@ -136,28 +156,19 @@ public class CliExecutor {
                 return sb.toString();
             });
 
-
-            // 3. 超时控制
-            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            if (!finished) {
+            // 2. 超时控制
+            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 return "执行超时：运行时间超过 " + timeoutSeconds + " 秒。";
             }
 
-            // 等待读取线程结束（给一点点缓冲时间处理最后剩余的 buffer）
+            // 3. 获取输出结果
             String result = outputFuture.get(1, TimeUnit.SECONDS).trim();
             return result.isEmpty() ? "执行成功" : result;
 
         } catch (Exception e) {
-            LOG.error("Execution failed", e); // 修正拼写
-            return "异常失败: " + e.getMessage();
-        } finally {
-            if (tempScript != null) {
-                try {
-                    Files.deleteIfExists(tempScript);
-                } catch (IOException ignored) {
-                }
-            }
+            LOG.error("Process execution failed", e);
+            return "系统失败: " + e.getMessage();
         }
     }
 }
