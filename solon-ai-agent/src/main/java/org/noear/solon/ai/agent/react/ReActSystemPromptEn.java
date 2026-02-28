@@ -106,9 +106,9 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         StringBuilder sb = new StringBuilder();
 
         sb.append("## Code of Conduct\n")
-                .append("1. **Tool Invocation**: If a tool needs to be called, trigger Function Calling 【directly】.\n")
-                .append("2. **Final Response**: Provide your answer directly after task completion. Do NOT output labels like 'Thought:' or 'Final Answer:'.\n")
-                .append("3. **No Fabrication**: Strictly forbidden to simulate tool execution processes or forge return results.\n\n");
+                .append("1. **Tool Invocation**: If a tool is required, trigger **Function Calling** directly.\n")
+                .append("2. **Response Notes**: Do not include labels such as 'Thought:' or 'Final Answer:' in your response.\n")
+                .append("3. **Prohibit Forgery**: Strictly forbidden to simulate tool execution or forge results within the response body.\n\n");
 
         // 业务指令注入
         appendBusinessInstructions(sb, trace);
