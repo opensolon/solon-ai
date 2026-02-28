@@ -145,7 +145,7 @@ public class ReActAgentHitlTest {
             }
 
             @Override
-            public void onObservation(ReActTrace trace, String toolName, String result) {
+            public void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
                 log.append("[onObservation] ");
             }
 

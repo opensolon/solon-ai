@@ -16,7 +16,11 @@
 * 新增 solon-ai-skill-toolgateway
 * 优化 solon-ai-skill-memory MemSkill 取消 userId 参数，自动从上下文中取
 * 添加 solon-ai-core __sessionId 自动作为工具上下文和提示词属性（用于传递会话id）
+* 添加 solon-ai-core ChatConfig.getReasoningFieldName 自动处理，兼容 deepseek 新的变化
+* 添加 solon-ai-agent ReActInterceptor.onObservation durationMs 参数（时长毫秒数）
+* 添加 solon-ai-agent ReActChunk isNormal(用于识别是否为正常结束)
 * 添加 solon-ai-skill-memory MemSkill 支持会话隔离与共享
+* 调整 solon-ai-agent ReActSystemPromptCn 去掉原生模式的行为准则（清爽些，减少逻辑混乱）
 
 ### 3.9.4
 

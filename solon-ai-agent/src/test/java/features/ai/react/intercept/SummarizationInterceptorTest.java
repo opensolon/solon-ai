@@ -86,7 +86,7 @@ public class SummarizationInterceptorTest {
         messageList.add(ChatMessage.ofAssistant("Thought 4"));
         messageList.add(ChatMessage.ofAssistant("Thought 5"));
 
-        interceptor.onObservation(trace, "tool_1", "Result");
+        interceptor.onObservation(trace, "tool_1", "Result", 0L);
 
         ArgumentCaptor<List> captor = ArgumentCaptor.forClass(List.class);
         verify(workingMemory).replaceMessages(captor.capture());
@@ -120,7 +120,7 @@ public class SummarizationInterceptorTest {
         messageList.add(ChatMessage.ofSystem("System 2 (Old Plan)")); // 模拟被错误存入的消息
         for (int i = 0; i < 10; i++) messageList.add(ChatMessage.ofAssistant("History " + i));
 
-        interceptor.onObservation(trace, "any", "any");
+        interceptor.onObservation(trace, "any", "any", 0L);
 
         ArgumentCaptor<List<ChatMessage>> captor = ArgumentCaptor.forClass(List.class);
         verify(workingMemory).replaceMessages(captor.capture());
@@ -145,7 +145,7 @@ public class SummarizationInterceptorTest {
             messageList.add(ChatMessage.ofAssistant("Irrelevant Step " + i));
         }
 
-        interceptor.onObservation(trace, "any", "any");
+        interceptor.onObservation(trace, "any", "any", 0L);
 
         ArgumentCaptor<List<ChatMessage>> captor = ArgumentCaptor.forClass(List.class);
         verify(workingMemory).replaceMessages(captor.capture());
@@ -166,7 +166,7 @@ public class SummarizationInterceptorTest {
         messageList.add(ChatMessage.ofUser("Task"));
         messageList.add(ChatMessage.ofAssistant("Response"));
 
-        interceptor.onObservation(trace, "any", "any");
+        interceptor.onObservation(trace, "any", "any", 0L);
 
         // 不应调用 replaceMessages
         verify(workingMemory, never()).replaceMessages(any());
@@ -189,7 +189,7 @@ public class SummarizationInterceptorTest {
         // 此时 size = 22, maxMessages = 6, targetIdx = 16
         // 即使没有原子对齐，16 也远大于 (1 + 1)
 
-        interceptor.onObservation(trace, "any", "any");
+        interceptor.onObservation(trace, "any", "any", 0L);
 
         ArgumentCaptor<List<ChatMessage>> captor = ArgumentCaptor.forClass(List.class);
         verify(workingMemory).replaceMessages(captor.capture());
