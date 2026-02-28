@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.flow.intercept.FlowInterceptor;
 import org.noear.solon.lang.Preview;
 
+import java.time.Duration;
 import java.util.Map;
 
 /**
@@ -84,7 +85,7 @@ public interface ReActInterceptor extends AgentInterceptor, FlowInterceptor, Cha
     /**
      * 观察节点：工具执行返回结果 (Observation) 后触发
      */
-    default void onObservation(ReActTrace trace, String toolName, String result) {
+    default void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
     }
 
     /**

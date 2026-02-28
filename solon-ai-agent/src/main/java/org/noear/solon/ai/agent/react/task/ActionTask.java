@@ -43,6 +43,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.StringReader;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -119,6 +120,7 @@ public class ActionTask implements NamedTaskComponent {
 
         // 4. 执行工具
         final String result;
+        long start = System.currentTimeMillis();
         if (Assert.isEmpty(trace.getLastObservation())) {
             result = executeTool(trace, toolName, args);
         } else {
@@ -129,12 +131,13 @@ public class ActionTask implements NamedTaskComponent {
         if (Agent.ID_END.equals(trace.getRoute())) {
             return null;
         }
+        final long durationMs = System.currentTimeMillis() - start;
 
         trace.setLastObservation(result);
 
         // 5. 触发 Observation 拦截 (内容是纯的)
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onObservation(trace, toolName, result);
+            item.target.onObservation(trace, toolName, result, durationMs);
         }
 
         if (trace.isPending()) {
