@@ -107,7 +107,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
         sb.append("## Code of Conduct\n")
                 .append("1. **Tool Invocation**: If a tool needs to be called, trigger Function Calling 【directly】.\n")
-                .append("2. **Direct Response**: Provide your answer directly after task completion. Do NOT output labels like 'Thought:' or 'Final Answer:'.\n")
+                .append("2. **Final Response**: Provide your answer directly after task completion. Do NOT output labels like 'Thought:' or 'Final Answer:'.\n")
                 .append("3. **No Fabrication**: Strictly forbidden to simulate tool execution processes or forge return results.\n\n");
 
         // 业务指令注入
