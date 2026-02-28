@@ -48,7 +48,7 @@ public class ProcessExecutor {
     private static final Logger LOG = LoggerFactory.getLogger(ProcessExecutor.class);
 
     private int maxOutputSize = 1024 * 1024; // 默认 1MB
-    private int timeoutSeconds = 30;         // 默认 30s
+    private int timeoutSeconds = 120;        // 默认 120s
     private Charset scriptCharset = StandardCharsets.UTF_8;
     private Charset outputCharset = StandardCharsets.UTF_8;
 
