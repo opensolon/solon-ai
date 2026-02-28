@@ -124,7 +124,7 @@ public class ShellSkill extends AbsProcessSkill {
      */
     @ToolMapping(name = "list_files", description = "列出当前工作目录下的文件和目录列表")
     public String listFiles() {
-        File[] files = executor.getRootPath().toFile().listFiles();
+        File[] files = rootPath.toFile().listFiles();
         if (files == null) return "空目录";
         StringBuilder sb = new StringBuilder();
         for (File f : files) {

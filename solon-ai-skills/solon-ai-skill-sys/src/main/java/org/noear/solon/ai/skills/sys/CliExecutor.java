@@ -26,7 +26,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -47,26 +46,10 @@ import java.util.concurrent.TimeUnit;
 public class CliExecutor {
     private static final Logger LOG = LoggerFactory.getLogger(CliExecutor.class);
 
-    private final Path rootPath;
-
     private int maxOutputSize = 1024 * 1024; // 默认 1MB
     private int timeoutSeconds = 30;         // 默认 30s
     private Charset scriptCharset = StandardCharsets.UTF_8;
     private Charset outputCharset = StandardCharsets.UTF_8;
-
-    public CliExecutor(String workDir) {
-        this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
-        ensureDir();
-    }
-
-    public CliExecutor(Path workDir) {
-        this.rootPath = workDir;
-        ensureDir();
-    }
-
-    public Path getRootPath() {
-        return rootPath;
-    }
 
     public int getMaxOutputSize() {
         return maxOutputSize;
@@ -106,8 +89,9 @@ public class CliExecutor {
         this.outputCharset = outputCharset;
     }
 
-    public String execute(String code, String cmd, String ext, Map<String, String> envs) {
+    public String execute(Path rootPath, String code, String cmd, String ext, Map<String, String> envs) {
         Path tempScript = null;
+
         try {
             tempScript = Files.createTempFile(rootPath, "ai_script_", ext);
             Files.write(tempScript, code.getBytes(scriptCharset));
@@ -174,16 +158,6 @@ public class CliExecutor {
                 } catch (IOException ignored) {
                 }
             }
-        }
-    }
-
-    private void ensureDir() {
-        try {
-            if (!Files.exists(rootPath)) {
-                Files.createDirectories(rootPath);
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to initialize work directory: " + rootPath, e);
         }
     }
 }

@@ -18,6 +18,7 @@ package org.noear.solon.ai.skills.sys;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.lang.Preview;
 
+import java.io.IOException;
 import java.nio.file.*;
 import java.util.Map;
 
@@ -32,14 +33,18 @@ import java.util.Map;
  */
 @Preview("3.9.1")
 public abstract class AbsProcessSkill extends AbsSkill {
-    protected final CliExecutor executor;
+
+    protected final Path rootPath;
+    protected final CliExecutor executor = new CliExecutor();
 
     public AbsProcessSkill(String workDir) {
-        executor = new CliExecutor(workDir);
+        this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
+        ensureDir();
     }
 
     public AbsProcessSkill(Path workDir) {
-        executor = new CliExecutor(workDir);
+        this.rootPath = workDir;
+        ensureDir();
     }
 
     /**
@@ -57,6 +62,16 @@ public abstract class AbsProcessSkill extends AbsSkill {
     }
 
     protected String runCode(String code, String cmd, String ext, Map<String, String> envs) {
-        return executor.execute(code, cmd, ext, envs);
+        return executor.execute(rootPath, code, cmd, ext, envs);
+    }
+
+    private void ensureDir() {
+        try {
+            if (!Files.exists(rootPath)) {
+                Files.createDirectories(rootPath);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to initialize work directory: " + rootPath, e);
+        }
     }
 }
