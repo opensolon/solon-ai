@@ -86,7 +86,7 @@ public class CliSkill extends AbsProcessSkill {
         try {
             Path relative;
             if (path.isAbsolute()) {
-                relative = rootPath.relativize(path);
+                relative = executor.getRootPath().relativize(path);
             } else {
                 relative = path;
             }
@@ -250,7 +250,7 @@ public class CliSkill extends AbsProcessSkill {
 
 
         sb.append("##### 3. 关联技能索引 (Connected Skills)\n");
-        sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(rootPath, ".", false)).append("\n");
+        sb.append("- **盒子本地技能**: ").append(scanSkillSpecs(executor.getRootPath(), ".", false)).append("\n");
         if (!skillPools.isEmpty()) {
             skillPools.forEach((k, v) -> {
                 // 对于池路径，启用“大列表折叠”逻辑
@@ -288,7 +288,7 @@ public class CliSkill extends AbsProcessSkill {
         sb.append("- **只读保护**: 严禁对以 @ 开头的路径执行任何写入（write/edit）工具。\n");
         sb.append("- **确定性路径**: 严禁操作未经 list_files或grep_search 确认过的路径。严禁假设文件存在。\n");
 
-        injectRootInstructions(sb, rootPath, "#### 盒子业务导向 (Box Orientation)\n");
+        injectRootInstructions(sb, executor.getRootPath(), "#### 盒子业务导向 (Box Orientation)\n");
 
         return sb.toString();
     }
@@ -511,7 +511,7 @@ public class CliSkill extends AbsProcessSkill {
                             String relStr = target.relativize(p).toString().replace("\\", "/");
                             String logicPath = (logicPrefix != null) ?
                                     logicPrefix + "/" + relStr :
-                                    rootPath.relativize(p).toString().replace("\\", "/");
+                                    executor.getRootPath().relativize(p).toString().replace("\\", "/");
 
                             return prefix + logicPath + suffix + sizeSuffix + (isSkill ? " (Skill)" : "");
                         } catch (IOException e) {
@@ -644,7 +644,7 @@ public class CliSkill extends AbsProcessSkill {
                         if (line.contains(query)) {
                             String displayPath = (logicPrefix != null) ?
                                     logicPrefix + "/" + target.relativize(file).toString() :
-                                    rootPath.relativize(file).toString();
+                                    executor.getRootPath().relativize(file).toString();
 
                             String trimmedLine = line.trim();
                             if (trimmedLine.length() > 500) trimmedLine = trimmedLine.substring(0, 500) + "...";
@@ -700,7 +700,7 @@ public class CliSkill extends AbsProcessSkill {
                     String relPathStr = target.relativize(file).toString().replace("\\", "/");
                     String displayPath = (pathPrefix != null) ?
                             pathPrefix + "/" + relPathStr :
-                            rootPath.relativize(file).toString().replace("\\", "/");
+                            executor.getRootPath().relativize(file).toString().replace("\\", "/");
 
                     // 同步优化 3: 增加文件大小感知
                     long size = attrs.size();
@@ -813,18 +813,18 @@ public class CliSkill extends AbsProcessSkill {
 
 
     public CliSkill scriptCharset(Charset scriptCharset) {
-        this.scriptCharset = scriptCharset;
+        executor.setScriptCharset(scriptCharset);
         return this;
     }
 
     public CliSkill outputCharset(Charset outputCharset) {
-        this.outputCharset = outputCharset;
+        executor.setOutputCharset(outputCharset);
         return this;
     }
 
     private Path resolvePathExtended(String pStr) {
         String clearPath = (pStr != null && pStr.startsWith("./")) ? pStr.substring(2) : pStr;
-        if (clearPath == null || clearPath.isEmpty() || ".".equals(clearPath)) return rootPath;
+        if (clearPath == null || clearPath.isEmpty() || ".".equals(clearPath)) return executor.getRootPath();
         if (clearPath.startsWith("@")) {
             for (Map.Entry<String, Path> e : skillPools.entrySet()) {
                 if (clearPath.startsWith(e.getKey())) {
@@ -838,8 +838,8 @@ public class CliSkill extends AbsProcessSkill {
 
     private Path resolvePath(String pathStr) {
         String cleanPath = (pathStr != null && pathStr.startsWith("./")) ? pathStr.substring(2) : pathStr;
-        Path p = rootPath.resolve(cleanPath).normalize();
-        if (!p.startsWith(rootPath)) {
+        Path p = executor.getRootPath().resolve(cleanPath).normalize();
+        if (!p.startsWith(executor.getRootPath())) {
             // 报错信息更明确，强化边界意识
             throw new SecurityException("权限拒绝：检测到路径越界尝试。你当前仅被允许操作盒子目录: " + boxId);
         }
