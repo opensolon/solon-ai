@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * 外部命令行执行器
@@ -92,7 +93,7 @@ public class ProcessExecutor {
     /**
      * 执行代码脚本（持久化为临时文件后执行）
      */
-    public String executeCode(Path rootPath, String code, String cmd, String ext, Map<String, String> envs) {
+    public String executeCode(Path rootPath, String code, String cmd, String ext, Map<String, String> envs, Consumer<String> onOutput) {
         Path tempScript = null;
         try {
             // 1. 持久化脚本
@@ -103,7 +104,7 @@ public class ProcessExecutor {
             List<String> fullCmd = new ArrayList<>(Arrays.asList(cmd.split("\\s+")));
             fullCmd.add(tempScript.toAbsolutePath().toString());
 
-            return executeCmd(rootPath, fullCmd, envs);
+            return executeCmd(rootPath, fullCmd, envs, onOutput);
         } catch (Exception e) {
             LOG.error("Code execution failed", e);
             return "代码执行失败: " + e.getMessage();
@@ -119,7 +120,7 @@ public class ProcessExecutor {
     /**
      * 执行完整命令，支持实时输出回调
      */
-    public String executeCmd(Path rootPath, List<String> fullCmd, Map<String, String> envs) {
+    public String executeCmd(Path rootPath, List<String> fullCmd, Map<String, String> envs, Consumer<String> onOutput) {
         try {
             ProcessBuilder pb = new ProcessBuilder(fullCmd);
             pb.directory(rootPath.toFile());
@@ -138,6 +139,12 @@ public class ProcessExecutor {
                     char[] buffer = new char[4096];
                     int n;
                     while ((n = reader.read(buffer)) != -1) {
+
+                        if (onOutput != null) {
+                            String fragment = new String(buffer, 0, n);
+                            onOutput.accept(fragment);
+                        }
+
                         if (sb.length() + n < maxOutputSize) {
                             sb.append(buffer, 0, n);
                         } else {

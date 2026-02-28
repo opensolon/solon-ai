@@ -21,6 +21,7 @@ import org.noear.solon.lang.Preview;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * 外部进程执行基类
@@ -62,7 +63,11 @@ public abstract class AbsProcessSkill extends AbsSkill {
     }
 
     protected String runCode(String code, String cmd, String ext, Map<String, String> envs) {
-        return executor.executeCode(rootPath, code, cmd, ext, envs);
+        return executor.executeCode(rootPath, code, cmd, ext, envs, null);
+    }
+
+    protected String runCode(String code, String cmd, String ext, Map<String, String> envs, Consumer<String> onOutput) {
+        return executor.executeCode(rootPath, code, cmd, ext, envs, onOutput);
     }
 
     private void ensureDir() {
