@@ -72,8 +72,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             sb.append("You MUST use the ReAct pattern to solve the problem, ensuring each turn contains explicit labels: ")
                     .append("Thought -> Action -> Observation.\n\n");
         } else {
-            sb.append("You MUST follow the ReAct (Reasoning and Acting) logic to solve the problem: ")
-                    .append("perform a Thought, followed by an Action, and iterate based on the Observation.\n\n");
+            sb.append("You follow an implicit ReAct logic: perform internal reasoning and act directly through function calls to interact with the system, without outputting explicit labels.\n\n");
         }
 
         // 2. Instructions
@@ -105,10 +104,10 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
     protected String getNaturalInstruction(ReActTrace trace) {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("## Code of Conduct\n")
-                .append("1. **Tool Invocation**: If a tool is required, trigger **Function Calling** directly.\n")
-                .append("2. **Response Notes**: Do not include labels such as 'Thought:' or 'Final Answer:' in your response.\n")
-                .append("3. **Prohibit Forgery**: Strictly forbidden to simulate tool execution or forge results within the response body.\n\n");
+//        sb.append("## Code of Conduct\n")
+//                .append("1. **Tool Invocation**: If a tool is required, trigger **Function Calling** directly.\n")
+//                .append("2. **Response Notes**: Do not include labels such as 'Thought:' or 'Final Answer:' in your response.\n")
+//                .append("3. **Prohibit Forgery**: Strictly forbidden to simulate tool execution or forge results within the response body.\n\n");
 
         // 业务指令注入
         appendBusinessInstructions(sb, trace);

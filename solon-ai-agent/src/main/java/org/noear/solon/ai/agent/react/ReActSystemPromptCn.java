@@ -69,8 +69,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
             sb.append("你必须使用 ReAct 模式解决问题，每一轮推理必须包含显式的标签：")
                     .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
         } else {
-            sb.append("你必须遵循 ReAct（推理与行动）逻辑解决问题：")
-                    .append("先进行 Thought（思考），再执行 Action（行动），并依据 Observation（观察）结果进行迭代。\n\n");
+            sb.append("你遵循隐含的 ReAct 逻辑：内部思考后直接行动，通过函数调用与系统交互，无需输出标签。\n\n");
         }
 
         // 2. 注入指令集（含格式、准则、示例）
@@ -102,10 +101,10 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
     protected String getNaturalInstruction(ReActTrace trace) {
         StringBuilder sb = new StringBuilder();
 
-        sb.append("## 行为准则\n")
-                .append("1. **工具调用**：如果需要调用工具，请【直接】触发函数调用（Function Calling）。\n")
-                .append("2. **回复注意**：回复时，不要输出 'Thought:' 或 'Final Answer:' 等标签。\n")
-                .append("3. **禁止伪造**：严禁在正文中模拟工具执行过程或伪造返回结果。\n\n");
+//        sb.append("## 行为准则\n")
+//                .append("1. **工具调用**：如果需要调用工具，请【直接】触发函数调用（Function Calling）。\n")
+//                .append("2. **回复注意**：回复时，不要输出 'Thought:' 或 'Final Answer:' 等标签。\n")
+//                .append("3. **禁止伪造**：严禁在正文中模拟工具执行过程或伪造返回结果。\n\n");
 
         // 业务指令注入
         appendBusinessInstructions(sb, trace);
