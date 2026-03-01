@@ -24,6 +24,7 @@ import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
@@ -52,12 +53,14 @@ public class ClaudeChatDialect extends AbstractChatDialect {
 
     /**
      * 匹配检测
+     *
      * @param config 聊天配置
      */
     @Override
     public boolean matched(ChatConfig config) {
         return "claude".equals(config.getProvider()) ||
-                "anthropic".equals(config.getProvider()) ;
+                "anthropic".equals(config.getProvider()) ||
+                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/v1/messages"));
     }
 
     @Override
@@ -99,13 +102,14 @@ public class ClaudeChatDialect extends AbstractChatDialect {
 
     /**
      * 构建 Messages 规范的请求体
-     * @author oisin lu
-     * @date 2026年1月27日
+     *
      * @param config   聊天配置
      * @param options  聊天选项
      * @param messages 对话消息列表
      * @param isStream 是否使用流式模式
      * @return 规范的请求体
+     * @author oisin lu
+     * @date 2026年1月27日
      */
     @Override
     public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {

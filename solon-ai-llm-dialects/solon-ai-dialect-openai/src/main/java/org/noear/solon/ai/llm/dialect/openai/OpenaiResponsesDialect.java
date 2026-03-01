@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.core.util.Assert;
 
 import java.util.List;
 import java.util.Map;
@@ -55,7 +56,8 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "openai-responses".equals(config.getProvider());
+        return "openai-responses".equals(config.getProvider()) ||
+                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("v1/responses"));
     }
 
     /**

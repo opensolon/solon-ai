@@ -22,6 +22,7 @@ import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 import org.slf4j.Logger;
@@ -75,7 +76,8 @@ public class GeminiChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "gemini".equals(config.getProvider());
+        return "gemini".equals(config.getProvider()) ||
+                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().contains("/v1beta/models/") && config.getApiUrl().endsWith("generateContent"));
     }
 
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
