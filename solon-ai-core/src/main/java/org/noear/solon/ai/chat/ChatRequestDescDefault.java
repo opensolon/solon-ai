@@ -141,14 +141,14 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 originalPrompt.attrs().putAll(options.toolContext());
             }
 
+            for (RankEntity<ChatInterceptor> item : options.interceptors()) {
+                item.target.onPrepare(session, options, originalPrompt, instructionBuilder);
+            }
+
             StringBuilder skillsInstruction = SkillUtil.activeSkills(options, originalPrompt, new StringBuilder());
             if (skillsInstruction.length() > 0) {
                 instructionBuilder.append("\n");
                 instructionBuilder.append(skillsInstruction);
-            }
-
-            for (RankEntity<ChatInterceptor> item : options.interceptors()) {
-                item.target.onPrepare(session, options, originalPrompt, instructionBuilder);
             }
 
             if (instructionBuilder.length() > 0) {
