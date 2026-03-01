@@ -314,16 +314,25 @@ public class SupervisorTask implements NamedTaskComponent {
         int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
+                final ChatResponse response;
+
                 if(trace.getOptions().getStreamSink() == null) {
-                    return req.call();
+                    response = req.call();
                 } else {
-                    return req.stream()
+                    response = req.stream()
                             .doOnNext(resp -> {
                                 trace.getOptions().getStreamSink().next(
                                         new SupervisorChunk(node, trace, resp));
                             })
                             .blockLast();
                 }
+
+                if (response.hasChoices() == false) {
+                    //触发重试
+                    throw new IllegalStateException("The LLM did not return");
+                }
+
+                return response;
             } catch (Exception e) {
                 if (i == maxRetries - 1) throw new RuntimeException("Supervisor call failed", e);
                 LOG.warn("Supervisor call failed, retrying ({}/{})...", i + 1, maxRetries);

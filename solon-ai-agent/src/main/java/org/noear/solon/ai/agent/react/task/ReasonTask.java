@@ -402,14 +402,23 @@ public class ReasonTask implements NamedTaskComponent {
 
         for (int i = 0; i <= maxRetries; i++) { // 注意是 <=，确保至少执行一次
             try {
+                final ChatResponse response;
+
                 if (trace.getOptions().getStreamSink() != null) {
-                    return req.stream().doOnNext(resp -> {
+                     response = req.stream().doOnNext(resp -> {
                         trace.getOptions().getStreamSink()
                                 .next(new ReasonChunk(node, trace, resp));
                     }).blockLast();
                 } else {
-                    return req.call();
+                    response = req.call();
                 }
+
+                if (response.hasChoices() == false) {
+                    //触发重试
+                    throw new IllegalStateException("The LLM did not return");
+                }
+
+                return response;
             } catch (Throwable e) {
                 lastException = e;
                 if (i < maxRetries) {

@@ -304,17 +304,22 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     private AssistantMessage doCall(SimpleTrace trace, AgentSession session, Prompt finalPrompt, ChatRequestDesc chatReq) throws Throwable {
         if (chatReq != null) {
             // chatModel 处理
-            ChatResponse response;
+            final ChatResponse response;
 
-            if(trace.getOptions().getStreamSink() == null){
+            if (trace.getOptions().getStreamSink() == null) {
                 response = chatReq.call();
             } else {
                 response = chatReq.stream()
-                        .doOnNext(resp->{
+                        .doOnNext(resp -> {
                             trace.getOptions().getStreamSink().next(
-                                    new ChatChunk( trace, resp));
+                                    new ChatChunk(trace, resp));
                         })
                         .blockLast();
+            }
+
+            if (response.hasChoices() == false) {
+                //触发重试
+                throw new IllegalStateException("The LLM did not return");
             }
 
             final AssistantMessage responseMessage;
