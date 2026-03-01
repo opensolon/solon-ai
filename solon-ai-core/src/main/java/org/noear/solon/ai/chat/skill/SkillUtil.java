@@ -77,6 +77,12 @@ public class SkillUtil {
      */
     private static void injectSkillInstruction(Skill skill, Prompt prompt, StringBuilder combinedInstruction) {
         String ins = skill.getInstruction(prompt);
+
+        if (Assert.isEmpty(ins) && Assert.isEmpty(skill.description())) {
+            //如果指令为 null，不展示（只作工具集用）
+            return;
+        }
+
         Collection<FunctionTool> tools = skill.getTools(prompt);
 
         // 1. 如果有工具，进行元信息染色（借鉴 MCP 思想）
