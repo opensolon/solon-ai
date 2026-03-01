@@ -115,19 +115,10 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
                 .append("- Note: Do not terminate prematurely; ensure necessary expert input is obtained.\n");
 
         // F. Custom Business Logic: 注入增量业务指令
-        if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
+        if (instructionProvider != null) {
             sb.append("\n## Core Task Instructions\n");
-
             // Agent-level instructions
-            if (instructionProvider != null) {
-                sb.append(instructionProvider.apply(trace)).append("\n");
-            }
-
-            // Skill-level instructions (Add a sub-header for better focus)
-            if (trace.getOptions().getSkillInstruction() != null) {
-                sb.append("### Supplemental Guidelines\n");
-                sb.append(trace.getOptions().getSkillInstruction()).append("\n");
-            }
+            sb.append(instructionProvider.apply(trace)).append("\n");
             sb.append("\n");
         }
 

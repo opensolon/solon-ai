@@ -175,19 +175,10 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
     }
 
     private void appendBusinessInstructions(StringBuilder sb, ReActTrace trace) {
-        if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
+        if (instructionProvider != null) {
             sb.append("## Core Task Instructions\n");
-
             // Agent-level instructions
-            if (instructionProvider != null) {
-                sb.append(instructionProvider.apply(trace)).append("\n");
-            }
-
-            // Skill-level instructions (Add a sub-header for better focus)
-            if (trace.getOptions().getSkillInstruction() != null) {
-                sb.append("### Supplemental Guidelines\n");
-                sb.append(trace.getOptions().getSkillInstruction()).append("\n");
-            }
+            sb.append(instructionProvider.apply(trace)).append("\n");
             sb.append("\n");
         }
     }

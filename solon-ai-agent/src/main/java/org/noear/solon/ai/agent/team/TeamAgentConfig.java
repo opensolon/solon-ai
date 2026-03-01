@@ -154,16 +154,23 @@ public class TeamAgentConfig implements NonSerializable {
     public String getOutputKey() { return outputKey; }
 
     public String getSystemPromptFor(TeamTrace trace, FlowContext context) {
-        String raw = systemPrompt.getSystemPrompt(trace);
-
-        if (context == null || raw == null) {
-            return raw;
+        String prompt = systemPrompt.getSystemPrompt(trace);
+        if (prompt == null) {
+            return prompt;
         }
 
-        // 动态渲染模板（如解析 #{user_name}）
-        String finalPrompt = SnelUtil.render(raw, context.vars());
+        if (context != null) {
+            // 动态渲染模板（如解析 #{user_name}）
+            prompt = SnelUtil.render(prompt, context.vars());
+        }
 
-        return finalPrompt;
+        // Skill 级指令（增加一个子标题，强化感知）
+        if (trace.getOptions().getSkillInstruction() != null) {
+            //sb.append("\n## 补充业务准则\n");
+            prompt = prompt + "\n" + trace.getOptions().getSkillInstruction() + "\n";
+        }
+
+        return prompt;
     }
 
     public Locale getLocale() { return systemPrompt.getLocale(); }

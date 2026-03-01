@@ -92,11 +92,11 @@ public class SkillUtil {
             combinedInstruction.append("\n---\n"); // 使用分割线开启独立空间
 
             // 技能标题行：### [Skill: Name] Description
-            combinedInstruction.append("### [Skill: ").append(skill.name()).append("]");
+            combinedInstruction.append("# [Skill: ").append(skill.name()).append("]");
             if (Utils.isNotEmpty(skill.description())) {
                 combinedInstruction.append(" - ").append(skill.description());
             }
-            combinedInstruction.append("\n\n");
+            combinedInstruction.append("\n<Skill:").append(skill.name()).append(">\n\n");
 
             // 注入技能特有的指令（如数据库结构、API 限制等）
             if (Assert.isNotEmpty(ins)) {
@@ -111,6 +111,7 @@ public class SkillUtil {
                 combinedInstruction.append("> **工具作用域**: 此技能指令适用于以下工具的调用: ").append(toolNames).append("\n");
             }
 
+            combinedInstruction.append("\n\n</Skill:").append(skill.name()).append(">\n");
             combinedInstruction.append("---\n"); // 闭合分割线
         }
     }

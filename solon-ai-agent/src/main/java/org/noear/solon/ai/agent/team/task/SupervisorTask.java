@@ -327,7 +327,7 @@ public class SupervisorTask implements NamedTaskComponent {
                             .blockLast();
                 }
 
-                if (response.hasChoices() == false) {
+                if (response.hasChoices() == false && response.isFinished() == false) {
                     //触发重试
                     throw new IllegalStateException("The LLM did not return");
                 }

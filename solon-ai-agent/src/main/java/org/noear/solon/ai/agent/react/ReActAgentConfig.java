@@ -126,15 +126,23 @@ public class ReActAgentConfig {
      * 根据当前上下文获取动态渲染的系统提示词
      */
     public String getSystemPromptFor(ReActTrace trace, FlowContext context) {
-        String raw = systemPrompt.getSystemPrompt(trace);
-        if (context == null || raw == null) {
-            return raw;
+        String prompt = systemPrompt.getSystemPrompt(trace);
+        if (prompt == null) {
+            return prompt;
         }
 
-        // 动态渲染模板（如解析 #{user_name}）
-        String rendered = SnelUtil.render(raw, context.vars());
+        if (context != null) {
+            // 动态渲染模板（如解析 #{user_name}）
+            prompt = SnelUtil.render(prompt, context.vars());
+        }
 
-        return rendered;
+        // Skill 级指令（增加一个子标题，强化感知）
+        if (trace.getOptions().getSkillInstruction() != null) {
+            //sb.append("\n## 补充业务准则\n");
+            prompt = prompt + "\n" + trace.getOptions().getSkillInstruction() + "\n";
+        }
+
+        return prompt;
     }
 
     public Locale getLocale() { return systemPrompt.getLocale(); }
