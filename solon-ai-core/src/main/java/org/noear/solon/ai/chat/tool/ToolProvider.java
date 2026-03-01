@@ -18,14 +18,14 @@ package org.noear.solon.ai.chat.tool;
 import java.util.Collection;
 
 /**
- * 工具提供者
+ * 工具集提供者
  *
  * @author noear
  * @since 3.1
  */
 public interface ToolProvider {
     /**
-     * 获取工具
+     * 获取工具集
      */
     Collection<FunctionTool> getTools();
 }

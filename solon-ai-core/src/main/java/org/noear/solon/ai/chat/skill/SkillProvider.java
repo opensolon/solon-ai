@@ -13,19 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.resource;
+package org.noear.solon.ai.chat.skill;
+
+import org.noear.solon.lang.Preview;
 
 import java.util.Collection;
 
 /**
- * 资源集提供者
+ * 技能集提供者
  *
  * @author noear
- * @since 3.2
+ * @since 3.9.5
  */
-public interface ResourceProvider {
+@Preview("3.9.5")
+public interface SkillProvider {
     /**
-     * 获取资源集
+     * 获取技能集
      */
-    Collection<FunctionResource> getResources();
+    Collection<Skill> getSkills();
 }

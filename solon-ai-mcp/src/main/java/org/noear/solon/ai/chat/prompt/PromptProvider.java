@@ -18,14 +18,14 @@ package org.noear.solon.ai.chat.prompt;
 import java.util.Collection;
 
 /**
- * 提示语提供者
+ * 提示语集提供者
  *
  * @author noear
  * @since 3.2
  */
 public interface PromptProvider {
     /**
-     * 获取提示语
+     * 获取提示语集
      */
     Collection<FunctionPrompt> getPrompts();
 }

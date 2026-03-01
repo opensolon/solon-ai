@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.skill.SkillProvider;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
@@ -226,6 +227,19 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      */
     public T skillAdd(Skill... skills) {
         for (Skill s : skills) {
+            this.skills.put(s.name(), new RankEntity<>(s, 0));
+        }
+
+        return (T) this;
+    }
+
+    /**
+     * 添加技能
+     *
+     * @since 3.9.5
+     */
+    public T skillAdd(SkillProvider skillProvider) {
+        for (Skill s : skillProvider.getSkills()) {
             this.skills.put(s.name(), new RankEntity<>(s, 0));
         }
 
