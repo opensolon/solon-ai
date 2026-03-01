@@ -9,9 +9,8 @@ import org.noear.solon.test.SolonTest;
 @SolonTest
 public class ClaudeTest extends AbsChatTest{
     protected ChatModel.Builder getChatModelBuilder() {
-        return ChatModel.of("")
-                .apiKey("")
-                .provider("claude")
-                .model("");
+        return ChatModel.of("https://api.vip.crond.dev/v1/messages")
+                .apiKey("sk-***")
+                .model("claude-opus-4-6");
     }
 }

@@ -9,9 +9,8 @@ import org.noear.solon.test.SolonTest;
 @SolonTest
 public class GeminiTest extends AbsChatTest{
     protected ChatModel.Builder getChatModelBuilder() {
-        return ChatModel.of("")
-                .apiKey("")
-                .provider("gemini")
-                .model("");
+        return ChatModel.of("https://api.vip.crond.dev/v1beta/models/假流式/gemini-3-flash-preview-cli:generateContent")
+                .apiKey("sk-***")
+                .model("假流式/gemini-3-flash-preview-high-cli");
     }
 }
