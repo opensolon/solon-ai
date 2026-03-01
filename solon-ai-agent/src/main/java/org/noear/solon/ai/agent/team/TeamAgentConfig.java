@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.core.util.IgnoreCaseMap;
 import org.noear.solon.core.util.SnelUtil;
@@ -66,7 +67,7 @@ public class TeamAgentConfig implements NonSerializable {
     private String outputKey;
 
     /** 系统提示词（System Prompt）模板提供者 */
-    private TeamSystemPrompt systemPrompt = TeamSystemPromptCn.getDefault();
+    private AgentSystemPrompt<TeamTrace> systemPrompt = TeamSystemPromptCn.getDefault();
     /** 运行时全局配置选项 */
     private final TeamOptions defaultOptions = new TeamOptions();
 
@@ -82,7 +83,7 @@ public class TeamAgentConfig implements NonSerializable {
     protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) { this.graphAdjuster = graphAdjuster; }
     protected void setFinishMarker(String finishMarker) { this.finishMarker = finishMarker; }
     protected void setOutputKey(String outputKey) { this.outputKey = outputKey; }
-    protected void setSystemPrompt(TeamSystemPrompt promptProvider) {
+    protected void setSystemPrompt(AgentSystemPrompt<TeamTrace> promptProvider) {
         this.systemPrompt = promptProvider;
     }
 

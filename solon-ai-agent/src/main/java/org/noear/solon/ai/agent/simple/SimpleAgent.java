@@ -18,10 +18,7 @@ package org.noear.solon.ai.agent.simple;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentHandler;
-import org.noear.solon.ai.agent.AgentProfile;
-import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.*;
@@ -397,7 +394,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return this;
         }
 
-        public Builder systemPrompt(SimpleSystemPrompt systemPrompt) {
+        public Builder systemPrompt(AgentSystemPrompt<SimpleTrace> systemPrompt) {
             config.setSystemPrompt(systemPrompt);
             return this;
         }

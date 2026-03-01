@@ -15,9 +15,9 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.lang.Preview;
 
-import java.util.Locale;
 import java.util.function.Function;
 
 /**
@@ -30,18 +30,7 @@ import java.util.function.Function;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public interface TeamSystemPrompt {
-    /**
-     * 获取提示词对应的语言环境
-     */
-    Locale getLocale();
-
-    /**
-     * 获取未渲染的原始提示词模板
-     */
-    String getSystemPrompt(TeamTrace trace);
-
-
+public interface TeamSystemPrompt extends AgentSystemPrompt<TeamTrace> {
     /**
      * 获取构建器实例
      */

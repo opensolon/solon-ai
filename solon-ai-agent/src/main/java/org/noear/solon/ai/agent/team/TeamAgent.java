@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.team;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -356,7 +357,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder systemPrompt(TeamSystemPrompt promptProvider) {
+        public Builder systemPrompt(AgentSystemPrompt<TeamTrace> promptProvider) {
             config.setSystemPrompt(promptProvider);
             return this;
         }

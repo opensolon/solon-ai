@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.agent.react.task.*;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -395,7 +396,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        public Builder systemPrompt(ReActSystemPrompt val) {
+        public Builder systemPrompt(AgentSystemPrompt<ReActTrace> val) {
             config.setSystemPrompt(val);
             return this;
         }

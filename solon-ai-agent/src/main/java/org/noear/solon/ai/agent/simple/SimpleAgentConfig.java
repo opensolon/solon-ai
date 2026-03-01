@@ -17,8 +17,8 @@ package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
@@ -52,7 +52,7 @@ public class SimpleAgentConfig {
     /**
      * 系统提示词模板（支持动态注入上下文）
      */
-    private SimpleSystemPrompt systemPrompt = SimpleSystemPrompt.getDefault();
+    private AgentSystemPrompt<SimpleTrace> systemPrompt = SimpleSystemPrompt.getDefault();
     /**
      * 绑定的物理聊天模型
      */
@@ -102,7 +102,7 @@ public class SimpleAgentConfig {
         this.profile = profile;
     }
 
-    protected void setSystemPrompt(SimpleSystemPrompt systemPrompt) {
+    protected void setSystemPrompt(AgentSystemPrompt<SimpleTrace> systemPrompt) {
         this.systemPrompt = systemPrompt;
     }
 

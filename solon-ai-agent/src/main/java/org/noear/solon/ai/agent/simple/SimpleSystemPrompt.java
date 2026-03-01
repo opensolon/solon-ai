@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.simple;
 
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
@@ -28,7 +29,7 @@ import java.util.function.Function;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class SimpleSystemPrompt {
+public class SimpleSystemPrompt implements AgentSystemPrompt<SimpleTrace> {
     private static SimpleSystemPrompt _DEFAULT = new SimpleSystemPrompt(null, null);
 
     public static SimpleSystemPrompt getDefault() {

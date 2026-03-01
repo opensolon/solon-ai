@@ -15,9 +15,9 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.lang.Preview;
 
-import java.util.Locale;
 import java.util.function.Function;
 
 /**
@@ -28,17 +28,7 @@ import java.util.function.Function;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public interface ReActSystemPrompt {
-    /**
-     * 获取语言环境 (默认中文)
-     */
-    Locale getLocale();
-
-    /**
-     * 获取原始提示词模板
-     */
-    String getSystemPrompt(ReActTrace trace);
-
+public interface ReActSystemPrompt extends AgentSystemPrompt<ReActTrace> {
 
     // --- Builder Pattern ---
 

@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentProfile;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
@@ -47,7 +48,7 @@ public class ReActAgentConfig {
     /** 计算图微调器（自定义执行链路） */
     private Consumer<GraphSpec> graphAdjuster;
     /** 提示词模板（默认中文） */
-    private ReActSystemPrompt systemPrompt = ReActSystemPromptCn.getDefault();
+    private AgentSystemPrompt<ReActTrace> systemPrompt = ReActSystemPromptCn.getDefault();
     /** 终止标识符（模型输出此词时停止思考循环） */
     private String finishMarker;
     /** 结果回填 Key */
@@ -78,7 +79,7 @@ public class ReActAgentConfig {
 
     protected void setFinishMarker(String val) { this.finishMarker = val; }
 
-    protected void setSystemPrompt(ReActSystemPrompt val) {
+    protected void setSystemPrompt(AgentSystemPrompt<ReActTrace> val) {
         this.systemPrompt = val;
     }
 
