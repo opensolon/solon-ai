@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept.summarize;
 
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -105,16 +106,24 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
             return null;
         }
 
+        // 仅保留非初心消息进行持久化，避免 RAG 库中充斥重复的初始指令
+        List<ChatMessage> pureExpired = messagesToSummarize.stream()
+                .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
+                .collect(Collectors.toList());
+
+        if (pureExpired.isEmpty()) {
+            return null;
+        }
+
         try {
             // 1. 结构化历史记录
             StringBuilder sb = new StringBuilder();
-            for (ChatMessage m : messagesToSummarize) {
+            for (ChatMessage m : pureExpired) {
                 sb.append(m.getRole().name()).append(": ").append(m.getContent()).append("\n");
             }
             String contentToStore = sb.toString();
 
             // 2. 异步持久化到向量数据库 (冷记忆存入)
-            // 在实际工程中，这里可以关联当前的 traceId 方便后续按对话隔离检索
             Document doc = new Document(contentToStore);
             doc.metadata("sessionId", trace.getSession().getSessionId());
             doc.metadata("agentName", trace.getAgentName());
@@ -123,10 +132,8 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
             vectorRepository.save(doc);
 
             // 3. 返回一个引导性提示
-            // 告知模型：旧细节已存入库，你可以通过特定意图触发检索（如果 Agent 具备 RAG 工具）
-            // 或者简单返回一个标记，配合外部的 RAG 拦截器使用
-            return ChatMessage.ofSystem("--- [历史明细已归档至向量库] ---\n" +
-                    "注：若需回溯更早的执行细节，请调用知识库检索工具。");
+            return ChatMessage.ofSystem("--- [Historical details archived to vector store] ---\n" +
+                    "Note: Use recall_history tool if you need to look back at earlier specific execution steps.");
 
         } catch (Exception e) {
             log.error("Failed to archive messages to vector store", e);

@@ -69,6 +69,11 @@ public interface ChatMessage extends Serializable {
     ChatMessage addMetadata(String key, Object value);
 
     /**
+     * 是否有元数据
+     */
+    boolean hasMetadata(String key);
+
+    /**
      * 是否思考中
      */
     default boolean isThinking() {

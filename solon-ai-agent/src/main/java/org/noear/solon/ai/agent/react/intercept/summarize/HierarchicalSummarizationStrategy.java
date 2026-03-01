@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept.summarize;
 
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.chat.ChatModel;
@@ -23,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
 
 /**
@@ -37,14 +39,16 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
 
     private final ChatModel chatModel;
 
-    private String promptTemplate =  "你是一个记忆管理专家。请将『旧的摘要』与『新增的执行历史』合并，更新为一个精炼的『全局进度摘要』。\n" +
+    private String promptTemplate = "你是一个记忆管理专家。初始任务目标已在上下文中永久保留，请忽略它们。\n" +
+            "请将『旧的执行摘要』与『新增的过期历史』合并，更新为一个精炼的『当前进度摘要』。\n" +
             "要求：\n" +
-            "1. 保留关键的事实、已确认的数据和最终结论。\n" +
+            "1. 重点提取已确认的数据、当前的逻辑位置和最终结论。\n" +
             "2. 移除重复的思考过程和已失效的尝试。\n" +
             "3. 保持长度在 500 字以内。\n\n" +
             "【旧摘要】：\n%s\n\n" +
             "【新增历史】：\n%s\n\n" +
-            "请输出更新后的全局摘要："; // 提供默认值，并开放 Setter
+            "请输出更新后的进度摘要：";
+
     private int maxSummaryLength = 800;    // 增加长度硬性保护
 
     private static final String SUMMARY_PREFIX = "--- [全局进度滚动摘要 (层级压缩)] ---";
@@ -69,18 +73,23 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
             lastSummary = "";
         }
 
-        if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
+        // 过滤初心，只总结“中间增量”
+        List<ChatMessage> pureExpired = (messagesToSummarize == null) ? new ArrayList<>() :
+                messagesToSummarize.stream()
+                        .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
+                        .collect(Collectors.toList());
+
+        if (pureExpired.isEmpty()) {
             return buildMessage(lastSummary);
         }
 
         try {
             // 1. 提取新过期的流水账
-            String newHistoryText = messagesToSummarize.stream()
+            String newHistoryText = pureExpired.stream()
                     .map(m -> String.format("%s: %s", m.getRole().name(), m.getContent()))
                     .collect(Collectors.joining("\n"));
 
-            // 2. 构造层级合并指令
-            // 我们要求模型基于旧摘要，融合新信息，输出一个新的全局摘要
+            // 2. 构造指令（lastSummary 可能已经包含了之前的进度）
             String prompt = String.format(promptTemplate,
                     (lastSummary.isEmpty() ? "（暂无）" : lastSummary),
                     newHistoryText
@@ -93,18 +102,12 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
                 lastSummary = lastSummary.substring(0, maxSummaryLength) + "...[Truncated]";
             }
 
-            // 4. 更新内部状态，实现层级滚动
+            // 4. 更新内部状态
             trace.setExtra(STRATEGY_LASTSUMMARY_KEY, lastSummary);
 
-            if (log.isDebugEnabled()) {
-                log.debug("Hierarchical summary updated. Length: {}", lastSummary.length());
-            }
-
             return buildMessage(lastSummary);
-
         } catch (Exception e) {
             log.error("Hierarchical summarization failed", e);
-            // 失败时至少返回旧摘要，保证记忆不丢失
             return buildMessage(lastSummary);
         }
     }

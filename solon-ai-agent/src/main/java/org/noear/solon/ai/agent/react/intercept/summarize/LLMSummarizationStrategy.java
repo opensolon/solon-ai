@@ -15,10 +15,12 @@
  */
 package org.noear.solon.ai.agent.react.intercept.summarize;
 
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,31 +58,28 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
         }
 
         try {
-            // 1. 将待总结的消息列表转换为易于理解的文本格式
+            // 1. 过滤初心，只看发生了什么
             String historyText = messagesToSummarize.stream()
+                    .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
                     .map(m -> String.format("[%s]: %s", m.getRole().name().toUpperCase(), m.getContent()))
                     .collect(Collectors.joining("\n"));
 
-            // 2. 构建提示词并调用模型
+            if (Assert.isEmpty(historyText)) return null;
+
+            // 2. 构建提示词
             String requestText = new StringBuilder(prompt.length() + historyText.length() + 20)
                     .append(prompt)
-                    .append("\n\n--- 待总结历史 ---\n")
+                    .append("\n\n--- 执行过程 ---\n")
                     .append(historyText)
                     .toString();
 
-            // 使用简易 chat 接口获取结果
             String summary = chatModel.prompt(requestText).call().getContent();
 
-            if (log.isDebugEnabled()) {
-                log.debug("LLM Summary generated: {} chars", summary.length());
-            }
-
-            // 3. 返回一条包含摘要的系统消息，并带有明显的视觉标记
-            return ChatMessage.ofSystem("--- [历史执行摘要 (基于 LLM 自动生成)] ---\n" + summary);
+            // 3. 返回包含标记的消息
+            return ChatMessage.ofSystem("--- [Execution Summary] ---\n" + summary);
 
         } catch (Exception e) {
             log.error("Failed to generate LLM summary", e);
-            // 如果总结失败，返回 null，拦截器会降级使用 DEFAULT_TRIM_MARKER
             return null;
         }
     }

@@ -15,10 +15,12 @@
  */
 package org.noear.solon.ai.agent.react.intercept.summarize;
 
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,23 +64,22 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
         }
 
         try {
-            // 1. 序列化对话历史，仅保留核心对话内容
+            // 1. 过滤初心，仅对中间过程进行“提纯”
             String historyText = messagesToSummarize.stream()
+                    .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
                     .map(m -> String.format("%s: %s", m.getRole(), m.getContent()))
                     .collect(Collectors.joining("\n"));
 
+            if (Assert.isEmpty(historyText)) return null;
+
             // 2. 调用模型提取关键信息
             String requestText = new StringBuilder(prompt.length() + historyText.length() + 20)
-                    .append(prompt).append("\n\n--- 对话历史 ---\n").append(historyText).toString();
+                    .append(prompt).append("\n\n--- 待提取过程 ---\n").append(historyText).toString();
 
             String keyInfo = chatModel.prompt(requestText).call().getContent();
 
-            if (log.isDebugEnabled()) {
-                log.debug("Key info extracted ({} messages)", messagesToSummarize.size());
-            }
-
             // 3. 将提取到的“干货”作为系统信息注入
-            return ChatMessage.ofSystem("--- [已确认的关键信息看板] ---\n" + keyInfo);
+            return ChatMessage.ofSystem("--- [Confirmed Key Information] ---\n" + keyInfo);
 
         } catch (Exception e) {
             log.error("Failed to extract key info", e);

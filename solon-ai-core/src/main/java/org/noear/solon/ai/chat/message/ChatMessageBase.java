@@ -69,4 +69,13 @@ public abstract class ChatMessageBase<Slf extends ChatMessageBase> implements Ch
 
         return (Slf) this;
     }
+
+    @Override
+    public boolean hasMetadata(String key) {
+        if (metadata == null) {
+            return false;
+        } else {
+            return metadata.containsKey(key);
+        }
+    }
 }

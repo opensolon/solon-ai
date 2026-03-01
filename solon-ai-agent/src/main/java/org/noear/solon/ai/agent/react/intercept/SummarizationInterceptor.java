@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.*;
@@ -40,7 +41,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
     private final SummarizationStrategy summarizationStrategy;
 
     public SummarizationInterceptor(int maxMessages, SummarizationStrategy summarizationStrategy) {
-        this.maxMessages = Math.max(6, maxMessages);
+        this.maxMessages = Math.max(12, maxMessages);
         this.summarizationStrategy = summarizationStrategy;
     }
 
@@ -55,30 +56,33 @@ public class SummarizationInterceptor implements ReActInterceptor {
     @Override
     public void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
-        // 预留缓冲，避免频繁重构
+
+        // 预留缓冲，避免频繁重构 (maxMessages + 触发阈值)
         if (messages.size() <= maxMessages + 2) return;
 
-        // 1. 寻找核心锚点（初心：首个 UserMessage）
-        ChatMessage firstUserMsg = null;
-        int firstUserIdx = -1;
+        // 1. 提取“初心链” (The Original Intent Chain)
+        List<ChatMessage> firstList = new ArrayList<>();
+        int lastFirstIdx = -1;
         for (int i = 0; i < messages.size(); i++) {
-            if (messages.get(i) instanceof UserMessage) {
-                firstUserMsg = messages.get(i);
-                firstUserIdx = i;
-                break;
+            ChatMessage msg = messages.get(i);
+            if (msg.hasMetadata(ReActAgent.META_FIRST)) {
+                firstList.add(msg);
+                lastFirstIdx = i;
             }
         }
 
-        // 2. 确定截断起始点
+        // 2. 确定截断起始点 (Sliding Window Start)
         int targetIdx = messages.size() - maxMessages;
 
         // 3. 增强版原子对齐 (Atomic Alignment)
-        // 确保 Action 和 Observation 不被分离，且不越过 User 任务开始点
-        while (targetIdx > 0 && targetIdx > firstUserIdx + 1) {
+        while (targetIdx > 0 && targetIdx > lastFirstIdx + 1) {
             ChatMessage msg = messages.get(targetIdx);
             if (msg instanceof ToolMessage || isObservation(msg)) {
+                // 如果当前是 Observation，必须向前找对应的 Action
                 targetIdx--;
             } else if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
+                // 如果当前是带工具调用的 Action，尝试看其之后是否对齐
+                // 实际上对齐逻辑主要靠向前回溯
                 targetIdx--;
             } else {
                 break;
@@ -86,9 +90,9 @@ public class SummarizationInterceptor implements ReActInterceptor {
         }
 
         // 4. 语义连贯补齐 (Semantic Completion)
-        // 尝试以“Thought”作为历史的首条消息
-        if (targetIdx > firstUserIdx + 1) {
+        if (targetIdx > lastFirstIdx + 1) {
             ChatMessage prev = messages.get(targetIdx - 1);
+            // 如果前一条是纯文本 Assistant 消息（Thought），包含进来作为上下文起始
             if (prev instanceof AssistantMessage && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())) {
                 targetIdx--;
             }
@@ -97,54 +101,51 @@ public class SummarizationInterceptor implements ReActInterceptor {
         // 5. 重构 WorkingMemory
         List<ChatMessage> compressed = new ArrayList<>();
 
-        // 策略 A: 保持全局系统角色（抓取第一条原始指令）
+        // 策略 A: 保持 SystemMessage (全局约束)
         messages.stream()
-                .filter(m -> m instanceof SystemMessage)
+                .filter(m -> m instanceof SystemMessage && !m.hasMetadata("_first"))
                 .findFirst()
                 .ifPresent(compressed::add);
 
-        // 策略 B: 保持原始任务初心
-        if (firstUserMsg != null && !compressed.contains(firstUserMsg)) {
-            compressed.add(firstUserMsg);
+        // 策略 B: 注入“初心链” (通过 metadata _first 标记的所有历史记录)
+        for (ChatMessage firstMsg : firstList) {
+            if (!compressed.contains(firstMsg)) {
+                compressed.add(firstMsg);
+            }
         }
 
-        // 策略 C: 语义总结或注入物理断裂标记
-        if (targetIdx > (firstUserIdx + 1)) {
+        // 策略 C: 语义总结或物理断裂标记
+        if (targetIdx > (lastFirstIdx + 1)) {
             if (summarizationStrategy != null) {
-                // 提取裁减区进行摘要加工
-                List<ChatMessage> expired = messages.subList(firstUserIdx + 1, targetIdx);
+                // 提取“初心链”之后、活跃窗口之前的内容进行摘要
+                List<ChatMessage> expired = messages.subList(lastFirstIdx + 1, targetIdx);
                 ChatMessage summaryMsg = summarizationStrategy.summarize(trace, expired);
                 if (summaryMsg != null) {
                     compressed.add(summaryMsg);
                 }
-            } else {String marker = "--- [Historical context trimmed for optimization.";
-                if (trace.hasPlans()) {
-                    marker += " Refer to current plans for state.] ---";
-                } else {
-                    marker += " Focus on the latest conversation.] ---";
-                }
+            } else {
+                String marker = "--- [Historical context optimized. ";
+                marker += (trace.hasPlans() ? "Refer to plans for progress.] ---" : "Focus on recent steps.] ---");
                 compressed.add(ChatMessage.ofSystem(marker));
             }
         }
 
-        // 策略 D: 装载滑动窗口内的活跃消息
+        // 策略 D: 装载活跃窗口消息
         compressed.addAll(messages.subList(targetIdx, messages.size()));
 
-        if (log.isDebugEnabled()) {
-            log.debug("ReActAgent [{}] summarized context: {} -> {} messages (aligned at index {})",
-                    trace.getAgentName(), messages.size(), compressed.size(), targetIdx);
-        }
-
         // 6. 更新工作区
-        trace.getWorkingMemory().replaceMessages(compressed);
+        if (compressed.size() < messages.size()) {
+            trace.getWorkingMemory().replaceMessages(compressed);
+
+            if (log.isDebugEnabled()) {
+                log.debug("ReActAgent [{}] summarized: {} -> {} messages (FirstChain size: {})",
+                        trace.getAgentName(), messages.size(), compressed.size(), firstList.size());
+            }
+        }
     }
 
     private boolean isObservation(ChatMessage msg) {
-        if (msg instanceof ToolMessage) {
-            return true;
-        } else {
-            // 兼容非 Native Tool 模式下的 ReAct 文本协议
-            return msg instanceof UserMessage && msg.getContent() != null && msg.getContent().startsWith("Observation:");
-        }
+        return (msg instanceof ToolMessage) ||
+                (msg instanceof UserMessage && msg.getContent() != null && msg.getContent().startsWith("Observation:"));
     }
 }
