@@ -26,6 +26,7 @@ import java.util.Locale;
  * @since 3.9.5
  */
 @Preview("3.9.5")
+@FunctionalInterface
 public interface AgentSystemPrompt<Tr> {
     /**
      * 获取提示词对应的语言环境
