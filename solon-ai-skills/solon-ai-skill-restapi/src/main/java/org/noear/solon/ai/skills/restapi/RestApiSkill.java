@@ -114,7 +114,7 @@ public class RestApiSkill extends AbsSkill {
     @Override
     public String getInstruction(Prompt prompt) {
         if (dynamicTools.isEmpty()) {
-            return "#### API 专家 (RestApiSkill)\n" +
+            return "## API 专家 (RestApiSkill)\n" +
                     "**警告：当前系统未加载任何业务 API 定义。**\n" +
                     "- 严禁尝试猜测或伪造任何 API 名称。\n" +
                     "- 如果用户提问涉及业务数据查询，请直接回答：'抱歉，当前未配置相关的业务接口，无法为您执行查询。'";
@@ -122,7 +122,7 @@ public class RestApiSkill extends AbsSkill {
 
         final int size = dynamicTools.size();
         StringBuilder sb = new StringBuilder();
-        sb.append("#### 业务 API 发现规范 (共 ").append(size).append(" 个接口)\n");
+        sb.append("## 业务 API 发现规范 (共 ").append(size).append(" 个接口)\n");
 
         if (size <= dynamicThreshold) {
             // FULL 模式
@@ -156,7 +156,7 @@ public class RestApiSkill extends AbsSkill {
             }
         }
 
-        sb.append("\n\n##### 执行约束\n")
+        sb.append("\n\n## 执行约束\n")
                 .append("1. **响应处理**: 如果返回数据带 `[Data truncated]` 标记，请基于现有部分分析，不要尝试重复调用获取全量。\n")
                 .append("2. **失败重试**: 若接口报错，请检查参数是否符合 Step 2 获取的 Schema，不要盲目重试。");
 

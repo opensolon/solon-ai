@@ -75,7 +75,7 @@ public interface Skill {
     }
 
     /**
-     * 动态指令注入：生成并注入到 System Message 的描述性文本（如果使用 MD 层级，从第四级开始）
+     * 动态指令注入：生成并注入到 System Message 的描述性文本（如果使用 MD 层级，建议从第2级开始）
      * 用于约束 AI 如何使用该技能下的工具
      */
     default String getInstruction(Prompt prompt) {

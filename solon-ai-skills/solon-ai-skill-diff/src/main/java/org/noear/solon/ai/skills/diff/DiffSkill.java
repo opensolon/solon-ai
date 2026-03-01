@@ -67,7 +67,7 @@ public class DiffSkill extends AbsSkill {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        return "#### 精准编辑协议 (Diff Edit Protocol)\n" +
+        return "## 精准编辑协议 (Diff Edit Protocol)\n" +
                 "- **适用场景**：修改已有文件内容。当文件较大或需要多点修改时，严禁使用全量覆盖。调用 `apply_diff` 是唯一专业选择。\n" +
                 "- **原子流程**：必须遵循“读-比-改”闭环。即：先用 `read_file` 获取带有行号的源码 -> 在内心生成 Diff -> 调用 `apply_diff`。\n" +
                 "- **冲突规避**：如果收到“上下文不匹配”错误，说明你的本地副本已过期。必须立即重新执行 `read_file` 同步状态，再次生成补丁。\n" +

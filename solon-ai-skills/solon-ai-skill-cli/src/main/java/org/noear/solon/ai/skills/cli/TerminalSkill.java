@@ -105,14 +105,14 @@ public class TerminalSkill extends AbsSkill {
     @Override
     public String getInstruction(Prompt prompt) {
         String currentTime = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss (z)"));
-        return "#### Terminal 环境状态\n" +
+        return "## Terminal 环境状态\n" +
                 "- **当前时间**: " + currentTime + "（注：此为动态时间，每次都会刷新）\n" +
                 "- **终端类型**: " + shellMode + "\n" +
                 "- **环境变量**: 挂载池已注入变量（如 @pool1 映射为 " + envExample + "）。\n" +
                 "- **路径规则**: \n" +
                 "  - **工作区(Workspace)**: 你的主目录，支持读写。必须使用相对路径（如 `src/app.java`）。\n" +
                 "  - **挂载池(Pools)**: 以 `@` 开头的逻辑路径（如 " + skillManager.getPoolMap().keySet() + "）为**只读**资源，严禁写入。\n" +
-                "#### 执行规约\n" +
+                "## 执行规约\n" +
                 "- **只读隔离**: 逻辑路径（以 @ 开头）仅支持读取和命令执行，所有写入操作必须使用相对路径。\n" +
                 "- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`。\n";
     }

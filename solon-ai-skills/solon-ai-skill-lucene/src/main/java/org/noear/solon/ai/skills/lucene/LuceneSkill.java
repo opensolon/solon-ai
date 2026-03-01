@@ -103,7 +103,7 @@ public class LuceneSkill extends AbsSkill {
 
     @Override
     public String getInstruction(Prompt prompt) {
-        return "#### 本地全文搜索协议 (Local Search Protocol)\n" +
+        return "## 本地全文搜索协议 (Local Search Protocol)\n" +
                 "- **工具定位**：这是你感知当前工作区内容的“本地雷达”。当你无法通过目录结构定位具体逻辑，或需要查找跨文件的符号引用时使用。\n" +
                 "- **数据边界**：搜索仅限于当前项目根目录及挂载的只读池。它是私有的、实时的、不依赖外部网络的。\n" +
                 "- **搜索策略**：支持模糊关键词。结果按 Lucene 相关性排序。若由于文件大幅改动导致搜索结果不自然，应立即执行 `refresh_search_index`。\n" +

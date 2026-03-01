@@ -69,12 +69,12 @@ public class ToolGatewaySkill extends AbsSkill {
     @Override
     public String getInstruction(Prompt prompt) {
         if (dynamicTools.isEmpty()) {
-            return "#### 工具网关\n当前暂无业务工具。";
+            return "## 工具网关\n当前暂无业务工具。";
         }
 
         final int size = dynamicTools.size();
         StringBuilder sb = new StringBuilder();
-        sb.append("#### 业务工具发现规范 (共 ").append(size).append(" 个工具)\n");
+        sb.append("## 业务工具发现规范 (共 ").append(size).append(" 个工具)\n");
 
         if (size <= dynamicThreshold) {
             // FULL 模式：直接交付给 AI
@@ -99,7 +99,7 @@ public class ToolGatewaySkill extends AbsSkill {
                 sb.append("> **提示**: 业务工具量大，建议通过关键词搜索，例如：search_tools('天气')。");
             } else {
                 // 展示摘要清单
-                sb.append("### 可用业务工具清单:\n");
+                sb.append("## 可用业务工具清单:\n");
                 for (FunctionTool tool : dynamicTools.values()) {
                     sb.append("- **").append(tool.name()).append("**: ").append(tool.description()).append("\n");
                 }

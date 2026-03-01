@@ -67,7 +67,9 @@ public class ExpertSkill extends AbsSkill {
         int total = skillMap.size();
         StringBuilder sb = new StringBuilder();
 
-        sb.append("\n#### 专家技能库执行规约 (当前可用技能: " + total + ")\n");
+        sb.append("优先使用合适的技能解决问题（不确定用什么技能时，可通过 skillsearch 搜索）\n");
+
+        sb.append("\n## 专家技能库执行规约 (当前可用技能: " + total + ")\n");
 
         if (total <= dynamicThreshold && total > 0) {
             sb.append("已加载以下专家技能，其内容即为执行标准，请严格遵循：\n");
