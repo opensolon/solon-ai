@@ -72,7 +72,8 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             sb.append("You MUST use the ReAct pattern to solve the problem, ensuring each turn contains explicit labels: ")
                     .append("Thought -> Action -> Observation.\n\n");
         } else {
-            sb.append("You follow an implicit ReAct logic: perform internal reasoning and act directly through function calls to interact with the system, without outputting explicit labels.\n\n");
+            sb.append("Solve problems directly through tool calls. Keep responses concise and accurate.\n\n");
+            //sb.append("You follow an implicit ReAct logic: perform internal reasoning and act directly through function calls to interact with the system, without outputting explicit labels.\n\n");
         }
 
         // 2. Instructions
@@ -112,11 +113,11 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         // 业务指令注入
         appendBusinessInstructions(sb, trace);
 
-        sb.append("## Example\n")
-                .append("User: Check the weather in London and summarize it.\n")
-                .append("(Model triggers function call: get_weather)\n")
-                .append("(Model responds based on result)\n")
-                .append("It is currently sunny in London with a temperature of 20°C, perfect for outdoor activities.\n\n");
+//        sb.append("## Example\n")
+//                .append("User: Check the weather in London and summarize it.\n")
+//                .append("(Model triggers function call: get_weather)\n")
+//                .append("(Model responds based on result)\n")
+//                .append("It is currently sunny in London with a temperature of 20°C, perfect for outdoor activities.\n\n");
 
         return sb.toString();
     }

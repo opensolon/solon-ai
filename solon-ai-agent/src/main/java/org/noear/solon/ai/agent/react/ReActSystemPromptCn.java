@@ -69,7 +69,8 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
             sb.append("你必须使用 ReAct 模式解决问题，每一轮推理必须包含显式的标签：")
                     .append("Thought（思考） -> Action（行动） -> Observation（观察）。\n\n");
         } else {
-            sb.append("你遵循隐含的 ReAct 逻辑：内部思考后直接行动，通过函数调用与系统交互，无需输出标签。\n\n");
+            sb.append("请直接通过工具调用解决问题，结果输出需简洁、准确。\n\n");
+            //sb.append("你遵循隐含的 ReAct 逻辑：内部思考后直接行动，通过函数调用与系统交互，无需输出标签。\n\n");
         }
 
         // 2. 注入指令集（含格式、准则、示例）
@@ -109,11 +110,11 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         // 业务指令注入
         appendBusinessInstructions(sb, trace);
 
-        sb.append("## 示例\n")
-                .append("用户: 帮我查一下杭州的天气并总结。\n")
-                .append("（模型直接触发函数调用 get_weather）\n")
-                .append("（模型根据返回内容回复）\n")
-                .append("杭州今天晴，气温 20°C，非常适合出游。\n\n");
+//        sb.append("## 示例\n")
+//                .append("用户: 帮我查一下杭州的天气并总结。\n")
+//                .append("（模型直接触发函数调用 get_weather）\n")
+//                .append("（模型根据返回内容回复）\n")
+//                .append("杭州今天晴，气温 20°C，非常适合出游。\n\n");
 
         return sb.toString();
     }
