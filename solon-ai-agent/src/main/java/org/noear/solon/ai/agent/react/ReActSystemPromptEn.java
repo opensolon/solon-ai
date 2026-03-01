@@ -72,7 +72,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             sb.append("You MUST use the ReAct pattern to solve the problem, ensuring each turn contains explicit labels: ")
                     .append("Thought -> Action -> Observation.\n\n");
         } else {
-            sb.append("Solve problems directly through tool calls. Keep responses concise and accurate.\n\n");
+            //sb.append("Solve problems directly through tool calls. Keep responses concise and accurate.\n\n");
             //sb.append("You follow an implicit ReAct logic: perform internal reasoning and act directly through function calls to interact with the system, without outputting explicit labels.\n\n");
         }
 
