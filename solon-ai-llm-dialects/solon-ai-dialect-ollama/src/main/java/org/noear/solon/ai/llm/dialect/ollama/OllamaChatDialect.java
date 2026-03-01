@@ -31,6 +31,7 @@ import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.DateUtil;
 
 import java.util.Date;
@@ -57,7 +58,8 @@ public class OllamaChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "ollama".equals(config.getProvider());
+        return "ollama".equals(config.getProvider()) ||
+                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/api/chat"));
     }
 
     @Override
