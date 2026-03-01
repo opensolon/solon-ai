@@ -81,7 +81,29 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
             autoToolCall.set(from.autoToolCall.get());
 
             toolContext.putAll(from.toolContext);
-            options.putAll(from.options);
+
+            if(Assert.isNotEmpty(from.options)) {
+                //支持配置形态，转为旨类型（llm 需要强类型）
+                for (Map.Entry<String, Object> entry : from.options.entrySet()) {
+                    if (entry.getValue() instanceof String) {
+                        String val = (String) entry.getValue();
+
+                        if (Assert.isBoolean(val)) {
+                            options.put(entry.getKey(), Boolean.parseBoolean(val));
+                        } else if (Assert.isNumber(val)) {
+                            if (val.indexOf('.') < 0) {
+                                options.put(entry.getKey(), Integer.parseInt(val));
+                            } else {
+                                options.put(entry.getKey(), Float.parseFloat(val));
+                            }
+                        } else {
+                            options.put(entry.getKey(), val);
+                        }
+                    } else {
+                        options.put(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
 
             tools.putAll(from.tools);
             skills.putAll(from.skills);
