@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.skills.cli.CliSkill;
+import org.noear.solon.ai.skills.cli.CliSkillProvider;
 
 import java.io.InputStream;
 import java.net.URL;
@@ -35,17 +35,21 @@ public class CliSkillTest {
                 .name("ClaudeCodeAgent")
                 .role(role)
                 .instruction("严格遵守挂载技能中的【规范协议】执行任务")
-                .defaultSkillAdd(new CliSkill(workDir))
+                .defaultSkillAdd(new CliSkillProvider(workDir))
                 .maxSteps(30) // 生产环境建议 30 步，以支持复杂的链式思考
                 .build();
     }
 
     @Test
     public void case1() {
-        CliSkill cliSkill = new CliSkill("app");
+        CliSkillProvider cliSkill = new CliSkillProvider("app");
 
-        FunctionTool tools = cliSkill.getTools(null).stream().filter(f -> f.name().equals("write_to_file"))
-                .findFirst().get();
+        FunctionTool tools = cliSkill.getTerminalSkill()
+                .getTools(null)
+                .stream()
+                .filter(f -> f.name().equals("write"))
+                .findFirst()
+                .get();
 
         try {
             tools.call(Utils.asMap("content", "xxx"));

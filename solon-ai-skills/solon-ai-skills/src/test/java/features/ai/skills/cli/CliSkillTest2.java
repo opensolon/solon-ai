@@ -7,7 +7,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActResponse;
-import org.noear.solon.ai.skills.cli.CliSkill;
+import org.noear.solon.ai.skills.cli.CliSkillProvider;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -24,8 +24,8 @@ public class CliSkillTest2 {
     }
 
     private ReActAgent createAgent(String role, String boxWorkDir) {
-        CliSkill cli = new CliSkill("test-box", boxWorkDir)
-                .mountPool("@shared", skillDir);
+        CliSkillProvider cli = new CliSkillProvider(boxWorkDir)
+                .skillPool("@shared", skillDir);
 
         return ReActAgent.of(LlmUtil.getChatModel())
                 .name("ClaudeCodeAgent")
