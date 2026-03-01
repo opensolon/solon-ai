@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationInterceptor;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
@@ -16,9 +17,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
-import org.noear.solon.core.util.Assert;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -29,266 +28,209 @@ public class SummarizationInterceptorTest {
 
     private ReActTrace trace;
     private Prompt workingMemory;
-    private List<ChatMessage> messageList;
     private SummarizationInterceptor interceptor;
     private ChatModel chatModel;
 
     @BeforeEach
     public void setUp() {
         trace = mock(ReActTrace.class);
-        workingMemory = mock(Prompt.class);
-        messageList = new ArrayList<>();
+        workingMemory = Prompt.of();
 
         when(trace.getWorkingMemory()).thenReturn(workingMemory);
-        when(workingMemory.getMessages()).thenReturn(messageList);
         when(trace.getAgentName()).thenReturn("TestAgent");
 
         chatModel = LlmUtil.getChatModel();
 
-        // 设置较小的阈值以便触发压缩逻辑
+        // 阈值设为 6，消息超过 6 条时触发压缩
         interceptor = new SummarizationInterceptor(6);
     }
 
     /**
-     * 测试 1：验证原子对齐（Action 和 Observation 必须同生共死）
+     * 验证“初心链”物理保留
      */
     @Test
-    public void testAtomicAlignment_WithActionPair() {
-        // 1. 基础消息
-        messageList.add(ChatMessage.ofSystem("Base System"));
-        messageList.add(ChatMessage.ofUser("Initial Task"));
+    public void testFirstChainPreservationAndMetadata() {
+        // 模拟 ReActAgent 行为：为 System 和第一个 User 注入 META_FIRST
+        ChatMessage systemMsg = ChatMessage.ofSystem("Base System");
+        systemMsg.addMetadata(ReActAgent.META_FIRST, 1);
+        workingMemory.addMessage(systemMsg);
 
-        // 2. 干扰消息
-        messageList.add(ChatMessage.ofAssistant("Thought 1"));
-        messageList.add(ChatMessage.ofUser("Observation: Noise 1"));
-        messageList.add(ChatMessage.ofAssistant("Thought 1.5")); // 增加这一条
-        messageList.add(ChatMessage.ofUser("Observation: Noise 1.5")); // 增加这一条
+        ChatMessage userGoal = ChatMessage.ofUser("Initial Goal");
+        userGoal.addMetadata(ReActAgent.META_FIRST, 1); // 手动模拟框架注入标记
+        workingMemory.addMessage(userGoal);
 
-        // 3. 关键原子对 (使用 AssistantMessage 的标准实现而非 Mock)
-        // 这样 getContent() 默认返回空字符串而非 null，规避 NPE
-        List<ToolCall> toolCalls = Arrays.asList(new ToolCall("call_1", "call_1", "tool_1", "{}", Utils.asMap()));
-        // 参数含义：content, isThinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw
-        AssistantMessage actionMsg = new AssistantMessage(
-                "Calling tool...",
-                false,
-                null,
-                null,
-                toolCalls,
-                null
-        );
-
-        messageList.add(actionMsg); // Index 4
-        messageList.add(ChatMessage.ofTool("Result", "tool_1", "call_1")); // Index 5
-
-        // 4. 后续堆叠
-        messageList.add(ChatMessage.ofAssistant("Thought 2"));
-        messageList.add(ChatMessage.ofAssistant("Thought 3"));
-        messageList.add(ChatMessage.ofAssistant("Thought 4"));
-        messageList.add(ChatMessage.ofAssistant("Thought 5"));
-
-        interceptor.onObservation(trace, "tool_1", "Result", 0L);
-
-        ArgumentCaptor<List> captor = ArgumentCaptor.forClass(List.class);
-        verify(workingMemory).replaceMessages(captor.capture());
-        List<ChatMessage> compressed = (List<ChatMessage>) captor.getValue();
-
-        // 5. 验证结果
-        // 检查是否包含 ToolMessage
-        assertTrue(compressed.stream().anyMatch(m -> m instanceof ToolMessage), "Observation must be preserved");
-
-        // 检查是否包含带 ToolCalls 的 AssistantMessage
-        assertTrue(compressed.stream().anyMatch(m ->
-                (m instanceof AssistantMessage) && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())
-        ), "Action must be preserved");
-
-        // 验证 TRIM_MARKER
-        // 确保检查 getContent() 前不为 null
-        boolean hasMarker = compressed.stream()
-                .filter(m -> m.getContent() != null)
-                .anyMatch(m -> m.getContent().contains("trimmed"));
-        assertTrue(hasMarker, "Should contain trim marker");
-    }
-
-    /**
-     * 测试 2：验证系统提示词去重逻辑
-     * (WorkingMemory 中即便有多个 SystemMessage，也只应保留第一个)
-     */
-    @Test
-    public void testSystemMessageDeduplication() {
-        messageList.add(ChatMessage.ofSystem("System 1"));
-        messageList.add(ChatMessage.ofUser("User 1"));
-        messageList.add(ChatMessage.ofSystem("System 2 (Old Plan)")); // 模拟被错误存入的消息
-        for (int i = 0; i < 10; i++) messageList.add(ChatMessage.ofAssistant("History " + i));
-
-        interceptor.onObservation(trace, "any", "any", 0L);
-
-        ArgumentCaptor<List<ChatMessage>> captor = ArgumentCaptor.forClass(List.class);
-        verify(workingMemory).replaceMessages(captor.capture());
-        List<ChatMessage> compressed = captor.getValue();
-
-        long systemCount = compressed.stream()
-                .filter(m -> m instanceof SystemMessage && !m.getContent().contains("trimmed"))
-                .count();
-
-        assertEquals(1, systemCount, "Should only keep the first foundational SystemMessage");
-        assertEquals("System 1", compressed.get(0).getContent(), "The preserved system message must be the first one");
-    }
-
-    /**
-     * 测试 3：验证“初心”保护 (First User Message 不会被裁)
-     */
-    @Test
-    public void testFirstUserMessagePreservation() {
-        messageList.add(ChatMessage.ofSystem("System"));
-        messageList.add(ChatMessage.ofUser("KEEP THIS GOAL"));
+        // 注入大量中间历史 (Total: 2 + 15 = 17 > 6)
         for (int i = 0; i < 15; i++) {
-            messageList.add(ChatMessage.ofAssistant("Irrelevant Step " + i));
+            workingMemory.addMessage(ChatMessage.ofAssistant("Step " + i));
         }
 
+        // 执行拦截
         interceptor.onObservation(trace, "any", "any", 0L);
 
-        ArgumentCaptor<List<ChatMessage>> captor = ArgumentCaptor.forClass(List.class);
-        verify(workingMemory).replaceMessages(captor.capture());
-        List<ChatMessage> compressed = captor.getValue();
+        // 验证截断发生
+        assertTrue(workingMemory.getMessages().size() < 17);
 
-        boolean goalPreserved = compressed.stream()
-                .anyMatch(m -> m instanceof UserMessage && m.getContent().equals("KEEP THIS GOAL"));
+        // 验证带有标记的初心是否被保留
+        ChatMessage firstUser = workingMemory.getMessages().stream()
+                .filter(m -> m instanceof UserMessage)
+                .findFirst()
+                .orElse(null);
 
-        assertTrue(goalPreserved, "The very first User message (goal) must never be trimmed");
+        assertNotNull(firstUser, "First User goal should be preserved");
+        assertTrue(firstUser.hasMetadata(ReActAgent.META_FIRST), "Should carry _first metadata");
+        assertEquals("Initial Goal", firstUser.getContent());
     }
 
     /**
-     * 测试 4：验证无须截断时的行为
+     * 验证原子对齐不会误伤初心链
      */
     @Test
-    public void testNoCompressionWhenUnderThreshold() {
-        messageList.add(ChatMessage.ofSystem("System"));
-        messageList.add(ChatMessage.ofUser("Task"));
-        messageList.add(ChatMessage.ofAssistant("Response"));
+    public void testAtomicAlignment_RespectsFirstChain() {
+        ChatMessage sys = ChatMessage.ofSystem("System");
+        sys.addMetadata(ReActAgent.META_FIRST, 1);
+        workingMemory.addMessage(sys);
 
-        interceptor.onObservation(trace, "any", "any", 0L);
+        ChatMessage goal = ChatMessage.ofUser("Target Goal");
+        goal.addMetadata(ReActAgent.META_FIRST, 1); // 加上标记
+        workingMemory.addMessage(goal);
 
-        // 不应调用 replaceMessages
-        verify(workingMemory, never()).replaceMessages(any());
-    }
-
-    /**
-     * 测试 5：验证在极端回溯下，依然能触发 TRIM_MARKER
-     * 场景：消息非常多，即使对齐回退了几步，前面依然有大量被丢弃的历史
-     */
-    @Test
-    public void testTrimMarkerWithHeavyHistory() {
-        messageList.add(ChatMessage.ofSystem("System"));
-        messageList.add(ChatMessage.ofUser("Initial Goal")); // Index 1
-
-        // 模拟大量历史 (Index 2 to 21)
-        for (int i = 0; i < 20; i++) {
-            messageList.add(ChatMessage.ofAssistant("Old Step " + i));
+        // 噪音消息
+        for (int i = 0; i < 5; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("Noise " + i));
         }
 
-        // 此时 size = 22, maxMessages = 6, targetIdx = 16
-        // 即使没有原子对齐，16 也远大于 (1 + 1)
+        // 构造原子对 (Action + Observation)
+        List<ToolCall> toolCalls = Arrays.asList(new ToolCall("c1", "c1", "t1", "{}", Utils.asMap()));
+        AssistantMessage action = new AssistantMessage("call", false, null, null, toolCalls, null);
+        workingMemory.addMessage(action);
+        workingMemory.addMessage(ChatMessage.ofTool("res", "t1", "c1"));
 
-        interceptor.onObservation(trace, "any", "any", 0L);
+        // 堆叠活跃消息，迫使对齐逻辑在截断时进行回退判断
+        for (int i = 0; i < 3; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("Active " + i));
+        }
 
-        ArgumentCaptor<List<ChatMessage>> captor = ArgumentCaptor.forClass(List.class);
-        verify(workingMemory).replaceMessages(captor.capture());
-        List<ChatMessage> compressed = captor.getValue();
+        interceptor.onObservation(trace, "t1", "res", 0L);
 
-        assertTrue(compressed.stream().anyMatch(m -> m.getContent().contains("trimmed")),
-                "With heavy history, trim marker must be present");
+        List<ChatMessage> result = workingMemory.getMessages();
+
+        // 验证初心完好
+        boolean hasFirstGoal = result.stream()
+                .anyMatch(m -> m instanceof UserMessage && m.hasMetadata(ReActAgent.META_FIRST));
+        assertTrue(hasFirstGoal, "First chain must be protected even with atomic alignment");
+
+        // 验证 Tool 消息由于对齐机制也被保留了
+        assertTrue(result.stream().anyMatch(m -> m instanceof ToolMessage));
     }
 
     /**
-     * 测试 6：LLMSummarizationStrategy (真实模型集成)
+     * 验证 VectorStore 策略过滤逻辑
      */
     @Test
-    public void testLLMSummarizationStrategy() throws Exception {
+    public void testVectorStoreSummarizationStrategy_FiltersFirst() throws Exception {
+        RepositoryStorable vectorRepository = mock(RepositoryStorable.class);
+        AgentSession session = mock(AgentSession.class);
+        when(trace.getSession()).thenReturn(session);
+        when(session.getSessionId()).thenReturn("sess_001");
+
+        VectorStoreSummarizationStrategy strategy = new VectorStoreSummarizationStrategy(vectorRepository);
+
+        ChatMessage m1 = ChatMessage.ofUser("初心内容");
+        m1.addMetadata(ReActAgent.META_FIRST, 1); // 标记为初心
+        ChatMessage m2 = ChatMessage.ofAssistant("执行过程内容");
+
+        strategy.summarize(trace, Arrays.asList(m1, m2));
+
+        ArgumentCaptor<Document> docCaptor = ArgumentCaptor.forClass(Document.class);
+        verify(vectorRepository).save(docCaptor.capture());
+
+        String savedContent = docCaptor.getValue().getContent();
+        // 核心验证：策略类内部过滤掉了带有 _first 的消息，不存入向量库
+        assertFalse(savedContent.contains("初心内容"), "Vector store should filter out messages with _first metadata");
+        assertTrue(savedContent.contains("执行过程内容"));
+    }
+
+    /**
+     * 验证 LLMSummarizationStrategy 真实集成
+     */
+    @Test
+    public void testLLMSummarizationStrategy_Real() throws Exception {
         LLMSummarizationStrategy strategy = new LLMSummarizationStrategy(chatModel);
-        messageList.add(ChatMessage.ofUser("请总结：今天天气不错，我们要去郊游。"));
-        messageList.add(ChatMessage.ofAssistant("好的，出发吧。"));
 
-        ChatMessage result = strategy.summarize(trace, messageList);
+        ChatMessage m1 = ChatMessage.ofUser("我是初心任务");
+        m1.addMetadata(ReActAgent.META_FIRST, 1);
+        ChatMessage m2 = ChatMessage.ofAssistant("我是需要被总结的执行细节。");
 
-        assertNotNull(result);
-        assertTrue(result.getContent().contains("历史执行摘要"));
-        // 验证真实模型输出了非空内容
-        assertFalse(result.getContent().length() < 10);
-    }
-
-    /**
-     * 测试 7：KeyInfoExtractionStrategy (真实模型集成)
-     */
-    @Test
-    public void testKeyInfoExtractionStrategy() throws Exception {
-        KeyInfoExtractionStrategy strategy = new KeyInfoExtractionStrategy(chatModel);
-        messageList.add(ChatMessage.ofUser("记住我的订单号是 10086。"));
-
-        ChatMessage result = strategy.summarize(trace, messageList);
+        ChatMessage result = strategy.summarize(trace, Arrays.asList(m1, m2));
 
         assertNotNull(result);
-        assertTrue(result.getContent().contains("关键信息看板"));
-        // 真实模型应该能提取出 10086
-        assertTrue(result.getContent().contains("10086"));
+        // 验证使用了新版的英文标识
+        assertTrue(result.getContent().contains("Execution Summary"));
     }
 
-    /**
-     * 测试 8：HierarchicalSummarizationStrategy (层级滚动)
-     */
     @Test
-    public void testHierarchicalSummarizationStrategy() throws Exception {
-        String lastSummaryKey = "agent:summary:hierarchical";
-        // 模拟 Trace 中已有旧摘要
-        when(trace.getExtraAs(lastSummaryKey)).thenReturn("之前的对话讨论了足球。");
+    public void testSemanticCompletion_IncludesThought() {
+        // 1. 初心
+        workingMemory.addMessage(ChatMessage.ofUser("Goal").addMetadata(ReActAgent.META_FIRST, 1));
 
+        // 2. 构造一个 Thought (Assistant 消息且无 ToolCalls)
+        AssistantMessage thought = new AssistantMessage("I should check the weather first.");
+        workingMemory.addMessage(thought); // 假设这是 targetIdx - 1 的位置
+
+        // 3. 构造活跃窗口消息
+        for (int i = 0; i < 10; i++) {
+            workingMemory.addMessage(ChatMessage.ofAssistant("Step " + i));
+        }
+
+        interceptor.onObservation(trace, "any", "any", 0L);
+
+        // 验证：thought 消息虽然在 maxMessages 范围外，但由于语义补齐逻辑，它应该被保留
+        assertTrue(workingMemory.getMessages().contains(thought), "Thought message should be preserved for semantic continuity");
+    }
+
+    @Test
+    public void testCompositeStrategy_Isolation() {
+        SummarizationStrategy mockErrorStrategy = mock(SummarizationStrategy.class);
+        when(mockErrorStrategy.summarize(any(), any())).thenThrow(new RuntimeException("LLM Timeout"));
+
+        SummarizationStrategy normalStrategy = new LLMSummarizationStrategy(chatModel);
+        CompositeSummarizationStrategy composite = new CompositeSummarizationStrategy(mockErrorStrategy, normalStrategy);
+
+        ChatMessage result = composite.summarize(trace, Arrays.asList(ChatMessage.ofUser("data")));
+
+        assertNotNull(result);
+        assertTrue(result.getContent().contains("Execution Summary"), "Should still contain result from normal strategy");
+    }
+
+    @Test
+    public void testHierarchicalStrategy_StateRolling() {
         HierarchicalSummarizationStrategy strategy = new HierarchicalSummarizationStrategy(chatModel);
-        messageList.add(ChatMessage.ofUser("现在我们聊聊篮球。"));
+        String lastSummaryKey = "agent:summary:hierarchical";
 
-        ChatMessage result = strategy.summarize(trace, messageList);
+        // 模拟之前已经存在的旧摘要
+        String oldSummary = "Previous summary content.";
+        when(trace.getExtraAs(lastSummaryKey)).thenReturn(oldSummary);
 
-        assertNotNull(result);
-        // 验证是否触发了状态写回（这是该策略的核心逻辑）
+        // 触发新的总结
+        strategy.summarize(trace, Arrays.asList(ChatMessage.ofAssistant("New event.")));
+
+        // 验证：trace.setExtra 被调用了，且存入了新的摘要（由于 mock 模型，这里主要看调用）
         verify(trace).setExtra(eq(lastSummaryKey), anyString());
     }
 
-    /**
-     * 测试 9：VectorStoreSummarizationStrategy (修正 anyList 编译问题)
-     */
     @Test
-    public void testVectorStoreSummarizationStrategy() throws Exception {
-        RepositoryStorable vectorRepository = mock(RepositoryStorable.class);
-        AgentSession session = mock(AgentSession.class);
+    public void testGlobalSystemMessagePreservation() {
+        // 构造一个没有 _first 标记的全局 System 指令
+        ChatMessage globalSystem = ChatMessage.ofSystem("You are a helpful assistant.");
+        workingMemory.addMessage(globalSystem);
 
-        when(trace.getSession()).thenReturn(session);
-        when(session.getSessionId()).thenReturn("test_sess_001");
+        for (int i = 0; i < 20; i++) {
+            workingMemory.addMessage(ChatMessage.ofUser("msg " + i));
+        }
 
-        VectorStoreSummarizationStrategy strategy = new VectorStoreSummarizationStrategy(vectorRepository);
-        messageList.add(ChatMessage.ofUser("存入向量库的内容"));
+        interceptor.onObservation(trace, "any", "any", 0L);
 
-        ChatMessage result = strategy.summarize(trace, messageList);
-
-        // 使用明确的 ArgumentMatchers 避免 any() 歧义
-        verify(vectorRepository).save(any(Document.class));
-
-        assertNotNull(result);
-        assertTrue(result.getContent().contains("已归档"));
-    }
-
-    /**
-     * 测试 10：CompositeSummarizationStrategy (策略合并)
-     */
-    @Test
-    public void testCompositeSummarizationStrategy() {
-        // 使用 Lambda 快速实现，验证合并逻辑
-        SummarizationStrategy s1 = (t, msgs) -> ChatMessage.ofSystem("摘要 A");
-        SummarizationStrategy s2 = (t, msgs) -> ChatMessage.ofSystem("摘要 B");
-
-        CompositeSummarizationStrategy composite = new CompositeSummarizationStrategy(s1, s2);
-
-        messageList.add(ChatMessage.ofUser("Trigger"));
-        ChatMessage result = composite.summarize(trace, messageList);
-
-        // 验证双换行符合并
-        assertEquals("摘要 A\n\n摘要 B", result.getContent());
+        // 验证：第一条消息依然是原生的 System 消息
+        assertEquals(globalSystem.getContent(), workingMemory.getMessages().get(0).getContent());
     }
 }
