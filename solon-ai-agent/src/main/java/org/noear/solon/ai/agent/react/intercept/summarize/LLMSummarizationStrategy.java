@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.intercept.summarize;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
+import org.noear.solon.ai.agent.util.AgentUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -87,12 +88,12 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
                     .append(newHistoryText)
                     .toString();
 
-            String summary = chatModel.prompt(requestText).call().getContent();
+            String summary = AgentUtil.callWithRetry(() -> chatModel.prompt(requestText).call().getContent());
 
             // 3. 返回包含标记的消息
             return ChatMessage.ofSystem("--- [Execution Summary] ---\n" + summary);
 
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Failed to generate LLM summary", e);
             return null;
         }

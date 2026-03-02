@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.intercept.summarize;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
+import org.noear.solon.ai.agent.util.AgentUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -111,7 +112,7 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
             );
 
             // 3. 调用模型生成增量摘要
-            lastSummary = chatModel.prompt(prompt).call().getContent();
+            lastSummary = AgentUtil.callWithRetry(() -> chatModel.prompt(prompt).call().getContent());
 
             if (lastSummary != null && lastSummary.length() > maxSummaryLength) {
                 lastSummary = lastSummary.substring(0, maxSummaryLength) + "...[Truncated]";
@@ -121,7 +122,7 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
             trace.setExtra(STRATEGY_LASTSUMMARY_KEY, lastSummary);
 
             return buildMessage(lastSummary);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Hierarchical summarization failed", e);
             return buildMessage(lastSummary);
         }

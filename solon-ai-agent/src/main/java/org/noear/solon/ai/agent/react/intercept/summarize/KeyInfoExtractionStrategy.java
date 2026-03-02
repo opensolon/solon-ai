@@ -18,6 +18,7 @@ package org.noear.solon.ai.agent.react.intercept.summarize;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
+import org.noear.solon.ai.agent.util.AgentUtil;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -90,12 +91,12 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
             String requestText = new StringBuilder(prompt.length() + newHistoryText.length() + 20)
                     .append(prompt).append("\n\n--- 待提取过程 ---\n").append(newHistoryText).toString();
 
-            String keyInfo = chatModel.prompt(requestText).call().getContent();
+            String keyInfo = AgentUtil.callWithRetry(() -> chatModel.prompt(requestText).call().getContent());
 
             // 3. 将提取到的“干货”作为系统信息注入
             return ChatMessage.ofSystem("--- [Confirmed Key Information] ---\n" + keyInfo);
 
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Failed to extract key info", e);
             return null;
         }
