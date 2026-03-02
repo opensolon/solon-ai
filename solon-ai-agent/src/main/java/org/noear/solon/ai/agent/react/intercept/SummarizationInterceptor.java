@@ -122,7 +122,8 @@ public class SummarizationInterceptor implements ReActInterceptor {
                 }
             } else {
                 String marker = "--- [Context optimized. Process before step " + targetIdx + " is summarized.] ---";
-                compressed.add(ChatMessage.ofSystem(marker));
+                compressed.add(ChatMessage.ofSystem(marker)
+                        .addMetadata(ReActAgent.META_SUMMARY, 1));
             }
         }
 
