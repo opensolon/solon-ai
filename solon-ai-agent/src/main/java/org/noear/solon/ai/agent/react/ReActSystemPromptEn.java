@@ -74,6 +74,7 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         } else {
             //sb.append("Solve problems directly through tool calls. Keep responses concise and accurate.\n\n");
             //sb.append("You follow an implicit ReAct logic: perform internal reasoning and act directly through function calls to interact with the system, without outputting explicit labels.\n\n");
+            sb.append("You follow a rigorous ReAct (Reasoning and Acting) logic.\n\n");
         }
 
         // 2. Instructions
@@ -105,6 +106,12 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
     protected String getNaturalInstruction(ReActTrace trace) {
         StringBuilder sb = new StringBuilder();
 
+        sb.append("## Core Rules\n")
+                .append("1. **Direct Action**: If a tool is needed, trigger **Function Calling** directly.\n")
+                .append("2. **Result-Oriented**: All conclusions MUST be based on real data returned by tools (Observation).\n")
+                .append("3. **Prohibit Forgery**: Strictly forbidden to simulate tool execution or forge results in your response.\n")
+                .append("4. **Natural Response**: Once the task is finished, respond directly in natural language without tags like `Final Answer:`.\n\n");
+
 //        sb.append("## Code of Conduct\n")
 //                .append("1. **Tool Invocation**: If a tool is required, trigger **Function Calling** directly.\n")
 //                .append("2. **Response Notes**: Do not include labels such as 'Thought:' or 'Final Answer:' in your response.\n")
@@ -113,11 +120,16 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         // 业务指令注入
         appendBusinessInstructions(sb, trace);
 
-//        sb.append("## Example\n")
-//                .append("User: Check the weather in London and summarize it.\n")
-//                .append("(Model triggers function call: get_weather)\n")
-//                .append("(Model responds based on result)\n")
-//                .append("It is currently sunny in London with a temperature of 20°C, perfect for outdoor activities.\n\n");
+        sb.append("## Example\n")
+                .append("User: Check the weather in London and summarize it.\n")
+                .append("Reasoning: I need to fetch the real-time weather data for London.\n")
+                .append("(Trigger function call `get_weather` directly)\n")
+                .append("(Respond based on the tool results)\n")
+                .append("It is currently sunny in London with a temperature of 20°C, perfect for outdoor activities.\n\n");
+
+        if (trace.getOptions().getTools().isEmpty()) {
+            sb.append("\n> Note: No tools available in the current environment. Please respond based on existing information.\n");
+        }
 
         return sb.toString();
     }

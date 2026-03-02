@@ -71,6 +71,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         } else {
             //sb.append("请直接通过工具调用解决问题，结果输出需简洁、准确。\n\n");
             //sb.append("你遵循隐含的 ReAct 逻辑：内部思考后直接行动，通过函数调用与系统交互，无需输出标签。\n\n");
+            sb.append("你遵循严谨的 ReAct (Reasoning and Acting) 逻辑。\n\n");
         }
 
         // 2. 注入指令集（含格式、准则、示例）
@@ -102,6 +103,12 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
     protected String getNaturalInstruction(ReActTrace trace) {
         StringBuilder sb = new StringBuilder();
 
+        sb.append("## 核心规则\n")
+                .append("1. **工具调用**：如果需要调用工具，请【直接】触发函数调用（Function Calling）。\n")
+                .append("2. **结果导向**：所有结论必须基于工具返回的真实数据（Observation）。\n")
+                .append("3. **严禁伪造**：禁止在回复中模拟或伪造工具的执行过程。\n\n")
+                .append("4. **自然回复**：任务完成后，请以自然语言直接回复，无需输出 `Final Answer:` 等标签。\n\n");
+
 //        sb.append("## 行为准则\n")
 //                .append("1. **工具调用**：如果需要调用工具，请【直接】触发函数调用（Function Calling）。\n")
 //                .append("2. **回复注意**：回复时，不要输出 'Thought:' 或 'Final Answer:' 等标签。\n")
@@ -110,11 +117,16 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         // 业务指令注入
         appendBusinessInstructions(sb, trace);
 
-//        sb.append("## 示例\n")
-//                .append("用户: 帮我查一下杭州的天气并总结。\n")
-//                .append("（模型直接触发函数调用 get_weather）\n")
-//                .append("（模型根据返回内容回复）\n")
-//                .append("杭州今天晴，气温 20°C，非常适合出游。\n\n");
+        sb.append("## 示例\n")
+                .append("用户: 帮我查一下杭州的天气并总结。\n")
+                .append("推理: 我需要获取杭州的实时天气数据。\n")
+                .append("（直接触发函数调用 get_weather）\n")
+                .append("（根据返回内容回复）\n")
+                .append("杭州今天晴，气温 20°C，非常适合出游。\n\n");
+
+        if (trace.getOptions().getTools().isEmpty()) {
+            sb.append("\n> 注意：当前环境无可用工具，请根据已有信息直接回复。\n");
+        }
 
         return sb.toString();
     }
