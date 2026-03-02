@@ -41,7 +41,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
     private final SummarizationStrategy summarizationStrategy;
 
     public SummarizationInterceptor(int maxMessages, SummarizationStrategy summarizationStrategy) {
-        this.maxMessages = Math.max(12, maxMessages);
+        this.maxMessages = Math.max(6, maxMessages);
         this.summarizationStrategy = summarizationStrategy;
     }
 
@@ -50,7 +50,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
     }
 
     public SummarizationInterceptor() {
-        this(12, null);
+        this(6, null);
     }
 
     @Override
