@@ -43,15 +43,18 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
 
     private final ChatModel chatModel;
 
-    private String promptTemplate = "你是一个记忆管理专家。初始任务目标已在上下文中永久保留，请忽略它们。\n" +
-            "请将『旧的执行摘要』与『新增的过期历史』合并，更新为一个精炼的『当前进度摘要』。\n" +
-            "要求：\n" +
-            "1. 重点提取已确认的数据、当前的逻辑位置和最终结论。\n" +
-            "2. 移除重复的思考过程和已失效的尝试。\n" +
-            "3. 保持长度在 500 字以内。\n\n" +
-            "【旧摘要】：\n%s\n\n" +
-            "【新增历史】：\n%s\n\n" +
-            "请输出更新后的进度摘要：";
+    // 1. 定义系统指令（静态部分）
+    String systemInstruction = "## 角色定义\n" +
+            "你是一个专业的记忆管理专家，负责对 Agent 的执行历史进行层级化压缩。\n\n" +
+            "## 处理逻辑\n" +
+            "请将『旧的摘要内容』与『新增的过期历史记录』合并，生成精炼的『当前进度摘要』。\n\n" +
+            "## 核心要求\n" +
+            "1. **信息提取**：重点保留已确认的关键数据、当前的逻辑位置、以及已达成的阶段性结论。\n" +
+            "2. **去重降噪**：移除重复的思考过程、已失效的尝试方案、以及无意义的中间状态。\n" +
+            "3. **长度约束**：严格保持输出在 500 字以内，使用简洁的陈述句。\n\n" +
+            "## 注意事项\n" +
+            "直接输出摘要正文，不要包含“好的”、“明白”或“根据您的要求”等废话。";
+
 
     private int maxSummaryLength = 800;    // 增加长度硬性保护
 
@@ -62,8 +65,8 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
         this.chatModel = chatModel;
     }
 
-    public void setPromptTemplate(String promptTemplate) {
-        this.promptTemplate = promptTemplate;
+    public void setSystemInstruction(String systemInstruction) {
+        this.systemInstruction = systemInstruction;
     }
 
     public void setMaxSummaryLength(int maxSummaryLength) {
@@ -105,14 +108,20 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
                     })
                     .collect(Collectors.joining("\n"));
 
-            // 2. 构造指令（lastSummary 可能已经包含了之前的进度）
-            String prompt = String.format(promptTemplate,
-                    (lastSummary.isEmpty() ? "（暂无）" : lastSummary),
-                    newHistoryText
-            );
+            // 2. 构造用户数据（使用 Markdown 分隔符增加结构感）
+            String userData = "### 旧的摘要内容\n" +
+                    (lastSummary.isEmpty() ? "（暂无）" : lastSummary) +
+                    "\n\n" +
+                    "### 新增的过期历史记录\n" +
+                    newHistoryText +
+                    "\n\n" +
+                    "### 最终任务要求\n" +
+                    "请根据 System Message（系统指令）中的逻辑，输出更新后的『进度摘要』：";
 
             // 3. 调用模型生成增量摘要
-            lastSummary = AgentUtil.callWithRetry(() -> chatModel.prompt(prompt).call().getContent());
+            lastSummary = AgentUtil.callWithRetry(() -> chatModel.prompt(userData)
+                    .options(o -> o.systemPrompt(systemInstruction))
+                    .call().getContent());
 
             if (lastSummary != null && lastSummary.length() > maxSummaryLength) {
                 lastSummary = lastSummary.substring(0, maxSummaryLength) + "...[Truncated]";

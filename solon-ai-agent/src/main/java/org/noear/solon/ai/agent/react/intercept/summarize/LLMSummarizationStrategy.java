@@ -40,18 +40,27 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
     private static final Logger log = LoggerFactory.getLogger(LLMSummarizationStrategy.class);
 
     private final ChatModel chatModel;
-    private final String prompt;
+    // 1. 系统指令：定义总结逻辑和约束
+    private String systemInstruction = "## 角色定义\n" +
+            "你是一个高效的任务进度分析员。请简要总结 AI Agent 的执行历史片段。\n\n" +
+            "## 总结要点\n" +
+            "1. **操作回顾**：已尝试的主要操作（工具调用）。\n" +
+            "2. **关键发现**：获取到的核心信息或结论。\n" +
+            "3. **当前进度**：目前处于任务的哪个阶段，还剩什么未完成。\n\n" +
+            "## 输出规范\n" +
+            "- 要求：精炼、准确，不超过 300 字。\n" +
+            "- 严禁包含：无关的客套话或自我介绍。\n" +
+            "- 若无可总结内容，请回复：(无显著进度)。";
 
     /**
      * @param chatModel 用于生成摘要的模型（建议使用廉价、快速的模型）
      */
     public LLMSummarizationStrategy(ChatModel chatModel) {
-        this(chatModel, "请简要总结以下 AI Agent 的执行历史。说明已尝试的操作、获取的关键信息以及当前的进度。要求：精炼、准确，不超过 300 字。");
+        this.chatModel = chatModel;
     }
 
-    public LLMSummarizationStrategy(ChatModel chatModel, String prompt) {
-        this.chatModel = chatModel;
-        this.prompt = prompt;
+    public void setSystemInstruction(String systemInstruction) {
+        this.systemInstruction = systemInstruction;
     }
 
     @Override
@@ -82,13 +91,19 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
             if (Assert.isEmpty(newHistoryText)) return null;
 
             // 2. 构建提示词
-            String requestText = new StringBuilder(prompt.length() + newHistoryText.length() + 20)
-                    .append(prompt)
-                    .append("\n\n--- 执行过程 ---\n")
-                    .append(newHistoryText)
-                    .toString();
+            String userData = "### 待总结历史片段\n" +
+                    newHistoryText +
+                    "\n\n" +
+                    "### 任务指令\n" +
+                    "请根据系统指令对上述执行过程进行语义总结：";
 
-            String summary = AgentUtil.callWithRetry(() -> chatModel.prompt(requestText).call().getContent());
+            String summary = AgentUtil.callWithRetry(() -> chatModel.prompt(userData)
+                    .options(o -> o.systemPrompt(systemInstruction))
+                    .call().getContent());
+
+            if (Assert.isEmpty(summary) || summary.contains("(无显著进度)")) {
+                return null;
+            }
 
             // 3. 返回包含标记的消息
             return ChatMessage.ofSystem("--- [Execution Summary] ---\n" + summary)

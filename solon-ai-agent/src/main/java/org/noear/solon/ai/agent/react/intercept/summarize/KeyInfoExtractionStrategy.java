@@ -41,23 +41,27 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
     private static final Logger log = LoggerFactory.getLogger(KeyInfoExtractionStrategy.class);
 
     private final ChatModel chatModel;
-    private final String prompt;
+    // 1. 系统指令：定义提取协议和专家身份
+    private String systemInstruction = "## 角色定义\n" +
+            "你是一个精密的信息审计专家。你的任务是从杂乱的对话历史中“脱水”，仅保留高价值的结构化信息。\n\n" +
+            "## 提取维度\n" +
+            "1. **业务参数**：用户提及的特定 ID、数值、时间、偏好或硬性约束。\n" +
+            "2. **确定性事实**：通过工具调用已证实的真实状态或返回的关键结果。\n" +
+            "3. **负面路径**：已验证为无效的尝试（防止 Agent 重复错误）。\n\n" +
+            "## 输出规范\n" +
+            "- 必须以简洁的 **Markdown 列表** 形式输出。\n" +
+            "- 严禁包含任何推测、解释或修饰性语句。\n" +
+            "- 如果没有发现关键信息，请直接回复：(无关键增量)。";
 
     /**
      * @param chatModel 用于执行提取任务的模型
      */
     public KeyInfoExtractionStrategy(ChatModel chatModel) {
-        this(chatModel, "你是一个信息审计专家。请从以下对话历史中提取核心关键信息。\n" +
-                "提取重点包括：\n" +
-                "1. 用户提及的特定参数、约束或偏好；\n" +
-                "2. 已经通过工具获取到的确定性事实（如ID、数值、状态）；\n" +
-                "3. 已验证为失败的尝试（以避免重复）。\n" +
-                "要求：以简洁的列表形式输出，不含多余的修饰词。");
+        this.chatModel = chatModel;
     }
 
-    public KeyInfoExtractionStrategy(ChatModel chatModel, String prompt) {
-        this.chatModel = chatModel;
-        this.prompt = prompt;
+    public void setSystemInstruction(String systemInstruction) {
+        this.systemInstruction = systemInstruction;
     }
 
     @Override
@@ -88,10 +92,19 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
             if (Assert.isEmpty(newHistoryText)) return null;
 
             // 2. 调用模型提取关键信息
-            String requestText = new StringBuilder(prompt.length() + newHistoryText.length() + 20)
-                    .append(prompt).append("\n\n--- 待提取过程 ---\n").append(newHistoryText).toString();
+            String userData = "### 待处理历史片段\n" +
+                    newHistoryText +
+                    "\n\n" +
+                    "### 审计要求\n" +
+                    "请根据系统指令，提取上述片段中的关键信息。";
 
-            String keyInfo = AgentUtil.callWithRetry(() -> chatModel.prompt(requestText).call().getContent());
+            String keyInfo = AgentUtil.callWithRetry(() -> chatModel.prompt(userData)
+                    .options(o -> o.systemPrompt(systemInstruction))
+                    .call().getContent());
+
+            if (Assert.isEmpty(keyInfo) || keyInfo.contains("(无关键增量)")) {
+                return null; // 如果没有新干货，就不产生这次摘要注入，节省上下文
+            }
 
             // 3. 将提取到的“干货”作为系统信息注入
             return ChatMessage.ofSystem("--- [Confirmed Key Information] ---\n" + keyInfo)
