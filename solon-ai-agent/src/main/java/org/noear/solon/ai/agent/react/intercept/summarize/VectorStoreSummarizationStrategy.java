@@ -62,10 +62,8 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
 
     @Override
     public String getInstruction(Prompt prompt) {
-        String sessionId = prompt.attrAs("sessionId");
-
-        return "- 当你看到内容包含 '[Content Truncated]' 或 '[已归档至向量库]' 标记时，说明部分细节已存入冷记忆。\n" +
-                "- 你可以调用 recall_history 工具来按关键词找回这些明细。";
+        return "- 当你看到内容包含 '--- [已归档至向量库] ---' 标记时，说明部分执行细节已转入冷记忆。\n" +
+                "- 如果后续任务需要早前的具体事实、ID 或详细数据，请调用 `recall_history` 工具找回。";
     }
 
     // --- Tool 实现（负责“取”） ---
@@ -139,7 +137,8 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
             vectorRepository.save(doc);
 
             // 返回一个紧凑的系统通知
-            return ChatMessage.ofSystem("--- [Step details archived to vector store. Use recall_history if needed.] ---");
+            return ChatMessage.ofSystem("--- [部分执行细节已归档至向量库，必要时请使用 recall_history 工具回溯] ---")
+                    .addMetadata(ReActAgent.META_SUMMARY, 1);
 
         } catch (Exception e) {
             log.error("Failed to archive to vector store", e);
