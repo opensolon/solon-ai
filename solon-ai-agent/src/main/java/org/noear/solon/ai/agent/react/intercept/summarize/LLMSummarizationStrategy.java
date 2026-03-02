@@ -19,7 +19,9 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,18 +61,30 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
 
         try {
             // 1. 过滤初心，只看发生了什么
-            String historyText = messagesToSummarize.stream()
+            String newHistoryText = messagesToSummarize.stream()
                     .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
-                    .map(m -> String.format("[%s]: %s", m.getRole().name().toUpperCase(), m.getContent()))
+                    .map(m -> {
+                        if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {
+                            return "[Action]: 调用工具 " + ((AssistantMessage) m).getToolCalls().get(0).getName();
+                        }
+                        if (m instanceof ToolMessage) {
+                            String content = m.getContent();
+                            if (content != null && content.length() > 2000) {
+                                content = content.substring(0, 2000) + "...[内容过长已截断]";
+                            }
+                            return "[Observation]: 得到结果 " + content;
+                        }
+                        return m.getRole().name() + ": " + m.getContent();
+                    })
                     .collect(Collectors.joining("\n"));
 
-            if (Assert.isEmpty(historyText)) return null;
+            if (Assert.isEmpty(newHistoryText)) return null;
 
             // 2. 构建提示词
-            String requestText = new StringBuilder(prompt.length() + historyText.length() + 20)
+            String requestText = new StringBuilder(prompt.length() + newHistoryText.length() + 20)
                     .append(prompt)
                     .append("\n\n--- 执行过程 ---\n")
-                    .append(historyText)
+                    .append(newHistoryText)
                     .toString();
 
             String summary = chatModel.prompt(requestText).call().getContent();

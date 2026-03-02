@@ -19,7 +19,10 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,7 +89,19 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
         try {
             // 1. 提取新过期的流水账
             String newHistoryText = pureExpired.stream()
-                    .map(m -> String.format("%s: %s", m.getRole().name(), m.getContent()))
+                    .map(m -> {
+                        if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {
+                            return "[Action]: 调用工具 " + ((AssistantMessage) m).getToolCalls().get(0).getName();
+                        }
+                        if (m instanceof ToolMessage) {
+                            String content = m.getContent();
+                            if (content != null && content.length() > 2000) {
+                                content = content.substring(0, 2000) + "...[内容过长已截断]";
+                            }
+                            return "[Observation]: 得到结果 " + content;
+                        }
+                        return m.getRole().name() + ": " + m.getContent();
+                    })
                     .collect(Collectors.joining("\n"));
 
             // 2. 构造指令（lastSummary 可能已经包含了之前的进度）

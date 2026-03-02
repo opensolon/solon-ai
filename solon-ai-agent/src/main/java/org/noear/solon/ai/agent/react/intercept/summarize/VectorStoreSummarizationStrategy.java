@@ -19,7 +19,9 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.ai.rag.Document;
@@ -106,37 +108,41 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
             return null;
         }
 
-        // 仅保留非初心消息进行持久化，避免 RAG 库中充斥重复的初始指令
-        List<ChatMessage> pureExpired = messagesToSummarize.stream()
+        // 优化点 1: 预处理消息，进行“结构化降噪”，节省向量库空间并提升检索质量
+        String archivedContent = messagesToSummarize.stream()
                 .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
-                .collect(Collectors.toList());
+                .map(m -> {
+                    if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {
+                        return "[Action]: 调用工具 " + ((AssistantMessage) m).getToolCalls().get(0).getName();
+                    }
+                    if (m instanceof ToolMessage) {
+                        String content = m.getContent();
+                        if (content != null && content.length() > 2000) {
+                            content = content.substring(0, 2000) + "...[内容过长已截断]";
+                        }
+                        return "[Observation]: 得到结果 " + content;
+                    }
+                    return m.getRole().name() + ": " + m.getContent();
+                })
+                .collect(Collectors.joining("\n"));
 
-        if (pureExpired.isEmpty()) {
-            return null;
-        }
+        if (Assert.isEmpty(archivedContent.trim())) return null;
 
         try {
-            // 1. 结构化历史记录
-            StringBuilder sb = new StringBuilder();
-            for (ChatMessage m : pureExpired) {
-                sb.append(m.getRole().name()).append(": ").append(m.getContent()).append("\n");
-            }
-            String contentToStore = sb.toString();
-
-            // 2. 异步持久化到向量数据库 (冷记忆存入)
-            Document doc = new Document(contentToStore);
+            // 优化点 3: 封装为高质量 Document
+            Document doc = new Document(archivedContent);
             doc.metadata("sessionId", trace.getSession().getSessionId());
-            doc.metadata("agentName", trace.getAgentName());
             doc.metadata("timestamp", OffsetDateTime.now().toString());
-            doc.metadata("type", "historical_context");
+            doc.metadata("type", "execution_log");
+
+            // 异步保存 (假设 vectorRepository 实现支持异步或环境允许同步)
             vectorRepository.save(doc);
 
-            // 3. 返回一个引导性提示
-            return ChatMessage.ofSystem("--- [Historical details archived to vector store] ---\n" +
-                    "Note: Use recall_history tool if you need to look back at earlier specific execution steps.");
+            // 返回一个紧凑的系统通知
+            return ChatMessage.ofSystem("--- [Step details archived to vector store. Use recall_history if needed.] ---");
 
         } catch (Exception e) {
-            log.error("Failed to archive messages to vector store", e);
+            log.error("Failed to archive to vector store", e);
             return null;
         }
     }

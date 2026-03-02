@@ -50,15 +50,19 @@ public class SummarizationInterceptor implements ReActInterceptor {
     }
 
     public SummarizationInterceptor() {
-        this(6, null);
+        this(9, null);
     }
 
     @Override
     public void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
 
+        long messageSize = messages.stream()
+                .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
+                .count();
+
         // 预留缓冲，避免频繁重构 (maxMessages + 触发阈值)
-        if (messages.size() <= maxMessages + 2) return;
+        if (messageSize <= maxMessages) return;
 
         // 1. 提取“初心链” (The Original Intent Chain)
         List<ChatMessage> firstList = new ArrayList<>();
@@ -75,24 +79,21 @@ public class SummarizationInterceptor implements ReActInterceptor {
         int targetIdx = messages.size() - maxMessages;
 
         // 3. 增强版原子对齐 (Atomic Alignment)
-        while (targetIdx > 0 && targetIdx > lastFirstIdx + 1) {
+        while (targetIdx > (lastFirstIdx + 1) && targetIdx < messages.size()) {
             ChatMessage msg = messages.get(targetIdx);
             if (msg instanceof ToolMessage || isObservation(msg)) {
-                // 如果当前是 Observation，必须向前找对应的 Action
                 targetIdx--;
             } else if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
-                // 如果当前是带工具调用的 Action，尝试看其之后是否对齐
-                // 实际上对齐逻辑主要靠向前回溯
-                targetIdx--;
+                // 停止回溯，这是一个 Action 节点
+                break;
             } else {
                 break;
             }
         }
 
         // 4. 语义连贯补齐 (Semantic Completion)
-        if (targetIdx > lastFirstIdx + 1) {
+        if (targetIdx > (lastFirstIdx + 1)) {
             ChatMessage prev = messages.get(targetIdx - 1);
-            // 如果前一条是纯文本 Assistant 消息（Thought），包含进来作为上下文起始
             if (prev instanceof AssistantMessage && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())) {
                 targetIdx--;
             }
@@ -103,29 +104,23 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
         // 策略 A: 保持 SystemMessage (全局约束)
         messages.stream()
-                .filter(m -> m instanceof SystemMessage && !m.hasMetadata("_first"))
-                .findFirst()
-                .ifPresent(compressed::add);
+                .filter(m -> m instanceof SystemMessage && !m.hasMetadata(ReActAgent.META_FIRST))
+                .forEach(compressed::add);
 
         // 策略 B: 注入“初心链” (通过 metadata _first 标记的所有历史记录)
-        for (ChatMessage firstMsg : firstList) {
-            if (!compressed.contains(firstMsg)) {
-                compressed.add(firstMsg);
-            }
-        }
+        compressed.addAll(firstList);
 
         // 策略 C: 语义总结或物理断裂标记
         if (targetIdx > (lastFirstIdx + 1)) {
             if (summarizationStrategy != null) {
-                // 提取“初心链”之后、活跃窗口之前的内容进行摘要
+                // 仅总结 lastFirstIdx 之后到当前窗口之前的内容
                 List<ChatMessage> expired = messages.subList(lastFirstIdx + 1, targetIdx);
                 ChatMessage summaryMsg = summarizationStrategy.summarize(trace, expired);
                 if (summaryMsg != null) {
                     compressed.add(summaryMsg);
                 }
             } else {
-                String marker = "--- [Historical context optimized. ";
-                marker += (trace.hasPlans() ? "Refer to plans for progress.] ---" : "Focus on recent steps.] ---");
+                String marker = "--- [Context optimized. Process before step " + targetIdx + " is summarized.] ---";
                 compressed.add(ChatMessage.ofSystem(marker));
             }
         }
