@@ -106,7 +106,7 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         sb.append("## 核心规则\n")
                 .append("1. **工具调用**：如果需要调用工具，请【直接】触发函数调用（Function Calling）。\n")
                 .append("2. **结果导向**：所有结论必须基于工具返回的真实数据（Observation）。\n")
-                .append("3. **严禁伪造**：禁止在回复中模拟或伪造工具的执行过程。\n\n")
+                .append("3. **严禁伪造**：禁止在回复中模拟或伪造工具的执行过程。\n")
                 .append("4. **自然回复**：任务完成后，请以自然语言直接回复，无需输出 `Final Answer:` 等标签。\n\n");
 
 //        sb.append("## 行为准则\n")
