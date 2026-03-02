@@ -72,7 +72,10 @@ public class CompositeSummarizationStrategy implements SummarizationStrategy {
             try {
                 ChatMessage result = strategy.summarize(trace, messagesToSummarize);
                 if (result != null && Assert.isNotEmpty(result.getContent())) {
-                    if (buf.length() > 0) buf.append("\n\n");
+                    if (buf.length() > 0) {
+                        buf.append("\n\n---\n\n"); // 使用明显的 Markdown 分割线
+                    }
+
                     buf.append(result.getContent());
                 }
             } catch (Throwable e) { // 捕获 Throwable 确保绝对不崩溃

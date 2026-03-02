@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 语义保护型上下文压缩拦截器 (Atomic & Semantic Context Compressor)
@@ -102,32 +103,23 @@ public class SummarizationInterceptor implements ReActInterceptor {
         // 5. 重构 WorkingMemory
         List<ChatMessage> compressed = new ArrayList<>();
 
-        // 策略 A: 保持 SystemMessage (全局约束)
-        messages.stream()
-                .filter(m -> m instanceof SystemMessage)
-                .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))   // 排除初心
-                .filter(m -> !m.hasMetadata(ReActAgent.META_SUMMARY)) // <--- 优雅地排除旧摘要
-                .forEach(compressed::add);
-
-        // 策略 B: 注入“初心链” (通过 metadata _first 标记的所有历史记录)
         compressed.addAll(firstList);
 
-        // 策略 C: 语义总结或物理断裂标记
         if (targetIdx > (lastFirstIdx + 1)) {
-            if (summarizationStrategy != null) {
-                List<ChatMessage> expired = messages.subList(lastFirstIdx + 1, targetIdx);
-                ChatMessage summaryMsg = summarizationStrategy.summarize(trace, expired);
+            List<ChatMessage> expired = messages.subList(lastFirstIdx + 1, targetIdx);
+            // 过滤掉 expired 中可能存在的旧摘要标记消息，避免“摘要的摘要”产生标题堆叠
+            List<ChatMessage> pureHistory = expired.stream()
+                    .filter(m -> !m.hasMetadata(ReActAgent.META_SUMMARY))
+                    .collect(Collectors.toList());
+
+            if (summarizationStrategy != null && !pureHistory.isEmpty()) {
+                ChatMessage summaryMsg = summarizationStrategy.summarize(trace, pureHistory);
                 if (summaryMsg != null) {
                     compressed.add(summaryMsg);
                 }
-            } else {
-                String marker = "--- [Context optimized. Process before step " + targetIdx + " is summarized.] ---";
-                compressed.add(ChatMessage.ofSystem(marker)
-                        .addMetadata(ReActAgent.META_SUMMARY, 1));
             }
         }
 
-        // 策略 D: 装载活跃窗口消息
         compressed.addAll(messages.subList(targetIdx, messages.size()));
 
         // 6. 更新工作区

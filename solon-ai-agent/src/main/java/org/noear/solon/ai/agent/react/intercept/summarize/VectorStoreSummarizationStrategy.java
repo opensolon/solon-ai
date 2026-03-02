@@ -52,9 +52,6 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
         this.vectorRepository = vectorRepository;
     }
 
-    // --- Skill 接口增强（负责“引导”） ---
-
-
     @Override
     public String description() {
         return "历史记忆回溯";
@@ -130,7 +127,7 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
             // 优化点 3: 封装为高质量 Document
             Document doc = new Document(archivedContent);
             doc.metadata("sessionId", trace.getSession().getSessionId());
-            doc.metadata("timestamp", OffsetDateTime.now().toString());
+            doc.metadata("timestamp_long", System.currentTimeMillis());
             doc.metadata("type", "execution_log");
 
             // 异步保存 (假设 vectorRepository 实现支持异步或环境允许同步)
