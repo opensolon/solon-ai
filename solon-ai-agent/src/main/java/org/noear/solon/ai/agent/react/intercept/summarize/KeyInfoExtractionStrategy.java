@@ -94,7 +94,8 @@ public class KeyInfoExtractionStrategy implements SummarizationStrategy {
             String keyInfo = AgentUtil.callWithRetry(() -> chatModel.prompt(requestText).call().getContent());
 
             // 3. 将提取到的“干货”作为系统信息注入
-            return ChatMessage.ofSystem("--- [Confirmed Key Information] ---\n" + keyInfo);
+            return ChatMessage.ofSystem("--- [Confirmed Key Information] ---\n" + keyInfo)
+                    .addMetadata(ReActAgent.META_SUMMARY, 1);
 
         } catch (Throwable e) {
             log.error("Failed to extract key info", e);

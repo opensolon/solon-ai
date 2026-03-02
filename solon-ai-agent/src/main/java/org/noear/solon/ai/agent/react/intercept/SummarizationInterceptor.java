@@ -104,12 +104,9 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
         // 策略 A: 保持 SystemMessage (全局约束)
         messages.stream()
-                .filter(m -> m instanceof SystemMessage && !m.hasMetadata(ReActAgent.META_FIRST))
-                .filter(m -> {
-                    String content = m.getContent();
-                    // 排除掉包含我们自定义前缀的旧摘要消息
-                    return content == null || !content.contains("--- [全局进度滚动摘要");
-                })
+                .filter(m -> m instanceof SystemMessage)
+                .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))   // 排除初心
+                .filter(m -> !m.hasMetadata(ReActAgent.META_SUMMARY)) // <--- 优雅地排除旧摘要
                 .forEach(compressed::add);
 
         // 策略 B: 注入“初心链” (通过 metadata _first 标记的所有历史记录)

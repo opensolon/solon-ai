@@ -132,6 +132,7 @@ public class HierarchicalSummarizationStrategy implements SummarizationStrategy 
         if (content == null || content.isEmpty()) {
             return null;
         }
-        return ChatMessage.ofSystem(SUMMARY_PREFIX + "\n" + content);
+        return ChatMessage.ofSystem(SUMMARY_PREFIX + "\n" + content)
+                .addMetadata(ReActAgent.META_SUMMARY, 1);
     }
 }

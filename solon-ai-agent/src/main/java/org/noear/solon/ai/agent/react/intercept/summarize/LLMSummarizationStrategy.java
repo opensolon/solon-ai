@@ -91,7 +91,8 @@ public class LLMSummarizationStrategy implements SummarizationStrategy {
             String summary = AgentUtil.callWithRetry(() -> chatModel.prompt(requestText).call().getContent());
 
             // 3. 返回包含标记的消息
-            return ChatMessage.ofSystem("--- [Execution Summary] ---\n" + summary);
+            return ChatMessage.ofSystem("--- [Execution Summary] ---\n" + summary)
+                    .addMetadata(ReActAgent.META_SUMMARY, 1);
 
         } catch (Throwable e) {
             log.error("Failed to generate LLM summary", e);

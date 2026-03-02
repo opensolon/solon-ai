@@ -73,7 +73,9 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     public final static String ID_ACTION = "action";
     public final static String ID_ACTION_BEF = "action_bef";
     public final static String ID_ACTION_AFT = "action_aft";
+
     public final static String META_FIRST = "_first";
+    public final static String META_SUMMARY = "_summary";
 
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
