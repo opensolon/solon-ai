@@ -73,6 +73,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         this.options.putAll(config.getModelOptions());
         this.options.role(config.getModelOptions().role());
         this.options.instruction(config.getModelOptions().instruction());
+        this.options.systemPrompt(config.getModelOptions().systemPrompt());
     }
 
     public ChatRequestDesc session(ChatSession session) {
@@ -129,12 +130,18 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
             StringBuilder instructionBuilder = new StringBuilder();
 
-            if (Assert.isNotEmpty(options.role())) {
-                instructionBuilder.append("## 你的角色\n").append(options.role()).append("\n\n");
-            }
+            if (Assert.isNotEmpty(options.systemPrompt())) {
+                //如果有系统提示词（优先用）
+                instructionBuilder.append(options.systemPrompt()).append("\n\n");
+            } else {
+                //如果没有尝试结构化构建
+                if (Assert.isNotEmpty(options.role())) {
+                    instructionBuilder.append("## 你的角色\n").append(options.role()).append("\n\n");
+                }
 
-            if (Assert.isNotEmpty(options.instruction())) {
-                instructionBuilder.append("## 执行指令\n").append(options.instruction()).append("\n");
+                if (Assert.isNotEmpty(options.instruction())) {
+                    instructionBuilder.append("## 执行指令\n").append(options.instruction()).append("\n");
+                }
             }
 
             if (originalPrompt != null && Assert.isNotEmpty(options.toolContext())) {

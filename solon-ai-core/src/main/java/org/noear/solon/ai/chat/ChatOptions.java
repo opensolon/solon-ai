@@ -41,6 +41,7 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
 
     private String role;
     private String instruction;
+    private String systemPrompt;
 
     /**
      * 角色
@@ -54,6 +55,7 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
      */
     public ChatOptions role(String role) {
         this.role = role;
+        this.systemPrompt = null;
         return this;
     }
 
@@ -69,6 +71,24 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
      */
     public ChatOptions instruction(String instruction) {
         this.instruction = instruction;
+        this.systemPrompt = null;
+        return this;
+    }
+
+    /**
+     * 指令
+     */
+    public String systemPrompt() {
+        return systemPrompt;
+    }
+
+    /**
+     * 指令
+     */
+    public ChatOptions systemPrompt(String systemPrompt) {
+        this.systemPrompt = systemPrompt;
+        this.role = null;
+        this.instruction = null;
         return this;
     }
 
