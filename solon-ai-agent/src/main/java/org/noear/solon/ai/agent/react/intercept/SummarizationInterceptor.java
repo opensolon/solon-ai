@@ -51,7 +51,14 @@ public class SummarizationInterceptor implements ReActInterceptor {
     }
 
     public SummarizationInterceptor() {
-        this(6, null);
+        /**
+         * 仅使用 LLMSummarization / HierarchicalSummarization：maxMessages: 10 - 14
+         * 仅使用 KeyInfoExtraction：maxMessages: 15 - 20
+         * 仅使用 VectorStoreSummarization：maxMessages: 18 - 25
+         * 推荐 maxMessages: 10 - 12
+         * */
+
+        this(12, null);
     }
 
     @Override
