@@ -55,7 +55,6 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
      */
     public ChatOptions role(String role) {
         this.role = role;
-        this.systemPrompt = null;
         return this;
     }
 
@@ -71,7 +70,6 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
      */
     public ChatOptions instruction(String instruction) {
         this.instruction = instruction;
-        this.systemPrompt = null;
         return this;
     }
 
@@ -87,8 +85,6 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
      */
     public ChatOptions systemPrompt(String systemPrompt) {
         this.systemPrompt = systemPrompt;
-        this.role = null;
-        this.instruction = null;
         return this;
     }
 
