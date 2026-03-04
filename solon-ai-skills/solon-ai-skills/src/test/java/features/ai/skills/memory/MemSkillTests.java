@@ -16,6 +16,7 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.skills.memory.MemSearchProvider;
 import org.noear.solon.ai.skills.memory.MemSearchResult;
 import org.noear.solon.ai.skills.memory.MemSkill;
+import org.noear.solon.ai.skills.memory.MemStoreProviderReadisImpl;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Arrays;
@@ -46,7 +47,7 @@ public class MemSkillTests {
         RedisClient redisClient = new RedisClient(properties);
 
         // 3. 实例化 MemSkill
-        memSkill = new MemSkill(redisClient, mockSearchProvider);
+        memSkill = new MemSkill(new MemStoreProviderReadisImpl(redisClient), mockSearchProvider);
 
         // 清理历史数据防止干扰
         memSkill.prune("test_hobby", testUserId);
