@@ -23,13 +23,13 @@ import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Anthropic Claude Messages接口方言
@@ -123,7 +123,86 @@ public class ClaudeChatDialect extends AbstractChatDialect {
 
     @Override
     public List<AssistantMessage> parseAssistantMessage(ChatResponseDefault resp, ONode oMessage) {
-        return super.parseAssistantMessage(resp, oMessage); // 使用父类的通用解析方法
+        ONode oContent = oMessage.getOrNull("content");
+        if (oContent != null && oContent.isArray()) {
+            boolean hasToolUse = false;
+            for (ONode item : oContent.getArray()) {
+                if ("tool_use".equals(item.get("type").getString())) {
+                    hasToolUse = true;
+                    break;
+                }
+            }
+
+            if (hasToolUse) {
+                return parseClaudeAssistantMessage(resp, oMessage, oContent);
+            }
+        }
+
+        return super.parseAssistantMessage(resp, oMessage);
+    }
+
+    /**
+     * 构建Claude消息体
+     * @param resp
+     * @param oMessage
+     * @param oContent
+     * @return 消息集合
+     * @author oisin lu
+     * @date 2026年3月4日
+     */
+    private List<AssistantMessage> parseClaudeAssistantMessage(ChatResponseDefault resp, ONode oMessage, ONode oContent) {
+        List<AssistantMessage> messageList = new ArrayList<>();
+
+        StringBuilder textContent = new StringBuilder();
+        List<ToolCall> toolCalls = new ArrayList<>();
+        List<Map> toolCallsRaw = new ArrayList<>();
+
+        for (ONode item : oContent.getArray()) {
+            String type = item.get("type").getString();
+            if ("text".equals(type)) {
+                String text = item.get("text").getString();
+                if (Utils.isNotEmpty(text)) {
+                    if (textContent.length() > 0) {
+                        textContent.append("\n");
+                    }
+                    textContent.append(text);
+                }
+            } else if ("tool_use".equals(type)) {
+                String toolId = item.get("id").getString();
+                String toolName = item.get("name").getString();
+                ONode inputNode = item.get("input");
+
+                String inputJson = inputNode != null ? inputNode.toJson() : "{}";
+                Map<String, Object> arguments = new HashMap<>();
+                if (inputNode != null && inputNode.isObject()) {
+                    arguments = inputNode.toBean(Map.class);
+                }
+
+                ToolCall toolCall = new ToolCall(toolId, toolId, toolName, inputJson, arguments);
+                toolCalls.add(toolCall);
+                Map<String, Object> toolCallRaw = new HashMap<>();
+                toolCallRaw.put("id", toolId);
+                toolCallRaw.put("type", "function");
+                Map<String, Object> functionData = new HashMap<>();
+                functionData.put("name", toolName);
+                functionData.put("arguments", inputJson);
+                toolCallRaw.put("function", functionData);
+                toolCallsRaw.add(toolCallRaw);
+            }
+        }
+
+        if (resp.in_thinking && resp.isStream()) {
+            messageList.add(new AssistantMessage("</think>", true));
+            messageList.add(new AssistantMessage("\n\n", false));
+            resp.in_thinking = false;
+        }
+
+        String content = textContent.length() > 0 ? textContent.toString() : "";
+        AssistantMessage message = new AssistantMessage(content,
+                false, null, toolCallsRaw, toolCalls, null);
+        messageList.add(message);
+
+        return messageList;
     }
 
     //如果没有改变，不需要重写

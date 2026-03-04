@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Claude 响应解析器
@@ -37,13 +38,17 @@ public class ClaudeResponseParser {
     private static final Logger log = LoggerFactory.getLogger(ClaudeResponseParser.class);
     private final boolean logEnabled;
 
-    // 流式工具调用状态追踪
-    private String currentToolUseId;
-    private String currentToolName;
-    private StringBuilder currentToolInput;
+    /**
+     * 流式工具调用的按请求隔离状态
+     */
+    private static class StreamToolState {
+        String toolUseId;
+        String toolName;
+        StringBuilder toolInput;
+    }
 
-    // 流式思考内容状态追踪
-    private boolean currentBlockIsThinking;
+    // 按 resp 隔离的流式状态，支持多并发流式请求
+    private final ConcurrentHashMap<ChatResponseDefault, StreamToolState> streamStates = new ConcurrentHashMap<>();
 
     public ClaudeResponseParser() {
         this.logEnabled = log.isDebugEnabled();
@@ -127,6 +132,7 @@ public class ClaudeResponseParser {
                 continue;
             }
             if ("[DONE]".equals(jsonData)) {
+                streamStates.remove(resp);
                 if (resp.isFinished() == false) {
                     resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                     resp.setFinished(true);
@@ -140,6 +146,8 @@ public class ClaudeResponseParser {
             // Claude 流式响应事件类型
             String eventType = oResp.get("type").getString();
             if ("error".equals(eventType)) {
+                streamStates.remove(resp);
+
                 ONode oError = oResp.get("error");
                 String errorType = oError.get("type").getString();
                 String errorMsg = oError.get("message").getString();
@@ -173,7 +181,6 @@ public class ClaudeResponseParser {
                     String blockType = contentBlock.get("type").getString();
                     if ("thinking".equals(blockType)) {
                         // 思考内容块开始
-                        currentBlockIsThinking = true;
                         if (!resp.in_thinking) {
                             // 第一次进入思考模式，添加开始标记
                             resp.addChoice(new ChatChoice(0, new Date(), null,
@@ -190,7 +197,6 @@ public class ClaudeResponseParser {
                             hasChoices = true;
                         }
                     } else if ("text".equals(blockType)) {
-                        currentBlockIsThinking = false;
                         // 如果之前在思考模式，添加结束标记
                         if (resp.in_thinking) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
@@ -207,7 +213,6 @@ public class ClaudeResponseParser {
                             hasChoices = true;
                         }
                     } else if ("tool_use".equals(blockType)) {
-                        currentBlockIsThinking = false;
                         // 如果之前在思考模式，添加结束标记
                         if (resp.in_thinking) {
                             resp.addChoice(new ChatChoice(0, new Date(), null,
@@ -217,10 +222,11 @@ public class ClaudeResponseParser {
                             resp.in_thinking = false;
                             hasChoices = true;
                         }
-                        // 工具调用开始，初始化状态
-                        currentToolUseId = contentBlock.get("id").getString();
-                        currentToolName = contentBlock.get("name").getString();
-                        currentToolInput = new StringBuilder();
+                        StreamToolState state = new StreamToolState();
+                        state.toolUseId = contentBlock.get("id").getString();
+                        state.toolName = contentBlock.get("name").getString();
+                        state.toolInput = new StringBuilder();
+                        streamStates.put(resp, state);
                     }
                 }
             } else if ("content_block_delta".equals(eventType)) {
@@ -244,18 +250,22 @@ public class ClaudeResponseParser {
                             hasChoices = true;
                         }
                     } else if ("input_json_delta".equals(deltaType)) {
-                        // 工具调用参数增量更新，累积JSON
+                        // 工具调用参数增量更新，按需从 map 获取状态
                         String partialJson = delta.get("partial_json").getString();
-                        if (Utils.isNotEmpty(partialJson) && currentToolInput != null) {
-                            currentToolInput.append(partialJson);
+                        if (Utils.isNotEmpty(partialJson)) {
+                            StreamToolState state = streamStates.get(resp);
+                            if (state != null) {
+                                state.toolInput.append(partialJson);
+                            }
                         }
                     }
                 }
             } else if ("content_block_stop".equals(eventType)) {
-                // 内容块结束，如果是工具调用，构建工具调用消息
-                if (currentToolUseId != null && currentToolName != null && currentToolInput != null) {
+                // 内容块结束，按需从 map 获取并清理工具调用状态
+                StreamToolState state = streamStates.remove(resp);
+                if (state != null) {
                     try {
-                        String inputJson = currentToolInput.toString();
+                        String inputJson = state.toolInput.toString();
                         Map<String, Object> arguments = new HashMap<>();
                         if (Utils.isNotEmpty(inputJson)) {
                             ONode inputNode = ONode.ofJson(inputJson);
@@ -265,15 +275,15 @@ public class ClaudeResponseParser {
                         }
 
                         // 创建工具调用对象
-                        ToolCall toolCall = new ToolCall(currentToolUseId, currentToolUseId, currentToolName, inputJson, arguments);
+                        ToolCall toolCall = new ToolCall(state.toolUseId, state.toolUseId, state.toolName, inputJson, arguments);
 
                         // 创建带有工具调用的助手消息
                         List<Map> toolCallsRaw = new ArrayList<>();
                         Map<String, Object> toolCallRaw = new HashMap<>();
-                        toolCallRaw.put("id", currentToolUseId);
+                        toolCallRaw.put("id", state.toolUseId);
                         toolCallRaw.put("type", "function");
                         Map<String, Object> functionData = new HashMap<>();
-                        functionData.put("name", currentToolName);
+                        functionData.put("name", state.toolName);
                         functionData.put("arguments", inputJson);
                         toolCallRaw.put("function", functionData);
                         toolCallsRaw.add(toolCallRaw);
@@ -287,11 +297,6 @@ public class ClaudeResponseParser {
                         hasChoices = true;
                     } catch (Exception e) {
                         log.warn("Failed to parse tool call in stream mode", e);
-                    } finally {
-                        // 重置工具调用状态
-                        currentToolUseId = null;
-                        currentToolName = null;
-                        currentToolInput = null;
                     }
                 }
             } else if ("message_delta".equals(eventType)) {
@@ -300,7 +305,7 @@ public class ClaudeResponseParser {
                 if (usage != null) {
                     resp.setUsage(usage);
                 }
-                
+
                 ONode stopReason = oResp.get("delta");
                 if (stopReason != null) {
                     String finishReason = stopReason.get("stop_reason").getString();
@@ -310,8 +315,11 @@ public class ClaudeResponseParser {
                     }
                 }
             } else if ("message_stop".equals(eventType)) {
-                // 消息结束
+                // 消息结束，清理状态并添加信息对 finished 进行透传
+                streamStates.remove(resp);
+                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
+                hasChoices = true;
             } else if ("ping".equals(eventType)) {
                 // 心跳消息，忽略
                 continue;
@@ -366,14 +374,15 @@ public class ClaudeResponseParser {
         // 解析内容
         ONode contentArray = oResp.getOrNull("content");
         if (contentArray != null && contentArray.isArray()) {
-            List<AssistantMessage> messageList = new ArrayList<>();
-            // 分离思考内容和普通内容
+            // 分离思考内容、普通内容和工具调用
             StringBuilder thinkingContent = new StringBuilder();
             StringBuilder normalContent = new StringBuilder();
+            List<ToolCall> allToolCalls = new ArrayList<>();
+            List<Map> allToolCallsRaw = new ArrayList<>();
+
             for (ONode contentItem : contentArray.getArray()) {
                 String contentType = contentItem.get("type").getString();
                 if ("thinking".equals(contentType)) {
-                    // 收集思考内容
                     String thinking = contentItem.get("thinking").getString();
                     if (Utils.isNotEmpty(thinking)) {
                         if (thinkingContent.length() > 0) {
@@ -382,7 +391,6 @@ public class ClaudeResponseParser {
                         thinkingContent.append(thinking);
                     }
                 } else if ("text".equals(contentType)) {
-                    // 收集普通文本内容
                     String text = contentItem.get("text").getString();
                     if (Utils.isNotEmpty(text)) {
                         if (normalContent.length() > 0) {
@@ -391,7 +399,6 @@ public class ClaudeResponseParser {
                         normalContent.append(text);
                     }
                 } else if ("tool_use".equals(contentType)) {
-                    // 解析工具调用
                     String toolName = contentItem.get("name").getString();
                     String toolId = contentItem.get("id").getString();
                     ONode inputNode = contentItem.get("input");
@@ -399,10 +406,9 @@ public class ClaudeResponseParser {
                     if (inputNode != null && inputNode.isObject()) {
                         arguments = inputNode.toBean(Map.class);
                     }
-                    // 创建工具调用对象
-                    ToolCall toolCall = new ToolCall(toolId, toolId, toolName, inputNode.toJson(), arguments);
-                    // 创建带有工具调用的助手消息
-                    List<Map> toolCallsRaw = new ArrayList<>();
+
+                    allToolCalls.add(new ToolCall(toolId, toolId, toolName, inputNode.toJson(), arguments));
+
                     Map<String, Object> toolCallRaw = new HashMap<>();
                     toolCallRaw.put("id", toolId);
                     toolCallRaw.put("type", "function");
@@ -410,37 +416,36 @@ public class ClaudeResponseParser {
                     functionData.put("name", toolName);
                     functionData.put("arguments", inputNode.toJson());
                     toolCallRaw.put("function", functionData);
-                    toolCallsRaw.add(toolCallRaw);
-                    List<ToolCall> toolCalls = new ArrayList<>();
-                    toolCalls.add(toolCall);
-
-                    AssistantMessage assistantMessage = new AssistantMessage("",
-                            false, null, toolCallsRaw,
-                            toolCalls, null);
-                    messageList.add(assistantMessage);
+                    allToolCallsRaw.add(toolCallRaw);
                 }
             }
 
-            // 构建包含思考内容的消息
+            // 构建文本内容
+            String textContent;
+            Map<String, Object> contentRaw = null;
             if (thinkingContent.length() > 0 && normalContent.length() > 0) {
-                // 有思考内容和普通内容
-                String fullContent = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n" + normalContent.toString();
-                Map<String, Object> contentRaw = new LinkedHashMap<>();
+                textContent = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n" + normalContent.toString();
+                contentRaw = new LinkedHashMap<>();
                 contentRaw.put("thinking", thinkingContent.toString());
                 contentRaw.put("content", normalContent.toString());
-                messageList.add(0, new AssistantMessage(fullContent, false, contentRaw, null, null, null));
             } else if (thinkingContent.length() > 0) {
-                // 只有思考内容
-                String fullContent = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n";
-                Map<String, Object> contentRaw = new LinkedHashMap<>();
+                textContent = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n";
+                contentRaw = new LinkedHashMap<>();
                 contentRaw.put("thinking", thinkingContent.toString());
-                messageList.add(0, new AssistantMessage(fullContent, false, contentRaw, null, null, null));
             } else if (normalContent.length() > 0) {
-                // 只有普通内容
-                messageList.add(0, new AssistantMessage(normalContent.toString()));
+                textContent = normalContent.toString();
+            } else {
+                textContent = "";
             }
-            // 添加所有解析出的消息
-            for (AssistantMessage msg : messageList) {
+
+            // 将所有工具调用合并到一个 AssistantMessage 中
+            if (!allToolCalls.isEmpty()) {
+                AssistantMessage msg = new AssistantMessage(textContent,
+                        false, contentRaw, allToolCallsRaw, allToolCalls, null);
+                resp.addChoice(new ChatChoice(0, created, "stop", msg));
+            } else if (Utils.isNotEmpty(textContent)) {
+                AssistantMessage msg = new AssistantMessage(textContent,
+                        false, contentRaw, null, null, null);
                 resp.addChoice(new ChatChoice(0, created, "stop", msg));
             }
         }
