@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.*;
@@ -25,117 +26,122 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
- * 智能上下文压缩拦截器 (Context Compressor)
- * <p>通过滑动窗口机制截断历史消息，同时保护任务锚点并确保 Action-Observation 逻辑对齐。</p>
+ * 语义保护型上下文压缩拦截器 (Atomic & Semantic Context Compressor)
  *
  * @author noear
- * @since 3.8.1
+ * @since 3.9.4
  */
-@Preview("3.8.1")
+@Preview("3.8.2")
 public class SummarizationInterceptor implements ReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(SummarizationInterceptor.class);
 
-    /** 窗口保留的最大消息数 */
     private final int maxMessages;
-    /** Token 预算阈值 */
-    private final int maxTokens;
-    /** 截断标识符 */
-    private static final String TRIM_MARKER = "[Historical context trimmed]";
+    private final SummarizationStrategy summarizationStrategy;
 
-    /**
-     * @param maxMessages 保留条数阈值 (建议 >= 10)
-     * @param maxTokens   Token 预算阈值 (建议 >= 4000)
-     */
-    public SummarizationInterceptor(int maxMessages, int maxTokens) {
-        this.maxMessages = Math.max(4, maxMessages);
-        this.maxTokens = Math.max(1000, maxTokens);
+    public SummarizationInterceptor(int maxMessages, SummarizationStrategy summarizationStrategy) {
+        this.maxMessages = Math.max(6, maxMessages);
+        this.summarizationStrategy = summarizationStrategy;
+    }
+
+    public SummarizationInterceptor(int maxMessages) {
+        this(maxMessages, null);
     }
 
     public SummarizationInterceptor() {
-        this(10, 4000);
+        /**
+         * 仅使用 LLMSummarization / HierarchicalSummarization：maxMessages: 10 - 14
+         * 仅使用 KeyInfoExtraction：maxMessages: 15 - 20
+         * 仅使用 VectorStoreSummarization：maxMessages: 18 - 25
+         * 推荐 maxMessages: 10 - 12
+         * */
+
+        this(12, null);
     }
 
     @Override
-    public void onObservation(ReActTrace trace, String result) {
-        if (trace.getWorkingMemory().size() < 4) return;
-
-        // 1. 触发检查：缓冲 2 条消息，避免频繁重组
+    public void onObservation(ReActTrace trace, String toolName, String result, long durationMs) {
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
-        int currentTokens = estimateTokens(messages);
-        if (messages.size() <= maxMessages + 2 && currentTokens <= maxTokens) {
-            return;
+
+        long messageSize = messages.stream()
+                .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
+                .count();
+
+        // 预留缓冲，避免频繁重构 (maxMessages + 触发阈值)
+        if (messageSize <= maxMessages) return;
+
+        // 1. 提取“初心链” (The Original Intent Chain)
+        List<ChatMessage> firstList = new ArrayList<>();
+        int lastFirstIdx = -1;
+        for (int i = 0; i < messages.size(); i++) {
+            ChatMessage msg = messages.get(i);
+            if (msg.hasMetadata(ReActAgent.META_FIRST)) {
+                firstList.add(msg);
+                lastFirstIdx = i;
+            }
         }
 
-        // 2. 识别任务锚点：首条 User 消息通常包含原始任务定义
-        ChatMessage firstUserMsg = null;
-        for (ChatMessage m : messages) {
-            if (m instanceof UserMessage) {
-                firstUserMsg = m;
+        // 2. 确定截断起始点 (Sliding Window Start)
+        int targetIdx = messages.size() - maxMessages;
+
+        // 3. 增强版原子对齐 (Atomic Alignment)
+        while (targetIdx > (lastFirstIdx + 1) && targetIdx < messages.size()) {
+            ChatMessage msg = messages.get(targetIdx);
+            if (msg instanceof ToolMessage || isObservation(msg)) {
+                targetIdx--;
+            } else if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
+                // 停止回溯，这是一个 Action 节点
+                break;
+            } else {
                 break;
             }
         }
 
-        // 3. 确定逻辑对齐截断点
-        int startIdx = Math.max(0, messages.size() - maxMessages);
-
-        // 关键逻辑：防止在 Action 和 Observation 之间断开，必须确保它们成对被保留或丢弃
-        while (startIdx > 0) {
-            ChatMessage msg = messages.get(startIdx);
-            if (msg instanceof ToolMessage) {
-                startIdx--; // 当前是结果，继续向前寻找动作
-            } else if (msg instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) msg).getToolCalls())) {
-                break; // 找到了完整的 Action-Observation 对的起点
-            } else {
-                break; // 正常的 Thought 或 User 消息
+        // 4. 语义连贯补齐 (Semantic Completion)
+        if (targetIdx > (lastFirstIdx + 1)) {
+            ChatMessage prev = messages.get(targetIdx - 1);
+            if (prev instanceof AssistantMessage && Assert.isEmpty(((AssistantMessage) prev).getToolCalls())) {
+                targetIdx--;
             }
         }
 
-        // 4. 重组上下文
+        // 5. 重构 WorkingMemory
         List<ChatMessage> compressed = new ArrayList<>();
 
-        // 保留全局指令 (System) 和原始任务 (First User)
-        messages.stream().filter(m -> m instanceof SystemMessage).forEach(compressed::add);
-        if (firstUserMsg != null && !(firstUserMsg instanceof SystemMessage)) {
-            compressed.add(firstUserMsg);
+        compressed.addAll(firstList);
+
+        if (targetIdx > (lastFirstIdx + 1)) {
+            List<ChatMessage> expired = messages.subList(lastFirstIdx + 1, targetIdx);
+            // 过滤掉 expired 中可能存在的旧摘要标记消息，避免“摘要的摘要”产生标题堆叠
+            List<ChatMessage> pureHistory = expired.stream()
+                    .filter(m -> !m.hasMetadata(ReActAgent.META_SUMMARY))
+                    .collect(Collectors.toList());
+
+            if (summarizationStrategy != null && !pureHistory.isEmpty()) {
+                ChatMessage summaryMsg = summarizationStrategy.summarize(trace, pureHistory);
+                if (summaryMsg != null) {
+                    compressed.add(summaryMsg);
+                }
+            }
         }
 
-        int dropCount = startIdx;
-        if (firstUserMsg != null && messages.indexOf(firstUserMsg) < startIdx) {
-            dropCount--;
-        }
+        compressed.addAll(messages.subList(targetIdx, messages.size()));
 
-        // 5. 应用压缩
-        if (dropCount > 0) {
+        // 6. 更新工作区
+        if (compressed.size() < messages.size()) {
+            trace.getWorkingMemory().replaceMessages(compressed);
+
             if (log.isDebugEnabled()) {
-                log.debug("ReActAgent [{}] context compressed: dropped {} messages", trace.getAgentName(), dropCount);
-            }
-            compressed.add(ChatMessage.ofSystem(TRIM_MARKER + " (Dropped " + dropCount + " messages for context optimization)"));
-        }
-
-        compressed.addAll(messages.subList(startIdx, messages.size()));
-        trace.getWorkingMemory().replaceMessages(compressed);
-    }
-
-    /**
-     * 粗略估算 Token (中英混排按 1.5 字符/Token 估算)
-     */
-    private int estimateTokens(List<ChatMessage> messages) {
-        return messages.stream().mapToInt(this::estimateTokens).sum();
-    }
-
-    private int estimateTokens(ChatMessage msg) {
-        if (msg == null || msg.getContent() == null) return 0;
-        String content = msg.getContent();
-
-        int length = content.length();
-        if (msg instanceof AssistantMessage) {
-            List<?> toolCalls = ((AssistantMessage) msg).getToolCalls();
-            if (Assert.isNotEmpty(toolCalls)) {
-                length += toolCalls.size() * 100; // 补偿 JSON 元数据开销
+                log.debug("ReActAgent [{}] summarized: {} -> {} messages (FirstChain size: {})",
+                        trace.getAgentName(), messages.size(), compressed.size(), firstList.size());
             }
         }
-        return (int) (length / 1.5);
+    }
+
+    private boolean isObservation(ChatMessage msg) {
+        return (msg instanceof ToolMessage) ||
+                (msg instanceof UserMessage && msg.getContent() != null && msg.getContent().startsWith("Observation:"));
     }
 }

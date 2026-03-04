@@ -19,18 +19,21 @@ import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.agent.react.ReActAgentConfig;
-import org.noear.solon.ai.agent.react.ReActInterceptor;
-import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.*;
+import org.noear.solon.ai.agent.react.intercept.HITL;
+import org.noear.solon.ai.agent.react.intercept.HITLDecision;
+import org.noear.solon.ai.agent.react.intercept.HITLTask;
+import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.NamedTaskComponent;
 import org.noear.solon.flow.Node;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,30 +65,176 @@ public class ReasonTask implements NamedTaskComponent {
         return ReActAgent.ID_REASON;
     }
 
+    private boolean handleHitlExtension(ReActTrace trace, int currentStep, int maxSteps, int maxStepsLimit){
+        // 检查用户是否已经通过 HITL 决策过“继续”
+        HITLDecision decision = trace.getContext().getAs(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
+
+        if (decision == null) {
+            // 核心创新：伪造一个 Feedback 请求，挂起任务
+            String warningMsg = String.format("Agent 已执行 %d 步（上限 %d 步），任务尚未完成。是否允许继续执行？",
+                    currentStep, maxSteps);
+
+            // 1. 记录挂起任务
+            Map<String, Object> args = new HashMap<>();
+            args.put("reason", warningMsg);
+            args.put("type", "step_limit_warning");
+
+            trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(FeedbackTool.TOOL_NAME, args, warningMsg));
+
+            // 2. 设为挂起状态
+            trace.pending(warningMsg);
+            trace.setFinalAnswer(warningMsg); // 让前端能展示这个询问提示
+
+            LOG.info("ReActAgent [{}] paused at threshold step: {}/{}", config.getName(), currentStep, maxSteps);
+            return true;
+        } else {
+            // 如果用户已经决策了（approve），则重置步数或扩大步数，让 Agent 继续跑
+            if (decision.isApproved()) {
+                // 方案：给 Agent 续命，增加步数上限（或者简单地将 stepCount 减去一部分）
+                int nextMaxSteps = Math.min(maxSteps + 10, maxStepsLimit);
+                trace.getOptions().setMaxSteps(nextMaxSteps);
+
+                LOG.info("ReActAgent [{}] approved to continue. New max steps: {}",
+                        config.getName(), trace.getOptions().getMaxSteps());
+
+                // 清理决策状态，防止死循环
+                trace.getContext().remove(HITL.DECISION_PREFIX + FeedbackTool.TOOL_NAME);
+                trace.getContext().remove(HITL.LAST_INTERVENED);
+            }
+        }
+
+        return false;
+    }
+
     @Override
     public void run(FlowContext context, Node node) throws Throwable {
         String traceKey = context.getAs(ReActAgent.KEY_CURRENT_UNIT_TRACE_KEY);
         ReActTrace trace = context.getAs(traceKey);
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] reasoning... Step: {}/{}",
-                    config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps());
+        if(Agent.ID_END.equals(trace.getRoute())){
+            //有可能在 action 的拦截里，要求终止
+            return;
         }
 
-        // [逻辑 1: 安全限流] 防止无限循环，达到最大步数则强制终止并返回错误提示
-        if (trace.nextStep() > trace.getOptions().getMaxSteps()) {
-            LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), trace.getOptions().getMaxSteps());
+        if (LOG.isDebugEnabled()) {
+            if (trace.getOptions().isPlanningMode()) {
+                String planDesc = "";
+                if (trace.hasPlans() && trace.getPlanIndex() < trace.getPlans().size()) {
+                    planDesc = " | Plan[" + (trace.getPlanIndex() + 1) + "]: " + trace.getPlans().get(trace.getPlanIndex());
+                }
+                LOG.debug("ReActAgent [{}] reasoning... Step: {}/{}{}",
+                        config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps(), planDesc);
+            } else {
+                LOG.debug("ReActAgent [{}] reasoning... Step: {}/{}",
+                        config.getName(), trace.getStepCount() + 1, trace.getOptions().getMaxSteps());
+            }
+        }
+
+        // [逻辑 1: 安全限流 & 互动续航]
+        int currentStep = trace.nextStep(); // 这里会自增步数
+        int maxSteps = trace.getOptions().getMaxSteps();
+        int maxStepsLimit = trace.getOptions().getMaxStepsLimit();
+
+        // 只有在不可扩展时，currentStep > maxStepsLimit 才触发硬熔断
+        if (currentStep > maxStepsLimit) {
+            if (trace.getOptions().isMaxStepsExtensible()) {
+                // 如果开启了续航，硬限自动向后推演，保持“无限”可能，但保留日志警告
+                LOG.warn("ReActAgent [{}] hard limit hit ({}), but extensible is ON. Pushing limit to {}",
+                        config.getName(), maxStepsLimit, maxStepsLimit + 20);
+                trace.getOptions().setMaxStepsLimit(maxStepsLimit + 20);
+            } else {
+                LOG.error("ReActAgent [{}] hard limit hit: {}", config.getName(), maxStepsLimit);
+                trace.setRoute(Agent.ID_END);
+                trace.setFinalAnswer("已达到硬性步数上限 (" + maxStepsLimit + ")，任务终止。");
+                return;
+            }
+        }
+
+        //软限拦截与自动/人工分流
+        if(trace.getOptions().isMaxStepsExtensible()) {
+            int thresholdStep = Math.max(maxSteps - 1, (int) (maxSteps * 0.8));
+
+            if (currentStep >= thresholdStep) {
+                // 检查是否有 HITL 拦截器（人工模式 vs 自动模式）
+                boolean hasHitl = trace.getOptions().getInterceptors().stream()
+                        .anyMatch(i -> i.target instanceof HITL);
+
+                if (hasHitl) {
+                    // 模式 A：由人类判断是否继续。若返回 true 表示任务已挂起等待。
+                    if (handleHitlExtension(trace, currentStep, maxSteps, trace.getOptions().getMaxStepsLimit())) {
+                        return;
+                    }
+                } else {
+                    // 模式 B：真正的无限续航（自动模式）
+                    // 只要没到物理硬限，就自动延展
+                    if (maxSteps < trace.getOptions().getMaxStepsLimit()) {
+                        trace.getOptions().setMaxSteps(maxSteps + 10);
+
+                        String interventionPrompt = String.format(
+                                "【运行干预】任务执行时长已超出预期（当前第 %d 步）。\n" +
+                                        "请停止当前的常规推理循环，先执行以下自审：\n" +
+                                        "1. **核心目标检查**：你距离解决最初提出的问题还有多远？\n" +
+                                        "2. **有效性评估**：如果过去几步的 Observation 没有带来新信息，说明当前策略已失效，请立即更换思路或尝试其他工具。\n" +
+                                        "3. **强制收敛**：严禁在原地打转。若确定无法达成，请总结已发现的线索并在 Final Answer 中申请用户协助。\n" +
+                                        "请在下一轮 Thought 中简要陈述你的新策略，然后继续。",
+                                currentStep
+                        );
+
+                        trace.getWorkingMemory().addMessage(ChatMessage.ofUser(interventionPrompt));
+                        LOG.info("ReActAgent [{}] critical intervention injected (Claude-style) at step {}", config.getName(), currentStep);
+                    }
+                }
+            }
+        } else  if (currentStep > maxSteps) {
+            // 非续航模式下的标准熔断
+            LOG.warn("ReActAgent [{}] reached max steps: {}", config.getName(), maxSteps);
             trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer("Agent error: Maximum iterations reached.");
+            trace.setFinalAnswer("Agent error: Maximum steps reached (" + maxSteps + ").");
             return;
         }
 
         // [逻辑 2: 提示词工程] 融合系统角色、执行计划、输出格式约束及协议指令
         String systemPrompt = config.getSystemPromptFor(trace, context);
 
-        if (trace.getOptions().isEnablePlanning() && trace.hasPlans()) {
-            systemPrompt += "\n\n[执行计划]\n" + String.join("\n", trace.getPlans()) +
-                    "\n请参考以上计划执行，当前已进行到第 " + (trace.getStepCount() + 1) + " 轮推理。";
+        if (trace.getOptions().isPlanningMode() && trace.hasPlans()) {
+            StringBuilder sb = new StringBuilder("\n\n[执行计划进度看板]\n");
+            List<String> plans = trace.getPlans();
+            int currIdx = trace.getPlanIndex();
+            int total = plans.size();
+
+            for (int i = 0; i < total; i++) {
+                String status = (i < currIdx) ? "[√] " : (i == currIdx ? "[●] " : "[ ] ");
+                sb.append(i + 1).append(". ").append(status).append(plans.get(i)).append("\n");
+            }
+
+            sb.append("\n**计划进度同步协议 (Plan Sync Protocol)：**\n");
+            if (currIdx < total) {
+                int currentStepNum = currIdx + 1;
+                int nextStepNum = currIdx + 2;
+
+                sb.append("- **当前状态**: 你正在执行步骤 [").append(currentStepNum).append("]。\n");
+                sb.append("- **正常推进**: 步骤完成后，若结果符合预期，必须调用 `update_plan_progress` 并将 `next_plan_index` 设为 `").append(nextStepNum).append("` ");
+
+                if (currIdx == total - 1) {
+                    sb.append("(标志所有计划已达成)。\n");
+                } else {
+                    sb.append("(切换至下一环节)。\n");
+                }
+
+                // 新增：修订引导，防止盲目推进
+                sb.append("- **动态调整**: 若观察结果（Observation）显示原计划已不可行，必须优先调用 `revise_plan` 修正后续步骤，严禁强行进入错误环节。\n");
+                sb.append("- **禁止跳步**: 在更新进度前，禁止直接提供最终回答。");
+            } else {
+                sb.append("- **目标达成**: 计划看板已全部标记为 [√]。请综合上述执行过程中的所有观察结果，直接给出最终的详细回答。");
+            }
+
+            systemPrompt += sb.toString();
+        }
+
+        if (trace.isPending()) {
+            // 如果是从挂起状态恢复（例如 HITL 后继续）
+            systemPrompt += "\n\n[Human-In-The-Loop Context]\n" +
+                    "用户已对你的执行流程进行了审核并准许继续。请结合最新的 Observation 反馈调整你的下一步策略。";
         }
 
         if (Assert.isNotEmpty(trace.getOptions().getOutputSchema())) {
@@ -100,12 +249,30 @@ public class ReasonTask implements NamedTaskComponent {
             systemPrompt = sb.toString();
         }
 
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("ReActAgent SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), systemPrompt);
+        }
+
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(systemPrompt));
         messages.addAll(trace.getWorkingMemory().getMessages());
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
-        ChatResponse response = callWithRetry(trace, messages);
+        ChatResponse response = callWithRetry(node, trace, messages);
+        if(response == null || trace.isPending()){
+            return;
+        }
+
+        final AssistantMessage responseMessage;
+        if (response.isStream()) {
+            responseMessage = response.getAggregationMessage();
+        } else {
+            responseMessage = response.getMessage();
+        }
+
+        if(responseMessage == null){
+            return;
+        }
 
         if (response.getUsage() != null) {
             trace.getMetrics().addUsage(response.getUsage());
@@ -115,45 +282,41 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onModelEnd(trace, response);
         }
 
+        if(trace.isPending()){
+            return;
+        }
+
+        // 触发推理审计事件（传递原始消息对象）
+        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onReason(trace, responseMessage);
+        }
+
+        if(trace.isPending()){
+            return;
+        }
+
         // 容错处理：模型响应内容及工具调用均为空时，引导其重新生成
-        if (response.hasChoices() == false || (Assert.isEmpty(response.getContent()) && Assert.isEmpty(response.getMessage().getToolCalls()))) {
+        if (Assert.isEmpty(responseMessage.getContent()) && Assert.isEmpty(responseMessage.getToolCalls())) {
             trace.getWorkingMemory().addMessage(ChatMessage.ofUser("Your last response was empty. Please provide Action or Final Answer."));
             trace.setRoute(ReActAgent.ID_REASON);
             return;
         }
 
         // [逻辑 4: 路由分发 - 基于原生工具调用协议]
-        if (Assert.isNotEmpty(response.getMessage().getToolCalls())) {
-            trace.getWorkingMemory().addMessage(response.getMessage());
+        if (Assert.isNotEmpty(responseMessage.getToolCalls())) {
+            trace.setLastReasonMessage(responseMessage);
             trace.setRoute(ReActAgent.ID_ACTION);
             return;
         }
 
         // [逻辑 5: 路由判断 - 文本 ReAct 协议解析]
-        String rawContent = response.hasContent() ? response.getContent() : ""; // 原始（含 think）
-        String clearContent = response.hasContent() ? response.getResultContent() : ""; // 干净（无 think）
+        final String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : ""; // 干净（无 think）
 
-        // 截断防御：防止模型“幻觉”出 Observation 标记从而绕过系统控制
-        int obsIndex = rawContent.indexOf("Observation:");
-        if (obsIndex != -1) {
-            rawContent = rawContent.substring(0, obsIndex).trim();
 
-            obsIndex = clearContent.indexOf("Observation:");
-            if (obsIndex != -1) {
-                clearContent = clearContent.substring(0, obsIndex).trim();
-            }
-        }
+        // 进一步清洗协议头（如 Thought:{...}\nAction:），提取核心思维逻辑
+        final String thoughtContent = extractThought(trace, clearContent);
 
-        // 触发推理审计事件（传递原始消息对象）
-        for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
-            item.target.onReason(trace, response.getMessage());
-        }
-
-        // 进一步清洗协议头（如 Thought:），提取核心思维逻辑
-        String thoughtContent = extractThought(clearContent);
-
-        trace.getWorkingMemory().addMessage(ChatMessage.ofAssistant(rawContent));
-        trace.setLastResult(thoughtContent);
+        trace.setLastReasonMessage(responseMessage);
 
         // 触发思考事件（仅在存在有效思考文本时通知）
         if(Assert.isNotEmpty(thoughtContent)) {
@@ -162,22 +325,33 @@ public class ReasonTask implements NamedTaskComponent {
             }
         }
 
+        if(trace.isPending()){
+            return;
+        }
+
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            if (Assert.isNotEmpty(clearContent)) {
+                trace.setRoute(Agent.ID_END);
+                trace.setFinalAnswer(clearContent, true); // 直接取干净的正文
+                return;
+            }
+        }
+
         // [逻辑 6: 决策流控]
 
         // 决策基准采用 clearContent，确保不受 <think> 标签内干扰词影响
-        String decisionBase = clearContent;
 
         // 1. 优先判断任务是否结束（Finish）
-        if (decisionBase.contains(config.getFinishMarker())) {
+        if (clearContent.contains(config.getFinishMarker())) {
             trace.setRoute(Agent.ID_END);
-            trace.setFinalAnswer(extractFinalAnswer(thoughtContent));
+            trace.setFinalAnswer(extractFinalAnswer(clearContent), true);
             return;
         }
 
         // 2. 其次判断文本形式的工具执行意图（Action: { ... }）
-        if (decisionBase.contains("Action:")) {
-            String actionPart = decisionBase.substring(decisionBase.indexOf("Action:"));
-            if (actionPart.matches("(?s)Action:\\s*\\{.*")) {
+        if (clearContent.contains("Action:")) {
+            String actionPart = clearContent.substring(clearContent.indexOf("Action:"));
+            if (actionPart.length() > 7) {
                 trace.setRoute(ReActAgent.ID_ACTION);
                 return;
             }
@@ -185,10 +359,10 @@ public class ReasonTask implements NamedTaskComponent {
 
         // 3. 兜底逻辑：既无明确工具调用也无完成标识，视为直接回复 Final Answer
         trace.setRoute(Agent.ID_END);
-        trace.setFinalAnswer(extractFinalAnswer(thoughtContent));
+        trace.setFinalAnswer(extractFinalAnswer(clearContent), true);
     }
 
-    private ChatResponse callWithRetry(ReActTrace trace, List<ChatMessage> messages) {
+    private @Nullable ChatResponse callWithRetry(Node node, ReActTrace trace, List<ChatMessage> messages) throws RuntimeException {
         if(LOG.isTraceEnabled()){
             LOG.trace("ReActAgent [{}] calling model... messages: {}",
                     config.getName(),
@@ -198,15 +372,17 @@ public class ReasonTask implements NamedTaskComponent {
         ChatRequestDesc req = config.getChatModel()
                 .prompt(messages)
                 .options(o -> {
-                    o.toolAdd(trace.getOptions().getTools());
-                    o.toolAdd(trace.getProtocolTools());
+                    if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+                        o.toolAdd(trace.getOptions().getTools());
+                        o.toolAdd(trace.getProtocolTools());
+                    }
 
                     o.autoToolCall(false); // 强制由 Agent 框架接管工具链路管理
                     o.toolContextPut(trace.getOptions().getToolContext());
 
                     trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
 
-                    if(trace.getOptions().getOutputSchema() != null){
+                    if (trace.getOptions().getOutputSchema() != null) {
                         o.optionSet("response_format", Utils.asMap("type", "json_object"));
                     }
 
@@ -217,68 +393,111 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onModelStart(trace, req);
         }
 
+        if(trace.isPending()){
+            return null;
+        }
+
         int maxRetries = trace.getOptions().getMaxRetries();
-        for (int i = 0; i < maxRetries; i++) {
+        Throwable lastException = null;
+
+        for (int i = 0; i <= maxRetries; i++) { // 注意是 <=，确保至少执行一次
             try {
-                return req.call();
-            } catch (Exception e) {
-                if (i == maxRetries - 1) {
-                    LOG.error("ReActAgent [{}] failed after {} retries", config.getName(), maxRetries, e);
-                    throw new RuntimeException("Reasoning failed after max retries", e);
+                final ChatResponse response;
+
+                if (trace.getOptions().getStreamSink() != null) {
+                     response = req.stream().doOnNext(resp -> {
+                        trace.getOptions().getStreamSink()
+                                .next(new ReasonChunk(node, trace, resp));
+                    }).blockLast();
+                } else {
+                    response = req.call();
                 }
 
-                LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.getMessage());
+                if (response.hasChoices() == false && response.isFinished() == false) {
+                    //触发重试
+                    throw new IllegalStateException("The LLM did not return");
+                }
 
-                try {
-                    Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException("Retry interrupted", ie);
+                return response;
+            } catch (Throwable e) {
+                lastException = e;
+                if (i < maxRetries) {
+                    LOG.warn("ReActAgent [{}] retry {}/{} due to: {}", config.getName(), i + 1, maxRetries, e.getMessage());
+                    try {
+                        Thread.sleep(trace.getOptions().getRetryDelayMs() * (i + 1));
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 }
             }
         }
-        throw new RuntimeException("Unreachable");
+
+        // [核心优化]：如果到这里还没 return，说明全部失败了
+        LOG.error("ReActAgent [{}] totally failed after {} retries", config.getName(), maxRetries, lastException);
+
+        // 设置故障状态并终止路由
+        trace.setRoute(Agent.ID_END);
+        trace.setFinalAnswer("抱歉，暂时无法连接模型服务 (" + lastException.getMessage() + ")。请稍后重试。");
+
+        return null; // 返回 null，由 run 方法处理
     }
 
     /**
      * 移除技术性标签（如 <think>）及协议引导词（如 Thought:），获取纯净思考主体
      */
-    private String extractThought(String content) {
-        if (Utils.isEmpty(content)) {
+    private String extractThought(ReActTrace trace, String clearContent) {
+        if (Utils.isEmpty(clearContent)) {
             return "";
         }
 
-        String result;
-        int labelIndex = content.indexOf(THOUGHT_LABEL);
-        if (labelIndex != -1) {
-            result = content.substring(labelIndex + THOUGHT_LABEL.length()).trim();
-        } else {
-            result = content.trim();
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            return clearContent;
         }
 
-        return PATTERN_THINK.matcher(result).replaceAll("").trim();
+        String result;
+        int labelIndex = clearContent.indexOf(THOUGHT_LABEL);
+        if(labelIndex < 0){
+            return "";
+        }
+
+        result = clearContent.substring(labelIndex + THOUGHT_LABEL.length()).trim();
+
+        labelIndex = result.indexOf("\nAction:");
+        if (labelIndex > -1) {
+            result = result.substring(0, labelIndex).trim();
+        }
+
+        return result;
     }
 
     /**
      * 清理推理过程，从思考片段中提取最终业务答案
      */
-    private String extractFinalAnswer(String thoughtContent) {
-        if (Utils.isEmpty(thoughtContent)) {
+    private String extractFinalAnswer(String clearContent) {
+        if (Utils.isEmpty(clearContent)) {
             return "";
         }
 
-        String answer = thoughtContent;
+        String answer = clearContent;
         String marker = config.getFinishMarker();
 
         int markerIndex = answer.indexOf(marker);
-        if (markerIndex != -1) {
-            answer = answer.substring(markerIndex + marker.length()).trim();
+        if (markerIndex < 0) {
+            /**
+             * 示例："\n\nThought: 用户想要转账500元给老张，但是缺少必需的收款人银行卡号信息，需要向用户询问。\nAction: 我需要向用户询问老张的银行卡号，因为这是执行转账操作的必需参数。"
+             * */
+            marker = "Action:";
+            markerIndex = answer.indexOf(marker);
         }
 
-        return PATTERN_CLEAN.matcher(answer).replaceAll("").trim();
+        if (markerIndex < 0) {
+            return "";
+        }
+
+        answer = answer.substring(markerIndex + marker.length()).trim();
+        return answer;
     }
 
     private static final String THOUGHT_LABEL = "Thought:";
-    private static final Pattern PATTERN_THINK = Pattern.compile("(?s)<think>.*?</think>");
-    private static final Pattern PATTERN_CLEAN = Pattern.compile("(?m)^(Action|Observation):\\s*");
 }

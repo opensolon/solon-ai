@@ -18,8 +18,10 @@ package org.noear.solon.ai.agent;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.agent.team.NodeChunk;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.util.AgentUtil;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -51,9 +53,22 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     String name();
 
     /**
-     * 智能体职责描述（用于语义路由与任务分发参考）
+     * 智能体角色职责（用于 Prompt 提示与协作分发参考）
      */
-    String description();
+    String role();
+
+    /**
+     * 生成动态角色描述
+     *
+     * @param context 流程上下文（支持使用 context.vars 渲染模板）
+     */
+    default String roleFor(FlowContext context) {
+        if (context == null) {
+            return role();
+        }
+
+        return SnelUtil.render(role(), context.vars());
+    }
 
     /**
      * 智能体档案（能力画像与交互契约）
@@ -63,14 +78,10 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     }
 
     /**
-     * 生成动态职责描述（支持模板渲染）
+     * 生成动态元数据（用于协作传递）
      */
-    default String descriptionFor(FlowContext context) {
-        if (context == null) {
-            return description();
-        }
-
-        return SnelUtil.render(description(), context.vars());
+    default ONode toMetadata(FlowContext context) {
+        return AgentUtil.toMetadataNode(this, context);
     }
 
     /**
@@ -140,7 +151,10 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
         // 3. 准备提示词并执行推理
         final Prompt effectivePrompt;
         if (trace != null) {
-            effectivePrompt = trace.getProtocol().prepareAgentPrompt(trace, this, trace.getWorkingMemory(), trace.getConfig().getLocale());
+            effectivePrompt = trace.getProtocol()
+                    .prepareAgentPrompt(trace, this,
+                            trace.getWorkingMemory(),
+                            trace.getConfig().getLocale());
         } else {
             effectivePrompt = null;
         }
@@ -162,6 +176,12 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
 
         // 4. 同步执行轨迹与结果处理
         if (trace != null) {
+            //状态实时化
+            if (trace.getOptions().getStreamSink() != null) {
+                trace.getOptions().getStreamSink().next(new NodeChunk(node, trace, msg));
+            }
+
+            //协议后处理集成
             String rawContent = (msg.getContent() == null) ? "" : msg.getContent().trim();
             String finalResult = trace.getProtocol().resolveAgentOutput(trace, this, rawContent);
 
@@ -169,11 +189,14 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
                 finalResult = "Agent [" + name() + "] processed but returned no textual content.";
             }
 
+            //指标自动化同步
             trace.addRecord(ChatRole.ASSISTANT, name(), finalResult, duration);
 
             // 执行后置回调
             trace.getProtocol().onAgentEnd(trace, this);
-            trace.getOptions().getInterceptors().forEach(item -> item.target.onAgentEnd(trace, this));
+            for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
+                item.target.onAgentEnd(trace, this);
+            }
         }
 
         if (LOG.isDebugEnabled()) {
@@ -186,6 +209,8 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
     static String KEY_CURRENT_TEAM_TRACE_KEY = "_current_team_trace_key_";
     static String KEY_SESSION = "_SESSION_";
     static String KEY_PROTOCOL = "_PROTOCOL_";
+
+    static String META_AGENT = "_agent_";
 
     // --- Node IDs ---
     static String ID_START = "start";

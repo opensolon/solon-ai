@@ -1,10 +1,8 @@
 package features.ai.core;
 
-import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Param;
 
-import java.lang.reflect.Array;
 import java.util.Arrays;
 import java.util.List;
 

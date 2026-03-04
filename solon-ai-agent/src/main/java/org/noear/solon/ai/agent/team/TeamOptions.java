@@ -15,14 +15,17 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.NonSerializable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.FluxSink;
 
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * 团队协作配置选项 (Runtime Options)
@@ -34,6 +37,8 @@ import java.util.*;
  */
 public class TeamOptions implements NonSerializable {
     private static final Logger LOG = LoggerFactory.getLogger(TeamOptions.class);
+
+    private transient FluxSink<AgentChunk> streamSink;
 
     /**
      * 最大协作回合数（指团队中 Supervisor 指派专家的次数上限，防止死循环）
@@ -50,33 +55,44 @@ public class TeamOptions implements NonSerializable {
      */
     private long retryDelayMs = 1000L;
     /** 会话回溯窗口大小 */
-    private int sessionWindowSize = 5;
+    private int sessionWindowSize = 8;
 
     /** 记录回溯窗口大小 */
-    private int recordWindowSize = 5;
+    private int recordWindowSize = 8;
 
     private String skillInstruction;
+
+    /** 反馈模式（允许主动寻求外部帮助/反馈） */
+    private boolean feedbackMode = false;
+    private Function<TeamTrace, String> feedbackDescriptionProvider;
+    private Function<TeamTrace, String> feedbackReasonDescriptionProvider;
 
     /**
      * 模型选项
      */
     private final ModelOptionsAmend<?, TeamInterceptor> modelOptions = new ModelOptionsAmend<>();
-    /**
-     * 团队协作拦截器链（支持排序，用于审计、监控或干预）
-     */
-    private final List<RankEntity<TeamInterceptor>> interceptors = new ArrayList<>();
 
 
     public TeamOptions copy() {
         TeamOptions tmp = new TeamOptions();
-        tmp.interceptors.addAll(this.interceptors);
         tmp.modelOptions.putAll(this.modelOptions);
         tmp.maxTurns = this.maxTurns;
         tmp.maxRetries = this.maxRetries;
         tmp.retryDelayMs = this.retryDelayMs;
         tmp.recordWindowSize = this.recordWindowSize;
+        tmp.skillInstruction = this.skillInstruction;
+
+        tmp.feedbackMode = this.feedbackMode;
 
         return tmp;
+    }
+
+    protected void setStreamSink(FluxSink<AgentChunk> streamSink) {
+        this.streamSink = streamSink;
+    }
+
+    public FluxSink<AgentChunk> getStreamSink() {
+        return streamSink;
     }
 
 
@@ -115,23 +131,16 @@ public class TeamOptions implements NonSerializable {
         this.skillInstruction = skillInstruction;
     }
 
-    /**
-     * 注册团队拦截器
-     *
-     * @param interceptor 拦截器实例
-     * @param index       权重索引（数值越小优先级越高）
-     */
-    protected void addInterceptor(TeamInterceptor interceptor, int index) {
-        this.interceptors.add(new RankEntity<>(interceptor, index));
+    protected void setFeedbackMode(boolean feedbackMode) {
+        this.feedbackMode = feedbackMode;
+    }
 
-        if (interceptors.size() > 1) {
-            Collections.sort(interceptors);
-        }
+    protected void setFeedbackDescriptionProvider(Function<TeamTrace, String> provider) {
+        this.feedbackDescriptionProvider = provider;
+    }
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamOptions register interceptor: {}, index: {}",
-                    interceptor.getClass().getSimpleName(), index);
-        }
+    protected void setFeedbackReasonDescriptionProvider(Function<TeamTrace, String> provider) {
+        this.feedbackReasonDescriptionProvider = provider;
     }
 
 
@@ -150,8 +159,8 @@ public class TeamOptions implements NonSerializable {
 
     public FunctionTool getTool(String name) { return modelOptions.tool(name); }
 
-    public List<RankEntity<TeamInterceptor>> getInterceptors() {
-        return interceptors;
+    public Collection<RankEntity<TeamInterceptor>> getInterceptors() {
+        return modelOptions.interceptors();
     }
 
     public int getMaxTurns() {
@@ -176,5 +185,25 @@ public class TeamOptions implements NonSerializable {
 
     public String getSkillInstruction() {
         return skillInstruction;
+    }
+
+    public boolean isFeedbackMode() {
+        return feedbackMode;
+    }
+
+    public String getFeedbackDescription(TeamTrace trace) {
+        if (feedbackDescriptionProvider == null) {
+            return null;
+        }
+
+        return feedbackDescriptionProvider.apply(trace);
+    }
+
+    public String getFeedbackReasonDescription(TeamTrace trace) {
+        if (feedbackReasonDescriptionProvider == null) {
+            return null;
+        }
+
+        return feedbackReasonDescriptionProvider.apply(trace);
     }
 }

@@ -11,6 +11,7 @@ import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 
+import java.lang.reflect.Type;
 import java.util.Map;
 
 public class FaceShow {
@@ -161,6 +162,11 @@ public class FaceShow {
         @Override
         public String inputSchema() {
             return "";
+        }
+
+        @Override
+        public Type returnType() {
+            return null;
         }
 
         @Override

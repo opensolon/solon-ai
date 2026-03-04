@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.util;
 
+import org.noear.solon.core.Constants;
+
 import java.lang.reflect.Type;
 
 /**
@@ -28,12 +30,14 @@ public class ParamDesc {
     private final Type type;
     private final boolean required;
     private final String description;
+    private final String defaultValue;
 
-    public ParamDesc(String name, Type type, boolean required, String description) {
+    public ParamDesc(String name, Type type, boolean required, String description, String defaultValue) {
         this.name = name;
         this.type = type;
         this.required = required;
         this.description = (description == null ? "" : description);
+        this.defaultValue = Constants.PARM_UNDEFINED_VALUE.equals(defaultValue) ? null : defaultValue;
     }
 
     /**
@@ -58,6 +62,13 @@ public class ParamDesc {
     }
 
     /**
+     * 默认值
+     */
+    public String defaultValue() {
+        return defaultValue;
+    }
+
+    /**
      * 是否必须
      */
     public boolean required() {
@@ -69,6 +80,7 @@ public class ParamDesc {
         return "ParamDesc{" +
                 "name='" + name + '\'' +
                 ", description='" + description + '\'' +
+                ", defaultValue='" + defaultValue + '\'' +
                 ", required=" + required +
                 ", type=" + type +
                 '}';

@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.skill.SkillProvider;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.Props;
@@ -185,18 +186,50 @@ public class ChatModel implements AiModel {
             return this;
         }
 
+        /**
+         * User-Agent
+         */
+        public Builder userAgent(String userAgent) {
+            config.setUserAgent(userAgent);
+            return this;
+        }
+
+        /**
+         * 角色
+         */
+        public Builder role(String role) {
+            config.getModelOptions().role(role);
+            return this;
+        }
+
+        /**
+         * 指令
+         */
+        public Builder instruction(String instruction) {
+            config.getModelOptions().instruction(instruction);
+            return this;
+        }
+
+        /**
+         * 模型选项
+         */
         public Builder modelOptions(Consumer<ModelOptionsAmend<?, ChatInterceptor>> consumer) {
             consumer.accept(config.getModelOptions());
+            return this;
+        }
+
+        public Builder reasoningFieldName(String reasoningFieldName) {
+            config.setReasoningFieldName(reasoningFieldName);
             return this;
         }
 
         /**
          * 默认工具添加（即每次请求都会带上）
          *
-         * @param tool 工具对象
+         * @param tools 工具
          */
-        public Builder defaultToolAdd(FunctionTool tool) {
-            config.addDefaultTool(tool);
+        public Builder defaultToolAdd(FunctionTool... tools) {
+            config.addDefaultTool(tools);
             return this;
         }
 
@@ -228,7 +261,8 @@ public class ChatModel implements AiModel {
          * @param toolObj 工具对象
          */
         public Builder defaultToolAdd(Object toolObj) {
-            return defaultToolAdd(new MethodToolProvider(toolObj));
+            config.getModelOptions().toolAdd(toolObj);
+            return this;
         }
 
         /**
@@ -240,7 +274,7 @@ public class ChatModel implements AiModel {
         public Builder defaultToolAdd(String name, Consumer<FunctionToolDesc> toolBuilder) {
             FunctionToolDesc decl = new FunctionToolDesc(name);
             toolBuilder.accept(decl);
-            config.addDefaultTool(decl);
+            config.getModelOptions().toolAdd(decl);
             return this;
         }
 
@@ -250,8 +284,23 @@ public class ChatModel implements AiModel {
          *
          * @since 3.8.4
          */
-        public Builder defaultSkillAdd(Skill skill) {
-            return defaultSkillAdd(0, skill);
+        public Builder defaultSkillAdd(Skill... skill) {
+            for (Skill s : skill) {
+                defaultSkillAdd(0, s);
+            }
+            return this;
+        }
+
+        /**
+         * 默认技能添加
+         *
+         * @since 3.9.5
+         */
+        public Builder defaultSkillAdd(SkillProvider skillProvider) {
+            for (Skill s : skillProvider.getSkills()) {
+                defaultSkillAdd(0, s);
+            }
+            return this;
         }
 
         /**

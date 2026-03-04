@@ -204,6 +204,14 @@ public class EmbeddingModel implements AiModel {
         }
 
         /**
+         *  User-Agent
+         */
+        public Builder userAgent(String userAgent){
+            config.setUserAgent(userAgent);
+            return this;
+        }
+
+        /**
          * 网络超时
          */
         public Builder timeout(Duration timeout) {

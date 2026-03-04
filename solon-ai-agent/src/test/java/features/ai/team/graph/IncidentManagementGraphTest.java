@@ -85,9 +85,9 @@ public class IncidentManagementGraphTest {
                 })
                 .build();
 
-        // 2. 运行测试
+        // 2. 运行测试：改为链式调用风格
         AgentSession session = InMemoryAgentSession.of("session_incident_01");
-        team.call(Prompt.of("系统出现报警，请立即处理"), session);
+        team.prompt(Prompt.of("系统出现报警，请立即处理")).session(session).call();
 
         // 3. 结果验证 (Agent 走 Trace，Activity 走 Context)
         TeamTrace trace = team.getTrace(session);
@@ -114,11 +114,11 @@ public class IncidentManagementGraphTest {
     }
 
     private Agent createSupportAgent(ChatModel chatModel, String name, String role, String mockMsg) {
+        // 使用新版 role(x).instruction(y) 风格
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(p->p
-                        .role(role)
-                        .instruction("请简要回复结论。参考内容：" + mockMsg))
+                .role(role)
+                .instruction("请简要回复结论。参考内容：" + mockMsg)
                 .build();
     }
 }

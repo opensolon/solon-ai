@@ -15,6 +15,6 @@ public class OllamaTest extends AbsChatTest{
     protected ChatModel.Builder getChatModelBuilder() {
         return ChatModel.of("http://127.0.0.1:11434/api/chat")
                 .provider("ollama")
-                .model("qwen2.5:1.5b"); //"llama3.2";
+                .model("qwen3:4b"); //"llama3.2";
     }
 }

@@ -17,16 +17,10 @@ package org.noear.solon.ai.mcp.server.manager;
 
 import io.modelcontextprotocol.server.*;
 import io.modelcontextprotocol.spec.McpSchema;
-import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
-import org.noear.solon.ai.chat.ChatRole;
-import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.mcp.exception.McpException;
 import org.noear.solon.ai.mcp.server.McpServerContext;
 import org.noear.solon.ai.mcp.server.McpServerProperties;
-import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.prompt.FunctionPrompt;
 import org.noear.solon.ai.util.ParamDesc;
 import org.noear.solon.core.handle.Context;
 import reactor.core.publisher.Mono;
@@ -98,54 +92,8 @@ public class StatelessPromptRegistry implements McpPrimitivesRegistry<FunctionPr
                     (exchange, request) -> {
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(null,  exchange), () -> {
-                                functionPrompt.handleAsync(request.arguments()).whenComplete((prompts, err) -> {
-                                    if (err != null) {
-                                        err = Utils.throwableUnwrap(err);
-                                        sink.error(new McpException(err.getMessage(), err));
-                                    } else {
-                                        List<McpSchema.PromptMessage> promptMessages = new ArrayList<>();
-                                        for (ChatMessage msg : prompts) {
-                                            if (msg.getRole() == ChatRole.ASSISTANT) {
-                                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.ASSISTANT, new McpSchema.TextContent(msg.getContent())));
-                                            } else if (msg.getRole() == ChatRole.USER) {
-                                                UserMessage userMessage = (UserMessage) msg;
-
-                                                if (Utils.isEmpty(userMessage.getMedias())) {
-                                                    //如果没有媒体
-                                                    promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                            new McpSchema.TextContent(msg.getContent())));
-                                                } else {
-                                                    //如果有，分解消息
-
-                                                    //1.先转媒体（如果是图片）
-                                                    for (AiMedia media : userMessage.getMedias()) {
-                                                        if (media instanceof Image) {
-                                                            Image mediaImage = (Image) media;
-                                                            if (mediaImage.getB64Json() != null) {
-                                                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                                        new McpSchema.ImageContent(null, null,
-                                                                                mediaImage.getB64Json(),
-                                                                                mediaImage.getMimeType())));
-                                                            } else {
-                                                                promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                                        new McpSchema.ImageContent(null, null,
-                                                                                mediaImage.getUrl(),
-                                                                                mediaImage.getMimeType())));
-                                                            }
-                                                        }
-                                                    }
-
-                                                    //2.再转文本
-                                                    if (Utils.isNotEmpty(msg.getContent())) {
-                                                        promptMessages.add(new McpSchema.PromptMessage(McpSchema.Role.USER,
-                                                                new McpSchema.TextContent(msg.getContent())));
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        sink.success(new McpSchema.GetPromptResult(functionPrompt.description(), promptMessages));
-                                    }
+                                functionPrompt.handleAsync(request.arguments()).whenComplete((rst, err) -> {
+                                    McpResultResponder.doPromptResultResponse(sink, mcpServerProps, functionPrompt, rst, err);
                                 });
                             });
                         });

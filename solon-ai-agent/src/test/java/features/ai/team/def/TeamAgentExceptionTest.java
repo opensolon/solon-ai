@@ -31,8 +31,9 @@ public class TeamAgentExceptionTest {
             public String name() { return "trouble_maker"; }
 
             @Override
-            public String description() { return "总是出问题的 Agent"; }
+            public String role() { return "故障模拟器"; }
 
+            // 注意：匿名内部类中 role/instruction 风格通常在 Builder 中定义，此处模拟 API 逻辑一致性
             @Override
             public AssistantMessage call(Prompt prompt, AgentSession session) throws Throwable {
                 // 模拟 Agent 在推理或工具调用时发生的严重错误
@@ -51,7 +52,8 @@ public class TeamAgentExceptionTest {
 
         // 4. 执行并断言异常传播
         try {
-            team.call(Prompt.of("触发异常测试"), session);
+            // 修改风格为 prompt().session().call()
+            team.prompt(Prompt.of("触发异常测试")).session(session).call();
             Assertions.fail("期望抛出异常但未捕获到");
         } catch (Throwable e) {
             e.printStackTrace();
@@ -91,7 +93,8 @@ public class TeamAgentExceptionTest {
 
         // 3. 执行测试并验证
         try {
-            team.call(Prompt.of("测试工作流故障"), session);
+            // 修改风格为 prompt().session().call()
+            team.prompt(Prompt.of("测试工作流故障")).session(session).call();
             Assertions.fail("Graph 节点异常未能正确阻断流程");
         } catch (Throwable e) {
             System.out.println("捕获到预期的 Graph 节点异常: " + e.getCause().getMessage());

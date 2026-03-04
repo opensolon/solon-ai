@@ -16,11 +16,15 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.content.Contents;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -32,20 +36,22 @@ import java.util.List;
 @Preview("3.1")
 public class UserMessage extends ChatMessageBase<UserMessage> {
     private final ChatRole role = ChatRole.USER;
+    private final List<ContentBlock> blocks = new ArrayList<>();
     private String content;
-    private List<AiMedia> medias;
 
     public UserMessage() {
         //用于序列化
     }
 
-    public UserMessage(String content) {
-        this(content, null);
-    }
+    public UserMessage(Contents contents) {
+        if (contents != null) {
+            this.blocks.addAll(contents.getBlocks());
+            this.content = contents.getContent();
 
-    public UserMessage(String content, List<AiMedia> medias) {
-        this.content = content;
-        this.medias = medias;
+            if (Assert.isNotEmpty(contents.metas())) {
+                this.getMetadata().putAll(contents.metas());
+            }
+        }
     }
 
     /**
@@ -57,7 +63,7 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
     }
 
     /**
-     * 内容
+     * 内容（兼容单模态LLM）
      */
     @Override
     public String getContent() {
@@ -65,30 +71,27 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
     }
 
     /**
-     * 媒体集合
+     * 内容块集合（兼容多模态LLM）
      */
     @Nullable
-    public List<AiMedia> getMedias() {
-        return medias;
-    }
-
-    public boolean hasMedias(){
-        return Utils.isNotEmpty(medias);
+    public List<ContentBlock> getBlocks() {
+        return blocks;
     }
 
     /**
-     * 获取图像
+     * 是否为多模态
      */
-    @Nullable
-    public <T extends AiMedia> T getMedia(Class<T> type) {
-        if (Utils.isNotEmpty(medias)) {
-            AiMedia media = medias.get(0);
-            if (type.isInstance(media)) {
-                return (T) media;
-            }
+    public boolean isMultiModal() {
+        int size = blocks.size();
+        if (size > 1) {
+            return true;
         }
 
-        return null;
+        if (size == 1) {
+            return !(blocks.get(0) instanceof TextBlock);
+        }
+
+        return false;
     }
 
     @Override
@@ -98,16 +101,16 @@ public class UserMessage extends ChatMessageBase<UserMessage> {
 
         buf.append("role=").append(getRole().name().toLowerCase());
 
-        if (content != null) {
+        if (Utils.isNotEmpty(content)) {
             buf.append(", content='").append(content).append('\'');
+        }
+
+        if (isMultiModal()) {
+            buf.append(", blocks=").append(blocks);
         }
 
         if (Utils.isNotEmpty(metadata)) {
             buf.append(", metadata=").append(metadata);
-        }
-
-        if (Utils.isNotEmpty(medias)) {
-            buf.append(", medias=").append(medias);
         }
 
         buf.append("}");

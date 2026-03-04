@@ -16,10 +16,16 @@
 package org.noear.solon.ai.chat.message;
 
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 聊天工具消息
@@ -30,6 +36,7 @@ import java.util.Map;
 @Preview("3.1")
 public class ToolMessage extends ChatMessageBase<ToolMessage> {
     private final ChatRole role = ChatRole.TOOL;
+    private final List<ContentBlock> blocks = new ArrayList<>();
     private String content;
     private String name;
     private String toolCallId;
@@ -39,11 +46,19 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
         //用于序列化
     }
 
-    public ToolMessage(String content, String name, String toolCallId, boolean returnDirect) {
-        this.content = content;
+    public ToolMessage(ToolResult toolResult, String name, String toolCallId, boolean returnDirect) {
         this.name = name;
         this.toolCallId = toolCallId;
         this.returnDirect = returnDirect;
+
+        if (toolResult != null) {
+            this.blocks.addAll(toolResult.getBlocks());
+            this.content = toolResult.getContent();
+
+            if (Assert.isNotEmpty(toolResult.metas())) {
+                this.getMetadata().putAll(toolResult.metas());
+            }
+        }
     }
 
     /**
@@ -54,9 +69,36 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
         return role;
     }
 
+    /**
+     * 内容（兼容单模态LLM）
+     */
     @Override
     public String getContent() {
         return content;
+    }
+
+    /**
+     * 内容块集合（兼容多模态LLM）
+     */
+    @Nullable
+    public List<ContentBlock> getBlocks() {
+        return blocks;
+    }
+
+    /**
+     * 是否为多模态
+     */
+    public boolean isMultiModal() {
+        int size = blocks.size();
+        if (size > 1) {
+            return true;
+        }
+
+        if (size == 1) {
+            return !(blocks.get(0) instanceof TextBlock);
+        }
+
+        return false;
     }
 
     /**
@@ -87,8 +129,12 @@ public class ToolMessage extends ChatMessageBase<ToolMessage> {
 
         buf.append("role=").append(getRole().name().toLowerCase());
 
-        if (content != null) {
+        if (Utils.isNotEmpty(content)) {
             buf.append(", content='").append(content).append('\'');
+        }
+
+        if (isMultiModal()) {
+            buf.append(", blocks=").append(blocks);
         }
 
         if (Utils.isNotEmpty(metadata)) {

@@ -7,14 +7,13 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,7 +37,7 @@ public class McpHttpClientMixTest10_stateless {
     @Test
     public void tool1_model() throws Exception {
         //没有参数的工具
-        String response = mcpClient.callToolAsText("spotIntro", Collections.emptyMap()).getContent();
+        String response = mcpClient.callTool("spotIntro", Collections.emptyMap()).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -65,7 +64,7 @@ public class McpHttpClientMixTest10_stateless {
         args.put("city", "杭州");
         args.put("userName", "xxx");
 
-        String response = mcpClient.callToolAsText("getCity", args).getContent();
+        String response = mcpClient.callTool("getCity", args).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -77,7 +76,7 @@ public class McpHttpClientMixTest10_stateless {
         Map<String, Object> args = Utils.asMap("activityInfo",
                 Utils.asMap("activityId", "12"));
 
-        String response = mcpClient.callToolAsText("getDetails", args).getContent();
+        String response = mcpClient.callTool("getDetails", args).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -89,7 +88,7 @@ public class McpHttpClientMixTest10_stateless {
         Map<String, Object> args = Utils.asMap("activityInfo",
                 Utils.asMap("activityId", "12"));
 
-        String response = mcpClient.callToolAsText("getDetailsResult", args).getContent();
+        String response = mcpClient.callTool("getDetailsResult", args).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -99,7 +98,7 @@ public class McpHttpClientMixTest10_stateless {
 
     @Test
     public void tool4_getHeader() throws Exception {
-        String response = mcpClient.callToolAsText("getHeader", Utils.asMap()).getContent();
+        String response = mcpClient.callTool("getHeader", Utils.asMap()).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -108,7 +107,7 @@ public class McpHttpClientMixTest10_stateless {
 
     @Test
     public void tool5_getParam() throws Exception {
-        String response = mcpClient.callToolAsText("getParam", Utils.asMap()).getContent();
+        String response = mcpClient.callTool("getParam", Utils.asMap()).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -117,12 +116,12 @@ public class McpHttpClientMixTest10_stateless {
 
     @Test
     public void prompt1() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("splitMessage", Collections.emptyMap());
+        Prompt prompt = mcpClient.getPrompt("splitMessage", Collections.emptyMap());
 
-        assert Utils.isNotEmpty(prompt);
+        assert Utils.isNotEmpty(prompt.getMessages());
         log.warn("{}", prompt);
         assert prompt.size() == 2;
-        assert "[{role=user, content='', medias=[Image{url='https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png', b64_json='null', mimeType='image/jpeg'}]}, {role=user, content='这图里有方块吗？'}]"
-                .equals(prompt.toString());
+        assert "[{role=user, content='这图里有方块吗？'}, {role=user, blocks=[ImageBlock{url='https://solon.noear.org/img/369a9093918747df8ab0a5ccc314306a.png', data='null', mimeType='image/jpeg'}]}]"
+                .equals(prompt.getMessages().toString());
     }
 }

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.simple;
 
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -25,6 +26,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 import java.util.function.Consumer;
 
@@ -43,12 +45,12 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
     private final SimpleAgent agent;
     private final Prompt prompt;
     private AgentSession session;
-    private ModelOptionsAmend<?, SimpleInterceptor> options;
+    private SimpleOptions options;
 
     public SimpleRequest(SimpleAgent agent, Prompt prompt) {
         this.agent = agent;
         this.prompt = prompt;
-        this.options = new ModelOptionsAmend<>();
+        this.options = new SimpleOptions();
         this.options.putAll(agent.getConfig().getDefaultOptions());
     }
 
@@ -86,5 +88,30 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
         SimpleTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
 
         return new SimpleResponse(session, trace, message);
+    }
+
+    public Flux<AgentChunk> stream() {
+        if (session == null) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("No session provided for SimpleRequest, using temporary InMemoryAgentSession.");
+            }
+            // 自动降级为临时的内存会话
+            session = InMemoryAgentSession.of();
+        }
+
+        return Flux.<AgentChunk>create(sink -> {
+            try {
+                options.setStreamSink(sink);
+                AssistantMessage message = agent.call(prompt, session, options);
+                SimpleTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+
+                SimpleResponse resp = new SimpleResponse(session, trace, message);
+
+                sink.next(new SimpleChunk(resp));
+                sink.complete();
+            } catch (Throwable e) {
+                sink.error(e);
+            }
+        });
     }
 }

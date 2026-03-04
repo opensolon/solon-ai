@@ -11,6 +11,134 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 3.9.5
+
+* 新增 solon-ai-skill-toolgateway
+* 优化 solon-ai-skill-memory MemSkill 取消 userId 参数，自动从上下文中取
+* 添加 solon-ai-core __sessionId 自动作为工具上下文和提示词属性（用于传递会话id）
+* 添加 solon-ai-core ChatConfig.getReasoningFieldName 自动处理，兼容 deepseek 新的变化
+* 添加 solon-ai-core ChatModel options 配置自动转强类型（llm 不能接收str）
+* 添加 solon-ai-agent ReActInterceptor.onObservation durationMs 参数（时长毫秒数）
+* 添加 solon-ai-agent ReActChunk isNormal(用于识别是否为正常结束)
+* 添加 solon-ai-skill-memory MemSkill 支持会话隔离与共享
+
+### 3.9.4
+
+* 新增 solon-ai-skill-lucene 插件
+* 新增 solon-ai-skill-diff 插件
+* 新增 solon-ai-skill-memory 插件
+* 添加 solon-ai-core toolContext 自动转为 Prompt.attrs 的机制（方便 skill 传递）
+* 添加 solon-ai-agent ReActChunk, TeamChunk getTrace 方法
+* 添加 solon-ai-agent __sessionId 作为智能体的必要工具上下文（方便工具的会话数据隔离）
+* 优化 solon-ai-core chatModel 方言的（不规范的）兼容性处理
+* 优化 solon-ai-core buildToolCallBuilder 兼容（有些 llm stream ，会部分全量多次提供）
+* 优化 solon-ai-agent SummarizationInterceptor 增加策略机制并内置4个策略
+* 修复 solon-ai-core ChatModel.stream 过程异常时会破坏流响应的问题
+* 修复 solon-ai-agent ReasonTask.callWithRetry 网络异常时会中断工作流的问题
+* 修复 solon-ai-agent ReActAgent 流式请求时，可能无法记忆结果内容的问题
+
+### 3.9.3
+
+* 重构 solon-ai-agent Plan-ReAct 模式（相对之前，新设计智能、态动、按需）
+* 优化 solon-ai-skill-cli CliSkill
+
+### 3.9.2
+
+
+* 新增 solon-ai-acp 插件（可以对接支持 acp 协议的 IDE）
+* 添加 solon-ai-core ChatSessionProvider
+* 添加 solon-ai-core FunctionTool:call 方法
+* 添加 solon-ai-mcp FunctionPrompt:get 方法
+* 添加 solon-ai-mcp FunctionResource:read 方法
+* 添加 solon-ai-core ToolSchemaUtil.resultConvert 方法（将 tool 转换从内部，转到外部）
+* 添加 solon-ai-agent ReActAgent maxStepsExtensible 配置，允许通过 HITL 扩容步数
+* 优化 solon-ai-core ChatModel 与 DeepSeek-R1 兼容性
+* 优化 solon-ai-agent ReActAgent 与 DeepSeek-R1 兼容性（手造的 AssistantMessage 需要自动补字段）
+* 优化 solon-ai-agent FunctionTool 增加 tool 多模态与单模态兼容处理
+* 优化 solon-ai-skill-cli CliSkill 进一步与 Claude Code 规范对齐（接近 100%）
+* 优化 solon-ai-skill-cli CodeCLI exit 改为进程退出
+* 优化 solon-ai-mcp 无心跳时，支持自动复位尝试
+* 调整 solon-ai-mcp McpClientProvider 接口，优化多模态适配
+* 调整 solon-ai-core 多模态体系（AiMedia 更名为 ContentBlock，）
+* 调整 solon-ai-core UserMessage medias 更名为 blocks，hasMedias 更名为 isMultiModal
+* 调整 solon-ai-core ToolMessage 添加 blocks，isMultiModal（工具支持多模态）
+* 调整 solon-ai-core ChatDialect 接口，对多模态和 R1 更友好
+* 移除 solon-ai-core 移除 ImageModel 体系，由 GenerateModel 体系接替（v3.5 时增加)
+* 修复 solon-ai-agent ReActAgent 重试时会消息倍增的问题 
+* 修复 solon-ai-agent ReActAgent，TeamAgent 在恢复执行时，会重置 Options 的问题
+
+
+变更说明：
+
+| 旧名（强调多媒体）                                  | 新名（强调多模态内容块）                                          |
+|--------------------------------------------|-------------------------------------------------------|
+| AiMedia                                    | ContentBlock                                          |
+| Text                                       | TextBlock                                             |
+| Image                                      | ImageBlock                                            |
+| Audio                                      | AudioBlock                                            |
+| Video                                      | VideoBlock                                            |
+|                                            |                                                       |
+| UserMessage.getMedias()                    | getBlocks()                                           |
+| UserMessage.hasMedias()                    | isMultiModal()                                        |
+| /                                          | ToolMessage.getBlocks()                               |
+| /                                          | ToolMessage.isMultiModal()                            |
+|                                            |                                                       |
+| McpClientProvider.callTool()               | callToolRequest()                                     |
+| McpClientProvider.callToolAsText()         | callTool()                                            |
+| McpClientProvider.callToolAsImage()        | /                                                     |
+| McpClientProvider.callToolAsAudio()        | /                                                     |
+| McpClientProvider.readResource()           | readResourceRequest()                                 |
+| McpClientProvider.readResourceAsText()     | readResource()                                        |
+| McpClientProvider.readResourceAsBlob()     | /                                                     |
+| McpClientProvider.getPrompt()              | getPromptRequest()                                    |
+| McpClientProvider.getPromptAsMessage()     | getPrompt()                                           |
+| `org.noear.solon.ai.mcp.server.prompt.*`   | `org.noear.solon.ai.chat.prompt.*` （prompt 是公用元素）     | 
+| `org.noear.solon.ai.mcp.server.resource.*` | `org.noear.solon.ai.chat.resource.*` （resource 是公用元素） | 
+
+
+
+### v3.9.1
+
+
+* 新增 solon-ai-dialect-claude 插件
+* 新增 solon-ai-dialect-openai OpenaiResponses 方言适配
+* 新增 solon-ai-repo-weaviate 插件
+* 新增 solon-ai-skill-cli 插件（含 CliSkill 和 SolonCodeCLI）
+* 新增 solon-ai-skill-data 插件（含 RedisSkill）
+* 新增 solon-ai-skill-file 插件（含 FileReadWriteSkill，ZipSkill）
+* 新增 solon-ai-skill-generation 插件（含 ImageGenerationSkill， VideoGenerationSkill）
+* 新增 solon-ai-skill-mail 插件（含 MailSkill）
+* 新增 solon-ai-skill-pdf 插件（含 PdfSkill）
+* 新增 solon-ai-skill-restapi 插件（含 RestApiSkill），内置 OpenApi3 和 swagger2 兼容适配（可扩展定制）
+* 新增 solon-ai-skill-social 插件（含 DingTalkSkill，FeishuSkill，WeComSkill）
+* 新增 solon-ai-skill-sys 插件（含 NodejsSkill，PythonSkill， ShellSkill，SystemClockSkill）
+* 新增 solon-ai-skill-text2sql 插件（含 Text2SqlSkill）
+* 新增 solon-ai-skill-web 插件（含 WebCrawlerSkill，WebSearchSkill）
+* 添加 solon-ai-core ChatModel role 和 instruction 支持（提供类似 SimpleAgent 效果）
+* 添加 solon-ai-core ChatModel.stream 背压流控支持
+* 添加 solon-ai-core FileChatSession，RedisChatSession 聊天会话实现
+* 添加 solon-ai-core ChatInterceptor.onPrepare 事件（勾子）
+* 添加 solon-ai-core Prompt.removeLastMessage, removeLastAssistantMessage 方法
+* 添加 solon-ai-agent FileAgentSession 智能体会话实现
+* 添加 solon-ai-agent ReActTrace, TeamTrace pending 机制（方便按需拦截挂机）
+* 添加 solon-ai-agent feedbackMode 模式（默认为 false）
+* 添加 solon-ai-agent ReActInterceptor.onObservation toolName 参数
+* 添加 solon-ai-agent HITL 专属接口，进一步优化人工机制（同意，拒绝，跳过）
+* 添加 solon-ai-agent stream 流式输出机制
+* 优化 solon-ai-agent ReActAgent 添加主动挂机的能力（处理无法完成的任务时，可避免幻觉轮询）
+* 优化 solon-ai-agent description + systemPrompt 标为弃用，改由 role + instruction 替代（简化了）
+* 优化 solon-ai-agent 内置的 Team 协议（如 ReActProtocol，SwarmProtocol 等）
+* 优化 solon-ai-agent 内置的 ToolRetryInterceptor，ToolSanitizerInterceptor 等
+* 优化 solon-ai-agent AgentSession 接口 updateSnapshot 取消入参
+* 优化 solon-ai-agent ActionTask 取消正则匹配 json 方式，改用 json 流式读取方式
+* 调整 solon-ai-core InMemoryChatSession systemMessages 标为弃用（不建议放到会话里，不方便做结构化的管理）
+* 调整 solon-ai-agent 取消 title（减少迷惑），systemMessage 标为弃用。改用 role 和 instruction
+* 调整 solon-ai-core ChatModel.stream 返回由 Publisher 改为 Flux
+* 调整 solon-ai-agent enablePlanning 更名为 planningMode （前者标为弃用）
+* 修复 solon-ai-agent ReActAgent 新话题开始时， ReActTrace 没有重置干净的问题
+* 修复 solon-ai-agent SimpleAgent 没有接入协作协议 prepareAgentPrompt 勾子
+* qdrant 升为 1.16.2
+
 ### v3.9.0
 
 * 添加 solon-ai-core Prompt 更多方法（getLastAssistantMessage, size 等）

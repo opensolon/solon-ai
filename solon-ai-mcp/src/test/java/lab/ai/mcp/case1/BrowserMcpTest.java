@@ -3,9 +3,9 @@ package lab.ai.mcp.case1;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.media.Text;
 import org.noear.solon.test.SolonTest;
 
 /**
@@ -24,7 +24,7 @@ public class BrowserMcpTest {
 
         log.warn("{}", clientProvider.getTools());
 
-        Text rst = clientProvider.callToolAsText("get_browser_status", Utils.asMap());
+        ToolResult rst = clientProvider.callTool("get_browser_status", Utils.asMap());
 
         log.warn("{}", rst);
     }
@@ -38,7 +38,7 @@ public class BrowserMcpTest {
 
         log.warn("{}", clientProvider.getTools());
 
-        Text rst = clientProvider.callToolAsText("get_browser_status", Utils.asMap());
+        ToolResult rst = clientProvider.callTool("get_browser_status", Utils.asMap());
 
         log.warn("{}", rst);
     }

@@ -25,26 +25,28 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
- * 基于注解的技能（基类）
+ * 技能定制基类
  *
  * @author noear
  * @since 3.8.4
  */
 @Preview("3.8.4")
 public abstract class AbsSkill implements Skill {
-    protected final SkillMetadata metadata;
+    private volatile SkillMetadata metadata;
     protected final List<FunctionTool> tools;
 
     protected AbsSkill() {
         this.tools = new ArrayList<>();
         this.tools.addAll(new MethodToolProvider(this).getTools());
-
-        this.metadata = new SkillMetadata(this.name(), this.description());
     }
 
     @Override
     public SkillMetadata metadata() {
-        return metadata;
+        if (this.metadata == null) {
+            this.metadata = new SkillMetadata(this.name(), this.description());
+        }
+
+        return this.metadata;
     }
 
     @Override

@@ -64,7 +64,8 @@ public class TddCodeReviewGraphTest {
         // 2. 执行流程
         AgentSession session = InMemoryAgentSession.of("session_tdd_01");
         String query = "实现一个用户登录功能，包含用户名密码验证和记住我选项";
-        team.call(Prompt.of(query), session);
+        // 修改为 .prompt(prompt).session(session).call() 风格
+        team.prompt(Prompt.of(query)).session(session).call();
 
         // 3. 结果验证 (Agent 走 Trace，Activity 走 Context)
         TeamTrace trace = team.getTrace(session);
@@ -98,11 +99,11 @@ public class TddCodeReviewGraphTest {
     }
 
     private Agent createTddAgent(ChatModel chatModel, String name, String role, String instruction) {
+        // 修改为 role(x).instruction(y) 风格替代 systemPrompt
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(p->p
-                        .role(role)
-                        .instruction("你是" + role + "。" + instruction + " 请直接输出结果，不要有额外解释。"))
+                .role(role)
+                .instruction("你是" + role + "。" + instruction + " 请直接输出结果，不要有额外解释。")
                 .build();
     }
 }

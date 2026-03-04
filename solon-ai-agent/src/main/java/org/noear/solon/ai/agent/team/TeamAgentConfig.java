@@ -17,11 +17,10 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.IgnoreCaseMap;
+import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.NonSerializable;
@@ -47,10 +46,8 @@ public class TeamAgentConfig implements NonSerializable {
     private String name = "team_agent";
     /** 状态跟踪键（用于隔离 Session 中的轨迹数据） */
     private volatile String traceKey;
-    /** 显示标题 */
-    private String title;
     /** 职能描述（供上层团队调度识别） */
-    private String description;
+    private String role;
     /** 档案信息（能力与边界定义） */
     private AgentProfile profile;
 
@@ -70,7 +67,7 @@ public class TeamAgentConfig implements NonSerializable {
     private String outputKey;
 
     /** 系统提示词（System Prompt）模板提供者 */
-    private TeamSystemPrompt systemPrompt = TeamSystemPromptCn.getDefault();
+    private AgentSystemPrompt<TeamTrace> systemPrompt = TeamSystemPromptCn.getDefault();
     /** 运行时全局配置选项 */
     private final TeamOptions defaultOptions = new TeamOptions();
 
@@ -81,19 +78,13 @@ public class TeamAgentConfig implements NonSerializable {
     // --- 配置注入 (Protected) ---
 
     protected void setName(String name) { this.name = name; }
-    protected void setTitle(String title) { this.title = title; }
-    protected void setDescription(String description) { this.description = description; }
+    protected void setRole(String role) { this.role = role; }
     protected void setProfile(AgentProfile profile) { this.profile = profile; }
     protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) { this.graphAdjuster = graphAdjuster; }
     protected void setFinishMarker(String finishMarker) { this.finishMarker = finishMarker; }
     protected void setOutputKey(String outputKey) { this.outputKey = outputKey; }
-    protected void setSystemPrompt(TeamSystemPrompt promptProvider) {
+    protected void setSystemPrompt(AgentSystemPrompt<TeamTrace> promptProvider) {
         this.systemPrompt = promptProvider;
-
-        String role = systemPrompt.getRole();
-        if (role != null && description == null) {
-            description = role;
-        }
     }
 
     /**
@@ -102,7 +93,7 @@ public class TeamAgentConfig implements NonSerializable {
      */
     protected void addAgent(Agent agent) {
         Objects.requireNonNull(agent.name(), "agent.name is required");
-        Objects.requireNonNull(agent.description(), "agent.description is required");
+        Objects.requireNonNull(agent.role(), "agent.role is required");
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent [{}] register agent: {}", name, agent.name());
@@ -137,8 +128,7 @@ public class TeamAgentConfig implements NonSerializable {
         return traceKey;
     }
 
-    public String getTitle() { return title; }
-    public String getDescription() { return description; }
+    public String getRole() { return role; }
 
     public AgentProfile getProfile() {
         if (profile == null) profile = new AgentProfile();
@@ -164,7 +154,23 @@ public class TeamAgentConfig implements NonSerializable {
     public String getOutputKey() { return outputKey; }
 
     public String getSystemPromptFor(TeamTrace trace, FlowContext context) {
-        return systemPrompt.getSystemPromptFor(trace, context);
+        String prompt = systemPrompt.getSystemPrompt(trace);
+        if (prompt == null) {
+            return prompt;
+        }
+
+        if (context != null) {
+            // 动态渲染模板（如解析 #{user_name}）
+            prompt = SnelUtil.render(prompt, context.vars());
+        }
+
+        // Skill 级指令（增加一个子标题，强化感知）
+        if (trace.getOptions().getSkillInstruction() != null) {
+            //sb.append("\n## 补充业务准则\n");
+            prompt = prompt + "\n" + trace.getOptions().getSkillInstruction() + "\n";
+        }
+
+        return prompt;
     }
 
     public Locale getLocale() { return systemPrompt.getLocale(); }

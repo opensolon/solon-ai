@@ -16,11 +16,8 @@
 package org.noear.solon.ai.chat.interceptor;
 
 import org.noear.solon.Utils;
-import org.noear.solon.ai.chat.ChatConfigReadonly;
 import org.noear.solon.ai.chat.ChatRequest;
-import org.noear.solon.lang.Nullable;
 
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -36,15 +33,16 @@ public class ToolRequest {
     private Map<String, Object> args;
 
     public ToolRequest(ChatRequest request, Map<String, Object> toolsContext, Map<String, Object> args) {
+        //允许拦截器修改参数和上下文集合（不要只读）
         this.request = request;
-        this.toolsContext = Collections.unmodifiableMap(toolsContext);
+        this.toolsContext = toolsContext;
 
         if (Utils.isEmpty(toolsContext)) {
-            this.args = Collections.unmodifiableMap(args);
+            this.args = args;
         } else {
             Map<String, Object> tmp = new LinkedHashMap<>(args);
             tmp.putAll(toolsContext);
-            this.args = Collections.unmodifiableMap(tmp);
+            this.args = tmp;
         }
     }
 

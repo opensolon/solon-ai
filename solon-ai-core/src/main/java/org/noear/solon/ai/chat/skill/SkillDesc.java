@@ -21,10 +21,7 @@ import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.lang.Preview;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -113,7 +110,7 @@ public class SkillDesc implements Skill {
 
     public static class Builder {
         private final SkillMetadata metadata;
-        private final List<FunctionTool> tools = new ArrayList<>();
+        private final Map<String, FunctionTool> tools = new LinkedHashMap<>();
 
         private Function<Prompt, Boolean> isSupportedHandler;
         private Function<Prompt, String> getInstructionHandler;
@@ -172,26 +169,36 @@ public class SkillDesc implements Skill {
             return this;
         }
 
-        public Builder toolAdd(FunctionTool tool) {
+        public Builder toolAdd(FunctionTool... tools) {
             this.getToolsHandler = null;
-            this.tools.add(tool);
+            for (FunctionTool tool : tools) {
+                this.tools.put(tool.name(), tool);
+            }
             return this;
         }
 
         public Builder toolAdd(ToolProvider toolProvider) {
             this.getToolsHandler = null;
-            this.tools.addAll(toolProvider.getTools());
+            for (FunctionTool tool : toolProvider.getTools()) {
+                this.tools.put(tool.name(), tool);
+            }
             return this;
         }
 
         public Builder toolAdd(Object toolObj) {
-            return toolAdd(new MethodToolProvider(toolObj));
+            if (toolObj instanceof FunctionTool) {
+                FunctionTool tool = (FunctionTool) toolObj;
+                this.tools.put(tool.name(), tool);
+                return this;
+            } else {
+                return toolAdd(new MethodToolProvider(toolObj));
+            }
         }
 
         public SkillDesc build() {
             if (getToolsHandler == null) {
                 //如果没有，返回静态的工具集
-                getToolsHandler = (prompt) -> tools;
+                getToolsHandler = (prompt) -> tools.values();
             }
 
             return new SkillDesc(metadata, isSupportedHandler, getInstructionHandler, onAttachHandler, getToolsHandler);

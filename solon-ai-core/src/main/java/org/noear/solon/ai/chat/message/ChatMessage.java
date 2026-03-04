@@ -19,8 +19,11 @@ import org.noear.snack4.ONode;
 import org.noear.snack4.Feature;
 import org.noear.solon.Solon;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.content.Contents;
+import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.core.util.Assert;
 
 import java.io.*;
 import java.time.LocalDateTime;
@@ -51,6 +54,11 @@ public interface ChatMessage extends Serializable {
     Map<String, Object> getMetadata();
 
     /**
+     * 获取元数据
+     */
+    <T> T getMetadataAs(String key);
+
+    /**
      * 添加元数据
      */
     ChatMessage addMetadata(Map<String, Object> map);
@@ -59,6 +67,11 @@ public interface ChatMessage extends Serializable {
      * 添加元数据
      */
     ChatMessage addMetadata(String key, Object value);
+
+    /**
+     * 是否有元数据
+     */
+    boolean hasMetadata(String key);
 
     /**
      * 是否思考中
@@ -81,45 +94,65 @@ public interface ChatMessage extends Serializable {
     }
 
     /**
+     * 构建系统消息
+     */
+    static SystemMessage ofSystem(String role, String instruction) {
+        StringBuilder buf = new StringBuilder();
+
+        if (Assert.isNotEmpty(role)) {
+            buf.append("## 你的角色\n").append(role).append("\n\n");
+        }
+        if (Assert.isNotEmpty(instruction)) {
+            buf.append("## 执行指令\n").append(instruction);
+        }
+
+        return new SystemMessage(buf.toString());
+    }
+
+    /**
      * 构建用户消息
      */
     static UserMessage ofUser(String content) {
-        return new UserMessage(content, null);
+        return new UserMessage(new Contents(content));
     }
 
     /**
      * 构建用户消息
      */
-    static UserMessage ofUser(String content, List<AiMedia> medias) {
-        return new UserMessage(content, medias);
+    static UserMessage ofUser(String content, List<ContentBlock> blocks) {
+        return new UserMessage(new Contents(content).addBlocks(blocks));
     }
 
     /**
      * 构建用户消息
      */
-    static UserMessage ofUser(String content, AiMedia... medias) {
-        return new UserMessage(content, Arrays.asList(medias));
+    static UserMessage ofUser(String content, ContentBlock... blocks) {
+        return new UserMessage(new Contents(content).addBlocks(Arrays.asList(blocks)));
     }
 
     /**
      * 构建用户消息
      */
-    static UserMessage ofUser(AiMedia media) {
-        return new UserMessage("", Arrays.asList(media));
+    static UserMessage ofUser(ContentBlock block) {
+        return new UserMessage(new Contents().addBlock(block));
+    }
+
+    static UserMessage ofUser(Contents contents) {
+        return new UserMessage(contents);
     }
 
     /**
      * 构建工具消息
      */
     static ToolMessage ofTool(String content, String name, String toolCallId) {
-        return ofTool(content, name, toolCallId, false);
+        return ofTool(new ToolResult(content), name, toolCallId, false);
     }
 
     /**
      * 构建工具消息
      */
-    static ToolMessage ofTool(String content, String name, String toolCallId, boolean returnDirect) {
-        return new ToolMessage(content, name, toolCallId, returnDirect);
+    static ToolMessage ofTool(ToolResult toolResult, String name, String toolCallId, boolean returnDirect) {
+        return new ToolMessage(toolResult, name, toolCallId, returnDirect);
     }
 
     /// //////////////////
@@ -130,7 +163,7 @@ public interface ChatMessage extends Serializable {
     static UserMessage ofUserAugment(String message, Object context) {
         String newContent = String.format("%s\n\n Now: %s\n\n References: %s", message,
                 LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME), context);
-        return new UserMessage(newContent);
+        return ChatMessage.ofUser(newContent);
     }
 
     /**
@@ -183,12 +216,12 @@ public interface ChatMessage extends Serializable {
      * 从 json 反序列化为消息
      */
     static ChatMessage fromJson(String json) {
-        ONode oNode = ONode.ofJson(json);
+        ONode oNode = ONode.ofJson(json, Feature.Read_AutoType);
         return fromJson(oNode);
     }
 
     static ChatMessage fromJson(ONode oNode) {
-        ChatRole role = ChatRole.valueOf(oNode.get("role").getString());
+        ChatRole role = ChatRole.ofName(oNode.get("role").getString());
 
         if (role == ChatRole.TOOL) {
             return oNode.toBean(ToolMessage.class);

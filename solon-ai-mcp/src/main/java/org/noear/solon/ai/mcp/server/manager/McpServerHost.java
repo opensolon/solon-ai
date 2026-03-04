@@ -17,8 +17,8 @@ package org.noear.solon.ai.mcp.server.manager;
 
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
-import org.noear.solon.ai.mcp.server.resource.FunctionResource;
+import org.noear.solon.ai.chat.prompt.FunctionPrompt;
+import org.noear.solon.ai.chat.resource.FunctionResource;
 
 /**
  * MCP 服务端包装器

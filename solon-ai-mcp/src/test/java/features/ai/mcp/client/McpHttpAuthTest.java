@@ -47,4 +47,48 @@ public class McpHttpAuthTest {
         error = error.getCause();
         assert error.getMessage().contains("401");
     }
+
+    @Test
+    public void case3() {
+        McpClientProvider mcpClient = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
+                .url("http://localhost:8081/auth/sse")
+                .cacheSeconds(30)
+                .build();
+
+        Throwable error = null;
+        try {
+            mcpClient.getTools();
+        } catch (Throwable e) {
+            error = e;
+            e.printStackTrace();
+        }
+        mcpClient.close();
+
+        assert error != null;
+        error = error.getCause();
+        assert error.getMessage().contains("401");
+    }
+
+    @Test
+    public void case4() {
+        McpClientProvider mcpClient = McpClientProvider.builder()
+                .channel(McpChannel.STREAMABLE)
+                .url("http://localhost:8081/auth/sse-x")
+                .cacheSeconds(30)
+                .build();
+
+        Throwable error = null;
+        try {
+            mcpClient.getTools();
+        } catch (Throwable e) {
+            error = e;
+            e.printStackTrace();
+        }
+        mcpClient.close();
+
+        assert error != null;
+        error = error.getCause();
+        assert error.getMessage().contains("404");
+    }
 }

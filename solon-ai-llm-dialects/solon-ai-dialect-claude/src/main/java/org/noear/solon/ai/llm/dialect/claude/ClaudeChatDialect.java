@@ -23,9 +23,10 @@ import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
 import java.util.List;
 import java.util.Map;
@@ -52,16 +53,14 @@ public class ClaudeChatDialect extends AbstractChatDialect {
 
     /**
      * 匹配检测
+     *
      * @param config 聊天配置
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "claude".equals(config.getProvider());
-    }
-
-    @Override
-    public HttpUtils createHttpUtils(ChatConfig config) {
-        return createHttpUtils(config, false);
+        return "claude".equals(config.getProvider()) ||
+                "anthropic".equals(config.getProvider()) ||
+                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/v1/messages"));
     }
 
     @Override
@@ -69,6 +68,7 @@ public class ClaudeChatDialect extends AbstractChatDialect {
         String apiUrl = config.getApiUrl().toString();
 
         HttpUtils httpUtils = HttpUtils.http(apiUrl)
+                .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) config.getTimeout().getSeconds());
 
         if (config.getProxy() != null) {
@@ -86,6 +86,10 @@ public class ClaudeChatDialect extends AbstractChatDialect {
             httpUtils.header("Accept", "text/event-stream");
         }
 
+        if (Utils.isNotEmpty(config.getUserAgent())) {
+            httpUtils.userAgent(config.getUserAgent());
+        }
+
         httpUtils.headers(config.getHeaders());
 
         return httpUtils;
@@ -98,13 +102,14 @@ public class ClaudeChatDialect extends AbstractChatDialect {
 
     /**
      * 构建 Messages 规范的请求体
-     * @author oisin lu
-     * @date 2026年1月27日
+     *
      * @param config   聊天配置
      * @param options  聊天选项
      * @param messages 对话消息列表
      * @param isStream 是否使用流式模式
      * @return 规范的请求体
+     * @author oisin lu
+     * @date 2026年1月27日
      */
     @Override
     public String buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
@@ -112,8 +117,8 @@ public class ClaudeChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
-        return requestBuilder.buildAssistantMessageNode(toolCallBuilders);
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
+        return requestBuilder.buildAssistantToolCallMessageNode(resp, toolCallBuilders);
     }
 
     @Override
@@ -121,8 +126,9 @@ public class ClaudeChatDialect extends AbstractChatDialect {
         return super.parseAssistantMessage(resp, oMessage); // 使用父类的通用解析方法
     }
 
-    @Override
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
-    }
+    //如果没有改变，不需要重写
+//    @Override
+//    public AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage,List<ToolMessage> toolMessages) {
+//        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
+//    }
 }

@@ -17,17 +17,16 @@ package org.noear.solon.ai.llm.dialect.dashscope;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.media.Audio;
+import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.content.ImageBlock;
 
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -77,7 +76,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
             n.getOrNew("input").getOrNew("messages").then(n1 -> {
                 for (ChatMessage m1 : messages) {
                     if (m1.isThinking() == false) {
-                        n1.add(buildChatMessageNode(m1));
+                        n1.add(buildChatMessageNode(config, m1));
                     }
                 }
             });
@@ -101,7 +100,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) { //不是数据结构
             if(resp.isFinished() == false) {
-                resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
             }
             return true;
@@ -132,6 +131,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
                 if (Utils.isNotEmpty(finish_reason)) {
                     resp.setFinished(true);
+                    resp.lastFinishReason = finish_reason;
                 }
 
                 index++;
@@ -139,7 +139,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
             if (resp.isFinished()) {
                 if (resp.hasChoices() == false) {
-                    resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage("")));
+                    resp.addChoice(new ChatChoice(0, created, resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 }
             }
 
@@ -157,30 +157,23 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    protected void buildChatMessageNodeDo(ONode oNode, UserMessage msg) {
-        List<AiMedia> medias = msg.getMedias();
-        String content = msg.getContent();
-
-        if (medias == null) {
-            medias = Arrays.asList();
-        }
-        final List<AiMedia> finalMedias = medias;
+    protected void buildUserMessageNodeDo(ChatConfig config, ONode oNode, UserMessage msg) {
         ONode contentNode = new ONode().then(n -> {
-            for (AiMedia media : finalMedias) {
-                if (media instanceof Image) {
+            for (ContentBlock block1 : msg.getBlocks()) {
+                if (block1 instanceof ImageBlock) {
                     n.add(new ONode().then(n1 -> {
-                        n1.set("image", media.toDataString(true));
+                        n1.set("image", block1.toDataString(true));
                     }));
-                }else if (media instanceof Audio) {
+                }else if (block1 instanceof AudioBlock) {
                     n.add(new ONode().then(n1 -> {
-                        n1.set("audio", media.toDataString(true));
+                        n1.set("audio", block1.toDataString(true));
                     }));
                 }
             }
 
-            if (Utils.isNotEmpty(content)) {
+            if (Utils.isNotEmpty(msg.getContent())) {
                 n.add(new ONode().then(n1 -> {
-                    n1.set("text", content);
+                    n1.set("text", msg.getContent());
                 }));
             }
         });

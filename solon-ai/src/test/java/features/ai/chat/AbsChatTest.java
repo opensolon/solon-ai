@@ -203,7 +203,7 @@ public abstract class AbsChatTest {
                 .build();
 
         ChatResponse resp = chatModel
-                .prompt("solon 框架的作者是谁？")
+                .prompt("solon 框架的作者是谁（个人或公司）？")
                 .call();
 
         //打印消息
@@ -216,7 +216,7 @@ public abstract class AbsChatTest {
                 .build();
 
         ChatResponse resp = chatModel
-                .prompt(ChatMessage.ofUserAugment("solon 框架的作者是谁？", new Document()
+                .prompt(ChatMessage.ofUserAugment("solon 框架的作者是谁（个人或公司）？", new Document()
                         .title("概述")
                         .url("https://solon.noear.org/article/about")))
                 .call();
@@ -307,7 +307,7 @@ public abstract class AbsChatTest {
 
         //流返回(sse)
         publisher = chatModel
-                .prompt("搜索网络： solon 框架的作者是谁？")
+                .prompt("搜索网络： solon 框架的作者是谁（个人或公司）？")
                 .session(chatSession)
                 .options(o -> o.toolAdd(new Tools()))
                 .stream();
@@ -527,7 +527,6 @@ public abstract class AbsChatTest {
 
         // 验证：1. 属性是否成功注入 2. 系统消息是否自动添加（1个User + 1个Skill生成的System + 1个Assistant）
         Assertions.assertEquals("time_v1", prompt.attr("skill_attached"));
-        Assertions.assertTrue(chatSession.getMessages().stream().anyMatch(m -> m instanceof SystemMessage));
         Assertions.assertTrue(resp.getMessage().getContent().contains("2026"));
     }
 

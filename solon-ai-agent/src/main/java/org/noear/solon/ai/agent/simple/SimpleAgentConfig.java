@@ -17,11 +17,14 @@ package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.ai.agent.AgentHandler;
 import org.noear.solon.ai.agent.AgentProfile;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ModelOptionsAmend;
+import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Locale;
 
 /**
  * 简单智能体配置类
@@ -39,13 +42,9 @@ public class SimpleAgentConfig {
     /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
     private volatile String traceKey;
     /**
-     * 显示标题
-     */
-    private String title;
-    /**
      * 功能描述
      */
-    private String description;
+    private String role;
     /**
      * 智能体画像（能力、模态支持等）
      */
@@ -53,7 +52,7 @@ public class SimpleAgentConfig {
     /**
      * 系统提示词模板（支持动态注入上下文）
      */
-    private SimpleSystemPrompt systemPrompt;
+    private AgentSystemPrompt<SimpleTrace> systemPrompt = SimpleSystemPrompt.getDefault();
     /**
      * 绑定的物理聊天模型
      */
@@ -61,7 +60,7 @@ public class SimpleAgentConfig {
     /**
      * 模型选项
      */
-    private ModelOptionsAmend<?, SimpleInterceptor> defaultOptions = new ModelOptionsAmend<>();
+    private SimpleOptions defaultOptions = new SimpleOptions();
     /**
      * 自定义处理器（与 chatModel 二选一）
      */
@@ -95,25 +94,16 @@ public class SimpleAgentConfig {
         this.name = name;
     }
 
-    protected void setTitle(String title) {
-        this.title = title;
-    }
-
-    protected void setDescription(String description) {
-        this.description = description;
+    protected void setRole(String role) {
+        this.role = role;
     }
 
     protected void setProfile(AgentProfile profile) {
         this.profile = profile;
     }
 
-    protected void setSystemPrompt(SimpleSystemPrompt systemPrompt) {
+    protected void setSystemPrompt(AgentSystemPrompt<SimpleTrace> systemPrompt) {
         this.systemPrompt = systemPrompt;
-
-        String role = systemPrompt.getRole();
-        if (role != null && description == null) {
-            description = role;
-        }
     }
 
     protected void setChatModel(ChatModel chatModel) {
@@ -156,12 +146,8 @@ public class SimpleAgentConfig {
         return traceKey;
     }
 
-    public String getTitle() {
-        return title;
-    }
-
-    public String getDescription() {
-        return description;
+    public String getRole() {
+        return role;
     }
 
     public AgentProfile getProfile() {
@@ -169,19 +155,27 @@ public class SimpleAgentConfig {
         return profile;
     }
 
-    public String getSystemPromptFor(FlowContext context) {
-        if (systemPrompt == null) {
-            return "";
+    public Locale getLocale() {
+        return Locale.CHINESE;
+    }
+
+    public String getSystemPromptFor(SimpleTrace trace,FlowContext context) {
+        String raw = systemPrompt.getSystemPrompt(trace);
+        if (context == null || raw == null) {
+            return raw;
         }
 
-        return systemPrompt.getSystemPromptFor(context);
+        // 动态渲染模板（如解析 #{user_name}）
+        String rendered = SnelUtil.render(raw, context.vars());
+
+        return rendered;
     }
 
     public ChatModel getChatModel() {
         return chatModel;
     }
 
-    public ModelOptionsAmend<?, SimpleInterceptor> getDefaultOptions() {
+    public SimpleOptions getDefaultOptions() {
         return defaultOptions;
     }
 

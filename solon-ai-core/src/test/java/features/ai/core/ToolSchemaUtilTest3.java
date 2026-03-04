@@ -22,9 +22,14 @@ public class ToolSchemaUtilTest3 {
 
         Assertions.assertEquals(1, provider.getTools().size());
         for (FunctionTool tool : provider.getTools()) {
+            System.out.println(tool.inputSchema());
+            Assertions.assertEquals(
+                    "{\"type\":\"object\",\"properties\":{\"亲属ID\":{\"type\":\"integer\",\"description\":\"\",\"default\":11}},\"required\":[\"亲属ID\"]}\n",
+                    tool.inputSchema());
+
             System.out.println(tool.outputSchema());
             Assertions.assertEquals(
-                    "{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"object\",\"properties\":{},\"required\":[],\"description\":\"执行成功的结果\"},\"message\":{\"type\":\"string\",\"description\":\"执行错误的信息\"},\"success\":{\"type\":\"boolean\",\"description\":\"是否执行成功\"}},\"required\":[\"success\",\"data\",\"message\"]}",
+                    "{\"type\":\"object\",\"properties\":{\"data\":{\"type\":\"object\",\"properties\":{},\"required\":[],\"description\":\"执行成功的结果\"},\"message\":{\"type\":\"string\",\"description\":\"执行错误的信息\"},\"success\":{\"type\":\"boolean\",\"description\":\"是否执行成功\",\"default\":false}},\"required\":[\"success\",\"data\",\"message\"]}",
                     tool.outputSchema());
             break;
         }
@@ -33,7 +38,7 @@ public class ToolSchemaUtilTest3 {
     @AllArgsConstructor
     @Data
     public static class ToolResult<T> {
-        @Param(description = "是否执行成功", required = true)
+        @Param(description = "是否执行成功", required = true, defaultValue = "false")
         private Boolean success;
 
         @Param(description = "执行成功的结果")
@@ -48,7 +53,7 @@ public class ToolSchemaUtilTest3 {
 
     public class TestMcpServerEndpoint {
         @ToolMapping(description = "根据ID查询亲属信息")
-        public ToolResult<Void> getKinsfolkById(@Param(value = "亲属ID", required = true) Long id) {
+        public ToolResult<Void> getKinsfolkById(@Param(value = "亲属ID", required = true, defaultValue = "11") Long id) {
             return ToolResult.SUCCESS;
         }
     }

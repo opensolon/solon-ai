@@ -18,10 +18,7 @@ package org.noear.solon.ai.agent.simple;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.agent.Agent;
-import org.noear.solon.ai.agent.AgentHandler;
-import org.noear.solon.ai.agent.AgentProfile;
-import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.*;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.*;
@@ -29,8 +26,8 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.skill.SkillProvider;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
@@ -42,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Type;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 简单智能体实现
@@ -70,13 +68,12 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     }
 
     @Override
-    public String title() {
-        return config.getTitle();
-    }
+    public String role() {
+        if (config.getRole() == null) {
+            return config.getName();
+        }
 
-    @Override
-    public String description() {
-        return config.getDescription();
+        return config.getRole();
     }
 
     @Override
@@ -114,17 +111,27 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         return trace;
     }
 
-    protected AssistantMessage call(Prompt prompt, AgentSession session, ModelOptionsAmend<?, SimpleInterceptor> options) throws Throwable {
-        if (options == null) {
-            options = config.getDefaultOptions();
-        }
-
-
-        FlowContext context = session.getSnapshot();
-        TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
+    protected AssistantMessage call(Prompt prompt, AgentSession session, SimpleOptions options) throws Throwable {
+        final FlowContext context = session.getSnapshot();
+        final TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL); // 从上下文获取协议
+        final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         // 初始化或恢复推理痕迹 (Trace)
         SimpleTrace trace = getTrace(context, prompt);
+
+        if (options == null) {
+            options = config.getDefaultOptions().copy();
+        }
+
+        if (parentTeamTrace != null) {
+            //传递流控
+            options.setStreamSink(parentTeamTrace.getOptions().getStreamSink());
+        }
+
+        //添加必要的工具上下文
+        options.toolContextPut(ChatSession.ATTR_SESSIONID, session.getSessionId());
+
+        trace.prepare(config, options, session, protocol);
 
         if (Prompt.isEmpty(prompt)) {
             //可能是旧问题（之前中断的）
@@ -137,7 +144,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         // 1. 构建请求消息
-        Prompt finalPrompt = prepareAgentPrompt(parentTeamTrace, session, prompt);
+        Prompt finalPrompt = prepareAgentPrompt(trace, parentTeamTrace, session, prompt);
 
         // 2. 物理调用：执行带重试机制的 LLM 请求
         AssistantMessage assistantMessage = null;
@@ -163,13 +170,17 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         // 4. 更新会话状态与快照
-        if(Assert.isNotEmpty(assistantMessage.getContent()) && Assert.isEmpty(assistantMessage.getToolCalls())) {
+        if (Assert.isNotEmpty(assistantMessage.getContent()) && Assert.isEmpty(assistantMessage.getToolCalls())) {
             if (parentTeamTrace == null) {
                 session.addMessage(assistantMessage);
             }
         }
 
-        session.updateSnapshot(context);
+        session.updateSnapshot();
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("SimpleAgent [{}] finished: {}", config.getName(), assistantMessage.getContent());
+        }
 
         return assistantMessage;
     }
@@ -178,20 +189,36 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     /**
      * 组装完整的 Prompt 消息列表（含 SystemPrompt、OutputSchema 及历史窗口）
      */
-    private Prompt prepareAgentPrompt(TeamTrace parentTeamTrace, AgentSession session, Prompt originalPrompt) {
-        String spText = config.getSystemPromptFor(session.getSnapshot());
+    private Prompt prepareAgentPrompt(SimpleTrace trace, TeamTrace parentTeamTrace, AgentSession session, Prompt originalPrompt) {
+        // 1. 获取基础 System Prompt
+        StringBuilder spBuf = new StringBuilder();
+        String baseSp = config.getSystemPromptFor(trace, session.getSnapshot());
+        if (baseSp != null) {
+            spBuf.append(baseSp);
+        }
 
-        // 注入 JSON Schema 指令（强制格式输出）
+        // 2. 【核心修复】注入协议指令（断面数据：如 Coder 写的代码就在这里）
+        FlowContext context = session.getSnapshot();
+        if (trace.getProtocol() != null) {
+            // 调用协议注入，它会把 "## 当前接力任务断面" 附加到 spBuf 后面
+            trace.getProtocol().injectAgentInstruction(context, this, config.getLocale(), spBuf);
+        }
+
+        // 3. 注入 JSON Schema 指令
         if (Assert.isNotEmpty(config.getOutputSchema())) {
-            spText += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
-                    "Please provide the response in JSON format strictly following this schema:\n" +
-                    config.getOutputSchema();
+            spBuf.append("\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n")
+                    .append("Please provide the response in JSON format strictly following this schema:\n")
+                    .append(config.getOutputSchema());
+        }
+
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("SimpleAgent SystemPrompt rendered for trace [{}]: {}", name(), spBuf);
         }
 
         List<ChatMessage> messages = new ArrayList<>();
 
-        if (Assert.isNotEmpty(spText)) {
-            messages.add(ChatMessage.ofSystem(spText.trim()));
+        if (spBuf.length() > 0) {
+            messages.add(ChatMessage.ofSystem(spBuf.toString().trim()));
         }
 
         // 加载限定窗口大小的历史记录
@@ -225,11 +252,10 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                     ONode.serialize(finalPrompt.getMessages(), Feature.Write_PrettyFormat, Feature.Write_EnumUsingName));
         }
 
-       ChatRequestDesc chatReq = null;
+        ChatRequestDesc chatReq = null;
 
         if (config.getChatModel() != null) {
             //构建 chatModel 请求
-            final TeamProtocol protocol = session.getSnapshot().getAs(Agent.KEY_PROTOCOL);
             chatReq = config.getChatModel()
                     .prompt(finalPrompt)
                     .options(o -> {
@@ -237,8 +263,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                         o.toolAdd(options.tools());
 
                         //协议工具
-                        if (protocol != null) {
-                            protocol.injectAgentTools(session.getSnapshot(), this, o::toolAdd);
+                        if (trace.getProtocol() != null) {
+                            trace.getProtocol().injectAgentTools(session.getSnapshot(), this, o::toolAdd);
                         }
 
                         o.toolContextPut(options.toolContext());
@@ -279,13 +305,43 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     private AssistantMessage doCall(SimpleTrace trace, AgentSession session, Prompt finalPrompt, ChatRequestDesc chatReq) throws Throwable {
         if (chatReq != null) {
             // chatModel 处理
-            ChatResponse resp = chatReq.call();
+            final ChatResponse response;
 
-            if (resp.getUsage() != null) {
-                trace.getMetrics().addUsage(resp.getUsage());
+            if (trace.getOptions().getStreamSink() == null) {
+                response = chatReq.call();
+            } else {
+                response = chatReq.stream()
+                        .doOnNext(resp -> {
+                            trace.getOptions().getStreamSink().next(
+                                    new ChatChunk(trace, resp));
+                        })
+                        .blockLast();
             }
 
-            String clearContent = resp.hasContent() ? resp.getResultContent() : "";
+            if (response.hasChoices() == false && response.isFinished() == false) {
+                //触发重试
+                throw new IllegalStateException("The LLM did not return");
+            }
+
+            final AssistantMessage responseMessage;
+            if (response.isStream()) {
+                responseMessage = response.getAggregationMessage();
+            } else {
+                responseMessage = response.getMessage();
+            }
+
+            if (response.getUsage() != null) {
+                trace.getMetrics().addUsage(response.getUsage());
+            }
+
+            if (responseMessage.hasContent() && responseMessage.getMetadata().containsKey(Agent.META_AGENT)) {
+                String source = responseMessage.getMetadataAs("source");
+                if (Assert.isNotEmpty(source)) {
+                    return ChatMessage.ofAssistant(source);
+                }
+            }
+
+            String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
             return ChatMessage.ofAssistant(clearContent);
         } else {
             // fallback 到自定义处理器
@@ -315,14 +371,18 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return this;
         }
 
-        public Builder title(String title) {
-            config.setTitle(title);
+        public Builder role(String role) {
+            config.setRole(role);
             return this;
         }
 
-        public Builder description(String description) {
-            config.setDescription(description);
-            return this;
+        /**
+         * @deprecated 3.9.1 {@link #role(String)}
+         *
+         */
+        @Deprecated
+        public Builder description(String val) {
+            return role(val);
         }
 
         public Builder profile(AgentProfile profile) {
@@ -330,20 +390,23 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return this;
         }
 
-        public Builder chatModel(ChatModel chatModel) {
-            config.setChatModel(chatModel);
+        public Builder instruction(String instruction) {
+            config.setSystemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
             return this;
         }
 
-        public Builder systemPrompt(SimpleSystemPrompt systemPrompt) {
+        public Builder instruction(Function<SimpleTrace, String> instruction) {
+            config.setSystemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
+            return this;
+        }
+
+        public Builder systemPrompt(AgentSystemPrompt<SimpleTrace> systemPrompt) {
             config.setSystemPrompt(systemPrompt);
             return this;
         }
 
-        public Builder systemPrompt(Consumer<SimpleSystemPrompt.Builder> promptBuilder) {
-            SimpleSystemPrompt.Builder builder = SimpleSystemPrompt.builder();
-            promptBuilder.accept(builder);
-            config.setSystemPrompt(builder.build());
+        public Builder chatModel(ChatModel chatModel) {
+            config.setChatModel(chatModel);
             return this;
         }
 
@@ -383,9 +446,12 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         public Builder defaultSkillAdd(Skill... skills) {
-            for (Skill skill : skills) {
-                config.getDefaultOptions().skillAdd(0, skill);
-            }
+            config.getDefaultOptions().skillAdd(skills);
+            return this;
+        }
+
+        public Builder defaultSkillAdd(SkillProvider skillProvider) {
+            config.getDefaultOptions().skillAdd(skillProvider);
             return this;
         }
 
@@ -415,7 +481,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
          * @param toolObj 工具对象
          */
         public Builder defaultToolAdd(Object toolObj) {
-            return defaultToolAdd(new MethodToolProvider(toolObj));
+            config.getDefaultOptions().toolAdd(toolObj);
+            return this;
         }
 
 
@@ -447,10 +514,6 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
             if (config.getName() == null) {
                 config.setName("simple_agent");
-            }
-
-            if (config.getDescription() == null) {
-                config.setDescription(config.getTitle() != null ? config.getTitle() : config.getName());
             }
 
             return new SimpleAgent(config);

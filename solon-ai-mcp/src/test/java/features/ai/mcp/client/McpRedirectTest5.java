@@ -23,7 +23,7 @@ public class McpRedirectTest5 {
                 .url("http://localhost:8081/demo5/jump/sse")
                 .build();
 
-        String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+        String response = mcpClient.callTool("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);

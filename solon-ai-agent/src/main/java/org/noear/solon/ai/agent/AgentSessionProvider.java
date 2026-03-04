@@ -15,17 +15,13 @@
  */
 package org.noear.solon.ai.agent;
 
+import org.noear.solon.lang.NonNull;
 import org.noear.solon.lang.Preview;
 
 /**
  * Agent 会话提供者（Session 工厂/加载器）
  *
  * <p>核心职责：基于业务实例标识维护和检索 Agent 运行状态。</p>
- * <ul>
- * <li><b>状态持久化：</b>支持内存、Redis 或数据库等不同存储策略的会话存取。</li>
- * <li><b>上下文隔离：</b>确保不同业务流水（instanceId）拥有独立的执行记忆。</li>
- * <li><b>一致性：</b>保证同一任务在并行或分布式环境下的状态连续性。</li>
- * </ul>
  *
  * @author noear
  * @since 3.8.1
@@ -42,8 +38,9 @@ public interface AgentSessionProvider {
      * <li>若不存在，则按需创建（Lazy loading）并初始化新会话。</li>
      * </ul>
      *
-     * @param instanceId 业务实例标识（如：对话 ID、任务流水号等）
+     * @param instanceId instanceId 会话实例标识
      * @return 关联的 AgentSession 实例（不应返回 null）
      */
+    @NonNull
     AgentSession getSession(String instanceId);
 }

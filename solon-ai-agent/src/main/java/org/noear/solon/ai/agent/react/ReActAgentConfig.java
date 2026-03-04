@@ -16,19 +16,15 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentProfile;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * ReAct 智能体配置
@@ -43,10 +39,8 @@ public class ReActAgentConfig {
     private String name = "react_agent";
     /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
     private volatile String traceKey;
-    /** 智能体标题 */
-    private String title;
     /** 智能体职责描述（用于模型识别角色任务） */
-    private String description;
+    private String role;
     /** 智能体画像 */
     private AgentProfile profile;
     /** 执行推理的基础模型 */
@@ -54,11 +48,13 @@ public class ReActAgentConfig {
     /** 计算图微调器（自定义执行链路） */
     private Consumer<GraphSpec> graphAdjuster;
     /** 提示词模板（默认中文） */
-    private ReActSystemPrompt systemPrompt = ReActSystemPromptCn.getDefault();
+    private AgentSystemPrompt<ReActTrace> systemPrompt = ReActSystemPromptCn.getDefault();
     /** 终止标识符（模型输出此词时停止思考循环） */
     private String finishMarker;
     /** 结果回填 Key */
     private String outputKey;
+
+    private ReActStyle style = ReActStyle.NATIVE_TOOL;
 
     /** 默认运行选项（限流、重试、窗口等） */
     private final ReActOptions defaultOptions = new ReActOptions();
@@ -75,9 +71,7 @@ public class ReActAgentConfig {
 
     protected void setName(String name) { this.name = name; }
 
-    protected void setTitle(String title) { this.title = title; }
-
-    protected void setDescription(String description) { this.description = description; }
+    protected void setRole(String role) { this.role = role; }
 
     protected void setProfile(AgentProfile profile) { this.profile = profile; }
 
@@ -85,17 +79,13 @@ public class ReActAgentConfig {
 
     protected void setFinishMarker(String val) { this.finishMarker = val; }
 
-    protected void setSystemPrompt(ReActSystemPrompt val) {
+    protected void setSystemPrompt(AgentSystemPrompt<ReActTrace> val) {
         this.systemPrompt = val;
-
-        String role = systemPrompt.getRole();
-        if (role != null && description == null) {
-            description = role;
-        }
     }
 
     protected void setOutputKey(String val) { this.outputKey = val; }
 
+    protected void setStyle(ReActStyle style) { this.style = style; }
 
 
     // --- 参数获取 (Public) ---
@@ -109,9 +99,7 @@ public class ReActAgentConfig {
         return traceKey;
     }
 
-    public String getTitle() { return title; }
-
-    public String getDescription() { return description; }
+    public String getRole() { return role; }
 
     public AgentProfile getProfile() {
         if (profile == null) profile = new AgentProfile();
@@ -138,11 +126,30 @@ public class ReActAgentConfig {
      * 根据当前上下文获取动态渲染的系统提示词
      */
     public String getSystemPromptFor(ReActTrace trace, FlowContext context) {
-        return systemPrompt.getSystemPromptFor(trace, context);
+        String prompt = systemPrompt.getSystemPrompt(trace);
+        if (prompt == null) {
+            return prompt;
+        }
+
+        if (context != null) {
+            // 动态渲染模板（如解析 #{user_name}）
+            prompt = SnelUtil.render(prompt, context.vars());
+        }
+
+        // Skill 级指令（增加一个子标题，强化感知）
+        if (trace.getOptions().getSkillInstruction() != null) {
+            //sb.append("\n## 补充业务准则\n");
+            prompt = prompt + "\n" + trace.getOptions().getSkillInstruction() + "\n";
+        }
+
+        return prompt;
     }
 
     public Locale getLocale() { return systemPrompt.getLocale(); }
 
     public String getOutputKey() { return outputKey; }
 
+    public ReActStyle getStyle() {
+        return style;
+    }
 }

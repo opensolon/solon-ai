@@ -15,65 +15,98 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.*;
+
 /**
- * ReAct 逻辑死循环拦截器 (Loop Breaker)
- * <p>通过监控模型输出的内容指纹，防止智能体在同一状态下反复迭代（复读机行为）。</p>
+ * 避免逻辑死循环拦截器 (Loop Breaker)
  *
- * @author noear
- * @since 3.8.1
+ * <p>通过监控动作意图的滑动窗口频率，防止智能体陷入连续重复或 A-B-A-B 型往复迭代。</p>
  */
 @Preview("3.8.1")
 public class StopLoopInterceptor implements ReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(StopLoopInterceptor.class);
+    private static final String EXTRAS_HISTORY_KEY = "stoploop_history";
 
-    /** 同一响应内容允许重复的最大次数 */
-    private final int maxSameActions;
+    private final int maxRepeatCount;
+    private final int windowSize;
 
-    /**
-     * @param maxSameActions 最大允许重复次数（建议 2-3 次，给模型留出自愈空间）
-     */
-    public StopLoopInterceptor(int maxSameActions) {
-        this.maxSameActions = Math.max(2, maxSameActions);
+    public StopLoopInterceptor(int maxRepeatCount, int windowSize) {
+        this.maxRepeatCount = Math.max(2, maxRepeatCount);
+        this.windowSize = Math.max(4, windowSize);
     }
 
     public StopLoopInterceptor() {
-        this(3);
+        this(3, 8); // 稍微放大窗口，增加容错
     }
 
     @Override
-    public void onModelEnd(ReActTrace trace, ChatResponse resp) {
-        String content = resp.getContent();
-        if (Assert.isEmpty(content)) {
-            return;
+    public void onReason(ReActTrace trace, AssistantMessage message) {
+        if (message == null) return;
+
+        String fingerprint = generateNormalizedFingerprint(message);
+        if (fingerprint == null) return;
+
+        LinkedList<String> history = trace.getExtraAs(EXTRAS_HISTORY_KEY);
+        if (history == null) {
+            history = new LinkedList<>();
+            trace.setExtra(EXTRAS_HISTORY_KEY, history);
         }
 
-        // 1. 提取响应内容指纹
-        String fingerprint = content.trim();
+        history.add(fingerprint);
+        if (history.size() > windowSize) {
+            history.removeFirst();
+        }
 
-        // 2. 检索历史轨迹中相同内容的出现频次
-        long repeatCount = trace.getWorkingMemory().getMessages().stream()
-                .filter(m -> m.getContent() != null && m.getContent().trim().equals(fingerprint))
-                .count();
+        long count = history.stream().filter(fp -> fp.equals(fingerprint)).count();
 
-        // 3. 判定死循环风险并执行硬熔断
-        if (repeatCount >= maxSameActions) {
-            String errorMsg = String.format(
-                    "Detected ReAct loop in agent [%s]: Response content repeated %d times. Interrupting to save tokens.",
-                    trace.getAgentName(), maxSameActions
+        if (count >= maxRepeatCount) {
+            // --- 核心优化点：软中断策略 ---
+
+            // 1. 构造一个引导模型收尾的提示语，而不是直接停止
+            String breakMsg = String.format(
+                    "SYSTEM ALERT: Potential loop detected. You have called the same action %d times. " +
+                            "Please STOP further actions and provide a Final Answer based on the information you currently have.",
+                    count
             );
 
-            // 记录 WARN 日志，便于生产环境定位哪些 Prompt 容易触发死循环
-            log.warn(errorMsg);
+            log.warn("ReAct Loop detected for agent [{}], injecting break command.", trace.getAgentName());
 
-            throw new RuntimeException(errorMsg);
+            // 2. 将其注入为下一次的 Observation，给模型“自省”和“总结”的机会
+            trace.pending(breakMsg);
+
+            // 3. 清理该 trace 的历史，防止在收尾阶段再次触发
+            history.clear();
         }
+    }
+
+    private String generateNormalizedFingerprint(AssistantMessage message) {
+        if (Assert.isNotEmpty(message.getToolCalls())) {
+            StringBuilder sb = new StringBuilder();
+            for (ToolCall call : message.getToolCalls()) {
+                // 仅对工具名+参数进行指纹化
+                sb.append(call.getName()).append(":").append(ONode.serialize(call.getArguments()));
+            }
+            return sb.toString();
+        } else if (Assert.isNotEmpty(message.getContent())) {
+            String content = message.getContent();
+            // 提取 Action 块，忽略 Thought 的微小差异
+            int actionIdx = content.indexOf("Action:");
+            if (actionIdx >= 0) {
+                return content.substring(actionIdx).trim();
+            }
+            // 如果只有内容，取前 50 个字符作为特征，防止文本生成死循环
+            return content.length() > 50 ? content.substring(0, 50) : content;
+        }
+        return null;
     }
 }

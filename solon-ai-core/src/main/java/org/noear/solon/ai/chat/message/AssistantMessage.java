@@ -19,6 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.lang.reflect.Type;
@@ -34,6 +35,9 @@ import java.util.*;
 public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     private final ChatRole role = ChatRole.ASSISTANT;
     private String content;
+    //适配 r1 需要
+    private transient String reasoning;
+    private String reasoningFieldName;
     private List<ToolCall> toolCalls;
     private List<Map> toolCallsRaw;
     private List<Map> searchResultsRaw;
@@ -59,6 +63,10 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     }
 
     public AssistantMessage(String content, boolean isThinking, Object contentRaw, List<Map> toolCallsRaw, List<ToolCall> toolCalls, List<Map> searchResultsRaw) {
+        if(content == null){
+           content = "";
+        }
+
         this.content = content;
         this.isThinking = isThinking;
         this.toolCallsRaw = toolCallsRaw;
@@ -83,8 +91,15 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     /**
      * 转为 Bean（content 须是 json，否则会异常）
      */
-    public <T> T toBean(Type type){
+    public <T> T toBean(Type type) {
         return ONode.deserialize(content, type);
+    }
+
+    /**
+     * 是否有内容
+     */
+    public boolean hasContent() {
+        return Assert.isNotEmpty(content);
     }
 
     /**
@@ -93,6 +108,35 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     @Override
     public String getContent() {
         return content;
+    }
+
+    public String getReasoning() {
+        if (reasoning == null) {
+            if (isThinking) {
+                reasoning = content.replace("</?think>", "").trim();
+            } else if (content.contains("</think>")) {
+                int start = content.indexOf("<think>");
+                int end = content.indexOf("</think>");
+
+                if (start > -1 && end > -1) {
+                    reasoning = content.substring(start + 7, end).trim();
+                } else {
+                    reasoning = "";
+                }
+            } else {
+                reasoning = "";
+            }
+        }
+
+        return reasoning;
+    }
+
+    public String getReasoningFieldName() {
+        return reasoningFieldName;
+    }
+
+    public void setReasoningFieldName(String reasoningFieldName) {
+        this.reasoningFieldName = reasoningFieldName;
     }
 
     /**
@@ -172,8 +216,12 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             buf.append(", is_thinking=true");
         }
 
-        if (content != null) {
+        if (Utils.isNotEmpty(content)) {
             buf.append(", content='").append(content).append('\'');
+        }
+
+        if (Utils.isNotEmpty(reasoning)) {
+            buf.append(", reasoning='").append(reasoning).append('\'');
         }
 
         if (contentRaw != null) {

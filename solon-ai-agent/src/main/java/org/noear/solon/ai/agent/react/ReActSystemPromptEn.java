@@ -34,7 +34,9 @@ import java.util.function.Function;
 public class ReActSystemPromptEn implements ReActSystemPrompt {
     private static final Logger log = LoggerFactory.getLogger(ReActSystemPromptEn.class);
 
-    /** 默认英文模板单例 */
+    /**
+     * 默认英文模板单例
+     */
     private static final ReActSystemPrompt _DEFAULT = new ReActSystemPromptEn(null, null);
 
     public static ReActSystemPrompt getDefault() {
@@ -57,27 +59,121 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
 
     @Override
     public String getSystemPrompt(ReActTrace trace) {
-        final String role = getRole();
-        final String instruction = getInstruction(trace);
+        String role = getRole(trace);
+        String instruction = getInstruction(trace);
 
         StringBuilder sb = new StringBuilder();
 
         // 1. Role & Paradigm
-        sb.append("## Role\n")
-                .append(role).append(". ")
-                .append("You must solve the problem using the ReAct pattern: ")
-                .append("Thought -> Action -> Observation.\n\n");
+        sb.append("## Your Role\n")
+                .append(role).append(". ");
+
+        if (trace.getConfig().getStyle() == ReActStyle.STRUCTURED_TEXT) {
+            sb.append("You MUST use the ReAct pattern to solve the problem, ensuring each turn contains explicit labels: ")
+                    .append("Thought -> Action -> Observation.\n\n");
+        } else {
+            //sb.append("Solve problems directly through tool calls. Keep responses concise and accurate.\n\n");
+            //sb.append("You follow an implicit ReAct logic: perform internal reasoning and act directly through function calls to interact with the system, without outputting explicit labels.\n\n");
+            sb.append("You follow a rigorous ReAct (Reasoning and Acting) logic.\n\n");
+        }
 
         // 2. Instructions
         sb.append(instruction);
 
-        // 3. Toolset
+        return sb.toString();
+    }
+
+    public String getRole(ReActTrace trace) {
+        if (roleDesc != null) {
+            return roleDesc;
+        }
+
+        if (trace.getConfig().getRole() != null) {
+            return trace.getConfig().getRole();
+        }
+
+        return "Professional task expert with autonomous action capabilities";
+    }
+
+    public String getInstruction(ReActTrace trace) {
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            return getNaturalInstruction(trace);
+        } else {
+            return getClassicInstruction(trace); // 即你原来的逻辑
+        }
+    }
+
+    protected String getNaturalInstruction(ReActTrace trace) {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("## Core Rules\n")
+                .append("1. **Direct Action**: If a tool is needed, trigger **Function Calling** directly.\n")
+                .append("2. **Result-Oriented**: All conclusions MUST be based on real data returned by tools (Observation).\n")
+                .append("3. **Prohibit Forgery**: Strictly forbidden to simulate tool execution or forge results in your response.\n")
+                .append("4. **Natural Response**: Once the task is finished, respond directly in natural language without tags like `Final Answer:`.\n\n");
+
+//        sb.append("## Code of Conduct\n")
+//                .append("1. **Tool Invocation**: If a tool is required, trigger **Function Calling** directly.\n")
+//                .append("2. **Response Notes**: Do not include labels such as 'Thought:' or 'Final Answer:' in your response.\n")
+//                .append("3. **Prohibit Forgery**: Strictly forbidden to simulate tool execution or forge results within the response body.\n\n");
+
+        // 业务指令注入
+        appendBusinessInstructions(sb, trace);
+
+        sb.append("## Example\n")
+                .append("User: Check the weather in London and summarize it.\n")
+                .append("Reasoning: I need to fetch the real-time weather data for London.\n")
+                .append("(Trigger function call `get_weather` directly)\n")
+                .append("(Respond based on the tool results)\n")
+                .append("It is currently sunny in London with a temperature of 20°C, perfect for outdoor activities.\n\n");
+
+        if (trace.getOptions().getTools().isEmpty()) {
+            sb.append("\n> Note: No tools available in the current environment. Please respond based on existing information.\n");
+        }
+
+        return sb.toString();
+    }
+
+    protected String getClassicInstruction(ReActTrace trace) {
+        ReActAgentConfig config = trace.getConfig();
+        StringBuilder sb = new StringBuilder();
+
+        // A. Format constraints
+        sb.append("## Output Format (Strictly Follow)\n")
+                .append("Thought: Briefly explain your reasoning (1-2 sentences).\n")
+                .append("Action: To use a tool, you MUST output a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown code blocks, no extra text.\n")
+                .append("Final Answer: Once the task is finished, start with ").append(config.getFinishMarker()).append(" followed by the answer.\n\n");
+
+        // B. Completion specs
+        sb.append("## Final Answer Requirements\n")
+                .append("1. When the task is complete, you MUST provide the final answer.\n")
+                .append("2. The final answer MUST start with ").append(config.getFinishMarker()).append(".\n")
+                .append("3. Directly provide your complete answer after ").append(config.getFinishMarker()).append(" without extra tags.\n\n");
+
+        // C. Core behaviors
+        sb.append("## Core Rules\n")
+                .append("1. Only use tools from the 'Available Tools' list.\n")
+                .append("2. Output ONLY one Action and STOP immediately to wait for Observation.\n")
+                .append("3. Completion is signaled ONLY by ").append(config.getFinishMarker()).append(".\n\n");
+
+        // D. Business instructions
+        appendBusinessInstructions(sb, trace);
+
+        // E. Few-shot guidance
+        sb.append("## Example\n")
+                .append("User: What is the weather in Paris?\n")
+                .append("Thought: I need to check the current weather for Paris.\n")
+                .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"Paris\"}}\n")
+                .append("Thought: I have obtained the weather information.\n")
+                .append("Final Answer: ").append(config.getFinishMarker()).append("The weather in Paris is 18°C and sunny.\n");
+
+
+        // F. Toolset
         if (trace.getOptions().getTools().isEmpty()) {
             sb.append("\nNote: No tools available. Provide the Final Answer directly.\n");
         } else {
             sb.append("\n## Available Tools\n");
-            // 同步中文版：明确使用内置函数调用
-            sb.append("You can also use the following tools, preferably via the model's built-in Function Calling feature:\n");
+            sb.append("You can invoke the following tools via the Action field:\n");
             trace.getOptions().getTools().forEach(t -> {
                 sb.append("- ").append(t.name()).append(": ").append(t.descriptionAndMeta());
                 if (Assert.isNotEmpty(t.inputSchema())) {
@@ -90,72 +186,20 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         return sb.toString();
     }
 
-    @Override
-    public String getRole() {
-        if (roleDesc != null) {
-            return roleDesc;
-        }
-        return "You are a professional Task Solver";
-    }
-
-    @Override
-    public String getInstruction(ReActTrace trace) {
-        ReActAgentConfig config = trace.getConfig();
-        StringBuilder sb = new StringBuilder();
-
-        // A. Format constraints
-        sb.append("## Output Format (Strictly Follow)\n")
-                .append("Thought: Briefly explain your reasoning (1-2 sentences).\n")
-                .append("Action: To use a tool, prioritize using the model's built-in Function Calling tool. If the environment does not support it, output ONLY a single JSON object: {\"name\": \"tool_name\", \"arguments\": {...}}. No markdown, no extra text.\n")
-                .append("Final Answer: Once the task is finished, start with ").append(config.getFinishMarker()).append(" followed by the answer.\n\n");
-
-        // B. Completion specs
-        sb.append("## Final Answer Requirements\n")
-                .append("1. When the task is complete, you MUST provide the final answer.\n")
-                .append("2. The final answer MUST start with ").append(config.getFinishMarker()).append(".\n")
-                .append("3. Directly provide your complete answer after ").append(config.getFinishMarker()).append(" without extra tags.\n\n");
-
-        // C. Core behaviors
-        sb.append("## Core Rules\n")
-                .append("1. Prioritize using the model's built-in Function Calling protocol.\n")
-                .append("2. Only use tools from the 'Available Tools' list.\n")
-                .append("3. Output ONLY one Action and STOP immediately to wait for Observation.\n")
-                .append("4. Completion is signaled ONLY by ").append(config.getFinishMarker()).append(".\n\n");
-
-        // D. Business instructions
-        if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
+    private void appendBusinessInstructions(StringBuilder sb, ReActTrace trace) {
+        if (instructionProvider != null) {
             sb.append("## Core Task Instructions\n");
-
             // Agent-level instructions
-            if (instructionProvider != null) {
-                sb.append(instructionProvider.apply(trace)).append("\n");
-            }
-
-            // Skill-level instructions (Add a sub-header for better focus)
-            if (trace.getOptions().getSkillInstruction() != null) {
-                sb.append("### Supplemental Guidelines\n");
-                sb.append(trace.getOptions().getSkillInstruction()).append("\n");
-            }
+            sb.append(instructionProvider.apply(trace)).append("\n");
             sb.append("\n");
         }
-
-        // E. Few-shot guidance
-        sb.append("## Example\n")
-                .append("User: What is the weather in Paris?\n")
-                .append("Thought: I need to check the current weather for Paris.\n")
-                .append("Action: {\"name\": \"get_weather\", \"arguments\": {\"location\": \"Paris\"}}\n")
-                .append("Observation: 18°C, Sunny.\n")
-                .append("Thought: I have obtained the weather information.\n")
-                .append("Final Answer: ").append(config.getFinishMarker()).append("The weather in Paris is 18°C and sunny.\n");
-
-        return sb.toString();
     }
 
     public static Builder builder() {
         return new Builder();
     }
 
-    public static class Builder implements ReActSystemPrompt.Builder{
+    public static class Builder implements ReActSystemPrompt.Builder {
         private String roleDesc;
         private Function<ReActTrace, String> instructionProvider;
 

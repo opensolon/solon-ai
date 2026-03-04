@@ -17,7 +17,8 @@ package org.noear.solon.ai.llm.dialect.claude;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatRole;
@@ -25,7 +26,8 @@ import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -206,7 +208,7 @@ public class ClaudeRequestBuilder {
         if (message instanceof ToolMessage) {
             buildToolMessageNode(node, (ToolMessage) message);
         } else if (message instanceof AssistantMessage) {
-            buildAssistantMessageNode(node, (AssistantMessage) message);
+            buildAssistantToolCallMessageNode(node, (AssistantMessage) message);
         } else {
             buildNormalMessageNode(node, message);
         }
@@ -237,7 +239,7 @@ public class ClaudeRequestBuilder {
      * @param node 父节点
      * @param assistantMessage 助手消息
      */
-    private void buildAssistantMessageNode(ONode node, AssistantMessage assistantMessage) {
+    private void buildAssistantToolCallMessageNode(ONode node, AssistantMessage assistantMessage) {
         if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
             ONode contentArray = node.getOrNew("content").asArray();
             // 添加文本内容（如果有）
@@ -250,9 +252,9 @@ public class ClaudeRequestBuilder {
             for (ToolCall call : assistantMessage.getToolCalls()) {
                 contentArray.addNew()
                     .set("type", "tool_use")
-                    .set("id", call.id())
-                    .set("name", call.name())
-                    .set("input", ONode.ofBean(call.arguments()));
+                    .set("id", call.getId())
+                    .set("name", call.getName())
+                    .set("input", ONode.ofBean(call.getArguments()));
             }
         } else {
             String content = assistantMessage.getContent();
@@ -274,34 +276,31 @@ public class ClaudeRequestBuilder {
     private void buildNormalMessageNode(ONode node, ChatMessage message) {
         if (message instanceof UserMessage) {
             UserMessage userMessage = (UserMessage) message;
-            if (Utils.isEmpty(userMessage.getMedias())) {
-                // 纯文本消息
+            if (userMessage.isMultiModal() == false) {
+                //单模态
                 node.set("content", userMessage.getContent());
             } else {
-                // 多模态消息
+                //多模态
                 ONode contentArray = node.getOrNew("content").asArray();
-                
-                // 添加文本内容（如果存在）
-                if (Utils.isNotEmpty(userMessage.getContent())) {
-                    contentArray.addNew()
-                        .set("type", "text")
-                        .set("text", userMessage.getContent());
-                }
-                
                 // Claude支持图像上传
-                for (AiMedia media : userMessage.getMedias()) {
-                    if (media instanceof Image) {
-                        Image image = (Image) media;
+                for (ContentBlock block1 : userMessage.getBlocks()) {
+                    if (block1 instanceof TextBlock) {
+                        TextBlock text = (TextBlock) block1;
+                        contentArray.addNew()
+                                .set("type", "text")
+                                .set("text", text.getContent());
+                    } else if (block1 instanceof ImageBlock) {
+                        ImageBlock image = (ImageBlock) block1;
 
                         // 从Image对象获取实际的媒体类型
                         String mediaType = image.getMimeType();
 
                         contentArray.addNew()
-                            .set("type", "image")
-                            .set("source", new ONode()
-                                .set("type", "base64")
-                                .set("media_type", mediaType)
-                                .set("data", image.toDataString(false)));
+                                .set("type", "image")
+                                .set("source", new ONode()
+                                        .set("type", "base64")
+                                        .set("media_type", mediaType)
+                                        .set("data", image.toDataString(false)));
                     }
                 }
             }
@@ -362,7 +361,7 @@ public class ClaudeRequestBuilder {
      * @param toolCallBuilders 工具调用构建器
      * @return 助手消息
      */
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode node = new ONode();
         node.set("role", "assistant");
 
@@ -393,24 +392,5 @@ public class ClaudeRequestBuilder {
         }
 
         return node;
-    }
-
-    /**
-     * 构建助手消息（通过工具消息）
-     * @author oisin lu
-     * @date 2026年1月27日
-     * @param toolMessages 工具消息列表
-     * @return 助手消息
-     */
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-        StringBuilder buf = new StringBuilder();
-        for (ToolMessage toolMessage : toolMessages) {
-            if (buf.length() > 0) {
-                buf.append('\n');
-            }
-            buf.append(toolMessage.getContent());
-        }
-
-        return ChatMessage.ofAssistant(buf.toString());
     }
 }

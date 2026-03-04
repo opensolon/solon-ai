@@ -21,6 +21,9 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.core.util.RankEntity;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -34,8 +37,13 @@ public class CallChain {
     private final AiHandler<ChatRequest, ChatResponse, IOException> lastHandler;
     private int index;
 
-    public CallChain(List<RankEntity<ChatInterceptor>> interceptorList, AiHandler<ChatRequest, ChatResponse, IOException> lastHandler) {
-        this.interceptorList = interceptorList;
+    public CallChain(Collection<RankEntity<ChatInterceptor>> interceptors, AiHandler<ChatRequest, ChatResponse, IOException> lastHandler) {
+        this.interceptorList = new ArrayList<>(interceptors);
+
+        if(interceptorList.size() > 0){
+            Collections.sort(interceptorList);
+        }
+
         this.lastHandler = lastHandler;
         this.index = 0;
     }

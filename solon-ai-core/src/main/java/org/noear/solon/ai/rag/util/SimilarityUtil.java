@@ -110,7 +110,7 @@ public final class SimilarityUtil {
      * @param embedA 嵌入矢量1
      * @param embedB 嵌入矢量2
      */
-    private static double cosineSimilarity(float[] embedA, float[] embedB) {
+    public static double cosineSimilarity(float[] embedA, float[] embedB) {
         if (embedA != null && embedB != null) {
             if (embedA.length != embedB.length) {
                 throw new IllegalArgumentException("Embed length must be equal");

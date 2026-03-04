@@ -112,42 +112,29 @@ public abstract class TeamProtocolBase implements TeamProtocol {
         return requiredTail.stream().allMatch(name -> participated.contains(name.toLowerCase()));
     }
 
-    /**
-     * 为当前 Agent 准备结构化的上下文 Prompt (System Context + Progress History)
-     */
     @Override
-    public Prompt prepareAgentPrompt(TeamTrace trace, Agent agent, Prompt originalPrompt, Locale locale) {
-        if (trace == null || trace.isInitial()) return originalPrompt;
+    public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
+        TeamTrace trace = TeamTrace.getCurrent(context);
+        if(trace == null){
+            return;
+        }
 
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         String profileDesc = (agent.profile() != null) ? agent.profile().toFormatString(locale) : "";
 
-        StringBuilder sb = new StringBuilder();
         if (isZh) {
-            sb.append("# 任务上下文 (SYSTEM CONTEXT)\n");
-            sb.append("## 你的身份\n").append(profileDesc).append("\n\n");
-            sb.append("## 协作进度 (最近 5 条)\n");
+            sb.append("## 任务上下文 (SYSTEM CONTEXT)\n");
+            sb.append("### 你的身份\n").append(profileDesc).append("\n\n");
+            sb.append("### 协作进度 (最近 5 条)\n");
             sb.append(trace.getFormattedHistory(5, false)).append("\n\n");
             sb.append("---\n请根据上述进度完成你的任务。");
         } else {
-            sb.append("# SYSTEM CONTEXT\n");
-            sb.append("## Your Identity\n").append(profileDesc).append("\n\n");
-            sb.append("## Collaboration Records (Last 5 entries)\n");
+            sb.append("## SYSTEM CONTEXT\n");
+            sb.append("### Your Identity\n").append(profileDesc).append("\n\n");
+            sb.append("### Collaboration Records (Last 5 entries)\n");
             sb.append(trace.getFormattedHistory(5, false)).append("\n\n");
             sb.append("---\nPlease complete your task based on the progress.");
         }
-
-        Prompt newPrompt =  Prompt.of();
-        // System 承载背景，避免 User 消息过长干扰任务理解
-        newPrompt.addMessage(ChatMessage.ofSystem(sb.toString()));
-
-        injectAgentConstraints(newPrompt, locale);
-        newPrompt.addMessage(originalPrompt.getMessages());
-        return newPrompt;
-    }
-
-    protected void injectAgentConstraints(Prompt prompt, Locale locale) {
-        // 子类扩展：注入特定约束（如强制 JSON 输出）
     }
 
     /**

@@ -165,6 +165,14 @@ public class GenerateModel implements AiModel {
         }
 
         /**
+         *  User-Agent
+         */
+        public Builder userAgent(String userAgent){
+            config.setUserAgent(userAgent);
+            return this;
+        }
+
+        /**
          * 添加默认选项
          */
         public Builder defaultOptionAdd(String key, Object val) {

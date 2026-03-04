@@ -23,8 +23,7 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import java.util.*;
 
 /**
@@ -149,7 +148,7 @@ public class SequentialProtocol extends TeamProtocolBase {
     public void onAgentEnd(TeamTrace trace, Agent agent) {
         SequenceState state = getSequenceState(trace);
         String content = trace.getLastAgentContent();
-        boolean isSuccess = assessQuality(content);
+        boolean isSuccess = assessQuality(content) && trace.isPending() == false;
         StageInfo info = state.stages.get(agent.name());
 
         if (isSuccess) {
@@ -170,7 +169,7 @@ public class SequentialProtocol extends TeamProtocolBase {
         super.onAgentEnd(trace, agent);
     }
 
-    public boolean detectMediaPresence(TeamTrace trace) {
+    public boolean detectMultiModalPresence(TeamTrace trace) {
         String content = trace.getLastAgentContent();
         if (content == null) return false;
         return content.contains("![image]") || content.matches("(?s).*\\[.*?\\]\\(data:image/.*\\).*");

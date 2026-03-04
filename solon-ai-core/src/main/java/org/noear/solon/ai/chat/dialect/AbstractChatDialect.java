@@ -16,15 +16,18 @@
 package org.noear.solon.ai.chat.dialect;
 
 import org.noear.snack4.ONode;
+import org.noear.snack4.json.JsonReader;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
-import org.noear.solon.ai.media.Audio;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.*;
-import org.noear.solon.ai.media.Image;
-import org.noear.solon.ai.media.Video;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
+import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
 import java.util.*;
 
@@ -35,9 +38,9 @@ import java.util.*;
  * @since 3.1
  */
 public abstract class AbstractChatDialect implements ChatDialect {
-    public HttpUtils createHttpUtils(ChatConfig config) {
-        HttpUtils httpUtils = HttpUtils
-                .http(config.getApiUrl())
+    public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
+        HttpUtils httpUtils = HttpUtils.http(config.getApiUrl())
+                .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) config.getTimeout().getSeconds());
 
         if (config.getProxy() != null) {
@@ -48,16 +51,27 @@ public abstract class AbstractChatDialect implements ChatDialect {
             httpUtils.header("Authorization", "Bearer " + config.getApiKey());
         }
 
+        if (Utils.isNotEmpty(config.getUserAgent())) {
+            httpUtils.userAgent(config.getUserAgent());
+        }
+
         httpUtils.headers(config.getHeaders());
 
         return httpUtils;
     }
 
-    protected void buildChatMessageNodeDo(ONode oNode, AssistantMessage msg) {
+    protected void buildAssistantMessageNodeDo(ChatConfig config, ONode oNode, AssistantMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
 
         if (Utils.isNotEmpty(msg.getResultContent())) {
             oNode.set("content", msg.getResultContent());
+        }
+
+        //兼容 r1 的 tool-call(可以再优化，只在最后一条加)
+        if (Utils.isNotEmpty(msg.getReasoningFieldName())) {
+            oNode.set(msg.getReasoningFieldName(), msg.getReasoning());
+        } else if (Utils.isNotEmpty(config.getReasoningFieldName())) {
+            oNode.set(config.getReasoningFieldName(), "");
         }
 
         if (Utils.isNotEmpty(msg.getToolCallsRaw())) {
@@ -65,14 +79,13 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
     }
 
-    protected void buildChatMessageNodeDo(ONode oNode, SystemMessage msg) {
+    protected void buildSystemMessageNodeDo(ChatConfig config, ONode oNode, SystemMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
         oNode.set("content", msg.getContent());
     }
 
-    protected void buildChatMessageNodeDo(ONode oNode, ToolMessage msg) {
+    protected void buildToolMessageNodeDo(ChatConfig config, ONode oNode, ToolMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
-        oNode.set("content", msg.getContent());
 
         if (Utils.isNotEmpty(msg.getName())) {
             oNode.set("name", msg.getName());
@@ -81,32 +94,29 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (Utils.isNotEmpty(msg.getToolCallId())) {
             oNode.set("tool_call_id", msg.getToolCallId());
         }
-    }
 
-    protected void buildChatMessageNodeDo(ONode oNode, UserMessage msg) {
-        oNode.set("role", msg.getRole().name().toLowerCase());
-        if (Utils.isEmpty(msg.getMedias())) {
+        if (msg.isMultiModal() == false) {
             oNode.set("content", msg.getContent());
         } else {
             oNode.getOrNew("content").then(n1 -> {
-                if (Utils.isNotEmpty(msg.getContent())) {
-                    n1.addNew().set("type", "text").set("text", msg.getContent());
-                }
-
-                for (AiMedia m1 : msg.getMedias()) {
+                for (ContentBlock m1 : msg.getBlocks()) {
                     ONode m1Node = null;
-                    if (m1 instanceof Image) {
+
+                    if (m1 instanceof TextBlock) {
+                        TextBlock m1Text = (TextBlock) m1;
+                        n1.addNew().set("type", "text").set("text", m1Text.getContent());
+                    } else if (m1 instanceof ImageBlock) {
                         m1Node = n1.addNew();
 
                         m1Node.set("type", "image_url");
                         m1Node.getOrNew("image_url").set("url", m1.toDataString(true));
 
-                    } else if (m1 instanceof Audio) {
+                    } else if (m1 instanceof AudioBlock) {
                         m1Node = n1.addNew();
 
                         m1Node.set("type", "audio_url");
                         m1Node.getOrNew("audio_url").set("url", m1.toDataString(true));
-                    } else if (m1 instanceof Video) {
+                    } else if (m1 instanceof VideoBlock) {
                         m1Node = n1.addNew();
 
                         m1Node.set("type", "video_url");
@@ -127,17 +137,64 @@ public abstract class AbstractChatDialect implements ChatDialect {
         }
     }
 
+    protected void buildUserMessageNodeDo(ChatConfig config, ONode oNode, UserMessage msg) {
+        oNode.set("role", msg.getRole().name().toLowerCase());
 
-    public ONode buildChatMessageNode(ChatMessage chatMessage) {
+        if (msg.isMultiModal() == false) {
+            //单模态
+            oNode.set("content", msg.getContent());
+        } else {
+            //多模态
+            oNode.getOrNew("content").then(n1 -> {
+                for (ContentBlock block1 : msg.getBlocks()) {
+                    ONode oNode1 = null;
+
+                    if (block1 instanceof TextBlock) {
+                        TextBlock m1Text = (TextBlock) block1;
+                        n1.addNew().set("type", "text").set("text", m1Text.getContent());
+                    } else if (block1 instanceof ImageBlock) {
+                        oNode1 = n1.addNew();
+
+                        oNode1.set("type", "image_url");
+                        oNode1.getOrNew("image_url").set("url", block1.toDataString(true));
+
+                    } else if (block1 instanceof AudioBlock) {
+                        oNode1 = n1.addNew();
+
+                        oNode1.set("type", "audio_url");
+                        oNode1.getOrNew("audio_url").set("url", block1.toDataString(true));
+                    } else if (block1 instanceof VideoBlock) {
+                        oNode1 = n1.addNew();
+
+                        oNode1.set("type", "video_url");
+                        oNode1.getOrNew("video_url").set("url", block1.toDataString(true));
+                    }
+
+                    if (oNode1 != null) {
+                        if (Utils.isNotEmpty(block1.metas())) {
+                            for (Map.Entry<String, Object> entry : block1.metas().entrySet()) {
+                                if (oNode1.hasKey(entry.getKey()) == false) {
+                                    oNode1.set(entry.getKey(), ONode.ofBean(entry.getValue()));
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+
+    public ONode buildChatMessageNode(ChatConfig config, ChatMessage chatMessage) {
         ONode oNode = new ONode();
         if (chatMessage instanceof AssistantMessage) {
-            buildChatMessageNodeDo(oNode, (AssistantMessage) chatMessage);
+            buildAssistantMessageNodeDo(config, oNode, (AssistantMessage) chatMessage);
         } else if (chatMessage instanceof SystemMessage) {
-            buildChatMessageNodeDo(oNode, (SystemMessage) chatMessage);
+            buildSystemMessageNodeDo(config, oNode, (SystemMessage) chatMessage);
         } else if (chatMessage instanceof ToolMessage) {
-            buildChatMessageNodeDo(oNode, (ToolMessage) chatMessage);
+            buildToolMessageNodeDo(config, oNode, (ToolMessage) chatMessage);
         } else if (chatMessage instanceof UserMessage) {
-            buildChatMessageNodeDo(oNode, (UserMessage) chatMessage);
+            buildUserMessageNodeDo(config, oNode, (UserMessage) chatMessage);
         } else {
             throw new IllegalArgumentException("Unsupported chat message type: " + chatMessage.getClass());
         }
@@ -182,7 +239,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             n.getOrNew("messages").then(n1 -> {
                 for (ChatMessage m1 : messages) {
                     if (m1.isThinking() == false) {
-                        n1.add(buildChatMessageNode(m1));
+                        n1.add(buildChatMessageNode(config, m1));
                     }
                 }
             });
@@ -199,10 +256,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     @Override
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
-        oNode.set("content", "");
+        oNode.set("content", resp.getAggregationContent());
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
@@ -224,7 +281,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     @Override
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
+    public AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage, List<ToolMessage> toolMessages) {
         //要求直接返回（转为新的响应消息）
         StringBuffer buf = new StringBuffer();
         for (ToolMessage toolMessage : toolMessages) {
@@ -234,7 +291,15 @@ public abstract class AbstractChatDialect implements ChatDialect {
             buf.append(toolMessage.getContent());
         }
 
-        return ChatMessage.ofAssistant(buf.toString());
+        AssistantMessage assistantMessage = ChatMessage.ofAssistant(buf.toString())
+                .addMetadata("reason", "tool")
+                .addMetadata("source", toolCallMessage.getResultContent());
+
+        for (ToolMessage toolMessage : toolMessages) {
+            assistantMessage.addMetadata(toolMessage.getMetadata());
+        }
+
+        return assistantMessage;
     }
 
     /**
@@ -271,7 +336,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (n1fArgs.isString()) {
             //有可能是 json string（如果不是不用管，可能只是流的中间消息）
             if (hasNestedJsonBlock(argStr)) {
-                n1fArgs = ONode.ofJson(argStr);
+                JsonReader reader = new JsonReader(argStr);
+                n1fArgs = reader.readLast();
             }
         }
 
@@ -354,72 +420,75 @@ public abstract class AbstractChatDialect implements ChatDialect {
          * 也可能和内容都为空: ...
          * */
 
-        if (Utils.isEmpty(toolCallsRaw) && resp.hasToolCallBuilders() == false) {
-            //如果没有工具调用（且没有工具构建）
-            String reasoning_content = oMessage.get("reasoning_content").getValueAs();
-            if (reasoning_content == null) {
-                reasoning_content = oMessage.get("reasoning").getValueAs();
-            }
+        final String reasoning_content;
+        if (oMessage.hasKey("reasoning_content")) {
+            reasoning_content = oMessage.get("reasoning_content").getValueAs();
+            resp.reasoning_field_name = "reasoning_content";
+        } else if (oMessage.hasKey("reasoning")) {
+            reasoning_content = oMessage.get("reasoning").getValueAs();
+            resp.reasoning_field_name = "reasoning";
+        } else {
+            reasoning_content = null;
+        }
 
-            if (Utils.isNotEmpty(reasoning_content)) {
-                resp.has_reasoning_field = true;
-                //有思考专属内容的协议
-                if (resp.isStream()) {
-                    //如果是流返回（可能要拆成多条流消息）
-                    if (Utils.isEmpty(content)) {
-                        if (resp.in_thinking == false) {
-                            //说明是第一次
-                            messageList.add(new AssistantMessage("<think>", true));
-                            messageList.add(new AssistantMessage("\n\n", true));
-                            if (Utils.isNotEmpty(reasoning_content)) {
-                                content = reasoning_content;
-                            }
-                        } else {
+        if (Utils.isNotEmpty(reasoning_content)) {
+            resp.has_reasoning_field = true;
+            //有思考专属内容的协议
+            if (resp.isStream()) {
+                //如果是流返回（可能要拆成多条流消息）
+                if (Utils.isEmpty(content)) {
+                    if (resp.in_thinking == false) {
+                        //说明是第一次
+                        messageList.add(new AssistantMessage("<think>", true));
+                        messageList.add(new AssistantMessage("\n\n", true));
+                        if (Utils.isNotEmpty(reasoning_content)) {
                             content = reasoning_content;
                         }
+                    } else {
+                        content = reasoning_content;
+                    }
 
+                    resp.in_thinking = true;
+                } else {
+                    if (resp.in_thinking) {
+                        //说明是最后一次
+                        messageList.add(new AssistantMessage("</think>", true));
+                        messageList.add(new AssistantMessage("\n\n", false));
+                    }
+
+                    resp.in_thinking = false;
+                }
+            } else {
+                //如查是单次返回
+                if (Utils.isNotEmpty(reasoning_content)) {
+                    content = "<think>\n\n" + reasoning_content + "</think>\n\n" + content;
+                }
+            }
+        } else if (Utils.isNotEmpty(content)) {
+            if (resp.has_reasoning_field) { //有些情况，后面就没字段了
+                //有推理字段的
+                if (resp.in_thinking) {
+                    if (resp.isStream()) {
+                        //说明是最后一次
+                        messageList.add(new AssistantMessage("</think>", true));
+                        messageList.add(new AssistantMessage("\n\n", false));
+                    }
+
+                    resp.in_thinking = false;
+                }
+            } else {
+                //分析 think 状态（无推理字段的）
+                if (resp.isStream()) {
+                    //如果是流返回
+                    if (content.startsWith("<think>")) {
                         resp.in_thinking = true;
                     } else {
                         if (resp.in_thinking) {
-                            //说明是最后一次
-                            messageList.add(new AssistantMessage("</think>", true));
-                            messageList.add(new AssistantMessage("\n\n", false));
-                        }
-
-                        resp.in_thinking = false;
-                    }
-                } else {
-                    //如查是单次返回
-                    if (Utils.isNotEmpty(reasoning_content)) {
-                        content = "<think>\n\n" + reasoning_content + "</think>\n\n" + content;
-                    }
-                }
-            } else if (Utils.isNotEmpty(content)) {
-                if (resp.has_reasoning_field) { //有些情况，后面就没字段了
-                    //有推理字段的
-                    if (resp.in_thinking) {
-                        if (resp.isStream()) {
-                            //说明是最后一次
-                            messageList.add(new AssistantMessage("</think>", true));
-                            messageList.add(new AssistantMessage("\n\n", false));
-                        }
-
-                        resp.in_thinking = false;
-                    }
-                } else {
-                    //分析 think 状态（无推理字段的）
-                    if (resp.isStream()) {
-                        //如果是流返回
-                        if (content.startsWith("<think>")) {
-                            resp.in_thinking = true;
-                        } else {
-                            if (resp.in_thinking) {
-                                int thinkEnd = content.indexOf("</think>");
-                                if (thinkEnd >= 0) { //可能是个开始符
-                                    resp.in_thinking = false;
-                                    messageList.add(new AssistantMessage(content, true));
-                                    return messageList;
-                                }
+                            int thinkEnd = content.indexOf("</think>");
+                            if (thinkEnd >= 0) { //可能是个开始符
+                                resp.in_thinking = false;
+                                messageList.add(new AssistantMessage(content, true));
+                                return messageList;
                             }
                         }
                     }
@@ -429,7 +498,10 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (content != null || toolCallsRaw != null) {
             Object contentRaw = oContent.toBean();
-            messageList.add(new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw));
+            AssistantMessage message = new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw);
+            message.setReasoningFieldName(resp.reasoning_field_name);
+
+            messageList.add(message);
         }
 
         return messageList;

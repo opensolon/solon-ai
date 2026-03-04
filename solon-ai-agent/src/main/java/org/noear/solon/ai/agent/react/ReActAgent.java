@@ -15,23 +15,23 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.task.ActionTask;
-import org.noear.solon.ai.agent.react.task.PlanTask;
-import org.noear.solon.ai.agent.react.task.ReasonTask;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.ai.agent.react.task.*;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
+import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.skill.SkillProvider;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
 import org.noear.solon.core.util.Assert;
@@ -51,17 +51,31 @@ import java.util.function.Function;
 
 /**
  * ReAct (Reason + Act) 协同推理智能体
- * <p>通过 [Reasoning -> Acting -> Observation] 的闭环模式，利用工具解决复杂逻辑任务。</p>
+ *
+ * <p>该智能体实现了经典 ReAct 推理模式：通过【思考(Thought) -> 动作(Act) -> 观察(Observation)】的循环，
+ * 使 LLM 能够使用外部工具解决复杂任务。其核心是一个基于 Solon Flow 构建的计算图。</p>
+ *
+ * <p>执行流程：</p>
+ * <pre>
+ * Start -> [Plan (可选)] -> [Reason (决策)] --(Action意图)--> [Action (执行工具)] --(结果回传)--> Reason
+ * |
+ * (结束意图) --> End
+ * </pre>
+ *
+ * @author noear
+ * @since 3.8.1
  */
 @Preview("3.8.1")
 public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     public final static String ID_REASON = "reason";
     public final static String ID_REASON_BEF = "reason_bef";
     public final static String ID_REASON_AFT = "reason_aft";
-    public final static String ID_PLAN = "plan";
     public final static String ID_ACTION = "action";
     public final static String ID_ACTION_BEF = "action_bef";
     public final static String ID_ACTION_AFT = "action_aft";
+
+    public final static String META_FIRST = "_first";
+    public final static String META_SUMMARY = "_summary";
 
     private static final Logger LOG = LoggerFactory.getLogger(ReActAgent.class);
 
@@ -82,9 +96,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
      */
     protected Graph buildGraph() {
         return Graph.create(config.getTraceKey(), spec -> {
-            spec.addStart(Agent.ID_START).linkAdd(ReActAgent.ID_PLAN);
-            spec.addActivity(new PlanTask(config)).linkAdd(ID_REASON_BEF);
-
+            spec.addStart(Agent.ID_START).linkAdd(ReActAgent.ID_REASON_BEF);
             spec.addActivity(ID_REASON_BEF).title("Pre-Reasoning").linkAdd(ID_REASON);
 
             spec.addExclusive(new ReasonTask(config, this))
@@ -129,13 +141,12 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     }
 
     @Override
-    public String title() {
-        return config.getTitle();
-    }
+    public String role() {
+        if (config.getRole() == null) {
+            return config.getName();
+        }
 
-    @Override
-    public String description() {
-        return config.getDescription();
+        return config.getRole();
     }
 
     @Override
@@ -150,6 +161,10 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
     @Override
     public ReActRequest prompt(String prompt) {
+        if (prompt == null) {
+            return prompt();
+        }
+
         return new ReActRequest(this, Prompt.of(prompt));
     }
 
@@ -173,7 +188,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
     }
 
     /**
-     * 智能体核心调用流程
+     * 智能体核心调用流程：管理会话上下文、痕迹记录与拦截器触发
      */
     protected AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) throws Throwable {
         final FlowContext context = session.getSnapshot();
@@ -184,8 +199,16 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         final ReActTrace trace = getTrace(context, prompt);
 
         if (options == null) {
-            options = config.getDefaultOptions();
+            options = config.getDefaultOptions().copy();
         }
+
+        if (parentTeamTrace != null) {
+            //传递流控
+            options.setStreamSink(parentTeamTrace.getOptions().getStreamSink());
+        }
+
+        //添加必要的工具上下文
+        options.getToolContext().put(ChatSession.ATTR_SESSIONID, session.getSessionId());
 
         trace.prepare(config, options, session, protocol);
 
@@ -196,7 +219,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
 
         if (Prompt.isEmpty(prompt)) {
-            //可能是旧问题（之前中断的）
+            // 可能是恢复执行（之前中断的）
             prompt = trace.getOriginalPrompt();
 
             if (Prompt.isEmpty(prompt)) {
@@ -204,14 +227,18 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                 return ChatMessage.ofAssistant("");
             }
         } else {
-            //新问题（重置相关数据）
-            trace.getWorkingMemory().clear();
+            // 新任务（重置相关数据）
+            trace.reset(prompt);
+            context.trace().recordNode(graph, null);
 
             // 1. 加载历史上下文（短期记忆）
             if (trace.getWorkingMemory().isEmpty() && options.getSessionWindowSize() > 0) {
                 if (parentTeamTrace == null) {
                     Collection<ChatMessage> history = session.getLatestMessages(options.getSessionWindowSize());
-                    trace.getWorkingMemory().addMessage(history);
+                    for (ChatMessage message : history) {
+                        message.addMetadata(META_FIRST, 1);
+                        trace.getWorkingMemory().addMessage(message);
+                    }
                 }
             }
 
@@ -221,16 +248,25 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                     session.addMessage(message);
                 }
 
+                message.addMetadata(META_FIRST, 1); //初心
                 trace.getWorkingMemory().addMessage(message);
             }
+        }
 
-            trace.setPlans(null);
-            context.trace().recordNode(graph, null);
-            trace.setOriginalPrompt(prompt);
+        //添加模式技能（要在激活技能之前）
+        if(trace.getOptions().isPlanningMode()){
+            trace.getOptions().getModelOptions().skillAdd(new PlanSkill(trace));
         }
 
         //如果提示词没问题，开始激活技能
         trace.activeSkills();
+
+        //添加模式工具
+        if (trace.getOptions().isFeedbackMode()) {
+            trace.getOptions().getModelOptions().toolAdd(FeedbackTool.getTool(
+                    trace.getOptions().getFeedbackDescription(trace),
+                    trace.getOptions().getFeedbackReasonDescription(trace)));
+        }
 
 
         // 拦截器：任务开始事件
@@ -238,35 +274,37 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             item.target.onAgentStart(trace);
         }
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserContent());
-        }
-
-        long startTime = System.currentTimeMillis();
-        try {
-            final FlowOptions flowOptions = new FlowOptions();
-            options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
-
-            trace.getMetrics().reset();
-
-            // 核心执行：基于计算图进行循环推理
-            context.with(KEY_CURRENT_UNIT_TRACE_KEY, config.getTraceKey(), () -> {
-                flowEngine.eval(graph, -1, context, flowOptions);
-            });
-        } finally {
-            // 记录性能指标
-            long duration = System.currentTimeMillis() - startTime;
-            trace.getMetrics().setTotalDuration(duration);
-
+        if(trace.isPending() == false) {
             if (LOG.isDebugEnabled()) {
-                LOG.debug("ReActAgent [{}] finished. Duration: {}ms, Steps: {}, Tools: {}",
-                        config.getName(), duration, trace.getStepCount(), trace.getToolCallCount());
+                LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserContent());
             }
 
-            // 父一级团队轨迹
-            if (parentTeamTrace != null) {
-                // 汇总 token 使用情况
-                parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+            long startTime = System.currentTimeMillis();
+            try {
+                final FlowOptions flowOptions = new FlowOptions();
+                options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
+
+                trace.getMetrics().reset();
+
+                // 核心执行：基于计算图进行循环推理
+                context.with(KEY_CURRENT_UNIT_TRACE_KEY, config.getTraceKey(), () -> {
+                    flowEngine.eval(graph, -1, context, flowOptions);
+                });
+            } finally {
+                // 记录性能指标
+                long duration = System.currentTimeMillis() - startTime;
+                trace.getMetrics().setTotalDuration(duration);
+
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("ReActAgent [{}] finished. Duration: {}ms, Steps: {}, Tools: {}",
+                            config.getName(), duration, trace.getStepCount(), trace.getToolCallCount());
+                }
+
+                // 父一级团队轨迹
+                if (parentTeamTrace != null) {
+                    // 汇总 token 使用情况
+                    parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+                }
             }
         }
 
@@ -278,18 +316,22 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-        if(Assert.isNotEmpty(result)) {
+        if (Assert.isNotEmpty(result)) {
             if (parentTeamTrace == null) {
                 session.addMessage(assistantMessage);
             }
             trace.getWorkingMemory().addMessage(assistantMessage);
         }
 
-        session.updateSnapshot(context);
+        session.updateSnapshot();
 
         // 拦截器：任务结束事件
         for (RankEntity<ReActInterceptor> item : options.getInterceptors()) {
             item.target.onAgentEnd(trace);
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("ReActAgent [{}] finished: {}", config.getName(), assistantMessage.getContent());
         }
 
         return assistantMessage;
@@ -313,19 +355,28 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        public Builder name(String val) {
-            config.setName(val);
+        public Builder style(ReActStyle style) {
+            config.setStyle(style);
             return this;
         }
 
-        public Builder title(String val) {
-            config.setTitle(val);
+        public Builder name(String name) {
+            config.setName(name);
             return this;
         }
 
+        public Builder role(String role) {
+            config.setRole(role);
+            return this;
+        }
+
+        /**
+         * @deprecated 3.9.1 {@link #role(String)}
+         *
+         */
+        @Deprecated
         public Builder description(String val) {
-            config.setDescription(val);
-            return this;
+            return role(val);
         }
 
         public Builder profile(AgentProfile profile) {
@@ -335,6 +386,21 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         public Builder profile(Consumer<AgentProfile> profileConsumer) {
             profileConsumer.accept(config.getProfile());
+            return this;
+        }
+
+        public Builder instruction(String instruction) {
+            config.setSystemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
+            return this;
+        }
+
+        public Builder instruction(Function<ReActTrace, String> instruction) {
+            config.setSystemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
+            return this;
+        }
+
+        public Builder systemPrompt(AgentSystemPrompt<ReActTrace> val) {
+            config.setSystemPrompt(val);
             return this;
         }
 
@@ -354,18 +420,6 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        public Builder systemPrompt(ReActSystemPrompt val) {
-            config.setSystemPrompt(val);
-            return this;
-        }
-
-        public Builder systemPrompt(Consumer<ReActSystemPrompt.Builder> promptBuilder) {
-            ReActSystemPrompt.Builder builder = ReActSystemPrompt.builder();
-            promptBuilder.accept(builder);
-            config.setSystemPrompt(builder.build());
-            return this;
-        }
-
         public Builder modelOptions(Consumer<ModelOptionsAmend<?, ReActInterceptor>> chatOptions) {
             chatOptions.accept(config.getDefaultOptions().getModelOptions());
             return this;
@@ -381,6 +435,16 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
          */
         public Builder maxSteps(int val) {
             config.getDefaultOptions().setMaxSteps(val);
+            return this;
+        }
+
+        public Builder maxStepsLimit(int val) {
+            config.getDefaultOptions().setMaxStepsLimit(val);
+            return this;
+        }
+
+        public Builder maxStepsExtensible(boolean val) {
+            config.getDefaultOptions().setMaxStepsExtensible(val);
             return this;
         }
 
@@ -405,18 +469,23 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
 
-        public Builder defaultToolAdd(FunctionTool tool) {
-            config.getDefaultOptions().getModelOptions().toolAdd(tool);
+        public Builder defaultSkillAdd(Skill... skills) {
+            config.getDefaultOptions().getModelOptions().skillAdd(skills);
             return this;
         }
 
-        public Builder defaultSkillAdd(Skill skill) {
-            config.getDefaultOptions().getModelOptions().skillAdd(skill);
+        public Builder defaultSkillAdd(SkillProvider skillProvider) {
+            config.getDefaultOptions().getModelOptions().skillAdd(skillProvider);
             return this;
         }
 
         public Builder defaultSkillAdd(Skill skill, int index) {
             config.getDefaultOptions().getModelOptions().skillAdd(index, skill);
+            return this;
+        }
+
+        public Builder defaultToolAdd(FunctionTool... tools) {
+            config.getDefaultOptions().getModelOptions().toolAdd(tools);
             return this;
         }
 
@@ -431,7 +500,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         public Builder defaultToolAdd(Object toolObj) {
-            return defaultToolAdd(new MethodToolProvider(toolObj));
+            config.getDefaultOptions().getModelOptions().toolAdd(toolObj);
+            return this;
         }
 
 
@@ -458,23 +528,77 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        public Builder enablePlanning(boolean val) {
-            config.getDefaultOptions().setEnablePlanning(val);
+        /**
+         * 规划模式（推理前先制定计划）
+         */
+        public Builder planningMode(boolean val) {
+            config.getDefaultOptions().setPlanningMode(val);
             return this;
         }
 
-        public Builder planInstruction(Function<ReActTrace, String> provider) {
-            config.getDefaultOptions().setPlanInstructionProvider(provider);
+
+        public Builder planningInstruction(Function<ReActTrace, String> provider) {
+            config.getDefaultOptions().setPlanningInstructionProvider(provider);
             return this;
+        }
+
+        public Builder planningInstruction(String instruction) {
+            config.getDefaultOptions().setPlanningInstructionProvider(t -> instruction);
+            return this;
+        }
+
+        /**
+         * 反馈模式（允许主动寻求外部帮助/反馈）
+         */
+        public Builder feedbackMode(boolean val) {
+            config.getDefaultOptions().setFeedbackMode(val);
+            return this;
+        }
+
+        public Builder feedbackDescription(String description) {
+            config.getDefaultOptions().setFeedbackDescriptionProvider(t -> description);
+            return this;
+        }
+
+        public Builder feedbackDescription(Function<ReActTrace, String> provider) {
+            config.getDefaultOptions().setFeedbackDescriptionProvider(provider);
+            return this;
+        }
+
+        public Builder feedbackReasonDescription(String description) {
+            config.getDefaultOptions().setFeedbackReasonDescriptionProvider(t -> description);
+            return this;
+        }
+
+        public Builder feedbackReasonDescription(Function<ReActTrace, String> provider) {
+            config.getDefaultOptions().setFeedbackReasonDescriptionProvider(provider);
+            return this;
+        }
+
+
+        /**
+         * 启用规划模式（推理前先制定计划）
+         *
+         * @deprecated 3.9.0 {@link #planningMode(boolean)}
+         */
+        @Deprecated
+        public Builder enablePlanning(boolean val) {
+            return planningMode(val);
+        }
+
+        /**
+         * 启用反馈模式（允许主动寻求外部帮助/反馈）
+         *
+         * @deprecated 3.9.0 {@link #feedbackMode(boolean)}
+         */
+        @Deprecated
+        public Builder planInstruction(Function<ReActTrace, String> provider) {
+            return planningInstruction(provider);
         }
 
         public ReActAgent build() {
             if (config.getName() == null) {
                 config.setName("react_agent");
-            }
-
-            if (config.getDescription() == null) {
-                config.setDescription(config.getTitle() != null ? config.getTitle() : config.getName());
             }
 
             return new ReActAgent(config);

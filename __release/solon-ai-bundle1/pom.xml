@@ -6,9 +6,9 @@
 
     <parent>
         <groupId>org.noear</groupId>
-        <artifactId>solon-ai-parent</artifactId>
-        <version>3.9.0</version>
-        <relativePath>../../solon-ai-parent/pom.xml</relativePath>
+        <artifactId>solon-parent</artifactId>
+        <version>3.9.5-SNAPSHOT</version>
+        <relativePath />
     </parent>
 
     <groupId>org.noear.bundle</groupId>
@@ -21,6 +21,7 @@
         <module>../../solon-ai-core</module>
         <module>../../solon-ai-agent</module>
         <module>../../solon-ai-a2a</module>
+        <module>../../solon-ai-acp</module>
         <module>../../solon-ai-flow</module>
         <module>../../solon-ai-mcp</module>
         <module>../../solon-ai-parent</module>
@@ -32,25 +33,22 @@
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-openai</module>
         <module>../../solon-ai-llm-dialects/solon-ai-dialect-claude</module>
 
-        <module>../../solon-ai-rag-loaders/solon-ai-load-ddl</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-excel</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-html</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-markdown</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-pdf</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-ppt</module>
-        <module>../../solon-ai-rag-loaders/solon-ai-load-word</module>
 
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-chroma</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-dashvector</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-elasticsearch</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-milvus</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-qdrant</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-redis</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-tcvectordb</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-opensearch</module>
-        <module>../../solon-ai-rag-repositorys/solon-ai-repo-pgvector</module>
-
-        <module>../../solon-ai-rag-searchs/solon-ai-search-baidu</module>
-        <module>../../solon-ai-rag-searchs/solon-ai-search-bocha</module>
+        <module>../../solon-ai-skills/solon-ai-skills</module>
+        <module>../../solon-ai-skills/solon-ai-skill-cli</module>
+        <module>../../solon-ai-skills/solon-ai-skill-data</module>
+        <module>../../solon-ai-skills/solon-ai-skill-diff</module>
+        <module>../../solon-ai-skills/solon-ai-skill-file</module>
+        <module>../../solon-ai-skills/solon-ai-skill-generation</module>
+        <module>../../solon-ai-skills/solon-ai-skill-mail</module>
+        <module>../../solon-ai-skills/solon-ai-skill-memory</module>
+        <module>../../solon-ai-skills/solon-ai-skill-pdf</module>
+        <module>../../solon-ai-skills/solon-ai-skill-restapi</module>
+        <module>../../solon-ai-skills/solon-ai-skill-social</module>
+        <module>../../solon-ai-skills/solon-ai-skill-sys</module>
+        <module>../../solon-ai-skills/solon-ai-skill-text2sql</module>
+        <module>../../solon-ai-skills/solon-ai-skill-toolgateway</module>
+        <module>../../solon-ai-skills/solon-ai-skill-web</module>
+        <module>../../solon-ai-skills/solon-ai-skill-lucene</module>
     </modules>
 </project>

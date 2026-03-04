@@ -38,4 +38,12 @@ public enum ChatRole {
      * 助理
      */
     ASSISTANT;
+
+    public static ChatRole ofName(String name) {
+        if (name == null) {
+            return ASSISTANT;
+        }
+
+        return valueOf(name.toUpperCase());
+    }
 }

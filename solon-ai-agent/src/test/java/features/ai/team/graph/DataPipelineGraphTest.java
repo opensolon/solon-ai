@@ -76,7 +76,8 @@ public class DataPipelineGraphTest {
 
         // 2. 执行 ETL 任务
         AgentSession session = InMemoryAgentSession.of("session_etl_01");
-        team.call(Prompt.of("请开始执行 20240115 批次的数据清洗任务。"), session);
+        // 改为 agent.prompt(prompt).session(session).call() 风格
+        team.prompt(Prompt.of("请开始执行 20240115 批次的数据清洗任务。")).session(session).call();
 
         // 3. 验证与断言
         TeamTrace trace = team.getTrace(session);
@@ -118,11 +119,11 @@ public class DataPipelineGraphTest {
      * 创建一个模拟 ETL 环节的 Agent
      */
     private Agent createETLAgent(ChatModel chatModel, String name, String role, String mockOutput) {
+        // 改由 agent.role(x).instruction(y) 风格替代
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(p->p
-                        .role(role)
-                        .instruction("请基于输入数据进行处理。处理结果示例：" + mockOutput))
+                .role(role)
+                .instruction("请基于输入数据进行处理。处理结果示例：" + mockOutput)
                 .build();
     }
 }

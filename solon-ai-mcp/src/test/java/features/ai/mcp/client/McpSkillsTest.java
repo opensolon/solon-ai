@@ -25,7 +25,7 @@ public class McpSkillsTest {
     public void case1() {
         McpClientProvider mcpClient = McpClientProvider.builder()
                 .channel(McpChannel.STREAMABLE)
-                .url("http://localhost:8081//skill/order")
+                .url("http://localhost:8081/skill/order")
                 .build();
 
         Prompt prompt = Prompt.of("这个订单：A001，请查询订单详情。")

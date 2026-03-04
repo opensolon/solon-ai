@@ -17,16 +17,17 @@ package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.ChatResponseDefault;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
-import org.noear.solon.ai.media.Audio;
-import org.noear.solon.ai.media.Image;
+import org.noear.solon.ai.chat.content.AudioBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -125,9 +126,9 @@ public class OpenaiResponsesRequestBuilder {
                 for (ToolCall call : assistantMessage.getToolCalls()) {
                     inputArray.addNew()
                             .set("type", "function_call")
-                            .set("call_id", call.id())
-                            .set("name", call.name())
-                            .set("arguments", call.argumentsStr());
+                            .set("call_id", call.getId())
+                            .set("name", call.getName())
+                            .set("arguments", call.getArgumentsStr());
                 }
             } else {
                 // 普通助手消息
@@ -141,31 +142,30 @@ public class OpenaiResponsesRequestBuilder {
             ONode msgNode = inputArray.addNew()
                     .set("type", "message")
                     .set("role", "user");
-            if (Utils.isEmpty(userMessage.getMedias())) {
-                // 纯文本消息
+            if (userMessage.isMultiModal() == false) {
+                //单模态
                 msgNode.set("content", userMessage.getContent());
             } else {
-                // 多模态消息
+                //多模态
                 ONode contentArray = msgNode.getOrNew("content").asArray();
-                // 添加文本内容（如果存在）
-                if (Utils.isNotEmpty(userMessage.getContent())) {
-                    contentArray.addNew()
-                            .set("type", "input_text")
-                            .set("text", userMessage.getContent());
-                }
-                // 添加媒体内容（图像、音频等）
-                for (AiMedia media : userMessage.getMedias()) {
-                    if (media instanceof Image) {
-                        Image image = (Image) media;
+
+                for (ContentBlock block1 : userMessage.getBlocks()) {
+                    if (block1 instanceof TextBlock) {
+                        TextBlock text = (TextBlock) block1;
+                        contentArray.addNew()
+                                .set("type", "input_text")
+                                .set("text", text.getContent());
+                    } else if (block1 instanceof ImageBlock) {
+                        ImageBlock image = (ImageBlock) block1;
                         contentArray.addNew()
                                 .set("type", "input_image")
                                 .set("image_url", image.toDataString(true));
-                    } else if (media instanceof Audio) {
-                        Audio audio = (Audio) media;
+                    } else if (block1 instanceof AudioBlock) {
+                        AudioBlock audio = (AudioBlock) block1;
                         ONode audioNode = contentArray.addNew()
                                 .set("type", "input_audio");
                         // Responses API 音频格式：data (base64) 和 format
-                        audioNode.set("data", audio.getB64Json());
+                        audioNode.set("data", audio.getData());
                         // 从 mimeType 提取格式，如 audio/mp3 -> mp3
                         String mimeType = audio.getMimeType();
                         if (Utils.isNotEmpty(mimeType) && mimeType.startsWith("audio/")) {
@@ -259,7 +259,7 @@ public class OpenaiResponsesRequestBuilder {
      * @author oisin lu
      * @date 2026年1月28日
      */
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         // Responses API 中工具调用不需要显式的助手消息节点
         // 而是直接在 input 中添加 function_call 项
         // 这里返回一个兼容的结构

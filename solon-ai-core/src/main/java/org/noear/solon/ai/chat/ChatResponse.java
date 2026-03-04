@@ -87,6 +87,11 @@ public interface ChatResponse {
     AssistantMessage getAggregationMessage();
 
     /**
+     * 获取聚合内容（流响应完成时可用）
+     */
+    String getAggregationContent();
+
+    /**
      * 是否有消息内容
      */
     boolean hasContent();

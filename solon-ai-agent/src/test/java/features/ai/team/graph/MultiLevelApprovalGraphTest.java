@@ -80,9 +80,9 @@ public class MultiLevelApprovalGraphTest {
                 })
                 .build();
 
-        // 2. 执行
+        // 2. 执行 (修改为新的链式风格)
         AgentSession session = InMemoryAgentSession.of("session_approval_01");
-        team.call(Prompt.of("请处理这笔差旅费报销申请"), session);
+        team.prompt(Prompt.of("请处理这笔差旅费报销申请")).session(session).call();
 
         // 3. 结果验证 (Agent 走 Trace，Activity 走 Context)
         TeamTrace trace = team.getTrace(session);
@@ -107,11 +107,11 @@ public class MultiLevelApprovalGraphTest {
     }
 
     private Agent createApprover(ChatModel chatModel, String name, String role, String opinion) {
+        // 修改为 role(x).instruction(y) 风格
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(p->p
-                        .role(role)
-                        .instruction("你是" + role + "。请基于报销事由给出简短审批意见。参考回复：" + opinion))
+                .role(role)
+                .instruction("你是" + role + "。请基于报销事由给出简短审批意见。参考回复：" + opinion)
                 .build();
     }
 }

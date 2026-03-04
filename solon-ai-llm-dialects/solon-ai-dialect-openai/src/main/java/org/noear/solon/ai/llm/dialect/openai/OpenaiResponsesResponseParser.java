@@ -95,7 +95,7 @@ public class OpenaiResponsesResponseParser {
             if (jsonData.isEmpty() || "[DONE]".equals(jsonData)) {
                 if ("[DONE]".equals(jsonData)) {
                     if (!resp.isFinished()) {
-                        resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                        resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                         resp.setFinished(true);
                     }
                     return true;
@@ -207,7 +207,8 @@ public class OpenaiResponsesResponseParser {
                         toolCallsRaw.add(toolCallRaw);
                         List<ToolCall> toolCalls = new ArrayList<>();
                         toolCalls.add(toolCall);
-                        AssistantMessage assistantMessage = new AssistantMessage("", false, null,
+                        AssistantMessage assistantMessage = new AssistantMessage("",
+                                false, null,
                                 toolCallsRaw, toolCalls, null);
                         resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));
                         hasChoices = true;
@@ -264,7 +265,7 @@ public class OpenaiResponsesResponseParser {
     public boolean parseNonStreamResponse(ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) {
             if (!resp.isFinished()) {
-                resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
             }
             return true;
@@ -361,7 +362,8 @@ public class OpenaiResponsesResponseParser {
                     List<ToolCall> toolCalls = new ArrayList<>();
                     toolCalls.add(toolCall);
 
-                    AssistantMessage assistantMessage = new AssistantMessage("", false, null,
+                    AssistantMessage assistantMessage = new AssistantMessage("",
+                            false, null,
                             toolCallsRaw, toolCalls, null);
                     messageList.add(assistantMessage);
                 }

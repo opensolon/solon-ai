@@ -98,7 +98,7 @@ public class GeminiResponseParser {
 
             if ("[DONE]".equals(jsonData)) {
                 if (resp.isFinished() == false) {
-                    resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                    resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                     resp.setFinished(true);
                 }
                 return true;
@@ -145,6 +145,7 @@ public class GeminiResponseParser {
 
                     if (Utils.isNotEmpty(finishReason)) {
                         resp.setFinished(true);
+                        resp.lastFinishReason = finishReason;
                     }
 
                     ONode oContent = oChoice1.get("content");
@@ -180,7 +181,7 @@ public class GeminiResponseParser {
     public boolean parseNonStreamResponse(ChatResponseDefault resp, String json) {
         if ("[DONE]".equals(json)) {
             if (resp.isFinished() == false) {
-                resp.addChoice(new ChatChoice(0, new Date(), "stop", new AssistantMessage("")));
+                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
             }
             return true;
@@ -233,13 +234,14 @@ public class GeminiResponseParser {
 
                 if (Utils.isNotEmpty(finishReason)) {
                     resp.setFinished(true);
+                    resp.lastFinishReason = finishReason;
                 }
             }
         }
 
         if (resp.isFinished()) {
             if (resp.hasChoices() == false) {
-                resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage("")));
+                resp.addChoice(new ChatChoice(0, created, resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
             }
         }
 

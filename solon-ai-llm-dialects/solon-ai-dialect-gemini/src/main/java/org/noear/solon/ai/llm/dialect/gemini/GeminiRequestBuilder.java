@@ -19,6 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
+import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -113,7 +114,7 @@ public class GeminiRequestBuilder {
         if (message instanceof ToolMessage) {
             buildToolMessageNode(node, (ToolMessage) message);
         } else if (message instanceof AssistantMessage) {
-            buildAssistantMessageNode(node, (AssistantMessage) message);
+            buildAssistantToolCallMessageNode(node, (AssistantMessage) message);
         } else {
             buildNormalMessageNode(node, message);
         }
@@ -147,18 +148,18 @@ public class GeminiRequestBuilder {
      * @param node              父节点
      * @param assistantMessage  助手消息
      */
-    private void buildAssistantMessageNode(ONode node, AssistantMessage assistantMessage) {
+    private void buildAssistantToolCallMessageNode(ONode node, AssistantMessage assistantMessage) {
         if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
             node.getOrNew("parts").asArray().then(n1 -> {
                 for (ToolCall call : assistantMessage.getToolCalls()) {
                     n1.addNew().getOrNew("functionCall").then(n2 -> {
-                        n2.set("name", call.name());
-                        if (call.argumentsStr() != null) {
+                        n2.set("name", call.getName());
+                        if (call.getArgumentsStr() != null) {
                             try {
-                                ONode argsNode = ONode.ofJson(call.argumentsStr());
+                                ONode argsNode = ONode.ofJson(call.getArgumentsStr());
                                 n2.set("args", argsNode);
                             } catch (Exception e) {
-                                n2.set("args", ONode.ofBean(call.arguments()));
+                                n2.set("args", ONode.ofBean(call.getArguments()));
                             }
                         } else {
                             n2.set("args", new ONode());
@@ -233,7 +234,7 @@ public class GeminiRequestBuilder {
      * @param toolCallBuilders 工具调用构建器
      * @return 助手消息节点
      */
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "model");
 
@@ -258,24 +259,6 @@ public class GeminiRequestBuilder {
         });
 
         return oNode;
-    }
-
-    /**
-     * 构建助手消息（通过工具消息）
-     *
-     * @param toolMessages 工具消息列表
-     * @return 助手消息
-     */
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-        StringBuffer buf = new StringBuffer();
-        for (ToolMessage toolMessage : toolMessages) {
-            if (buf.length() > 0) {
-                buf.append('\n');
-            }
-            buf.append(toolMessage.getContent());
-        }
-
-        return ChatMessage.ofAssistant(buf.toString());
     }
 
     /**

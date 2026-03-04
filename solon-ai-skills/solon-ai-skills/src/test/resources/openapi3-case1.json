@@ -1,0 +1,153 @@
+{
+  "info": {
+    "title": "restApiSkill",
+    "description": "",
+    "version": "1.0.0",
+    "x-project-id": "5d8c71bdf452000",
+    "x-marks": [
+      {
+        "mark_id": "1",
+        "project_id": "0",
+        "name": "开发中",
+        "color": "#2857FF",
+        "is_sys_default": 1,
+        "is_default_mark": 1
+      },
+      {
+        "mark_id": "2",
+        "project_id": "0",
+        "name": "已完成",
+        "color": "#26CEA4",
+        "is_sys_default": 1,
+        "is_default_mark": -1
+      },
+      {
+        "mark_id": "3",
+        "project_id": "0",
+        "name": "需修改",
+        "color": "#FFC01E",
+        "is_sys_default": 1,
+        "is_default_mark": -1
+      },
+      {
+        "mark_id": "4",
+        "project_id": "0",
+        "name": "已废弃",
+        "color": "#FF2200",
+        "is_sys_default": 1,
+        "is_default_mark": -1
+      }
+    ]
+  },
+  "openapi": "3.0.0",
+  "paths": {
+    "test/index": {
+      "get": {
+        "x-target-id": "18c71efcf2a003",
+        "x-protocol": "http",
+        "summary": "查询首页数据",
+        "description": "",
+        "tags": [],
+        "x-mock-server-enable": 1,
+        "x-mark-id": "1",
+        "x-updated-at": "2026-02-25T09:53:56+08:00",
+        "x-updated-user-name": "秋",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "description": "类型 1 学生 2教师",
+            "required": true,
+            "example": "1",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                },
+                "example": "test1"
+              }
+            }
+          },
+          "404": {
+            "description": "失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                },
+                "example": ""
+              }
+            }
+          }
+        }
+      }
+    },
+    "test/info": {
+      "post": {
+        "x-target-id": "18c7da98b2a0f8",
+        "x-protocol": "http",
+        "summary": "查询人员详情",
+        "description": "",
+        "tags": [],
+        "x-mock-server-enable": 1,
+        "x-mark-id": "1",
+        "x-updated-at": "2026-02-25T10:13:01+08:00",
+        "x-updated-user-name": "秋",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": "{\r\n    \"name\": \"张三\"\r\n}"
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                },
+                "example": "{\r\n    \"id\": 1,\r\n    \"name\": \"张三\"\r\n}"
+              }
+            }
+          },
+          "404": {
+            "description": "失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                },
+                "example": ""
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/",
+      "description": "本地",
+      "x-env-id": "",
+      "variables": {}
+    }
+  ]
+}

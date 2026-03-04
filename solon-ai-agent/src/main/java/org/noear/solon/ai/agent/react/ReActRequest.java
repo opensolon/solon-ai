@@ -15,21 +15,24 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.AgentChunk;
 import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
 
 import java.util.function.Consumer;
 
 /**
  * ReAct 模式推理请求
- * <p>采用 Fluent API 风格，封装了 Agent 调用的完整参数（Prompt、Session、Options）</p>
+ *
+ * <p>采用 Fluent API 风格，封装了单次 Agent 调用的完整参数。
+ * 它是线程不安全的，每个请求应由 {@link ReActAgent#prompt(Prompt)} 独立创建。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -42,16 +45,15 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
     private final Prompt prompt;
     private AgentSession session;
     private ReActOptions options;
+    private Consumer<ReActOptionsAmend> optionsAdjustor;
 
     public ReActRequest(ReActAgent agent, Prompt prompt) {
         this.agent = agent;
         this.prompt = prompt;
-        // 初始拷贝 Agent 的默认配置，实现请求级别的隔离
-        this.options = agent.getConfig().getDefaultOptions().copy();
     }
 
     /**
-     * 绑定会话实例
+     * 绑定持久化会话：用于维持长期记忆或多轮对话上下文
      */
     @Override
     public ReActRequest session(AgentSession session) {
@@ -63,15 +65,15 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
      * 修改当前请求的运行选项
      */
     public ReActRequest options(Consumer<ReActOptionsAmend> adjustor) {
-        adjustor.accept(new ReActOptionsAmend(options));
+        optionsAdjustor = adjustor;
         return this;
     }
 
-    /**
-     * 执行同步调用
-     */
-    @Override
-    public ReActResponse call() throws Throwable {
+    private void init(){
+        if (options != null) {
+            return; // 已经初始化过了，不再重复逻辑
+        }
+
         if (session == null) {
             if (log.isDebugEnabled()) {
                 log.debug("No session provided for ReActRequest, using temporary InMemoryAgentSession.");
@@ -79,9 +81,55 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
             session = InMemoryAgentSession.of();
         }
 
+        ReActTrace trace = agent.getTrace(session);
+        if (trace != null) {
+            options = trace.getOptions();
+        }
+
+        if(options == null){
+            options = agent.getConfig().getDefaultOptions().copy();
+        }
+
+        if(optionsAdjustor != null){
+            optionsAdjustor.accept(new ReActOptionsAmend(options));
+        }
+    }
+
+    /**
+     * 执行同步调用：阻塞当前线程直至推理完成或超时
+     *
+     * @return 包含最终答案、执行指标和过程轨迹的响应对象
+     */
+    @Override
+    public ReActResponse call() throws Throwable {
+        init();
+
         AssistantMessage message = agent.call(prompt, session, options);
-        ReActTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+        ReActTrace trace = agent.getTrace(session);
 
         return new ReActResponse(session, trace, message);
+    }
+
+    /**
+     * 响应式流输出：实时推送推理过程中的 Chunk（如 ReasonChunk, ActionChunk）
+     * 适用于 Web 端 SSE 或 WebSocket 实时展示思考过程
+     */
+    public Flux<AgentChunk> stream() {
+        init();
+
+        return Flux.<AgentChunk>create(sink -> {
+            try {
+                options.setStreamSink(sink);
+                AssistantMessage message = agent.call(prompt, session, options);
+                ReActTrace trace = agent.getTrace(session);
+
+                ReActResponse resp = new ReActResponse(session, trace, message);
+
+                sink.next(new ReActChunk(resp));
+                sink.complete();
+            } catch (Throwable e) {
+                sink.error(e);
+            }
+        });
     }
 }

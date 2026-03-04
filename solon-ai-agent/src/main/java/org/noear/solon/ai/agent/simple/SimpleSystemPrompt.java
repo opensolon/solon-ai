@@ -15,11 +15,9 @@
  */
 package org.noear.solon.ai.agent.simple;
 
-import org.noear.solon.core.util.SnelUtil;
-import org.noear.solon.flow.FlowContext;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.function.Function;
 
@@ -31,63 +29,67 @@ import java.util.function.Function;
  * @since 3.8.1
  */
 @Preview("3.8.1")
-public class SimpleSystemPrompt {
-    private static final Logger LOG = LoggerFactory.getLogger(SimpleSystemPrompt.class);
+public class SimpleSystemPrompt implements AgentSystemPrompt<SimpleTrace> {
+    private static SimpleSystemPrompt _DEFAULT = new SimpleSystemPrompt(null, null);
 
-    /** 角色设定提供者 */
+    public static SimpleSystemPrompt getDefault() {
+        return _DEFAULT;
+    }
+
+    /**
+     * 角色设定提供者
+     */
     private final String roleDesc;
-    /** 执行指令提供者 */
-    private final Function<FlowContext, String> instructionProvider;
+    /**
+     * 执行指令提供者
+     */
+    private final Function<SimpleTrace, String> instructionProvider;
 
-    public SimpleSystemPrompt(String roleDesc, Function<FlowContext, String> instructionProvider) {
+    public SimpleSystemPrompt(String roleDesc, Function<SimpleTrace, String> instructionProvider) {
         this.roleDesc = roleDesc;
         this.instructionProvider = instructionProvider;
     }
 
     /**
-     * 获取最终渲染后的系统提示词
-     */
-    public String getSystemPromptFor(FlowContext context) {
-        String rawPrompt = getSystemPrompt(context);
-        if (context == null || rawPrompt == null) {
-            return rawPrompt;
-        }
-
-        // 动态渲染模板（如解析 ${user_name}）
-        String rendered = SnelUtil.render(rawPrompt, context.vars());
-
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("Simple SystemPrompt rendered: {}", rendered);
-        }
-
-        return rendered;
-    }
-
-    /**
      * 组合 角色 (Role) 与 指令 (Instruction) 文本
      */
-    public String getSystemPrompt(FlowContext context) {
-        StringBuilder sb = new StringBuilder();
-        String role = getRole();
-        String inst = getInstruction(context);
+    public String getSystemPrompt(SimpleTrace trace) {
+        String role = getRole(trace);
+        String instruction = getInstruction(trace);
 
-        if (role != null) {
-            sb.append("## 角色设定\n").append(role).append("\n\n");
+        StringBuilder sb = new StringBuilder();
+
+        if (Assert.isNotEmpty(role)) {
+            sb.append("## 你的角色\n").append(role).append("。\n\n");
         }
-        if (inst != null) {
-            sb.append("## 执行指令\n").append(inst);
+
+        if (Assert.isNotEmpty(instruction)) {
+            sb.append("## 执行指令\n").append(instruction);
         }
+
         return sb.toString();
     }
 
-    /** 获取角色文本 */
-    public String getRole() {
-        return roleDesc != null ? roleDesc : null;
+    /**
+     * 获取角色文本
+     */
+    public String getRole(SimpleTrace trace) {
+        if (roleDesc != null) {
+            return roleDesc;
+        }
+
+        if (trace.getConfig().getRole() != null) {
+            return trace.getConfig().getRole();
+        }
+
+        return null;
     }
 
-    /** 获取指令文本 */
-    public String getInstruction(FlowContext context) {
-        return instructionProvider != null ? instructionProvider.apply(context) : null;
+    /**
+     * 获取指令文本
+     */
+    public String getInstruction(SimpleTrace trace) {
+        return instructionProvider != null ? instructionProvider.apply(trace) : null;
     }
 
     public static Builder builder() {
@@ -99,21 +101,27 @@ public class SimpleSystemPrompt {
      */
     public static class Builder {
         private String roleDesc;
-        private Function<FlowContext, String> instructionProvider;
+        private Function<SimpleTrace, String> instructionProvider;
 
-        /** 设置静态角色文本 */
+        /**
+         * 设置静态角色文本
+         */
         public Builder role(String role) {
             this.roleDesc = role;
             return this;
         }
 
-        /** 设置静态指令文本 */
+        /**
+         * 设置静态指令文本
+         */
         public Builder instruction(String instruction) {
             return instruction(ctx -> instruction);
         }
 
-        /** 设置动态指令提供逻辑 */
-        public Builder instruction(Function<FlowContext, String> instructionProvider) {
+        /**
+         * 设置动态指令提供逻辑
+         */
+        public Builder instruction(Function<SimpleTrace, String> instructionProvider) {
             this.instructionProvider = instructionProvider;
             return this;
         }

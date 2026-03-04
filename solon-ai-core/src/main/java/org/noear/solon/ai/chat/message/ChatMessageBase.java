@@ -41,6 +41,11 @@ public abstract class ChatMessageBase<Slf extends ChatMessageBase> implements Ch
         return metadata;
     }
 
+    @Override
+    public <T> T getMetadataAs(String key) {
+        return (T) getMetadata().get(key);
+    }
+
     /**
      * 添加元数据
      */
@@ -63,5 +68,14 @@ public abstract class ChatMessageBase<Slf extends ChatMessageBase> implements Ch
         }
 
         return (Slf) this;
+    }
+
+    @Override
+    public boolean hasMetadata(String key) {
+        if (metadata == null) {
+            return false;
+        } else {
+            return metadata.containsKey(key);
+        }
     }
 }

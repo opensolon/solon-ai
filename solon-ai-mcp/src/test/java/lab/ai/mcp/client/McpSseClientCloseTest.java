@@ -22,7 +22,7 @@ public class McpSseClientCloseTest {
 
     private static void call(McpClientProvider toolProvider) {
         try {
-            String response = toolProvider.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+            String response = toolProvider.callTool("getWeather", Collections.singletonMap("location", "杭州")).getContent();
             assert response != null;
             System.err.println(response);
         } catch (Throwable e) {

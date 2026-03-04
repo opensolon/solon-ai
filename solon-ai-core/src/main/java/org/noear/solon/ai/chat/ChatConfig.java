@@ -31,6 +31,9 @@ import java.util.*;
  * @since 3.1
  */
 public class ChatConfig extends AiConfig {
+    //用于 r1 思考补位（手动构建 AssistantMessage 时用）
+    private String reasoningFieldName;
+
     //用于配置注入
     private Boolean defaultAutoToolCall;
     @Deprecated
@@ -70,6 +73,23 @@ public class ChatConfig extends AiConfig {
         return modelOptions;
     }
 
+    public void setReasoningFieldName(String reasoningFieldName) {
+        this.reasoningFieldName = reasoningFieldName;
+    }
+
+    public String getReasoningFieldName() {
+        if (reasoningFieldName == null) {
+            String modelL = getModel().toLowerCase();
+            if (modelL.contains("deepseek-r1") ||
+                    modelL.contains("deepseek-reasoner")) {
+                reasoningFieldName = "reasoning_content";
+            } else {
+                reasoningFieldName = "";
+            }
+        }
+
+        return reasoningFieldName;
+    }
 
     public void setDefaultAutoToolCall(boolean defaultAutoToolCall) {
         getModelOptions().autoToolCall(defaultAutoToolCall);
@@ -86,8 +106,8 @@ public class ChatConfig extends AiConfig {
     /**
      * 添加默认工具（即每次请求都会带上）
      */
-    public void addDefaultTool(FunctionTool tool) {
-        getModelOptions().toolAdd(tool);
+    public void addDefaultTool(FunctionTool... tools) {
+        getModelOptions().toolAdd(tools);
     }
 
     /**
@@ -149,7 +169,7 @@ public class ChatConfig extends AiConfig {
     /**
      * 添加默认工具（即每次请求都会带上）
      *
-     * @deprecated 3.8.4 {@link #addDefaultTool(FunctionTool)}
+     * @deprecated 3.8.4 {@link #addDefaultTool(FunctionTool...)}
      */
     @Deprecated
     public void addDefaultTools(FunctionTool tool) {
@@ -205,7 +225,7 @@ public class ChatConfig extends AiConfig {
      * @deprecated 3.8.4 {@link #getModelOptions()}
      */
     @Deprecated
-    public List<RankEntity<ChatInterceptor>> getDefaultInterceptors() {
+    public Collection<RankEntity<ChatInterceptor>> getDefaultInterceptors() {
         return getModelOptions().interceptors();
     }
 
@@ -225,7 +245,7 @@ public class ChatConfig extends AiConfig {
      * @deprecated 3.8.4 {@link #getModelOptions()}
      */
     @Deprecated
-    public List<RankEntity<Skill>> getDefaultSkills() {
+    public Collection<RankEntity<Skill>> getDefaultSkills() {
         return getModelOptions().skills();
     }
 

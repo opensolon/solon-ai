@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.agent.AgentProfile;
+import org.noear.snack4.ONode;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +37,9 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
     private static final TeamSystemPrompt _DEFAULT = new TeamSystemPromptCn(null, null);
 
-    public static TeamSystemPrompt getDefault() { return _DEFAULT; }
+    public static TeamSystemPrompt getDefault() {
+        return _DEFAULT;
+    }
 
     private final String roleDesc;
     private final Function<TeamTrace, String> instructionProvider;
@@ -49,51 +51,54 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
     }
 
     @Override
-    public Locale getLocale() { return Locale.CHINESE; }
+    public Locale getLocale() {
+        return Locale.CHINESE;
+    }
 
     /**
      * 构建完整的系统提示词模板
      */
     @Override
     public String getSystemPrompt(TeamTrace trace) {
+        String role = getRole(trace);
+        String instruction = getInstruction(trace);
+
         StringBuilder sb = new StringBuilder();
         // 1. 注入角色定义
-        sb.append("## 角色定义\n").append(getRole()).append("\n\n");
+        sb.append("## 你的角色\n").append(role).append("\n\n");
         // 2. 注入综合指令（成员、任务、协议、规范）
-        sb.append(getInstruction(trace));
+        sb.append(instruction);
         return sb.toString();
     }
 
-    @Override
-    public String getRole() {
+    public String getRole(TeamTrace trace) {
         if (roleDesc != null) {
             return roleDesc;
         }
-        return "你是一个团队协作主管 (Supervisor)，负责协调成员完成任务";
+
+        if (trace.getConfig().getRole() != null) {
+            return trace.getConfig().getRole();
+        }
+
+        return "团队协作主管 (Supervisor)，负责协调成员完成任务";
     }
 
     /**
      * 核心指令构造逻辑：按维度拼装 Prompt 块
      */
-    @Override
     public String getInstruction(TeamTrace trace) {
         TeamAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
         // A. 团队成员名录：基于 Agent 职责描述与契约构建知识库
         sb.append("## 团队成员\n");
+        sb.append("```json\n");
+        ONode agentMetas = new ONode().asArray();
         config.getAgentMap().forEach((name, agent) -> {
-            sb.append("- **").append(name).append("**:\n");
-            sb.append("  - 职责: ").append(agent.descriptionFor(trace.getContext())).append("\n");
-
-            AgentProfile profile = agent.profile();
-            if (profile != null) {
-                String info = profile.toFormatString(getLocale());
-                if (info.length() > 0) {
-                    sb.append("  - 契约: `").append(info).append("`\n");
-                }
-            }
+            agentMetas.add(agent.toMetadata(trace.getContext()));
         });
+        sb.append(agentMetas.toJson());
+        sb.append("\n```\n");
 
         // B. 任务背景：注入用户原始 Prompt
         sb.append("\n## 当前任务\n").append(trace.getOriginalPrompt().getUserContent()).append("\n");
@@ -104,10 +109,9 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
 
         // D. 输出规范：强制约束回复格式，便于程序化解析决策
         sb.append("\n## 输出规范\n")
-                .append("1. **状态分析**：分析当前执行进度，决定下一步行动。\n")
-                .append("2. **任务终止**：如果任务已完成，必须输出: ").append(config.getFinishMarker())
-                .append(" 并在其后提供最终答案。\n")
-                .append("3. **继续执行**：若任务未完成，请**仅输出**下一个要执行的 Agent 名字，不要有额外文本。\n");
+                .append("1. **任务终止**：如果任务已完成，必须输出: ").append(config.getFinishMarker())
+                .append(" 并在其后提供最终答案。若直接回复用户，**禁止**包括分析过程。\n")
+                .append("2. **继续执行**：若任务未完成，请**仅输出**下一个要执行的 Agent 名字，不要有额外文本。\n");
 
         // E. 治理准则：防死循环与合规性约束
         sb.append("\n## 历史分析与准则\n")
@@ -116,26 +120,19 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
                 .append("- 注意：严禁过早结束，确保专家意见已被充分获取。\n");
 
         // F. 增量指令：业务侧自定义的补充约束
-        if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
-            sb.append("## 核心任务指令\n");
-
+        if (instructionProvider != null) {
+            sb.append("\n## 核心任务指令\n");
             // Agent 级指令
-            if (instructionProvider != null) {
-                sb.append(instructionProvider.apply(trace)).append("\n");
-            }
-
-            // Skill 级指令（增加一个子标题，强化感知）
-            if (trace.getOptions().getSkillInstruction() != null) {
-                sb.append("### 补充业务准则\n");
-                sb.append(trace.getOptions().getSkillInstruction()).append("\n");
-            }
+            sb.append(instructionProvider.apply(trace)).append("\n");
             sb.append("\n");
         }
 
         return sb.toString();
     }
 
-    public static Builder builder() { return new Builder(); }
+    public static Builder builder() {
+        return new Builder();
+    }
 
     public static class Builder implements TeamSystemPrompt.Builder {
         private String roleDesc;

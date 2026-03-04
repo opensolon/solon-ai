@@ -25,7 +25,7 @@ import org.noear.solon.lang.Preview;
 
 /**
  * 团队协作拦截器 (Team Interceptor)
- * * <p>核心职责：提供对 TeamAgent 协作全生命周期的观察与干预能力。支持团队、决策、成员三个维度的切面注入。</p>
+ * <p>核心职责：提供对 TeamAgent 协作全生命周期的观察与干预能力。支持团队、决策、成员三个维度的切面注入。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -50,7 +50,8 @@ public interface TeamInterceptor extends AgentInterceptor, FlowInterceptor, Chat
 
     /**
      * 决策准入校验（主管发起思考前）
-     * * @return true: 继续执行; false: 熔断并中止协作
+     *
+     * @return true: 继续执行; false: 熔断并中止协作
      */
     default boolean shouldSupervisorContinue(TeamTrace trace) {
         return true;
@@ -70,7 +71,8 @@ public interface TeamInterceptor extends AgentInterceptor, FlowInterceptor, Chat
 
     /**
      * 决策结果输出（指令解析后）
-     * * @param decision 经解析确定的目标 Agent 名称或终结指令
+     *
+     * @param decision 经解析确定的目标 Agent 名称或终结指令
      */
     default void onSupervisorDecision(TeamTrace trace, String decision) {}
 
@@ -79,7 +81,8 @@ public interface TeamInterceptor extends AgentInterceptor, FlowInterceptor, Chat
 
     /**
      * 成员执行准入校验（Agent 运行前）
-     * * @param agent 即将运行的智能体
+     *
+     * @param agent 即将运行的智能体
      * @return true: 允许运行; false: 跳过并回滚至决策层
      */
     default boolean shouldAgentContinue(TeamTrace trace, Agent agent) {

@@ -55,19 +55,10 @@ public interface ChatDialect extends AiModelDialect {
     /**
      * 创建 http 工具
      *
-     * @param config 聊天配置
-     */
-    HttpUtils createHttpUtils(ChatConfig config);
-
-    /**
-     * 创建 http 工具
-     *
      * @param config   聊天配置
      * @param isStream 是否流式获取
      */
-    default HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
-        return createHttpUtils(config);
-    }
+    HttpUtils createHttpUtils(ChatConfig config, boolean isStream);
 
     /**
      * 构建请求数据
@@ -84,14 +75,14 @@ public interface ChatDialect extends AiModelDialect {
      *
      * @param toolCallBuilders 工具调用构建器集合
      */
-    ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders);
+    ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders);
 
     /**
      * 构建助理消息根据直接返回的工具消息
      *
      * @param toolMessages 直接返回的工具消息
      */
-    AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages);
+    AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage, List<ToolMessage> toolMessages);
 
     /**
      * 分析响应数据

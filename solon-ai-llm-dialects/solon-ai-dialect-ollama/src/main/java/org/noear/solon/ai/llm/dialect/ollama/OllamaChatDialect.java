@@ -17,9 +17,9 @@ package org.noear.solon.ai.llm.dialect.ollama;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.AiMedia;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.AiUsage;
-import org.noear.solon.ai.media.Audio;
+import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.ChatChoice;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatException;
@@ -29,14 +29,14 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
-import org.noear.solon.ai.media.Image;
-import org.noear.solon.ai.media.Video;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.VideoBlock;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.DateUtil;
 
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Ollama 聊天模型方言
@@ -58,33 +58,37 @@ public class OllamaChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "ollama".equals(config.getProvider());
+        return "ollama".equals(config.getProvider()) ||
+                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().endsWith("/api/chat"));
     }
 
     @Override
-    protected void buildChatMessageNodeDo(ONode oNode, UserMessage msg) {
+    protected void buildUserMessageNodeDo(ChatConfig config, ONode oNode, UserMessage msg) {
         oNode.set("role", msg.getRole().name().toLowerCase());
-        if (Utils.isEmpty(msg.getMedias())) {
+        if (msg.isMultiModal() == false) {
+            //单模态
             oNode.set("content", msg.getContent());
         } else {
+            //多模态
             oNode.set("content", msg.getContent());
 
-            AiMedia demo = msg.getMedias().get(0);
-            if (demo instanceof Image) {
-                oNode.set("images", msg.getMedias().stream().map(i -> i.toDataString(false)).collect(Collectors.toList()));
-            } else if (demo instanceof Audio) {
-                oNode.set("audios", msg.getMedias().stream().map(i -> i.toDataString(false)).collect(Collectors.toList()));
-            } else if (demo instanceof Video) {
-                oNode.set("videos", msg.getMedias().stream().map(i -> i.toDataString(false)).collect(Collectors.toList()));
+            for (ContentBlock block1 : msg.getBlocks()) {
+                if (block1 instanceof ImageBlock) {
+                    oNode.getOrNew("images").add(block1.toDataString(false));
+                } else if (block1 instanceof AudioBlock) {
+                    oNode.getOrNew("audios").add(block1.toDataString(false));
+                } else if (block1 instanceof VideoBlock) {
+                    oNode.getOrNew("videos").add(block1.toDataString(false));
+                }
             }
         }
     }
 
     @Override
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
         ONode oNode = new ONode();
         oNode.set("role", "assistant");
-        oNode.set("content", "");
+        oNode.set("content", resp.getAggregationContent());
         oNode.getOrNew("tool_calls").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 //有可能没有
@@ -126,6 +130,10 @@ public class OllamaChatDialect extends AbstractChatDialect {
                 resp.addChoice(new ChatChoice(0, created, done_reason, msg1));
             }
 
+            if (Utils.isNotEmpty(done_reason)) {
+                resp.lastFinishReason = done_reason;
+            }
+
             if (resp.isFinished()) {
                 long promptTokens = oResp.get("prompt_eval_count").getLong();
                 long completionTokens = oResp.get("eval_count").getLong();
@@ -134,7 +142,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
                 resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens, oResp));
 
                 if (resp.hasChoices() == false) {
-                    resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage("")));
+                    resp.addChoice(new ChatChoice(0, created, resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 }
             }
         }

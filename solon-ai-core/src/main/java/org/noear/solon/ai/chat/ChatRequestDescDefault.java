@@ -16,19 +16,17 @@
 package org.noear.solon.ai.chat;
 
 import org.noear.snack4.ONode;
-import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.interceptor.*;
+import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
 import org.noear.solon.ai.chat.skill.SkillUtil;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.ToolCall;
-import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.tool.ToolCallException;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.MimeType;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.net.http.HttpException;
@@ -36,14 +34,17 @@ import org.noear.solon.net.http.HttpResponse;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.textstream.ServerSentEvent;
 import org.noear.solon.net.http.textstream.TextStreamUtil;
-import org.noear.solon.rx.SimpleSubscriber;
-import org.reactivestreams.Publisher;
-import org.reactivestreams.Subscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -70,6 +71,9 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
         this.options = new ChatOptions();
         this.options.putAll(config.getModelOptions());
+        this.options.role(config.getModelOptions().role());
+        this.options.instruction(config.getModelOptions().instruction());
+        this.options.systemPrompt(config.getModelOptions().systemPrompt());
     }
 
     public ChatRequestDesc session(ChatSession session) {
@@ -108,20 +112,60 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     /**
      * 准备
      */
-    private void prepare(){
-        if (session == null) {
-            session = InMemoryChatSession.builder().build();
-        }
+    private void prepare() {
+        if (prepared.compareAndSet(false, true)) {
+            if (session == null) {
+                session = InMemoryChatSession.builder().build();
+            }
 
-        StringBuilder combinedInstruction = SkillUtil.activeSkills(options, originalPrompt);
-        if (combinedInstruction.length() > 0) {
-            session.addMessage(ChatMessage.ofSystem(combinedInstruction.toString()));
-        }
+            if (originalPrompt != null) {
+                session.addMessage(originalPrompt);
+            }
 
-        if (originalPrompt != null) {
-            session.addMessage(originalPrompt);
+            // 如果没有 sessionId 则推入
+            options.toolContext().computeIfAbsent(ChatSession.ATTR_SESSIONID,
+                    k -> session.getSessionId());
+
+            //---
+
+            StringBuilder instructionBuilder = new StringBuilder();
+
+            if (Assert.isNotEmpty(options.systemPrompt())) {
+                //如果有系统提示词（优先用）
+                instructionBuilder.append(options.systemPrompt()).append("\n\n");
+            } else {
+                //如果没有尝试结构化构建
+                if (Assert.isNotEmpty(options.role())) {
+                    instructionBuilder.append("## 你的角色\n").append(options.role()).append("\n\n");
+                }
+
+                if (Assert.isNotEmpty(options.instruction())) {
+                    instructionBuilder.append("## 执行指令\n").append(options.instruction()).append("\n");
+                }
+            }
+
+            if (originalPrompt != null && Assert.isNotEmpty(options.toolContext())) {
+                originalPrompt.attrs().putAll(options.toolContext());
+            }
+
+            for (RankEntity<ChatInterceptor> item : options.interceptors()) {
+                item.target.onPrepare(session, options, originalPrompt, instructionBuilder);
+            }
+
+            StringBuilder skillsInstruction = SkillUtil.activeSkills(options, originalPrompt, new StringBuilder());
+            if (skillsInstruction.length() > 0) {
+                instructionBuilder.append("\n");
+                instructionBuilder.append(skillsInstruction);
+            }
+
+            if (instructionBuilder.length() > 0) {
+                systemMessage = ChatMessage.ofSystem(instructionBuilder.toString());
+            }
         }
     }
+
+    private AtomicBoolean prepared = new AtomicBoolean(false);
+    private SystemMessage systemMessage;
 
     /**
      * 调用
@@ -135,7 +179,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
 
     protected ChatResponse internalCall() throws IOException {
         //构建请求数据（每次请求重新构建 finalPrompt）
-        ChatRequest req = new ChatRequest(config, dialect, options, session, originalPrompt, false);
+        ChatRequest req = new ChatRequest(config, dialect, options, session, systemMessage, originalPrompt, false);
 
         CallChain chain = new CallChain(options.interceptors(), this::doCall);
 
@@ -160,7 +204,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             log.debug("llm-response: {}", respJson);
         }
 
-        ChatResponseDefault resp = new ChatResponseDefault(req,false);
+        ChatResponseDefault resp = new ChatResponseDefault(req, false);
         resp.setResponseData(respJson);
         dialect.parseResponseJson(config, resp, respJson);
 
@@ -172,15 +216,15 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             AssistantMessage choiceMessage = resp.getMessage();
             session.addMessage(choiceMessage); //添加到记忆
 
-            if (options.isAutoToolCall() && Utils.isNotEmpty(choiceMessage.getToolCalls())) {
+            if (options.isAutoToolCall() && Assert.isNotEmpty(choiceMessage.getToolCalls())) {
                 List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
-                if (Utils.isEmpty(returnDirectMessages)) {
+                if (Assert.isEmpty(returnDirectMessages)) {
                     //没有直接返回的消息
                     return internalCall();
                 } else {
                     //要求直接返回（转为新的响应消息）
-                    choiceMessage = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
+                    choiceMessage = dialect.buildAssistantMessageByToolMessages(choiceMessage, returnDirectMessages);
                     resp.reset();
                     resp.addChoice(new ChatChoice(0, new Date(), "tool", choiceMessage));
                     session.addMessage(choiceMessage); //添加到记忆
@@ -195,15 +239,15 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      * 流响应
      */
     @Override
-    public Publisher<ChatResponse> stream() {
+    public Flux<ChatResponse> stream() {
         prepare();
 
-        return internalStream();
+        return Flux.from(internalStream());
     }
 
-    private Publisher<ChatResponse> internalStream() {
+    private Flux<ChatResponse> internalStream() {
         //构建请求数据（每次请求重新构建 finalPrompt）
-        ChatRequest req = new ChatRequest(config, dialect, options, session, originalPrompt,true);
+        ChatRequest req = new ChatRequest(config, dialect, options, session, systemMessage, originalPrompt, true);
 
         StreamChain chain = new StreamChain(options.interceptors(), this::doStream);
 
@@ -213,7 +257,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     /**
      * 流响应
      */
-    private Publisher<ChatResponse> doStream(ChatRequest req) {
+    private Flux<ChatResponse> doStream(ChatRequest req) {
         HttpUtils httpUtils = dialect.createHttpUtils(config, req.isStream());
 
         String reqJson = req.toRequestData();
@@ -222,72 +266,73 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             log.debug("llm-request: {}", reqJson);
         }
 
-        return subscriber -> {
-            httpUtils.bodyOfJson(reqJson).execAsync("POST")
-                    .whenComplete((resp, err) -> {
-                        Subscriber<? super ChatResponse> subscriberProxy = ChatSubscriberProxy.of(subscriber);
-
-                        if (err == null) {
-                            try {
-                                if (resp.code() < 400) {
-                                    parseResp(req, resp, subscriberProxy);
-                                } else {
-                                    String message = resp.bodyAsString();
-
-                                    String description;
-                                    if (Utils.isEmpty(message)) {
-                                        description = "Error code:" + resp.code();
-                                    } else {
-                                        description = "Error code:" + resp.code() + ", message:" + message;
-                                    }
-
-                                    subscriberProxy.onError(new HttpException(description));
-                                }
-                            } catch (IOException e) {
-                                subscriberProxy.onError(e);
-                            }
+        return Mono.fromFuture(httpUtils.bodyOfJson(reqJson).execAsync("POST"))
+                .flatMapMany(resp -> {
+                    try {
+                        if (resp.code() < 400) {
+                            return parseResp(req, resp);
                         } else {
-                            subscriberProxy.onError(err);
+                            return Flux.error(createHttpException(resp));
                         }
-                    });
-        };
+                    } catch (IOException e) {
+                        return Flux.error(e);
+                    }
+                });
+
     }
 
-    private void parseResp(ChatRequest req, HttpResponse httpResp, Subscriber<? super ChatResponse> subscriber) throws IOException {
-        ChatResponseDefault resp = new ChatResponseDefault(req, true);
+    private Flux<ChatResponse> parseResp(ChatRequest req, HttpResponse httpResp) throws IOException {
+        ChatResponseDefault respDesc = new ChatResponseDefault(req, true);
         String contentType = httpResp.header("Content-Type");
 
-        try {
-            if (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE)) {
-                TextStreamUtil.parseSseStream(httpResp, new SimpleSubscriber<ServerSentEvent>()
-                        .doOnSubscribe(subscriber::onSubscribe)//不要做订阅（外部不支持多次触发）
-                        .doOnNext(event -> {
-                            return onEventStream(resp, event, subscriber);
-                        })
-                        .doOnComplete(() -> {
-                            onEventEnd(resp, subscriber);
-                        })
-                        .doOnError(subscriber::onError));
-            } else {
-                TextStreamUtil.parseLineStream(httpResp, new SimpleSubscriber<String>()
-                        .doOnSubscribe(subscriber::onSubscribe)
-                        .doOnNext(data -> {
-                            return onEventStream(resp, new ServerSentEvent(null, data), subscriber);
-                        })
-                        .doOnComplete(() -> {
-                            onEventEnd(resp, subscriber);
-                        })
-                        .doOnError(subscriber::onError));
-            }
-        } catch (Throwable ex) {
-            subscriber.onError(ex);
-        }
+        return Flux.<ChatResponse>create(sink -> {
+            Flux<?> source = (contentType != null && contentType.startsWith(MimeType.TEXT_EVENT_STREAM_VALUE))
+                    ? TextStreamUtil.parseSseStream(httpResp)
+                    : TextStreamUtil.parseLineStream(httpResp);
+
+            // 使用原子引用管理订阅，以便内部控制终止
+            final AtomicReference<Disposable> disposableRef = new AtomicReference<>();
+
+            Disposable disposable = source.subscribe(
+                    data -> {
+                        // [对接点]：检查 sink 状态，如果已经完成或取消，不再处理
+                        if (sink.isCancelled() == false) {
+                            try {
+                                ServerSentEvent sse = (data instanceof ServerSentEvent)
+                                        ? (ServerSentEvent) data : new ServerSentEvent(null, (String) data);
+
+                                // [对接点]：利用 onEventStream 的返回值
+                                if (!onEventStream(respDesc, sse, sink)) {
+                                    // 返回 false 说明内部要求终止（如报错或逻辑中断）
+                                    disposableRef.get().dispose();
+                                }
+                            } catch (Throwable e) {
+                                sink.error(e);
+                            }
+                        }
+                    },
+                    sink::error,
+                    () -> {
+                        // 只有在没有被手动 dispose 的情况下才执行 End 逻辑
+                        if (sink.isCancelled() == false) {
+                            try {
+                                onEventEnd(respDesc, sink);
+                            } catch (Throwable e) {
+                                sink.error(e);
+                            }
+                        }
+                    }
+            );
+
+            disposableRef.set(disposable);
+            sink.onDispose(disposable);
+        }, FluxSink.OverflowStrategy.BUFFER);
     }
 
-    private void onEventEnd(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
+    private void onEventEnd(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink) {
         if (resp.toolCallBuilders.size() > 0) {
-            if (buildStreamToolMessage(resp, subscriber) == false) {
-                return;
+            if (buildStreamToolCallMessage(resp, sink) == false) {
+                return; // 进入了内部递归流处理，不执行 complete
             }
         }
 
@@ -297,90 +342,95 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             session.addMessage(aggregationMessage);
         }
 
-        subscriber.onComplete();
+        sink.complete();
     }
 
-    private boolean onEventStream(ChatResponseDefault resp, ServerSentEvent event, Subscriber<? super ChatResponse> subscriber) {
+    /**
+     * @return 是否结束流
+     */
+    private boolean onEventStream(ChatResponseDefault resp, ServerSentEvent event, FluxSink<? super ChatResponse> sink) {
         if (log.isDebugEnabled()) {
             log.debug("llm-response: {}", event.data());
         }
 
         resp.setResponseData(event.data());
 
-        if (Utils.isEmpty(event.data())) {
+        if (Assert.isEmpty(event.data())) {
             return true;
         }
 
         resp.reset();
         if (dialect.parseResponseJson(config, resp, event.data())) {
             if (resp.getError() != null) {
-                subscriber.onError(resp.getError());
+                sink.error(resp.getError());
                 return false;
             }
 
             if (resp.hasChoices()) {
                 AssistantMessage choiceMessage = resp.getMessage();
-                if (Utils.isNotEmpty(choiceMessage.getToolCalls())) {
+                if (Assert.isNotEmpty(choiceMessage.getToolCalls())) {
                     //messages.add(choiceMessage);
                     buildToolCallBuilder(resp, choiceMessage);
                 }
 
-                if (choiceMessage != null) {
-                    if (resp.getChoices().size() > 1) {
-                        //有多个选择时，拆成多个。
-                        List<ChatChoice> choices = new ArrayList<>(resp.getChoices());
-                        for (ChatChoice choice : choices) {
-                            resp.reset();
-                            resp.addChoice(choice);
-                            publishResponse(subscriber, resp, choice);
-                        }
-                    } else {
-                        publishResponse(subscriber, resp, resp.getChoices().get(0));
-                    }
+                // 拆分 Choice 并在当前 Sink 中发射
+                List<ChatChoice> choices = new ArrayList<>(resp.getChoices());
+                for (ChatChoice choice : choices) {
+                    resp.reset();
+                    resp.addChoice(choice);
+                    publishResponse(sink, resp, choice);
                 }
             }
-
-//            if (resp.isFinished()) {
-//                if (resp.toolCallBuilders.size() > 0) {
-//                    return buildStreamToolMessage(resp, subscriber);
-//                }
-//            }
         }
 
         return true;
     }
 
-    private boolean buildStreamToolMessage(ChatResponseDefault resp, Subscriber<? super ChatResponse> subscriber) {
+    /**
+     * @return 是否结束流
+     */
+    private boolean buildStreamToolCallMessage(ChatResponseDefault resp, FluxSink<? super ChatResponse> sink) {
         try {
-            ONode oNode = dialect.buildAssistantMessageNode(resp.toolCallBuilders);
-
+            ONode oNode = dialect.buildAssistantToolCallMessageNode(resp, resp.toolCallBuilders);
             List<AssistantMessage> assistantMessages = dialect.parseAssistantMessage(resp, oNode);
+
+            // 如果没有消息，说明工具调用解析失败或没有工具需要处理，直接完成
+            if (assistantMessages.isEmpty()) {
+                log.debug("The tool call resolution result is empty, ending the streaming response");
+                return true; //触发外层的完成事件
+            }
 
             session.addMessage(assistantMessages);
 
             if (options.isAutoToolCall()) {
-                // 如果没有消息，说明工具调用解析失败或没有工具需要处理，直接完成
-                if (assistantMessages.isEmpty()) {
-                    log.debug("工具调用解析结果为空，结束流式响应");
-                    return true; //触发外层的完成事件
-                }
+                AssistantMessage choiceMessage = assistantMessages.get(0);
+                List<ToolMessage> returnDirectMessages = buildToolMessage(resp, choiceMessage);
 
-                List<ToolMessage> returnDirectMessages = buildToolMessage(resp, assistantMessages.get(0));
+                if (Assert.isEmpty(returnDirectMessages)) {
+                    Disposable disposable = internalStream().subscribe(
+                            sink::next,
+                            sink::error,
+                            sink::complete
+                    );
+                    sink.onDispose(disposable);
 
-                if (Utils.isEmpty(returnDirectMessages)) {
-                    //没有要求直接返回
-                    internalStream().subscribe(subscriber);
                     return false; //不触发外层的完成事件
                 } else {
                     //要求直接返回（转为新的响应消息）
-                    AssistantMessage message = dialect.buildAssistantMessageByToolMessages(returnDirectMessages);
+                    AssistantMessage message = dialect.buildAssistantMessageByToolMessages(choiceMessage, returnDirectMessages);
                     resp.reset();
                     resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
-                    resp.aggregationMessageContent.setLength(0);
-                    publishResponse(subscriber, resp, resp.lastChoice());
+                    //resp.aggregationMessageContent.setLength(0);
+                    publishResponse(sink, resp, resp.lastChoice());
                     return true; //触发外层的完成事件
                 }
             } else {
+                AssistantMessage message = assistantMessages.get(0);
+                resp.reset();
+                resp.addChoice(new ChatChoice(0, new Date(), "tool", message));
+                //resp.aggregationMessageContent.setLength(0);
+
+                publishResponse(sink, resp, resp.lastChoice());
                 return true; //触发外层的完成事件
             }
 
@@ -390,31 +440,56 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         }
     }
 
-    private void publishResponse(Subscriber<? super ChatResponse> subscriber, ChatResponseDefault resp, ChatChoice choice) {
-        if (choice.getMessage().getContent() != null) {
-            resp.aggregationMessageContent.append(choice.getMessage().getContent());
+    private HttpException createHttpException(HttpResponse resp) {
+        try {
+            String message = resp.bodyAsString();
+            String description = Assert.isEmpty(message)
+                    ? "Error code:" + resp.code()
+                    : "Error code:" + resp.code() + ", message:" + message;
+            return new HttpException(description);
+        } catch (IOException e) {
+            return new HttpException("Error code:" + resp.code(), e);
         }
-        subscriber.onNext(resp);
+    }
+
+    private void publishResponse(FluxSink<? super ChatResponse> sink, ChatResponseDefault resp, ChatChoice choice) {
+        if (choice.getMessage().hasContent()) {
+            resp.contentBuilder.append(choice.getMessage().getContent());
+        }
+        sink.next(resp);
     }
 
     private void buildToolCallBuilder(ChatResponseDefault resp, AssistantMessage acm) {
-        if (Utils.isEmpty(acm.getToolCalls())) {
+        if (Assert.isEmpty(acm.getToolCalls())) {
             return;
         }
 
+        if (Assert.isNotEmpty(acm.getContent())) {
+            resp.contentBuilder.append(acm.getContent());
+        }
+
+        if (Assert.isNotEmpty(acm.getReasoning())) {
+            resp.reasoningBuilder.append(acm.getReasoning());
+        }
+
         for (ToolCall call : acm.getToolCalls()) {
-            ToolCallBuilder callBuilder = resp.toolCallBuilders.computeIfAbsent(call.index(), k -> new ToolCallBuilder());
+            ToolCallBuilder callBuilder = resp.toolCallBuilders.computeIfAbsent(call.getIndex(), k -> new ToolCallBuilder());
 
-            if (call.id() != null) {
-                callBuilder.idBuilder.append(call.id());
+            if (call.getId() != null && call.getId().contentEquals(callBuilder.idBuilder)
+                    && call.getName() != null && call.getName().contentEquals(callBuilder.nameBuilder)) {
+                //说明 id 和 name 在全量增加
+            } else {
+                if (call.getId() != null) {
+                    callBuilder.idBuilder.append(call.getId());
+                }
+
+                if (call.getName() != null) {
+                    callBuilder.nameBuilder.append(call.getName());
+                }
             }
 
-            if (call.name() != null) {
-                callBuilder.nameBuilder.append(call.name());
-            }
-
-            if (call.argumentsStr() != null) {
-                callBuilder.argumentsBuilder.append(call.argumentsStr());
+            if (call.getArgumentsStr() != null) {
+                callBuilder.argumentsBuilder.append(call.getArgumentsStr());
             }
         }
     }
@@ -423,26 +498,29 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
      * @return returnDirect
      */
     private List<ToolMessage> buildToolMessage(ChatResponseDefault resp, AssistantMessage acm) throws ChatException {
-        if (Utils.isEmpty(acm.getToolCalls())) {
+        if (Assert.isEmpty(acm.getToolCalls())) {
             return null;
         }
 
         List<ToolMessage> toolMessages = new ArrayList<>();
         for (ToolCall call : acm.getToolCalls()) {
-            FunctionTool func = options.tool(call.name());
+            FunctionTool tool = options.tool(call.getName());
 
-            if (func != null) {
+            if (tool != null) {
                 try {
-                    String content = doToolCall(resp, func, call.arguments());
-                    ToolMessage toolMessage = ChatMessage.ofTool(content, call.name(), call.id(), func.returnDirect());
+                    ToolResult toolResult = doToolCall(resp, tool, call.getArguments());
+                    ToolMessage toolMessage = ChatMessage.ofTool(toolResult, call.getName(), call.getId(), tool.returnDirect());
+                    toolMessage.addMetadata(tool.meta());
+                    toolMessage.addMetadata("__tool", tool.name());
+
                     session.addMessage(toolMessage);
                     toolMessages.add(toolMessage);
                 } catch (Throwable ex) {
-                    throw new ToolCallException("The tool call failed, name: '" + func + "'", ex);
+                    throw new ToolCallException("The tool call failed, name: '" + tool + "'", ex);
                 }
             } else {
                 //会存在调用的call实际上不存在的情况
-                log.warn("Tool call not found: {}", call.name());
+                log.warn("Tool call not found: {}", call.getName());
             }
         }
 
@@ -457,14 +535,12 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     /**
      * 执行工具调用（支持拦截器）
      */
-    private String doToolCall(ChatResponseDefault resp, FunctionTool func, Map<String, Object> args) throws Throwable {
+    private ToolResult doToolCall(ChatResponseDefault resp, FunctionTool func, Map<String, Object> args) throws Throwable {
         //收集拦截器
-        List<RankEntity<ChatInterceptor>> interceptorList = options.interceptors();
-
         ToolRequest req = new ToolRequest(resp.getRequest(), resp.getOptions().toolContext(), args);
 
         //构建请求数据
-        ToolChain chain = new ToolChain(interceptorList, func);
+        ToolChain chain = new ToolChain(options.interceptors(), func);
 
         return chain.doIntercept(req);
     }

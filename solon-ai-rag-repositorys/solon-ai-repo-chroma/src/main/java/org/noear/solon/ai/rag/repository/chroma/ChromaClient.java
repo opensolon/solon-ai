@@ -11,6 +11,7 @@ import org.noear.solon.net.http.HttpUtils;
 
 /**
  * Chroma API 客户端
+ * 自动检测并支持 v1 和 v2 API 版本，默认使用 v2
  *
  * @author 小奶奶花生米
  * @since 3.1
@@ -23,17 +24,77 @@ public class ChromaClient {
     private final MultiMap<String> headers = new MultiMap<>();
     private final StringSerializer serializer = new StringSerializer();
 
+    // API 版本配置
+    private final String apiVersion;
+    private final String tenant;
+    private final String database;
+
+    // 默认值常量
+    private static final String DEFAULT_TENANT = "default_tenant";
+    private static final String DEFAULT_DATABASE = "default_database";
+
 
     public ChromaClient(String baseUrl) {
+        this(baseUrl, DEFAULT_TENANT, DEFAULT_DATABASE);
+    }
+
+    public ChromaClient(String baseUrl, String tenant, String database) {
         if (Utils.isEmpty(baseUrl)) {
             throw new IllegalArgumentException("The baseurl cannot be empty.");
         }
 
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
+        
+        // 自动检测服务器版本，默认使用 v2
+        this.apiVersion = detectApiVersion();
+        logger.info("Auto-detected Chroma API version: " + this.apiVersion);
+        
+        this.tenant = Utils.isEmpty(tenant) ? DEFAULT_TENANT : tenant;
+        this.database = Utils.isEmpty(database) ? DEFAULT_DATABASE : database;
     }
 
     public ChromaClient(Properties properties) {
-        this(properties.getProperty("url"));
+        this(
+            properties.getProperty("url"),
+            properties.getProperty("tenant", DEFAULT_TENANT),
+            properties.getProperty("database", DEFAULT_DATABASE)
+        );
+    }
+
+    /**
+     * 自动检测 Chroma 服务器的 API 版本
+     * 优先尝试 v2 API，如果不可用则降级到 v1
+     *
+     * @return 检测到的 API 版本（v1 或 v2）
+     */
+    private String detectApiVersion() {
+        try {
+            // 优先尝试访问 v2 API 的心跳端点
+            String v2Endpoint = baseUrl + "api/v2/heartbeat";
+            HttpUtils httpUtils = HttpUtils.http(v2Endpoint)
+                    .serializer(serializer)
+                    .headers(headers)
+                    .header("Accept", "application/json");
+            
+            String response = httpUtils.get();
+            
+            // 如果 v2 API 响应成功，则使用 v2
+            if (response != null && !response.isEmpty()) {
+                try {
+                    Map<String, Object> responseMap = ONode.deserialize(response, Map.class);
+                    if (responseMap.containsKey("nanosecond heartbeat")) {
+                        return "v2";
+                    }
+                } catch (Exception e) {
+                    // 解析失败，继续尝试其他方式
+                }
+            }
+        } catch (Exception e) {
+            logger.info("v2 API not available, falling back to v1: " + e.getMessage());
+        }
+        
+        // 如果 v2 API 不可用，降级到 v1
+        return "v1";
     }
 
     /**
@@ -65,13 +126,45 @@ public class ChromaClient {
     }
 
     /**
+     * 构建 API 端点路径
+     * 根据 API 版本自动选择 v1 或 v2 路径格式
+     *
+     * @param pathParts 路径部分数组
+     * @return 完整的 API 端点 URL
+     */
+    private String buildEndpoint(String... pathParts) {
+        if ("v1".equals(apiVersion)) {
+            // v1 API 格式: /api/v1/{path}
+            return baseUrl + "api/v1/" + String.join("/", pathParts);
+        } else if ("v2".equals(apiVersion)) {
+            // v2 API 格式: /api/v2/tenants/{tenant}/databases/{database}/{path}
+            String basePath = "api/v2/tenants/" + tenant + "/databases/" + database;
+            if (pathParts == null || pathParts.length == 0) {
+                return baseUrl + basePath;
+            }
+            return baseUrl + basePath + "/" + String.join("/", pathParts);
+        } else {
+            throw new IllegalArgumentException("Unsupported API version: " + apiVersion);
+        }
+    }
+
+    /**
      * 检查服务是否健康
      *
      * @return 是否健康
      */
     public boolean isHealthy() {
         try {
-            String endpoint = baseUrl + "api/v1/heartbeat";
+            // heartbeat 端点不包含 tenant 和 database 路径
+            String endpoint;
+            if ("v1".equals(apiVersion)) {
+                endpoint = baseUrl + "api/v1/heartbeat";
+            } else if ("v2".equals(apiVersion)) {
+                endpoint = baseUrl + "api/v2/heartbeat";
+            } else {
+                return false;
+            }
+            
             String response = http(endpoint).get();
 
             Map<String, Object> responseMap = ONode.deserialize(response, Map.class);
@@ -90,7 +183,7 @@ public class ChromaClient {
      */
     public CollectionsResponse listCollections() throws IOException {
         try {
-            String endpoint = baseUrl + "api/v1/collections";
+            String endpoint = buildEndpoint("collections");
 
             CollectionsResponse response = http(endpoint).getAs(CollectionsResponse.class);
 
@@ -117,7 +210,7 @@ public class ChromaClient {
      */
     public CollectionResponse createCollection(String name, Map<String, Object> metadata) throws IOException {
         try {
-            String endpoint = baseUrl + "api/v1/collections";
+            String endpoint = buildEndpoint("collections");
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("name", name);
@@ -157,11 +250,14 @@ public class ChromaClient {
      */
     public CollectionResponse getCollectionStats(String collectionName) throws IOException {
         try {
-            String endpoint = baseUrl + "api/v1/collections/" + collectionName;
+            String endpoint = buildEndpoint("collections", collectionName);
 
             CollectionResponse response = http(endpoint).getAs(CollectionResponse.class);
 
             if (response.hasError()) {
+                if ("NotFoundError".equals(response.getError()) || response.getError().contains("not exist")){
+                    return null;
+                }
                 throw new IOException("Failed to get collection stats: " + response.getMessage());
             }
 
@@ -182,7 +278,7 @@ public class ChromaClient {
      */
     public void deleteCollection(String collectionId) throws IOException {
         try {
-            String endpoint = baseUrl + "api/v1/collections/" + collectionId;
+            String endpoint = buildEndpoint("collections", collectionId);
 
             String responseStr = http(endpoint).delete();
 
@@ -234,7 +330,7 @@ public class ChromaClient {
     public void addDocuments(String collectionId, List<String> ids, List<List<Float>> embeddings,
                              List<String> documents, List<Map<String, Object>> metadatas) throws IOException {
         try {
-            String endpoint = baseUrl + "api/v1/collections/" + collectionId + "/add";
+            String endpoint = buildEndpoint("collections", collectionId, "add");
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("ids", ids);
@@ -296,7 +392,7 @@ public class ChromaClient {
      */
     public void deleteDocuments(String collectionId, List<String> ids) throws IOException {
         try {
-            String endpoint = baseUrl + "api/v1/collections/" + collectionId + "/delete";
+            String endpoint = buildEndpoint("collections", collectionId, "delete");
 
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("ids", ids);
@@ -320,7 +416,7 @@ public class ChromaClient {
      */
     public boolean documentExists(String collectionId, String id) throws IOException {
         try {
-            String endpoint = baseUrl + "api/v1/collections/" + collectionId + "/get";
+            String endpoint = buildEndpoint("collections", collectionId, "get");
 
             Map<String, Object> requestBody = new HashMap<>();
             List<String> ids = new ArrayList<>();
@@ -353,7 +449,7 @@ public class ChromaClient {
     public QueryResponse queryDocuments(String collectionId, List<Float> queryEmbedding,
                                         int limit, Map<String, Object> metadataFilter) throws IOException {
         try {
-            String endpoint = baseUrl + "api/v1/collections/" + collectionId + "/query";
+            String endpoint = buildEndpoint("collections", collectionId, "query");
 
             Map<String, Object> requestBody = new HashMap<>();
 

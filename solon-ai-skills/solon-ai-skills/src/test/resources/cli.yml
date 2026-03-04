@@ -1,0 +1,7 @@
+
+
+solon.logging.appender:
+  console:
+    level: WARN
+  file:
+    enable: false

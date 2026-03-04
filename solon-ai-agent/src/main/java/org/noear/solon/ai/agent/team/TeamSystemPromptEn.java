@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.ai.agent.AgentProfile;
+import org.noear.snack4.ONode;
 import org.noear.solon.lang.Preview;
 import java.util.Locale;
 import java.util.function.Function;
@@ -32,7 +32,9 @@ import java.util.function.Function;
 public class TeamSystemPromptEn implements TeamSystemPrompt {
     private static final TeamSystemPrompt _DEFAULT = new TeamSystemPromptEn(null, null);
 
-    public static TeamSystemPrompt getDefault() { return _DEFAULT; }
+    public static TeamSystemPrompt getDefault() {
+        return _DEFAULT;
+    }
 
     private final String roleDesc;
     private final Function<TeamTrace, String> instructionProvider;
@@ -44,52 +46,54 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
     }
 
     @Override
-    public Locale getLocale() { return Locale.ENGLISH; }
+    public Locale getLocale() {
+        return Locale.ENGLISH;
+    }
 
     @Override
     public String getSystemPrompt(TeamTrace trace) {
+        String role = getRole(trace);
+        String instruction = getInstruction(trace);
+
         StringBuilder sb = new StringBuilder();
 
         // 1. Role Section
-        sb.append("## Role Definition\n").append(getRole()).append("\n\n");
+        sb.append("## Your Role\n").append(role).append("\n\n");
 
         // 2. Comprehensive Instructions
-        sb.append(getInstruction(trace));
+        sb.append(instruction);
 
         return sb.toString();
     }
 
-    @Override
-    public String getRole() {
+    public String getRole(TeamTrace trace) {
         if (roleDesc != null) {
             return roleDesc;
         }
-        return "You are the Team Supervisor, responsible for coordinating agents to complete the task";
+
+        if (trace.getConfig().getRole() != null) {
+            return trace.getConfig().getRole();
+        }
+
+        return "Team Supervisor, responsible for coordinating agents to complete the task";
     }
 
     /**
      * 构建核心指令集：采用 Markdown 分层结构提升 LLM 遵循度
      */
-    @Override
     public String getInstruction(TeamTrace trace) {
         TeamAgentConfig config = trace.getConfig();
         StringBuilder sb = new StringBuilder();
 
         // A. Team Directory: 注入成员职责与契约 (Contract)
         sb.append("## Team Members\n");
+        sb.append("```json\n");
+        ONode agentMetas = new ONode().asArray();
         config.getAgentMap().forEach((name, agent) -> {
-            sb.append("- **").append(name).append("**:\n");
-            sb.append("  - Responsibility: ").append(agent.descriptionFor(trace.getContext())).append("\n");
-
-            AgentProfile profile = agent.profile();
-            if (profile != null) {
-                String profileInfo = profile.toFormatString(getLocale());
-                if (profileInfo.length() > 0) {
-                    // 使用 code-block 强化契约信息的语义边界
-                    sb.append("  - Contract: `").append(profileInfo).append("`\n");
-                }
-            }
+            agentMetas.add(agent.toMetadata(trace.getContext()));
         });
+        sb.append(agentMetas.toJson());
+        sb.append("\n```\n");
 
         // B. Context: 注入原始用户需求
         sb.append("\n## Current Task\n").append(trace.getOriginalPrompt().getUserContent()).append("\n");
@@ -100,10 +104,9 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
 
         // D. Output Specification: 强制格式化响应，确保下游解析成功
         sb.append("\n## Output Specification\n")
-                .append("1. **Progress Analysis**: Evaluate current progress and decide the next turn.\n")
-                .append("2. **Termination**: If the task is finished, output: ").append(config.getFinishMarker())
-                .append(" followed by the final result.\n")
-                .append("3. **Routing**: Otherwise, output **ONLY** the name of the next Agent to execute.\n");
+                .append("1. **Termination**: If the task is finished, output: ").append(config.getFinishMarker())
+                .append(" followed by the final result. If responding directly to the user, **DO NOT** include any analysis process.\n")
+                .append("2. **Routing**: If the task is ongoing, output **ONLY** the name of the next Agent to execute. Do not provide extra text.\n");
 
         // E. Guidelines: 防止死循环及过度协作
         sb.append("\n## History Analysis & Guidelines\n")
@@ -112,28 +115,21 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
                 .append("- Note: Do not terminate prematurely; ensure necessary expert input is obtained.\n");
 
         // F. Custom Business Logic: 注入增量业务指令
-        if (instructionProvider != null || trace.getOptions().getSkillInstruction() != null) {
-            sb.append("## Core Task Instructions\n");
-
+        if (instructionProvider != null) {
+            sb.append("\n## Core Task Instructions\n");
             // Agent-level instructions
-            if (instructionProvider != null) {
-                sb.append(instructionProvider.apply(trace)).append("\n");
-            }
-
-            // Skill-level instructions (Add a sub-header for better focus)
-            if (trace.getOptions().getSkillInstruction() != null) {
-                sb.append("### Supplemental Guidelines\n");
-                sb.append(trace.getOptions().getSkillInstruction()).append("\n");
-            }
+            sb.append(instructionProvider.apply(trace)).append("\n");
             sb.append("\n");
         }
 
         return sb.toString();
     }
 
-    public static Builder builder() { return new Builder(); }
+    public static Builder builder() {
+        return new Builder();
+    }
 
-    public static class Builder implements TeamSystemPrompt.Builder{
+    public static class Builder implements TeamSystemPrompt.Builder {
         private String roleDesc;
         private Function<TeamTrace, String> instructionProvider;
 

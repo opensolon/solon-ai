@@ -9,7 +9,9 @@
  */
 package org.noear.solon.ai.agent.team.task;
 
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamInterceptor;
@@ -17,6 +19,7 @@ import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
@@ -79,7 +82,7 @@ public class SupervisorTask implements NamedTaskComponent {
             // 2. 协作熔断检查：达到最大迭代次数或已标记结束则退出
             if (Agent.ID_END.equals(trace.getRoute()) ||
                     trace.getTurnCount() >= trace.getOptions().getMaxTurns()) {
-                trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SYSTEM, "[Terminated] Max iterations reached", 0);
+                trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SYSTEM, "[Terminated] Max turns reached", 0);
                 routeTo(context, trace, Agent.ID_END);
                 return;
             }
@@ -92,7 +95,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 return;
             }
 
-            dispatch(context, trace);
+            dispatch(node, context, trace);
 
         } catch (Exception e) {
             handleError(context, e);
@@ -102,7 +105,7 @@ public class SupervisorTask implements NamedTaskComponent {
     /**
      * 构建 Prompt 并调用模型进行调度决策
      */
-    protected void dispatch(FlowContext context, TeamTrace trace) throws Exception {
+    protected void dispatch(Node node, FlowContext context, TeamTrace trace) throws Exception {
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
 
         // 组装系统提示词 (基础模版 + 协议扩展)
@@ -143,23 +146,49 @@ public class SupervisorTask implements NamedTaskComponent {
             userContent.append(isZh ? "\n> **待命专家**：[" : "\n> **Pending Experts**: [").append(agentsList).append("].");
         }
 
-        List<ChatMessage> messages = Arrays.asList(
-                ChatMessage.ofSystem(finalSystemPrompt),
-                ChatMessage.ofUser(userContent.toString())
-        );
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("TeamAgent SystemPrompt rendered for agent [{}]:\n{}", trace.getAgentName(), finalSystemPrompt);
+        }
 
-        ChatResponse response = callWithRetry(trace, messages);
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.ofSystem(finalSystemPrompt));
+        messages.addAll(trace.getWorkingMemory().getMessages());
+        messages.add(ChatMessage.ofUser(userContent.toString()));
+
+
+        ChatResponse response = callWithRetry(node, trace, messages);
+        if (trace.isPending()) {
+            return;
+        }
+
+        final AssistantMessage responseMessage;
+        if (response.isStream()) {
+            responseMessage = response.getAggregationMessage();
+        } else {
+            responseMessage = response.getMessage();
+        }
 
         if (response.getUsage() != null) {
             trace.getMetrics().addUsage(response.getUsage());
         }
 
-        trace.getOptions().getInterceptors().forEach(item -> item.target.onModelEnd(trace, response));
+        for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onModelEnd(trace, response);
+        }
+        if (trace.isPending()) {
+            return;
+        }
 
-        String clearContent = response.hasContent() ? response.getResultContent() : "";
+        String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
         String decision = clearContent.trim();
         trace.setLastDecision(decision);
-        trace.getOptions().getInterceptors().forEach(item -> item.target.onSupervisorDecision(trace, decision));
+
+        for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
+            item.target.onSupervisorDecision(trace, decision);
+        }
+        if (trace.isPending()) {
+            return;
+        }
 
         commitRoute(trace, decision, context);
     }
@@ -168,6 +197,15 @@ public class SupervisorTask implements NamedTaskComponent {
      * 将决策文本解析为物理路由目标
      */
     protected void commitRoute(TeamTrace trace, String decision, FlowContext context) {
+        if (FeedbackTool.isSuspend(decision)) {
+            ONode oNode = ONode.ofJson(decision);
+            String reason = oNode.get("reason").getString();
+            trace.setFinalAnswer(reason);
+            trace.setRoute(Agent.ID_END);
+            trace.getContext().interrupt();
+            return;
+        }
+
         if (Assert.isEmpty(decision)) {
             routeTo(context, trace, Agent.ID_END);
             return;
@@ -248,8 +286,14 @@ public class SupervisorTask implements NamedTaskComponent {
     /**
      * 带重试机制的模型调用
      */
-    protected ChatResponse callWithRetry(TeamTrace trace, List<ChatMessage> messages) {
+    protected ChatResponse callWithRetry(Node node, TeamTrace trace, List<ChatMessage> messages) {
         ChatRequestDesc req = config.getChatModel().prompt(messages).options(o -> {
+            if(trace.getOptions().isFeedbackMode()) {
+                o.toolAdd(FeedbackTool.getTool(
+                        trace.getOptions().getFeedbackDescription(trace),
+                        trace.getOptions().getFeedbackReasonDescription(trace)));
+            }
+
             o.toolAdd(trace.getOptions().getTools());
             config.getProtocol().injectSupervisorTools(trace.getContext(), o::toolAdd);
 
@@ -258,12 +302,37 @@ public class SupervisorTask implements NamedTaskComponent {
 
             o.optionSet(trace.getOptions().getModelOptions().options());
         });
-        trace.getOptions().getInterceptors().forEach(item -> item.target.onModelStart(trace, req));
+
+        for(RankEntity<TeamInterceptor> item: trace.getOptions().getInterceptors()){
+            item.target.onModelStart(trace, req);
+        }
+        if(trace.isPending()){
+            return null;
+        }
+
 
         int maxRetries = trace.getOptions().getMaxRetries();
         for (int i = 0; i < maxRetries; i++) {
             try {
-                return req.call();
+                final ChatResponse response;
+
+                if(trace.getOptions().getStreamSink() == null) {
+                    response = req.call();
+                } else {
+                    response = req.stream()
+                            .doOnNext(resp -> {
+                                trace.getOptions().getStreamSink().next(
+                                        new SupervisorChunk(node, trace, resp));
+                            })
+                            .blockLast();
+                }
+
+                if (response.hasChoices() == false && response.isFinished() == false) {
+                    //触发重试
+                    throw new IllegalStateException("The LLM did not return");
+                }
+
+                return response;
             } catch (Exception e) {
                 if (i == maxRetries - 1) throw new RuntimeException("Supervisor call failed", e);
                 LOG.warn("Supervisor call failed, retrying ({}/{})...", i + 1, maxRetries);

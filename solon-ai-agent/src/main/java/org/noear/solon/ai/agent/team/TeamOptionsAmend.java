@@ -17,6 +17,8 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 
+import java.util.function.Function;
+
 /**
  * 团队协作选项修正器
  *
@@ -49,6 +51,11 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
         return this;
     }
 
+    public TeamOptionsAmend recordWindowSize(int recordWindowSize) {
+        options.setRecordWindowSize(recordWindowSize);
+        return this;
+    }
+
     /**
      * 修正调度重试配置
      */
@@ -57,11 +64,36 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
         return this;
     }
 
+    public TeamOptionsAmend feedbackMode(boolean feedbackMode) {
+        options.setFeedbackMode(feedbackMode);
+        return this;
+    }
+
+    public TeamOptionsAmend feedbackDescription(String description) {
+        options.setFeedbackDescriptionProvider(t -> description);
+        return this;
+    }
+
+    public TeamOptionsAmend feedbackDescription(Function<TeamTrace, String> provider) {
+        options.setFeedbackDescriptionProvider(provider);
+        return this;
+    }
+
+    public TeamOptionsAmend feedbackReasonDescription(String description) {
+        options.setFeedbackReasonDescriptionProvider(t -> description);
+        return this;
+    }
+
+    public TeamOptionsAmend feedbackReasonDescription(Function<TeamTrace, String> provider) {
+        options.setFeedbackReasonDescriptionProvider(provider);
+        return this;
+    }
+
     /**
      * 动态追加拦截器
      */
     public TeamOptionsAmend interceptorAdd(TeamInterceptor interceptor) {
-        options.addInterceptor(interceptor, 0);
+        options.getModelOptions().interceptorAdd(interceptor);
         return this;
     }
 
@@ -69,7 +101,7 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
      * 动态追加拦截器（带排序权重）
      */
     public TeamOptionsAmend interceptorAdd(TeamInterceptor interceptor, int index) {
-        options.addInterceptor(interceptor, index);
+        options.getModelOptions().interceptorAdd(index, interceptor);
         return this;
     }
 }

@@ -24,7 +24,10 @@ import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.prompt.PromptImpl;
 import org.noear.solon.ai.chat.skill.SkillUtil;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.FlowContextInternal;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,38 +50,96 @@ import java.util.stream.Collectors;
 public class TeamTrace implements AgentTrace {
     private static final Logger LOG = LoggerFactory.getLogger(TeamTrace.class);
 
-    /** 关联团队配置 */
+    /**
+     * 关联团队配置
+     */
     private transient TeamAgentConfig config;
-    /** 运行时选项 */
+    /**
+     * 运行时选项
+     */
     private transient TeamOptions options;
-    /** 当前活跃会话（持有 LLM 上下文记忆） */
+    /**
+     * 当前活跃会话（持有 LLM 上下文记忆）
+     */
     private transient AgentSession session;
 
-    /** 当前 Agent 标识 */
+    /**
+     * 当前 Agent 标识
+     */
     private String agentName;
-    /** 当前任务提示词（随协作阶段动态变化） */
+    /**
+     * 当前任务提示词（随协作阶段动态变化）
+     */
     private Prompt originalPrompt;
-    /** 工作记忆 */
+    /**
+     * 工作记忆
+     */
     private final Prompt workingMemory = new PromptImpl();
-    /** 协作流水账：按时间轴记录执行详情 */
+    /**
+     * 协作流水账：按时间轴记录执行详情
+     */
     private final List<TeamRecord> records = new CopyOnWriteArrayList<>();
 
-    /** 路由决策：指向下一个 Agent 或 ID_END */
+    /**
+     * 路由决策：指向下一个 Agent 或 ID_END
+     */
     private volatile String route;
-    /** 调度器原始决策文本（用于异常复盘） */
+
+    /**
+     * 最终交付答案
+     */
+    private String finalAnswer;
+
+    /**
+     * 调度器原始决策文本（用于异常复盘）
+     */
     private volatile String lastDecision;
-    /** 最后运行的专家 Agent 名字 */
+    /**
+     * 最后运行的专家 Agent 名字
+     */
     private volatile String lastAgentName;
-    /** 迭代安全计数器（防止无限循环） */
+    /**
+     * 迭代安全计数器（防止无限循环）
+     */
     private final AtomicInteger turnCounter;
-    /** 度量指标 */
+    /**
+     * 度量指标
+     */
     private final Metrics metrics = new Metrics();
 
-    /** 协议私有存储空间（供 TeamProtocol 存储私有状态） */
+    /**
+     * 协议私有存储空间（供 TeamProtocol 存储私有状态）
+     */
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
 
-    /** 最终交付答案 */
-    private String finalAnswer;
+
+    /**
+     * 是否处于挂起状态（如：等待人工介入、异步回调或逻辑暂存）
+     */
+    private boolean pending;
+    /**
+     * 挂起原因（通常作为反馈给用户或审批者的提示信息）
+     */
+    private String pendingReason;
+
+    private final Map<String, Object> extras = new ConcurrentHashMap<>();
+
+    public Map<String, Object> getExtras() {
+        return extras;
+    }
+
+    public Object getExtra(String key) {
+        return extras.get(key);
+    }
+
+    public <T> T getExtraAs(String key) {
+        return (T) extras.get(key);
+    }
+
+    public void setExtra(String key, Object val) {
+        extras.put(key, val);
+    }
+
 
     public TeamTrace() {
         this.turnCounter = new AtomicInteger(0);
@@ -90,28 +151,110 @@ public class TeamTrace implements AgentTrace {
     }
 
     public static TeamTrace getCurrent(FlowContext context) {
-        String teamTraceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
-        if (teamTraceKey != null) {
-            return context.getAs(teamTraceKey);
+        String traceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
+        if (traceKey != null) {
+            return context.getAs(traceKey);
         } else {
             return null;
         }
     }
 
+    /**
+     * 运行时环境准备
+     */
+    protected void prepare(TeamAgentConfig config, TeamOptions options, AgentSession session, String agentName) {
+        this.config = config;
+        this.options = options;
+        this.session = session;
+        this.agentName = agentName;
+        this.finalAnswer = null;
+
+        //每次执行重置中断状态
+        this.pending = false;
+        this.pendingReason = null;
+        ((FlowContextInternal)session.getSnapshot()).stopped(false);
+    }
+
     protected void activeSkills() {
+        if (originalPrompt != null && Assert.isNotEmpty(getOptions().getToolContext())) {
+            originalPrompt.attrs().putAll(getOptions().getToolContext());
+        }
+
         //设置指令
-        StringBuilder combinedInstruction = SkillUtil.activeSkills(options.getModelOptions(), originalPrompt);
-        if (combinedInstruction.length() > 0) {
-            options.setSkillInstruction(combinedInstruction.toString());
+        StringBuilder skillsInstruction = SkillUtil.activeSkills(options.getModelOptions(), originalPrompt, new StringBuilder());
+        if (skillsInstruction.length() > 0) {
+            options.setSkillInstruction(skillsInstruction.toString());
         }
     }
 
-    /** 是否为初始状态 */
+    protected void reset(Prompt originalPrompt){
+        // 1. 基础状态重置
+        this.turnCounter.set(0);
+        this.route = null;            // 路由必须重置，由协议在构建图后重新计算
+        this.finalAnswer = null;
+        this.lastDecision = null;
+        this.lastAgentName = null;
+
+        // 2. 核心记忆与流水账清理
+        this.records.clear();         // 协作流水账必须清空，否则上下文注入时会包含旧任务的 Expert Output
+        this.workingMemory.clear();   // 顶层工作记忆清空
+
+        // 3. 协议私有上下文重置（关键！）
+        // 这里存储了如：当前环节索引、已完成的角色列表等，必须清空以重新开始协议逻辑
+        this.protocolContext.clear();
+
+        // 4. 指标重置
+        this.metrics.reset();
+
+        // 5. 任务绑定
+        setOriginalPrompt(originalPrompt);
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("TeamAgent [{}] trace reset. Ready for new collaboration.", agentName);
+        }
+    }
+
+    /**
+     * 触发协作流挂起
+     *
+     * @param reason 挂起原因或需要人工确认的提示词
+     */
+    public void pending(String reason) {
+        this.pending = true;
+        this.pendingReason = reason;
+        this.finalAnswer = reason;
+
+        // 自动同步中断底层流程引擎
+        if (session != null) {
+            session.getSnapshot().stop();
+        }
+    }
+
+    /**
+     * 判定当前任务是否正在挂起等待
+     */
+    public boolean isPending() {
+        return pending || (session != null && session.getSnapshot().isStopped());
+    }
+
+    /**
+     * 获取挂起的原因或提示信息
+     */
+    public @Nullable String getPendingReason() {
+        return pendingReason;
+    }
+
+
+    /**
+     * 是否为初始状态
+     */
     public boolean isInitial() {
         return records.isEmpty();
     }
 
-    /** 提取最近一位专家 Agent（非 Supervisor）的内容 */
+    /**
+     * 提取最近一位专家 Agent（非 Supervisor）的内容
+     */
     public String getLastAgentContent() {
         for (int i = records.size() - 1; i >= 0; i--) {
             TeamRecord record = records.get(i);
@@ -128,14 +271,6 @@ public class TeamTrace implements AgentTrace {
         return 0L;
     }
 
-    /** 运行时环境准备 */
-    protected void prepare(TeamAgentConfig config, TeamOptions options, AgentSession session, String agentName) {
-        this.config = config;
-        this.options = options;
-        this.session = session;
-        this.agentName = agentName;
-    }
-
     // --- 属性访问 ---
 
     @Override
@@ -143,17 +278,38 @@ public class TeamTrace implements AgentTrace {
         return metrics;
     }
 
-    public String getAgentName() { return agentName; }
-    public TeamAgentConfig getConfig() { return config; }
-    public TeamOptions getOptions() { return options; }
-    public AgentSession getSession() { return session; }
-
-    public FlowContext getContext() {
-        return (session != null) ? session.getSnapshot() : null;
+    public String getAgentName() {
+        return agentName;
     }
 
-    public TeamProtocol getProtocol() { return config.getProtocol(); }
-    public Prompt getOriginalPrompt() { return originalPrompt; }
+    public TeamAgentConfig getConfig() {
+        return config;
+    }
+
+    public TeamOptions getOptions() {
+        return options;
+    }
+
+    public AgentSession getSession() {
+        return session;
+    }
+
+    public FlowContext getContext() {
+        if (session != null) {
+            return session.getSnapshot();
+        } else {
+            return null;
+        }
+    }
+
+    public TeamProtocol getProtocol() {
+        return config.getProtocol();
+    }
+
+    public Prompt getOriginalPrompt() {
+        return originalPrompt;
+    }
+
     public void setOriginalPrompt(Prompt originalPrompt) {
         Objects.requireNonNull(originalPrompt, "OriginalPrompt cannot be null");
         this.originalPrompt = originalPrompt;
@@ -163,23 +319,56 @@ public class TeamTrace implements AgentTrace {
         return workingMemory;
     }
 
-    public String getRoute() { return route; }
-    public void setRoute(String route) { this.route = route; }
-    public String getLastDecision() { return lastDecision; }
-    public void setLastDecision(String decision) { this.lastDecision = decision; }
-    public String getLastAgentName() { return lastAgentName; }
-    public void setLastAgentName(String agentName) { this.lastAgentName = agentName; }
-    public int getTurnCount() { return turnCounter.get(); }
-    public void resetTurnCount() { turnCounter.set(0); }
-    public int nextTurn() { return turnCounter.incrementAndGet(); }
+    public String getRoute() {
+        return route;
+    }
 
-    /** 获取协议私有上下文 */
-    public Map<String, Object> getProtocolContext() { return protocolContext; }
-    public void resetProtocolContext(){
+    public void setRoute(String route) {
+        this.route = route;
+    }
+
+    public String getLastDecision() {
+        return lastDecision;
+    }
+
+    public void setLastDecision(String decision) {
+        this.lastDecision = decision;
+    }
+
+    public String getLastAgentName() {
+        return lastAgentName;
+    }
+
+    public void setLastAgentName(String agentName) {
+        this.lastAgentName = agentName;
+    }
+
+    public int getTurnCount() {
+        return turnCounter.get();
+    }
+
+    public void resetTurnCount() {
+        turnCounter.set(0);
+    }
+
+    public int nextTurn() {
+        return turnCounter.incrementAndGet();
+    }
+
+    /**
+     * 获取协议私有上下文
+     */
+    public Map<String, Object> getProtocolContext() {
+        return protocolContext;
+    }
+
+    public void resetProtocolContext() {
         protocolContext.clear();
     }
 
-    /** 获取协议状态快照（JSON 格式，供 Agent 感知全局进度） */
+    /**
+     * 获取协议状态快照（JSON 格式，供 Agent 感知全局进度）
+     */
     public String getProtocolDashboardSnapshot() {
         return ONode.serialize(protocolContext);
     }
@@ -188,9 +377,14 @@ public class TeamTrace implements AgentTrace {
         return (T) protocolContext.get(key);
     }
 
-    public int getRecordCount() { return records.size(); }
+    public int getRecordCount() {
+        return records.size();
+    }
 
-    /** 记录执行足迹 */
+
+    /**
+     * 记录执行足迹
+     */
     public void addRecord(ChatRole role, String source, String content, long duration) {
         records.add(new TeamRecord(role, source, content, duration));
 
@@ -200,14 +394,21 @@ public class TeamTrace implements AgentTrace {
         }
     }
 
-    /** 获取全量格式化历史 */
-    public String getFormattedHistory() { return getFormattedHistory(0, true); }
+    /**
+     * 获取全量格式化历史
+     */
+    public String getFormattedHistory() {
+        return getFormattedHistory(0, true);
+    }
 
-    public String getFormattedHistory(int windowSize) { return getFormattedHistory(windowSize, true); }
+    public String getFormattedHistory(int windowSize) {
+        return getFormattedHistory(windowSize, true);
+    }
 
     /**
      * 渲染协作历史（Markdown 格式）
-     * @param windowSize 限制返回的步数（0 为不限）
+     *
+     * @param windowSize    限制返回的步数（0 为不限）
      * @param includeSystem 是否包含调度器决策逻辑
      */
     public String getFormattedHistory(int windowSize, boolean includeSystem) {
@@ -230,11 +431,21 @@ public class TeamTrace implements AgentTrace {
                 .collect(Collectors.joining("\n\n"));
     }
 
-    public List<TeamRecord> getRecords() { return Collections.unmodifiableList(records); }
-    public String getFinalAnswer() { return finalAnswer; }
-    public void setFinalAnswer(String finalAnswer) { this.finalAnswer = finalAnswer; }
+    public List<TeamRecord> getRecords() {
+        return Collections.unmodifiableList(records);
+    }
 
-    /** 协作足迹详情 */
+    public String getFinalAnswer() {
+        return finalAnswer;
+    }
+
+    public void setFinalAnswer(String finalAnswer) {
+        this.finalAnswer = finalAnswer;
+    }
+
+    /**
+     * 协作足迹详情
+     */
     public static class TeamRecord {
         private final ChatRole role;
         private final String source;
@@ -248,10 +459,34 @@ public class TeamTrace implements AgentTrace {
             this.duration = duration;
         }
 
-        public ChatRole getRole() { return role; }
-        public boolean isAgent() { return ChatRole.ASSISTANT == role; }
-        public String getSource() { return source; }
-        public String getContent() { return content; }
-        public long getDuration() { return duration; }
+        public ChatRole getRole() {
+            return role;
+        }
+
+        public boolean isAgent() {
+            return ChatRole.ASSISTANT == role;
+        }
+
+        public String getSource() {
+            return source;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public long getDuration() {
+            return duration;
+        }
+
+        @Override
+        public String toString() {
+            return "TeamRecord{" +
+                    "role=" + role +
+                    ", source='" + source + '\'' +
+                    ", content='" + content + '\'' +
+                    ", duration=" + duration +
+                    '}';
+        }
     }
 }

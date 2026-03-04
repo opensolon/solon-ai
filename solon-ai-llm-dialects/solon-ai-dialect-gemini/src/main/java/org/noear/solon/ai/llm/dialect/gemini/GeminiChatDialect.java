@@ -21,9 +21,10 @@ import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,18 +76,15 @@ public class GeminiChatDialect extends AbstractChatDialect {
      */
     @Override
     public boolean matched(ChatConfig config) {
-        return "gemini".equals(config.getProvider());
-    }
-
-    @Override
-    public HttpUtils createHttpUtils(ChatConfig config) {
-        return createHttpUtils(config, false);
+        return "gemini".equals(config.getProvider()) ||
+                (Assert.isEmpty(config.getProvider()) && config.getApiUrl().contains("/v1beta/models/") && config.getApiUrl().endsWith("generateContent"));
     }
 
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
         String apiUrl = buildApiUrl(config.getApiUrl().toString(), config.getModel(), isStream);
 
         HttpUtils httpUtils = HttpUtils.http(apiUrl)
+                .ssl(HttpSslSupplierAny.getInstance())
                 .timeout((int) config.getTimeout().getSeconds());
 
         if (config.getProxy() != null) {
@@ -99,6 +97,10 @@ public class GeminiChatDialect extends AbstractChatDialect {
 
         if (isStream) {
             httpUtils.header("Accept", "text/event-stream");
+        }
+
+        if (Utils.isNotEmpty(config.getUserAgent())) {
+            httpUtils.userAgent(config.getUserAgent());
         }
 
         httpUtils.headers(config.getHeaders());
@@ -183,8 +185,8 @@ public class GeminiChatDialect extends AbstractChatDialect {
     }
 
     @Override
-    public ONode buildAssistantMessageNode(Map<String, ToolCallBuilder> toolCallBuilders) {
-        return requestBuilder.buildAssistantMessageNode(toolCallBuilders);
+    public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
+        return requestBuilder.buildAssistantToolCallMessageNode(resp, toolCallBuilders);
     }
 
     @Override
@@ -196,10 +198,5 @@ public class GeminiChatDialect extends AbstractChatDialect {
         } else {
             return super.parseAssistantMessage(resp, oMessage);
         }
-    }
-
-    @Override
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
     }
 }

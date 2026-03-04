@@ -15,7 +15,10 @@
  */
 package org.noear.solon.ai.rag.repository.qdrant;
 
+import io.qdrant.client.grpc.Common;
 import io.qdrant.client.grpc.Points;
+import io.qdrant.client.grpc.Common.Filter;
+
 import org.noear.solon.Utils;
 import org.noear.solon.expression.Expression;
 import org.noear.solon.expression.Transformer;
@@ -27,13 +30,16 @@ import org.noear.solon.expression.snel.VariableNode;
 import java.util.ArrayList;
 import java.util.List;
 
+import static io.qdrant.client.grpc.Common.Condition;
+import static io.qdrant.client.grpc.Common.Range;
+
 /**
  * 过滤转换器
  *
  * @author noear
  * @since 3.1
  */
-public class FilterTransformer implements Transformer<Boolean, Points.Filter> {
+public class FilterTransformer implements Transformer<Boolean, Filter> {
     private static FilterTransformer instance = new FilterTransformer();
 
     public static FilterTransformer getInstance() {
@@ -41,15 +47,15 @@ public class FilterTransformer implements Transformer<Boolean, Points.Filter> {
     }
 
     @Override
-    public Points.Filter transform(Expression<Boolean> source) {
+    public Filter transform(Expression<Boolean> source) {
         return this.transformDo(source);
     }
 
-    protected Points.Filter transformDo(Expression operand) {
-        Points.Filter.Builder context = Points.Filter.newBuilder();
-        List<Points.Condition> mustClauses = new ArrayList<Points.Condition>();
-        List<Points.Condition> shouldClauses = new ArrayList<Points.Condition>();
-        List<Points.Condition> mustNotClauses = new ArrayList<Points.Condition>();
+    protected Filter transformDo(Expression operand) {
+        Filter.Builder context = Filter.newBuilder();
+        List<Condition> mustClauses = new ArrayList<Condition>();
+        List<Condition> shouldClauses = new ArrayList<Condition>();
+        List<Condition> mustNotClauses = new ArrayList<Condition>();
 
         if (operand instanceof LogicalNode) {
             LogicalNode logicalNode = (LogicalNode) operand;
@@ -80,7 +86,7 @@ public class FilterTransformer implements Transformer<Boolean, Points.Filter> {
         return context.addAllMust(mustClauses).addAllShould(shouldClauses).addAllMustNot(mustNotClauses).build();
     }
 
-    protected Points.Condition parseComparison(ComparisonNode expr) {
+    protected Condition parseComparison(ComparisonNode expr) {
         VariableNode left = (VariableNode) expr.getLeft();
         ConstantNode right = (ConstantNode) expr.getRight();
 
@@ -106,7 +112,7 @@ public class FilterTransformer implements Transformer<Boolean, Points.Filter> {
         }
     }
 
-    protected Points.Condition buildEqCondition(VariableNode key, ConstantNode value) {
+    protected Condition buildEqCondition(VariableNode key, ConstantNode value) {
         String identifier = key.getName();
         if (value.getValue() instanceof String) {
             String valueStr = value.getValue().toString();
@@ -120,66 +126,66 @@ public class FilterTransformer implements Transformer<Boolean, Points.Filter> {
 
     }
 
-    protected Points.Condition buildNeCondition(VariableNode key, ConstantNode value) {
+    protected Condition buildNeCondition(VariableNode key, ConstantNode value) {
         String identifier = key.getName();
         if (value.getValue() instanceof String) {
             String valueStr = value.getValue().toString();
 
-            return io.qdrant.client.ConditionFactory.filter(Points.Filter.newBuilder()
+            return io.qdrant.client.ConditionFactory.filter(Filter.newBuilder()
                     .addMustNot(io.qdrant.client.ConditionFactory.matchKeyword(identifier, valueStr))
                     .build());
         } else if (value.getValue() instanceof Number) {
             long lValue = ((Number) value.getValue()).longValue();
-            Points.Condition condition = io.qdrant.client.ConditionFactory.match(identifier, lValue);
-            return io.qdrant.client.ConditionFactory.filter(Points.Filter.newBuilder().addMustNot(condition).build());
+            Condition condition = io.qdrant.client.ConditionFactory.match(identifier, lValue);
+            return io.qdrant.client.ConditionFactory.filter(Filter.newBuilder().addMustNot(condition).build());
         }
 
         throw new IllegalArgumentException("Invalid value type for NEQ. Can either be a string or Number");
 
     }
 
-    protected Points.Condition buildGtCondition(VariableNode key, ConstantNode value) {
+    protected Condition buildGtCondition(VariableNode key, ConstantNode value) {
         String identifier = key.getName();
         if (value.getValue() instanceof Number) {
             Double dvalue = ((Number) value.getValue()).doubleValue();
-            return io.qdrant.client.ConditionFactory.range(identifier, Points.Range.newBuilder().setGt(dvalue).build());
+            return io.qdrant.client.ConditionFactory.range(identifier, Range.newBuilder().setGt(dvalue).build());
         }
         throw new RuntimeException("Unsupported value type for GT condition. Only supports Number");
 
     }
 
-    protected Points.Condition buildLtCondition(VariableNode key, ConstantNode value) {
+    protected Condition buildLtCondition(VariableNode key, ConstantNode value) {
         String identifier = key.getName();
         if (value.getValue() instanceof Number) {
             Double dvalue = ((Number) value.getValue()).doubleValue();
-            return io.qdrant.client.ConditionFactory.range(identifier, Points.Range.newBuilder().setLt(dvalue).build());
+            return io.qdrant.client.ConditionFactory.range(identifier, Range.newBuilder().setLt(dvalue).build());
         }
         throw new RuntimeException("Unsupported value type for LT condition. Only supports Number");
 
     }
 
-    protected Points.Condition buildGteCondition(VariableNode key, ConstantNode value) {
+    protected Condition buildGteCondition(VariableNode key, ConstantNode value) {
         String identifier = key.getName();
         if (value.getValue() instanceof Number) {
             Double dvalue = ((Number) value.getValue()).doubleValue();
-            return io.qdrant.client.ConditionFactory.range(identifier, Points.Range.newBuilder().setGte(dvalue).build());
+            return io.qdrant.client.ConditionFactory.range(identifier, Range.newBuilder().setGte(dvalue).build());
         }
         throw new RuntimeException("Unsupported value type for GTE condition. Only supports Number");
 
     }
 
-    protected Points.Condition buildLteCondition(VariableNode key, ConstantNode value) {
+    protected Condition buildLteCondition(VariableNode key, ConstantNode value) {
         String identifier = key.getName();
         if (value.getValue() instanceof Number) {
             Double dvalue = ((Number) value.getValue()).doubleValue();
-            return io.qdrant.client.ConditionFactory.range(identifier, Points.Range.newBuilder().setLte(dvalue).build());
+            return io.qdrant.client.ConditionFactory.range(identifier, Range.newBuilder().setLte(dvalue).build());
         }
 
         throw new RuntimeException("Unsupported value type for LTE condition. Only supports Number");
 
     }
 
-    protected Points.Condition buildInCondition(VariableNode key, ConstantNode value) {
+    protected Condition buildInCondition(VariableNode key, ConstantNode value) {
         if (value.getValue() instanceof List) {
             List valueList = (List) value.getValue();
 
@@ -213,7 +219,7 @@ public class FilterTransformer implements Transformer<Boolean, Points.Filter> {
 
     }
 
-    protected Points.Condition buildNInCondition(VariableNode key, ConstantNode value) {
+    protected Condition buildNInCondition(VariableNode key, ConstantNode value) {
         if (value.getValue() instanceof List) {
             List valueList = (List) value.getValue();
 

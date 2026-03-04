@@ -29,7 +29,6 @@ import org.noear.solon.ai.mcp.server.McpServerProperties;
 import org.noear.solon.core.handle.Context;
 import reactor.core.publisher.Mono;
 
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -106,22 +105,7 @@ public class StatefulToolRegistry implements McpPrimitivesRegistry<FunctionTool>
                         return Mono.create(sink -> {
                             Context.currentWith(new McpServerContext(exchange, exchange.transportContext()), () -> {
                                 functionTool.handleAsync(request).whenComplete((rst, err) -> {
-                                    final McpSchema.CallToolResult result;
-
-                                    if (err != null) {
-                                        err = Utils.throwableUnwrap(err);
-                                        result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(err.getMessage())), true);
-                                    } else {
-
-                                        if (mcpServerProps.isEnableOutputSchema() && Utils.isNotEmpty(functionTool.outputSchema())) {
-                                            Map<String, Object> map = ONode.deserialize(rst, Map.class);
-                                            result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false, map);
-                                        } else {
-                                            result = new McpSchema.CallToolResult(Arrays.asList(new McpSchema.TextContent(rst)), false);
-                                        }
-                                    }
-
-                                    sink.success(result);
+                                    McpResultResponder.doToolResultResponse(sink, mcpServerProps, functionTool, rst, err);
                                 });
                             });
                         });

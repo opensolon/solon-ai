@@ -15,20 +15,21 @@
  */
 package org.noear.solon.ai.agent.team;
 
-import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.Skill;
+import org.noear.solon.ai.chat.skill.SkillProvider;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.*;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
@@ -39,6 +40,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 团队协作智能体 (Team Agent)
@@ -109,13 +111,12 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
     }
 
     @Override
-    public String title() {
-        return config.getTitle();
-    }
+    public String role() {
+        if (config.getRole() == null) {
+            return config.getName();
+        }
 
-    @Override
-    public String description() {
-        return config.getDescription();
+        return config.getRole();
     }
 
     @Override
@@ -174,6 +175,11 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             options = config.getDefaultOptions();
         }
 
+        if (parentTeamTrace != null) {
+            //传递流控
+            options.setStreamSink(parentTeamTrace.getOptions().getStreamSink());
+        }
+
         // 1. 运行时环境准备
         trace.prepare(config, options, session, config.getName());
 
@@ -188,7 +194,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             }
         } else {
             //新问题（重置数据）
-            trace.getWorkingMemory().clear();
+            trace.reset(prompt);
+            context.trace().recordNode(graph, null);
 
 
             // 加载历史上下文（短期记忆）
@@ -207,54 +214,51 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                 }
                 trace.getWorkingMemory().addMessage(message);
             }
-
-            context.trace().recordNode(graph, null);
-            trace.setOriginalPrompt(prompt);
-            trace.setRoute(null);
-            trace.resetProtocolContext();
-            trace.resetTurnCount();
         }
 
         //如果提示词没问题，开始部署技能
         trace.activeSkills();
 
         // 触发团队启动拦截
-        options.getInterceptors().forEach(item -> item.target.onTeamStart(trace));
-
-
-        // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("TeamAgent [{}] starting collaboration flow...", name());
+        for(RankEntity<TeamInterceptor> item : options.getInterceptors()){
+            item.target.onTeamStart(trace);
         }
 
-        long startTime = System.currentTimeMillis();
-
         try {
-            try {
-                final FlowOptions flowOptions = new FlowOptions();
-                options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
-
-                trace.getMetrics().reset();
-
-                context.with(Agent.KEY_CURRENT_TEAM_TRACE_KEY, config.getTraceKey(), () -> {
-                    context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
-                        flowEngine.eval(graph, -1, context, flowOptions);
-                    });
-                });
-            } finally {
-                // 记录性能指标
-                long duration = System.currentTimeMillis() - startTime;
-                trace.getMetrics().setTotalDuration(duration);
-
+            if(trace.isPending() == false) {
+                // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("TeamAgent [{}] finished. Duration: {}ms, turns: {}",
-                            config.getName(), duration, trace.getTurnCount());
+                    LOG.debug("TeamAgent [{}] starting collaboration flow...", name());
                 }
 
-                // 父一级团队轨迹
-                if (parentTeamTrace != null) {
-                    // 汇总 token 使用情况
-                    parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+                long startTime = System.currentTimeMillis();
+
+                try {
+                    final FlowOptions flowOptions = new FlowOptions();
+                    options.getInterceptors().forEach(item -> flowOptions.interceptorAdd(item.target, item.index));
+
+                    trace.getMetrics().reset();
+
+                    context.with(Agent.KEY_CURRENT_TEAM_TRACE_KEY, config.getTraceKey(), () -> {
+                        context.with(Agent.KEY_PROTOCOL, config.getProtocol(), () -> {
+                            flowEngine.eval(graph, -1, context, flowOptions);
+                        });
+                    });
+                } finally {
+                    // 记录性能指标
+                    long duration = System.currentTimeMillis() - startTime;
+                    trace.getMetrics().setTotalDuration(duration);
+
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("TeamAgent [{}] finished. Duration: {}ms, turns: {}",
+                                config.getName(), duration, trace.getTurnCount());
+                    }
+
+                    // 父一级团队轨迹
+                    if (parentTeamTrace != null) {
+                        // 汇总 token 使用情况
+                        parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
+                    }
                 }
             }
 
@@ -273,20 +277,21 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             }
 
             AssistantMessage assistantMessage = ChatMessage.ofAssistant(result);
-            if(Assert.isNotEmpty(result)) {
+            if (Assert.isNotEmpty(result)) {
                 if (parentTeamTrace == null) {
                     session.addMessage(assistantMessage);
                 }
                 trace.getWorkingMemory().addMessage(assistantMessage);
             }
 
-            session.updateSnapshot(context);
+            session.updateSnapshot();
 
             // 触发完成拦截
             options.getInterceptors().forEach(item -> item.target.onTeamEnd(trace));
 
+
             if (LOG.isDebugEnabled()) {
-                LOG.debug("TeamAgent [{}] collaboration completed.", name());
+                LOG.debug("TeamAgent [{}] completed: {}", config.getName(), assistantMessage.getContent());
             }
 
             return assistantMessage;
@@ -294,13 +299,6 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         } finally {
             // 5. 资源清理与协议后置处理
             config.getProtocol().onTeamFinished(context, trace);
-
-            if (context.containsKey(Agent.KEY_CURRENT_TEAM_TRACE_KEY)) {
-                //说明有嵌套，需要清空协议上下文（可能会重新再进来）
-                if (context.isStopped() == false) {
-                    trace.resetProtocolContext();
-                }
-            }
         }
     }
 
@@ -327,14 +325,17 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder title(String title) {
-            config.setTitle(title);
+        public Builder role(String role) {
+            config.setRole(role);
             return this;
         }
 
-        public Builder description(String description) {
-            config.setDescription(description);
-            return this;
+        /**
+         * @deprecated 3.9.1 {@link #role(String)}
+         */
+        @Deprecated
+        public Builder description(String val) {
+            return role(val);
         }
 
         public Builder profile(AgentProfile profile) {
@@ -347,6 +348,22 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
+        public Builder instruction(String instruction) {
+            config.setSystemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
+            return this;
+        }
+
+        public Builder instruction(Function<TeamTrace, String> instruction) {
+            config.setSystemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
+            return this;
+        }
+
+        public Builder systemPrompt(AgentSystemPrompt<TeamTrace> promptProvider) {
+            config.setSystemPrompt(promptProvider);
+            return this;
+        }
+
+
         /**
          * 添加团队成员
          */
@@ -354,18 +371,6 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             for (Agent agent : agents) {
                 config.addAgent(agent);
             }
-            return this;
-        }
-
-        public Builder systemPrompt(TeamSystemPrompt promptProvider) {
-            config.setSystemPrompt(promptProvider);
-            return this;
-        }
-
-        public Builder systemPrompt(Consumer<TeamSystemPrompt.Builder> promptBuilder) {
-            TeamSystemPrompt.Builder builder = TeamSystemPrompt.builder();
-            promptBuilder.accept(builder);
-            config.setSystemPrompt(builder.build());
             return this;
         }
 
@@ -426,8 +431,41 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder defaultSkillAdd(Skill skill) {
-            config.getDefaultOptions().getModelOptions().skillAdd(skill);
+        /**
+         * 反馈模式（允许主动寻求外部帮助/反馈）
+         */
+        public Builder feedbackMode(boolean val) {
+            config.getDefaultOptions().setFeedbackMode(val);
+            return this;
+        }
+
+        public Builder feedbackDescription(String description) {
+            config.getDefaultOptions().setFeedbackDescriptionProvider(t -> description);
+            return this;
+        }
+
+        public Builder feedbackDescription(Function<TeamTrace, String> provider) {
+            config.getDefaultOptions().setFeedbackDescriptionProvider(provider);
+            return this;
+        }
+
+        public Builder feedbackReasonDescription(String description) {
+            config.getDefaultOptions().setFeedbackReasonDescriptionProvider(t -> description);
+            return this;
+        }
+
+        public Builder feedbackReasonDescription(Function<TeamTrace, String> provider) {
+            config.getDefaultOptions().setFeedbackReasonDescriptionProvider(provider);
+            return this;
+        }
+
+        public Builder defaultSkillAdd(Skill... skills) {
+            config.getDefaultOptions().getModelOptions().skillAdd(skills);
+            return this;
+        }
+
+        public Builder defaultSkillAdd(SkillProvider skillProvider) {
+            config.getDefaultOptions().getModelOptions().skillAdd(skillProvider);
             return this;
         }
 
@@ -436,8 +474,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
             return this;
         }
 
-        public Builder defaultToolAdd(FunctionTool tool) {
-            config.getDefaultOptions().getModelOptions().toolAdd(tool);
+        public Builder defaultToolAdd(FunctionTool... tools) {
+            config.getDefaultOptions().getModelOptions().toolAdd(tools);
             return this;
         }
 
@@ -457,7 +495,8 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
          * @param toolObj 工具对象
          */
         public Builder defaultToolAdd(Object toolObj) {
-            return defaultToolAdd(new MethodToolProvider(toolObj));
+            config.getDefaultOptions().getModelOptions().toolAdd(toolObj);
+            return this;
         }
 
         public Builder defaultToolContextPut(String key, Object value) {
@@ -472,23 +511,19 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
         public Builder defaultInterceptorAdd(TeamInterceptor... interceptors) {
             for (TeamInterceptor interceptor : interceptors) {
-                config.getDefaultOptions().addInterceptor(interceptor, 0);
+                config.getDefaultOptions().getModelOptions().interceptorAdd(interceptor);
             }
             return this;
         }
 
         public Builder defaultInterceptorAdd(TeamInterceptor interceptor, int index) {
-            config.getDefaultOptions().addInterceptor(interceptor, index);
+            config.getDefaultOptions().getModelOptions().interceptorAdd(index, interceptor);
             return this;
         }
 
         public TeamAgent build() {
             if (config.getName() == null) {
                 config.setName("team_agent");
-            }
-
-            if (config.getDescription() == null) {
-                config.setDescription(config.getTitle() != null ? config.getTitle() : config.getName());
             }
 
             if (config.getAgentMap().isEmpty() && config.getGraphAdjuster() == null) {

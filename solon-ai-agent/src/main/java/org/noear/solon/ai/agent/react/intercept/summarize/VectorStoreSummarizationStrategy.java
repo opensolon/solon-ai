@@ -1,0 +1,145 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.noear.solon.ai.agent.react.intercept.summarize;
+
+import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.intercept.SummarizationStrategy;
+import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.message.AssistantMessage;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.chat.skill.AbsSkill;
+import org.noear.solon.ai.rag.Document;
+import org.noear.solon.ai.rag.RepositoryStorable;
+import org.noear.solon.ai.rag.util.QueryCondition;
+import org.noear.solon.annotation.Param;
+import org.noear.solon.core.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * 向量检索增强总结策略 (RAG-based Memory Strategy)
+ * 核心逻辑：将裁减的消息持久化到向量库，并提取关键词或最新摘要作为上下文索引。
+ *
+ * @author noear
+ * @since 3.9.4
+ */
+public class VectorStoreSummarizationStrategy extends AbsSkill implements SummarizationStrategy {
+    private static final Logger log = LoggerFactory.getLogger(VectorStoreSummarizationStrategy.class);
+
+    private final RepositoryStorable vectorRepository;
+
+    public VectorStoreSummarizationStrategy(RepositoryStorable vectorRepository) {
+        this.vectorRepository = vectorRepository;
+    }
+
+    @Override
+    public String description() {
+        return "历史记忆回溯";
+    }
+
+    @Override
+    public String getInstruction(Prompt prompt) {
+        return "- 当你看到内容包含 '--- [已归档至向量库] ---' 标记时，说明部分执行细节已转入冷记忆。\n" +
+                "- 如果后续任务需要早前的具体事实、ID 或详细数据，请调用 `recall_history` 工具找回。";
+    }
+
+    // --- Tool 实现（负责“取”） ---
+    @ToolMapping(name = "recall_history", description = "回溯本会话中早前已归档的长记忆、历史细节或事实")
+    public String recall(@Param(name = "query", description = "检索关键词或核心短语") String query,
+                         @Param(name = "limit", description = "返回记忆片段的数量", defaultValue = "3") int limit,
+                         String __sessionId) {
+
+        if (Assert.isEmpty(query)) {
+            return "请提供具体的关键词以进行历史回溯。";
+        }
+
+        QueryCondition condition = new QueryCondition(query)
+                .filterExpression("sessionId = '" + __sessionId + "'")
+                .limit(limit);
+
+        try {
+            List<Document> docs = vectorRepository.search(condition);
+
+            if (docs.isEmpty()) {
+                return "记忆库中暂未找到关于 '" + query + "' 的相关记录。可能是该话题未被归档，或关键词不匹配。";
+            }
+
+            return docs.stream()
+                    .map(d -> {
+                        String time = d.getMetadataAs("timestamp");
+                        return (time != null ? "[" + time + "] " : "") + d.getContent();
+                    })
+                    .collect(Collectors.joining("\n\n---\n\n"));
+
+        } catch (Exception e) {
+            log.error("Recall history failed. SessionId: {}, Query: {}", __sessionId, query, e);
+            return "[系统通知] 历史记忆访问受阻。请尝试基于当前已知对话继续执行。";
+        }
+    }
+
+    @Override
+    public ChatMessage summarize(ReActTrace trace, List<ChatMessage> messagesToSummarize) {
+        if (messagesToSummarize == null || messagesToSummarize.isEmpty()) {
+            return null;
+        }
+
+        // 优化点 1: 预处理消息，进行“结构化降噪”，节省向量库空间并提升检索质量
+        String archivedContent = messagesToSummarize.stream()
+                .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
+                .map(m -> {
+                    if (m instanceof AssistantMessage && Assert.isNotEmpty(((AssistantMessage) m).getToolCalls())) {
+                        return "[Action]: 调用工具 " + ((AssistantMessage) m).getToolCalls().get(0).getName();
+                    }
+                    if (m instanceof ToolMessage) {
+                        String content = m.getContent();
+                        if (content != null && content.length() > 2000) {
+                            content = content.substring(0, 2000) + "...[内容过长已截断]";
+                        }
+                        return "[Observation]: 得到结果 " + content;
+                    }
+                    return m.getRole().name() + ": " + m.getContent();
+                })
+                .collect(Collectors.joining("\n"));
+
+        if (Assert.isEmpty(archivedContent.trim())) return null;
+
+        try {
+            // 优化点 3: 封装为高质量 Document
+            Document doc = new Document(archivedContent);
+            doc.metadata("sessionId", trace.getSession().getSessionId());
+            doc.metadata("timestamp_long", System.currentTimeMillis());
+            doc.metadata("type", "execution_log");
+
+            // 异步保存 (假设 vectorRepository 实现支持异步或环境允许同步)
+            vectorRepository.save(doc);
+
+            // 返回一个紧凑的系统通知
+            return ChatMessage.ofSystem("--- [部分执行细节已归档至向量库，必要时请使用 recall_history 工具回溯] ---")
+                    .addMetadata(ReActAgent.META_SUMMARY, 1);
+
+        } catch (Exception e) {
+            log.error("Failed to archive to vector store", e);
+            return null;
+        }
+    }
+}

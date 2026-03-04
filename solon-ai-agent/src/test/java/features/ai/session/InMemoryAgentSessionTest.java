@@ -104,11 +104,6 @@ public class InMemoryAgentSessionTest {
         Assertions.assertEquals("ctx_123", session.getSessionId());
         Assertions.assertEquals(context, session.getSnapshot());
         Assertions.assertEquals(session, context.get(Agent.KEY_SESSION));
-
-        // 测试更新快照
-        FlowContext newContext = FlowContext.of("new");
-        session.updateSnapshot(newContext);
-        Assertions.assertEquals(newContext, session.getSnapshot());
     }
 
     @Test

@@ -26,7 +26,8 @@ public class SimpleAgentMemoryTest {
 
         SimpleAgent agent = SimpleAgent.of(chatModel)
                 .name("MemoryAgent")
-                .description("一个有记忆的推理助手")
+                .role("一个有记忆的推理助手")
+                .instruction("负责记录并回答用户在对话中提到的个人偏好与事实。")
                 .sessionWindowSize(10) // 启用历史窗口
                 .build();
 
@@ -37,7 +38,8 @@ public class SimpleAgentMemoryTest {
         String p1 = "你好，我的名字叫 noear，我最喜欢的颜色是蓝色。请确认你收到了。";
         System.out.println("User R1: " + p1);
 
-        AssistantMessage resp1 = agent.call(Prompt.of(p1), session);
+        // 修改调用风格为 prompt().session().call()
+        AssistantMessage resp1 = agent.prompt(Prompt.of(p1)).session(session).call().getMessage();
         String content1 = resp1.getContent();
         System.out.println("AI R1: " + content1);
 
@@ -48,7 +50,8 @@ public class SimpleAgentMemoryTest {
         String p2 = "请问，我刚才说我叫什么名字？我最喜欢的颜色是什么？";
         System.out.println("\nUser R2: " + p2);
 
-        AssistantMessage resp2 = agent.call(Prompt.of(p2), session);
+        // 修改调用风格为 prompt().session().call()
+        AssistantMessage resp2 = agent.prompt(Prompt.of(p2)).session(session).call().getMessage();
         String content2 = resp2.getContent();
         System.out.println("AI R2: " + content2);
 

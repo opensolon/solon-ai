@@ -25,7 +25,7 @@ public class McpStdioClientTest {
 
         //args("/c", "npx.cmd", "-y", "@modelcontextprotocol/server-everything", "dir")
 
-        String response = mcpClient.callToolAsText("get_weather", Collections.singletonMap("location", "杭州")).getContent();
+        String response = mcpClient.callTool("get_weather", Collections.singletonMap("location", "杭州")).getContent();
 
         assert response != null;
         System.out.println(response);

@@ -40,7 +40,8 @@ public class TeamAgentHumanInTheLoopTest {
                     // 节点1：Planner (AI 生成方案)
                     spec.addActivity(ReActAgent.of(chatModel)
                                     .name("planner")
-                                    .description("负责生成详细方案")
+                                    .role("行程规划师")
+                                    .instruction("负责根据用户需求生成详细的旅行或活动方案。")
                                     .build())
                             .linkAdd("human_audit");
 
@@ -53,7 +54,8 @@ public class TeamAgentHumanInTheLoopTest {
                     // 节点3：Confirmer (AI 最终确认)
                     spec.addActivity(ReActAgent.of(chatModel)
                                     .name("confirmer")
-                                    .description("负责在审批通过后完成最终确认")
+                                    .role("流程确认官")
+                                    .instruction("负责在人工审批通过后，对方案进行最终确认并通知用户。")
                                     .build())
                             .linkAdd(Agent.ID_END);
 
@@ -68,8 +70,11 @@ public class TeamAgentHumanInTheLoopTest {
         AgentSession session = InMemoryAgentSession.of("order_888");
         System.out.println(">>> [系统]：AI 开始规划方案...");
 
-        // 第一次调用：执行到 human_audit 节点会因为没有审批标记而 stop
-        String firstResult = auditTeam.call(Prompt.of("帮我策划一个去拉萨的行程"), session).getContent();
+        // 第一次调用：改为链式调用风格
+        String firstResult = auditTeam.prompt(Prompt.of("帮我策划一个去拉萨的行程"))
+                .session(session)
+                .call()
+                .getContent();
 
         System.out.println(">>> [阶段A结果]：\n" + firstResult);
 
@@ -87,8 +92,11 @@ public class TeamAgentHumanInTheLoopTest {
         // --- 阶段 C：继续执行 ---
         System.out.println(">>> [系统]：审批通过，恢复流程执行最终确认...");
 
-        // 第二次调用：传入 session 即可，Agent 会从挂起点自动恢复
-        String finalOutput = auditTeam.call(session).getContent();
+        // 第二次调用：改为链式调用风格，Agent 会从挂起点自动恢复
+        String finalOutput = auditTeam.prompt()
+                .session(session)
+                .call()
+                .getContent();
 
         System.out.println(">>> [最终输出]：\n" + finalOutput);
 

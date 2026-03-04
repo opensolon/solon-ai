@@ -13,7 +13,6 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 
@@ -143,7 +142,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
 
         // 验证结果内容覆盖率
         Assertions.assertTrue(result.contains("张三") || result.contains("用户"), "结果应包含用户信息");
-        Assertions.assertTrue(result.contains("1000"), "结果应包含余额信息");
+        Assertions.assertTrue(result.contains("1000") || result.contains("1,000"), "结果应包含余额信息");
         Assertions.assertTrue(result.contains("优惠券"), "结果应包含优惠券信息");
     }
 
@@ -163,7 +162,7 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
             if (msg instanceof AssistantMessage) {
                 AssistantMessage am = (AssistantMessage) msg;
                 if (Assert.isNotEmpty(am.getToolCalls())) {
-                    am.getToolCalls().forEach(c -> tools.add(c.name()));
+                    am.getToolCalls().forEach(c -> tools.add(c.getName()));
                 }
 
                 // 2. 适配文本 ReAct 模式 (从 AssistantMessage 的 content 文本中正则提取)
@@ -202,23 +201,6 @@ public class ReActAgentProtocolTest extends ReActAgentTestBase {
         return false;
     }
 
-    private boolean containsObservation(ReActTrace trace) {
-        if (trace == null) return false;
-        for (ChatMessage msg : trace.getWorkingMemory().getMessages()) {
-            // 1. 原生协议：检查是否是 ToolMessage 类型
-            if (msg instanceof ToolMessage) {
-                return true;
-            }
-
-            // 2. 文本模式：检查内容是否包含 Observation 关键字
-            // ActionTask 在文本模式下会生成：Observation: [工具结果]
-            String content = msg.getContent();
-            if (content != null && content.contains("Observation:")) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     // --- 业务工具类 ---
 

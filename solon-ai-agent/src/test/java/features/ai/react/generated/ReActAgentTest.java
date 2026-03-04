@@ -8,8 +8,6 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 
 /**
@@ -43,7 +41,10 @@ public class ReActAgentTest {
 
         // 5. 调用智能体
         // 采用 call(Prompt, AgentSession) 契约，这是 3.8.x 推荐的标准用法
-        String result = agent.call(Prompt.of(question), session).getContent();
+        String result = agent.prompt(question)
+                .session(session)
+                .call()
+                .getContent();
 
         // 6. 验证计算结果
         Assertions.assertNotNull(result, "智能体回复不应为空");

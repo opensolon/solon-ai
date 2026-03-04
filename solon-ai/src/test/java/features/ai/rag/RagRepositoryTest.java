@@ -1,6 +1,6 @@
 package features.ai.rag;
 
-import features.ai.chat.DeepSeekTest;
+import features.ai.chat.DeepSeekChTest;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -25,7 +25,7 @@ import java.util.List;
 @SolonTest
 public class RagRepositoryTest {
     //JQC6M0GTNPGSCEXZOBUGUX0HVHCOLDIMN6XOSSSA
-    private static final Logger log = LoggerFactory.getLogger(DeepSeekTest.class);
+    private static final Logger log = LoggerFactory.getLogger(DeepSeekChTest.class);
 
 
     @Test

@@ -8,10 +8,10 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
+import org.noear.solon.ai.agent.team.TeamResponse;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.prompt.Prompt;
 
 import java.util.stream.Collectors;
 
@@ -25,35 +25,29 @@ public class TeamAgentParallelAgentTest {
         ChatModel chatModel = LlmUtil.getChatModel();
         String teamId = "parallel_translator";
 
-        // ============== 1. 优化系统提示词 (System Prompt) ==============
+        // ============== 1. 优化角色定义 (使用 role.instruction 风格) ==============
 
-        // 英语翻译专家：引入职业角色与负向约束
+        // 英语翻译专家：合并角色定义与指令
         Agent enTranslator = ReActAgent.of(chatModel)
                 .name("en_translator")
-                .description("负责中英高保真翻译")
-                .systemPrompt(p->p
-                        .role("你是一个资深的中英同声传译专家")
-                        .instruction("### 任务要求\n" +
-                                "1. 将输入内容翻译为地道的英语。\n" +
-                                "2. **禁止**输出任何解释、引导词或标点说明。\n" +
-                                "3. **直接**返回译文文本。"))
+                .role("资深中英同声传译专家，负责高保真翻译")
+                .instruction("### 任务要求\n" +
+                        "1. 将输入内容翻译为地道的英语。\n" +
+                        "2. **禁止**输出任何解释、引导词或标点说明。\n" +
+                        "3. **直接**返回译文文本。")
                 .build();
 
-        // 法语翻译专家：引入语境深度
+        // 法语翻译专家：合并角色定义与语境深度
         Agent frTranslator = ReActAgent.of(chatModel)
                 .name("fr_translator")
-                .description("负责中法地道表达翻译")
-                .systemPrompt(p->p
-                        .role("你是一个精通法语文化的翻译专家")
-                        .instruction("### 任务要求\n" +
-                                "1. 将输入内容翻译为准确的法语。\n" +
-                                "2. 确保用词符合当地表达习惯。\n" +
-                                "3. **仅**输出翻译结果，不要回复除译文外的任何内容。"))
+                .role("精通法语文化的翻译专家，负责地道表达翻译")
+                .instruction("### 任务要求\n" +
+                        "1. 将输入内容翻译为准确的法语。\n" +
+                        "2. 确保用词符合当地表达习惯。\n" +
+                        "3. **仅**输出翻译结果，不要回复除译文外的任何内容。")
                 .build();
 
         // ============== 2. 自定义 Team 图结构 (逻辑不变) ==============
-
-
 
         TeamAgent team = TeamAgent.of(null)
                 .name(teamId)
@@ -84,17 +78,18 @@ public class TeamAgentParallelAgentTest {
 
         System.out.println("=== Team Graph Structure ===\n" + team.getGraph().toYaml());
 
-        // 3. 执行
+        // 3. 执行 (修改为新的 call 风格)
         AgentSession session = InMemoryAgentSession.of("sn_2026_para_01");
-        String result = team.call(Prompt.of("你好，世界"), session).getContent();
+        TeamResponse resp = team.prompt("你好，世界")
+                .session(session)
+                .call();
 
         // 4. 结果检测
-        System.out.println("=== 最终汇聚结果 ===\n" + result);
+        System.out.println("=== 最终汇聚结果 ===\n" + resp.getContent());
 
-        TeamTrace trace = team.getTrace(session);
-        Assertions.assertNotNull(trace);
-        Assertions.assertTrue(trace.getRecordCount() >= 2);
-        Assertions.assertTrue(result.contains("Hello") || result.contains("world"));
-        Assertions.assertTrue(result.contains("Monde") || result.contains("Bonjour"));
+        Assertions.assertNotNull(resp.getTrace());
+        Assertions.assertTrue(resp.getTrace().getRecordCount() >= 2);
+        Assertions.assertTrue(resp.getContent().contains("Hello") || resp.getContent().contains("world"));
+        Assertions.assertTrue(resp.getContent().contains("Monde") || resp.getContent().contains("Bonjour"));
     }
 }

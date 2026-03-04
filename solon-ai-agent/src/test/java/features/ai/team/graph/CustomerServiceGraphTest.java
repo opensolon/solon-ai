@@ -88,9 +88,9 @@ public class CustomerServiceGraphTest {
                 })
                 .build();
 
-        // 2. 执行测试
+        // 2. 执行测试（调整为链式调用风格）
         AgentSession session = InMemoryAgentSession.of("session_customer_01");
-        team.call(Prompt.of("我的电脑无法开机了，请帮我处理。"), session);
+        team.prompt(Prompt.of("我的电脑无法开机了，请帮我处理。")).session(session).call();
 
         // 3. 验证 Agent 路径（使用 trace）
         TeamTrace trace = team.getTrace(session);
@@ -103,7 +103,6 @@ public class CustomerServiceGraphTest {
         Assertions.assertTrue(agentPath.contains("technical_support"));
 
         // 4. 验证业务逻辑节点（使用 Context 或 外部变量）
-        // 既然日志输出了 ">>> [Node] 满意度调查完成"，说明链路走通了
         Assertions.assertEquals("Survey_Completed", finalSolution[0], "满意度调查节点未被触发");
 
         // 验证分类网关是否生效
@@ -111,11 +110,11 @@ public class CustomerServiceGraphTest {
     }
 
     private Agent createServiceAgent(ChatModel chatModel, String name, String role, String reply) {
+        // 修改为 role().instruction() 风格
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(p->p
-                        .role(role)
-                        .instruction("你是" + role + "。请基于用户问题提供服务。回复示例：" + reply))
+                .role(role)
+                .instruction("你是" + role + "。请基于用户问题提供服务。回复示例：" + reply)
                 .build();
     }
 }

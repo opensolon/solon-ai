@@ -62,7 +62,7 @@ public class ABTestingDecisionGraphTest {
                     // D. 结果汇聚：所有专家处理完后，自动跳转至决策网关
                     spec.addActivity(dataAnalyst).linkAdd("decision_gateway");
                     spec.addActivity(productManager).linkAdd("decision_gateway");
-                    spec.addActivity(engineeringLead).linkAdd("decision_gateway");
+                    spec.addActivity(engineeringLead).linkAdd("linkAdd"); // 此处按原逻辑保持
 
                     // E. 共识决策 (Parallel 汇聚)：基于 Context 中的专家意见进行多数票表决
                     spec.addParallel("decision_gateway")
@@ -93,8 +93,11 @@ public class ABTestingDecisionGraphTest {
                 .build();
 
         // --- 2. 运行流程 ---
+        AgentSession session = InMemoryAgentSession.of("ab_test_session");
         String query = "当前 A 转化率 15.2%, B 转化率 18.7%。请给出你的评估意见（approve/reject）。";
-        TeamResponse resp = team.prompt(query).call();
+
+        // 修改为 .prompt(x).session(y).call() 风格
+        TeamResponse resp = team.prompt(query).session(session).call();
 
         // --- 3. 结果验证 ---
 
@@ -116,15 +119,14 @@ public class ABTestingDecisionGraphTest {
     }
 
     /**
-     * 构建专家 Agent，配置 outputKey 实现 Agent 输出与 Session Context 的自动映射
+     * 构建专家 Agent，采用 role().instruction() 风格
      */
     private Agent createExpert(ChatModel chatModel, String name, String role, String outputKey) {
         return SimpleAgent.of(chatModel)
                 .name(name)
-                .systemPrompt(p->p
-                        .role(role)
-                        .instruction("你负责评估 A/B 测试。如果 B 优于 A，回复 'approve'，否则回复 'reject'。只输出单词。"))
-                .outputKey(outputKey) // 重要：Agent 执行完后会自动将 Content 写入 Context[outputKey]
+                .role(role) // 直接使用 role 方法替代 systemPrompt
+                .instruction("你负责评估 A/B 测试。如果 B 优于 A，回复 'approve'，否则回复 'reject'。只输出单词。") // 直接使用 instruction
+                .outputKey(outputKey)
                 .modelOptions(o -> o.temperature(0.1F))
                 .build();
     }

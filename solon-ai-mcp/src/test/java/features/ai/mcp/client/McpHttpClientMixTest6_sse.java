@@ -8,12 +8,12 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.mcp.server.prompt.FunctionPrompt;
-import org.noear.solon.ai.mcp.server.resource.FunctionResource;
+import org.noear.solon.ai.chat.prompt.FunctionPrompt;
+import org.noear.solon.ai.chat.resource.FunctionResource;
 import org.noear.solon.test.SolonTest;
 
 import java.util.*;
@@ -38,7 +38,7 @@ public class McpHttpClientMixTest6_sse {
 
     @Test
     public void tool1() throws Exception {
-        String response = mcpClient.callToolAsText("getWeather", Collections.singletonMap("location", "杭州")).getContent();
+        String response = mcpClient.callTool("getWeather", Collections.singletonMap("location", "杭州")).getContent();
 
         log.warn("{}", response);
         assert Utils.isNotEmpty(response);
@@ -73,7 +73,7 @@ public class McpHttpClientMixTest6_sse {
 
     @Test
     public void resource() throws Exception {
-        String resource = mcpClient.readResourceAsText("config://app-version").getContent();
+        String resource = mcpClient.readResource("config://app-version").getContent();
 
         assert Utils.isNotEmpty(resource);
         log.warn("{}", resource);
@@ -89,7 +89,7 @@ public class McpHttpClientMixTest6_sse {
 
     @Test
     public void resource_tmpl() throws Exception {
-        String resource = mcpClient.readResourceAsText("db://users/12/email").getContent();
+        String resource = mcpClient.readResource("db://users/12/email").getContent();
 
         assert Utils.isNotEmpty(resource);
         log.warn("{}", resource);
@@ -114,21 +114,21 @@ public class McpHttpClientMixTest6_sse {
 
     @Test
     public void prompt() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("askQuestion", Collections.singletonMap("topic", "教育"));
+        Prompt prompt = mcpClient.getPrompt("askQuestion", Collections.singletonMap("topic", "教育"));
 
-        assert Utils.isNotEmpty(prompt);
+        assert Utils.isNotEmpty(prompt.getMessages());
         log.warn("{}", prompt);
         assert prompt.size() == 1;
     }
 
     @Test
     public void prompt2() throws Exception {
-        List<ChatMessage> prompt = mcpClient.getPromptAsMessages("debugSession", Collections.singletonMap("error", "太阳没出来"));
+        Prompt prompt = mcpClient.getPrompt("debugSession", Collections.singletonMap("error", "太阳没出来"));
 
-        assert Utils.isNotEmpty(prompt);
+        assert Utils.isNotEmpty(prompt.getMessages());
         log.warn("{}", prompt);
         assert prompt.size() == 2;
-        assert prompt.get(0).getContent().contains("太阳");
+        assert prompt.getMessages().get(0).getContent().contains("太阳");
     }
 
 

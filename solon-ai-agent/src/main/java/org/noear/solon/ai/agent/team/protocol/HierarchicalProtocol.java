@@ -34,6 +34,8 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static org.noear.solon.ai.agent.team.protocol.ContractNetProtocol.ID_BIDDING;
+
 /**
  * 层级化协作协议 (Hierarchical Protocol)
  *
@@ -69,18 +71,19 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         public void absorb(String agentName, String content, TeamProtocolBase protocol) {
             if (Utils.isEmpty(content)) return;
 
+            // 1. 提取结构化数据存入 _results (用于逻辑计算)
             ONode report = protocol.sniffJson(content);
             if (report.isObject() && !report.isEmpty()) {
-                report.remove("agent");
-                report.remove("role");
-                data.setAll(report.getObjectUnsafe());
-            } else {
-                String memo = content.trim().replace("\n", " ");
-                if (memo.length() > MAX_MEMO_LEN) {
-                    memo = memo.substring(0, MAX_MEMO_LEN) + "...";
-                }
-                data.getOrNew("_reports").set(agentName, memo);
+                data.getOrNew("_results").set(agentName, report);
             }
+
+            // 2. 【核心修改】：提取一段干净的文本存入 _reports (用于 Shadow Context 和汇总)
+            // 移除 content 中的 JSON 块，保留原始话术
+            String cleanContent = content.replaceAll("\\{.*\\}", "").trim();
+            if (cleanContent.length() > MAX_MEMO_LEN) {
+                cleanContent = cleanContent.substring(0, MAX_MEMO_LEN) + "...";
+            }
+            data.getOrNew("_reports").set(agentName, cleanContent);
         }
 
         @Override
@@ -109,6 +112,29 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         spec.addEnd(Agent.ID_END);
     }
 
+    @Override
+    public void injectAgentInstruction(FlowContext context, Agent agent, Locale locale, StringBuilder sb) {
+        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
+
+        // 增加明显的区块分割
+        sb.append("\n\n---"); // 视觉分割线，帮助模型切分注意力
+        sb.append(isZh ? "\n## 协作与汇报规范\n" : "\n## Collaboration & Reporting\n");
+
+        // 1. 强制汇报规范
+        sb.append(isZh
+                ? "\n1. 汇报要求：\n- 请在回复结尾使用 JSON 块反馈核心数据（例：{\"result\": \"...\", \"status\": \"done\"}）。"
+                : "\n1. Reporting Requirement:\n- End response with a JSON block for key data (e.g., {\"result\": \"...\", \"status\": \"done\"}).");
+
+
+        // 2. 动态追加完成标记提醒
+        if (agent instanceof TeamAgent) {
+            String marker = ((TeamAgent) agent).getConfig().getFinishMarker();
+            if (Utils.isNotEmpty(marker)) {
+                sb.append(isZh ? "\n2. **完成标记**：任务完成时，必须包含标记: " : "\n2. **Finish Marker**: Upon completion, must include: ")
+                        .append("`").append(marker).append("`\n");
+            }
+        }
+    }
     /**
      * 增强专家指令：注入汇报规范与多模态提醒
      */
@@ -121,6 +147,22 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         HierarchicalState state = (HierarchicalState) trace.getProtocolContext().get(KEY_HIERARCHY_STATE);
         boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         StringBuilder sb = new StringBuilder();
+
+        // 逻辑：专家不看全局看板，但能看到“上一个同事干了什么”，解决断层
+        String lastAgent = trace.getLastAgentName();
+        if (state != null && Utils.isNotEmpty(lastAgent)) {
+            ONode dashboard = ONode.ofJson(state.toString());
+            if (dashboard.get("_reports").hasKey(lastAgent)) {
+                String lastSummary = dashboard.get("_reports").get(lastAgent).getString();
+
+                sb.append(isZh ? "\n\n### 前置背景 (Pre-Context)\n" : "\n\n### Pre-Context\n");
+                sb.append(isZh ? "- 来自 " : "- From ").append(lastAgent).append(": ")
+                        .append("**").append(lastSummary).append("**\n");
+
+                sb.append(isZh ? "> 请务必基于上述背景数据进行处理，不要修改原始关键信息。\n"
+                        : "> Please process based on the data above without altering core information.\n");
+            }
+        }
 
         // 注入 A：透传主管的决策分析逻辑
         // 在 SupervisorTask 分发决策时，应将原始决策文本存入 active_instruction
@@ -149,31 +191,22 @@ public class HierarchicalProtocol extends TeamProtocolBase {
             }
         }
 
-        // 3. 强制汇报规范
-        sb.append(isZh
-                ? "\n### 汇报要求：\n- 请在回复结尾使用 JSON 块反馈核心数据（例：{\"result\": \"...\", \"status\": \"done\"}）。"
-                : "\n### Reporting Requirement:\n- End response with a JSON block for key data (e.g., {\"result\": \"...\", \"status\": \"done\"}).");
 
         // 4. 多模态提醒
         if (originalPrompt.getMessages().stream()
                 .filter(m -> m.getRole() == ChatRole.USER)
                 .map(m -> (UserMessage) m)
-                .anyMatch(UserMessage::hasMedias)) {
+                .anyMatch(UserMessage::isMultiModal)) {
             sb.append(isZh
                     ? "\n- [重要]：输入包含多媒体附件，请务必结合视觉或文件内容进行处理。"
                     : "\n- [IMPORTANT]: Multimodal content detected. Process based on the attachments.");
         }
 
-        // 5. 动态追加完成标记提醒
-        if (agent instanceof TeamAgent) {
-            String marker = ((TeamAgent) agent).getConfig().getFinishMarker();
-            if (Utils.isNotEmpty(marker)) {
-                sb.append(isZh ? "\n- [注意]：任务完成时，必须在回复中包含标记: " : "\n- [NOTE]: Upon completion, must include marker: ")
-                        .append("`").append(marker).append("`\n");
-            }
+        if (sb.length() > 0) {
+            finalPrompt.addMessage(sb.toString());
         }
 
-        return super.prepareAgentPrompt(trace, agent, finalPrompt.addMessage(sb.toString()), locale);
+        return super.prepareAgentPrompt(trace, agent, finalPrompt, locale);
     }
 
     @Override
@@ -227,23 +260,26 @@ public class HierarchicalProtocol extends TeamProtocolBase {
     @Override
     public String resolveSupervisorRoute(FlowContext context, TeamTrace trace, String decision) {
         if (decision != null && decision.contains(config.getFinishMarker())) {
-            // --- 核心：流程完整性校验 ---
-            // 动态检查所有注册的专家是否都至少参与过（或根据特定业务逻辑判断）
-            Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext().get(KEY_AGENT_USAGE);
+            //基于错误的通用阻断逻辑
+            HierarchicalState state = (HierarchicalState) trace.getProtocolContext().get(KEY_HIERARCHY_STATE);
+            if (state != null) {
+                ONode errors = ONode.ofJson(state.toString()).get("_meta").get("errors");
+                if (errors.isObject() && !errors.isEmpty()) {
+                    boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+                    String errorHint = isZh ? "【系统干预】由于看板中仍有未解决的错误，任务不能结束。请指派相关专家修复。"
+                            : "[System] Task cannot end because errors exist. Assign agents to fix them.";
 
-            // 这里的逻辑可以改为：只要有待命专家未执行且任务未达到最大轮次，就不允许结束
-            // 或者针对你的单测：强制检查是否有程序员(implementer)参与
-            if (config.getAgentMap().containsKey("implementer")) {
-                boolean hasImplementerRun = (usage != null && usage.containsKey("implementer"));
-                if (!hasImplementerRun) {
-                    // 强制路由到程序员，并注入指令
-                    trace.getProtocolContext().put("active_instruction", "请执行最终的代码落地与验证工作。");
-                    return "implementer";
+                    // 1. 注入系统反馈
+                    trace.addRecord(ChatRole.SYSTEM, ID_BIDDING, errorHint, 0);
+                    // 2. 将决策存入 active_instruction 辅助下一轮 Prompt
+                    trace.getProtocolContext().put("active_instruction", errorHint);
+
+                    // 【关键修改点】：必须返回自身 ID，形成闭环，强制 LLM 在下一轮重新决策
+                    return TeamAgent.ID_SUPERVISOR;
                 }
             }
 
-            // --- 结果收敛 ---
-            // 捕获当前调度者的汇总内容作为最终答案
+            // 正常结束逻辑
             String finalAnswer = decision.replace(config.getFinishMarker(), "").trim();
             trace.setFinalAnswer(finalAnswer);
             return Agent.ID_END;
@@ -263,9 +299,9 @@ public class HierarchicalProtocol extends TeamProtocolBase {
 
         boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
         if (isZh) {
-            sb.append("\n### 运行看板 (Hierarchical Dashboard)\n");
+            sb.append("\n## 运行看板 (Hierarchical Dashboard)\n");
         } else {
-            sb.append("\n### Hierarchical Dashboard\n");
+            sb.append("\n## Hierarchical Dashboard\n");
         }
 
         ONode dashboard = (state != null) ? ONode.ofJson(state.toString()) : new ONode().asObject();
@@ -288,6 +324,14 @@ public class HierarchicalProtocol extends TeamProtocolBase {
             }
         } else {
             sb.append("```json\n").append(dashboard.toJson()).append("\n```\n");
+        }
+
+        if (isZh) {
+            sb.append("\n### 派发指令准则 (Standard Operating Procedure):\n");
+            sb.append("> 1. **显式数据传递**：指派专家时，必须复述看板 `_results` 中的核心参数。\n");
+        } else {
+            sb.append("\n### Directive Standards (SOP):\n");
+            sb.append("> 1. **Explicit Data Transfer**: Always restate core parameters from `_results`.\n");
         }
 
         if (isZh) {
