@@ -69,10 +69,33 @@ public class ClaudeRequestBuilder {
 
         // 构建消息数组，过滤掉系统消息
         ONode messagesNode = root.getOrNew("messages").asArray();
-        for (ChatMessage m1 : messages) {
-            if (!(m1 instanceof SystemMessage) && m1.isThinking() == false) {
-                messagesNode.add(buildMessageNode(m1));
+        ONode pendingToolResultNode = null; // 用于合并连续的 ToolMessage
+        for (ChatMessage message : messages) {
+            if (message instanceof SystemMessage || message.isThinking()) {
+                continue;
             }
+
+            if (message instanceof ToolMessage) {
+                if (pendingToolResultNode == null) {
+                    pendingToolResultNode = new ONode();
+                    pendingToolResultNode.set("role", "user");
+                    pendingToolResultNode.getOrNew("content").asArray();
+                }
+                ToolMessage toolMessage = (ToolMessage) message;
+                pendingToolResultNode.get("content").addNew()
+                        .set("type", "tool_result")
+                        .set("tool_use_id", toolMessage.getToolCallId())
+                        .set("content", toolMessage.getContent());
+            } else {
+                if (pendingToolResultNode != null) {
+                    messagesNode.add(pendingToolResultNode);
+                    pendingToolResultNode = null;
+                }
+                messagesNode.add(buildMessageNode(message));
+            }
+        }
+        if (pendingToolResultNode != null) {
+            messagesNode.add(pendingToolResultNode);
         }
 
         // 设置流式模式参数
