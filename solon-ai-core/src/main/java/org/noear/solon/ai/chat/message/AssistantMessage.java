@@ -181,6 +181,11 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         return isThinking;
     }
 
+    @Override
+    public boolean isToolCalls(){
+        return Assert.isNotEmpty(toolCalls);
+    }
+
     /**
      * 工具调用
      */

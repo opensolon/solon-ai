@@ -238,9 +238,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
             n.getOrNew("messages").then(n1 -> {
                 for (ChatMessage m1 : messages) {
-                    if (m1.isThinking() == false) {
+                    //if (m1.isThinking() == false || m1.isToolCalls()) {
                         n1.add(buildChatMessageNode(config, m1));
-                    }
+                    //}
                 }
             });
 
