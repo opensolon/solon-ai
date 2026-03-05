@@ -18,6 +18,9 @@ package org.noear.solon.ai.chat;
 import org.noear.solon.ai.chat.interceptor.ChatInterceptor;
 import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.core.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.Proxy;
 import java.time.Duration;
@@ -33,6 +36,8 @@ import java.util.stream.Collectors;
  * @since 3.3
  */
 public class ChatConfigReadonly {
+    private static final Logger LOG = LoggerFactory.getLogger(ChatConfigReadonly.class);
+
     private final ChatConfig config;
 
     public ChatConfigReadonly(ChatConfig config) {
@@ -53,6 +58,17 @@ public class ChatConfigReadonly {
 
     public String getModel() {
         return config.getModel();
+    }
+
+    /**
+     * 切换模型
+     */
+    public void switchModel(String model) {
+        if (Assert.isNotEmpty(model)) {
+            LOG.info("Switch model: {} -> {}", config.getModel(), model);
+
+            config.setModel(model);
+        }
     }
 
     public Map<String, String> getHeaders() {
