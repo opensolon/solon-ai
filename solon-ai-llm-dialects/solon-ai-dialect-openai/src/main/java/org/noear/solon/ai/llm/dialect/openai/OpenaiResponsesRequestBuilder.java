@@ -30,7 +30,6 @@ import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -56,18 +55,28 @@ public class OpenaiResponsesRequestBuilder {
         if (Utils.isNotEmpty(config.getModel())) {
             root.set("model", config.getModel());
         }
-        // 构建 input（将消息转为 input 数组）
+        // Responses API: SystemMessage 提取到顶层 instructions 字段
+        StringBuilder instructions = new StringBuilder();
+        for (ChatMessage msg : messages) {
+            if (msg instanceof SystemMessage && Utils.isNotEmpty(msg.getContent())) {
+                if (instructions.length() > 0) {
+                    instructions.append("\n\n");
+                }
+                instructions.append(msg.getContent());
+            }
+        }
+        if (instructions.length() > 0) {
+            root.set("instructions", instructions.toString());
+        }
+        // 构建 input（将消息转为 input 数组，SystemMessage 已提取到 instructions）
         ONode inputArray = root.getOrNew("input").asArray();
         for (ChatMessage msg : messages) {
-            if (msg.isThinking()) {
-                continue; // 跳过思考消息
+            if (msg.isThinking() || msg instanceof SystemMessage) {
+                continue;
             }
             buildInputItem(inputArray, msg);
         }
-        // 设置流式模式参数
-        if (isStream) {
-            root.set("stream", true);
-        }
+        root.set("stream", isStream);
         // 添加其他选项
         for (Map.Entry<String, Object> kv : options.options().entrySet()) {
             String key = kv.getKey();
@@ -98,14 +107,7 @@ public class OpenaiResponsesRequestBuilder {
      * @date 2026年1月28日
      */
     private void buildInputItem(ONode inputArray, ChatMessage message) {
-        if (message instanceof SystemMessage) {
-            // 系统消息: {"type": "message", "role": "system", "content": "..."}
-            inputArray.addNew()
-                    .set("type", "message")
-                    .set("role", "system")
-                    .set("content", message.getContent() != null ? message.getContent() : "");
-        } else if (message instanceof ToolMessage) {
-            // 工具结果: {"type": "function_call_output", "call_id": "xxx", "output": "..."}
+        if (message instanceof ToolMessage) {
             ToolMessage toolMessage = (ToolMessage) message;
             inputArray.addNew()
                     .set("type", "function_call_output")
@@ -114,8 +116,6 @@ public class OpenaiResponsesRequestBuilder {
         } else if (message instanceof AssistantMessage) {
             AssistantMessage assistantMessage = (AssistantMessage) message;
             if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
-                // 带工具调用的助手消息，需要拆分
-                // 先添加文本内容（如果存在）
                 if (Utils.isNotEmpty(assistantMessage.getContent())) {
                     inputArray.addNew()
                             .set("type", "message")
@@ -131,7 +131,6 @@ public class OpenaiResponsesRequestBuilder {
                             .set("arguments", call.getArgumentsStr());
                 }
             } else {
-                // 普通助手消息
                 inputArray.addNew()
                         .set("type", "message")
                         .set("role", "assistant")
@@ -148,7 +147,6 @@ public class OpenaiResponsesRequestBuilder {
             } else {
                 //多模态
                 ONode contentArray = msgNode.getOrNew("content").asArray();
-
                 for (ContentBlock block1 : userMessage.getBlocks()) {
                     if (block1 instanceof TextBlock) {
                         TextBlock text = (TextBlock) block1;
@@ -260,49 +258,25 @@ public class OpenaiResponsesRequestBuilder {
      * @date 2026年1月28日
      */
     public ONode buildAssistantToolCallMessageNode(ChatResponseDefault resp, Map<String, ToolCallBuilder> toolCallBuilders) {
-        // Responses API 中工具调用不需要显式的助手消息节点
-        // 而是直接在 input 中添加 function_call 项
-        // 这里返回一个兼容的结构
-        ONode node = new ONode();
-        node.set("role", "assistant");
-        ONode contentArray = node.getOrNew("content").asArray();
-        for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
-            ToolCallBuilder builder = kv.getValue();
-            // 解析参数 JSON 字符串为对象
-            Object inputObject;
-            String argsStr = builder.argumentsBuilder.toString();
-            try {
-                if (Utils.isNotEmpty(argsStr)) {
-                    ONode argsNode = ONode.ofJson(argsStr);
-                    inputObject = argsNode.toBean(Map.class);
-                } else {
-                    inputObject = new HashMap<>();
-                }
-            } catch (Exception e) {
-                inputObject = new HashMap<>();
+        ONode oNode = new ONode();
+        oNode.set("role", "assistant");
+        oNode.set("content", resp.getAggregationContent());
+        oNode.getOrNew("tool_calls").asArray().then(n1 -> {
+            for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
+                ToolCallBuilder builder = kv.getValue();
+                String argsStr = builder.argumentsBuilder.toString();
+                n1.addNew().set("id", builder.idBuilder.toString())
+                        .set("type", "function")
+                        .getOrNew("function").then(n2 -> {
+                            n2.set("name", builder.nameBuilder.toString());
+                            if (Utils.isNotEmpty(argsStr)) {
+                                n2.set("arguments", argsStr);
+                            } else {
+                                n2.set("arguments", "{}");
+                            }
+                        });
             }
-            contentArray.addNew()
-                    .set("type", "function_call")
-                    .set("call_id", builder.idBuilder.toString())
-                    .set("name", builder.nameBuilder.toString())
-                    .set("arguments", argsStr);
-        }
-        return node;
-    }
-
-    /**
-     * 构建助手消息（通过工具消息）
-     * @author oisin lu
-     * @date 2026年1月28日
-     */
-    public AssistantMessage buildAssistantMessageByToolMessages(List<ToolMessage> toolMessages) {
-        StringBuilder buf = new StringBuilder();
-        for (ToolMessage toolMessage : toolMessages) {
-            if (buf.length() > 0) {
-                buf.append('\n');
-            }
-            buf.append(toolMessage.getContent());
-        }
-        return ChatMessage.ofAssistant(buf.toString());
+        });
+        return oNode;
     }
 }
