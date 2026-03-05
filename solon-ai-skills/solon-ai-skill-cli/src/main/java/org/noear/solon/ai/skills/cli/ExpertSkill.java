@@ -40,7 +40,6 @@ import java.util.stream.Stream;
  */
 public class ExpertSkill extends AbsSkill {
     private final PoolManager poolManager;
-    private int dynamicThreshold = 8; // 超过此值，不再平铺注入所有 SKILL.md
     private int searchThreshold = 80;  // 超过此值，不再展示摘要清单，进入强制搜索
 
     public ExpertSkill(PoolManager poolManager) {
@@ -68,12 +67,7 @@ public class ExpertSkill extends AbsSkill {
 
         sb.append("## 专家技能库执行规约 (当前可用技能: " + total + ")\n");
 
-        if (total <= dynamicThreshold && total > 0) {
-            sb.append("已加载以下专家技能，其内容即为执行标准，请严格遵循：\n");
-            for (PoolManager.SkillDir skill : skillMap.values()) {
-                sb.append(renderSkillXml(skill, false));
-            }
-        } else if (total <= searchThreshold) {
+        if (total <= searchThreshold) {
             sb.append("检测到多个专家技能。如需了解具体领域规约或 API，请调用 `skillread`：\n");
             sb.append("<available_skills>\n");
             for (PoolManager.SkillDir skill : skillMap.values()) {
@@ -96,9 +90,7 @@ public class ExpertSkill extends AbsSkill {
         if (skillMap.isEmpty()) return null;
 
         int total = skillMap.size();
-        if (total <= dynamicThreshold) {
-            return tools.stream().filter(t -> t.name().equals("skillread")).collect(Collectors.toList());
-        } else if (total <= searchThreshold) {
+        if (total <= searchThreshold) {
             return tools.stream().filter(t -> t.name().equals("skillread") || t.name().equals("skilllist")).collect(Collectors.toList());
         } else {
             return this.tools;
