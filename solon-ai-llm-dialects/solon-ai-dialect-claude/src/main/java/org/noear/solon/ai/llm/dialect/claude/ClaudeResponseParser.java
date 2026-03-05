@@ -78,7 +78,7 @@ public class ClaudeResponseParser {
         }
         // 只有在有实际 token 消耗时才返回 usage
         if (inputTokens > 0 || outputTokens > 0 || cacheCreationInputTokens > 0 || cacheReadInputTokens > 0) {
-            return new AiUsage(inputTokens, outputTokens, inputTokens + outputTokens,
+            return new AiUsage(inputTokens, 0L, outputTokens, inputTokens + outputTokens,
                     cacheCreationInputTokens, cacheReadInputTokens, usageNode);
         }
 

@@ -59,11 +59,12 @@ public class OpenaiResponsesResponseParser {
 
     /**
      * 解析响应 JSON
-     * @author oisin lu
-     * @date 2026年1月28日
+     *
      * @param resp 聊天响应对象
      * @param json 响应 JSON 字符串
      * @return 是否有有效的选择
+     * @author oisin lu
+     * @date 2026年1月28日
      */
     public boolean parseResponse(ChatResponseDefault resp, String json) {
         if (resp.isStream()) {
@@ -82,6 +83,7 @@ public class OpenaiResponsesResponseParser {
 
     /**
      * 解析流式响应
+     *
      * @author oisin lu
      * @date 2026年1月28日
      */
@@ -291,6 +293,7 @@ public class OpenaiResponsesResponseParser {
 
     /**
      * 解析非流式响应
+     *
      * @author oisin lu
      * @date 2026年1月28日
      */
@@ -426,6 +429,7 @@ public class OpenaiResponsesResponseParser {
 
     /**
      * 解析 usage 信息
+     *
      * @author oisin lu
      * @date 2026年1月28日
      */
@@ -438,8 +442,9 @@ public class OpenaiResponsesResponseParser {
         long outputTokens = usageNode.hasKey("output_tokens") ? usageNode.get("output_tokens").getLong() : 0L;
         long totalTokens = usageNode.hasKey("total_tokens") ? usageNode.get("total_tokens").getLong() : (inputTokens + outputTokens);
         if (inputTokens > 0 || outputTokens > 0) {
-            return new AiUsage(inputTokens, outputTokens, totalTokens, usageNode);
+            return new AiUsage(inputTokens, 0L, outputTokens, totalTokens, usageNode);
         }
+
         return null;
     }
 }

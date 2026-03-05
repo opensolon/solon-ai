@@ -164,7 +164,7 @@ public class GeminiResponseParser {
                 long completionTokens = oUsage.getOrNull("candidatesTokenCount") != null ? oUsage.get("candidatesTokenCount").getLong() : 0;
                 long totalTokens = oUsage.getOrNull("totalTokenCount") != null ? oUsage.get("totalTokenCount").getLong() : 0;
 
-                resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens, oUsage));
+                resp.setUsage(new AiUsage(promptTokens, 0L, completionTokens, totalTokens, oUsage));
             }
         }
 
@@ -251,7 +251,7 @@ public class GeminiResponseParser {
             long completionTokens = oUsage.get("candidatesTokenCount").getLong();
             long totalTokens = oUsage.get("totalTokenCount").getLong();
 
-            resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens, oUsage));
+            resp.setUsage(new AiUsage(promptTokens,0L, completionTokens, totalTokens, oUsage));
         }
 
         return true;
