@@ -4,27 +4,10 @@
 
 package io.modelcontextprotocol.server.transport;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
-
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
-import io.modelcontextprotocol.spec.McpError;
-import io.modelcontextprotocol.spec.McpSchema;
+import io.modelcontextprotocol.spec.*;
 import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
-import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.spec.McpServerTransport;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
-import io.modelcontextprotocol.spec.ProtocolVersions;
 import io.modelcontextprotocol.util.Assert;
 import lombok.var;
 import org.slf4j.Logger;
@@ -34,6 +17,14 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 /**
  * Implementation of the MCP Stdio transport provider for servers that communicates using
@@ -149,7 +140,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 		}
 
 		@Override
-		public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
+		public Mono<Void> sendMessage(JSONRPCMessage message) {
 
 			return Mono.zip(inboundReady.asMono(), outboundReady.asMono()).then(Mono.defer(() -> {
 				if (outboundSink.tryEmitNext(message).isSuccess()) {
@@ -215,7 +206,7 @@ public class StdioServerTransportProvider implements McpServerTransportProvider 
 								logger.debug("Received JSON message: {}", line);
 
 								try {
-									McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
+									JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper,
 											line);
 									if (!this.inboundSink.tryEmitNext(message).isSuccess()) {
 										// logIfNotClosing("Failed to enqueue message");

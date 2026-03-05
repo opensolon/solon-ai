@@ -11,7 +11,7 @@
         <relativePath>../solon-ai-parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>solon-ai-mcp</artifactId>
+    <artifactId>mcp-sdk</artifactId>
     <name>${project.artifactId}</name>
     <packaging>jar</packaging>
 
@@ -20,21 +20,6 @@
     </properties>
 
     <dependencies>
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-core</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>mcp-sdk</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-web-sse</artifactId>

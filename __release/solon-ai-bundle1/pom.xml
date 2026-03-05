@@ -17,6 +17,7 @@
     <packaging>pom</packaging>
 
     <modules>
+        <module>../../mcp-sdk</module>
         <module>../../solon-ai</module>
         <module>../../solon-ai-core</module>
         <module>../../solon-ai-agent</module>
