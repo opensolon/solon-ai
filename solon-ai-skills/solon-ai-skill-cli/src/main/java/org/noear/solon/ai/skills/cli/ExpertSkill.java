@@ -40,7 +40,7 @@ import java.util.stream.Stream;
  */
 public class ExpertSkill extends AbsSkill {
     private final PoolManager poolManager;
-    private int searchThreshold = 80;  // 超过此值，不再展示摘要清单，进入强制搜索
+    private int searchThreshold = 50;  // 超过此值，不再展示摘要清单，进入强制搜索
 
     public ExpertSkill(PoolManager poolManager) {
         this.poolManager = poolManager;
