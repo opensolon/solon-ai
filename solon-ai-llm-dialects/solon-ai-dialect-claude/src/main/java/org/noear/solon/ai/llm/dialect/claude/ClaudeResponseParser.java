@@ -449,6 +449,12 @@ public class ClaudeResponseParser {
                 resp.addChoice(new ChatChoice(0, created, "stop", msg));
             }
         }
+        // 解析 stop_reason
+        String stopReason = oResp.get("stop_reason").getString();
+        if (Utils.isNotEmpty(stopReason)) {
+            resp.lastFinishReason = stopReason;
+        }
+
         // 解析用量信息
         AiUsage usage = parseUsage(oResp.getOrNull("usage"));
         if (usage != null) {

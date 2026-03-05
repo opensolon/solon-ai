@@ -205,9 +205,4 @@ public class ClaudeChatDialect extends AbstractChatDialect {
         return messageList;
     }
 
-    //如果没有改变，不需要重写
-//    @Override
-//    public AssistantMessage buildAssistantMessageByToolMessages(AssistantMessage toolCallMessage,List<ToolMessage> toolMessages) {
-//        return requestBuilder.buildAssistantMessageByToolMessages(toolMessages);
-//    }
 }

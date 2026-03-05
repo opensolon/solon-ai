@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * OpenAI Responses API 响应解析器
@@ -37,13 +38,20 @@ public class OpenaiResponsesResponseParser {
     private static final Logger log = LoggerFactory.getLogger(OpenaiResponsesResponseParser.class);
     private final boolean logEnabled;
 
-    // 流式状态追踪
-    private String currentItemId;
-    private String currentItemType;
-    private StringBuilder currentTextContent;
-    private String currentFunctionCallId;
-    private String currentFunctionName;
-    private StringBuilder currentFunctionArguments;
+    /**
+     * 流式工具调用的按请求隔离状态
+     */
+    private static class StreamState {
+        String currentItemId;
+        String currentItemType;
+        StringBuilder currentTextContent;
+        String currentFunctionCallId;
+        String currentFunctionName;
+        StringBuilder currentFunctionArguments;
+    }
+
+    // 按 resp 隔离的流式状态，支持多并发流式请求
+    private final ConcurrentHashMap<ChatResponseDefault, StreamState> streamStates = new ConcurrentHashMap<>();
 
     public OpenaiResponsesResponseParser() {
         this.logEnabled = log.isDebugEnabled();
@@ -63,6 +71,13 @@ public class OpenaiResponsesResponseParser {
         } else {
             return parseNonStreamResponse(resp, json);
         }
+    }
+
+    /**
+     * 获取或创建流式状态
+     */
+    private StreamState getOrCreateState(ChatResponseDefault resp) {
+        return streamStates.computeIfAbsent(resp, k -> new StreamState());
     }
 
     /**
@@ -94,6 +109,7 @@ public class OpenaiResponsesResponseParser {
             }
             if (jsonData.isEmpty() || "[DONE]".equals(jsonData)) {
                 if ("[DONE]".equals(jsonData)) {
+                    streamStates.remove(resp);
                     if (!resp.isFinished()) {
                         resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                         resp.setFinished(true);
@@ -108,6 +124,7 @@ public class OpenaiResponsesResponseParser {
             }
             String eventType = oResp.get("type").getString();
             if ("error".equals(eventType)) {
+                streamStates.remove(resp);
                 ONode oError = oResp.get("error");
                 String errorType = oError.get("type").getString();
                 String errorMsg = oError.get("message").getString();
@@ -130,15 +147,16 @@ public class OpenaiResponsesResponseParser {
                 // 新输出项添加
                 ONode item = oResp.get("item");
                 if (item != null) {
-                    currentItemId = item.get("id").getString();
-                    currentItemType = item.get("type").getString();
+                    StreamState state = getOrCreateState(resp);
+                    state.currentItemId = item.get("id").getString();
+                    state.currentItemType = item.get("type").getString();
 
-                    if ("message".equals(currentItemType)) {
-                        currentTextContent = new StringBuilder();
-                    } else if ("function_call".equals(currentItemType)) {
-                        currentFunctionCallId = item.get("call_id").getString();
-                        currentFunctionName = item.get("name").getString();
-                        currentFunctionArguments = new StringBuilder();
+                    if ("message".equals(state.currentItemType)) {
+                        state.currentTextContent = new StringBuilder();
+                    } else if ("function_call".equals(state.currentItemType)) {
+                        state.currentFunctionCallId = item.get("call_id").getString();
+                        state.currentFunctionName = item.get("name").getString();
+                        state.currentFunctionArguments = new StringBuilder();
                     }
                 }
             } else if ("response.content_part.added".equals(eventType)) {
@@ -147,15 +165,17 @@ public class OpenaiResponsesResponseParser {
                 if (part != null) {
                     String partType = part.get("type").getString();
                     if ("output_text".equals(partType)) {
-                        currentTextContent = new StringBuilder();
+                        StreamState state = getOrCreateState(resp);
+                        state.currentTextContent = new StringBuilder();
                     }
                 }
             } else if ("response.output_text.delta".equals(eventType)) {
                 // 文本增量
                 String delta = oResp.get("delta").getString();
                 if (Utils.isNotEmpty(delta)) {
-                    if (currentTextContent != null) {
-                        currentTextContent.append(delta);
+                    StreamState state = streamStates.get(resp);
+                    if (state != null && state.currentTextContent != null) {
+                        state.currentTextContent.append(delta);
                     }
                     resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(delta)));
                     hasChoices = true;
@@ -166,8 +186,9 @@ public class OpenaiResponsesResponseParser {
                 if (delta != null) {
                     String text = delta.get("text").getString();
                     if (Utils.isNotEmpty(text)) {
-                        if (currentTextContent != null) {
-                            currentTextContent.append(text);
+                        StreamState state = streamStates.get(resp);
+                        if (state != null && state.currentTextContent != null) {
+                            state.currentTextContent.append(text);
                         }
                         resp.addChoice(new ChatChoice(0, new Date(), null, new AssistantMessage(text)));
                         hasChoices = true;
@@ -176,15 +197,19 @@ public class OpenaiResponsesResponseParser {
             } else if ("response.function_call_arguments.delta".equals(eventType)) {
                 // 函数调用参数增量
                 String delta = oResp.get("delta").getString();
-                if (Utils.isNotEmpty(delta) && currentFunctionArguments != null) {
-                    currentFunctionArguments.append(delta);
+                if (Utils.isNotEmpty(delta)) {
+                    StreamState state = streamStates.get(resp);
+                    if (state != null && state.currentFunctionArguments != null) {
+                        state.currentFunctionArguments.append(delta);
+                    }
                 }
             } else if ("response.function_call_arguments.done".equals(eventType)) {
                 // 函数调用参数完成
-                if (currentFunctionCallId != null && currentFunctionName != null) {
+                StreamState state = streamStates.get(resp);
+                if (state != null && state.currentFunctionCallId != null && state.currentFunctionName != null) {
                     String arguments = oResp.get("arguments").getString();
-                    if (Utils.isEmpty(arguments) && currentFunctionArguments != null) {
-                        arguments = currentFunctionArguments.toString();
+                    if (Utils.isEmpty(arguments) && state.currentFunctionArguments != null) {
+                        arguments = state.currentFunctionArguments.toString();
                     }
                     try {
                         Map<String, Object> argMap = new HashMap<>();
@@ -194,14 +219,14 @@ public class OpenaiResponsesResponseParser {
                                 argMap = argsNode.toBean(Map.class);
                             }
                         }
-                        ToolCall toolCall = new ToolCall(currentFunctionCallId, currentFunctionCallId,
-                                currentFunctionName, arguments, argMap);
+                        ToolCall toolCall = new ToolCall(state.currentFunctionCallId, state.currentFunctionCallId,
+                                state.currentFunctionName, arguments, argMap);
                         List<Map> toolCallsRaw = new ArrayList<>();
                         Map<String, Object> toolCallRaw = new HashMap<>();
-                        toolCallRaw.put("id", currentFunctionCallId);
+                        toolCallRaw.put("id", state.currentFunctionCallId);
                         toolCallRaw.put("type", "function");
                         Map<String, Object> functionData = new HashMap<>();
-                        functionData.put("name", currentFunctionName);
+                        functionData.put("name", state.currentFunctionName);
                         functionData.put("arguments", arguments);
                         toolCallRaw.put("function", functionData);
                         toolCallsRaw.add(toolCallRaw);
@@ -216,21 +241,24 @@ public class OpenaiResponsesResponseParser {
                         log.warn("Failed to parse function call in stream mode", e);
                     } finally {
                         // 重置函数调用状态
-                        currentFunctionCallId = null;
-                        currentFunctionName = null;
-                        currentFunctionArguments = null;
+                        state.currentFunctionCallId = null;
+                        state.currentFunctionName = null;
+                        state.currentFunctionArguments = null;
                     }
                 }
             } else if ("response.output_item.done".equals(eventType)) {
                 // 输出项完成
-                currentItemId = null;
-                currentItemType = null;
-                currentTextContent = null;
+                StreamState state = streamStates.get(resp);
+                if (state != null) {
+                    state.currentItemId = null;
+                    state.currentItemType = null;
+                    state.currentTextContent = null;
+                }
             } else if ("response.output_text.done".equals(eventType) || "response.content_part.done".equals(eventType)) {
                 // 文本/内容部分完成
                 // 不需要特殊处理
             } else if ("response.completed".equals(eventType)) {
-                // 响应完成
+                streamStates.remove(resp);
                 ONode response = oResp.get("response");
                 if (response != null) {
                     resp.setModel(response.get("model").getString());
@@ -240,9 +268,13 @@ public class OpenaiResponsesResponseParser {
                         resp.setUsage(usage);
                     }
                 }
+                // 添加一个空的结束标记 choice，让框架能够将 isFinished=true 进行传递
+                resp.addChoice(new ChatChoice(0, new Date(), resp.getLastFinishReasonNormalized(), new AssistantMessage("")));
                 resp.setFinished(true);
+                hasChoices = true;
             } else if ("response.failed".equals(eventType)) {
-                // 响应失败
+                // 响应失败，清理状态
+                streamStates.remove(resp);
                 ONode response = oResp.get("response");
                 if (response != null) {
                     ONode error = response.get("error");
@@ -312,8 +344,9 @@ public class OpenaiResponsesResponseParser {
         // 解析 output 数组
         ONode outputArray = oResp.getOrNull("output");
         if (outputArray != null && outputArray.isArray()) {
-            List<AssistantMessage> messageList = new ArrayList<>();
             StringBuilder textContent = new StringBuilder();
+            List<ToolCall> allToolCalls = new ArrayList<>();
+            List<Map> allToolCallsRaw = new ArrayList<>();
             for (ONode outputItem : outputArray.getArray()) {
                 String itemType = outputItem.get("type").getString();
                 if ("message".equals(itemType)) {
@@ -334,7 +367,6 @@ public class OpenaiResponsesResponseParser {
                         }
                     }
                 } else if ("function_call".equals(itemType)) {
-                    // 解析工具调用
                     String callId = outputItem.get("call_id").getString();
                     String functionName = outputItem.get("name").getString();
                     String arguments = outputItem.get("arguments").getString();
@@ -348,8 +380,8 @@ public class OpenaiResponsesResponseParser {
                         } catch (Exception ignored) {
                         }
                     }
-                    ToolCall toolCall = new ToolCall(callId, callId, functionName, arguments, argMap);
-                    List<Map> toolCallsRaw = new ArrayList<>();
+                    allToolCalls.add(new ToolCall(callId, callId, functionName, arguments, argMap));
+
                     Map<String, Object> toolCallRaw = new HashMap<>();
                     toolCallRaw.put("id", callId);
                     toolCallRaw.put("type", "function");
@@ -357,31 +389,23 @@ public class OpenaiResponsesResponseParser {
                     functionData.put("name", functionName);
                     functionData.put("arguments", arguments);
                     toolCallRaw.put("function", functionData);
-                    toolCallsRaw.add(toolCallRaw);
-
-                    List<ToolCall> toolCalls = new ArrayList<>();
-                    toolCalls.add(toolCall);
-
-                    AssistantMessage assistantMessage = new AssistantMessage("",
-                            false, null,
-                            toolCallsRaw, toolCalls, null);
-                    messageList.add(assistantMessage);
+                    allToolCallsRaw.add(toolCallRaw);
                 }
             }
-            // 添加文本内容消息
-            if (textContent.length() > 0) {
-                messageList.add(0, new AssistantMessage(textContent.toString()));
-            }
-            // 如果有 output_text 便捷字段
-            if (messageList.isEmpty()) {
+
+            // 将所有工具调用合并到一个 AssistantMessage 中
+            if (!allToolCalls.isEmpty()) {
+                AssistantMessage msg = new AssistantMessage(textContent.toString(),
+                        false, null, allToolCallsRaw, allToolCalls, null);
+                resp.addChoice(new ChatChoice(0, created, "stop", msg));
+            } else if (textContent.length() > 0) {
+                resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage(textContent.toString())));
+            } else {
+                // 如果有 output_text 便捷字段
                 String outputText = oResp.get("output_text").getString();
                 if (Utils.isNotEmpty(outputText)) {
-                    messageList.add(new AssistantMessage(outputText));
+                    resp.addChoice(new ChatChoice(0, created, "stop", new AssistantMessage(outputText)));
                 }
-            }
-            // 添加所有解析出的消息
-            for (AssistantMessage msg : messageList) {
-                resp.addChoice(new ChatChoice(0, created, "stop", msg));
             }
         } else {
             // 如果没有 output 数组，尝试使用 output_text
