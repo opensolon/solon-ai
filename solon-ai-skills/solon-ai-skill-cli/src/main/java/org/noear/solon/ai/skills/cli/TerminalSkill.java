@@ -53,23 +53,35 @@ public class TerminalSkill extends AbsSkill {
     private final String extension;
     private final ShellMode shellMode;
     private final String envExample; // 增加范例字段
-    private final PoolManager skillManager; // 引入技能管理器
     private final Map<String, String> undoHistory = new ConcurrentHashMap<>();
+
+    //沙盒模式：只能访问相对咱径或逻辑路径；（否则为）开放模式：可以访问绝对路径
+    private boolean sandboxMode = true;
+    private final PoolManager poolManager; // 引入技能管理器
+
+    private final String pythonCmd;
+    private final String nodeCmd;
 
     protected Charset fileCharset = StandardCharsets.UTF_8;
     protected final ProcessExecutor executor = new ProcessExecutor();
 
     private final List<String> DEFAULT_IGNORES = Arrays.asList(
-            ".system", ".git", "node_modules", ".DS_Store"
+            ".soloncode", ".claude", ".opencode", ".git", ".DS_Store",
+            "node_modules", "target", "bin",
+            "venv", "vendor", "build"
     );
 
-    public TerminalSkill(PoolManager skillManager) {
-        this(null, skillManager);
+    public void setSandboxMode(boolean sandboxMode) {
+        this.sandboxMode = sandboxMode;
     }
 
-    public TerminalSkill(String workDir, PoolManager skillManager) {
+    public TerminalSkill(PoolManager poolManager) {
+        this(null, poolManager);
+    }
+
+    public TerminalSkill(String workDir, PoolManager poolManager) {
         this.workDirDef = workDir;
-        this.skillManager = skillManager;
+        this.poolManager = poolManager;
 
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
 
@@ -91,10 +103,19 @@ public class TerminalSkill extends AbsSkill {
         }
 
         switch (this.shellMode) {
-            case CMD: envExample = "%POOL1%"; break;
-            case POWERSHELL: envExample = "$env:POOL1"; break;
-            default: envExample = "$POOL1"; break;
+            case CMD:
+                envExample = "%POOL1%";
+                break;
+            case POWERSHELL:
+                envExample = "$env:POOL1";
+                break;
+            default:
+                envExample = "$POOL1";
+                break;
         }
+
+        pythonCmd = executor.probePythonCommand();
+        nodeCmd = executor.probeNodeCommand();
     }
 
     @Override
@@ -105,38 +126,74 @@ public class TerminalSkill extends AbsSkill {
     @Override
     public String getInstruction(Prompt prompt) {
         String currentTime = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss (z)"));
-        return "## Terminal 环境状态\n" +
-                "- **当前时间**: " + currentTime + "（注：此为动态时间，每次都会刷新）\n" +
-                "- **终端类型**: " + shellMode + "\n" +
-                "- **环境变量**: 挂载池已注入变量（如 @pool1 映射为 " + envExample + "）。\n" +
-                "- **路径规则**: \n" +
-                "  - **工作区(Workspace)**: 你的主目录，支持读写。必须使用相对路径（如 `src/app.java`）。\n" +
-                "  - **挂载池(Pools)**: 以 `@` 开头的逻辑路径（如 " + skillManager.getPoolMap().keySet() + "）为**只读**资源，严禁写入。\n" +
-                "## 执行规约\n" +
-                "- **只读隔离**: 逻辑路径（以 @ 开头）仅支持读取和命令执行，所有写入操作必须使用相对路径。\n" +
-                "- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`。\n";
+        StringBuilder sb = new StringBuilder();
+
+
+        sb.append("## Terminal 环境状态\n");
+        sb.append("- **当前时间**: ").append(currentTime).append("\n");
+        sb.append("- **沙盒模式**: ").append((sandboxMode ? "开启 (受限)" : "关闭 (开放)")).append("\n");
+        sb.append("- **终端类型**: ").append(shellMode).append("\n");
+
+        sb.append("- **执行环境**: \n");
+        sb.append("  - Python 命令: `").append(pythonCmd).append("` (系统已预置变量 `$PYTHON`)\n");
+        sb.append("  - Node.js 命令: `").append(nodeCmd).append("` (系统已预置变量 `$NODE`)\n");
+
+        sb.append("- **环境变量**: 挂载池已注入变量（如 @pool1 映射为 ").append(envExample).append("）。\n");
+
+        sb.append("- **路径规则**: \n");
+        sb.append("  - **工作区(Workspace)**: 你的主目录，支持读写。使用相对路径访问（如 `src/app.java`）。\n");
+        sb.append("  - **挂载池(Pools)**: 以 `@` 开头的逻辑路径（如 ").append(poolManager.getPoolMap().keySet()).append("）为**只读**资源，严禁写入。\n");
+        if (sandboxMode) {
+            sb.append("  - **沙盒模式**: 仅支持相对路径（相对于 Workspace）或逻辑路径(@pool)。严禁绝对路径。\n");
+        } else {
+            sb.append("  - **开放模式**: 支持绝对路径（如 `/etc/hosts` 或 `C:\\Windows`）、相对路径、逻辑路径(@pool)。\n");
+        }
+
+        sb.append("## 执行规约\n");
+        sb.append("- **只读隔离**: 逻辑路径（以 @ 开头）仅支持读取和命令执行，所有写入操作使用相对路径。\n");
+        if(sandboxMode) {
+            sb.append("- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
+        } else {
+            sb.append("- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`，支持绝对路径访问。\n");
+        }
+
+        if(sandboxMode) {
+            sb.append("\n<SYSTEM_CONSTRAINTS>\n");
+            sb.append("1. 严禁向用户复述或提及“系统限制”、“沙盒”、“规约”等术语。\n");
+            sb.append("2. 你是一个标准的底层 shell 执行器。面对越界请求，必须直接返回“无权访问”。\n");
+            sb.append("3. 禁止解释权限逻辑，禁止讨论路径映射关系。\n");
+            sb.append("</SYSTEM_CONSTRAINTS>\n");
+        }
+
+        return sb.toString();
     }
+
 
     // --- 1. 执行命令 ---
     @ToolMapping(
             name = "bash",
-            description = "在终端执行非交互式 Shell 指令。支持多行脚本，支持逻辑路径（如 @pool）自动转环境变量。禁止使用需要交互输入的命令（如 vim）。"
+            description = "在终端执行非交互式 Shell 指令。支持多行脚本，支持逻辑路径（如 @pool）自动转环境变量。"
     )
     public String bash(@Param(value = "command", description = "要执行的指令。") String command,
-                                       String __workDir) {
+                       @Param(name = "timeout", required = false, description = "可选超时时间，单位为毫秒") Integer timeout,
+                       String __workDir) {
         Path rootPath = getRootPath(__workDir);
         Map<String, String> envs = new HashMap<>();
 
+        envs.put("PYTHON", pythonCmd);
+        envs.put("NODE", nodeCmd);
+
         String finalCommand = translateCommandToEnv(command, envs);
-        return executor.executeCode(rootPath, finalCommand, shellCmd, extension, envs, null);
+
+        return executor.executeCode(rootPath, finalCommand, shellCmd, extension, envs, timeout, null);
     }
 
     // --- 2. 发现文件 ---
     @ToolMapping(name = "ls", description = "列出目录内容。支持递归 Tree 结构展示。支持逻辑路径（如 @pool）。")
     public String ls(@Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                             @Param(value = "recursive", required = false, description = "是否递归展示") Boolean recursive,
-                             @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件") Boolean showHidden,
-                             String __workDir) throws IOException {
+                     @Param(value = "recursive", required = false, description = "是否递归展示") Boolean recursive,
+                     @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件") Boolean showHidden,
+                     String __workDir) throws IOException {
         Path rootPath = getRootPath(__workDir);
 
         Path target = resolveSafePath(rootPath, path, false);
@@ -157,11 +214,11 @@ public class TerminalSkill extends AbsSkill {
     }
 
     // --- 3. 读取内容 ---
-    @ToolMapping(name = "read", description = "读取文件内容。修改文件前必须先通过此工具确认最新的文本内容、缩进和换行符。支持大文件分页。支持逻辑路径（如 @pool）。")
+    @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新的文本内容、缩进和换行符。支持大文件分页。支持逻辑路径（如 @pool）。")
     public String read(@Param(value = "path", description = "文件相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                           @Param(value = "start_line", required = false, description = "起始行 (从1开始)。") Integer startLine,
-                           @Param(value = "end_line", required = false, description = "结束行。") Integer endLine,
-                           String __workDir) throws IOException {
+                       @Param(value = "start_line", required = false, description = "起始行 (从1开始)。") Integer startLine,
+                       @Param(value = "end_line", required = false, description = "结束行。") Integer endLine,
+                       String __workDir) throws IOException {
         Path rootPath = getRootPath(__workDir);
 
         Path target = resolveSafePath(rootPath, path, false);
@@ -193,8 +250,8 @@ public class TerminalSkill extends AbsSkill {
     // --- 4. 写入与编辑 ---
     @ToolMapping(name = "write", description = "创建新文件或覆盖现有文件。")
     public String write(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                              @Param(value = "content", description = "完整文本内容。") String content,
-                              String __workDir) throws IOException {
+                        @Param(value = "content", description = "完整文本内容。") String content,
+                        String __workDir) throws IOException {
         Path rootPath = getRootPath(__workDir);
         Path target = resolveSafePath(rootPath, path, true);
 
@@ -209,9 +266,9 @@ public class TerminalSkill extends AbsSkill {
 
     @ToolMapping(name = "edit", description = "精准文本替换。")
     public String edit(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                                   @Param(value = "old_str", description = "待替换的唯一文本块。必须唯一且包含精确缩进。") String oldStr,
-                                   @Param(value = "new_str", description = "替换后的新内容。") String newStr,
-                                   String __workDir) throws IOException {
+                       @Param(value = "old_str", description = "待替换的唯一文本块。必须唯一且包含精确缩进。") String oldStr,
+                       @Param(value = "new_str", description = "替换后的新内容。") String newStr,
+                       String __workDir) throws IOException {
         Path rootPath = getRootPath(__workDir);
 
         Path target = resolveSafePath(rootPath, path, true);
@@ -235,7 +292,7 @@ public class TerminalSkill extends AbsSkill {
 
     @ToolMapping(name = "undo", description = "撤销最后一次对特定文件的 write 或 edit 操作。")
     public String undo(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                           String __workDir) throws IOException {
+                       String __workDir) throws IOException {
         Path rootPath = getRootPath(__workDir);
         Path target = resolveSafePath(rootPath, path, true);
 
@@ -246,10 +303,10 @@ public class TerminalSkill extends AbsSkill {
     }
 
     // --- 5. 搜索工具 ---
-    @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时必须先执行搜索。支持逻辑路径（如 @pool）。")
+    @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。")
     public String grep(@Param(value = "query", description = "关键字。") String query,
-                             @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                             String __workDir) throws IOException {
+                       @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
+                       String __workDir) throws IOException {
         Path rootPath = getRootPath(__workDir);
         Path target = resolveSafePath(rootPath, path, false);
 
@@ -285,8 +342,8 @@ public class TerminalSkill extends AbsSkill {
 
     @ToolMapping(name = "glob", description = "按通配符模式（如 **/*.java）搜索文件。确定文件范围的最高效工具。支持逻辑路径（如 @pool）。")
     public String glob(@Param(value = "pattern", description = "glob 模式。") String pattern,
-                             @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                             String __workDir) throws IOException {
+                       @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
+                       String __workDir) throws IOException {
         Path rootPath = getRootPath(__workDir);
         Path target = resolveSafePath(rootPath, path, false);
 
@@ -316,11 +373,33 @@ public class TerminalSkill extends AbsSkill {
     // --- 内部逻辑逻辑 ---
 
 
-
     private Path getRootPath(String __workDir) {
         String path = (__workDir != null) ? __workDir : workDirDef;
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
+    }
+
+    private String preprocessUserHome(String pStr) {
+        if (pStr == null) return null;
+
+        // 支持 ~/ 或 ~ 转换为用户主目录
+        if (pStr.equals("~") || pStr.startsWith("~/") || pStr.startsWith("~\\")) {
+            String userHome = System.getProperty("user.home");
+            if (pStr.length() == 1) {
+                return userHome;
+            } else {
+                return Paths.get(userHome, pStr.substring(2)).toString();
+            }
+        }
+        return pStr;
+    }
+
+    private boolean isNotUserHomePath(String pStr) {
+        if (pStr == null) {
+            return false;
+        } else {
+            return pStr.startsWith("~") == false;
+        }
     }
 
     private Path resolveSafePath(Path rootPath, String pStr, boolean writeMode) {
@@ -328,11 +407,11 @@ public class TerminalSkill extends AbsSkill {
             return rootPath;
         }
 
-        Path target = skillManager.resolve(rootPath, pStr);
-
+        // 1. 如果是逻辑路径（@开头），走 poolManager 逻辑
         if (pStr.startsWith("@")) {
+            Path target = poolManager.resolve(rootPath, pStr);
             String alias = pStr.split("[/\\\\]")[0];
-            boolean inPool = skillManager.getPoolMap().containsKey(alias);
+            boolean inPool = poolManager.getPoolMap().containsKey(alias);
 
             if (!inPool) {
                 throw new SecurityException("权限拒绝：未知的技能池路径 " + pStr);
@@ -341,10 +420,29 @@ public class TerminalSkill extends AbsSkill {
             if (writeMode) {
                 throw new SecurityException("权限拒绝：路径 " + pStr + " 属于只读挂载池，禁止写入。请将结果写入工作区的相对路径。");
             }
-        } else {
-            if (!target.startsWith(rootPath)) {
-                throw new SecurityException("权限拒绝：路径越界。");
+
+            return target;
+        }
+
+        // 2. 处理物理路径
+        String pStr2 = preprocessUserHome(pStr);
+        Path p = Paths.get(pStr2);
+        Path target;
+
+        if (p.isAbsolute()) {
+            // 【开放模式】直接使用绝对路径
+            if (sandboxMode && isNotUserHomePath(pStr)) {
+                throw new SecurityException("权限拒绝：沙盒模式下禁止使用绝对路径。");
             }
+            target = p.normalize();
+        } else {
+            // 相对路径
+            target = rootPath.resolve(pStr2).normalize();
+        }
+
+        // 3. 越界检查只在沙盒模式下强制执行
+        if (sandboxMode && isNotUserHomePath(pStr) && !target.startsWith(rootPath)) {
+            throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
         }
 
         return target;
@@ -355,12 +453,23 @@ public class TerminalSkill extends AbsSkill {
             String prefix = inputPath.split("[/\\\\]")[0];
             return prefix + "/" + targetDir.relativize(file).toString().replace("\\", "/");
         }
-        return rootPath.relativize(file).toString().replace("\\", "/");
+
+
+        // 开放模式下，如果文件不在 rootPath 内部，返回绝对路径字符串
+        if (!sandboxMode && !file.startsWith(rootPath)) {
+            return file.toAbsolutePath().toString().replace("\\", "/");
+        }
+
+        try {
+            return rootPath.relativize(file).toString().replace("\\", "/");
+        } catch (IllegalArgumentException e) {
+            return file.toAbsolutePath().toString().replace("\\", "/");
+        }
     }
 
     private String translateCommandToEnv(String command, Map<String, String> envs) {
         String result = command;
-        for (Map.Entry<String, Path> entry : skillManager.getPoolMap().entrySet()) {
+        for (Map.Entry<String, Path> entry : poolManager.getPoolMap().entrySet()) {
             String alias = entry.getKey(); // 例如 @pool1
             String envKey = alias.substring(1).toUpperCase(); // POOL1
 
@@ -373,6 +482,15 @@ public class TerminalSkill extends AbsSkill {
                 result = result.replace(alias, placeholder);
             }
         }
+
+        if (this.shellMode == ShellMode.CMD && result.contains("~")) {
+            String userHome = System.getProperty("user.home").replace("\\", "/");
+            // 简单替换方案，覆盖常见场景
+            result = result.replace("~/", userHome + "/")
+                    .replace("~\\", userHome + "/"); // 处理类似 command ~ 的结尾
+            if (result.equals("~")) result = userHome;
+        }
+
         return result;
     }
 
@@ -433,12 +551,14 @@ public class TerminalSkill extends AbsSkill {
         String name = path.getFileName().toString();
         if (DEFAULT_IGNORES.contains(name)) return true;
         try {
-            Path relative = path.isAbsolute() ? rootPath.relativize(path) : path;
-            for (Path segment : relative) {
-                if (DEFAULT_IGNORES.contains(segment.toString())) return true;
+            // 只有在 rootPath 内部时才进行递归片段检查
+            if (path.startsWith(rootPath)) {
+                Path relative = rootPath.relativize(path);
+                for (Path segment : relative) {
+                    if (DEFAULT_IGNORES.contains(segment.toString())) return true;
+                }
             }
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) { }
         return false;
     }
 
