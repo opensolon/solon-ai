@@ -135,8 +135,9 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         return reasoningFieldName;
     }
 
-    public void setReasoningFieldName(String reasoningFieldName) {
+    public AssistantMessage reasoningFieldName(String reasoningFieldName) {
         this.reasoningFieldName = reasoningFieldName;
+        return this;
     }
 
     /**
@@ -179,6 +180,11 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
     @Override
     public boolean isThinking() {
         return isThinking;
+    }
+
+    @Override
+    public boolean isToolCalls(){
+        return Assert.isNotEmpty(toolCalls);
     }
 
     /**

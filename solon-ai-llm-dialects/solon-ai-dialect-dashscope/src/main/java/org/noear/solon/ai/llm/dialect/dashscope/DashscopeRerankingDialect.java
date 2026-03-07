@@ -108,7 +108,7 @@ public class DashscopeRerankingDialect extends AbstractRerankingDialect {
                 ONode oUsage = oResp.get("usage");
                 long total_tokens = oUsage.get("total_tokens").getLong();
 
-                usage = new AiUsage(total_tokens, 0L, total_tokens, oUsage);
+                usage = new AiUsage(total_tokens, 0L, 0L, total_tokens, oUsage);
             }
 
             return new RerankingResponse(model, null, results, usage);

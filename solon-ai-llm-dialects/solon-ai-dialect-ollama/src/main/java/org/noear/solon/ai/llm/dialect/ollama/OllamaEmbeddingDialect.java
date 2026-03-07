@@ -66,7 +66,7 @@ public class OllamaEmbeddingDialect extends AbstractEmbeddingDialect {
             if (oResp.hasKey("prompt_eval_count")) {
                 long prompt_eval_count = oResp.get("prompt_eval_count").getLong();
 
-                usage = new AiUsage(prompt_eval_count, 0L, prompt_eval_count, oResp);
+                usage = new AiUsage(prompt_eval_count, 0L, 0L, prompt_eval_count, oResp);
             }
 
             return new EmbeddingResponse(model, null, data, usage);

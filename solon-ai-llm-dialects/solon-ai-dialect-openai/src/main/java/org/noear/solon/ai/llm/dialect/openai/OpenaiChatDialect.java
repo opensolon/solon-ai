@@ -113,10 +113,11 @@ public class OpenaiChatDialect extends AbstractChatDialect {
             ONode oUsage = oResp.getOrNull("usage");
             if (oUsage != null) {
                 long promptTokens = oUsage.get("prompt_tokens").getLong();
+                long thinkTokens = oUsage.get("think_tokens").getLong();
                 long completionTokens = oUsage.get("completion_tokens").getLong();
                 long totalTokens = oUsage.get("total_tokens").getLong();
 
-                resp.setUsage(new AiUsage(promptTokens, completionTokens, totalTokens, oUsage));
+                resp.setUsage(new AiUsage(promptTokens, thinkTokens, completionTokens, totalTokens, oUsage));
             }
         }
 

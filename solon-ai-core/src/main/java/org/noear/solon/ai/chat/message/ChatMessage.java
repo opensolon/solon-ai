@@ -80,6 +80,13 @@ public interface ChatMessage extends Serializable {
         return false;
     }
 
+    /**
+     * 是否为工具调用
+     */
+    default boolean isToolCalls(){
+        return false;
+    }
+
     /// //////////////
 
     static AssistantMessage ofAssistant(String content) {

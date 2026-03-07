@@ -49,9 +49,9 @@ public class McpStatelessAsyncServer {
 
 	private final McpJsonMapper jsonMapper;
 
-	private final McpSchema.ServerCapabilities serverCapabilities;
+	private final ServerCapabilities serverCapabilities;
 
-	private final McpSchema.Implementation serverInfo;
+	private final Implementation serverInfo;
 
 	private final String instructions;
 
@@ -63,7 +63,7 @@ public class McpStatelessAsyncServer {
 
 	private final ConcurrentHashMap<String, McpStatelessServerFeatures.AsyncPromptSpecification> prompts = new ConcurrentHashMap<>();
 
-	private final ConcurrentHashMap<McpSchema.CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
+	private final ConcurrentHashMap<CompleteReference, McpStatelessServerFeatures.AsyncCompletionSpecification> completions = new ConcurrentHashMap<>();
 
 	private List<String> protocolVersions;
 
@@ -129,10 +129,10 @@ public class McpStatelessAsyncServer {
 	// ---------------------------------------
 	// Lifecycle Management
 	// ---------------------------------------
-	private McpStatelessRequestHandler<McpSchema.InitializeResult> asyncInitializeRequestHandler() {
+	private McpStatelessRequestHandler<InitializeResult> asyncInitializeRequestHandler() {
 		return (ctx, req) -> Mono.defer(() -> {
-			McpSchema.InitializeRequest initializeRequest = this.jsonMapper.convertValue(req,
-					McpSchema.InitializeRequest.class);
+			InitializeRequest initializeRequest = this.jsonMapper.convertValue(req,
+					InitializeRequest.class);
 
 			logger.info("Client initialize request - Protocol: {}, Capabilities: {}, Info: {}",
 					initializeRequest.protocolVersion(), initializeRequest.capabilities(),
@@ -155,7 +155,7 @@ public class McpStatelessAsyncServer {
 						initializeRequest.protocolVersion(), serverProtocolVersion);
 			}
 
-			return Mono.just(new McpSchema.InitializeResult(serverProtocolVersion, this.serverCapabilities,
+			return Mono.just(new InitializeResult(serverProtocolVersion, this.serverCapabilities,
 					this.serverInfo, this.instructions));
 		});
 	}
@@ -164,7 +164,7 @@ public class McpStatelessAsyncServer {
 	 * Get the server capabilities that define the supported features and functionality.
 	 * @return The server capabilities
 	 */
-	public McpSchema.ServerCapabilities getServerCapabilities() {
+	public ServerCapabilities getServerCapabilities() {
 		return this.serverCapabilities;
 	}
 
@@ -172,7 +172,7 @@ public class McpStatelessAsyncServer {
 	 * Get the server implementation information.
 	 * @return The server implementation details
 	 */
-	public McpSchema.Implementation getServerInfo() {
+	public Implementation getServerInfo() {
 		return this.serverInfo;
 	}
 
@@ -225,9 +225,9 @@ public class McpStatelessAsyncServer {
 	}
 
 	private static class StructuredOutputCallToolHandler
-			implements BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> {
+			implements BiFunction<McpTransportContext, CallToolRequest, Mono<CallToolResult>> {
 
-		private final BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> delegateHandler;
+		private final BiFunction<McpTransportContext, CallToolRequest, Mono<CallToolResult>> delegateHandler;
 
 		private final JsonSchemaValidator jsonSchemaValidator;
 
@@ -235,7 +235,7 @@ public class McpStatelessAsyncServer {
 
 		public StructuredOutputCallToolHandler(JsonSchemaValidator jsonSchemaValidator,
 											   Map<String, Object> outputSchema,
-											   BiFunction<McpTransportContext, McpSchema.CallToolRequest, Mono<CallToolResult>> delegateHandler) {
+											   BiFunction<McpTransportContext, CallToolRequest, Mono<CallToolResult>> delegateHandler) {
 
 			Assert.notNull(jsonSchemaValidator, "JsonSchemaValidator must not be null");
 			Assert.notNull(delegateHandler, "Delegate call tool result handler must not be null");
@@ -246,7 +246,7 @@ public class McpStatelessAsyncServer {
 		}
 
 		@Override
-		public Mono<CallToolResult> apply(McpTransportContext transportContext, McpSchema.CallToolRequest request) {
+		public Mono<CallToolResult> apply(McpTransportContext transportContext, CallToolRequest request) {
 
 			return this.delegateHandler.apply(transportContext, request).map(result -> {
 
@@ -273,7 +273,7 @@ public class McpStatelessAsyncServer {
 					String content = "Response missing structured content which is expected when calling tool with non-empty outputSchema";
 					logger.warn(content);
 					return CallToolResult.builder()
-							.content(Arrays.asList(new McpSchema.TextContent(content)))
+							.content(Arrays.asList(new TextContent(content)))
 							.isError(true)
 							.build();
 				}
@@ -284,7 +284,7 @@ public class McpStatelessAsyncServer {
 				if (!validation.valid()) {
 					logger.warn("Tool call result validation failed: {}", validation.errorMessage());
 					return CallToolResult.builder()
-							.content(Arrays.asList(new McpSchema.TextContent(validation.errorMessage())))
+							.content(Arrays.asList(new TextContent(validation.errorMessage())))
 							.isError(true)
 							.build();
 				}
@@ -297,7 +297,7 @@ public class McpStatelessAsyncServer {
 					// https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content
 
 					return CallToolResult.builder()
-							.content(Arrays.asList(new McpSchema.TextContent(validation.jsonStructuredOutput())))
+							.content(Arrays.asList(new TextContent(validation.jsonStructuredOutput())))
 							.isError(result.isError())
 							.structuredContent(result.structuredContent())
 							.build();
@@ -377,19 +377,19 @@ public class McpStatelessAsyncServer {
 		});
 	}
 
-	private McpStatelessRequestHandler<McpSchema.ListToolsResult> toolsListRequestHandler() {
+	private McpStatelessRequestHandler<ListToolsResult> toolsListRequestHandler() {
 		return (ctx, params) -> {
 			List<Tool> tools = this.tools.stream()
 					.map(McpStatelessServerFeatures.AsyncToolSpecification::tool)
 					.collect(Collectors.toList());
-			return Mono.just(new McpSchema.ListToolsResult(tools, null));
+			return Mono.just(new ListToolsResult(tools, null));
 		};
 	}
 
 	private McpStatelessRequestHandler<CallToolResult> toolsCallRequestHandler() {
 		return (ctx, params) -> {
-			McpSchema.CallToolRequest callToolRequest = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.CallToolRequest>() {
+			CallToolRequest callToolRequest = jsonMapper.convertValue(params,
+					new TypeRef<CallToolRequest>() {
 					});
 
 			Optional<McpStatelessServerFeatures.AsyncToolSpecification> toolSpecification = this.tools.stream()
@@ -441,7 +441,7 @@ public class McpStatelessAsyncServer {
 	 * List all registered resources.
 	 * @return A Flux stream of all registered resources
 	 */
-	public Flux<McpSchema.Resource> listResources() {
+	public Flux<Resource> listResources() {
 		return Flux.fromIterable(this.resources.values())
 				.map(McpStatelessServerFeatures.AsyncResourceSpecification::resource);
 	}
@@ -503,7 +503,7 @@ public class McpStatelessAsyncServer {
 	 * List all registered resource templates.
 	 * @return A Flux stream of all registered resource templates
 	 */
-	public Flux<McpSchema.ResourceTemplate> listResourceTemplates() {
+	public Flux<ResourceTemplate> listResourceTemplates() {
 		return Flux.fromIterable(this.resourceTemplates.values())
 				.map(AsyncResourceTemplateSpecification::resourceTemplate);
 	}
@@ -533,29 +533,29 @@ public class McpStatelessAsyncServer {
 		});
 	}
 
-	private McpStatelessRequestHandler<McpSchema.ListResourcesResult> resourcesListRequestHandler() {
+	private McpStatelessRequestHandler<ListResourcesResult> resourcesListRequestHandler() {
 		return (ctx, params) -> {
 			var resourceList = this.resources.values()
 					.stream()
 					.map(McpStatelessServerFeatures.AsyncResourceSpecification::resource)
 					.collect(Collectors.toList());
-			return Mono.just(new McpSchema.ListResourcesResult(resourceList, null));
+			return Mono.just(new ListResourcesResult(resourceList, null));
 		};
 	}
 
-	private McpStatelessRequestHandler<McpSchema.ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
+	private McpStatelessRequestHandler<ListResourceTemplatesResult> resourceTemplateListRequestHandler() {
 		return (exchange, params) -> {
 			var resourceList = this.resourceTemplates.values()
 					.stream()
 					.map(AsyncResourceTemplateSpecification::resourceTemplate)
 					.collect(Collectors.toList());
-			return Mono.just(new McpSchema.ListResourceTemplatesResult(resourceList, null));
+			return Mono.just(new ListResourceTemplatesResult(resourceList, null));
 		};
 	}
 
-	private McpStatelessRequestHandler<McpSchema.ReadResourceResult> resourcesReadRequestHandler() {
+	private McpStatelessRequestHandler<ReadResourceResult> resourcesReadRequestHandler() {
 		return (ctx, params) -> {
-			McpSchema.ReadResourceRequest resourceRequest = jsonMapper.convertValue(params, new TypeRef<McpSchema.ReadResourceRequest>() {
+			ReadResourceRequest resourceRequest = jsonMapper.convertValue(params, new TypeRef<ReadResourceRequest>() {
 			});
 			var resourceUri = resourceRequest.uri();
 
@@ -624,7 +624,7 @@ public class McpStatelessAsyncServer {
 	 * List all registered prompts.
 	 * @return A Flux stream of all registered prompts
 	 */
-	public Flux<McpSchema.Prompt> listPrompts() {
+	public Flux<Prompt> listPrompts() {
 		return Flux.fromIterable(this.prompts.values())
 				.map(McpStatelessServerFeatures.AsyncPromptSpecification::prompt);
 	}
@@ -657,7 +657,7 @@ public class McpStatelessAsyncServer {
 		});
 	}
 
-	private McpStatelessRequestHandler<McpSchema.ListPromptsResult> promptsListRequestHandler() {
+	private McpStatelessRequestHandler<ListPromptsResult> promptsListRequestHandler() {
 		return (ctx, params) -> {
 			// TODO: Implement pagination
 			// McpSchema.PaginatedRequest request = objectMapper.convertValue(params,
@@ -669,14 +669,14 @@ public class McpStatelessAsyncServer {
 					.map(McpStatelessServerFeatures.AsyncPromptSpecification::prompt)
 					.collect(Collectors.toList());
 
-			return Mono.just(new McpSchema.ListPromptsResult(promptList, null));
+			return Mono.just(new ListPromptsResult(promptList, null));
 		};
 	}
 
-	private McpStatelessRequestHandler<McpSchema.GetPromptResult> promptsGetRequestHandler() {
+	private McpStatelessRequestHandler<GetPromptResult> promptsGetRequestHandler() {
 		return (ctx, params) -> {
-			McpSchema.GetPromptRequest promptRequest = jsonMapper.convertValue(params,
-					new TypeRef<McpSchema.GetPromptRequest>() {
+			GetPromptRequest promptRequest = jsonMapper.convertValue(params,
+					new TypeRef<GetPromptRequest>() {
 					});
 
 			// Implement prompt retrieval logic here
@@ -692,12 +692,12 @@ public class McpStatelessAsyncServer {
 		};
 	}
 
-	private static final Mono<McpSchema.CompleteResult> EMPTY_COMPLETION_RESULT = Mono
-			.just(new McpSchema.CompleteResult(new CompleteCompletion(new ArrayList<>(), 0, false)));
+	private static final Mono<CompleteResult> EMPTY_COMPLETION_RESULT = Mono
+			.just(new CompleteResult(new CompleteCompletion(new ArrayList<>(), 0, false)));
 
-	private McpStatelessRequestHandler<McpSchema.CompleteResult> completionCompleteRequestHandler() {
+	private McpStatelessRequestHandler<CompleteResult> completionCompleteRequestHandler() {
 		return (ctx, params) -> {
-			McpSchema.CompleteRequest request = parseCompletionParams(params);
+			CompleteRequest request = parseCompletionParams(params);
 
 			if (request.ref() == null) {
 				return Mono.error(
@@ -800,7 +800,7 @@ public class McpStatelessAsyncServer {
 	}
 
 	/**
-	 * Parses the raw JSON-RPC request parameters into a {@link McpSchema.CompleteRequest}
+	 * Parses the raw JSON-RPC request parameters into a {@link CompleteRequest}
 	 * object.
 	 * <p>
 	 * This method manually extracts the `ref` and `argument` fields from the input map,
@@ -808,19 +808,19 @@ public class McpStatelessAsyncServer {
 	 * fully-typed {@code CompleteRequest} instance.
 	 * @param object the raw request parameters, expected to be a Map containing "ref" and
 	 * "argument" entries.
-	 * @return a {@link McpSchema.CompleteRequest} representing the structured completion
+	 * @return a {@link CompleteRequest} representing the structured completion
 	 * request.
 	 * @throws IllegalArgumentException if the "ref" type is not recognized.
 	 */
 	@SuppressWarnings("unchecked")
-	private McpSchema.CompleteRequest parseCompletionParams(Object object) {
+	private CompleteRequest parseCompletionParams(Object object) {
 		Map<String, Object> params = (Map<String, Object>) object;
 		Map<String, Object> refMap = (Map<String, Object>) params.get("ref");
 		Map<String, Object> argMap = (Map<String, Object>) params.get("argument");
 
 		String refType = (String) refMap.get("type");
 
-		McpSchema.CompleteReference ref;
+		CompleteReference ref;
 
 		if (PromptReference.TYPE.equals(refType)) {
 			ref = new PromptReference(refType, (String) refMap.get("name"),
@@ -833,10 +833,10 @@ public class McpStatelessAsyncServer {
 
 		String argName = (String) argMap.get("name");
 		String argValue = (String) argMap.get("value");
-		McpSchema.CompleteRequest.CompleteArgument argument = new McpSchema.CompleteRequest.CompleteArgument(argName,
+		CompleteRequest.CompleteArgument argument = new CompleteRequest.CompleteArgument(argName,
 				argValue);
 
-		return new McpSchema.CompleteRequest(ref, argument);
+		return new CompleteRequest(ref, argument);
 	}
 
 	/**

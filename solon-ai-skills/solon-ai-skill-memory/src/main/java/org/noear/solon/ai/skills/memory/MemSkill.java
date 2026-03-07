@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.skills.memory;
 
-import org.noear.redisx.RedisClient;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -46,13 +45,15 @@ public class MemSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(MemSkill.class);
     private static final String BASE_PREFIX = "ai:memskill:";
 
-    private final RedisClient redis;
+    private final MemStoreProvider storeProvider;
+    //private final RedisClient redis;
     private final MemSearchProvider searchProvider;
     private boolean sessionIsolation = true; // 默认开启会话隔离
 
-    public MemSkill(RedisClient redis, MemSearchProvider searchProvider) {
-        this.redis = redis;
+    public MemSkill(MemStoreProvider storeProvider, MemSearchProvider searchProvider) {
+        //this.redis = redis;
         this.searchProvider = searchProvider;
+        this.storeProvider = storeProvider;
     }
 
     /**
@@ -144,7 +145,7 @@ public class MemSkill extends AbsSkill {
 
         try {
             String finalKey = getFinalKey(__sessionId, key);
-            String oldJson = redis.getBucket().get(finalKey);
+            String oldJson = storeProvider.get(finalKey); //redis.getBucket().get(finalKey);
             String now = getNow();
 
             StringBuilder feedback = new StringBuilder("【操作成功】心智模型已更新。");
@@ -167,7 +168,8 @@ public class MemSkill extends AbsSkill {
             else if (importance >= 5) ttl = 2592000;
             else ttl = 604800;
 
-            redis.getBucket().store(finalKey, ONode.serialize(data), ttl);
+            storeProvider.put(finalKey, ONode.serialize(data), ttl);
+            //redis.getBucket().store(finalKey, ONode.serialize(data), ttl);
 
             if (searchProvider != null) {
                 searchProvider.updateIndex(__sessionId, key, fact, importance, now);
@@ -213,7 +215,8 @@ public class MemSkill extends AbsSkill {
         __sessionId = getEffectiveSessionId(__sessionId);
 
         try {
-            String val = redis.getBucket().get(getFinalKey(__sessionId, key));
+            String val = storeProvider.get(getFinalKey(__sessionId, key));
+            //redis.getBucket().get(getFinalKey(__sessionId, key));
             if (Utils.isEmpty(val)) {
                 return "未找到认知条目 [" + key + "]。";
             }
@@ -256,7 +259,8 @@ public class MemSkill extends AbsSkill {
     public String prune(@Param("key") String key, String __sessionId) {
         __sessionId = getEffectiveSessionId(__sessionId);
 
-        redis.getBucket().remove(getFinalKey(__sessionId, key));
+        storeProvider.remove(getFinalKey(__sessionId, key));
+        //redis.getBucket().remove(getFinalKey(__sessionId, key));
         if (searchProvider != null) {
             searchProvider.removeIndex(__sessionId, key);
         }

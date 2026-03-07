@@ -48,10 +48,18 @@ public class PoolManager {
      * 注册池（并扫描）
      */
     public PoolManager register(String alias, Path dir) {
-        String key = alias.startsWith("@") ? alias : "@" + alias;
         Path rootPath = dir.toAbsolutePath().normalize();
-        poolMap.put(key, rootPath);
-        scanAndCache(key, rootPath);
+        String key = alias.startsWith("@") ? alias : "@" + alias;
+
+        if (Files.exists(rootPath) && Files.isDirectory(rootPath)) {
+            poolMap.put(key, rootPath);
+            scanAndCache(key, rootPath);
+            LOG.info("技能池已挂载: {} -> {}", key, rootPath);
+        } else {
+            String reason = !Files.exists(rootPath) ? "路径不存在" : "不是有效目录";
+            LOG.warn("技能池挂载跳过：{} (alias: {}, path: {})", reason, key, rootPath);
+        }
+
         return this;
     }
 
@@ -134,7 +142,7 @@ public class PoolManager {
                     if (isSkillDir(dir)) {
                         String rel = root.relativize(dir).toString().replace("\\", "/");
                         String aliasPath = alias + (rel.isEmpty() ? "" : "/" + rel);
-                        skillMap.put(aliasPath, new SkillDir(aliasPath, dir, parseDescription(dir)));
+                        skillMap.put(aliasPath, new PoolManager.SkillDir(aliasPath, dir, parseDescription(dir)));
                         return FileVisitResult.SKIP_SUBTREE;
                     }
                     if (dir.getFileName().toString().startsWith(".")) return FileVisitResult.SKIP_SUBTREE;

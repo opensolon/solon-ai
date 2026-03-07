@@ -27,19 +27,21 @@ import org.noear.solon.lang.Preview;
 @Preview("3.1")
 public class AiUsage {
     private final long promptTokens;
+    private final long thinkTokens;
     private final long completionTokens;
     private final long totalTokens;
     private final long cacheCreationInputTokens;
     private final long cacheReadInputTokens;
     private final ONode source;
 
-    public AiUsage(long promptTokens, long completionTokens, long totalTokens, ONode source) {
-        this(promptTokens, completionTokens, totalTokens, 0L, 0L, source);
+    public AiUsage(long promptTokens, long thinkTokens, long completionTokens, long totalTokens, ONode source) {
+        this(promptTokens, thinkTokens, completionTokens, totalTokens, 0L, 0L, source);
     }
 
-    public AiUsage(long promptTokens, long completionTokens, long totalTokens,
+    public AiUsage(long promptTokens, long thinkTokens, long completionTokens, long totalTokens,
                    long cacheCreationInputTokens, long cacheReadInputTokens, ONode source) {
         this.promptTokens = promptTokens;
+        this.thinkTokens = thinkTokens;
         this.completionTokens = completionTokens;
         this.totalTokens = totalTokens;
         this.cacheCreationInputTokens = cacheCreationInputTokens;
@@ -52,6 +54,13 @@ public class AiUsage {
      */
     public long promptTokens() {
         return promptTokens;
+    }
+
+    /**
+     * 获取思考消耗令牌数
+     */
+    public long thinkTokens() {
+        return thinkTokens;
     }
 
     /**

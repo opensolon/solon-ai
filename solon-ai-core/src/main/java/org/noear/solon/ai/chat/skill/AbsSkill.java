@@ -20,9 +20,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.lang.Preview;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.ArrayList;
+import java.util.*;
 
 /**
  * 技能定制基类
@@ -33,11 +31,33 @@ import java.util.ArrayList;
 @Preview("3.8.4")
 public abstract class AbsSkill implements Skill {
     private volatile SkillMetadata metadata;
+    private final Map<String, FunctionTool> toolMap;
     protected final List<FunctionTool> tools;
 
     protected AbsSkill() {
         this.tools = new ArrayList<>();
         this.tools.addAll(new MethodToolProvider(this).getTools());
+
+        Map<String, FunctionTool> toolMap0 = new LinkedHashMap<>();
+        for (FunctionTool tool : tools) {
+            toolMap0.put(tool.name(), tool);
+        }
+
+        toolMap = Collections.unmodifiableMap(toolMap0);
+    }
+
+    public Map<String, FunctionTool> getToolMap() {
+        return toolMap;
+    }
+
+    public Collection<FunctionTool> getToolAry(String... names) {
+        List<FunctionTool> list = new ArrayList<>();
+        for (String key : names) {
+            if (toolMap.containsKey(key)) {
+                list.add(toolMap.get(key));
+            }
+        }
+        return list;
     }
 
     @Override
