@@ -238,9 +238,15 @@ public class ClaudeResponseParser {
                         // 思考内容增量更新
                         String thinking = delta.get("thinking").getString();
                         if (Utils.isNotEmpty(thinking)) {
+                            resp.reasoningBuilder.append(thinking);
                             resp.addChoice(new ChatChoice(0, new Date(), null,
                                     new AssistantMessage(thinking, true)));
                             hasChoices = true;
+                        }
+                    } else if ("signature_delta".equals(deltaType)) {
+                        String signature = delta.get("signature").getString();
+                        if (Utils.isNotEmpty(signature)) {
+                            resp.thinkingSignature = signature;
                         }
                     } else if ("text_delta".equals(deltaType)) {
                         String text = delta.get("text").getString();

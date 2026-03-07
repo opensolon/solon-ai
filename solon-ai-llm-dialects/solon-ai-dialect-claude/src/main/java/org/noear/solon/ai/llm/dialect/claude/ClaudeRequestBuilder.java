@@ -265,11 +265,31 @@ public class ClaudeRequestBuilder {
     private void buildAssistantToolCallMessageNode(ONode node, AssistantMessage assistantMessage) {
         if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
             ONode contentArray = node.getOrNew("content").asArray();
-            // 添加文本内容（如果有）
-            if (Utils.isNotEmpty(assistantMessage.getContent())) {
+
+            // 提取 reasoning（思考）内容，放入 thinking 块
+            String reasoning = assistantMessage.getReasoning();
+            if (Utils.isNotEmpty(reasoning)) {
+                // 尝试从 contentRaw 中获取 signature
+                String signature = "";
+                Object contentRaw = assistantMessage.getContentRaw();
+                if (contentRaw instanceof Map) {
+                    Object sig = ((Map<?, ?>) contentRaw).get("thinkingSignature");
+                    if (sig instanceof String && Utils.isNotEmpty((String) sig)) {
+                        signature = (String) sig;
+                    }
+                }
+                contentArray.addNew()
+                    .set("type", "thinking")
+                    .set("thinking", reasoning)
+                    .set("signature", signature);
+            }
+
+            // 添加文本内容（如果有，排除 <think>...</think> 部分）
+            String resultContent = assistantMessage.getResultContent();
+            if (Utils.isNotEmpty(resultContent)) {
                 contentArray.addNew()
                     .set("type", "text")
-                    .set("text", assistantMessage.getContent());
+                    .set("text", resultContent);
             }
             // 添加工具调用
             for (ToolCall call : assistantMessage.getToolCalls()) {
@@ -389,6 +409,19 @@ public class ClaudeRequestBuilder {
         node.set("role", "assistant");
 
         ONode contentArray = node.getOrNew("content").asArray();
+
+        // 当开启思考模式时，需要在 tool_use 之前添加 thinking 块
+        String thinkingContent = resp.reasoningBuilder.toString();
+        if (Utils.isNotEmpty(thinkingContent)) {
+            ONode thinkingBlock = contentArray.addNew();
+            thinkingBlock.set("type", "thinking");
+            thinkingBlock.set("thinking", thinkingContent);
+            // signature 是 Claude 思考签名，某些兼容接口要求回传
+            if (Utils.isNotEmpty(resp.thinkingSignature)) {
+                thinkingBlock.set("signature", resp.thinkingSignature);
+            }
+        }
+
         for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
             ToolCallBuilder builder = kv.getValue();
 
