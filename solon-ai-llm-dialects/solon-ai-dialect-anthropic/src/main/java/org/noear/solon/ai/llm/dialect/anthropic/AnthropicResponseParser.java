@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.llm.dialect.claude;
+package org.noear.solon.ai.llm.dialect.anthropic;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
@@ -34,8 +34,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author oisin lu
  * @date 2026年1月27日
  */
-public class ClaudeResponseParser {
-    private static final Logger log = LoggerFactory.getLogger(ClaudeResponseParser.class);
+public class AnthropicResponseParser {
+    private static final Logger log = LoggerFactory.getLogger(AnthropicResponseParser.class);
     private final boolean logEnabled;
 
     /**
@@ -50,7 +50,7 @@ public class ClaudeResponseParser {
     // 按 resp 隔离的流式状态，支持多并发流式请求
     private final ConcurrentHashMap<ChatResponseDefault, StreamToolState> streamStates = new ConcurrentHashMap<>();
 
-    public ClaudeResponseParser() {
+    public AnthropicResponseParser() {
         this.logEnabled = log.isDebugEnabled();
     }
 

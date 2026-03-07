@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.llm.dialect.claude;
+package org.noear.solon.ai.llm.dialect.anthropic;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
@@ -36,19 +36,19 @@ import java.util.*;
  * @author oisin lu
  * @date 2026年1月27日
  */
-public class ClaudeChatDialect extends AbstractChatDialect {
-    private static final ClaudeChatDialect instance = new ClaudeChatDialect();
+public class AnthropicChatDialect extends AbstractChatDialect {
+    private static final AnthropicChatDialect instance = new AnthropicChatDialect();
 
-    private final ClaudeResponseParser responseParser;
-    private final ClaudeRequestBuilder requestBuilder;
+    private final AnthropicResponseParser responseParser;
+    private final AnthropicRequestBuilder requestBuilder;
 
-    public static ClaudeChatDialect getInstance() {
+    public static AnthropicChatDialect getInstance() {
         return instance;
     }
 
-    public ClaudeChatDialect() {
-        this.responseParser = new ClaudeResponseParser();
-        this.requestBuilder = new ClaudeRequestBuilder();
+    public AnthropicChatDialect() {
+        this.responseParser = new AnthropicResponseParser();
+        this.requestBuilder = new AnthropicRequestBuilder();
     }
 
     /**

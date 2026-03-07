@@ -43,7 +43,7 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-dialect-claude</artifactId>
+            <artifactId>solon-ai-dialect-anthropic</artifactId>
         </dependency>
 
         <dependency>

@@ -1,0 +1,6 @@
+[
+  {
+    "name": "org.noear.solon.ai.llm.dialect.anthropic.AnthropicChatDialect",
+    "allDeclaredConstructors": true
+  }
+]

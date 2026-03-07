@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.llm.dialect.claude;
+package org.noear.solon.ai.llm.dialect.anthropic;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
@@ -39,7 +39,7 @@ import java.util.Map;
  * @author oisin lu
  * @date 2026年1月27日
  */
-public class ClaudeRequestBuilder {
+public class AnthropicRequestBuilder {
 
     /**
      * 构建请求 JSON

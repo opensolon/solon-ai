@@ -32,6 +32,7 @@
 * 优化 solon-ai-skill-memory MemSkill 取消 userId 参数，自动从上下文中取
 * 优化 solon-ai-skill-cli
 * 优化 Solon AI Skill 指令层级控制
+* 调整 solon-ai-dialect-claude 更名为 solon-ai-dialect-anthropic（更合适）
 
 ### 3.9.4
 

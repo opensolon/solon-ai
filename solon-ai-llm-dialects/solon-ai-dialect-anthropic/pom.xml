@@ -11,7 +11,7 @@
         <relativePath>../../solon-ai-parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>solon-ai-dialect-claude</artifactId>
+    <artifactId>solon-ai-dialect-anthropic</artifactId>
     <name>${project.artifactId}</name>
     <packaging>jar</packaging>
 
