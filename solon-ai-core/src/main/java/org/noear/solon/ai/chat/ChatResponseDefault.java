@@ -156,7 +156,7 @@ public class ChatResponseDefault implements ChatResponse {
                         last.getToolCallsRaw(),
                         last.getToolCalls(),
                         last.getSearchResultsRaw()
-                );
+                ).reasoningFieldName(last.getReasoningFieldName());
             } else {
                 return lastChoice().getMessage();
             }

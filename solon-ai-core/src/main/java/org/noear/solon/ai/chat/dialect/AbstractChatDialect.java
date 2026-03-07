@@ -498,8 +498,8 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
         if (content != null || toolCallsRaw != null) {
             Object contentRaw = oContent.toBean();
-            AssistantMessage message = new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw);
-            message.setReasoningFieldName(resp.reasoning_field_name);
+            AssistantMessage message = new AssistantMessage(content, resp.in_thinking, contentRaw, toolCallsRaw, toolCalls, searchResultsRaw)
+                    .reasoningFieldName(resp.reasoning_field_name);
 
             messageList.add(message);
         }
