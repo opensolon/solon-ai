@@ -25,7 +25,7 @@
 * 添加 solon-ai-agent ReActChunk isNormal(用于识别是否为正常结束)
 * 添加 solon-ai-skill-memory MemSkill 支持会话隔离与共享
 * 优化 solon-ai-mcp 独立出 mcp-sdk 包
-* 优化 solon-ai-dialect-claude 方言适配
+* 优化 solon-ai-dialect-claude 方言适配（及 api.kimi.com/coding 兼容性）
 * 优化 solon-ai-dialect-openai 与 api.minimax.io 的兼容性
 * 优化 solon-ai-agent SummarizationInterceptor
 * 优化 solon-ai-agent ReActSystemPrompt 描述
