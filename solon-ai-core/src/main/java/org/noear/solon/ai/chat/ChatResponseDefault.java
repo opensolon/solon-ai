@@ -47,7 +47,7 @@ public class ChatResponseDefault implements ChatResponse {
     protected boolean finished;
 
     protected final StringBuilder contentBuilder = new StringBuilder();
-    protected final StringBuilder reasoningBuilder = new StringBuilder();
+    public final StringBuilder reasoningBuilder = new StringBuilder();
     protected final Map<String, ToolCallBuilder> toolCallBuilders = new LinkedHashMap<>();
 
     public ChatResponseDefault(ChatRequest req, boolean stream) {
@@ -240,6 +240,11 @@ public class ChatResponseDefault implements ChatResponse {
      * 推理字段名
      */
     public String reasoning_field_name;
+
+    /**
+     * 思考签名（Claude thinking signature，用于多轮工具调用时回传）
+     */
+    public String thinkingSignature;
 
     /**
      * 最后的 callId

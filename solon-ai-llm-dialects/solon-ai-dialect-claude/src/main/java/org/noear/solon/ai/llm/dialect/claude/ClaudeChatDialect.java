@@ -153,13 +153,24 @@ public class ClaudeChatDialect extends AbstractChatDialect {
     private List<AssistantMessage> parseClaudeAssistantMessage(ChatResponseDefault resp, ONode oMessage, ONode oContent) {
         List<AssistantMessage> messageList = new ArrayList<>();
 
+        StringBuilder thinkingContent = new StringBuilder();
+        String thinkingSignature = null;
         StringBuilder textContent = new StringBuilder();
         List<ToolCall> toolCalls = new ArrayList<>();
         List<Map> toolCallsRaw = new ArrayList<>();
 
         for (ONode item : oContent.getArray()) {
             String type = item.get("type").getString();
-            if ("text".equals(type)) {
+            if ("thinking".equals(type)) {
+                String thinking = item.get("thinking").getString();
+                if (Utils.isNotEmpty(thinking)) {
+                    thinkingContent.append(thinking);
+                }
+                String signature = item.get("signature").getString();
+                if (Utils.isNotEmpty(signature)) {
+                    thinkingSignature = signature;
+                }
+            } else if ("text".equals(type)) {
                 String text = item.get("text").getString();
                 if (Utils.isNotEmpty(text)) {
                     if (textContent.length() > 0) {
@@ -197,9 +208,28 @@ public class ClaudeChatDialect extends AbstractChatDialect {
             resp.in_thinking = false;
         }
 
-        String content = textContent.length() > 0 ? textContent.toString() : "";
+        // 构建消息内容，将思考内容用 <think>...</think> 包裹以便 getReasoning() 能提取
+        String content;
+        Map<String, Object> contentRaw = null;
+        if (thinkingContent.length() > 0) {
+            content = "<think>\n\n" + thinkingContent.toString() + "</think>\n\n";
+            if (textContent.length() > 0) {
+                content += textContent.toString();
+            }
+            contentRaw = new LinkedHashMap<>();
+            contentRaw.put("thinking", thinkingContent.toString());
+            if (thinkingSignature != null) {
+                contentRaw.put("thinkingSignature", thinkingSignature);
+            }
+            if (textContent.length() > 0) {
+                contentRaw.put("content", textContent.toString());
+            }
+        } else {
+            content = textContent.length() > 0 ? textContent.toString() : "";
+        }
+
         AssistantMessage message = new AssistantMessage(content,
-                false, null, toolCallsRaw, toolCalls, null);
+                false, contentRaw, toolCallsRaw, toolCalls, null);
         messageList.add(message);
 
         return messageList;
