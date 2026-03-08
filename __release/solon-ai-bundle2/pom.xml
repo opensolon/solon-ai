@@ -42,5 +42,7 @@
 
         <module>../../solon-ai-rag-searchs/solon-ai-search-baidu</module>
         <module>../../solon-ai-rag-searchs/solon-ai-search-bocha</module>
+        <module>../../solon-ai-rag-searchs/solon-ai-search-tavily</module>
+
     </modules>
 </project>
