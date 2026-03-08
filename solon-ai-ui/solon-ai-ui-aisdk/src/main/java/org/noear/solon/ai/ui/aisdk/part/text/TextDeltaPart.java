@@ -1,0 +1,50 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.noear.solon.ai.ui.aisdk.part.text;
+
+import org.noear.snack4.ONode;
+import org.noear.solon.ai.ui.aisdk.part.AiSdkStreamPart;
+
+/**
+ * Text Delta Part — 文本增量
+ * <p>
+ * 格式：{@code {"type":"text-delta","id":"txt_xxx","delta":"Hello"}}
+ *
+ * @see TextStartPart
+ * @see TextEndPart
+ * @see <a href="https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol#text-delta-part">Text Delta Part</a>
+ * @since 3.9.5
+ */
+public class TextDeltaPart extends AiSdkStreamPart {
+    private final String id;
+    private final String delta;
+
+    public TextDeltaPart(String id, String delta) {
+        this.id = id;
+        this.delta = delta;
+    }
+
+    @Override
+    public String getType() {
+        return "text-delta";
+    }
+
+    @Override
+    protected void writeFields(ONode node) {
+        node.set("id", id);
+        node.set("delta", delta);
+    }
+}
