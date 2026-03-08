@@ -51,5 +51,6 @@
         <module>../../solon-ai-skills/solon-ai-skill-toolgateway</module>
         <module>../../solon-ai-skills/solon-ai-skill-web</module>
         <module>../../solon-ai-skills/solon-ai-skill-lucene</module>
+        <module>../../solon-ai-ui/solon-ai-ui-aisdk</module>
     </modules>
 </project>
