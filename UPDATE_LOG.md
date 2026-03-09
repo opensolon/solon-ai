@@ -15,6 +15,8 @@
 
 * 新增 mcp-sdk 插件（从 solon-ai-mcp 独立出来）
 * 新增 solon-ai-skill-toolgateway 插件
+* 新增 solon-ai-search-tavily 插件
+* 新增 solon-ai-ui-aisdk 插件
 * 添加 solon-ai-core __sessionId 自动作为工具上下文和提示词属性（用于传递会话id）
 * 添加 solon-ai-core SkillProvider 接口
 * 添加 solon-ai-core AbsTool 类
