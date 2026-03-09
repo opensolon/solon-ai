@@ -318,6 +318,9 @@ public class RestApiSkill extends AbsSkill {
 
         // 3. 认证处理
 
+        if(tool.getSource() != null && Assert.isNotEmpty(tool.getSource().headers)){
+            http.headers(tool.getSource().headers);
+        }
 
         if (tool.getSource() != null && tool.getSource().authenticator != null) {
             tool.getSource().authenticator.apply(http, tool);
@@ -369,6 +372,10 @@ public class RestApiSkill extends AbsSkill {
 
         if (source.docUrl.startsWith("http://") || source.docUrl.startsWith("https://")) {
             HttpUtils http = HttpUtils.http(source.docUrl);
+
+            if(Assert.isNotEmpty(source.headers)){
+                http.headers(source.headers);
+            }
 
             if (source.authenticator != null) {
                 source.authenticator.apply(http, null);
