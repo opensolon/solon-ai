@@ -11,6 +11,9 @@
     </parent>
 
     <artifactId>solon-ai-search-tavily</artifactId>
+    <name>${project.artifactId}</name>
+    <packaging>jar</packaging>
+
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
