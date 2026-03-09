@@ -148,7 +148,7 @@ public class RestApiSkillTests extends HttpTester {
         // 1. 配置 Bearer 认证
         RestApiSkill authSkill = new RestApiSkill()
                 .addApi(mockApiDocsUrl, apiBaseUrl)
-                .authenticator((http, tool) -> http.header("Authorization", "Bearer mock-token"));
+                .defaultAuthenticator((http, tool) -> http.header("Authorization", "Bearer mock-token"));
 
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
                 .defaultSkillAdd(authSkill)

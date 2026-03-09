@@ -56,7 +56,7 @@ public class RestApiSkill extends AbsSkill {
     private final Map<String, ApiTool> dynamicTools = new LinkedHashMap<>();
 
     private ApiResolver resolver = OpenApiResolver.getInstance();
-    private ApiAuthenticator authenticator;
+    private ApiAuthenticator defaultAuthenticator;
 
     private int dynamicThreshold = 8; // 超过此值，不再平铺 Schema，进入清单模式
     private int searchThreshold = 80;  // 超过此值，不再展示清单，进入强制搜索模式
@@ -79,9 +79,17 @@ public class RestApiSkill extends AbsSkill {
         return this;
     }
 
-    public RestApiSkill authenticator(ApiAuthenticator authenticator) {
-        this.authenticator = authenticator;
+    public RestApiSkill defaultAuthenticator(ApiAuthenticator defaultAuthenticator) {
+        this.defaultAuthenticator = defaultAuthenticator;
         return this;
+    }
+
+    /**
+     * @deprecated 3.9.6 {@link #defaultAuthenticator(ApiAuthenticator)}
+     * */
+    @Deprecated
+    public RestApiSkill authenticator(ApiAuthenticator authenticator) {
+       return defaultAuthenticator(authenticator);
     }
 
     public RestApiSkill resolver(ApiResolver resolver) {
@@ -94,17 +102,44 @@ public class RestApiSkill extends AbsSkill {
     /**
      * 添加 API 组
      *
-     * @param definitionUrl OpenAPI 定义地址 (http://... 或 classpath:...)
-     * @param apiBaseUrl    实际接口执行基地址
+     * @param docUrl     OpenAPI 定义地址 (http://... 或 classpath:...)
+     * @param apiBaseUrl 实际接口执行基地址
      */
-    public RestApiSkill addApi(String definitionUrl, String apiBaseUrl) {
+    public RestApiSkill addApi(String docUrl, String apiBaseUrl) {
+        return addApi(docUrl, apiBaseUrl, null);
+    }
+
+    /**
+     * 添加 API 组
+     *
+     * @param docUrl     OpenAPI 定义地址 (http://... 或 classpath:...)
+     * @param apiBaseUrl 实际接口执行基地址
+     */
+    public RestApiSkill addApi(String docUrl, String apiBaseUrl, Map<String, String> headers) {
+        return addApi(docUrl, apiBaseUrl, headers, null);
+    }
+
+    /**
+     * 添加 API 组
+     *
+     * @param docUrl     OpenAPI 定义地址 (http://... 或 classpath:...)
+     * @param apiBaseUrl 实际接口执行基地址
+     */
+    public RestApiSkill addApi(String docUrl, String apiBaseUrl, Map<String, String> headers, ApiAuthenticator authenticator) {
         try {
-            loadApiFromDefinition(definitionUrl, apiBaseUrl);
+            ApiSource source = new ApiSource();
+            source.docUrl = docUrl;
+            source.apiBaseUrl = apiBaseUrl;
+            source.headers = headers;
+            source.authenticator = authenticator;
+
+            loadApiFromDefinition(source);
             return this;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
+
 
     @Override
     public String description() {
@@ -282,8 +317,14 @@ public class RestApiSkill extends AbsSkill {
         }
 
         // 3. 认证处理
-        if (authenticator != null) {
-            authenticator.apply(http, tool);
+
+
+        if (tool.getSource() != null && tool.getSource().authenticator != null) {
+            tool.getSource().authenticator.apply(http, tool);
+        } else {
+            if (defaultAuthenticator != null) {
+                defaultAuthenticator.apply(http, tool);
+            }
         }
 
         // 4. Query 参数设置 (URL 查询参数)
@@ -323,33 +364,41 @@ public class RestApiSkill extends AbsSkill {
 
     // --- 私有辅助 ---
 
-    private void loadApiFromDefinition(String definitionUrl, String apiBaseUrl) throws IOException {
-        final String source;
+    private void loadApiFromDefinition(ApiSource source) throws IOException {
+        final String json;
 
-        if (definitionUrl.startsWith("http://") || definitionUrl.startsWith("https://")) {
-            HttpUtils http = HttpUtils.http(definitionUrl);
-            if (authenticator != null) {
-                authenticator.apply(http, null);
+        if (source.docUrl.startsWith("http://") || source.docUrl.startsWith("https://")) {
+            HttpUtils http = HttpUtils.http(source.docUrl);
+
+            if (source.authenticator != null) {
+                source.authenticator.apply(http, null);
+            } else {
+                if (defaultAuthenticator != null) {
+                    defaultAuthenticator.apply(http, null);
+                }
             }
-            source = http.get();
+
+            json = http.get();
         } else {
-            source = ResourceUtil.findResourceAsString(definitionUrl);
+            json = ResourceUtil.findResourceAsString(source.docUrl);
         }
 
-        if (Utils.isEmpty(source)) {
-            log.warn("RestApiSkill: Source empty for {}", definitionUrl);
+        if (Utils.isEmpty(json)) {
+            log.warn("RestApiSkill: Source empty for {}", source.docUrl);
             return;
         }
 
-        List<ApiTool> tools = resolver.resolve(definitionUrl, source);
+        List<ApiTool> tools = resolver.resolve(source.docUrl, json);
         for (ApiTool tool : tools) {
             if (!tool.isDeprecated()) {
-                tool.setBaseUrl(apiBaseUrl);
+                tool.setBaseUrl(source.apiBaseUrl);
+                tool.setSource(source);
+
                 this.dynamicTools.put(tool.getName().toLowerCase(), tool);
             }
         }
 
-        log.info("RestApiSkill: Loaded {} tools from {}", tools.size(), definitionUrl);
+        log.info("RestApiSkill: Loaded {} tools from {}", tools.size(), source.docUrl);
     }
 
     private String formatApiDocs(Collection<ApiTool> tools) {

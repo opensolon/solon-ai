@@ -24,12 +24,14 @@ import org.noear.solon.core.util.Assert;
  * @since 3.9.1
  */
 public class ApiTool {
+    private ApiSource source;
     private String baseUrl;
     private String name;
     private String description;
     private String path;
     private String method;
     private boolean isMultipart;
+
 
     /**
      * header jsonSchema
@@ -55,6 +57,11 @@ public class ApiTool {
     private boolean isDeprecated;
 
     // --- Getter 方法 ---
+
+
+    public ApiSource getSource() {
+        return source;
+    }
 
     public String getBaseUrl() {
         return baseUrl;
@@ -117,6 +124,11 @@ public class ApiTool {
     }
 
     // --- Setter 方法 ---
+
+
+    public void setSource(ApiSource source) {
+        this.source = source;
+    }
 
     public void setBaseUrl(String baseUrl) {
         this.baseUrl = baseUrl;
