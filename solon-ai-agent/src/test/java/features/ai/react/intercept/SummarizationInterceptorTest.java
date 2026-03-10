@@ -42,7 +42,7 @@ public class SummarizationInterceptorTest {
         chatModel = LlmUtil.getChatModel();
 
         // 阈值设为 6，消息超过 6 条时触发压缩
-        interceptor = new SummarizationInterceptor(6);
+        interceptor = new SummarizationInterceptor(6,8000);
     }
 
     /**

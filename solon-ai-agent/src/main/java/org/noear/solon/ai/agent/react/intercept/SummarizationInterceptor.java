@@ -39,15 +39,17 @@ public class SummarizationInterceptor implements ReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(SummarizationInterceptor.class);
 
     private final int maxMessages;
+    protected int maxContextLength;
     private final SummarizationStrategy summarizationStrategy;
 
-    public SummarizationInterceptor(int maxMessages, SummarizationStrategy summarizationStrategy) {
+    public SummarizationInterceptor(int maxMessages, int maxContextLength, SummarizationStrategy summarizationStrategy) {
         this.maxMessages = Math.max(6, maxMessages);
+        this.maxContextLength = maxContextLength;
         this.summarizationStrategy = summarizationStrategy;
     }
 
-    public SummarizationInterceptor(int maxMessages) {
-        this(maxMessages, null);
+    public SummarizationInterceptor(int maxMessages, int maxTokens) {
+        this(maxMessages, maxTokens, null);
     }
 
     public SummarizationInterceptor() {
@@ -58,7 +60,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
          * 推荐 maxMessages: 10 - 12
          * */
 
-        this(12, null);
+        this(12, 8000,null);
     }
 
     @Override
@@ -69,8 +71,10 @@ public class SummarizationInterceptor implements ReActInterceptor {
                 .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
                 .count();
 
+        int currentContextLength = estimateContentLength(messages);
+
         // 预留缓冲，避免频繁重构 (maxMessages + 触发阈值)
-        if (messageSize <= maxMessages) return;
+        if (messageSize <= maxMessages && currentContextLength <= (maxContextLength * 0.8)) return;
 
         // 1. 提取“初心链” (The Original Intent Chain)
         List<ChatMessage> firstList = new ArrayList<>();
@@ -85,6 +89,20 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
         // 2. 确定截断起始点 (Sliding Window Start)
         int targetIdx = messages.size() - maxMessages;
+
+        // 如果是因为长度超标触发的，且当前滑动窗口依然很长，则进一步向后推移 targetIdx
+        if (currentContextLength > maxContextLength * 0.8) {
+            int runningLength = 0;
+            // 从后往前算，直到累加长度达到 maxContextLength 的一半（或者你设定的安全阈值）
+            for (int i = messages.size() - 1; i > lastFirstIdx; i--) {
+                runningLength += (messages.get(i).getContent() == null ? 0 : messages.get(i).getContent().length());
+                if (runningLength > maxContextLength * 0.5) {
+                    // 找到一个能容纳下最近上下文的临界点
+                    targetIdx = Math.min(targetIdx, i);
+                    break;
+                }
+            }
+        }
 
         // 3. 增强版原子对齐 (Atomic Alignment)
         while (targetIdx > (lastFirstIdx + 1) && targetIdx < messages.size()) {
@@ -138,6 +156,14 @@ public class SummarizationInterceptor implements ReActInterceptor {
                         trace.getAgentName(), messages.size(), compressed.size(), firstList.size());
             }
         }
+    }
+
+    private int estimateContentLength(List<ChatMessage> messages) {
+        // 简单估算：字符数 / 3 (对于中文/代码混合场景的经验值)
+        // 严谨做法：调用 chatModel.estimateTokens(messages)
+        return messages.stream()
+                .mapToInt(m -> m.getContent() == null ? 0 : m.getContent().length())
+                .sum();
     }
 
     private boolean isObservation(ChatMessage msg) {
