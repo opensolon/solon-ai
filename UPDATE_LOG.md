@@ -11,6 +11,11 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 3.9.6
+
+* 优化 solon-ai-agent SummarizationInterceptor 添加 maxContextLength 控制参数（很重要）
+* 优化 solon-ai-skill-restapi 每个 api 可以添加独立的验证机制
+
 ### 3.9.5
 
 * 新增 mcp-sdk 插件（从 solon-ai-mcp 独立出来）
