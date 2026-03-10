@@ -38,7 +38,7 @@ import java.util.stream.Collectors;
 public class SummarizationInterceptor implements ReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(SummarizationInterceptor.class);
 
-    //轻量级 6，均衡型 12， 代码专家型 15
+    //轻量级 9，均衡型 12， 代码专家型 15
     private final int maxMessages;
     //轻量级 8000，均衡型 12000，代码专家型 20000+
     private int maxContextLength;
