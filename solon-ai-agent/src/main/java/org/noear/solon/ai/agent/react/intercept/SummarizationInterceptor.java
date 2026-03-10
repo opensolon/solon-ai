@@ -38,13 +38,15 @@ import java.util.stream.Collectors;
 public class SummarizationInterceptor implements ReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(SummarizationInterceptor.class);
 
+    //轻量级 6，均衡型 12， 代码专家型 15
     private final int maxMessages;
-    protected int maxContextLength;
+    //轻量级 8000，均衡型 12000，代码专家型 20000+
+    private int maxContextLength;
     private final SummarizationStrategy summarizationStrategy;
 
     public SummarizationInterceptor(int maxMessages, int maxContextLength, SummarizationStrategy summarizationStrategy) {
         this.maxMessages = Math.max(6, maxMessages);
-        this.maxContextLength = maxContextLength;
+        this.maxContextLength = Math.max(8000, maxContextLength);
         this.summarizationStrategy = summarizationStrategy;
     }
 
