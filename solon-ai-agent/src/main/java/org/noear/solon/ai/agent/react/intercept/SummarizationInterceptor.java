@@ -90,17 +90,15 @@ public class SummarizationInterceptor implements ReActInterceptor {
         }
 
         // 2. 确定截断起始点 (Sliding Window Start)
-        int targetIdx = messages.size() - maxMessages;
+        int targetIdx = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
 
-        // 如果是因为长度超标触发的，且当前滑动窗口依然很长，则进一步向后推移 targetIdx
         if (currentContextLength > maxContextLength * 0.8) {
             int runningLength = 0;
-            // 从后往前算，直到累加长度达到 maxContextLength 的一半（或者你设定的安全阈值）
             for (int i = messages.size() - 1; i > lastFirstIdx; i--) {
                 runningLength += (messages.get(i).getContent() == null ? 0 : messages.get(i).getContent().length());
                 if (runningLength > maxContextLength * 0.5) {
-                    // 找到一个能容纳下最近上下文的临界点
-                    targetIdx = Math.min(targetIdx, i);
+                    // 确保 targetIdx 最小也是 i，但不能越过边界
+                    targetIdx = Math.max(targetIdx, i);
                     break;
                 }
             }
@@ -132,7 +130,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
 
         compressed.addAll(firstList);
 
-        if (targetIdx > (lastFirstIdx + 1)) {
+        if (targetIdx > (lastFirstIdx + 1) && targetIdx <= messages.size()) {
             List<ChatMessage> expired = messages.subList(lastFirstIdx + 1, targetIdx);
             // 过滤掉 expired 中可能存在的旧摘要标记消息，避免“摘要的摘要”产生标题堆叠
             List<ChatMessage> pureHistory = expired.stream()
