@@ -15,6 +15,10 @@
  */
 package org.noear.solon.ai.agent.react.intercept;
 
+import com.knuddels.jtokkit.Encodings;
+import com.knuddels.jtokkit.api.Encoding;
+import com.knuddels.jtokkit.api.EncodingRegistry;
+import com.knuddels.jtokkit.api.ModelType;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
@@ -38,15 +42,21 @@ import java.util.stream.Collectors;
 public class SummarizationInterceptor implements ReActInterceptor {
     private static final Logger log = LoggerFactory.getLogger(SummarizationInterceptor.class);
 
-    //轻量级 9，均衡型 12， 代码专家型 15
+    // 在类中预加载注册表
+    private static final EncodingRegistry registry = Encodings.newDefaultEncodingRegistry();
+    // 适配 GPT-4, GPT-3.5 或 DeepSeek (多数使用 cl100k_base)
+    private static final Encoding encoding = registry.getEncodingForModel(ModelType.GPT_4O);
+    private static final String META_TOKEN_SIZE = "token_size";
+
+    //轻量级 10，均衡型 13， 代码专家型 16
     private final int maxMessages;
     //轻量级 8000，均衡型 12000，代码专家型 20000+
-    private int maxContextLength;
+    private int maxTokens;
     private final SummarizationStrategy summarizationStrategy;
 
-    public SummarizationInterceptor(int maxMessages, int maxContextLength, SummarizationStrategy summarizationStrategy) {
-        this.maxMessages = Math.max(6, maxMessages);
-        this.maxContextLength = Math.max(8000, maxContextLength);
+    public SummarizationInterceptor(int maxMessages, int maxTokens, SummarizationStrategy summarizationStrategy) {
+        this.maxMessages = Math.max(10, maxMessages); // 10
+        this.maxTokens = Math.max(8000, maxTokens); // 12000
         this.summarizationStrategy = summarizationStrategy;
     }
 
@@ -62,7 +72,7 @@ public class SummarizationInterceptor implements ReActInterceptor {
          * 推荐 maxMessages: 10 - 12
          * */
 
-        this(12, 8000,null);
+        this(15, 12000,null);
     }
 
     @Override
@@ -73,10 +83,12 @@ public class SummarizationInterceptor implements ReActInterceptor {
                 .filter(m -> !m.hasMetadata(ReActAgent.META_FIRST))
                 .count();
 
-        int currentContextLength = estimateContentLength(messages);
+        int currentTokens = estimateTokens(messages);
 
         // 预留缓冲，避免频繁重构 (maxMessages + 触发阈值)
-        if (messageSize <= maxMessages && currentContextLength <= (maxContextLength * 0.8)) return;
+        if (messageSize <= maxMessages && currentTokens <= (maxTokens * 0.8)) {
+            return;
+        }
 
         // 1. 提取“初心链” (The Original Intent Chain)
         List<ChatMessage> firstList = new ArrayList<>();
@@ -92,12 +104,15 @@ public class SummarizationInterceptor implements ReActInterceptor {
         // 2. 确定截断起始点 (Sliding Window Start)
         int targetIdx = Math.max(lastFirstIdx + 1, messages.size() - maxMessages);
 
-        if (currentContextLength > maxContextLength * 0.8) {
-            int runningLength = 0;
+        if (currentTokens > maxTokens * 0.8) {
+            int runningTokens = 0;
             for (int i = messages.size() - 1; i > lastFirstIdx; i--) {
-                runningLength += (messages.get(i).getContent() == null ? 0 : messages.get(i).getContent().length());
-                if (runningLength > maxContextLength * 0.5) {
-                    // 确保 targetIdx 最小也是 i，但不能越过边界
+                ChatMessage msg = messages.get(i);
+                // 直接从 metadata 取，因为前面的 estimateTokens(messages) 已经保证了所有消息都有缓存
+                Integer cachedSize = msg.getMetadataAs(META_TOKEN_SIZE);
+                runningTokens += (cachedSize != null ? cachedSize : 0) + 4;
+
+                if (runningTokens > maxTokens * 0.5) {
                     targetIdx = Math.max(targetIdx, i);
                     break;
                 }
@@ -158,12 +173,25 @@ public class SummarizationInterceptor implements ReActInterceptor {
         }
     }
 
-    private int estimateContentLength(List<ChatMessage> messages) {
-        // 简单估算：字符数 / 3 (对于中文/代码混合场景的经验值)
-        // 严谨做法：调用 chatModel.estimateTokens(messages)
-        return messages.stream()
-                .mapToInt(m -> m.getContent() == null ? 0 : m.getContent().length())
-                .sum();
+    private int estimateTokens(List<ChatMessage> messages) {
+        int totalTokens = 0;
+        for (ChatMessage m : messages) {
+            // 尝试从元数据获取缓存值 (META_TOKEN_COUNT 可以定义在 ReActAgent 中)
+            Integer cachedCount = m.getMetadataAs(META_TOKEN_SIZE);
+
+            if (cachedCount == null) {
+                if (m.getContent() != null) {
+                    cachedCount = encoding.countTokens(m.getContent());
+                    // 将计算结果回填到消息元数据中，下次无需计算
+                    m.addMetadata(META_TOKEN_SIZE, cachedCount);
+                } else {
+                    cachedCount = 0;
+                }
+            }
+
+            totalTokens += cachedCount + 4; // Overhead
+        }
+        return totalTokens + 3;
     }
 
     private boolean isObservation(ChatMessage msg) {
