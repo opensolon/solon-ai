@@ -71,6 +71,10 @@ public class ChatConfigReadonly {
         }
     }
 
+    public long getContextLength(){
+        return config.getContextLength();
+    }
+
     public Map<String, String> getHeaders() {
         return Collections.unmodifiableMap(config.getHeaders());
     }

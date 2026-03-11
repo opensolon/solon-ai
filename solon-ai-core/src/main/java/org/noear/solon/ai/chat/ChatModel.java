@@ -179,6 +179,14 @@ public class ChatModel implements AiModel {
         }
 
         /**
+         * 使用模型
+         */
+        public Builder contextLength(long contextLength) {
+            config.setContextLength(contextLength);
+            return this;
+        }
+
+        /**
          * 头信息添加
          */
         public Builder headerSet(String key, String value) {

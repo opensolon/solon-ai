@@ -37,6 +37,7 @@ public class AiConfig {
     protected String apiKey;
     protected String provider;
     protected String model;
+    protected long contextLength;
     protected final Map<String, String> headers = new LinkedHashMap<>();
     protected String userAgent;
     protected Duration timeout = Duration.ofSeconds(60);
@@ -59,6 +60,10 @@ public class AiConfig {
 
     public String getModel() {
         return model;
+    }
+
+    public long getContextLength() {
+        return contextLength;
     }
 
     public Map<String, String> getHeaders() {
@@ -99,6 +104,10 @@ public class AiConfig {
 
     public void setModel(String model) {
         this.model = model;
+    }
+
+    public void setContextLength(long contextLength) {
+        this.contextLength = contextLength;
     }
 
     public void setHeaders(Map<String, String> headers) {
