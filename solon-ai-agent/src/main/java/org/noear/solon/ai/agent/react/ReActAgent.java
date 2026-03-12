@@ -254,7 +254,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         //添加模式技能（要在激活技能之前）
-        if(trace.getOptions().isPlanningMode()){
+        if (trace.getOptions().isPlanningMode()) {
             trace.getOptions().getModelOptions().skillAdd(new PlanSkill(trace));
         }
 
@@ -274,7 +274,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             item.target.onAgentStart(trace);
         }
 
-        if(trace.getSession().isPending() == false) {
+        if (trace.getSession().isPending() == false) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserContent());
             }
@@ -305,6 +305,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
                     // 汇总 token 使用情况
                     parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
                 }
+            }
+        } else {
+            //如果有挂起
+            if (trace.getFinalAnswer() == null) {
+                trace.setFinalAnswer(session.getPendingReason());
             }
         }
 

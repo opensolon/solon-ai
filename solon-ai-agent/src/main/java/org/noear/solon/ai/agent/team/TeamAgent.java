@@ -220,12 +220,12 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         trace.activeSkills();
 
         // 触发团队启动拦截
-        for(RankEntity<TeamInterceptor> item : options.getInterceptors()){
+        for (RankEntity<TeamInterceptor> item : options.getInterceptors()) {
             item.target.onTeamStart(trace);
         }
 
         try {
-            if(trace.getSession().isPending() == false) {
+            if (trace.getSession().isPending() == false) {
                 // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("TeamAgent [{}] starting collaboration flow...", name());
@@ -260,7 +260,13 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
                         parentTeamTrace.getMetrics().addMetrics(trace.getMetrics());
                     }
                 }
+            } else {
+                //如果有挂起
+                if (trace.getFinalAnswer() == null) {
+                    trace.setFinalAnswer(session.getPendingReason());
+                }
             }
+
 
             // 4. 结果收敛：从轨迹中提取最终答案
             String result = trace.getFinalAnswer();
