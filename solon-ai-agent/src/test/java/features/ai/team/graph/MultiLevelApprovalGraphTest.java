@@ -95,8 +95,8 @@ public class MultiLevelApprovalGraphTest {
         // --- 断言逻辑 ---
 
         // 验证 Activity 执行状态
-        Assertions.assertEquals(8000.0, session.getSnapshot().get("app_amount"));
-        Assertions.assertEquals("SUCCESS", session.getSnapshot().get("archive_status"));
+        Assertions.assertEquals(8000.0, session.getContext().get("app_amount"));
+        Assertions.assertEquals("SUCCESS", session.getContext().get("archive_status"));
 
         // 验证 Agent 路径
         Assertions.assertTrue(agentSteps.contains("finance_approver"), "8000元应由财务总监审批");

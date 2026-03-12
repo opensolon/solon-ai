@@ -48,10 +48,10 @@ public class RedisAgentSessionTest {
         RedisAgentSession session = new RedisAgentSession(testId, redisClient);
 
         Assertions.assertEquals(testId, session.getSessionId());
-        Assertions.assertNotNull(session.getSnapshot());
-        Assertions.assertEquals(testId, session.getSnapshot().getInstanceId());
+        Assertions.assertNotNull(session.getContext());
+        Assertions.assertEquals(testId, session.getContext().getInstanceId());
         // 验证 Agent.KEY_SESSION 注入
-        Assertions.assertEquals(session, session.getSnapshot().get(Agent.KEY_SESSION));
+        Assertions.assertEquals(session, session.getContext().get(Agent.KEY_SESSION));
     }
 
     @Test
@@ -64,8 +64,8 @@ public class RedisAgentSessionTest {
         // 覆盖构造函数：Redis 中存在快照的分ize
         RedisAgentSession session = new RedisAgentSession(testId, redisClient);
 
-        Assertions.assertEquals("val1", session.getSnapshot().get("key1"));
-        Assertions.assertEquals(session, session.getSnapshot().get(Agent.KEY_SESSION));
+        Assertions.assertEquals("val1", session.getContext().get("key1"));
+        Assertions.assertEquals(session, session.getContext().get(Agent.KEY_SESSION));
     }
 
     @Test
@@ -109,14 +109,14 @@ public class RedisAgentSessionTest {
     public void testUpdateSnapshot() {
         RedisAgentSession session = new RedisAgentSession(testId, redisClient);
 
-        FlowContext newCtx = session.getSnapshot();
+        FlowContext newCtx = session.getContext();
         newCtx.put("status", "running");
 
         // 执行更新
         session.updateSnapshot();
 
         // 验证内存
-        Assertions.assertEquals("running", session.getSnapshot().get("status"));
+        Assertions.assertEquals("running", session.getContext().get("status"));
 
         // 验证 Redis 持久化 (snapshotKey = instanceId + ":snapshot")
         String json = redisClient.getBucket().get(testId + ":snapshot");

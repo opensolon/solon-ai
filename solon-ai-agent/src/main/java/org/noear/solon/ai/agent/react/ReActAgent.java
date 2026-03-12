@@ -132,7 +132,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
      * 获取会话中的执行轨迹
      */
     public @Nullable ReActTrace getTrace(AgentSession session) {
-        return session.getSnapshot().getAs(config.getTraceKey());
+        return session.getContext().getAs(config.getTraceKey());
     }
 
     @Override
@@ -191,7 +191,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
      * 智能体核心调用流程：管理会话上下文、痕迹记录与拦截器触发
      */
     protected AssistantMessage call(Prompt prompt, AgentSession session, ReActOptions options) throws Throwable {
-        final FlowContext context = session.getSnapshot();
+        final FlowContext context = session.getContext();
         final TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL);
         final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
@@ -214,7 +214,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
 
         if (protocol != null) {
-            protocol.injectAgentTools(session.getSnapshot(), this, trace::addProtocolTool);
+            protocol.injectAgentTools(session.getContext(), this, trace::addProtocolTool);
         }
 
 
@@ -274,7 +274,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             item.target.onAgentStart(trace);
         }
 
-        if(trace.isPending() == false) {
+        if(trace.getSession().isPending() == false) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("ReActAgent [{}] start thinking... Prompt: {}", config.getName(), prompt.getUserContent());
             }

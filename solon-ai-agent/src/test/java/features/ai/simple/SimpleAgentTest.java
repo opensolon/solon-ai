@@ -64,7 +64,7 @@ public class SimpleAgentTest {
         Assertions.assertEquals(message.getContent(), message.getResultContent());
 
         // 方式 B：从 Session 的 Snapshot 中获取（因为配置了 outputKey）
-        String extractedData = (String) session.getSnapshot().get("extracted_resume");
+        String extractedData = (String) session.getContext().get("extracted_resume");
         System.out.println("从 Context 中读取的结果: " + extractedData);
     }
 

@@ -112,16 +112,6 @@ public class TeamTrace implements AgentTrace {
      */
     private final Map<String, Object> protocolContext = new ConcurrentHashMap<>();
 
-
-    /**
-     * 是否处于挂起状态（如：等待人工介入、异步回调或逻辑暂存）
-     */
-    private boolean pending;
-    /**
-     * 挂起原因（通常作为反馈给用户或审批者的提示信息）
-     */
-    private String pendingReason;
-
     private final Map<String, Object> extras = new ConcurrentHashMap<>();
 
     public Map<String, Object> getExtras() {
@@ -170,9 +160,7 @@ public class TeamTrace implements AgentTrace {
         this.finalAnswer = null;
 
         //每次执行重置中断状态
-        this.pending = false;
-        this.pendingReason = null;
-        ((FlowContextInternal)session.getSnapshot()).stopped(false);
+        session.pending(false, null);
     }
 
     protected void activeSkills() {
@@ -218,30 +206,44 @@ public class TeamTrace implements AgentTrace {
      * 触发协作流挂起
      *
      * @param reason 挂起原因或需要人工确认的提示词
+     * @deprecated 3.9.6 {@link AgentSession#pending(boolean, String)}
      */
+    @Deprecated
     public void pending(String reason) {
-        this.pending = true;
-        this.pendingReason = reason;
         this.finalAnswer = reason;
 
         // 自动同步中断底层流程引擎
         if (session != null) {
-            session.getSnapshot().stop();
+            session.pending(true, reason);
         }
     }
 
     /**
      * 判定当前任务是否正在挂起等待
+     *
+     * @deprecated 3.9.6 {@link AgentSession#isPending()}
      */
+    @Deprecated
     public boolean isPending() {
-        return pending || (session != null && session.getSnapshot().isStopped());
+        if (session == null) {
+            return false;
+        } else {
+            return session.isPending();
+        }
     }
 
     /**
      * 获取挂起的原因或提示信息
+     *
+     * @deprecated 3.9.6 {@link AgentSession#getPendingReason()}
      */
+    @Deprecated
     public @Nullable String getPendingReason() {
-        return pendingReason;
+        if (session == null) {
+            return null;
+        } else {
+            return session.getPendingReason();
+        }
     }
 
 
@@ -296,7 +298,7 @@ public class TeamTrace implements AgentTrace {
 
     public FlowContext getContext() {
         if (session != null) {
-            return session.getSnapshot();
+            return session.getContext();
         } else {
             return null;
         }

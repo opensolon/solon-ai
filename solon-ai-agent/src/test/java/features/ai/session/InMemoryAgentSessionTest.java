@@ -102,7 +102,7 @@ public class InMemoryAgentSessionTest {
         FlowContext context = FlowContext.of("ctx_123");
         InMemoryAgentSession session = InMemoryAgentSession.of(context);
         Assertions.assertEquals("ctx_123", session.getSessionId());
-        Assertions.assertEquals(context, session.getSnapshot());
+        Assertions.assertEquals(context, session.getContext());
         Assertions.assertEquals(session, context.get(Agent.KEY_SESSION));
     }
 

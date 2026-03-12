@@ -53,7 +53,7 @@ public class ReActAgentLoopTest {
         Assertions.assertTrue(result1.contains("卡号") || result1.contains("银行卡") || result1.contains("交易流水"),
                 "模型应该主动询问银行卡号");
 
-        FlowContext context = session.getSnapshot();
+        FlowContext context = session.getContext();
         ReActTrace trace = resp1.getTrace();
 
         Assertions.assertEquals(Agent.ID_END, trace.getRoute(), "流程应该已经标记为结束(挂起)");

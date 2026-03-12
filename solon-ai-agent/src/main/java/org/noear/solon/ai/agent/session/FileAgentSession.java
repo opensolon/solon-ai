@@ -75,7 +75,7 @@ public class FileAgentSession implements AgentSession {
         loadMessagesToCache();
 
         // 注入当前 FileAgentSession 到上下文，确保 updateSnapshot 触发的是当前实例
-        this.cache.getSnapshot().put(Agent.KEY_SESSION, this);
+        this.cache.getContext().put(Agent.KEY_SESSION, this);
     }
 
     private void loadMessagesToCache() {
@@ -149,7 +149,7 @@ public class FileAgentSession implements AgentSession {
     public void updateSnapshot() {
         try {
             // 将缓存中的快照全量持久化
-            String json = cache.getSnapshot().toJson();
+            String json = cache.getContext().toJson();
             Files.write(snapshotFile.toPath(), json.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             LOG.error("Persistence snapshot failed", e);
@@ -157,9 +157,9 @@ public class FileAgentSession implements AgentSession {
     }
 
     @Override
-    public FlowContext getSnapshot() {
+    public FlowContext getContext() {
         // 外部读写的快照对象直接来自缓存
-        return cache.getSnapshot();
+        return cache.getContext();
     }
 
     public void clear() {

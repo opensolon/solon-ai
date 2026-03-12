@@ -63,7 +63,7 @@ public class TeamAgentPersistenceHitlTest {
         teamAgent.prompt(Prompt.of("请起草一份周报内容")).session(session1).call();
 
         // 获取底层快照验证状态
-        FlowContext context1 = session1.getSnapshot();
+        FlowContext context1 = session1.getContext();
         Assertions.assertTrue(context1.isStopped(), "流程应该在产生初步结果后被拦截器挂起");
 
         // 模拟持久化：将 Context 序列化为 JSON 字符串

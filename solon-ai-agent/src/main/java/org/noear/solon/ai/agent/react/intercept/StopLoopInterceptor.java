@@ -82,7 +82,8 @@ public class StopLoopInterceptor implements ReActInterceptor {
             log.warn("ReAct Loop detected for agent [{}], injecting break command.", trace.getAgentName());
 
             // 2. 将其注入为下一次的 Observation，给模型“自省”和“总结”的机会
-            trace.pending(breakMsg);
+            trace.getSession().pending(true, breakMsg);
+            trace.setFinalAnswer(breakMsg);
 
             // 3. 清理该 trace 的历史，防止在收尾阶段再次触发
             history.clear();

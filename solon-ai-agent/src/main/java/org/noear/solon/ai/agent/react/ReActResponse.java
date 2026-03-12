@@ -51,7 +51,7 @@ public class ReActResponse implements AgentResponse {
 
     @Override
     public FlowContext getContext(){
-        return session.getSnapshot();
+        return session.getContext();
     }
 
     @Override

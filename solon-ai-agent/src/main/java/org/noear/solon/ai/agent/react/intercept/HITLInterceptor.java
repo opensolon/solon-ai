@@ -76,7 +76,7 @@ public class HITLInterceptor implements ReActInterceptor {
         // 1. 阶段：暂无决策 —— 挂起任务
         if (decision == null) {
             trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(toolName, new LinkedHashMap<>(args), comment));
-            trace.pending(comment);
+            trace.getSession().pending(true, comment);
             trace.setFinalAnswer(comment);
 
             return;

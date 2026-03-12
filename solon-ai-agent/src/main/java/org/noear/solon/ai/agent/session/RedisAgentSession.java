@@ -74,7 +74,7 @@ public class RedisAgentSession implements AgentSession {
         loadMessagesToCache();
 
         // 注入当前实例，确保外部调用 updateSnapshot 走持久化逻辑
-        this.cache.getSnapshot().put(Agent.KEY_SESSION, this);
+        this.cache.getContext().put(Agent.KEY_SESSION, this);
     }
 
     private void loadMessagesToCache() {
@@ -145,7 +145,7 @@ public class RedisAgentSession implements AgentSession {
     @Override
     public void updateSnapshot() {
         // 严格遵循原逻辑：使用 snapshotKey 持久化
-        redisClient.getBucket().store(snapshotKey, cache.getSnapshot().toJson());
+        redisClient.getBucket().store(snapshotKey, cache.getContext().toJson());
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("Session [{}] snapshot persisted to Redis.", snapshotKey);
@@ -153,7 +153,7 @@ public class RedisAgentSession implements AgentSession {
     }
 
     @Override
-    public FlowContext getSnapshot() {
-        return cache.getSnapshot();
+    public FlowContext getContext() {
+        return cache.getContext();
     }
 }

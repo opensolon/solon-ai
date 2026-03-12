@@ -79,7 +79,7 @@ public class TeamAgentHumanInTheLoopTest {
         System.out.println(">>> [阶段A结果]：\n" + firstResult);
 
         // 验证流程是否在 human_audit 处挂起
-        FlowContext context = session.getSnapshot();
+        FlowContext context = session.getContext();
         Assertions.assertTrue(context.isStopped(), "流程应在人工审核节点挂起");
         System.out.println(">>> [当前节点位置]：" + context.lastNodeId());
 

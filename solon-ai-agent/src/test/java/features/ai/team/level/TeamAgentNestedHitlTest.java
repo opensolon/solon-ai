@@ -76,7 +76,7 @@ public class TeamAgentNestedHitlTest {
         // 风格重构：agent.prompt(prompt).session(session).call()
         projectTeam.prompt(Prompt.of("开发支付模块")).session(session).call();
 
-        FlowContext context = session.getSnapshot();
+        FlowContext context = session.getContext();
         Assertions.assertTrue(context.isStopped(), "流程应在 dev_team 执行后被挂起");
 
         // --- 阶段 B：人工介入 ---

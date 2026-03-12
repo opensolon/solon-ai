@@ -45,8 +45,8 @@ public class HITL {
      * 清理状态
      */
     public static void clear(AgentSession session, HITLTask task) {
-        session.getSnapshot().remove(LAST_INTERVENED);
-        session.getSnapshot().remove(DECISION_PREFIX + task.getToolName());
+        session.getContext().remove(LAST_INTERVENED);
+        session.getContext().remove(DECISION_PREFIX + task.getToolName());
     }
 
     /**
@@ -57,7 +57,7 @@ public class HITL {
      * @param decision 决策实体（包含同意、拒绝理由或修正参数）
      */
     public static void submit(AgentSession session, String toolName, HITLDecision decision) {
-        session.getSnapshot().put(DECISION_PREFIX + toolName, decision);
+        session.getContext().put(DECISION_PREFIX + toolName, decision);
     }
 
     /**
@@ -112,14 +112,14 @@ public class HITL {
      * @return 挂起的任务实体，若无挂起则返回 null
      */
     public static HITLTask getPendingTask(AgentSession session) {
-        return session.getSnapshot().getAs(LAST_INTERVENED);
+        return session.getContext().getAs(LAST_INTERVENED);
     }
 
     public static HITLDecision getDecision(AgentSession session, HITLTask task) {
-        return session.getSnapshot().getAs(DECISION_PREFIX + task.getToolName());
+        return session.getContext().getAs(DECISION_PREFIX + task.getToolName());
     }
 
     public static HITLDecision getDecision(AgentSession session, String toolName) {
-        return session.getSnapshot().getAs(DECISION_PREFIX + toolName);
+        return session.getContext().getAs(DECISION_PREFIX + toolName);
     }
 }

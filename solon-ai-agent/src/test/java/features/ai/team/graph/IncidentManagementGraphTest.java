@@ -98,9 +98,9 @@ public class IncidentManagementGraphTest {
         System.out.println("AI 专家足迹: " + String.join(" -> ", agentSteps));
 
         // --- 断言逻辑 ---
-        Assertions.assertEquals(2, session.getSnapshot().get("incident_level"));
-        Assertions.assertEquals("level2_support", session.getSnapshot().get("target_handler"));
-        Assertions.assertEquals("CONFIRMED", session.getSnapshot().get("recovery_status"));
+        Assertions.assertEquals(2, session.getContext().get("incident_level"));
+        Assertions.assertEquals("level2_support", session.getContext().get("target_handler"));
+        Assertions.assertEquals("CONFIRMED", session.getContext().get("recovery_status"));
 
         Assertions.assertTrue(agentSteps.contains("monitor"));
         Assertions.assertTrue(agentSteps.contains("level2_support"));

@@ -82,7 +82,7 @@ public class ReasonTask implements NamedTaskComponent {
             trace.getContext().put(HITL.LAST_INTERVENED, new HITLTask(FeedbackTool.TOOL_NAME, args, warningMsg));
 
             // 2. 设为挂起状态
-            trace.pending(warningMsg);
+            trace.getSession().pending(true, warningMsg);
             trace.setFinalAnswer(warningMsg); // 让前端能展示这个询问提示
 
             LOG.info("ReActAgent [{}] paused at threshold step: {}/{}", config.getName(), currentStep, maxSteps);
@@ -231,7 +231,7 @@ public class ReasonTask implements NamedTaskComponent {
             systemPrompt += sb.toString();
         }
 
-        if (trace.isPending()) {
+        if (trace.getSession().isPending()) {
             // 如果是从挂起状态恢复（例如 HITL 后继续）
             systemPrompt += "\n\n[Human-In-The-Loop Context]\n" +
                     "用户已对你的执行流程进行了审核并准许继续。请结合最新的 Observation 反馈调整你的下一步策略。";
@@ -259,7 +259,7 @@ public class ReasonTask implements NamedTaskComponent {
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
         ChatResponse response = callWithRetry(node, trace, messages);
-        if(response == null || trace.isPending()){
+        if(response == null || trace.getSession().isPending()){
             return;
         }
 
@@ -282,7 +282,7 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onModelEnd(trace, response);
         }
 
-        if(trace.isPending()){
+        if(trace.getSession().isPending()){
             return;
         }
 
@@ -291,7 +291,7 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onReason(trace, responseMessage);
         }
 
-        if(trace.isPending()){
+        if(trace.getSession().isPending()){
             return;
         }
 
@@ -325,7 +325,7 @@ public class ReasonTask implements NamedTaskComponent {
             }
         }
 
-        if(trace.isPending()){
+        if(trace.getSession().isPending()){
             return;
         }
 
@@ -393,7 +393,7 @@ public class ReasonTask implements NamedTaskComponent {
             item.target.onModelStart(trace, req);
         }
 
-        if(trace.isPending()){
+        if(trace.getSession().isPending()){
             return null;
         }
 

@@ -85,7 +85,7 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
         }
 
         AssistantMessage message = agent.call(prompt, session, options);
-        SimpleTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+        SimpleTrace trace = session.getContext().getAs(agent.getConfig().getTraceKey());
 
         return new SimpleResponse(session, trace, message);
     }
@@ -103,7 +103,7 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
             try {
                 options.setStreamSink(sink);
                 AssistantMessage message = agent.call(prompt, session, options);
-                SimpleTrace trace = session.getSnapshot().getAs(agent.getConfig().getTraceKey());
+                SimpleTrace trace = session.getContext().getAs(agent.getConfig().getTraceKey());
 
                 SimpleResponse resp = new SimpleResponse(session, trace, message);
 

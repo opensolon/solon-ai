@@ -9,7 +9,6 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
 
@@ -47,7 +46,7 @@ public class ReActAgentDemo {
         System.out.println("\n--- 状态持久化与验证 ---");
 
         // 4. 获取执行轨迹：从 Session 中获取底层上下文进行序列化
-        FlowContext context1 = session1.getSnapshot();
+        FlowContext context1 = session1.getContext();
         String json = context1.toJson();
         System.out.println("Context JSON: " + json);
 

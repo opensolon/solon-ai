@@ -106,7 +106,7 @@ public class CustomerServiceGraphTest {
         Assertions.assertEquals("Survey_Completed", finalSolution[0], "满意度调查节点未被触发");
 
         // 验证分类网关是否生效
-        Assertions.assertEquals("technical_support", session.getSnapshot().get("handler"), "分类网关逻辑错误");
+        Assertions.assertEquals("technical_support", session.getContext().get("handler"), "分类网关逻辑错误");
     }
 
     private Agent createServiceAgent(ChatModel chatModel, String name, String role, String reply) {

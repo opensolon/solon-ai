@@ -41,13 +41,13 @@ public class ReActHitlDemo {
         String response1 = agent.call(Prompt.of("帮我查询北京天气并转账100元"), session).getContent();
         System.out.println("response1: " + response1);
 
-        if (session.getSnapshot().isStopped()) {
-            System.out.println("流程已挂起，当前节点：" + session.getSnapshot().lastNodeId());
+        if (session.getContext().isStopped()) {
+            System.out.println("流程已挂起，当前节点：" + session.getContext().lastNodeId());
         }
 
         // --- 模拟人工介入 ---
         System.out.println("\n--- 人工在 UI 界面点击了‘同意’ ---");
-        session.getSnapshot().put("approved", true);
+        session.getContext().put("approved", true);
 
         // --- 第二次执行：恢复运行 ---
         System.out.println("恢复运行...");

@@ -110,7 +110,7 @@ public class ActionTask implements NamedTaskComponent {
             item.target.onAction(trace, toolName, args);
         }
 
-        if (trace.isPending()) {
+        if (trace.getSession().isPending()) {
             return null;
         }
 
@@ -140,7 +140,7 @@ public class ActionTask implements NamedTaskComponent {
             item.target.onObservation(trace, toolName, result, durationMs);
         }
 
-        if (trace.isPending()) {
+        if (trace.getSession().isPending()) {
             return null;
         }
 

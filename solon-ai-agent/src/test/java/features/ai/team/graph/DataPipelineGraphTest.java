@@ -105,8 +105,8 @@ public class DataPipelineGraphTest {
 
         // 检测点 2: 验证 Activity 节点的执行（Activity 不在 Trace 里，看上下文和变量）
         Assertions.assertEquals(1, processedRecords[0], "Activity 节点 [quality_checkpoint] 未被触发");
-        Assertions.assertTrue(session.getSnapshot().<Boolean>getAs("is_quality_pass"), "质量检查状态未同步至上下文");
-        Assertions.assertEquals("FINISHED", session.getSnapshot().get("pipeline_status"), "最终报告节点未执行");
+        Assertions.assertTrue(session.getContext().<Boolean>getAs("is_quality_pass"), "质量检查状态未同步至上下文");
+        Assertions.assertEquals("FINISHED", session.getContext().get("pipeline_status"), "最终报告节点未执行");
 
         // 检测点 3: 验证最后一步 Agent 输出内容非空
         String lastAgentOutput = trace.getRecords().get(trace.getRecordCount() - 1).getContent();

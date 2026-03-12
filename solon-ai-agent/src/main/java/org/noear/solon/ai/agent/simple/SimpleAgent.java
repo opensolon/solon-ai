@@ -112,7 +112,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     }
 
     protected AssistantMessage call(Prompt prompt, AgentSession session, SimpleOptions options) throws Throwable {
-        final FlowContext context = session.getSnapshot();
+        final FlowContext context = session.getContext();
         final TeamProtocol protocol = context.getAs(Agent.KEY_PROTOCOL); // 从上下文获取协议
         final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
@@ -192,13 +192,13 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     private Prompt prepareAgentPrompt(SimpleTrace trace, TeamTrace parentTeamTrace, AgentSession session, Prompt originalPrompt) {
         // 1. 获取基础 System Prompt
         StringBuilder spBuf = new StringBuilder();
-        String baseSp = config.getSystemPromptFor(trace, session.getSnapshot());
+        String baseSp = config.getSystemPromptFor(trace, session.getContext());
         if (baseSp != null) {
             spBuf.append(baseSp);
         }
 
         // 2. 【核心修复】注入协议指令（断面数据：如 Coder 写的代码就在这里）
-        FlowContext context = session.getSnapshot();
+        FlowContext context = session.getContext();
         if (trace.getProtocol() != null) {
             // 调用协议注入，它会把 "## 当前接力任务断面" 附加到 spBuf 后面
             trace.getProtocol().injectAgentInstruction(context, this, config.getLocale(), spBuf);
@@ -264,7 +264,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
                         //协议工具
                         if (trace.getProtocol() != null) {
-                            trace.getProtocol().injectAgentTools(session.getSnapshot(), this, o::toolAdd);
+                            trace.getProtocol().injectAgentTools(session.getContext(), this, o::toolAdd);
                         }
 
                         o.toolContextPut(options.toolContext());

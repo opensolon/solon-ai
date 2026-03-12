@@ -103,7 +103,7 @@ public class TeamAgentExceptionTest {
             Assertions.assertTrue(e.getCause().toString().contains("节点执行异常"));
 
             // 验证快照：检查流程是否停留在发生故障的节点
-            Assertions.assertEquals("problem_node", session.getSnapshot().lastNodeId(),
+            Assertions.assertEquals("problem_node", session.getContext().lastNodeId(),
                     "快照应记录最后执行失败的节点 ID");
         }
     }

@@ -53,7 +53,8 @@ public class ReActAgentHitlTest {
                     Boolean approved = trace.getContext().getAs("is_approved");
                     if (approved == null) {
                         // 语义化中断
-                        trace.pending("等待退款批准");
+                        trace.getSession().pending(true,"等待退款批准");
+                        trace.setFinalAnswer("等待退款批准");
                     }
                 }
             }
@@ -75,11 +76,10 @@ public class ReActAgentHitlTest {
         // 调整断言：已经发生了 LLM 推理，Tokens 应该 > 0
         Assertions.assertTrue(resp.getMetrics().getTotalTokens() > 0, "应该已经产生了推理消耗");
 
-        ReActTrace state = session.getSnapshot().getAs("__" + agent.name());
-        Assertions.assertNotNull(state.getPendingReason(), "应该存在挂起的人工任务");
+        Assertions.assertNotNull(session.getPendingReason(), "应该存在挂起的人工任务");
 
         // --- 第二步：人工注入 ---
-        session.getSnapshot().put("is_approved", true);
+        session.getContext().put("is_approved", true);
 
         // --- 第三步：恢复执行 ---
         // 此时 prompt() 为空，内部会自动从 state 恢复之前的 Action 执行

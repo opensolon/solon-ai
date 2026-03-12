@@ -8,7 +8,6 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.flow.FlowContext;
@@ -61,7 +60,7 @@ public class ReActAgentHitlTest2 {
                 .getContent();
 
         // 通过 session.getSnapshot() 获取底层的 FlowContext 进行验证
-        FlowContext context = session.getSnapshot();
+        FlowContext context = session.getContext();
 
         // 验证：流程应该被拦截并停止，最后停留在工具节点
         Assertions.assertTrue(context.isStopped(), "流程应该被拦截并停止");

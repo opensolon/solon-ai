@@ -148,7 +148,7 @@ public class SequentialProtocol extends TeamProtocolBase {
     public void onAgentEnd(TeamTrace trace, Agent agent) {
         SequenceState state = getSequenceState(trace);
         String content = trace.getLastAgentContent();
-        boolean isSuccess = assessQuality(content) && trace.isPending() == false;
+        boolean isSuccess = assessQuality(content) && trace.getSession().isPending() == false;
         StageInfo info = state.stages.get(agent.name());
 
         if (isSuccess) {

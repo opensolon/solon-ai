@@ -32,7 +32,7 @@ public class TeamAgentProfileConsumerTest {
 
         // 1. 初始化会话并注入动态环境变量
         AgentSession session = InMemoryAgentSession.of("sn_2026_marketing_001");
-        session.getSnapshot().put("platform", "小红书"); // 用于动态渲染描述
+        session.getContext().put("platform", "小红书"); // 用于动态渲染描述
 
         // 2. 组建具有结构化档案的创意团队
         TeamAgent creativeTeam = TeamAgent.of(chatModel)
@@ -68,7 +68,7 @@ public class TeamAgentProfileConsumerTest {
 
         // 3. 验证动态描述渲染逻辑
         String renderedDesc = creativeTeam.getConfig().getAgentMap().get("copywriter")
-                .roleFor(session.getSnapshot());
+                .roleFor(session.getContext());
         System.out.println("--- 动态描述校验 ---");
         System.out.println("Rendered Description: " + renderedDesc);
         Assertions.assertTrue(renderedDesc.contains("小红书"), "动态职责渲染失败");

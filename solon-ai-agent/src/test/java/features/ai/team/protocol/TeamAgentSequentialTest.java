@@ -112,7 +112,7 @@ public class TeamAgentSequentialTest {
 
         TeamAgent team = TeamAgent.of(chatModel).protocol(TeamProtocols.SEQUENTIAL).agentAdd(calculator).build();
         AgentSession session = InMemoryAgentSession.of("s5");
-        session.getSnapshot().put("RATE", "0.5");
+        session.getContext().put("RATE", "0.5");
 
         // 修改调用风格
         String result = team.prompt(Prompt.of("金额 1000")).session(session).call().getContent();

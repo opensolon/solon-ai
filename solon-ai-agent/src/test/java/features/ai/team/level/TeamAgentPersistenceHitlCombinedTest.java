@@ -76,7 +76,7 @@ public class TeamAgentPersistenceHitlCombinedTest {
         // 改为链式调用
         projectTeam.prompt(Prompt.of("处理财务单据")).session(session1).call();
 
-        FlowContext context1 = session1.getSnapshot();
+        FlowContext context1 = session1.getContext();
         Assertions.assertTrue(context1.isStopped(), "流程应在 Worker 执行后被拦截器挂起");
 
         String jsonState = context1.toJson();

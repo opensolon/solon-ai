@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent;
 
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.flow.FlowContextInternal;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 
@@ -36,7 +37,50 @@ public interface AgentSession extends ChatSession, NonSerializable {
     void updateSnapshot();
 
     /**
-     * 获取当前状态快照（用于状态回溯或持久化导出）
+     * 获取会话上下文
      */
-    FlowContext getSnapshot();
+    FlowContext getContext();
+
+    /**
+     * 获取当前状态快照（用于状态回溯或持久化导出）
+     *
+     * @deprecated 3.9.6
+     */
+    @Deprecated
+    default FlowContext getSnapshot() {
+        return getContext();
+    }
+
+    //----------------
+
+    /**
+     * 挂起
+     */
+    default void pending(boolean pending, String reason) {
+        if (pending == true) {
+            getContext().stop();
+        } else {
+            ((FlowContextInternal) getContext()).stopped(false);
+        }
+
+        if (reason == null) {
+            getContext().remove("_pending_reason_");
+        } else {
+            getContext().put("_pending_reason_", reason);
+        }
+    }
+
+    /**
+     * 是否已挂起
+     */
+    default boolean isPending() {
+        return getContext().isStopped();
+    }
+
+    /**
+     * 获取挂起原因
+     */
+    default String getPendingReason() {
+        return getContext().getAs("_pending_reason_");
+    }
 }

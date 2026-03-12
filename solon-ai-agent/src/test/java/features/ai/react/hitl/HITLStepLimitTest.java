@@ -41,7 +41,7 @@ public class HITLStepLimitTest {
                 .call();
 
         // 验证被拦截：因为 currentStep 会触碰 thresholdStep (max(9, 8))
-        Assertions.assertTrue(resp1.getTrace().isPending(), "步数接近上限，应该是 Pending 状态");
+        Assertions.assertTrue(resp1.getSession().isPending(), "步数接近上限，应该是 Pending 状态");
 
         // 3. 检查 HITL 任务
         HITLTask pendingTask = HITL.getPendingTask(session);

@@ -75,7 +75,7 @@ public class SimpleTrace implements AgentTrace {
 
     public FlowContext getContext() {
         if (session != null) {
-            return session.getSnapshot();
+            return session.getContext();
         } else {
             return null;
         }

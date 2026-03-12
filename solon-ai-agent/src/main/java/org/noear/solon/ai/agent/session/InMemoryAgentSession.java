@@ -92,7 +92,7 @@ public class InMemoryAgentSession extends InMemoryChatSession implements AgentSe
     }
 
     @Override
-    public FlowContext getSnapshot() {
+    public FlowContext getContext() {
         return snapshot;
     }
 }

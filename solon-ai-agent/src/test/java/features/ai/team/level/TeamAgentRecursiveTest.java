@@ -69,8 +69,8 @@ public class TeamAgentRecursiveTest {
         projectTeam.prompt(Prompt.of(promptText)).session(session).call().getContent();
 
         // 4. 结果验证：从 session 的快照中提取 Trace
-        TeamTrace rootTrace = session.getSnapshot().getAs("__project_team");
-        TeamTrace subTrace = session.getSnapshot().getAs("__dev_team");
+        TeamTrace rootTrace = session.getContext().getAs("__project_team");
+        TeamTrace subTrace = session.getContext().getAs("__dev_team");
 
         if (rootTrace != null) {
             log.info("父团队执行路径: {}", String.join(" -> ",
@@ -137,7 +137,7 @@ public class TeamAgentRecursiveTest {
         System.out.println(result);
 
         // 5. 获取执行轨迹
-        TeamTrace rootTrace = session.getSnapshot().getAs(projectTeam.getConfig().getTraceKey());
+        TeamTrace rootTrace = session.getContext().getAs(projectTeam.getConfig().getTraceKey());
         Assertions.assertNotNull(rootTrace, "执行轨迹丢失");
 
         // 打印历史日志供分析

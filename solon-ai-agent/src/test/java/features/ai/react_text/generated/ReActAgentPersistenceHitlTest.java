@@ -61,7 +61,7 @@ public class ReActAgentPersistenceHitlTest {
         agent.call(Prompt.of(promptText), session1);
 
         // 获取快照进行状态验证
-        FlowContext context1 = session1.getSnapshot();
+        FlowContext context1 = session1.getContext();
         Assertions.assertTrue(context1.isStopped(), "流程应在 Action 节点被拦截");
         Assertions.assertEquals(ReActAgent.ID_ACTION_AFT, context1.lastNodeId());
 
@@ -100,7 +100,7 @@ public class ReActAgentPersistenceHitlTest {
                 "审批并恢复后应成功执行退款工具并返回正确结果");
 
         // 验证轨迹记录是否完整
-        ReActTrace finalTrace = session2.getSnapshot().getAs("__" + agentName);
+        ReActTrace finalTrace = session2.getContext().getAs("__" + agentName);
         Assertions.assertTrue(finalTrace.getFormattedHistory().contains("Action"), "历史记录中应包含工具执行信息");
     }
 

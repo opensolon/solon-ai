@@ -62,7 +62,7 @@ public class ReActAgentHitlTest2 {
                 .getContent();
 
         // 通过 session.getSnapshot() 获取底层的 FlowContext 进行验证
-        FlowContext context = session.getSnapshot();
+        FlowContext context = session.getContext();
 
         // 验证：流程应该被拦截并停止，最后停留在工具节点
         Assertions.assertTrue(context.isStopped(), "流程应该被拦截并停止");

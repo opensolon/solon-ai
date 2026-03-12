@@ -68,8 +68,8 @@ public class TeamAgentTransferTest {
         AgentSession session = InMemoryAgentSession.of("session_001");
         team.prompt(Prompt.of("翻译并润色：'代码构建未来'")).session(session).call();
 
-        String translateResult = session.getSnapshot().getAs("translate_result");
-        String finalReport = session.getSnapshot().getAs("final_report");
+        String translateResult = session.getContext().getAs("translate_result");
+        String finalReport = session.getContext().getAs("final_report");
 
         System.out.println("--- 步骤1产出 (translate_result): " + translateResult);
         System.out.println("--- 团队最终产出 (final_report): " + finalReport);
@@ -110,8 +110,8 @@ public class TeamAgentTransferTest {
         AgentSession session = InMemoryAgentSession.of("session_002");
         team.prompt(Prompt.of("人工智能正在改变世界")).session(session).call();
 
-        String midResult = session.getSnapshot().getAs("translate_result");
-        String finalResult = session.getSnapshot().getAs("final_result");
+        String midResult = session.getContext().getAs("translate_result");
+        String finalResult = session.getContext().getAs("final_result");
 
         System.out.println("中间翻译: " + midResult);
         System.out.println("润色结果: " + finalResult);
@@ -142,7 +142,7 @@ public class TeamAgentTransferTest {
                 .getMessage()
                 .toBean(Personnel.class);
 
-        String jsonData = session.getSnapshot().getAs("structured_data");
+        String jsonData = session.getContext().getAs("structured_data");
         System.out.println("结构化结果: " + personnel.entity_name);
         System.out.println("结构化结果: " + jsonData);
 

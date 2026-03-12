@@ -43,7 +43,7 @@ public class FileAgentSessionTest {
         ));
 
         // 修改快照数据
-        session.getSnapshot().put("user_name", "noear");
+        session.getContext().put("user_name", "noear");
         session.updateSnapshot();
 
         // 2. 模拟重启：创建新的 Session 实例指向同一目录
@@ -56,8 +56,8 @@ public class FileAgentSessionTest {
         Assertions.assertEquals("hello", messages.get(0).getContent());
 
         // 验证快照恢复
-        Assertions.assertEquals("noear", sessionRecovered.getSnapshot().get("user_name"));
-        Assertions.assertEquals(sessionRecovered, sessionRecovered.getSnapshot().get(Agent.KEY_SESSION));
+        Assertions.assertEquals("noear", sessionRecovered.getContext().get("user_name"));
+        Assertions.assertEquals(sessionRecovered, sessionRecovered.getContext().get(Agent.KEY_SESSION));
     }
 
     @Test

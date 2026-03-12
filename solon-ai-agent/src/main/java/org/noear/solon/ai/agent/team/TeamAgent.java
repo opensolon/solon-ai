@@ -102,7 +102,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
      * 获取当前会话中的团队协作踪迹（Trace）
      */
     public @Nullable TeamTrace getTrace(AgentSession session) {
-        return session.getSnapshot().getAs(config.getTraceKey());
+        return session.getContext().getAs(config.getTraceKey());
     }
 
     @Override
@@ -165,7 +165,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
      * 执行团队协作（核心生命周期管理）
      */
     protected AssistantMessage call(Prompt prompt, AgentSession session, TeamOptions options) throws Throwable {
-        final FlowContext context = session.getSnapshot();
+        final FlowContext context = session.getContext();
         final TeamTrace parentTeamTrace = TeamTrace.getCurrent(context);
 
         // 初始化或获取本次协作的轨迹快照
@@ -225,7 +225,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         }
 
         try {
-            if(trace.isPending() == false) {
+            if(trace.getSession().isPending() == false) {
                 // 3. 驱动 Flow 引擎：在协议上下文中求值执行图
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("TeamAgent [{}] starting collaboration flow...", name());

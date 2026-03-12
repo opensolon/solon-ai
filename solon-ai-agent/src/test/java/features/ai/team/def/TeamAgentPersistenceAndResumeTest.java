@@ -50,10 +50,10 @@ public class TeamAgentPersistenceAndResumeTest {
         trace.setRoute(TeamAgent.ID_SUPERVISOR);
 
         // 将轨迹存入上下文，key 遵循框架规范 "__" + teamName
-        session.getSnapshot().put("__" + teamName, trace);
+        session.getContext().put("__" + teamName, trace);
 
         // 模拟落库序列化（JSON）
-        String jsonState = session.getSnapshot().toJson();
+        String jsonState = session.getContext().toJson();
         System.out.println(">>> 阶段 A：初始状态已持久化至数据库。当前断点：" + trace.getRoute());
 
         // --- 阶段 B：从持久化数据恢复并续跑 ---
@@ -123,16 +123,16 @@ public class TeamAgentPersistenceAndResumeTest {
         AgentSession session2 = InMemoryAgentSession.of("session_2");
 
         // 分别注入私有状态
-        session1.getSnapshot().put("user_name", "张三");
-        session2.getSnapshot().put("user_name", "李四");
+        session1.getContext().put("user_name", "张三");
+        session2.getContext().put("user_name", "李四");
 
         // 执行调用
         team.prompt("谁在和你说话？").session(session1).call();
         team.prompt("谁在和你说话？").session(session2).call();
 
         Assertions.assertNotEquals(
-                session1.getSnapshot().get("user_name"),
-                session2.getSnapshot().get("user_name"),
+                session1.getContext().get("user_name"),
+                session2.getContext().get("user_name"),
                 "不同会话的私有变量必须物理隔离"
         );
     }
