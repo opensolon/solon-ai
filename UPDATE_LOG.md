@@ -15,6 +15,7 @@
 
 * 优化 solon-ai-agent SummarizationInterceptor 添加 maxContextLength 控制参数（很重要）
 * 优化 solon-ai-skill-restapi 每个 api 可以添加独立的验证机制
+* 调整 solon-ai-agent 临时挂起操作，由 XxxTrace 转到 AgentSession（更统一）
 
 ### 3.9.5
 
