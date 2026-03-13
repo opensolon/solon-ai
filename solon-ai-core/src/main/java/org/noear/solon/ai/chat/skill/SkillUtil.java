@@ -78,7 +78,7 @@ public class SkillUtil {
     private static void injectSkillInstruction(Skill skill, Prompt prompt, StringBuilder combinedInstruction) {
         String ins = skill.getInstruction(prompt);
 
-        if (Assert.isEmpty(ins) && Assert.isEmpty(skill.description())) {
+        if (Assert.isEmpty(ins)) {
             //如果指令为 null，不展示（只作工具集用）
             return;
         }
