@@ -1,9 +1,6 @@
 package features.ai.chat;
 
-import features.ai.chat.tool.Case10Tools;
-import features.ai.chat.tool.Case8Tools;
-import features.ai.chat.tool.ReturnTools;
-import features.ai.chat.tool.Tools;
+import features.ai.chat.tool.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
@@ -28,6 +25,7 @@ import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -570,5 +568,39 @@ public abstract class AbsChatTest {
         // 自动工具调用通常会产生至少 5 条消息
         Assertions.assertTrue(chatSession.getMessages().size() >= 4);
         Assertions.assertTrue(lastResp.get().getAggregationMessage().getContent().contains("晴"));
+    }
+
+    @Test
+    public void case13_time_call() throws Throwable {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolAdd(new TimeTool())
+                .build();
+
+        String time = chatModel.prompt("当前系统时间是几点？")
+                .call()
+                .getContent();
+
+        System.out.println(time);
+
+        String hour =  LocalDateTime.now().getHour() + "";
+        assert time.contains(hour);
+    }
+
+    @Test
+    public void case14_time_stream() throws Throwable {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolAdd(new TimeTool())
+                .build();
+
+        ChatResponse resp  = chatModel.prompt("当前系统时间是几点？")
+                .stream()
+                .blockLast();
+
+        AssistantMessage msg = resp.getAggregationMessage();
+
+        System.out.println(msg.getContent());
+
+        String hour =  LocalDateTime.now().getHour() + "";
+        assert msg.getContent().contains(hour);
     }
 }
