@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.agent.react;
 
-import jdk.nashorn.internal.ir.CallNode;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
