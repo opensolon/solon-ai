@@ -21,9 +21,13 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.ChatRole;
+import org.noear.solon.ai.chat.content.ContentBlock;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -38,7 +42,7 @@ import java.util.Map;
  * <p>
  * 负责构建符合 Gemini API 规范的请求 JSON，
  * 包括消息格式转换、工具定义等。
- *
+ * @author xujiaze
  * @author cwdhf
  * @since 3.1
  */
@@ -189,9 +193,34 @@ public class GeminiRequestBuilder {
      * @param message 消息
      */
     private void buildNormalMessageNode(ONode node, ChatMessage message) {
-        String content = message.getContent();
-        if (Utils.isNotEmpty(content)) {
-            node.getOrNew("parts").asArray().addNew().set("text", content);
+        if (message instanceof UserMessage && ((UserMessage) message).isMultiModal()) {
+            ONode partsArr = node.getOrNew("parts").asArray();
+            for (ContentBlock block : ((UserMessage) message).getBlocks()) {
+                if (block instanceof TextBlock) {
+                    partsArr.addNew().set("text", block.getContent());
+                } else if (block instanceof ImageBlock) {
+                    ImageBlock image = (ImageBlock) block;
+                    ONode partNode = partsArr.addNew();
+                    if (Utils.isNotEmpty(image.getData())) {
+                        // base64 内联数据 → inline_data
+                        partNode.getOrNew("inline_data").then(n -> {
+                            n.set("mime_type", image.getMimeType());
+                            n.set("data", image.getData());
+                        });
+                    } else if (Utils.isNotEmpty(image.getUrl())) {
+                        // 文件 URI → file_data
+                        partNode.getOrNew("file_data").then(n -> {
+                            n.set("mime_type", image.getMimeType());
+                            n.set("file_uri", image.getUrl());
+                        });
+                    }
+                }
+            }
+        } else {
+            String content = message.getContent();
+            if (Utils.isNotEmpty(content)) {
+                node.getOrNew("parts").asArray().addNew().set("text", content);
+            }
         }
     }
 
