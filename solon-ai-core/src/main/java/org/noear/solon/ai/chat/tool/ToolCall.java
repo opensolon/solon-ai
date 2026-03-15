@@ -23,6 +23,7 @@ import java.util.Map;
  * 聊天函数调用
  *
  * @author noear
+ * @author xujiaze
  * @since 3.1
  */
 public class ToolCall implements Serializable {
@@ -31,6 +32,10 @@ public class ToolCall implements Serializable {
     private String name;
     private String argumentsStr;
     private Map<String, Object> arguments;
+    /** 思考签名（Gemini thinking signature，用于多轮工具调用时回传）
+     * @since Google Gemini 3 models
+     */
+    private String thoughtSignature;
 
     public ToolCall() {
         //用于序列化
@@ -84,5 +89,16 @@ public class ToolCall implements Serializable {
      */
     public Map<String, Object> getArguments() {
         return arguments;
+    }
+
+    /**
+     * 思考签名（Gemini thoughtSignature，用于多轮工具调用时回传）
+     */
+    public String getThoughtSignature() {
+        return thoughtSignature;
+    }
+
+    public void setThoughtSignature(String thoughtSignature) {
+        this.thoughtSignature = thoughtSignature;
     }
 }
