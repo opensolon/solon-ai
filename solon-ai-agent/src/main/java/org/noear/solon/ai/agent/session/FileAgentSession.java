@@ -59,7 +59,7 @@ public class FileAgentSession implements AgentSession {
             try {
                 byte[] bytes = Files.readAllBytes(snapshotFile.toPath());
                 loadedSnapshot = FlowContext.fromJson(new String(bytes, StandardCharsets.UTF_8));
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 LOG.warn("Load snapshot failed, session: {}", sessionId, e);
             }
         }

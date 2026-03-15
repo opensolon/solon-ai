@@ -91,7 +91,7 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
                     })
                     .collect(Collectors.joining("\n\n---\n\n"));
 
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Recall history failed. SessionId: {}, Query: {}", __sessionId, query, e);
             return "[系统通知] 历史记忆访问受阻。请尝试基于当前已知对话继续执行。";
         }
@@ -137,7 +137,7 @@ public class VectorStoreSummarizationStrategy extends AbsSkill implements Summar
             return ChatMessage.ofSystem("--- [部分执行细节已归档至向量库，必要时请使用 recall_history 工具回溯] ---")
                     .addMetadata(ReActAgent.META_SUMMARY, 1);
 
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Failed to archive to vector store", e);
             return null;
         }

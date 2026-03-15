@@ -230,7 +230,7 @@ public class ActionTask implements NamedTaskComponent {
                         // 执行并即时处理 (优化点 1)
                         handleSingleAction(node, trace, toolName, args, lastAssistantAdded);
 
-                    } catch (Exception e) {
+                    } catch (Throwable e) {
                         // 解析异常回传 (优化点 2)
                         handleSingleObservation(node, trace, null, null, "Observation: Error parsing Action JSON: " + e.getMessage(), lastAssistantAdded);
                         foundAny = true;

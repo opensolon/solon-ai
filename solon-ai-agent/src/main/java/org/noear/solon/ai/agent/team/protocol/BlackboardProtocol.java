@@ -86,7 +86,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
                         data.set("result_" + agentName, str);
                     }
                 }
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 LOG.warn("Blackboard Protocol: Merge failed for [{}], payload: {}", agentName, rawInput);
             }
         }

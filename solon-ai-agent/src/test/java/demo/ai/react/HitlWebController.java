@@ -96,7 +96,7 @@ public class HitlWebController {
                     .call();
 
             return Result.succeed(resp.getContent());
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // 如果是拒绝产生的异常，直接返回拒绝理由
             return Result.succeed(e.getMessage());
         }

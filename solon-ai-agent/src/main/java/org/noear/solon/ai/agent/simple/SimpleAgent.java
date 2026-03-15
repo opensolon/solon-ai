@@ -286,7 +286,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         for (int i = 0; i < maxRetries; i++) {
             try {
                 return doCall(trace, session, finalPrompt, chatReq);
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 if (i == maxRetries - 1) {
                     throw new RuntimeException("SimpleAgent [" + name() + "] failed after " + maxRetries + " retries", e);
                 }

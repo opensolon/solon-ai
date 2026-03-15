@@ -67,7 +67,7 @@ public abstract class TeamProtocolBase implements TeamProtocol {
         if (start != -1 && end > start) {
             try {
                 return ONode.ofJson(content.substring(start, end + 1));
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 LOG.warn("sniffJson failed: invalid json block");
                 return new ONode();
             }

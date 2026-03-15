@@ -72,7 +72,7 @@ public class ClaudeSkillLoader {
             scanScriptsToTools(skillDir, builder);
 
             return builder.build();
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // 这里可以记录 log
             return null;
         }

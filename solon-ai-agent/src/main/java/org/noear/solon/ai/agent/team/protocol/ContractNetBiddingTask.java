@@ -104,7 +104,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
                     }
 
                     autoBidCount++;
-                } catch (Exception e) {
+                } catch (Throwable e) {
                     LOG.warn("Agent [{}] auto-bidding failed: {}", agent.name(), e.getMessage());
                 }
             }
@@ -122,7 +122,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
                 LOG.debug("TeamAgent [{}] bidding finalized. {}", config.getName(), summary);
             }
 
-        } catch (Exception e) {
+        } catch (Throwable e) {
             handleFatalError(context, e);
         }
     }
@@ -130,7 +130,7 @@ public class ContractNetBiddingTask implements NamedTaskComponent {
     /**
      * 异常熔断：招标环节核心异常时，强行终止团队任务
      */
-    private void handleFatalError(FlowContext context, Exception e) {
+    private void handleFatalError(FlowContext context, Throwable e) {
         LOG.error("ContractNet bidding task fatal error", e);
         TeamTrace trace = context.getAs(config.getTraceKey());
         if (trace != null) {

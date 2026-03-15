@@ -46,7 +46,7 @@ public interface RepositoryStorable extends Repository {
             try {
                 save(documents, progressCallback);
                 future.complete(null);
-            } catch (Exception ex) {
+            } catch (Throwable ex) {
                 future.completeExceptionally(ex);
             }
         });

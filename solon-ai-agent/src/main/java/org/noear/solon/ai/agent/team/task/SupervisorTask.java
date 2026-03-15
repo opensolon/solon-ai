@@ -97,7 +97,7 @@ public class SupervisorTask implements NamedTaskComponent {
 
             dispatch(node, context, trace);
 
-        } catch (Exception e) {
+        } catch (Throwable e) {
             handleError(context, e);
         }
     }
@@ -333,7 +333,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 }
 
                 return response;
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 if (i == maxRetries - 1) throw new RuntimeException("Supervisor call failed", e);
                 LOG.warn("Supervisor call failed, retrying ({}/{})...", i + 1, maxRetries);
                 try {
@@ -355,7 +355,7 @@ public class SupervisorTask implements NamedTaskComponent {
         }
     }
 
-    protected void handleError(FlowContext context, Exception e) {
+    protected void handleError(FlowContext context, Throwable e) {
         LOG.error("TeamAgent [{}] supervisor fatal error", config.getName(), e);
         String traceKey = context.getAs(Agent.KEY_CURRENT_TEAM_TRACE_KEY);
         TeamTrace trace = context.getAs(traceKey);
