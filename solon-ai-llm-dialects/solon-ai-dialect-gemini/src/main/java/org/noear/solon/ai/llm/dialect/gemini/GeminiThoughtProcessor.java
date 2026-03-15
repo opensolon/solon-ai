@@ -79,7 +79,21 @@ public class GeminiThoughtProcessor {
                     String argsJson = argsNode.toJson();
                     Map<String, Object> argsMap = argsNode.toBean(Map.class);
 
-                    toolCalls.add(new ToolCall(functionName, null, functionName, argsJson, argsMap));
+                    ToolCall toolCall = new ToolCall(functionName, null, functionName, argsJson, argsMap);
+
+                    // 仅第一个 functionCall part 携带 thoughtSignature（并行调用时后续 part 没有）
+                    if (toolCalls.isEmpty()) {
+                        ONode thoughtSigNode = oPart.getOrNull("thoughtSignature");
+                        if (thoughtSigNode != null) {
+                            String thoughtSignature = thoughtSigNode.getString();
+                            if (Utils.isNotEmpty(thoughtSignature)) {
+                                toolCall.setThoughtSignature(thoughtSignature);
+                                resp.thinkingSignature = thoughtSignature;
+                            }
+                        }
+                    }
+
+                    toolCalls.add(toolCall);
                 } else if (isThought) {
                     hasThoughtPart = true;
                 } else if (oPart.hasKey("text")) {

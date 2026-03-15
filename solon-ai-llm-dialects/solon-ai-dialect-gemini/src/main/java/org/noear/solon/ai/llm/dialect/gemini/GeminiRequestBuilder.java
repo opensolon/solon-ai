@@ -151,8 +151,10 @@ public class GeminiRequestBuilder {
     private void buildAssistantToolCallMessageNode(ONode node, AssistantMessage assistantMessage) {
         if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
             node.getOrNew("parts").asArray().then(n1 -> {
+                boolean[] isFirst = {true};
                 for (ToolCall call : assistantMessage.getToolCalls()) {
-                    n1.addNew().getOrNew("functionCall").then(n2 -> {
+                    ONode partNode = n1.addNew();
+                    partNode.getOrNew("functionCall").then(n2 -> {
                         n2.set("name", call.getName());
                         if (call.getArgumentsStr() != null) {
                             try {
@@ -165,6 +167,11 @@ public class GeminiRequestBuilder {
                             n2.set("args", new ONode());
                         }
                     });
+                    // thoughtSignature 位于 part 级别（functionCall 的同级），仅第一个 part 需要
+                    if (isFirst[0] && Utils.isNotEmpty(call.getThoughtSignature())) {
+                        partNode.set("thoughtSignature", call.getThoughtSignature());
+                    }
+                    isFirst[0] = false;
                 }
             });
         } else {
@@ -238,10 +245,12 @@ public class GeminiRequestBuilder {
         ONode oNode = new ONode();
         oNode.set("role", "model");
 
+        boolean[] isFirst = {true};
         oNode.getOrNew("parts").asArray().then(n1 -> {
             for (Map.Entry<String, ToolCallBuilder> kv : toolCallBuilders.entrySet()) {
                 ToolCallBuilder builder = kv.getValue();
-                n1.addNew().getOrNew("functionCall").then(n2 -> {
+                ONode partNode = n1.addNew();
+                partNode.getOrNew("functionCall").then(n2 -> {
                     n2.set("name", builder.nameBuilder.toString());
                     if (builder.argumentsBuilder.length() > 0) {
                         String argsStr = builder.argumentsBuilder.toString();
@@ -255,6 +264,11 @@ public class GeminiRequestBuilder {
                         n2.set("args", new ONode());
                     }
                 });
+                // 仅第一个 part 需要回传 thoughtSignature（并行调用时后续 part 不需要）
+                if (isFirst[0] && Utils.isNotEmpty(resp.thinkingSignature)) {
+                    partNode.set("thoughtSignature", resp.thinkingSignature);
+                }
+                isFirst[0] = false;
             }
         });
 
