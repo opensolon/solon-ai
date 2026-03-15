@@ -155,6 +155,13 @@ public class GeminiResponseParser {
                         resp.addChoice(new ChatChoice(index, created, finishReason, msg1));
                         hasChoices = true;
                     }
+
+                    // 若 finishReason 存在但 messageList 为空（如最后一帧仅含 thoughtSignature 而无文本），
+                    // 仍需补充一个空消息，以确保 finished 状态能通过 Choice 正常传递给订阅者
+                    if (Utils.isNotEmpty(finishReason) && messageList.isEmpty()) {
+                        resp.addChoice(new ChatChoice(index, created, finishReason, new AssistantMessage("")));
+                        hasChoices = true;
+                    }
                 }
             }
 
