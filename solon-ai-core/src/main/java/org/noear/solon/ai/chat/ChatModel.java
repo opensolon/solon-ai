@@ -30,6 +30,7 @@ import org.noear.solon.core.Props;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
+import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
@@ -219,6 +220,16 @@ public class ChatModel implements AiModel {
          */
         public Builder instruction(String instruction) {
             config.getModelOptions().instruction(instruction);
+            return this;
+        }
+
+        public Builder outputSchema(String outputSchema) {
+            config.getModelOptions().outputSchema(outputSchema);
+            return this;
+        }
+
+        public Builder outputSchema(Type type) {
+            config.getModelOptions().outputSchema(type);
             return this;
         }
 

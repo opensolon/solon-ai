@@ -3,6 +3,7 @@ package features.ai.chat;
 import features.ai.chat.tool.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatRequest;
@@ -585,7 +586,7 @@ public abstract class AbsChatTest {
 
         System.out.println(time);
 
-        String hour =  LocalDateTime.now().getHour() + "";
+        String hour = LocalDateTime.now().getHour() + "";
         assert time.contains(hour);
     }
 
@@ -595,7 +596,7 @@ public abstract class AbsChatTest {
                 .defaultToolAdd(new TimeTool())
                 .build();
 
-        ChatResponse resp  = chatModel.prompt("当前系统时间是几点？")
+        ChatResponse resp = chatModel.prompt("当前系统时间是几点？")
                 .stream()
                 .blockLast();
 
@@ -603,7 +604,7 @@ public abstract class AbsChatTest {
 
         System.out.println(msg.getContent());
 
-        String hour =  LocalDateTime.now().getHour() + "";
+        String hour = LocalDateTime.now().getHour() + "";
         assert msg.getContent().contains(hour);
     }
 
@@ -637,7 +638,7 @@ public abstract class AbsChatTest {
                     @Override
                     public Flux<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
                         return chain.doIntercept(req)
-                                .doOnError(e->{
+                                .doOnError(e -> {
                                     lastThrow.set(e);
                                     e.printStackTrace();
                                 });
@@ -650,14 +651,63 @@ public abstract class AbsChatTest {
                 })
                 .build();
 
-        ChatResponse resp  = chatModel.prompt("当前系统时间是几点？")
+        ChatResponse resp = chatModel.prompt("当前系统时间是几点？")
                 .stream()
-                .doOnError(e->{
+                .doOnError(e -> {
                     lastThrow.set(e);
                     e.printStackTrace();
                 })
                 .blockLast();
 
         assert lastThrow.get() != null;
+    }
+
+    // 1. 定义我们期望输出的数据结构（POJO）
+    public static class ResumeInfo {
+        public String name;
+        public int age;
+        public String email;
+        public String[] capabilities;
+    }
+
+    @Test
+    public void case17_outputSchema() throws Throwable {
+        ChatModel chatModel = getChatModelBuilder()
+                .role("专业的人事助理，擅长简历信息提取")
+                .instruction("请从用户提供的文本中提取关键信息")
+                .outputSchema(ResumeInfo.class)
+                .modelOptions(o -> o.temperature(0.1F))
+                .build();
+
+
+        // 3. 准备业务输入
+        String userInput = "你好，我是张三，今年 28 岁。我的邮箱是 zhangsan@example.com。我精通 Java, Solon 和 AI 开发。";
+
+        // 4. 创建会话（用于承载 FlowContext）
+        ChatSession session = new InMemoryChatSession("demo");
+
+        // 5. 执行调用
+        System.out.println("--- 正在提取信息 ---");
+        AssistantMessage message = chatModel.prompt(Prompt.of(userInput)).session(session).call().getMessage();
+
+        // 6. 获取结果
+        // 方式 A：从返回值获取
+        System.out.println("模型直接返回1: " + message.getContent());
+        System.out.println("模型直接返回2: " + message.getResultContent());
+
+        ONode oNodeRef = ONode.ofJson("{\n" +
+                "  \"name\": \"张三\",\n" +
+                "  \"age\": 28,\n" +
+                "  \"email\": \"zhangsan@example.com\",\n" +
+                "  \"capabilities\": [\"Java\", \"Solon\", \"AI开发\"]\n" +
+                "}");
+
+        ONode oNodeDat = ONode.ofJson(message.getResultContent());
+
+        Assertions.assertEquals(oNodeRef.get("name").getString(),
+                oNodeDat.get("name").getString());
+
+        Assertions.assertEquals(oNodeRef.get("age").getString(),
+                oNodeDat.get("age").getString());
     }
 }
