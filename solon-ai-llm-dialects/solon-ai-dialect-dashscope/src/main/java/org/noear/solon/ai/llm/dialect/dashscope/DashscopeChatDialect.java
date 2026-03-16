@@ -26,6 +26,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.net.http.HttpUtils;
 
 import java.util.Date;
 import java.util.List;
@@ -49,7 +50,21 @@ public class DashscopeChatDialect extends AbstractChatDialect {
     public static DashscopeChatDialect getInstance() {
         return instance;
     }
+    /**
+     * DashScope 流式输出由请求头控制，见官方文档：
+     * <a href="https://help.aliyun.com/zh/model-studio/stream">流式输出</a>
+     * cURL 需设置 Header 参数 X-DashScope-SSE 为 enable。
+     */
+    private static final String HEADER_DASHSCOPE_SSE = "X-DashScope-SSE";
 
+    @Override
+    public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
+        HttpUtils httpUtils = super.createHttpUtils(config, isStream);
+        if (isStream) {
+            httpUtils.header(HEADER_DASHSCOPE_SSE, "enable");
+        }
+        return httpUtils;
+    }
     /**
      * 匹配检测
      *
@@ -120,21 +135,31 @@ public class DashscopeChatDialect extends AbstractChatDialect {
 
             int index = 0;
             Date created = null;
-            for (ONode oChoice1 : oResp.get("output").get("choices").getArray()) {
-                String finish_reason = oChoice1.get("finish_reason").getString();
+            ONode oOutput = oResp.get("output");
+            // 百炼联网搜索：search_info 在 output 层级，需注入到 message 供 AbstractChatDialect 解析
+            ONode oSearchInfo = oOutput != null ? oOutput.getOrNull("search_info") : null;
+            ONode oSearchResults = (oSearchInfo != null && oSearchInfo.hasKey("search_results"))
+                    ? oSearchInfo.get("search_results") : null;
+            if (oOutput != null) {
+                for (ONode oChoice1 : oOutput.get("choices").getArray()) {
+                    String finish_reason = oChoice1.get("finish_reason").getString();
+                    ONode oMessage = oChoice1.get("message");
+                    if (oSearchResults != null) {
+                        oMessage.set("search_results", oSearchResults);
+                    }
+                    List<AssistantMessage> messageList = parseAssistantMessage(resp, oMessage);
 
-                List<AssistantMessage> messageList = parseAssistantMessage(resp, oChoice1.get("message"));
+                    for (AssistantMessage msg1 : messageList) {
+                        resp.addChoice(new ChatChoice(index, created, finish_reason, msg1));
+                    }
 
-                for (AssistantMessage msg1 : messageList) {
-                    resp.addChoice(new ChatChoice(index, created, finish_reason, msg1));
+                    if (Utils.isNotEmpty(finish_reason)) {
+                        resp.setFinished(true);
+                        resp.lastFinishReason = finish_reason;
+                    }
+
+                    index++;
                 }
-
-                if (Utils.isNotEmpty(finish_reason)) {
-                    resp.setFinished(true);
-                    resp.lastFinishReason = finish_reason;
-                }
-
-                index++;
             }
 
             if (resp.isFinished()) {
