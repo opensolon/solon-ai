@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatRequest;
 import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.interceptor.*;
 import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.session.InMemoryChatSession;
@@ -16,6 +18,7 @@ import org.noear.solon.ai.chat.skill.Skill;
 import org.noear.solon.ai.chat.skill.SkillDesc;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
 import org.noear.solon.ai.chat.tool.ToolProvider;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.rx.SimpleSubscriber;
 import org.reactivestreams.Publisher;
@@ -602,5 +605,59 @@ public abstract class AbsChatTest {
 
         String hour =  LocalDateTime.now().getHour() + "";
         assert msg.getContent().contains(hour);
+    }
+
+    @Test
+    public void case15_tool_error_call() throws Throwable {
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolAdd(new ErrorTool())
+                .build();
+
+        Throwable lastThrow = null;
+
+        try {
+            chatModel.prompt("当前系统时间是几点？")
+                    .call()
+                    .getContent();
+        } catch (Exception e) {
+            lastThrow = e;
+            e.printStackTrace();
+        }
+
+        assert lastThrow != null;
+    }
+
+    @Test
+    public void case16_tool_error_stream() throws Throwable {
+        AtomicReference<Throwable> lastThrow = new AtomicReference<>();
+
+        ChatModel chatModel = getChatModelBuilder()
+                .defaultToolAdd(new ErrorTool())
+                .defaultInterceptorAdd(new ChatInterceptor() {
+                    @Override
+                    public Flux<ChatResponse> interceptStream(ChatRequest req, StreamChain chain) {
+                        return chain.doIntercept(req)
+                                .doOnError(e->{
+                                    lastThrow.set(e);
+                                    e.printStackTrace();
+                                });
+                    }
+
+                    @Override
+                    public ToolResult interceptTool(ToolRequest req, ToolChain chain) throws Throwable {
+                        throw new IOException("不支持工具调用");
+                    }
+                })
+                .build();
+
+        ChatResponse resp  = chatModel.prompt("当前系统时间是几点？")
+                .stream()
+                .doOnError(e->{
+                    lastThrow.set(e);
+                    e.printStackTrace();
+                })
+                .blockLast();
+
+        assert lastThrow.get() != null;
     }
 }

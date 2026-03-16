@@ -242,7 +242,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     public Flux<ChatResponse> stream() {
         prepare();
 
-        return Flux.from(internalStream());
+        return internalStream();
     }
 
     private Flux<ChatResponse> internalStream() {
@@ -274,7 +274,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                         } else {
                             return Flux.error(createHttpException(resp));
                         }
-                    } catch (IOException e) {
+                    } catch (Throwable e) {
                         return Flux.error(e);
                     }
                 });
