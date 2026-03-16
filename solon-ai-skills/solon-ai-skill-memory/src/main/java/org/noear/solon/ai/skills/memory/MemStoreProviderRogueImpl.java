@@ -2,6 +2,8 @@ package org.noear.solon.ai.skills.memory;
 
 import com.yomahub.roguemap.RogueMap;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  *
  * @author noear 2026/3/4 created
@@ -23,7 +25,7 @@ public class MemStoreProviderRogueImpl implements MemStoreProvider {
 
     @Override
     public void put(String key, String val, int ttl) {
-        rogueMap.put(key, val);
+        rogueMap.put(key, val, ttl, TimeUnit.SECONDS);
         rogueMap.checkpoint();
     }
 
