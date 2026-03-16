@@ -306,9 +306,9 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         // [逻辑 3.5: 思考事件] 无论是否有 tool_calls，都先提取思考内容并触发 onThought
-        // 否则当模型返回「思考 + tool_calls」时，逻辑 4 会提前 return，导致 onThought 永远不被调用
         final String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
         final String thoughtContent;
+
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             // 原生工具模式：非思考模式 LLM 的 getReasoning 可能为空，需回退到 extractThought
             thoughtContent = Utils.isNotEmpty(responseMessage.getReasoning())
@@ -318,6 +318,7 @@ public class ReasonTask implements NamedTaskComponent {
             // 文本结构模式：按 ReAct 协议 "Thought:" 解析
             thoughtContent = extractThought(trace, clearContent);
         }
+
         if (Assert.isNotEmpty(thoughtContent)) {
             for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                 item.target.onThought(trace, thoughtContent);
