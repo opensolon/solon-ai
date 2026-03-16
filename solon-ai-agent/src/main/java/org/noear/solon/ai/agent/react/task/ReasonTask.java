@@ -313,8 +313,11 @@ public class ReasonTask implements NamedTaskComponent {
         final String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : ""; // 干净（无 think）
 
 
-        // 进一步清洗协议头（如 Thought:{...}\nAction:），提取核心思维逻辑
-        final String thoughtContent = extractThought(trace, clearContent);
+        // 思考内容来源：优先使用 getReasoning() 获取 <think> 标签内的思考（豆包/DeepSeek/Qwen 等），
+        // 否则从 clearContent 中解析 ReAct 协议 "Thought:" 标签
+        String thoughtContent = Utils.isNotEmpty(responseMessage.getReasoning())
+                ? responseMessage.getReasoning()
+                : extractThought(trace, clearContent);
 
         trace.setLastReasonMessage(responseMessage);
 
