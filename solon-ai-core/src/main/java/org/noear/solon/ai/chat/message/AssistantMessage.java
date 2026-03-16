@@ -92,7 +92,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
      * 转为 Bean（content 须是 json，否则会异常）
      */
     public <T> T toBean(Type type) {
-        return ONode.deserialize(content, type);
+        return ONode.deserialize(getJsonContent(), type);
     }
 
     /**
@@ -172,6 +172,42 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
         }
 
         return resultContent;
+    }
+
+    private transient String jsonContent;
+    public String getJsonContent() {
+        if (jsonContent == null) {
+            String txt = getResultContent();
+
+            if (Assert.isNotEmpty(txt)) {
+                txt = txt.trim();
+
+                int braceStart = txt.indexOf('{');
+                int bracketStart = txt.indexOf('[');
+
+                int startIndex;
+                if (braceStart != -1 && bracketStart != -1) {
+                    startIndex = Math.min(braceStart, bracketStart);
+                } else {
+                    startIndex = Math.max(braceStart, bracketStart);
+                }
+
+                int braceEnd = txt.lastIndexOf('}');
+                int bracketEnd = txt.lastIndexOf(']');
+
+                int endIndex = Math.max(braceEnd, bracketEnd);
+
+                if (startIndex != -1 && endIndex != -1 && endIndex > startIndex) {
+                    jsonContent = txt.substring(startIndex, endIndex + 1);
+                } else {
+                    jsonContent = txt;
+                }
+            } else {
+                jsonContent = "";
+            }
+        }
+
+        return jsonContent;
     }
 
     /**

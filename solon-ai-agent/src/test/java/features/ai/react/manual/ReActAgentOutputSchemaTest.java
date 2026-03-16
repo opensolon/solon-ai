@@ -70,7 +70,7 @@ public class ReActAgentOutputSchemaTest {
                 "  \"capabilities\": [\"Java\", \"Solon\", \"AI开发\"]\n" +
                 "}");
 
-        ONode oNodeDat = ONode.ofJson(message.getResultContent());
+        ONode oNodeDat = ONode.ofJson(message.getJsonContent());
 
         Assertions.assertEquals(oNodeRef.get("name").getString(),
                 oNodeDat.get("name").getString());

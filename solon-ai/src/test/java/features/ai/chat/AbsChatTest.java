@@ -693,7 +693,7 @@ public abstract class AbsChatTest {
         // 6. 获取结果
         // 方式 A：从返回值获取
         System.out.println("模型直接返回1: " + message.getContent());
-        System.out.println("模型直接返回2: " + message.getResultContent());
+        System.out.println("模型直接返回2: " + message.getJsonContent());
 
         ONode oNodeRef = ONode.ofJson("{\n" +
                 "  \"name\": \"张三\",\n" +
@@ -702,7 +702,7 @@ public abstract class AbsChatTest {
                 "  \"capabilities\": [\"Java\", \"Solon\", \"AI开发\"]\n" +
                 "}");
 
-        ONode oNodeDat = ONode.ofJson(message.getResultContent());
+        ONode oNodeDat = ONode.ofJson(message.getJsonContent());
 
         Assertions.assertEquals(oNodeRef.get("name").getString(),
                 oNodeDat.get("name").getString());
