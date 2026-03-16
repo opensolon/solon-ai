@@ -302,27 +302,20 @@ public class ReasonTask implements NamedTaskComponent {
             return;
         }
 
-        // [逻辑 4: 路由分发 - 基于原生工具调用协议]
-        if (Assert.isNotEmpty(responseMessage.getToolCalls())) {
-            trace.setLastReasonMessage(responseMessage);
-            trace.setRoute(ReActAgent.ID_ACTION);
-            return;
+        // [逻辑 3.5: 思考事件] 无论是否有 tool_calls，都先提取思考内容并触发 onThought
+        // 否则当模型返回「思考 + tool_calls」时，逻辑 4 会提前 return，导致 onThought 永远不被调用
+        final String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
+        final String thoughtContent;
+        if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
+            // 原生工具模式：非思考模式 LLM 的 getReasoning 可能为空，需回退到 extractThought
+            thoughtContent = Utils.isNotEmpty(responseMessage.getReasoning())
+                    ? responseMessage.getReasoning()
+                    : extractThought(trace, clearContent);
+        } else {
+            // 文本结构模式：按 ReAct 协议 "Thought:" 解析
+            thoughtContent = extractThought(trace, clearContent);
         }
-
-        // [逻辑 5: 路由判断 - 文本 ReAct 协议解析]
-        final String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : ""; // 干净（无 think）
-
-
-        // 思考内容来源：优先使用 getReasoning() 获取 <think> 标签内的思考（豆包/DeepSeek/Qwen 等），
-        // 否则从 clearContent 中解析 ReAct 协议 "Thought:" 标签
-        String thoughtContent = Utils.isNotEmpty(responseMessage.getReasoning())
-                ? responseMessage.getReasoning()
-                : extractThought(trace, clearContent);
-
-        trace.setLastReasonMessage(responseMessage);
-
-        // 触发思考事件（仅在存在有效思考文本时通知）
-        if(Assert.isNotEmpty(thoughtContent)) {
+        if (Assert.isNotEmpty(thoughtContent)) {
             for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
                 item.target.onThought(trace, thoughtContent);
             }
@@ -332,6 +325,15 @@ public class ReasonTask implements NamedTaskComponent {
             return;
         }
 
+        trace.setLastReasonMessage(responseMessage);
+
+        // [逻辑 4: 路由分发 - 基于原生工具调用协议]
+        if (Assert.isNotEmpty(responseMessage.getToolCalls())) {
+            trace.setRoute(ReActAgent.ID_ACTION);
+            return;
+        }
+
+        // [逻辑 5: 路由判断 - 文本 ReAct 协议解析]
         if (trace.getConfig().getStyle() == ReActStyle.NATIVE_TOOL) {
             if (Assert.isNotEmpty(clearContent)) {
                 trace.setRoute(Agent.ID_END);
