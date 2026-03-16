@@ -95,6 +95,20 @@ public class AnthropicChatDialect extends AbstractChatDialect {
         return httpUtils;
     }
 
+
+//    @Override
+//    public void prepareOutputSchemaInstruction(ChatOptions options, StringBuilder instructionBuilder) {
+//        instructionBuilder.append("\n\n## [IMPORTANT: OUTPUT FORMAT]\n")
+//                .append("Format your response as a JSON object strictly following this schema:\n")
+//                .append("<output_schema>\n").append(options.outputSchema()).append("\n</output_schema>\n")
+//                .append("Output only the raw JSON, beginning with '{' and ending with '}'.");
+//    }
+
+    @Override
+    public void prepareOutputFormatOptions(ChatOptions options) {
+
+    }
+
     @Override
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         return responseParser.parseResponse(resp, json);

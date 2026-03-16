@@ -20,6 +20,7 @@ import org.noear.solon.ai.chat.tool.*;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.Preview;
 
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -42,6 +43,7 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
     private String role;
     private String instruction;
     private String systemPrompt;
+    private String outputSchema;
 
     /**
      * 角色
@@ -85,6 +87,20 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
      */
     public ChatOptions systemPrompt(String systemPrompt) {
         this.systemPrompt = systemPrompt;
+        return this;
+    }
+
+    public String outputSchema() {
+        return outputSchema;
+    }
+
+    public ChatOptions outputSchema(String val) {
+        this.systemPrompt = val;
+        return this;
+    }
+
+    public ChatOptions outputSchema(Type type) {
+        this.systemPrompt = ToolSchemaUtil.buildOutputSchema(type);
         return this;
     }
 

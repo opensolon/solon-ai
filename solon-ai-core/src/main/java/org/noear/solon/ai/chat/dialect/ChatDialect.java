@@ -61,6 +61,14 @@ public interface ChatDialect extends AiModelDialect {
     HttpUtils createHttpUtils(ChatConfig config, boolean isStream);
 
     /**
+     * 准备输出架构
+     */
+    void prepareOutputSchemaInstruction(String outputSchema, StringBuilder instructionBuilder);
+    void prepareOutputFormatOptions(ChatOptions options);
+
+
+
+    /**
      * 构建请求数据
      *
      * @param config   聊天配置

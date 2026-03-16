@@ -191,34 +191,37 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
      */
     private Prompt prepareAgentPrompt(SimpleTrace trace, TeamTrace parentTeamTrace, AgentSession session, Prompt originalPrompt) {
         // 1. 获取基础 System Prompt
-        StringBuilder spBuf = new StringBuilder();
+        StringBuilder systemPromptBuf = new StringBuilder();
         String baseSp = config.getSystemPromptFor(trace, session.getContext());
         if (baseSp != null) {
-            spBuf.append(baseSp);
+            systemPromptBuf.append(baseSp);
         }
 
         // 2. 【核心修复】注入协议指令（断面数据：如 Coder 写的代码就在这里）
         FlowContext context = session.getContext();
         if (trace.getProtocol() != null) {
             // 调用协议注入，它会把 "## 当前接力任务断面" 附加到 spBuf 后面
-            trace.getProtocol().injectAgentInstruction(context, this, config.getLocale(), spBuf);
+            trace.getProtocol().injectAgentInstruction(context, this, config.getLocale(), systemPromptBuf);
         }
 
         // 3. 注入 JSON Schema 指令
         if (Assert.isNotEmpty(config.getOutputSchema())) {
-            spBuf.append("\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n")
-                    .append("Please provide the response in JSON format strictly following this schema:\n")
-                    .append(config.getOutputSchema());
+            config.getChatModel().getDialect().prepareOutputSchemaInstruction(
+                    config.getOutputSchema(),
+                    systemPromptBuf);
+//            spBuf.append("\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n")
+//                    .append("Please provide the response in JSON format strictly following this schema:\n")
+//                    .append(config.getOutputSchema());
         }
 
         if (LOG.isTraceEnabled()) {
-            LOG.trace("SimpleAgent SystemPrompt rendered for trace [{}]: {}", name(), spBuf);
+            LOG.trace("SimpleAgent SystemPrompt rendered for trace [{}]: {}", name(), systemPromptBuf);
         }
 
         List<ChatMessage> messages = new ArrayList<>();
 
-        if (spBuf.length() > 0) {
-            messages.add(ChatMessage.ofSystem(spBuf.toString().trim()));
+        if (systemPromptBuf.length() > 0) {
+            messages.add(ChatMessage.ofSystem(systemPromptBuf.toString().trim()));
         }
 
         // 加载限定窗口大小的历史记录
@@ -273,7 +276,8 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
                         options.interceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
 
                         if (Assert.isNotEmpty(config.getOutputSchema())) {
-                            o.optionSet("response_format", Utils.asMap("type", "json_object"));
+                            config.getChatModel().getDialect().prepareOutputFormatOptions(o);
+                            //o.optionSet("response_format", Utils.asMap("type", "json_object"));
                         }
 
                         o.autoToolCall(options.isAutoToolCall());

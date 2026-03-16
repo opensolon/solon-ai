@@ -194,67 +194,70 @@ public class ReasonTask implements NamedTaskComponent {
         }
 
         // [逻辑 2: 提示词工程] 融合系统角色、执行计划、输出格式约束及协议指令
-        String systemPrompt = config.getSystemPromptFor(trace, context);
+        StringBuilder systemPromptBuf = new StringBuilder();
+        String baseSp = config.getSystemPromptFor(trace, context);
+        if (baseSp != null) {
+            systemPromptBuf.append(baseSp);
+        }
 
         if (trace.getOptions().isPlanningMode() && trace.hasPlans()) {
-            StringBuilder sb = new StringBuilder("\n\n[执行计划进度看板]\n");
+            systemPromptBuf.append("\n\n[执行计划进度看板]\n");
+
             List<String> plans = trace.getPlans();
             int currIdx = trace.getPlanIndex();
             int total = plans.size();
 
             for (int i = 0; i < total; i++) {
                 String status = (i < currIdx) ? "[√] " : (i == currIdx ? "[●] " : "[ ] ");
-                sb.append(i + 1).append(". ").append(status).append(plans.get(i)).append("\n");
+                systemPromptBuf.append(i + 1).append(". ").append(status).append(plans.get(i)).append("\n");
             }
 
-            sb.append("\n**计划进度同步协议 (Plan Sync Protocol)：**\n");
+            systemPromptBuf.append("\n**计划进度同步协议 (Plan Sync Protocol)：**\n");
             if (currIdx < total) {
                 int currentStepNum = currIdx + 1;
                 int nextStepNum = currIdx + 2;
 
-                sb.append("- **当前状态**: 你正在执行步骤 [").append(currentStepNum).append("]。\n");
-                sb.append("- **正常推进**: 步骤完成后，若结果符合预期，必须调用 `update_plan_progress` 并将 `next_plan_index` 设为 `").append(nextStepNum).append("` ");
+                systemPromptBuf.append("- **当前状态**: 你正在执行步骤 [").append(currentStepNum).append("]。\n");
+                systemPromptBuf.append("- **正常推进**: 步骤完成后，若结果符合预期，必须调用 `update_plan_progress` 并将 `next_plan_index` 设为 `").append(nextStepNum).append("` ");
 
                 if (currIdx == total - 1) {
-                    sb.append("(标志所有计划已达成)。\n");
+                    systemPromptBuf.append("(标志所有计划已达成)。\n");
                 } else {
-                    sb.append("(切换至下一环节)。\n");
+                    systemPromptBuf.append("(切换至下一环节)。\n");
                 }
 
                 // 新增：修订引导，防止盲目推进
-                sb.append("- **动态调整**: 若观察结果（Observation）显示原计划已不可行，必须优先调用 `revise_plan` 修正后续步骤，严禁强行进入错误环节。\n");
-                sb.append("- **禁止跳步**: 在更新进度前，禁止直接提供最终回答。");
+                systemPromptBuf.append("- **动态调整**: 若观察结果（Observation）显示原计划已不可行，必须优先调用 `revise_plan` 修正后续步骤，严禁强行进入错误环节。\n");
+                systemPromptBuf.append("- **禁止跳步**: 在更新进度前，禁止直接提供最终回答。");
             } else {
-                sb.append("- **目标达成**: 计划看板已全部标记为 [√]。请综合上述执行过程中的所有观察结果，直接给出最终的详细回答。");
+                systemPromptBuf.append("- **目标达成**: 计划看板已全部标记为 [√]。请综合上述执行过程中的所有观察结果，直接给出最终的详细回答。");
             }
 
-            systemPrompt += sb.toString();
         }
 
         if (trace.getSession().isPending()) {
             // 如果是从挂起状态恢复（例如 HITL 后继续）
-            systemPrompt += "\n\n[Human-In-The-Loop Context]\n" +
-                    "用户已对你的执行流程进行了审核并准许继续。请结合最新的 Observation 反馈调整你的下一步策略。";
+            systemPromptBuf.append("\n\n[Human-In-The-Loop Context]\n" +
+                    "用户已对你的执行流程进行了审核并准许继续。请结合最新的 Observation 反馈调整你的下一步策略。");
         }
 
         if (Assert.isNotEmpty(trace.getOptions().getOutputSchema())) {
-            systemPrompt += "\n\n[IMPORTANT: OUTPUT FORMAT REQUIREMENT]\n" +
-                    "Please provide the Final Answer strictly following this schema:\n" +
-                    trace.getOptions().getOutputSchema();
+            config.getChatModel().getDialect().prepareOutputSchemaInstruction(
+                    trace.getOptions().getOutputSchema(),
+                    systemPromptBuf);
         }
 
         if (trace.getProtocol() != null) {
-            StringBuilder sb = new StringBuilder(systemPrompt);
-            trace.getProtocol().injectAgentInstruction(context, agent, config.getLocale(), sb);
-            systemPrompt = sb.toString();
+            trace.getProtocol().injectAgentInstruction(context, agent, config.getLocale(),
+                    systemPromptBuf);
         }
 
         if (LOG.isTraceEnabled()) {
-            LOG.trace("ReActAgent SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), systemPrompt);
+            LOG.trace("ReActAgent SystemPrompt rendered for trace [{}]: {}", trace.getAgentName(), systemPromptBuf);
         }
 
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.ofSystem(systemPrompt));
+        messages.add(ChatMessage.ofSystem(systemPromptBuf.toString()));
         messages.addAll(trace.getWorkingMemory().getMessages());
 
         // [逻辑 3: 模型交互] 执行物理请求并触发模型响应相关的拦截器
@@ -383,7 +386,8 @@ public class ReasonTask implements NamedTaskComponent {
                     trace.getOptions().getInterceptors().forEach(item -> o.interceptorAdd(item.index, item.target));
 
                     if (trace.getOptions().getOutputSchema() != null) {
-                        o.optionSet("response_format", Utils.asMap("type", "json_object"));
+                        config.getChatModel().getDialect().prepareOutputFormatOptions(o);
+                        //o.optionSet("response_format", Utils.asMap("type", "json_object"));
                     }
 
                     o.optionSet(trace.getOptions().getModelOptions().options());

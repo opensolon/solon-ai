@@ -64,6 +64,10 @@ public class ChatModel implements AiModel {
 
     }
 
+    public ChatDialect getDialect() {
+        return dialect;
+    }
+
     /**
      * 提示语
      *

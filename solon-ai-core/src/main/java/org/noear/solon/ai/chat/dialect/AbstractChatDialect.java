@@ -26,6 +26,7 @@ import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 
@@ -58,6 +59,19 @@ public abstract class AbstractChatDialect implements ChatDialect {
         httpUtils.headers(config.getHeaders());
 
         return httpUtils;
+    }
+
+    @Override
+    public void prepareOutputSchemaInstruction(String outputSchema, StringBuilder instructionBuilder) {
+        instructionBuilder.append("\n\n## [IMPORTANT: OUTPUT FORMAT]\n")
+                .append("Format your response as a JSON object strictly following this schema:\n")
+                .append("<output_schema>\n").append(outputSchema).append("\n</output_schema>\n")
+                .append("Output only the raw JSON, beginning with '{' and ending with '}'.");
+    }
+
+    @Override
+    public void prepareOutputFormatOptions(ChatOptions options) {
+        options.optionSet("response_format", Utils.asMap("type", "json_object"));
     }
 
     protected void buildAssistantMessageNodeDo(ChatConfig config, ONode oNode, AssistantMessage msg) {

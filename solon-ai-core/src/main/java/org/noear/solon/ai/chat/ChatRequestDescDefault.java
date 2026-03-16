@@ -144,6 +144,11 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
                 }
             }
 
+            if(Assert.isNotEmpty(options.outputSchema())) {
+                dialect.prepareOutputSchemaInstruction(options.outputSchema(), instructionBuilder);
+                dialect.prepareOutputFormatOptions(options);
+            }
+
             if (originalPrompt != null && Assert.isNotEmpty(options.toolContext())) {
                 originalPrompt.attrs().putAll(options.toolContext());
             }
