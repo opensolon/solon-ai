@@ -15,7 +15,9 @@
  */
 package org.noear.solon.ai.chat.dialect;
 
+import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
+import org.noear.snack4.Options;
 import org.noear.snack4.json.JsonReader;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.content.ContentBlock;
@@ -29,6 +31,8 @@ import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.net.http.impl.HttpSslSupplierAny;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -39,6 +43,8 @@ import java.util.*;
  * @since 3.1
  */
 public abstract class AbstractChatDialect implements ChatDialect {
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractChatDialect.class);
+
     public HttpUtils createHttpUtils(ChatConfig config, boolean isStream) {
         HttpUtils httpUtils = HttpUtils.http(config.getApiUrl())
                 .ssl(HttpSslSupplierAny.getInstance())
@@ -348,17 +354,24 @@ public abstract class AbstractChatDialect implements ChatDialect {
         String argStr = n1fArgs.getString();
 
         if (n1fArgs.isString()) {
-            //有可能是 json string（如果不是不用管，可能只是流的中间消息）
+            //有可能是 json string（还可能只是流的中间消息）
             if (hasNestedJsonBlock(argStr)) {
-                JsonReader reader = new JsonReader(argStr);
+                JsonReader reader = new JsonReader(argStr, Options.of(Feature.Read_AutoRepair));
                 n1fArgs = reader.readLast();
+
+                if (n1fArgs == null) {
+                    LOG.warn("Parse function arguments failed: {}", argStr);
+                }
             }
         }
 
         Map<String, Object> argMap = null;
-        if (n1fArgs.isObject()) {
-            argMap = n1fArgs.toBean(Map.class);
+        if (n1fArgs != null) {
+            if (n1fArgs.isObject()) {
+                argMap = n1fArgs.toBean(Map.class);
+            }
         }
+
         return new ToolCall(index, callId, name, argStr, argMap);
     }
 

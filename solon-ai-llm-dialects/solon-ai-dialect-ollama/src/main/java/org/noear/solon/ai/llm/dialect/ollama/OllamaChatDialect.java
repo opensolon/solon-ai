@@ -15,7 +15,10 @@
  */
 package org.noear.solon.ai.llm.dialect.ollama;
 
+import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
+import org.noear.snack4.Options;
+import org.noear.snack4.json.JsonReader;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.AiUsage;
@@ -33,6 +36,8 @@ import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.DateUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Date;
 import java.util.List;
@@ -45,6 +50,8 @@ import java.util.Map;
  * @since 3.1
  */
 public class OllamaChatDialect extends AbstractChatDialect {
+    private static final Logger LOG = LoggerFactory.getLogger(OllamaChatDialect.class);
+
     private static OllamaChatDialect instance = new OllamaChatDialect();
 
     public static OllamaChatDialect getInstance() {
@@ -162,16 +169,24 @@ public class OllamaChatDialect extends AbstractChatDialect {
         String index = name;
 
         if (n1fArgs.isValue()) {
-            //有可能是 json string
+            //有可能是 json string（还可能只是流的中间消息）
             if (hasNestedJsonBlock(argStr)) {
-                n1fArgs = ONode.ofJson(argStr);
+                JsonReader reader = new JsonReader(argStr, Options.of(Feature.Read_AutoRepair));
+                n1fArgs = reader.readLast();
+
+                if (n1fArgs == null) {
+                    LOG.warn("Parse function arguments failed: {}", argStr);
+                }
             }
         }
 
         Map<String, Object> argMap = null;
-        if (n1fArgs.isObject()) {
-            argMap = n1fArgs.toBean(Map.class);
+        if (n1fArgs != null) {
+            if (n1fArgs.isObject()) {
+                argMap = n1fArgs.toBean(Map.class);
+            }
         }
+
         return new ToolCall(index, callId, name, argStr, argMap);
     }
 }
