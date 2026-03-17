@@ -26,6 +26,7 @@ import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -651,11 +652,14 @@ public abstract class AbsChatTest {
                 })
                 .build();
 
-        ChatResponse resp = chatModel.prompt("当前系统时间是几点？")
+        chatModel.prompt("当前系统时间是几点？")
                 .stream()
                 .doOnError(e -> {
                     lastThrow.set(e);
                     e.printStackTrace();
+                })
+                .onErrorResume(err->{
+                    return Mono.empty();
                 })
                 .blockLast();
 
