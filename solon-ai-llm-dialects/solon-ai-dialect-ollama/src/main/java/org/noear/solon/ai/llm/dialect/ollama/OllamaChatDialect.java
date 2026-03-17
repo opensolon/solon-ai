@@ -175,7 +175,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
                 n1fArgs = reader.readLast();
 
                 if (n1fArgs == null) {
-                    LOG.warn("Parse function arguments failed: {}", argStr);
+                    LOG.warn("Parse tool arguments failed: {}", argStr);
                 }
             }
         }

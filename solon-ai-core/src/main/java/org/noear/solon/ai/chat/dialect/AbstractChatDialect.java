@@ -360,7 +360,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 n1fArgs = reader.readLast();
 
                 if (n1fArgs == null) {
-                    LOG.warn("Parse function arguments failed: {}", argStr);
+                    LOG.warn("Parse tool arguments failed: {}", argStr);
                 }
             }
         }
