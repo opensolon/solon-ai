@@ -13,9 +13,20 @@
 
 ### 3.9.6
 
-* 优化 solon-ai-agent SummarizationInterceptor 添加 maxContextLength 控制参数（很重要）
+* 添加 solon-ai-core ChatModel.outputSchema 配置支持（且与 Agent 统一基于方言实现，各方言可定制）
+* 添加 solon-ai-core ChatModel.contextLength 配置支持（为 Agent 方便自动计算限制数）
+* 添加 solon-ai-core AssistantMessage.getJsonContent 方法
+* 添加 solon-ai-dialect-gemini tool-call 的思考签名支持
+* 优化 solon-ai-core AbstractChatDialect 解析 tool 参数的兼容性
+* 优化 solon-ai-dialect-dashscope 方言 支持流式传输与百炼联网搜索
+* 优化 solon-ai-dialect-gemini 特定 provider 结束时返回 content 为空的消息才设置finishReason 导致结束标志被提前过滤
+* 优化 solon-ai-agent ReActAgent onThought 事件，优先使用 getReasoning 获取 <think> 思考内容
+* 优化 solon-ai-agent ReActAgent SummarizationInterceptor 添加 maxContextLength 控制参数（很重要）
+* 优化 solon-ai-agent 流式处理 `catch (Exception`，换成 `catch (Throwable`
 * 优化 solon-ai-skill-restapi 每个 api 可以添加独立的验证机制
 * 调整 solon-ai-agent 临时挂起操作，由 XxxTrace 转到 AgentSession（更统一）
+* 调整 solon-ai-core Skill 的激活逻辑，如果 getInstruction 为空，则不进入 SystemPrompt（之前还要 description 为空）
+* 修复 solon-ai-agent ReActAgent 思考事件触发逻辑，确保在所有情况下都被调用
 
 ### 3.9.5
 
