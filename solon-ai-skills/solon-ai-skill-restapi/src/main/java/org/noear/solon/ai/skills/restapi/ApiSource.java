@@ -24,8 +24,24 @@ import java.util.Map;
  * @since 3.9.6
  */
 public class ApiSource {
-    public String docUrl;
-    public String apiBaseUrl;
-    public Map<String, String> headers;
-    public ApiAuthenticator authenticator;
+    protected String docUrl;
+    protected String apiBaseUrl;
+    protected Map<String, String> headers;
+    protected ApiAuthenticator authenticator;
+
+    public String getDocUrl() {
+        return docUrl;
+    }
+
+    public String getApiBaseUrl() {
+        return apiBaseUrl;
+    }
+
+    public Map<String, String> getHeaders() {
+        return headers;
+    }
+
+    public ApiAuthenticator getAuthenticator() {
+        return authenticator;
+    }
 }

@@ -86,10 +86,11 @@ public class RestApiSkill extends AbsSkill {
 
     /**
      * @deprecated 3.9.6 {@link #defaultAuthenticator(ApiAuthenticator)}
-     * */
+     *
+     */
     @Deprecated
     public RestApiSkill authenticator(ApiAuthenticator authenticator) {
-       return defaultAuthenticator(authenticator);
+        return defaultAuthenticator(authenticator);
     }
 
     public RestApiSkill resolver(ApiResolver resolver) {
@@ -126,14 +127,25 @@ public class RestApiSkill extends AbsSkill {
      * @param apiBaseUrl 实际接口执行基地址
      */
     public RestApiSkill addApi(String docUrl, String apiBaseUrl, Map<String, String> headers, ApiAuthenticator authenticator) {
-        try {
-            ApiSource source = new ApiSource();
-            source.docUrl = docUrl;
-            source.apiBaseUrl = apiBaseUrl;
-            source.headers = headers;
-            source.authenticator = authenticator;
 
-            loadApiFromDefinition(source);
+        ApiSource source = new ApiSource();
+        source.docUrl = docUrl;
+        source.apiBaseUrl = apiBaseUrl;
+        source.headers = headers;
+        source.authenticator = authenticator;
+
+        return addApi(source);
+    }
+
+
+    /**
+     * 添加 API 组
+     *
+     * @param apiSource 接口源
+     */
+    public RestApiSkill addApi(ApiSource apiSource) {
+        try {
+            loadApiFromDefinition(apiSource);
             return this;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -318,7 +330,7 @@ public class RestApiSkill extends AbsSkill {
 
         // 3. 认证处理
 
-        if(tool.getSource() != null && Assert.isNotEmpty(tool.getSource().headers)){
+        if (tool.getSource() != null && Assert.isNotEmpty(tool.getSource().headers)) {
             http.headers(tool.getSource().headers);
         }
 
@@ -373,7 +385,7 @@ public class RestApiSkill extends AbsSkill {
         if (source.docUrl.startsWith("http://") || source.docUrl.startsWith("https://")) {
             HttpUtils http = HttpUtils.http(source.docUrl);
 
-            if(Assert.isNotEmpty(source.headers)){
+            if (Assert.isNotEmpty(source.headers)) {
                 http.headers(source.headers);
             }
 
