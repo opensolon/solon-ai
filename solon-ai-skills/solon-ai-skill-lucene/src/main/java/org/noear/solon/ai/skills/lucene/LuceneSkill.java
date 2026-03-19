@@ -24,7 +24,6 @@ import org.apache.lucene.search.*;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
 import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
 import org.slf4j.Logger;
@@ -96,7 +95,7 @@ public class LuceneSkill extends AbsSkill {
         return this;
     }
 
-    private Path getRootPath(String __cwd) {
+    private Path getWorkPath(String __cwd) {
         String path = (__cwd != null) ? __cwd : workDir;
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
@@ -116,7 +115,7 @@ public class LuceneSkill extends AbsSkill {
     @ToolMapping(name = "full_text_search", description = "在工作区内中进行本地全文检索（支持代码、配置、文档等文本文件）。")
     public String full_text_search(@Param(value = "query", description = "搜索关键字或短语") String query,
                                    String __cwd) {
-        Path rootPath = getRootPath(__cwd);
+        Path workPath = getWorkPath(__cwd);
 
         try {
             if (!DirectoryReader.indexExists(indexDirectory)) {
@@ -186,7 +185,7 @@ public class LuceneSkill extends AbsSkill {
 
     @ToolMapping(name = "refresh_search_index", description = "刷新工作区内的本地全文索引。")
     public String refreshSearchIndex(String __cwd) {
-        Path rootPath = getRootPath(__cwd);
+        Path workPath = getWorkPath(__cwd);
 
         long start = System.currentTimeMillis();
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
@@ -196,7 +195,7 @@ public class LuceneSkill extends AbsSkill {
         int[] stats = {0};
 
         try (IndexWriter writer = new IndexWriter(indexDirectory, config)) {
-            Files.walkFileTree(rootPath, new SimpleFileVisitor<Path>() {
+            Files.walkFileTree(workPath, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                     // 排除忽略目录
@@ -219,7 +218,7 @@ public class LuceneSkill extends AbsSkill {
 
                             Document doc = new Document();
                             // StringField 不分词，用于路径存储
-                            doc.add(new StringField("path", rootPath.relativize(file).toString().replace("\\", "/"), Field.Store.YES));
+                            doc.add(new StringField("path", workPath.relativize(file).toString().replace("\\", "/"), Field.Store.YES));
                             // TextField 会分词，用于全文搜索
                             doc.add(new TextField("content", content, Field.Store.YES));
 

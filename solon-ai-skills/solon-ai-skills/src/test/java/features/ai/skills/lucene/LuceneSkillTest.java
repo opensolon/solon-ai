@@ -67,34 +67,34 @@ class LuceneSkillTest {
     @Test
     void testRefreshSearchIndexAndSearch() {
         // 执行索引刷新
-        String refreshResult = luceneSkill.refreshSearchIndex();
+        String refreshResult = luceneSkill.refreshSearchIndex(null);
         assertTrue(refreshResult.contains("索引刷新完成"), "索引刷新应成功");
 
         // 测试搜索存在的代码片段
-        String searchResult = luceneSkill.full_text_search("login");
+        String searchResult = luceneSkill.full_text_search("login", null);
         assertTrue(searchResult.contains("UserService.java"), "应能搜索到 UserService 类");
         assertTrue(searchResult.contains("public void login"), "搜索结果预览应包含关键字内容");
 
         // 测试搜索配置文件
-        String xmlResult = luceneSkill.full_text_search("timeout");
+        String xmlResult = luceneSkill.full_text_search("timeout", null);
         assertTrue(xmlResult.contains("config.xml"), "应能搜索到 XML 配置文件内容");
     }
 
     @Test
     void testIgnoreLogic() {
-        luceneSkill.refreshSearchIndex();
+        luceneSkill.refreshSearchIndex(null);
 
         // 搜索 .git 目录下的内容，理应搜索不到
-        String result = luceneSkill.full_text_search("ignore");
+        String result = luceneSkill.full_text_search("ignore", null);
         assertTrue(result.contains("未找到匹配内容"), "不应索引被忽略的目录内容");
     }
 
     @Test
     void testExtensionFilter() {
-        luceneSkill.refreshSearchIndex();
+        luceneSkill.refreshSearchIndex(null);
 
         // 搜索 .png 内容（默认不支持），理应搜索不到
-        String result = luceneSkill.full_text_search("binary");
+        String result = luceneSkill.full_text_search("binary", null);
         assertTrue(result.contains("未找到匹配内容"), "不应索引未定义的后缀名文件");
     }
 
@@ -104,21 +104,21 @@ class LuceneSkillTest {
         luceneSkill.searchableExtensions(Arrays.asList("png"))
                 .ignoreNames(Collections.emptyList());
 
-        luceneSkill.refreshSearchIndex();
+        luceneSkill.refreshSearchIndex(null);
 
         // 现在应该能搜到图片文件的内容了
-        String result = luceneSkill.full_text_search("binary");
+        String result = luceneSkill.full_text_search("binary", null);
         assertTrue(result.contains("image.png"), "自定义后缀配置应生效");
     }
 
     @Test
     void testSpecialCharacters() {
-        luceneSkill.refreshSearchIndex();
+        luceneSkill.refreshSearchIndex(null);
 
         // 验证 QueryParser.escape 是否生效
         // 括号、空格等特殊字符不应导致解析器抛出异常
         assertDoesNotThrow(() -> {
-            String result = luceneSkill.full_text_search("public void login()");
+            String result = luceneSkill.full_text_search("public void login()", null);
             assertNotNull(result);
         });
     }
@@ -126,8 +126,8 @@ class LuceneSkillTest {
     @Test
     void testEmptyDirectory(@TempDir Path emptyDir) {
         LuceneSkill emptySkill = new LuceneSkill(emptyDir.toString());
-        emptySkill.refreshSearchIndex();
-        String result = emptySkill.full_text_search("anything");
+        emptySkill.refreshSearchIndex(null);
+        String result = emptySkill.full_text_search("anything", null);
         assertTrue(result.contains("未找到匹配内容"), "空目录搜索应优雅处理");
     }
 }
