@@ -18,10 +18,7 @@ package org.noear.solon.ai.skills.diff;
 import com.github.difflib.UnifiedDiffUtils;
 import com.github.difflib.patch.Patch;
 import com.github.difflib.patch.PatchFailedException;
-import org.noear.solon.ai.annotation.ToolMapping;
-import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.skill.AbsSkill;
-import org.noear.solon.annotation.Param;
+import org.noear.solon.ai.chat.tool.AbsTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,8 +28,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 基于 Unified Diff 的代码编辑技能 (Precise Code Editing)
@@ -41,52 +38,51 @@ import java.util.List;
  * @author noear
  * @since 3.9.1
  */
-public class DiffSkill extends AbsSkill {
-    private static final Logger LOG = LoggerFactory.getLogger(DiffSkill.class);
+public class ApplyDiffTool extends AbsTool {
+    private static final Logger LOG = LoggerFactory.getLogger(ApplyDiffTool.class);
+    private final String workDir;
 
-    private final Path rootPath;
+    public ApplyDiffTool(String workDir) {
+        this.workDir = workDir;
 
-    public DiffSkill(String workDir) {
-        this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
+        addParam("path", String.class, true, "相对于工作目录的文件路径");
+        addParam("diff", String.class, true, "Unified Diff 格式的补丁内容 (包含 @@ 块和上下文)");
+    }
+
+    protected Path getWorkPath(String __cwd) {
+        String path = (__cwd != null) ? __cwd : workDir;
+        if (path == null) throw new IllegalStateException("Working directory is not set.");
+        return Paths.get(path).toAbsolutePath().normalize();
     }
 
     @Override
     public String name() {
-        return "diff_editor";
+        return "apply_diff";
     }
 
     @Override
     public String description() {
-        return "通过 Unified Diff 补丁精准修改代码。支持局部多块(Hunks)修改，具有上下文感知和冲突检测能力。";
+        return "使用标准的 Unified Diff 补丁精准修改现有文件。当你需要对已有代码进行局部微调时，这是首选工具。\n" +
+                "它具有以下特性：\n" +
+                "1. 上下文感知：通过 @@ 块周围的行进行定位，即使行号微调也能成功。\n" +
+                "2. 冲突检测：如果文件已被他人修改导致上下文不匹配，会报错提醒。\n" +
+                "3. 节省 Token：无需发送整个文件，仅发送变化的部分。";
     }
-
     @Override
-    public boolean isSupported(Prompt prompt) {
-        return true;
-    }
+    public Object handle(Map<String, Object> args) throws Throwable {
+        String path = (String) args.get("path");
+        String diff = (String) args.get("diff");
+        String __cwd = (String) args.get("__cwd"); //由 toolContext 传递
 
-    @Override
-    public String getInstruction(Prompt prompt) {
-        return "## 精准编辑协议 (Diff Edit Protocol)\n" +
-                "- **适用场景**：修改已有文件内容。当文件较大或需要多点修改时，严禁使用全量覆盖。调用 `apply_diff` 是唯一专业选择。\n" +
-                "- **原子流程**：必须遵循“读-比-改”闭环。即：先用 `read_file` 获取带有行号的源码 -> 在内心生成 Diff -> 调用 `apply_diff`。\n" +
-                "- **冲突规避**：如果收到“上下文不匹配”错误，说明你的本地副本已过期。必须立即重新执行 `read_file` 同步状态，再次生成补丁。\n" +
-                "- **补丁质量**：Diff 必须包含 @@ 块和足够的上下文行（Context Lines）。即使行号略有偏差，算法也能通过上下文精准定位。";
-    }
+        if (__cwd == null) {
+            return "错误: 未找到工作目录上下文。";
+        }
 
-    /**
-     * 应用补丁到指定文件
-     *
-     * @param path 文件相对路径
-     * @param diff 内容 (Unified Diff 格式)
-     */
-    @ToolMapping(name = "apply_diff", description = "应用 Unified Diff 补丁来修改文件。")
-    public String applyDiff(@Param(value = "path", description = "相对于工作目录的文件路径") String path,
-                            @Param(value = "diff", description = "Unified Diff 格式的补丁内容") String diff) {
-        Path targetPath = rootPath.resolve(path).normalize();
+        Path workPath = getWorkPath(__cwd);
+        Path targetPath = workPath.resolve(path).normalize();
 
         // 安全检查：防止路径穿越
-        if (!targetPath.startsWith(rootPath)) {
+        if (!targetPath.startsWith(workPath)) {
             return "错误: 非法的路径访问。";
         }
 

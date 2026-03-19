@@ -95,7 +95,7 @@ public class LuceneSkill extends AbsSkill {
         return this;
     }
 
-    private Path getWorkPath(String __cwd) {
+    protected Path getWorkPath(String __cwd) {
         String path = (__cwd != null) ? __cwd : workDir;
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
