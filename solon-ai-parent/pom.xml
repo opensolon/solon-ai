@@ -25,6 +25,8 @@
         <commonmark.version>0.20.0</commonmark.version>
         <jsoup.version>1.18.3</jsoup.version>
         <flexmark.version>0.50.50</flexmark.version>
+        <lsp4j.version>0.20.1</lsp4j.version>
+        <lucene.version>8.11.4</lucene.version>
         <milvus.version>2.6.3</milvus.version>
         <elasticsearch.version>7.17.29</elasticsearch.version>
         <opensearch.version>1.3.20</opensearch.version>
@@ -254,6 +256,12 @@
             <dependency>
                 <groupId>org.noear</groupId>
                 <artifactId>solon-ai-skill-generation</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>solon-ai-skill-lsp</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
