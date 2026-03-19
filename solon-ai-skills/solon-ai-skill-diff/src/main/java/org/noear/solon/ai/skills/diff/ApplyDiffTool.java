@@ -42,6 +42,10 @@ public class ApplyDiffTool extends AbsTool {
     private static final Logger LOG = LoggerFactory.getLogger(ApplyDiffTool.class);
     private final String workDir;
 
+    public ApplyDiffTool() {
+        this(null);
+    }
+
     public ApplyDiffTool(String workDir) {
         this.workDir = workDir;
 

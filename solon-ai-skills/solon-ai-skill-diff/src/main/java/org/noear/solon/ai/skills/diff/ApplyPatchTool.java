@@ -36,6 +36,10 @@ public class ApplyPatchTool extends AbsTool {
     private static final Logger LOG = LoggerFactory.getLogger(ApplyPatchTool.class);
     private final String workDir;
 
+    public ApplyPatchTool() {
+        this(null);
+    }
+
     public ApplyPatchTool(String workDir) {
         this.workDir = workDir;
 
