@@ -20,8 +20,6 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -177,7 +175,7 @@ public class TerminalSkill extends AbsSkill {
     public String bash(@Param(value = "command", description = "要执行的指令。") String command,
                        @Param(name = "timeout", required = false, description = "可选超时时间，单位为毫秒") Integer timeout,
                        String __cwd) {
-        Path rootPath = getRootPath(__cwd);
+        Path workPath = getWorkPath(__cwd);
         Map<String, String> envs = new HashMap<>();
 
         envs.put("PYTHON", pythonCmd);
@@ -185,7 +183,7 @@ public class TerminalSkill extends AbsSkill {
 
         String finalCommand = translateCommandToEnv(command, envs);
 
-        return executor.executeCode(rootPath, finalCommand, shellCmd, extension, envs, timeout, null);
+        return executor.executeCode(workPath, finalCommand, shellCmd, extension, envs, timeout, null);
     }
 
     // --- 2. 发现文件 ---
@@ -194,9 +192,9 @@ public class TerminalSkill extends AbsSkill {
                      @Param(value = "recursive", required = false, description = "是否递归展示") Boolean recursive,
                      @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件") Boolean showHidden,
                      String __cwd) throws IOException {
-        Path rootPath = getRootPath(__cwd);
+        Path workPath = getWorkPath(__cwd);
 
-        Path target = resolveSafePath(rootPath, path, false);
+        Path target = resolveSafePath(workPath, path, false);
 
         if (!Files.exists(target)) {
             return "错误：路径不存在";
@@ -206,10 +204,10 @@ public class TerminalSkill extends AbsSkill {
             StringBuilder sb = new StringBuilder();
             String displayName = (path == null || ".".equals(path)) ? "." : path;
             sb.append(displayName).append("\n");
-            generateTreeInternal(rootPath, target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden));
+            generateTreeInternal(workPath, target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden));
             return sb.toString();
         } else {
-            return flatListLogic(rootPath, target, path, Boolean.TRUE.equals(showHidden));
+            return flatListLogic(workPath, target, path, Boolean.TRUE.equals(showHidden));
         }
     }
 
@@ -219,9 +217,9 @@ public class TerminalSkill extends AbsSkill {
                        @Param(value = "start_line", required = false, description = "起始行 (从1开始)。") Integer startLine,
                        @Param(value = "end_line", required = false, description = "结束行。") Integer endLine,
                        String __cwd) throws IOException {
-        Path rootPath = getRootPath(__cwd);
+        Path workPath = getWorkPath(__cwd);
 
-        Path target = resolveSafePath(rootPath, path, false);
+        Path target = resolveSafePath(workPath, path, false);
         if (!Files.exists(target)) return "错误：文件不存在";
 
         long fileSize = Files.size(target);
@@ -252,8 +250,8 @@ public class TerminalSkill extends AbsSkill {
     public String write(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
                         @Param(value = "content", description = "完整文本内容。") String content,
                         String __cwd) throws IOException {
-        Path rootPath = getRootPath(__cwd);
-        Path target = resolveSafePath(rootPath, path, true);
+        Path workPath = getWorkPath(__cwd);
+        Path target = resolveSafePath(workPath, path, true);
 
         if (Files.exists(target)) {
             undoHistory.put(path, new String(Files.readAllBytes(target), fileCharset));
@@ -269,8 +267,8 @@ public class TerminalSkill extends AbsSkill {
                        @Param(value = "old_str", description = "待替换的唯一文本块。必须唯一且包含精确缩进。") String oldStr,
                        @Param(value = "new_str", description = "替换后的新内容。") String newStr,
                        String __cwd) throws IOException {
-        Path rootPath = getRootPath(__cwd);
-        Path target = resolveSafePath(rootPath, path, true);
+        Path workPath = getWorkPath(__cwd);
+        Path target = resolveSafePath(workPath, path, true);
 
         String content = new String(Files.readAllBytes(target), fileCharset);
 
@@ -291,8 +289,8 @@ public class TerminalSkill extends AbsSkill {
     public String multiedit(@Param(value = "path", description = "文件相对路径。禁止以 ./ 开头。") String path,
                             @Param(value = "edits", description = "编辑操作列表，每个包含 old_str, new_str, 以及可选的 replace_all。") List<EditOp> edits,
                             String __cwd) throws IOException {
-        Path rootPath = getRootPath(__cwd);
-        Path target = resolveSafePath(rootPath, path, true);
+        Path workPath = getWorkPath(__cwd);
+        Path target = resolveSafePath(workPath, path, true);
 
         if (!Files.exists(target)) {
             return "错误：文件不存在，无法进行多重编辑。";
@@ -322,8 +320,8 @@ public class TerminalSkill extends AbsSkill {
     @ToolMapping(name = "undo", description = "撤销最后一次对特定文件的 write 或 edit 操作。")
     public String undo(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
                        String __cwd) throws IOException {
-        Path rootPath = getRootPath(__cwd);
-        Path target = resolveSafePath(rootPath, path, true);
+        Path workPath = getWorkPath(__cwd);
+        Path target = resolveSafePath(workPath, path, true);
 
         String history = undoHistory.remove(path);
         if (history == null) return "错误：该文件无撤销记录。";
@@ -336,27 +334,27 @@ public class TerminalSkill extends AbsSkill {
     public String grep(@Param(value = "query", description = "关键字。") String query,
                        @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
                        String __cwd) throws IOException {
-        Path rootPath = getRootPath(__cwd);
-        Path target = resolveSafePath(rootPath, path, false);
+        Path workPath = getWorkPath(__cwd);
+        Path target = resolveSafePath(workPath, path, false);
 
         StringBuilder sb = new StringBuilder();
 
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                return isIgnored(rootPath, dir) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+                return isIgnored(workPath, dir) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
             }
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(rootPath, file)) return FileVisitResult.CONTINUE;
+                if (isIgnored(workPath, file)) return FileVisitResult.CONTINUE;
                 try (Scanner scanner = new Scanner(Files.newInputStream(file), fileCharset.name())) {
                     int lineNum = 0;
                     while (scanner.hasNextLine()) {
                         lineNum++;
                         String line = scanner.nextLine();
                         if (line.contains(query)) {
-                            String displayPath = formatDisplayPath(rootPath, path, target, file);
+                            String displayPath = formatDisplayPath(workPath, path, target, file);
                             sb.append(displayPath).append(":").append(lineNum).append(": ").append(line.trim()).append("\n");
                         }
                         if (sb.length() > 8000) return FileVisitResult.TERMINATE;
@@ -373,8 +371,8 @@ public class TerminalSkill extends AbsSkill {
     public String glob(@Param(value = "pattern", description = "glob 模式。") String pattern,
                        @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
                        String __cwd) throws IOException {
-        Path rootPath = getRootPath(__cwd);
-        Path target = resolveSafePath(rootPath, path, false);
+        Path workPath = getWorkPath(__cwd);
+        Path target = resolveSafePath(workPath, path, false);
 
         final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
         final String logicPrefix = (path != null && path.startsWith("@")) ? path.split("[/\\\\]")[0] : null;
@@ -383,13 +381,13 @@ public class TerminalSkill extends AbsSkill {
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                return isIgnored(rootPath, dir) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+                return isIgnored(workPath, dir) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
             }
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (!isIgnored(rootPath, file) && matcher.matches(target.relativize(file))) {
-                    results.add("[FILE] " + formatDisplayPath(rootPath, path, target, file));
+                if (!isIgnored(workPath, file) && matcher.matches(target.relativize(file))) {
+                    results.add("[FILE] " + formatDisplayPath(workPath, path, target, file));
                 }
                 return results.size() >= 500 ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
             }
@@ -437,7 +435,7 @@ public class TerminalSkill extends AbsSkill {
         }
     }
 
-    private Path getRootPath(String __cwd) {
+    private Path getWorkPath(String __cwd) {
         String path = (__cwd != null) ? __cwd : workDir;
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
@@ -466,14 +464,14 @@ public class TerminalSkill extends AbsSkill {
         }
     }
 
-    private Path resolveSafePath(Path rootPath, String pStr, boolean writeMode) {
+    private Path resolveSafePath(Path workPath, String pStr, boolean writeMode) {
         if (Assert.isEmpty(pStr) || ".".equals(pStr)) {
-            return rootPath;
+            return workPath;
         }
 
         // 1. 如果是逻辑路径（@开头），走 poolManager 逻辑
         if (pStr.startsWith("@")) {
-            Path target = poolManager.resolve(rootPath, pStr);
+            Path target = poolManager.resolve(workPath, pStr);
             String alias = pStr.split("[/\\\\]")[0];
             boolean inPool = poolManager.getPoolMap().containsKey(alias);
 
@@ -501,31 +499,31 @@ public class TerminalSkill extends AbsSkill {
             target = p.normalize();
         } else {
             // 相对路径
-            target = rootPath.resolve(pStr2).normalize();
+            target = workPath.resolve(pStr2).normalize();
         }
 
         // 3. 越界检查只在沙盒模式下强制执行
-        if (sandboxMode && isNotUserHomePath(pStr) && !target.startsWith(rootPath)) {
+        if (sandboxMode && isNotUserHomePath(pStr) && !target.startsWith(workPath)) {
             throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
         }
 
         return target;
     }
 
-    private String formatDisplayPath(Path rootPath, String inputPath, Path targetDir, Path file) {
+    private String formatDisplayPath(Path workPath, String inputPath, Path targetDir, Path file) {
         if (inputPath != null && inputPath.startsWith("@")) {
             String prefix = inputPath.split("[/\\\\]")[0];
             return prefix + "/" + targetDir.relativize(file).toString().replace("\\", "/");
         }
 
 
-        // 开放模式下，如果文件不在 rootPath 内部，返回绝对路径字符串
-        if (!sandboxMode && !file.startsWith(rootPath)) {
+        // 开放模式下，如果文件不在 workPath 内部，返回绝对路径字符串
+        if (!sandboxMode && !file.startsWith(workPath)) {
             return file.toAbsolutePath().toString().replace("\\", "/");
         }
 
         try {
-            return rootPath.relativize(file).toString().replace("\\", "/");
+            return workPath.relativize(file).toString().replace("\\", "/");
         } catch (IllegalArgumentException e) {
             return file.toAbsolutePath().toString().replace("\\", "/");
         }
@@ -570,11 +568,11 @@ public class TerminalSkill extends AbsSkill {
         }
     }
 
-    private void generateTreeInternal(Path rootPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden) throws IOException {
+    private void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden) throws IOException {
         if (depth >= maxDepth) return;
         try (Stream<Path> stream = Files.list(current)) {
             List<Path> children = stream
-                    .filter(p -> !isIgnored(rootPath, p))
+                    .filter(p -> !isIgnored(workPath, p))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .sorted((a, b) -> {
                         boolean aDir = Files.isDirectory(a);
@@ -589,21 +587,21 @@ public class TerminalSkill extends AbsSkill {
                 boolean isDir = Files.isDirectory(child);
                 sb.append(indent).append(isLast ? "└── " : "├── ").append(child.getFileName()).append("\n");
                 if (isDir)
-                    generateTreeInternal(rootPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden);
+                    generateTreeInternal(workPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden);
             }
         } catch (AccessDeniedException e) {
             sb.append(indent).append("└── [拒绝访问]\n");
         }
     }
 
-    private String flatListLogic(Path rootPath, Path target, String inputPath, boolean showHidden) throws IOException {
+    private String flatListLogic(Path workPath, Path target, String inputPath, boolean showHidden) throws IOException {
         try (Stream<Path> stream = Files.list(target)) {
             List<String> lines = stream
-                    .filter(p -> !isIgnored(rootPath, p))
+                    .filter(p -> !isIgnored(workPath, p))
                     .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                     .map(p -> {
                         boolean isDir = Files.isDirectory(p);
-                        String displayPath = formatDisplayPath(rootPath, inputPath, target, p);
+                        String displayPath = formatDisplayPath(workPath, inputPath, target, p);
                         return (isDir ? "[DIR] " : "[FILE] ") + displayPath + (isDir ? "/" : "");
                     }).sorted().collect(Collectors.toList());
             return lines.isEmpty() ? "(目录为空)" : String.join("\n", lines);
@@ -611,13 +609,13 @@ public class TerminalSkill extends AbsSkill {
     }
 
 
-    private boolean isIgnored(Path rootPath, Path path) {
+    private boolean isIgnored(Path workPath, Path path) {
         String name = path.getFileName().toString();
         if (DEFAULT_IGNORES.contains(name)) return true;
         try {
-            // 只有在 rootPath 内部时才进行递归片段检查
-            if (path.startsWith(rootPath)) {
-                Path relative = rootPath.relativize(path);
+            // 只有在 workPath 内部时才进行递归片段检查
+            if (path.startsWith(workPath)) {
+                Path relative = workPath.relativize(path);
                 for (Path segment : relative) {
                     if (DEFAULT_IGNORES.contains(segment.toString())) return true;
                 }
