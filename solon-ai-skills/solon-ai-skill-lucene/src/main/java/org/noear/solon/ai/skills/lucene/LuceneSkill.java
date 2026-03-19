@@ -45,10 +45,26 @@ import java.util.stream.Collectors;
  */
 public class LuceneSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(LuceneSkill.class);
+    private static final LuceneSkill instance = new LuceneSkill();
 
-    protected final Path rootPath;
-    protected final Directory indexDirectory;
-    protected final Analyzer analyzer;
+    public static LuceneSkill getInstance() {
+        return instance;
+    }
+
+    private final Directory indexDirectory;
+    private final Analyzer analyzer;
+    private final String workDir;
+
+    public LuceneSkill() {
+        this(null);
+    }
+
+    public LuceneSkill(String workDir) {
+        this.workDir = workDir;
+        this.indexDirectory = new ByteBuffersDirectory();
+        this.analyzer = new StandardAnalyzer();
+    }
+
 
     // 可配置的忽略列表
     private Set<String> ignoreNames = new HashSet<>(Arrays.asList(
@@ -59,12 +75,6 @@ public class LuceneSkill extends AbsSkill {
     private Set<String> searchableExtensions = new HashSet<>(Arrays.asList(
             "java", "xml", "js", "ts", "md", "properties", "sql", "txt", "html", "json", "yml", "yaml", "sh", "bat"
     ));
-
-    public LuceneSkill(String workDir) {
-        this.rootPath = Paths.get(workDir).toAbsolutePath().normalize();
-        this.indexDirectory = new ByteBuffersDirectory();
-        this.analyzer = new StandardAnalyzer();
-    }
 
     /**
      * 设置忽略的文件名或目录名
@@ -86,6 +96,12 @@ public class LuceneSkill extends AbsSkill {
         return this;
     }
 
+    private Path getRootPath(String __cwd) {
+        String path = (__cwd != null) ? __cwd : workDir;
+        if (path == null) throw new IllegalStateException("Working directory is not set.");
+        return Paths.get(path).toAbsolutePath().normalize();
+    }
+
     @Override
     public String name() {
         return "local_full_text_search_manager";
@@ -96,23 +112,18 @@ public class LuceneSkill extends AbsSkill {
         return "高性能本地全文检索工具。支持后缀: " + searchableExtensions;
     }
 
-    @Override
-    public boolean isSupported(Prompt prompt) {
-        return true;
-    }
 
-    @Override
-    public String getInstruction(Prompt prompt) {
-        return "## 本地全文搜索协议 (Local Search Protocol)\n" +
-                "- **工具定位**：这是你感知当前工作区内容的“本地雷达”。当你无法通过目录结构定位具体逻辑，或需要查找跨文件的符号引用时使用。\n" +
-                "- **数据边界**：搜索仅限于当前项目根目录及挂载的只读池。它是私有的、实时的、不依赖外部网络的。\n" +
-                "- **搜索策略**：支持模糊关键词。结果按 Lucene 相关性排序。若由于文件大幅改动导致搜索结果不自然，应立即执行 `refresh_search_index`。\n" +
-                "- **性能习惯**：对于已知路径的小文件，优先使用 `read_file`；对于“大海捞针”式的查询，必须使用此协议。";
-    }
+    @ToolMapping(name = "full_text_search", description = "在工作区内中进行本地全文检索（支持代码、配置、文档等文本文件）。")
+    public String full_text_search(@Param(value = "query", description = "搜索关键字或短语") String query,
+                                   String __cwd) {
+        Path rootPath = getRootPath(__cwd);
 
-    @ToolMapping(name = "full_text_search", description = "在项目文件中进行本地全文检索（支持代码、配置、文档）。")
-    public String full_text_search(@Param(value = "query", description = "搜索关键字或短语") String query) {
         try {
+            if (!DirectoryReader.indexExists(indexDirectory)) {
+                //如果还没有，尝试刷新
+                refreshSearchIndex(__cwd);
+            }
+
             if (!DirectoryReader.indexExists(indexDirectory)) {
                 return "本地索引尚未建立。请先执行 refresh_search_index 工具以初始化搜索环境。";
             }
@@ -167,14 +178,16 @@ public class LuceneSkill extends AbsSkill {
                 sb.append("\n");
             }
             return sb.toString();
-        } catch (Exception e) {
+        } catch (Throwable e) {
             LOG.error("Full text search error", e);
             return "搜索失败: " + e.getMessage();
         }
     }
 
-    @ToolMapping(name = "refresh_search_index", description = "刷新本地全文索引。")
-    public String refreshSearchIndex() {
+    @ToolMapping(name = "refresh_search_index", description = "刷新工作区内的本地全文索引。")
+    public String refreshSearchIndex(String __cwd) {
+        Path rootPath = getRootPath(__cwd);
+
         long start = System.currentTimeMillis();
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
         config.setOpenMode(IndexWriterConfig.OpenMode.CREATE); // 重新构建索引
@@ -212,7 +225,7 @@ public class LuceneSkill extends AbsSkill {
 
                             writer.addDocument(doc);
                             stats[0]++; // 计数增加
-                        } catch (Exception e) {
+                        } catch (Throwable e) {
                             LOG.warn("Failed to index file: " + file, e);
                         }
                     }
