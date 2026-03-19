@@ -39,6 +39,7 @@
         <tika.version>2.9.3</tika.version>
 
         <lucene.version>8.11.4</lucene.version>
+        <playwright.version>1.42.0</playwright.version>
     </properties>
 
     <dependencyManagement>
