@@ -10,7 +10,7 @@ import java.time.Duration;
  * @author noear 2026/2/23 created
  *
  */
-public class ExaMcpClient {
+public class ExaAiClient {
     private static final String BASE_URL = "https://mcp.exa.ai/mcp";
     private static final int TIMEOUT_MS = 30_000;
 

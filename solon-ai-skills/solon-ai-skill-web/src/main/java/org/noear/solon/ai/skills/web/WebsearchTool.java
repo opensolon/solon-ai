@@ -13,21 +13,21 @@ import java.util.Map;
 /**
  * Web 搜索工具 (基于 Solon MCP Client 实现)
  */
-public class WebsearchExaTool {
+public class WebsearchTool {
 
     private static final int DEFAULT_NUM_RESULTS = 8;
 
-    private static final WebsearchExaTool instance = new WebsearchExaTool();
+    private static final WebsearchTool instance = new WebsearchTool();
 
-    public static WebsearchExaTool getInstance() {
+    public static WebsearchTool getInstance() {
         return instance;
     }
 
     private final McpClientProvider mcpClient;
 
-    public WebsearchExaTool() {
+    public WebsearchTool() {
         // 使用 STREAMABLE 适配 Exa 的 text/event-stream 模式
-        this.mcpClient = ExaMcpClient.getMcpClient();
+        this.mcpClient = ExaAiClient.getMcpClient();
     }
 
     @ToolMapping(name = "websearch", description = "执行实时web搜索")

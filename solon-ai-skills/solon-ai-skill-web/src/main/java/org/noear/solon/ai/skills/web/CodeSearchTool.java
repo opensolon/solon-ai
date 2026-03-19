@@ -12,17 +12,17 @@ import java.util.Map;
 /**
  * CodeSearchTool
  */
-public class CodeSearchExaTool extends AbsTool {
-    private static CodeSearchExaTool instance = new CodeSearchExaTool();
-    public static CodeSearchExaTool getInstance(){
+public class CodeSearchTool extends AbsTool {
+    private static CodeSearchTool instance = new CodeSearchTool();
+    public static CodeSearchTool getInstance(){
         return instance;
     }
 
     private static final int DEFAULT_TOKENS = 5000;
     private final McpClientProvider mcpClient;
 
-    public CodeSearchExaTool() {
-        this.mcpClient = ExaMcpClient.getMcpClient();
+    public CodeSearchTool() {
+        this.mcpClient = ExaAiClient.getMcpClient();
 
         addParam("query", String.class, true,
                 "搜索查询词，用于查找 API、库和 SDK 的相关上下文。 " +
