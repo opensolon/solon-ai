@@ -1,17 +1,13 @@
 package demo.ai.skills;
 
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.skills.file.FileReadWriteSkill;
 import org.noear.solon.ai.skills.file.ZipSkill;
 import org.noear.solon.ai.skills.pdf.PdfSkill;
 import org.noear.solon.ai.skills.mail.MailSkill;
 import org.noear.solon.ai.skills.sys.*;
-import org.noear.solon.ai.skills.crawler.WebCrawlerSkill;
-import org.noear.solon.ai.skills.search.WebSearchSkill;
+import org.noear.solon.ai.skills.crawler.WebCrawlerDriverSkill;
+import org.noear.solon.ai.skills.search.WebSearchDriverSkill;
 import org.noear.solon.ai.skills.generation.ImageGenerationSkill;
-import org.noear.solon.ai.skills.generation.VideoGenerationSkill;
-
-import java.io.File;
 
 /**
  * 高级 AI 技能联动示例（2026 增强版）
@@ -23,7 +19,7 @@ public class AdvancedDemo {
         String workDir = "./finance_work";
 
         SystemClockSkill clock = new SystemClockSkill();
-        WebSearchSkill search = new WebSearchSkill(WebSearchSkill.SERPER, "serper_key");
+        WebSearchDriverSkill search = new WebSearchDriverSkill(WebSearchDriverSkill.SERPER, "serper_key");
         PythonSkill python = new PythonSkill(workDir);
 
         // 1. 引入 PdfSkill，支持中文报告
@@ -47,8 +43,8 @@ public class AdvancedDemo {
     public void techResearchTask() throws Exception {
         String workDir = "./research_docs";
 
-        WebSearchSkill search = new WebSearchSkill(WebSearchSkill.BING, "bing_key");
-        WebCrawlerSkill crawler = new WebCrawlerSkill(WebCrawlerSkill.JINA, "jina_key");
+        WebSearchDriverSkill search = new WebSearchDriverSkill(WebSearchDriverSkill.BING, "bing_key");
+        WebCrawlerDriverSkill crawler = new WebCrawlerDriverSkill(WebCrawlerDriverSkill.JINA, "jina_key");
         PdfSkill pdf = new PdfSkill(workDir); // 默认字体模式
         ZipSkill zip = new ZipSkill(workDir);
 
@@ -86,7 +82,7 @@ public class AdvancedDemo {
         String workDir = "./ai_workspace";
 
         SystemClockSkill clock = new SystemClockSkill();
-        WebSearchSkill search = new WebSearchSkill(WebSearchSkill.SERPER, "key");
+        WebSearchDriverSkill search = new WebSearchDriverSkill(WebSearchDriverSkill.SERPER, "key");
         ImageGenerationSkill image = new ImageGenerationSkill(ImageGenerationSkill.DALL_E, "key", workDir);
         PdfSkill pdf = new PdfSkill(workDir);
         MailSkill mail = new MailSkill(workDir, "smtp.gmail.com", 587, "ai@gmail.com", "app_password");

@@ -40,13 +40,13 @@ import org.slf4j.LoggerFactory;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class WebCrawlerSkill extends AbsSkill {
-    private static final Logger LOG = LoggerFactory.getLogger(WebCrawlerSkill.class);
+public class WebCrawlerDriverSkill extends AbsSkill {
+    private static final Logger LOG = LoggerFactory.getLogger(WebCrawlerDriverSkill.class);
 
     private final String apiKey;
     private final CrawlerDriver driver;
 
-    public WebCrawlerSkill(CrawlerDriver driver, String apiKey) {
+    public WebCrawlerDriverSkill(CrawlerDriver driver, String apiKey) {
         this.driver = driver;
         this.apiKey = apiKey;
     }

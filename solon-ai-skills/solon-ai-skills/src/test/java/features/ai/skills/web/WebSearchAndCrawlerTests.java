@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleResponse;
-import org.noear.solon.ai.skills.crawler.WebCrawlerSkill;
-import org.noear.solon.ai.skills.search.WebSearchSkill;
+import org.noear.solon.ai.skills.crawler.WebCrawlerDriverSkill;
+import org.noear.solon.ai.skills.search.WebSearchDriverSkill;
 
 /**
  * 联网搜索与网页抓取集成测试
@@ -20,7 +20,7 @@ public class WebSearchAndCrawlerTests {
     @Test
     public void testSearchLogic() {
         // 1. 基础搜索功能测试 (使用 Serper 驱动)
-        WebSearchSkill searchSkill = new WebSearchSkill(WebSearchSkill.SERPER, serperKey);
+        WebSearchDriverSkill searchSkill = new WebSearchDriverSkill(WebSearchDriverSkill.SERPER, serperKey);
 
         String result = searchSkill.search("Solon AI 框架最新进展");
 
@@ -32,7 +32,7 @@ public class WebSearchAndCrawlerTests {
     @Test
     public void testCrawlerLogic() {
         // 2. 基础抓取功能测试 (使用 Jina 驱动)
-        WebCrawlerSkill crawlerSkill = new WebCrawlerSkill(WebCrawlerSkill.JINA, jinaKey);
+        WebCrawlerDriverSkill crawlerSkill = new WebCrawlerDriverSkill(WebCrawlerDriverSkill.JINA, jinaKey);
 
         String result = crawlerSkill.crawl("https://solon.noear.org/article/about");
 
@@ -49,8 +49,8 @@ public class WebSearchAndCrawlerTests {
         if (serperKey == null) return; // 没 Key 跳过集成测试
 
         // 1. 组合技能
-        WebSearchSkill searchSkill = new WebSearchSkill(WebSearchSkill.SERPER, serperKey);
-        WebCrawlerSkill crawlerSkill = new WebCrawlerSkill(WebCrawlerSkill.JINA, jinaKey);
+        WebSearchDriverSkill searchSkill = new WebSearchDriverSkill(WebSearchDriverSkill.SERPER, serperKey);
+        WebCrawlerDriverSkill crawlerSkill = new WebCrawlerDriverSkill(WebCrawlerDriverSkill.JINA, jinaKey);
 
         SimpleAgent agent = SimpleAgent.of(LlmUtil.getChatModel())
                 .role("研究助理")

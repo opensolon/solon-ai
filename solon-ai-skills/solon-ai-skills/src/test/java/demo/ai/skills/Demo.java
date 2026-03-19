@@ -3,14 +3,14 @@ package demo.ai.skills;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.skills.file.FileReadWriteSkill;
 import org.noear.solon.ai.skills.sys.SystemClockSkill;
-import org.noear.solon.ai.skills.crawler.WebCrawlerSkill;
-import org.noear.solon.ai.skills.search.WebSearchSkill;
+import org.noear.solon.ai.skills.crawler.WebCrawlerDriverSkill;
+import org.noear.solon.ai.skills.search.WebSearchDriverSkill;
 
 
 public class Demo {
     public void test() throws Exception {
-        WebSearchSkill search = new WebSearchSkill(WebSearchSkill.BAIDU, "serper_key");
-        WebCrawlerSkill crawler = new WebCrawlerSkill(WebCrawlerSkill.FIRECRAWL, "jina_key");
+        WebSearchDriverSkill search = new WebSearchDriverSkill(WebSearchDriverSkill.BAIDU, "serper_key");
+        WebCrawlerDriverSkill crawler = new WebCrawlerDriverSkill(WebCrawlerDriverSkill.FIRECRAWL, "jina_key");
         FileReadWriteSkill disk = new FileReadWriteSkill("./ai_workspace");
         SystemClockSkill clock = new SystemClockSkill();
 

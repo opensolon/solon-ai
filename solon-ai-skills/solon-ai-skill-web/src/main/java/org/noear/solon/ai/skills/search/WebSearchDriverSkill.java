@@ -43,19 +43,19 @@ import java.util.stream.Collectors;
  * @since 3.9.1
  */
 @Preview("3.9.1")
-public class WebSearchSkill extends AbsSkill {
-    private static final Logger LOG = LoggerFactory.getLogger(WebSearchSkill.class);
+public class WebSearchDriverSkill extends AbsSkill {
+    private static final Logger LOG = LoggerFactory.getLogger(WebSearchDriverSkill.class);
 
     private final String apiKey;
     private final SearchDriver driver;
     private int maxResults = 5;
 
-    public WebSearchSkill(SearchDriver driver, String apiKey) {
+    public WebSearchDriverSkill(SearchDriver driver, String apiKey) {
         this.driver = driver;
         this.apiKey = apiKey;
     }
 
-    public WebSearchSkill maxResults(int maxResults) {
+    public WebSearchDriverSkill maxResults(int maxResults) {
         this.maxResults = maxResults;
         return this;
     }

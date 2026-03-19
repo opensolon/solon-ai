@@ -23,6 +23,24 @@
 
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-ai-mcp</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>${jsoup.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.vladsch.flexmark</groupId>
+            <artifactId>flexmark-html2md-converter</artifactId>
+            <version>${flexmark.version}</version>
+        </dependency>
+
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>solon-logging-simple</artifactId>
             <scope>test</scope>
         </dependency>
