@@ -46,7 +46,7 @@ public class TerminalSkill extends AbsSkill {
         CMD, POWERSHELL, UNIX_SHELL
     }
 
-    private final String workDirDef;
+    private final String workDir;
     private final String shellCmd;
     private final String extension;
     private final ShellMode shellMode;
@@ -78,7 +78,7 @@ public class TerminalSkill extends AbsSkill {
     }
 
     public TerminalSkill(String workDir, PoolManager poolManager) {
-        this.workDirDef = workDir;
+        this.workDir = workDir;
         this.poolManager = poolManager;
 
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
@@ -130,6 +130,8 @@ public class TerminalSkill extends AbsSkill {
         sb.append("## Terminal 环境状态\n");
         sb.append("- **当前时间**: ").append(currentTime).append("\n");
         sb.append("- **沙盒模式**: ").append((sandboxMode ? "开启 (受限)" : "关闭 (开放)")).append("\n");
+        sb.append("- **运行环境**: ").append(System.getProperty("os.name"))
+                .append(" (").append(System.getProperty("os.arch")).append(")\n");
         sb.append("- **终端类型**: ").append(shellMode).append("\n");
 
         sb.append("- **执行环境**: \n");
@@ -142,9 +144,9 @@ public class TerminalSkill extends AbsSkill {
         sb.append("  - **工作区(Workspace)**: 你的主目录，支持读写。使用相对路径访问（如 `src/app.java`）。\n");
         sb.append("  - **挂载池(Pools)**: 以 `@` 开头的逻辑路径（如 ").append(poolManager.getPoolMap().keySet()).append("）为**只读**资源，严禁写入。\n");
         if (sandboxMode) {
-            sb.append("  - **沙盒模式**: 仅支持相对路径（相对于 Workspace）或逻辑路径(@pool)。严禁绝对路径。\n");
+            sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (@pool)。\n");
         } else {
-            sb.append("  - **开放模式**: 支持绝对路径（如 `/etc/hosts` 或 `C:\\Windows`）、相对路径、逻辑路径(@pool)。\n");
+            sb.append("  - **安全级别**: 开放模式。支持绝对路径（如 `/etc/hosts` 或 `C:\\Windows`）、相对路径 (如 `src/app.java`) 及逻辑路径(@pool)。\n");
         }
 
         sb.append("## 执行规约\n");
@@ -174,8 +176,8 @@ public class TerminalSkill extends AbsSkill {
     )
     public String bash(@Param(value = "command", description = "要执行的指令。") String command,
                        @Param(name = "timeout", required = false, description = "可选超时时间，单位为毫秒") Integer timeout,
-                       String __workDir) {
-        Path rootPath = getRootPath(__workDir);
+                       String __cwd) {
+        Path rootPath = getRootPath(__cwd);
         Map<String, String> envs = new HashMap<>();
 
         envs.put("PYTHON", pythonCmd);
@@ -191,8 +193,8 @@ public class TerminalSkill extends AbsSkill {
     public String ls(@Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
                      @Param(value = "recursive", required = false, description = "是否递归展示") Boolean recursive,
                      @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件") Boolean showHidden,
-                     String __workDir) throws IOException {
-        Path rootPath = getRootPath(__workDir);
+                     String __cwd) throws IOException {
+        Path rootPath = getRootPath(__cwd);
 
         Path target = resolveSafePath(rootPath, path, false);
 
@@ -216,8 +218,8 @@ public class TerminalSkill extends AbsSkill {
     public String read(@Param(value = "path", description = "文件相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
                        @Param(value = "start_line", required = false, description = "起始行 (从1开始)。") Integer startLine,
                        @Param(value = "end_line", required = false, description = "结束行。") Integer endLine,
-                       String __workDir) throws IOException {
-        Path rootPath = getRootPath(__workDir);
+                       String __cwd) throws IOException {
+        Path rootPath = getRootPath(__cwd);
 
         Path target = resolveSafePath(rootPath, path, false);
         if (!Files.exists(target)) return "错误：文件不存在";
@@ -249,8 +251,8 @@ public class TerminalSkill extends AbsSkill {
     @ToolMapping(name = "write", description = "创建新文件或覆盖现有文件。")
     public String write(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
                         @Param(value = "content", description = "完整文本内容。") String content,
-                        String __workDir) throws IOException {
-        Path rootPath = getRootPath(__workDir);
+                        String __cwd) throws IOException {
+        Path rootPath = getRootPath(__cwd);
         Path target = resolveSafePath(rootPath, path, true);
 
         if (Files.exists(target)) {
@@ -266,32 +268,61 @@ public class TerminalSkill extends AbsSkill {
     public String edit(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
                        @Param(value = "old_str", description = "待替换的唯一文本块。必须唯一且包含精确缩进。") String oldStr,
                        @Param(value = "new_str", description = "替换后的新内容。") String newStr,
-                       String __workDir) throws IOException {
-        Path rootPath = getRootPath(__workDir);
-
+                       String __cwd) throws IOException {
+        Path rootPath = getRootPath(__cwd);
         Path target = resolveSafePath(rootPath, path, true);
+
         String content = new String(Files.readAllBytes(target), fileCharset);
 
-        String finalOld = oldStr, finalNew = newStr;
-        if (content.contains("\r\n")) {
-            if (finalOld.contains("\n") && !finalOld.contains("\r\n")) finalOld = finalOld.replace("\n", "\r\n");
-            if (finalNew.contains("\n") && !finalNew.contains("\r\n")) finalNew = finalNew.replace("\n", "\r\n");
+        try {
+            String newContent = applyEditLogic(content, oldStr, newStr, false);
+            undoHistory.put(path, content);
+            Files.write(target, newContent.getBytes(fileCharset));
+            return "文件成功修改: " + path;
+        } catch (IllegalArgumentException e) {
+            return "错误：" + e.getMessage();
+        }
+    }
+
+    @ToolMapping(
+            name = "multiedit",
+            description = "在单次操作中对单个文件进行多次批量编辑。相比多次调用 edit，此工具效率更高且具有原子性。"
+    )
+    public String multiedit(@Param(value = "path", description = "文件相对路径。禁止以 ./ 开头。") String path,
+                            @Param(value = "edits", description = "编辑操作列表，每个包含 old_str, new_str, 以及可选的 replace_all。") List<EditOp> edits,
+                            String __cwd) throws IOException {
+        Path rootPath = getRootPath(__cwd);
+        Path target = resolveSafePath(rootPath, path, true);
+
+        if (!Files.exists(target)) {
+            return "错误：文件不存在，无法进行多重编辑。";
         }
 
-        int firstIndex = content.indexOf(finalOld);
-        if (firstIndex == -1) return "错误：找不到文本块。请确保 old_str 的缩进和换行与 read 的输出完全一致。";
-        if (content.lastIndexOf(finalOld) != firstIndex) return "错误：文本块在文件中不唯一，请增加上下文行。";
+        String originalContent = new String(Files.readAllBytes(target), fileCharset);
+        String workingContent = originalContent;
 
-        undoHistory.put(path, content);
-        String newContent = content.substring(0, firstIndex) + finalNew + content.substring(firstIndex + finalOld.length());
-        Files.write(target, newContent.getBytes(fileCharset));
-        return "文件成功修改: " + path;
+        // 顺序应用所有编辑
+        for (int i = 0; i < edits.size(); i++) {
+            EditOp edit = edits.get(i);
+
+            try {
+                workingContent = applyEditLogic(workingContent, edit.oldStr, edit.newStr, edit.replaceAll);
+            } catch (IllegalArgumentException e) {
+                return String.format("第 %d 个编辑操作失败: %s。所有更改已回滚。", i + 1, e.getMessage());
+            }
+        }
+
+        // 原子性保存：只有全部成功才写入文件并记录历史
+        undoHistory.put(path, originalContent);
+        Files.write(target, workingContent.getBytes(fileCharset));
+
+        return String.format("文件 %s 成功完成 %d 处修改。", path, edits.size());
     }
 
     @ToolMapping(name = "undo", description = "撤销最后一次对特定文件的 write 或 edit 操作。")
     public String undo(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                       String __workDir) throws IOException {
-        Path rootPath = getRootPath(__workDir);
+                       String __cwd) throws IOException {
+        Path rootPath = getRootPath(__cwd);
         Path target = resolveSafePath(rootPath, path, true);
 
         String history = undoHistory.remove(path);
@@ -304,8 +335,8 @@ public class TerminalSkill extends AbsSkill {
     @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。")
     public String grep(@Param(value = "query", description = "关键字。") String query,
                        @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                       String __workDir) throws IOException {
-        Path rootPath = getRootPath(__workDir);
+                       String __cwd) throws IOException {
+        Path rootPath = getRootPath(__cwd);
         Path target = resolveSafePath(rootPath, path, false);
 
         StringBuilder sb = new StringBuilder();
@@ -330,7 +361,7 @@ public class TerminalSkill extends AbsSkill {
                         }
                         if (sb.length() > 8000) return FileVisitResult.TERMINATE;
                     }
-                } catch (Exception ignored) {
+                } catch (Throwable ignored) {
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -341,8 +372,8 @@ public class TerminalSkill extends AbsSkill {
     @ToolMapping(name = "glob", description = "按通配符模式（如 **/*.java）搜索文件。确定文件范围的最高效工具。支持逻辑路径（如 @pool）。")
     public String glob(@Param(value = "pattern", description = "glob 模式。") String pattern,
                        @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                       String __workDir) throws IOException {
-        Path rootPath = getRootPath(__workDir);
+                       String __cwd) throws IOException {
+        Path rootPath = getRootPath(__cwd);
         Path target = resolveSafePath(rootPath, path, false);
 
         final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
@@ -370,9 +401,44 @@ public class TerminalSkill extends AbsSkill {
 
     // --- 内部逻辑逻辑 ---
 
+    /**
+     * 核心编辑逻辑抽取（供 edit 和 multiedit 复用）
+     */
+    private String applyEditLogic(String content, String oldStr, String newStr, boolean replaceAll) {
+        if (oldStr == null || newStr == null) {
+            throw new IllegalArgumentException("old_str 和 new_str 不能为空");
+        }
 
-    private Path getRootPath(String __workDir) {
-        String path = (__workDir != null) ? __workDir : workDirDef;
+        if (oldStr.equals(newStr)) {
+            throw new IllegalArgumentException("old_str 与 new_str 不能相同");
+        }
+
+        String finalOld = oldStr, finalNew = newStr;
+        // 自动适配换行符
+        if (content.contains("\r\n")) {
+            if (finalOld.contains("\n") && !finalOld.contains("\r\n")) finalOld = finalOld.replace("\n", "\r\n");
+            if (finalNew.contains("\n") && !finalNew.contains("\r\n")) finalNew = finalNew.replace("\n", "\r\n");
+        }
+
+        if (replaceAll) {
+            if (!content.contains(finalOld)) {
+                throw new IllegalArgumentException("找不到待替换的文本块");
+            }
+            return content.replace(finalOld, finalNew);
+        } else {
+            int firstIndex = content.indexOf(finalOld);
+            if (firstIndex == -1) {
+                throw new IllegalArgumentException("找不到文本块。请确保 old_str 的缩进和换行完全一致");
+            }
+            if (content.lastIndexOf(finalOld) != firstIndex) {
+                throw new IllegalArgumentException("文本块在文件中不唯一，请增加上下文行");
+            }
+            return content.substring(0, firstIndex) + finalNew + content.substring(firstIndex + finalOld.length());
+        }
+    }
+
+    private Path getRootPath(String __cwd) {
+        String path = (__cwd != null) ? __cwd : workDir;
         if (path == null) throw new IllegalStateException("Working directory is not set.");
         return Paths.get(path).toAbsolutePath().normalize();
     }
@@ -556,22 +622,24 @@ public class TerminalSkill extends AbsSkill {
                     if (DEFAULT_IGNORES.contains(segment.toString())) return true;
                 }
             }
-        } catch (Exception ignored) { }
+        } catch (Throwable ignored) { }
         return false;
-    }
-
-    private Path resolvePath(Path rootPath, String pathStr) {
-        String cleanPath = (pathStr != null && pathStr.startsWith("./")) ? pathStr.substring(2) : pathStr;
-        Path p = rootPath.resolve(cleanPath).normalize();
-        if (!p.startsWith(rootPath)) throw new SecurityException("权限拒绝：路径越界。");
-        return p;
     }
 
     private static String probeUnixShell() {
         try {
             return Runtime.getRuntime().exec("bash --version").waitFor() == 0 ? "bash" : "/bin/sh";
-        } catch (Exception e) {
+        } catch (Throwable e) {
             return "/bin/sh";
         }
+    }
+
+    public static class EditOp {
+        @Param(value = "old_str", description = "待替换的唯一文本块。必须唯一且包含精确缩进。")
+        public String oldStr;
+        @Param(value = "new_str", description = "替换后的新内容")
+        public String newStr;
+        @Param(value = "replace_all", required = false, description = "是否替换所有匹配项")
+        public Boolean replaceAll = false; // 赋默认值
     }
 }

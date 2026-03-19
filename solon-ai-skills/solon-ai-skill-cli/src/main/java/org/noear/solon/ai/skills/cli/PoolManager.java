@@ -202,7 +202,7 @@ public class PoolManager {
                     .map(this::formatDesc)
                     .orElse("专业领域专家规约。");
 
-        } catch (Exception e) {
+        } catch (Throwable e) {
             return "专家技能规约。";
         }
     }

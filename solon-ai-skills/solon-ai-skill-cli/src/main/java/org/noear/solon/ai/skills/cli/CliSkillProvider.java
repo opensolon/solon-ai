@@ -23,9 +23,18 @@ public class CliSkillProvider implements SkillProvider {
     }
 
     public CliSkillProvider(String workDir) {
-        poolManager = new PoolManager();
-        terminalSkill = new TerminalSkill(workDir, poolManager);
-        expertSkill = new ExpertSkill(poolManager);
+        this(workDir, null);
+    }
+
+    public CliSkillProvider(String workDir, PoolManager poolManager0) {
+        if(poolManager0 == null) {
+            this.poolManager = new PoolManager();
+        } else {
+            this.poolManager = poolManager0;
+        }
+
+        terminalSkill = new TerminalSkill(workDir, this.poolManager);
+        expertSkill = new ExpertSkill(this.poolManager);
     }
 
     /**
