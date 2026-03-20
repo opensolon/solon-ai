@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.util;
+package org.noear.solon.ai.util;
 
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;

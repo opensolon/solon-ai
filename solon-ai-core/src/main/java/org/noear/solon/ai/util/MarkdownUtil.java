@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.agent.util;
+package org.noear.solon.ai.util;
 
 import org.noear.solon.core.util.Assert;
 import org.yaml.snakeyaml.Yaml;
@@ -27,53 +27,65 @@ import java.util.List;
  * @since 3.9.6
  */
 public class MarkdownUtil {
+
     /**
      * 分析有元数据（YamlFrontmatter）的 markdown 文档
      */
     public static Markdown resolve(List<String> markdownLines) {
-        Markdown markdown = new Markdown();
+        return resolve(markdownLines, false);
+    }
 
+    /**
+     * 分析有元数据（YamlFrontmatter）的 markdown 文档
+     *
+     * @param onlyFrontmatter 只解析原数据
+     */
+    public static Markdown resolve(List<String> markdownLines, boolean onlyFrontmatter) {
+        Markdown markdown = new Markdown();
         if (Assert.isEmpty(markdownLines)) {
             return markdown;
         }
 
-        // 检查是否有 Frontmatter 标记
+        int endSeparatorIndex = -1;
+
+        // 1. 尝试寻找 Frontmatter 边界
+        // 必须以 --- 开头，且至少有 3 行（---, 内容, ---）
         if (markdownLines.size() > 2 && "---".equals(markdownLines.get(0).trim())) {
-            int endSeparatorIndex = -1;
             for (int i = 1; i < markdownLines.size(); i++) {
                 if ("---".equals(markdownLines.get(i).trim())) {
                     endSeparatorIndex = i;
                     break;
                 }
             }
+        }
 
-            if (endSeparatorIndex > 0) {
-                List<String> metaLines = markdownLines.subList(1, endSeparatorIndex);
+        // 2. 如果找到了元数据边界，解析它
+        if (endSeparatorIndex > 0) {
+            // 只有在 endSeparatorIndex > 0 时才说明有有效的 Yaml 块
+            List<String> metaLines = markdownLines.subList(1, endSeparatorIndex);
+            if (!metaLines.isEmpty()) {
                 String metadataStr = String.join("\n", metaLines);
-
                 try {
-                    Yaml yaml = new Yaml();
-                    Object loaded = yaml.load(metadataStr);
+                    Object loaded = new Yaml().load(metadataStr);
                     if (loaded != null) {
-                        // 将 Map 转换为 ONode
                         markdown.metadata.fill(loaded);
                     }
                 } catch (Exception e) {
-                    // 建议记录日志，防止 YAML 格式错误导致解析崩溃
+                    // 静默处理或记录日志
                 }
-
-                // 修正索引：获取第二个 --- 之后的所有内容
-                if (endSeparatorIndex + 1 < markdownLines.size()) {
-                    List<String> contentLines = markdownLines.subList(endSeparatorIndex + 1, markdownLines.size());
-                    markdown.content = String.join("\n", contentLines).trim();
-                }
-
-                return markdown;
             }
         }
 
-        // 处理没有元数据的情况
-        markdown.content = String.join("\n", markdownLines);
+        // 3. 处理正文 (Content)
+        if (!onlyFrontmatter) {
+            int contentStartIndex = (endSeparatorIndex > 0) ? endSeparatorIndex + 1 : 0;
+            if (contentStartIndex < markdownLines.size()) {
+                List<String> contentLines = markdownLines.subList(contentStartIndex, markdownLines.size());
+                // 使用 trim() 去掉首尾多余换行
+                markdown.content = String.join("\n", contentLines).trim();
+            }
+        }
+
         return markdown;
     }
 }
