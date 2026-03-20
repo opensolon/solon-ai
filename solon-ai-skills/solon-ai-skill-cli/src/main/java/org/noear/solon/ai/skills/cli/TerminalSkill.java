@@ -182,10 +182,6 @@ public class TerminalSkill extends AbsSkill {
                        @Param(name = "timeout", required = false, description = "可选超时时间，单位为毫秒") Integer timeout,
                        String __cwd) {
 
-        if (command.contains("kill ") && command.contains(Utils.pid())) {
-            return "错误：严禁停止宿主 Java 进程 (PID: " + Utils.pid() + ")。此操作已被系统拦截。";
-        }
-
         Path workPath = getWorkPath(__cwd);
         Map<String, String> envs = new HashMap<>();
 
