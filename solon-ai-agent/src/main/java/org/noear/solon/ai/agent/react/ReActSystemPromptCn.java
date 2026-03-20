@@ -117,12 +117,12 @@ public class ReActSystemPromptCn implements ReActSystemPrompt {
         // 业务指令注入
         appendBusinessInstructions(sb, trace);
 
-        sb.append("## 示例\n")
-                .append("用户: 帮我查一下杭州的天气并总结。\n")
-                .append("推理: 我需要获取杭州的实时天气数据。\n")
-                .append("（直接触发函数调用 get_weather）\n")
-                .append("（根据返回内容回复）\n")
-                .append("杭州今天晴，气温 20°C，非常适合出游。\n\n");
+//        sb.append("## 示例\n")
+//                .append("用户: 帮我查一下杭州的天气并总结。\n")
+//                .append("推理: 我需要获取杭州的实时天气数据。\n")
+//                .append("（直接触发函数调用 get_weather）\n")
+//                .append("（根据返回内容回复）\n")
+//                .append("杭州今天晴，气温 20°C，非常适合出游。\n\n");
 
         if (trace.getOptions().getTools().isEmpty()) {
             sb.append("\n> 注意：当前环境无可用工具，请根据已有信息直接回复。\n");

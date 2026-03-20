@@ -120,12 +120,12 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
         // 业务指令注入
         appendBusinessInstructions(sb, trace);
 
-        sb.append("## Example\n")
-                .append("User: Check the weather in London and summarize it.\n")
-                .append("Reasoning: I need to fetch the real-time weather data for London.\n")
-                .append("(Trigger function call `get_weather` directly)\n")
-                .append("(Respond based on the tool results)\n")
-                .append("It is currently sunny in London with a temperature of 20°C, perfect for outdoor activities.\n\n");
+//        sb.append("## Example\n")
+//                .append("User: Check the weather in London and summarize it.\n")
+//                .append("Reasoning: I need to fetch the real-time weather data for London.\n")
+//                .append("(Trigger function call `get_weather` directly)\n")
+//                .append("(Respond based on the tool results)\n")
+//                .append("It is currently sunny in London with a temperature of 20°C, perfect for outdoor activities.\n\n");
 
         if (trace.getOptions().getTools().isEmpty()) {
             sb.append("\n> Note: No tools available in the current environment. Please respond based on existing information.\n");
