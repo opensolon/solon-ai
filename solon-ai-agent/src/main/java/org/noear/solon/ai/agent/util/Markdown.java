@@ -33,6 +33,14 @@ public class Markdown {
         return metadata;
     }
 
+    public String getName() {
+        return metadata.get("name").getString();
+    }
+
+    public String getDescription() {
+        return metadata.get("description").getString();
+    }
+
     public String getContent() {
         return content;
     }
