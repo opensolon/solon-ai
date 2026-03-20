@@ -16,6 +16,7 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AbsAgentChunk;
+import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -39,6 +40,10 @@ public class ReActChunk extends AbsAgentChunk {
 
     public ReActTrace getTrace() {
         return response.getTrace();
+    }
+
+    public Metrics getMetrics() {
+        return response.getMetrics();
     }
 
     public boolean isNormal() {

@@ -18,6 +18,7 @@
 * 添加 solon-ai-core AssistantMessage.getJsonContent 方法
 * 添加 solon-ai-core MarkdownUtil 工具类
 * 添加 solon-ai-dialect-gemini tool-call 的思考签名支持
+* 添加 solon-ai-agent ReActChunk.getMetrics 方法
 * 优化 solon-ai-core AbstractChatDialect 解析 tool 参数的兼容性
 * 优化 solon-ai-dialect-dashscope 方言 支持流式传输与百炼联网搜索
 * 优化 solon-ai-dialect-anthropic tool.args 不规范时的兼容性（比如 json 不完整）
