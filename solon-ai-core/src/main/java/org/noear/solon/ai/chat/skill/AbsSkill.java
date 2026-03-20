@@ -51,6 +51,10 @@ public abstract class AbsSkill implements Skill {
     }
 
     public Collection<FunctionTool> getToolAry(String... names) {
+       return getToolAry(Arrays.asList(names));
+    }
+
+    public Collection<FunctionTool> getToolAry(Collection<String> names) {
         List<FunctionTool> list = new ArrayList<>();
         for (String key : names) {
             if (toolMap.containsKey(key)) {
