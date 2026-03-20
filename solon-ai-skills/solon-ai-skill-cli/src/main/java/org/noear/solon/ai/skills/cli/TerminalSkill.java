@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.skills.cli;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.skill.AbsSkill;
@@ -132,6 +133,11 @@ public class TerminalSkill extends AbsSkill {
                 .append(" (").append(System.getProperty("os.arch")).append(")\n");
         sb.append("- **终端类型**: ").append(shellMode).append("\n");
 
+        sb.append("- **进程安全约束**: \n");
+        sb.append("  - **当前宿主进程**: Java (PID: `").append(Utils.pid()).append("`)\n");
+        sb.append("  - **执行禁令**: 严禁执行任何可能导致宿主进程退出的命令（如 `kill -9 ").append(Utils.pid())
+                .append("`, `pkill java`, `killall java` 等）。在清理进程前，必须先通过 `ps` 或 `jps` 确认目标 PID。\n");
+
         sb.append("- **执行环境**: \n");
         sb.append("  - Python 命令: `").append(pythonCmd).append("` (系统已预置变量 `$PYTHON`)\n");
         sb.append("  - Node.js 命令: `").append(nodeCmd).append("` (系统已预置变量 `$NODE`)\n");
@@ -175,6 +181,11 @@ public class TerminalSkill extends AbsSkill {
     public String bash(@Param(value = "command", description = "要执行的指令。") String command,
                        @Param(name = "timeout", required = false, description = "可选超时时间，单位为毫秒") Integer timeout,
                        String __cwd) {
+
+        if (command.contains("kill") && command.contains(Utils.pid())) {
+            return "错误：严禁停止宿主 Java 进程 (PID: " + Utils.pid() + ")。此操作已被系统拦截。";
+        }
+
         Path workPath = getWorkPath(__cwd);
         Map<String, String> envs = new HashMap<>();
 

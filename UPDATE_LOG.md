@@ -25,6 +25,7 @@
 * 优化 solon-ai-agent ReActAgent SummarizationInterceptor 添加 maxContextLength 控制参数（很重要）
 * 优化 solon-ai-agent 流式处理 `catch (Exception`，换成 `catch (Throwable`
 * 优化 solon-ai-skill-restapi 每个 api 可以添加独立的验证机制
+* 优化 solon-ai-skill-cli 避免 bash 把当前进程给删掉了
 * 调整 solon-ai-agent 临时挂起操作，由 XxxTrace 转到 AgentSession（更统一）
 * 调整 solon-ai-core Skill 的激活逻辑，如果 getInstruction 为空，则不进入 SystemPrompt（之前还要 description 为空）
 * 修复 solon-ai-agent ReActAgent 思考事件触发逻辑，确保在所有情况下都被调用
