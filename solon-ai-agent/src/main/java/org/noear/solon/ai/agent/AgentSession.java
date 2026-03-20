@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent;
 
+import org.noear.dami2.bus.DamiBus;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.FlowContextInternal;
@@ -40,6 +41,15 @@ public interface AgentSession extends ChatSession, NonSerializable {
      * 获取会话上下文
      */
     FlowContext getContext();
+
+
+    /**
+     * 获取会话事件总线
+     */
+    default DamiBus getEventBus() {
+        return getContext().eventBus();
+    }
+
 
     /**
      * 获取当前状态快照（用于状态回溯或持久化导出）
