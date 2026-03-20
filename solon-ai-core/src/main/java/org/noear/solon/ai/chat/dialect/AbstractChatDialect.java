@@ -19,6 +19,7 @@ import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.snack4.Options;
 import org.noear.snack4.json.JsonReader;
+import org.noear.snack4.json.util.FormatUtil;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.AudioBlock;
@@ -365,7 +366,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
         }
 
-        Map<String, Object> argMap = null;
+        Map<String, Object> argMap = new HashMap<>();
         if (n1fArgs != null) {
             if (n1fArgs.isObject()) {
                 argMap = n1fArgs.toBean(Map.class);
@@ -536,31 +537,6 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
 
     protected boolean hasNestedJsonBlock(String str) {
-        if (str == null || str.isEmpty()) {
-            return false;
-        }
-
-        int start = 0;
-        int end = str.length() - 1;
-
-        // 跳过开头空白
-        while (start <= end && Character.isWhitespace(str.charAt(start))) {
-            start++;
-        }
-
-        // 跳过结尾空白
-        while (end >= start && Character.isWhitespace(str.charAt(end))) {
-            end--;
-        }
-
-        // 检查有效长度
-        if (start >= end) {
-            return false;
-        }
-
-        char first = str.charAt(start);
-        char last = str.charAt(end);
-
-        return (first == '{' && last == '}') || (first == '[' && last == ']');
+        return FormatUtil.hasNestedJsonBlock(str);
     }
 }

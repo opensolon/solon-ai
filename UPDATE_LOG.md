@@ -19,6 +19,7 @@
 * 添加 solon-ai-dialect-gemini tool-call 的思考签名支持
 * 优化 solon-ai-core AbstractChatDialect 解析 tool 参数的兼容性
 * 优化 solon-ai-dialect-dashscope 方言 支持流式传输与百炼联网搜索
+* 优化 solon-ai-dialect-anthropic tool.args 不规范时的兼容性（比如 json 不完整）
 * 优化 solon-ai-dialect-gemini 特定 provider 结束时返回 content 为空的消息才设置finishReason 导致结束标志被提前过滤
 * 优化 solon-ai-agent ReActAgent onThought 事件，优先使用 getReasoning 获取 <think> 思考内容
 * 优化 solon-ai-agent ReActAgent SummarizationInterceptor 添加 maxContextLength 控制参数（很重要）

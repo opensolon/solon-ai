@@ -15,7 +15,11 @@
  */
 package org.noear.solon.ai.llm.dialect.anthropic;
 
+import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
+import org.noear.snack4.Options;
+import org.noear.snack4.json.JsonReader;
+import org.noear.snack4.json.util.FormatUtil;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.ai.chat.ChatChoice;
@@ -35,7 +39,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * @date 2026年1月27日
  */
 public class AnthropicResponseParser {
-    private static final Logger log = LoggerFactory.getLogger(AnthropicResponseParser.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AnthropicResponseParser.class);
+
     private final boolean logEnabled;
 
     /**
@@ -51,7 +56,7 @@ public class AnthropicResponseParser {
     private final ConcurrentHashMap<ChatResponseDefault, StreamToolState> streamStates = new ConcurrentHashMap<>();
 
     public AnthropicResponseParser() {
-        this.logEnabled = log.isDebugEnabled();
+        this.logEnabled = LOG.isDebugEnabled();
     }
 
     /**
@@ -114,7 +119,7 @@ public class AnthropicResponseParser {
             return false;
         }
         if (logEnabled) {
-            log.debug("Claude stream raw response: {}", json);
+            LOG.debug("Claude stream raw response: {}", json);
         }
         String[] lines = json.split("\n");
         boolean hasChoices = false;
@@ -271,17 +276,22 @@ public class AnthropicResponseParser {
                 StreamToolState state = streamStates.remove(resp);
                 if (state != null) {
                     try {
-                        String inputJson = state.toolInput.toString();
+                        String argStr = state.toolInput.toString();
                         Map<String, Object> arguments = new HashMap<>();
-                        if (Utils.isNotEmpty(inputJson)) {
-                            ONode inputNode = ONode.ofJson(inputJson);
-                            if (inputNode.isObject()) {
-                                arguments = inputNode.toBean(Map.class);
+
+                        if (FormatUtil.hasNestedJsonBlock(argStr)) {
+                            JsonReader reader = new JsonReader(argStr, Options.of(Feature.Read_AutoRepair));
+                            ONode n1fArgs = reader.readLast();
+
+                            if (n1fArgs == null) {
+                                LOG.warn("Parse tool arguments failed: {}", argStr);
+                            } else if (n1fArgs.isObject()) {
+                                arguments = n1fArgs.toBean(Map.class);
                             }
                         }
 
                         // 创建工具调用对象
-                        ToolCall toolCall = new ToolCall(state.toolUseId, state.toolUseId, state.toolName, inputJson, arguments);
+                        ToolCall toolCall = new ToolCall(state.toolUseId, state.toolUseId, state.toolName, argStr, arguments);
 
                         // 创建带有工具调用的助手消息
                         List<Map> toolCallsRaw = new ArrayList<>();
@@ -290,7 +300,7 @@ public class AnthropicResponseParser {
                         toolCallRaw.put("type", "function");
                         Map<String, Object> functionData = new HashMap<>();
                         functionData.put("name", state.toolName);
-                        functionData.put("arguments", inputJson);
+                        functionData.put("arguments", argStr);
                         toolCallRaw.put("function", functionData);
                         toolCallsRaw.add(toolCallRaw);
 
@@ -302,7 +312,7 @@ public class AnthropicResponseParser {
                         resp.addChoice(new ChatChoice(0, new Date(), null, assistantMessage));
                         hasChoices = true;
                     } catch (Exception e) {
-                        log.warn("Failed to parse tool call in stream mode", e);
+                        LOG.warn("Failed to parse tool call in stream mode", e);
                     }
                 }
             } else if ("message_delta".equals(eventType)) {
