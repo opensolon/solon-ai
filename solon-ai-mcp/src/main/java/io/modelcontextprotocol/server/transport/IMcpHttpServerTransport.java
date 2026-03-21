@@ -8,7 +8,7 @@ import org.noear.solon.SolonApp;
 /**
  * @author noear
  */
-public interface IMcpHttpServerTransport extends IMcpServerTransport {
+public interface IMcpHttpServerTransport {
     void toHttpHandler(SolonApp app);
 
     String getMcpEndpoint();

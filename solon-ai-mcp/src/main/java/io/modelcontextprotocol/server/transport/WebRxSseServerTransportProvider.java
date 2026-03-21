@@ -70,7 +70,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @see McpServerTransportProvider
  * @see org.noear.solon.core.handle.Handler
  */
-public class WebRxSseServerTransportProvider implements McpServerTransportProvider, IMcpHttpServerTransport, IMcpServerTransport {
+public class WebRxSseServerTransportProvider implements McpServerTransportProvider, IMcpHttpServerTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebRxSseServerTransportProvider.class);
 

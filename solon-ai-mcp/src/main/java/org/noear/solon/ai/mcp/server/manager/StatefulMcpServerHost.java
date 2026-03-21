@@ -158,7 +158,7 @@ public class StatefulMcpServerHost implements McpServerHost {
         return toolManager;
     }
 
-    public IMcpServerTransport build() {
+    public Object build() {
         if (server == null) {
             server = mcpServerSpec.build();
             server.loggingNotification(McpSchema.LoggingMessageNotification.builder().level(loggingLevel).build());
@@ -193,7 +193,7 @@ public class StatefulMcpServerHost implements McpServerHost {
             }
         }
 
-        return (IMcpServerTransport) mcpTransportProvider;
+        return mcpTransportProvider;
     }
 
     @Override

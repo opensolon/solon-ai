@@ -107,7 +107,7 @@ public class StatelessMcpServerHost implements McpServerHost {
         return toolManager;
     }
 
-    public IMcpServerTransport build() {
+    public Object build() {
         if (server == null) {
             server = mcpServerSpec.build();
 
@@ -121,7 +121,7 @@ public class StatelessMcpServerHost implements McpServerHost {
                     promptManager.count());
         }
 
-        return (IMcpServerTransport) mcpTransportProvider;
+        return mcpTransportProvider;
     }
 
     @Override

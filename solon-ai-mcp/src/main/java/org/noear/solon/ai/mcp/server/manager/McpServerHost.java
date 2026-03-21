@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.mcp.server.manager;
 
-import io.modelcontextprotocol.server.transport.IMcpServerTransport;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.prompt.FunctionPrompt;
@@ -62,7 +61,7 @@ public interface McpServerHost {
     /**
      * 构建
      */
-    IMcpServerTransport build();
+    Object build();
 
     /**
      * 开始

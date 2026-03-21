@@ -27,7 +27,7 @@ import java.util.Map;
  *
  * @author Dariusz Jędrzejczyk
  */
-public class WebRxStatelessServerTransport implements McpStatelessServerTransport, IMcpHttpServerTransport, IMcpServerTransport {
+public class WebRxStatelessServerTransport implements McpStatelessServerTransport, IMcpHttpServerTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebRxStatelessServerTransport.class);
 

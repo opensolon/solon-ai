@@ -47,7 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author noear
  * @see McpStreamableServerTransportProvider
  */
-public class WebRxStreamableServerTransportProvider implements McpStreamableServerTransportProvider, IMcpHttpServerTransport, IMcpServerTransport {
+public class WebRxStreamableServerTransportProvider implements McpStreamableServerTransportProvider, IMcpHttpServerTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebRxStreamableServerTransportProvider.class);
 
