@@ -14,6 +14,15 @@ import java.nio.file.Paths;
 import java.util.Base64;
 
 public class BrowserSkill extends AbsSkill {
+    private static BrowserSkill instance;
+
+    public static BrowserSkill getInstance() {
+        if (instance == null) {
+            instance = new BrowserSkill();
+        }
+
+        return instance;
+    }
 
     // 核心 JS 标记脚本：为视觉对齐提供编号
     private static final String MARK_JS =
