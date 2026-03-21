@@ -70,7 +70,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @see McpServerTransportProvider
  * @see org.noear.solon.core.handle.Handler
  */
-public class WebRxSseServerTransportProvider implements McpServerTransportProvider, IMcpHttpServerTransport {
+public class WebRxSseServerTransportProvider implements McpServerTransportProvider, IMcpHttpServerTransport, IMcpServerTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebRxSseServerTransportProvider.class);
 
@@ -185,6 +185,10 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 		return sseEndpoint;
 	}
 
+	public String getMessageEndpoint() {
+		return messageEndpoint;
+	}
+
 	@Override
 	public List<String> protocolVersions() {
 		return Arrays.asList(ProtocolVersions.MCP_2024_11_05);
@@ -250,7 +254,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 				});
 	}
 
-	private void handleSseConnection(Context ctx) throws Throwable{
+	public void handleSseConnection(Context ctx) throws Throwable{
 		Mono<Entity> entityMono = doHandleSseConnection(ctx);
 		ctx.returnValue(entityMono);
 	}
@@ -316,7 +320,7 @@ public class WebRxSseServerTransportProvider implements McpServerTransportProvid
 	 * @param request The incoming server request containing the JSON-RPC message
 	 * @return A Mono emitting the response indicating the message processing result
 	 */
-	private void handleMessage(Context request) throws Throwable{
+	public void handleMessage(Context request) throws Throwable{
 		Mono<Entity> entityMono = doHandleMessage(request);
 		request.returnValue(entityMono);
 	}

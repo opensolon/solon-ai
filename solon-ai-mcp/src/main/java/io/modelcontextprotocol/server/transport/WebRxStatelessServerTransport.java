@@ -27,7 +27,7 @@ import java.util.Map;
  *
  * @author Dariusz Jędrzejczyk
  */
-public class WebRxStatelessServerTransport implements McpStatelessServerTransport, IMcpHttpServerTransport {
+public class WebRxStatelessServerTransport implements McpStatelessServerTransport, IMcpHttpServerTransport, IMcpServerTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebRxStatelessServerTransport.class);
 
@@ -77,7 +77,7 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 	}
 
 
-	private void handleGet(Context ctx) throws Throwable{
+	public void handleGet(Context ctx) throws Throwable{
 		Object entity = doHandleGet(ctx);
 		ctx.returnValue(entity);
 	}
@@ -86,7 +86,7 @@ public class WebRxStatelessServerTransport implements McpStatelessServerTranspor
 		return new Entity().status(StatusCodes.CODE_METHOD_NOT_ALLOWED);
 	}
 
-	private void handlePost(Context ctx) throws Throwable{
+	public void handlePost(Context ctx) throws Throwable{
 		Mono<Entity> entityMono = doHandlePost(ctx);
 		ctx.returnValue(entityMono);
 	}

@@ -47,7 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author noear
  * @see McpStreamableServerTransportProvider
  */
-public class WebRxStreamableServerTransportProvider implements McpStreamableServerTransportProvider, IMcpHttpServerTransport {
+public class WebRxStreamableServerTransportProvider implements McpStreamableServerTransportProvider, IMcpHttpServerTransport, IMcpServerTransport {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebRxStreamableServerTransportProvider.class);
 
@@ -194,7 +194,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	 * @param ctx The incoming server request
 	 * @return A Mono which emits a response with the SSE event stream
 	 */
-	private void handleGet(Context ctx) throws Throwable {
+	public void handleGet(Context ctx) throws Throwable {
 		Mono<Entity> entityMono = doHandleGet(ctx);
 		ctx.returnValue(entityMono);
 	}
@@ -259,7 +259,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 	 * @param ctx The incoming server request containing the JSON-RPC message
 	 * @return A Mono with the response appropriate to a particular Streamable HTTP flow.
 	 */
-	private void handlePost(Context ctx) throws Throwable{
+	public void handlePost(Context ctx) throws Throwable{
 		Mono<Entity> entityMono = doHandlePost(ctx);
 		ctx.returnValue(entityMono);
 	}
@@ -360,7 +360,7 @@ public class WebRxStreamableServerTransportProvider implements McpStreamableServ
 				.contextWrite(ctx -> ctx.put(McpTransportContext.KEY, transportContext));
 	}
 
-	private void handleDelete(Context ctx) throws Throwable {
+	public void handleDelete(Context ctx) throws Throwable {
 		Mono<Entity> entityMono = doHandleDelete(ctx);
 		ctx.returnValue(entityMono);
 	}

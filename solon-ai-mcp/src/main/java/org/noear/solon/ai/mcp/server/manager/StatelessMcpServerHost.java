@@ -70,7 +70,7 @@ public class StatelessMcpServerHost implements McpServerHost {
                 .messageEndpoint(this.mcpEndpoint)
                 .build();
 
-        mcpServerSpec = McpServer.async(this.mcpTransportProvider)
+        this.mcpServerSpec = McpServer.async(this.mcpTransportProvider)
                 .capabilities(serverCapabilities)
                 .serverInfo(serverProps.getName(), serverProps.getVersion());
 
@@ -107,18 +107,26 @@ public class StatelessMcpServerHost implements McpServerHost {
         return toolManager;
     }
 
+    public IMcpServerTransport build() {
+        if (server == null) {
+            server = mcpServerSpec.build();
+
+            log.info("Mcp-Server started, name={}, version={}, channel={}, mcpEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
+                    serverProperties.getName(),
+                    serverProperties.getVersion(),
+                    serverProperties.getChannel(),
+                    this.mcpEndpoint,
+                    toolManager.count(),
+                    resourceManager.count(),
+                    promptManager.count());
+        }
+
+        return (IMcpServerTransport) mcpTransportProvider;
+    }
+
     @Override
     public void start() {
-        server = mcpServerSpec.build();
-
-        log.info("Mcp-Server started, name={}, version={}, channel={}, mcpEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
-                serverProperties.getName(),
-                serverProperties.getVersion(),
-                serverProperties.getChannel(),
-                this.mcpEndpoint,
-                toolManager.count(),
-                resourceManager.count(),
-                promptManager.count());
+        build();
 
         //如果是 web 类的
         if (mcpTransportProvider instanceof IMcpHttpServerTransport) {

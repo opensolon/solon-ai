@@ -18,10 +18,7 @@ package org.noear.solon.ai.mcp.server.manager;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
-import io.modelcontextprotocol.server.transport.IMcpHttpServerTransport;
-import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
-import io.modelcontextprotocol.server.transport.WebRxSseServerTransportProvider;
-import io.modelcontextprotocol.server.transport.WebRxStreamableServerTransportProvider;
+import io.modelcontextprotocol.server.transport.*;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerTransportProviderBase;
 import org.noear.solon.Solon;
@@ -100,7 +97,7 @@ public class StatefulMcpServerHost implements McpServerHost {
             //stdio 通道
             this.mcpTransportProvider = new StdioServerTransportProvider(McpJsonMapper.getDefault());
 
-            mcpServerSpec = McpServer.async((StdioServerTransportProvider) this.mcpTransportProvider)
+            this.mcpServerSpec = McpServer.async((StdioServerTransportProvider) this.mcpTransportProvider)
                     .capabilities(serverCapabilities)
                     .serverInfo(serverProps.getName(), serverProps.getVersion());
         } else {
@@ -113,7 +110,7 @@ public class StatefulMcpServerHost implements McpServerHost {
                         .keepAliveInterval(serverProps.getHeartbeatInterval())
                         .build();
 
-                mcpServerSpec = McpServer.async((WebRxSseServerTransportProvider) this.mcpTransportProvider)
+                this.mcpServerSpec = McpServer.async((WebRxSseServerTransportProvider) this.mcpTransportProvider)
                         .capabilities(serverCapabilities)
                         .serverInfo(serverProps.getName(), serverProps.getVersion());
             } else {
@@ -122,7 +119,7 @@ public class StatefulMcpServerHost implements McpServerHost {
                         .keepAliveInterval(serverProps.getHeartbeatInterval())
                         .build();
 
-                mcpServerSpec = McpServer.async((WebRxStreamableServerTransportProvider) this.mcpTransportProvider)
+                this.mcpServerSpec = McpServer.async((WebRxStreamableServerTransportProvider) this.mcpTransportProvider)
                         .capabilities(serverCapabilities)
                         .serverInfo(serverProps.getName(), serverProps.getVersion());
             }
@@ -161,39 +158,47 @@ public class StatefulMcpServerHost implements McpServerHost {
         return toolManager;
     }
 
+    public IMcpServerTransport build() {
+        if (server == null) {
+            server = mcpServerSpec.build();
+            server.loggingNotification(McpSchema.LoggingMessageNotification.builder().level(loggingLevel).build());
+
+            if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
+                log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
+                        serverProperties.getName(),
+                        serverProperties.getVersion(),
+                        serverProperties.getChannel(),
+                        toolManager.count(),
+                        resourceManager.count(),
+                        promptManager.count());
+            } else if (McpChannel.SSE.equalsIgnoreCase(serverProperties.getChannel())) {
+                log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
+                        serverProperties.getName(),
+                        serverProperties.getVersion(),
+                        serverProperties.getChannel(),
+                        this.mcpEndpoint,
+                        this.messageEndpoint,
+                        toolManager.count(),
+                        resourceManager.count(),
+                        promptManager.count());
+            } else {
+                log.info("Mcp-Server started, name={}, version={}, channel={}, mcpEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
+                        serverProperties.getName(),
+                        serverProperties.getVersion(),
+                        serverProperties.getChannel(),
+                        this.mcpEndpoint,
+                        toolManager.count(),
+                        resourceManager.count(),
+                        promptManager.count());
+            }
+        }
+
+        return (IMcpServerTransport) mcpTransportProvider;
+    }
+
     @Override
     public void start() {
-        server = mcpServerSpec.build();
-        server.loggingNotification(McpSchema.LoggingMessageNotification.builder().level(loggingLevel).build());
-
-        if (McpChannel.STDIO.equalsIgnoreCase(serverProperties.getChannel())) {
-            log.info("Mcp-Server started, name={}, version={}, channel={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
-                    serverProperties.getName(),
-                    serverProperties.getVersion(),
-                    serverProperties.getChannel(),
-                    toolManager.count(),
-                    resourceManager.count(),
-                    promptManager.count());
-        } else if (McpChannel.SSE.equalsIgnoreCase(serverProperties.getChannel())) {
-            log.info("Mcp-Server started, name={}, version={}, channel={}, sseEndpoint={}, messageEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
-                    serverProperties.getName(),
-                    serverProperties.getVersion(),
-                    serverProperties.getChannel(),
-                    this.mcpEndpoint,
-                    this.messageEndpoint,
-                    toolManager.count(),
-                    resourceManager.count(),
-                    promptManager.count());
-        } else {
-            log.info("Mcp-Server started, name={}, version={}, channel={}, mcpEndpoint={}, toolRegistered={}, resourceRegistered={}, promptRegistered={}",
-                    serverProperties.getName(),
-                    serverProperties.getVersion(),
-                    serverProperties.getChannel(),
-                    this.mcpEndpoint,
-                    toolManager.count(),
-                    resourceManager.count(),
-                    promptManager.count());
-        }
+        build();
 
         //如果是 web 类的
         if (mcpTransportProvider instanceof IMcpHttpServerTransport) {
