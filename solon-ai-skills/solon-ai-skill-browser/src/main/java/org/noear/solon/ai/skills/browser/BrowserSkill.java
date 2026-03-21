@@ -14,13 +14,9 @@ import java.nio.file.Paths;
 import java.util.Base64;
 
 public class BrowserSkill extends AbsSkill {
-    private static BrowserSkill instance;
+    private static BrowserSkill instance = new BrowserSkill();
 
     public static BrowserSkill getInstance() {
-        if (instance == null) {
-            instance = new BrowserSkill();
-        }
-
         return instance;
     }
 
@@ -50,7 +46,7 @@ public class BrowserSkill extends AbsSkill {
 
     @Override
     public String description() {
-        return "高级浏览器技能：支持多标签切换、编号精准定位、文件上传与下载。";
+        return "高级无头浏览器技能：支持多标签切换、编号精准定位、文件上传与下载。";
     }
 
     @Override
@@ -69,15 +65,15 @@ public class BrowserSkill extends AbsSkill {
             sb.append("- **当前标签**: ").append(browserManager.getPageMap().keySet()).append("\n");
         }
 
-        sb.append("## 浏览器使用准则\n");
-        sb.append("- **适用场景**: 只有当目标地址是 HTML 网页、需要处理复杂的 JavaScript 渲染、或需要进行视觉确认时，才使用浏览器。\n");
-        sb.append("- **禁止场景**: 严禁使用浏览器调用 RESTful API 或下载纯文本/JSON 数据。对于此类任务，请优先使用 http 工具。\n");
-        sb.append("- **视觉驱动**: 浏览器是一个视觉工具。每次关键操作前，请先执行 `browser_screenshot` 以确保你正盯着正确的页面。\n");
+        sb.append("## 无头浏览器使用准则\n");
+        sb.append("- **适用场景**: 只有当目标地址是 HTML 网页、需要处理复杂的 JavaScript 渲染、或需要进行视觉确认时，才使用无头浏览器。\n");
+        sb.append("- **禁止场景**: 严禁使用无头浏览器调用 RESTful API 或下载纯文本/JSON 数据。对于此类任务，请优先使用 http 工具。\n");
+        sb.append("- **视觉驱动**: 无头浏览器是一个视觉工具。每次关键操作前，请先执行 `browser_screenshot` 以确保你正盯着正确的页面。\n");
         return sb.toString();
     }
 
     // --- 标签页管理 ---
-    @ToolMapping(name = "browser_tab_create", description = "在浏览器中创建并切换到新标签页。")
+    @ToolMapping(name = "browser_tab_create", description = "在无头浏览器中创建并切换到新标签页。")
     public String createTab(@Param("tab_id") String tabId, String __cwd) {
         BrowserManager browserManager = BrowserManager.of(__cwd);
 
@@ -85,7 +81,7 @@ public class BrowserSkill extends AbsSkill {
         return "已创建并切换到: " + tabId;
     }
 
-    @ToolMapping(name = "browser_tab_switch", description = "在浏览器中切换标签页。")
+    @ToolMapping(name = "browser_tab_switch", description = "在无头浏览器中切换标签页。")
     public String switchTab(@Param("tab_id") String tabId,
                             String __cwd) {
         BrowserManager browserManager = BrowserManager.of(__cwd);
@@ -100,14 +96,14 @@ public class BrowserSkill extends AbsSkill {
 
         try {
             browserManager.saveState();
-            return "浏览器会话状态已成功保存。下次启动将自动保持登录。";
+            return "无头浏览器会话状态已成功保存。下次启动将自动保持登录。";
         } catch (Throwable e) {
             return "状态保存失败: " + e.getMessage();
         }
     }
 
     // --- 核心交互 ---
-    @ToolMapping(name = "browser_navigate", description = "在浏览器中打开指定页面。仅当需要处理 HTML 页面、执行 JavaScript 或进行视觉观察时使用。")
+    @ToolMapping(name = "browser_navigate", description = "在无头浏览器中打开指定页面。仅当需要处理 HTML 页面、执行 JavaScript 或进行视觉观察时使用。")
     public String navigate(@Param("url") String url,
                            String __cwd) {
         BrowserManager browserManager = BrowserManager.of(__cwd);
@@ -118,7 +114,7 @@ public class BrowserSkill extends AbsSkill {
         return String.format("已加载: %s (标题: %s)", page.url(), page.title());
     }
 
-    @ToolMapping(name = "browser_screenshot", description = "捕捉浏览器当前呈现的视觉画面，并附带交互元素编号，用于视觉对齐和确认页面状态。")
+    @ToolMapping(name = "browser_screenshot", description = "捕捉无头浏览器当前呈现的视觉画面，并附带交互元素编号，用于视觉对齐和确认页面状态。")
     public String screenshot(String __cwd) {
         BrowserManager browserManager = BrowserManager.of(__cwd);
 
@@ -138,7 +134,7 @@ public class BrowserSkill extends AbsSkill {
         return "data:image/png;base64," + Base64.getEncoder().encodeToString(buffer);
     }
 
-    @ToolMapping(name = "browser_interact", description = "在浏览器中模拟真实用户对网页 DOM 元素进行交互操作。只能操作通过 browser_screenshot 看到的编号元素。")
+    @ToolMapping(name = "browser_interact", description = "在无头浏览器中模拟真实用户对网页 DOM 元素进行交互操作。只能操作通过 browser_screenshot 看到的编号元素。")
     public String interact(@Param(name = "action", description = "交互操作 (可选值：click, type, hover, scroll)") String action,
                            @Param(name = "selector") String selector,
                            @Param(value = "text", required = false) String text,
@@ -180,7 +176,7 @@ public class BrowserSkill extends AbsSkill {
 
     // --- 文件上传与下载 (新功能) ---
 
-    @ToolMapping(name = "browser_download", description = "在浏览器中点击链接并捕获下载文件。文件将保存到下载目录。")
+    @ToolMapping(name = "browser_download", description = "在无头浏览器中点击链接并捕获下载文件。文件将保存到下载目录。")
     public String download(@Param("selector") String selector,
                            String __cwd) {
         BrowserManager browserManager = BrowserManager.of(__cwd);
@@ -196,7 +192,7 @@ public class BrowserSkill extends AbsSkill {
         }
     }
 
-    @ToolMapping(name = "browser_upload", description = "在浏览器中向指定的文件输入框上传本地文件。")
+    @ToolMapping(name = "browser_upload", description = "在无头浏览器中向指定的文件输入框上传本地文件。")
     public String upload(@Param("selector") String selector,
                          @Param("file_path") String filePath,
                          String __cwd) {
