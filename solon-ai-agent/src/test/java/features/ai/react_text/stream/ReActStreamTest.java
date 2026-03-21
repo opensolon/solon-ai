@@ -8,7 +8,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
 import org.noear.solon.ai.agent.react.ReActStyle;
-import org.noear.solon.ai.agent.react.task.ActionChunk;
+import org.noear.solon.ai.agent.react.task.ActionEndChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -79,7 +79,7 @@ public class ReActStreamTest {
                 .doOnNext(chunk -> {
                     if (chunk instanceof ReasonChunk) {
                         System.out.println("[思考]: " + chunk.getContent());
-                    } else if (chunk instanceof ActionChunk) {
+                    } else if (chunk instanceof ActionEndChunk) {
                         actionFound.set(true);
                         System.out.println("[动作]: 正在调用工具...");
                     } else if (chunk instanceof ReActChunk) {

@@ -25,6 +25,7 @@
 * 优化 solon-ai-dialect-gemini 特定 provider 结束时返回 content 为空的消息才设置finishReason 导致结束标志被提前过滤
 * 优化 solon-ai-agent ReActAgent onThought 事件，优先使用 getReasoning 获取 <think> 思考内容
 * 优化 solon-ai-agent ReActAgent SummarizationInterceptor 添加 maxContextLength 控制参数（很重要）
+* 优化 solon-ai-agent ActionChunk 分为 ActionEndChunk 和 ActionStartChunk（并保留 ActionChunk 标为弃用）
 * 优化 solon-ai-agent 流式处理 `catch (Exception`，换成 `catch (Throwable`
 * 优化 solon-ai-skill-restapi 每个 api 可以添加独立的验证机制
 * 优化 solon-ai-skill-cli 避免 bash 把当前进程给删掉了

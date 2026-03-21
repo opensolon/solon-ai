@@ -27,12 +27,10 @@ import java.util.Map;
  *
  * @author noear
  * @since 3.9.1
- * @deprecated 3.9.6 {@link ActionEndChunk}
  */
-@Deprecated
 @Preview("3.9.1")
-public class ActionChunk extends AbsActionChunk {
-    public ActionChunk(Node node, ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
+public class ActionEndChunk extends ActionChunk {
+    public ActionEndChunk(Node node, ReActTrace trace, String toolName, Map<String, Object> args, ChatMessage message) {
         super(node, trace, toolName, args, message);
     }
 }

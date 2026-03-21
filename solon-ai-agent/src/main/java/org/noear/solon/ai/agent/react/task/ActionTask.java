@@ -104,7 +104,7 @@ public class ActionTask implements NamedTaskComponent {
     }
 
 
-    private String doAction(ReActTrace trace, String toolName, Map<String, Object> args) {
+    private String doAction(Node node, ReActTrace trace, String toolName, Map<String, Object> args) {
         trace.setLastObservation(null);
         for (RankEntity<ReActInterceptor> item : trace.getOptions().getInterceptors()) {
             item.target.onAction(trace, toolName, args);
@@ -116,6 +116,13 @@ public class ActionTask implements NamedTaskComponent {
 
         if (Agent.ID_END.equals(trace.getRoute())) {
             return null;
+        }
+
+
+
+        if (trace.getOptions().getStreamSink() != null) {
+            trace.getOptions().getStreamSink().next(
+                    new ActionStartChunk(node, trace, toolName, args, ChatMessage.ofAssistant("")));
         }
 
         // 4. 执行工具
@@ -162,7 +169,7 @@ public class ActionTask implements NamedTaskComponent {
         Map<String, Object> args = (call.getArguments() == null) ? new HashMap<>() : call.getArguments();
 
         // 触发 Action 生命周期拦截
-        String result = doAction(trace, call.getName(), args);
+        String result = doAction(node, trace, call.getName(), args);
         if (result == null) {
             return;
         }
@@ -177,7 +184,7 @@ public class ActionTask implements NamedTaskComponent {
 
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
-                    new ActionChunk(node, trace, call.getName(), args, toolMessage));
+                    new ActionEndChunk(node, trace, call.getName(), args, toolMessage));
         }
     }
 
@@ -257,7 +264,7 @@ public class ActionTask implements NamedTaskComponent {
      * 优化点 1：提取独立执行方法，确保 Observation 即时生成
      */
     private void handleSingleAction(Node node, ReActTrace trace, String toolName, Map<String, Object> args, AtomicBoolean lastAssistantAdded) throws Throwable {
-        String result = doAction(trace, toolName, args);
+        String result = doAction(node, trace, toolName, args);
         if (result != null) {
             handleSingleObservation(node, trace, toolName, args, "Observation: " + result, lastAssistantAdded);
         }
@@ -281,7 +288,7 @@ public class ActionTask implements NamedTaskComponent {
         // 在旧逻辑中，多工具并发时用户只能看到最后的结果，现在可以逐个看到每个工具的输出
         if (trace.getOptions().getStreamSink() != null) {
             trace.getOptions().getStreamSink().next(
-                    new ActionChunk(node, trace, toolName, args, chatMessage));
+                    new ActionEndChunk(node, trace, toolName, args, chatMessage));
         }
     }
 
