@@ -46,6 +46,10 @@ public class ThoughtChunk extends AbsAgentChunk {
         return node;
     }
 
+    public AssistantMessage getAssistantMessage() {
+        return assistantMessage;
+    }
+
     public ReActTrace getTrace() {
         return trace;
     }
