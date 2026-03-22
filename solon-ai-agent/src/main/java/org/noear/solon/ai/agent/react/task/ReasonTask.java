@@ -305,7 +305,7 @@ public class ReasonTask implements NamedTaskComponent {
             return;
         }
 
-        // [逻辑 3.5: 思考事件] 无论是否有 tool_calls，都先提取思考内容并触发 onThought
+        // [逻辑 3.5: 思考事件] 无论是否有 tool_calls，都先提取思考内容并触发 onThought 事件
         final String clearContent = responseMessage.hasContent() ? responseMessage.getResultContent() : "";
         final String thoughtContent;
 
@@ -327,6 +327,11 @@ public class ReasonTask implements NamedTaskComponent {
 
         if(trace.getSession().isPending()){
             return;
+        }
+
+
+        if(trace.getOptions().getStreamSink() != null){
+            trace.getOptions().getStreamSink().next(new ThoughtChunk(node, trace, responseMessage));
         }
 
         trace.setLastReasonMessage(responseMessage);
