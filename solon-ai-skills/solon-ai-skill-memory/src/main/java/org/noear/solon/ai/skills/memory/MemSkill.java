@@ -143,7 +143,7 @@ public class MemSkill extends AbsSkill {
             description = "将事实、偏好或进度存入用户心智模型。若存在同名 Key，系统将返回旧记录以供你对比反思。")
     public String extract(@Param("key") String key,
                           @Param("fact") String fact,
-                          @Param("importance") int importance,
+                          @Param(value = "importance", description = "权重(1-10)：1-3琐碎事实, 4-6偏好习惯, 7-9核心规约, 10重大身份定论") int importance,
                           String __sessionId) {
         __sessionId = getEffectiveSessionId(__sessionId);
 
