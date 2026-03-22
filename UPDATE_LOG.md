@@ -11,6 +11,10 @@
 *  mcp channel 概念改为 transport （并保持兼容）???
 
 
+### 3.9.7
+
+* 修复 solon-ai-core ChatModel.outputSchema 配置无效的问题
+
 ### 3.9.6
 
 * 添加 solon-ai-core ChatModel.outputSchema 配置支持（且与 Agent 统一基于方言实现，各方言可定制）

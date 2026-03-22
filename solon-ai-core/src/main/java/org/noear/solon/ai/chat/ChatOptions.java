@@ -95,12 +95,12 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
     }
 
     public ChatOptions outputSchema(String val) {
-        this.systemPrompt = val;
+        this.outputSchema = val;
         return this;
     }
 
     public ChatOptions outputSchema(Type type) {
-        this.systemPrompt = ToolSchemaUtil.buildOutputSchema(type);
+        this.outputSchema = ToolSchemaUtil.buildOutputSchema(type);
         return this;
     }
 
