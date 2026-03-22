@@ -15,10 +15,12 @@
  */
 package org.noear.solon.ai.agent.trace;
 
+import org.noear.solon.Utils;
 import org.noear.solon.ai.AiUsage;
 import org.noear.solon.lang.Preview;
 
 import java.io.Serializable;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 智能体执行指标统计
@@ -28,14 +30,16 @@ import java.io.Serializable;
  */
 @Preview("3.8.1")
 public class Metrics implements Serializable {
+    private final ReentrantLock LOCK = new ReentrantLock();
+
     /**
      * 总耗时（毫秒）
      */
-    private long totalDuration;
+    private volatile long totalDuration;
 
-    private long promptTokens;
-    private long completionTokens;
-    private long totalTokens;
+    private volatile long promptTokens;
+    private volatile long completionTokens;
+    private volatile long totalTokens;
 
 
     // --- Setter & Accumulator Methods ---
@@ -57,22 +61,40 @@ public class Metrics implements Serializable {
     }
 
     public void reset() {
-        this.totalDuration = 0;
-        this.promptTokens = 0;
-        this.completionTokens = 0;
-        this.totalTokens = 0;
+        LOCK.lock();
+
+        try {
+            this.totalDuration = 0;
+            this.promptTokens = 0;
+            this.completionTokens = 0;
+            this.totalTokens = 0;
+        } finally {
+            LOCK.unlock();
+        }
     }
 
     public void addMetrics(Metrics metrics) {
-        this.promptTokens += metrics.promptTokens;
-        this.completionTokens += metrics.completionTokens;
-        this.totalTokens += metrics.totalTokens;
+        LOCK.lock();
+
+        try {
+            this.promptTokens += metrics.promptTokens;
+            this.completionTokens += metrics.completionTokens;
+            this.totalTokens += metrics.totalTokens;
+        } finally {
+            LOCK.unlock();
+        }
     }
 
     public void addUsage(AiUsage usage) {
-        this.promptTokens += usage.promptTokens();
-        this.completionTokens += usage.completionTokens();
-        this.totalTokens += usage.totalTokens();
+        LOCK.lock();
+
+        try {
+            this.promptTokens += usage.promptTokens();
+            this.completionTokens += usage.completionTokens();
+            this.totalTokens += usage.totalTokens();
+        } finally {
+            LOCK.unlock();
+        }
     }
 
 
