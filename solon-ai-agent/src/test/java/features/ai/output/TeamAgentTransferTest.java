@@ -25,6 +25,7 @@ import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamProtocols;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.core.util.Assert;
 
@@ -143,6 +144,29 @@ public class TeamAgentTransferTest {
                 .toBean(Personnel.class);
 
         String jsonData = session.getContext().getAs("structured_data");
+        System.out.println("结构化结果: " + personnel.entity_name);
+        System.out.println("结构化结果: " + jsonData);
+
+        Assertions.assertTrue(jsonData.contains("entity_name"));
+        Assertions.assertTrue(jsonData.contains("1971"));
+        Assertions.assertTrue(jsonData.contains("CEO"));
+    }
+
+    @Test
+    public void testJsonSchemaOutputLlm() throws Throwable {
+        ChatModel chatModel = LlmUtil.getChatModel();
+
+        AssistantMessage resp = chatModel
+                .prompt("伊隆·马斯克，1971年出生，现任特斯拉CEO。")
+                .options(o->{
+                    o.role("高精度信息提取专家");
+                    o.instruction("从文本中提取关键实体，严格遵守 JSON Schema 规范。");
+                    o.outputSchema(Personnel.class);
+                }).call().getMessage();
+
+        String jsonData = resp.getContent();
+        Personnel personnel =resp.toBean(Personnel.class);
+
         System.out.println("结构化结果: " + personnel.entity_name);
         System.out.println("结构化结果: " + jsonData);
 
