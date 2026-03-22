@@ -374,7 +374,6 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
             if (resp.hasChoices()) {
                 AssistantMessage choiceMessage = resp.getMessage();
                 if (Assert.isNotEmpty(choiceMessage.getToolCalls())) {
-                    //messages.add(choiceMessage);
                     buildToolCallBuilder(resp, choiceMessage);
                 }
 
@@ -458,9 +457,19 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     }
 
     private void publishResponse(FluxSink<? super ChatResponse> sink, ChatResponseDefault resp, ChatChoice choice) {
-        if (choice.getMessage().hasContent()) {
-            resp.contentBuilder.append(choice.getMessage().getContent());
+        AssistantMessage acm = choice.getMessage();
+
+        if (Assert.isEmpty(acm.getToolCalls())) {
+            //工具不为空时已在 buildToolCallBuilder 添加
+            if (Assert.isNotEmpty(acm.getContent())) {
+                resp.contentBuilder.append(acm.getContent());
+            }
+
+            if (Assert.isNotEmpty(acm.getReasoning())) {
+                resp.reasoningBuilder.append(acm.getReasoning());
+            }
         }
+
         sink.next(resp);
     }
 

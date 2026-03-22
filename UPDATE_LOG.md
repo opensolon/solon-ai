@@ -18,6 +18,7 @@
 * 添加 solon-ai-agent AgentChunk.getMeta 流块元数据（方便在传递过程中，做标识）
 * 优化 solon-ai-agent ActionTask 执行完后就更新快照（避免可能的长时间没有更新快照）
 * 修复 solon-ai-core ChatModel.outputSchema 配置无效的问题
+* 修复 solon-ai-core 工具调用时可能消息内容重复的问题
 
 ### 3.9.6
 
