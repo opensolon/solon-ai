@@ -13,6 +13,8 @@
 
 ### 3.9.7
 
+* 添加 solon-ai-agent ThoughtChunk 流块
+* 添加 solon-ai-agent Metrics.addMetrics 锁安全
 * 优化 solon-ai-agent ActionTask 执行完后就更新快照（避免可能的长时间没有更新快照）
 * 修复 solon-ai-core ChatModel.outputSchema 配置无效的问题
 
