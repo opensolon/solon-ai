@@ -105,29 +105,33 @@ public class MemSkill extends AbsSkill {
     public String getInstruction(Prompt prompt) {
         String mentalModel = "";
         if (searchProvider != null) {
-            // 获取核心认知碎片（通常是重要度高或最近更新的）
             String sessionId = getSessoinId(prompt);
-
-            List<MemSearchResult> hot = searchProvider.getHotMemories(sessionId, 5);
+            List<MemSearchResult> hot = searchProvider.getHotMemories(sessionId, 8);
             if (!hot.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (MemSearchResult r : hot) {
-                    sb.append(String.format("- %s: %s (Time: %s)\n", r.getKey(), r.getContent(), r.getTime()));
+                    sb.append(String.format("- [%s] %s: %s (Imp: %d)\n",
+                            r.getTime(), r.getKey(), r.getContent(), r.getImportance()));
                 }
                 mentalModel = sb.toString();
             }
         }
 
-        String scope = sessionIsolation ? "当前用户私有" : "全局共享";
+        String scope = sessionIsolation ? "用户私人空间" : "全局公共知识库";
 
-        return "## 长期记忆自演进指南 (模式: " + scope + " | 当前时间: " + getNow() + ")\n" +
-                "你具备自主管理和演进用户心智模型的能力，请遵循以下原则：\n" +
-                "1. **核心心智模型**：这是你对当前用户的既有认知，请基于此进行对话：\n" +
-                (Assert.isEmpty(mentalModel) ? "- (心智模型构建中，请多提问以了解用户)" : mentalModel) +
-                "\n\n2. **认知演进准则**：\n" +
-                "   - **时序优先**：若认知记录存在冲突，以时间戳最近的为准。\n" +
-                "   - **主动修正**：若用户现状与上述模型冲突，必须通过 `mem_extract` 更新或 `mem_prune` 修剪。\n" +
-                "   - **归纳升维**：当认知库出现冗余时，主动使用 `mem_consolidate` 将低层事实归纳为高层偏好。";
+        return "## 长期记忆与心智演进指南 (存储域: " + scope + ")\n" +
+                "你拥有自主维护用户心智模型的能力。请实时提取对话中的价值点，并维持认知的一致性。\n\n" +
+                "### 1. 当前核心认知预览：\n" +
+                (Assert.isEmpty(mentalModel) ? "- (暂无核心认知，请通过交流逐步构建用户画像)" : mentalModel) +
+                "\n\n### 2. 记忆提取评分标准 (importance)：\n" +
+                "- **1-3 (琐碎事实)**：临时的任务细节、单次提及的背景（如：当前处理的文件名）。\n" +
+                "- **4-6 (行为偏好)**：用户展现出的习惯、常用的工具偏好、反复提及的关注点。\n" +
+                "- **7-9 (核心规约)**：项目的架构定义、长期的技术选型、用户明确要求的行为准则。\n" +
+                "- **10 (生命周期关键点)**：足以改变后续所有对话逻辑的重大发现或用户身份定论。\n\n" +
+                "### 3. 认知维护指令：\n" +
+                "- **发现冲突时**：若新事实与“核心认知预览”冲突，必须调用 `mem_extract` 更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正。\n" +
+                "- **碎片过多时**：当你发现检索到多个关于同一主题的低分记录（Imp < 5），应主动调用 `mem_consolidate` 将其升维为一条高分偏好（Imp >= 7）。\n" +
+                "- **时效性原则**：永远以时间戳（Time）最近的认知记录为准。";
     }
 
 
