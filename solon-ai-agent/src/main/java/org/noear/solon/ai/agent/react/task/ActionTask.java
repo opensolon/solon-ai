@@ -88,19 +88,24 @@ public class ActionTask implements NamedTaskComponent {
         AssistantMessage lastAssistant = trace.getLastReasonMessage();
         AtomicBoolean lastAssistantAdded = new AtomicBoolean(false);
 
-        // 1. 优先处理原生工具调用（Native Tool Calls）
-        if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
-            for (ToolCall call : lastAssistant.getToolCalls()) {
-                processNativeToolCall(node, call, trace, parentTeamTrace, lastAssistantAdded);
-                if (Agent.ID_END.equals(trace.getRoute())) {
-                    break;
+        try {
+            // 1. 优先处理原生工具调用（Native Tool Calls）
+            if (lastAssistant != null && Assert.isNotEmpty(lastAssistant.getToolCalls())) {
+                for (ToolCall call : lastAssistant.getToolCalls()) {
+                    processNativeToolCall(node, call, trace, parentTeamTrace, lastAssistantAdded);
+                    if (Agent.ID_END.equals(trace.getRoute())) {
+                        break;
+                    }
                 }
+                return;
             }
-            return;
-        }
 
-        // 2. 文本模式：解析模型输出中的 Action 块
-        processTextModeAction(node, trace, parentTeamTrace, lastAssistantAdded);
+            // 2. 文本模式：解析模型输出中的 Action 块
+            processTextModeAction(node, trace, parentTeamTrace, lastAssistantAdded);
+        } finally {
+            //刷新快照
+            trace.getSession().updateSnapshot();
+        }
     }
 
 

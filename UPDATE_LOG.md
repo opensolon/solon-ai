@@ -13,6 +13,7 @@
 
 ### 3.9.7
 
+* 优化 solon-ai-agent ActionTask 执行完后就更新快照（避免可能的长时间没有更新快照）
 * 修复 solon-ai-core ChatModel.outputSchema 配置无效的问题
 
 ### 3.9.6
