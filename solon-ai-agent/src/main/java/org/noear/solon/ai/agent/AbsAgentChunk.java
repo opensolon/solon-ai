@@ -18,6 +18,9 @@ package org.noear.solon.ai.agent;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.lang.Preview;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * 智能体响应块抽象基类
  *
@@ -29,6 +32,7 @@ public abstract class AbsAgentChunk implements AgentChunk {
     protected final String agentName;
     protected final ChatMessage message;
     protected final transient AgentSession session;
+    protected Map<String, Object> meta;
 
     public AbsAgentChunk(String agentName, AgentSession session, ChatMessage message) {
         this.agentName = agentName;
@@ -49,5 +53,14 @@ public abstract class AbsAgentChunk implements AgentChunk {
     @Override
     public ChatMessage getMessage() {
         return message;
+    }
+
+    @Override
+    public Map<String, Object> getMeta() {
+        if (meta == null) {
+            meta = new HashMap<>();
+        }
+
+        return meta;
     }
 }

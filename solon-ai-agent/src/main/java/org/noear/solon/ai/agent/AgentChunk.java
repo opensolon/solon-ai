@@ -20,6 +20,8 @@ import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
+import java.util.Map;
+
 /**
  * 智能体响应块（用于流式输出的内容片段）
  *
@@ -43,6 +45,11 @@ public interface AgentChunk extends NonSerializable {
      */
     @Nullable
     ChatMessage getMessage();
+
+    /**
+     * 获取当前块的元数据
+     */
+    Map<String, Object> getMeta();
 
     /**
      * 是否有当前块内容
