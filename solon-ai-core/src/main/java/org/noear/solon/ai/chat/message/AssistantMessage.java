@@ -160,14 +160,7 @@ public class AssistantMessage extends ChatMessageBase<AssistantMessage> {
             } else {
                 int thinkEndIndex = content.indexOf("</think>");
                 if (thinkEndIndex > -1) {
-                    //检查是否有重复的段？
-                    int thinkStartIndex2 = content.indexOf("<think>", thinkEndIndex);
-
-                    if (thinkStartIndex2 < 0) {
-                        resultContent = content.substring(thinkEndIndex + 8).trim();
-                    } else {
-                        resultContent = content.substring(thinkEndIndex + 8, thinkStartIndex2).trim();
-                    }
+                    resultContent = content.substring(thinkEndIndex + 8).trim();
                 } else {
                     if (content.contains("<think>")) {
                         resultContent = "";

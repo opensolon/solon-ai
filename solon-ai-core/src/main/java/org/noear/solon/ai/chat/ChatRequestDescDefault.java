@@ -459,8 +459,8 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
     private void publishResponse(FluxSink<? super ChatResponse> sink, ChatResponseDefault resp, ChatChoice choice) {
         AssistantMessage acm = choice.getMessage();
 
-        if (Assert.isEmpty(acm.getToolCalls())) {
-            //工具不为空时已在 buildToolCallBuilder 添加
+        if (acm != null && Assert.isEmpty(acm.getToolCalls())) {
+            //工具不为空时已在 buildToolCallBuilder 已添加
             if (Assert.isNotEmpty(acm.getContent())) {
                 resp.contentBuilder.append(acm.getContent());
             }
