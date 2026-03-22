@@ -30,7 +30,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 @Preview("3.8.1")
 public class Metrics implements Serializable {
-    private final ReentrantLock LOCK = new ReentrantLock();
+    private transient final ReentrantLock LOCK = new ReentrantLock();
 
     /**
      * 总耗时（毫秒）
