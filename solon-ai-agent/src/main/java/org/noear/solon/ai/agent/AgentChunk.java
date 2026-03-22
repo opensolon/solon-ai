@@ -52,6 +52,11 @@ public interface AgentChunk extends NonSerializable {
     Map<String, Object> getMeta();
 
     /**
+     * 是否当前块有元数据
+     */
+    boolean hasMeta(String name);
+
+    /**
      * 是否有当前块内容
      */
     default boolean hasContent() {

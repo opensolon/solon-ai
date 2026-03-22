@@ -63,4 +63,13 @@ public abstract class AbsAgentChunk implements AgentChunk {
 
         return meta;
     }
+
+    @Override
+    public boolean hasMeta(String name) {
+        if (meta == null) {
+            return false;
+        } else {
+            return meta.containsKey(name);
+        }
+    }
 }
