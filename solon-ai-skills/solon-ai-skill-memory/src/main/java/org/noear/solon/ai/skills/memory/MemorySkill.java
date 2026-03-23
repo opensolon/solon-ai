@@ -67,16 +67,8 @@ public class MemorySkill extends AbsSkill {
         }
     }
 
-    private String getSessoinId(Prompt prompt) {
-        if (sessionIsolation) {
-            return prompt.attrOrDefault(ChatSession.ATTR_SESSIONID, "tmp");
-        } else {
-            return "shared";
-        }
-    }
-
-    private String getFinalKey(String __sessionId, String key) {
-        return BASE_PREFIX + __sessionId + ":" + key;
+    private String getFinalKey(String bucketKey, String key) {
+        return BASE_PREFIX + bucketKey + ":" + key;
     }
 
     private String getNow() {
@@ -98,9 +90,13 @@ public class MemorySkill extends AbsSkill {
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
         String mentalModel = "";
+
         if (searchProvider != null) {
-            String sessionId = getSessoinId(prompt);
-            List<MemorySearchResult> hot = searchProvider.getHotMemories(sessionId, 8);
+            String __sessionId =  prompt.attrAs(ChatSession.ATTR_SESSIONID);
+            String bucketKey = getBucketKey(__sessionId);
+
+            List<MemorySearchResult> hot = searchProvider.getHotMemories(bucketKey, 8);
+
             if (!hot.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (MemorySearchResult r : hot) {
@@ -140,13 +136,13 @@ public class MemorySkill extends AbsSkill {
                           @Param(value = "importance", description = "权重(1-10)：1-3琐碎事实, 4-6偏好习惯, 7-9核心规约, 10重大身份定论") int importance,
                           String __cwd,
                           String __sessionId) {
-        __sessionId = getBucketKey(__sessionId);
+        String bucketKey = getBucketKey(__sessionId);
 
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
         try {
-            String finalKey = getFinalKey(__sessionId, key);
+            String finalKey = getFinalKey(bucketKey, key);
             String oldJson = storeProvider.get(finalKey); //redis.getBucket().get(finalKey);
             String now = getNow();
 
@@ -171,10 +167,9 @@ public class MemorySkill extends AbsSkill {
             else ttl = 604800;
 
             storeProvider.put(finalKey, ONode.serialize(data), ttl);
-            //redis.getBucket().store(finalKey, ONode.serialize(data), ttl);
 
             if (searchProvider != null) {
-                searchProvider.updateIndex(__sessionId, key, fact, importance, now);
+                searchProvider.updateIndex(bucketKey, key, fact, importance, now);
             }
 
             return feedback.toString();
@@ -192,15 +187,14 @@ public class MemorySkill extends AbsSkill {
     public String search(@Param("query") String query,
                          String __cwd,
                          String __sessionId) {
+        String bucketKey = getBucketKey(__sessionId);
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
         if (searchProvider == null) {
             return "搜索适配器未配置。";
         }
 
-        __sessionId = getBucketKey(__sessionId);
-
-        List<MemorySearchResult> results = searchProvider.search(__sessionId, query, 3);
+        List<MemorySearchResult> results = searchProvider.search(bucketKey, query, 3);
         if (results.isEmpty()) {
             return "未发现相关认知片段。";
         }
@@ -220,12 +214,12 @@ public class MemorySkill extends AbsSkill {
     public String recall(@Param("key") String key,
                          String __cwd,
                          String __sessionId) {
-        __sessionId = getBucketKey(__sessionId);
+        String bucketKey = getBucketKey(__sessionId);
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
 
         try {
-            String val = storeProvider.get(getFinalKey(__sessionId, key));
-            //redis.getBucket().get(getFinalKey(__sessionId, key));
+            String val = storeProvider.get(getFinalKey(bucketKey, key));
+
             if (Utils.isEmpty(val)) {
                 return "未找到认知条目 [" + key + "]。";
             }
@@ -249,8 +243,6 @@ public class MemorySkill extends AbsSkill {
                               @Param("evolved_insight") String insight,
                               String __cwd,
                               String __sessionId) {
-        __sessionId = getBucketKey(__sessionId);
-
         // 原论文精神：通过整合减少上下文占用，提高信噪比
         String fact = "[Evolved Insight] " + insight;
         extract(newKey, fact, 10, __cwd, __sessionId); // 核心洞察赋予最高重要度
@@ -269,14 +261,14 @@ public class MemorySkill extends AbsSkill {
     public String prune(@Param("key") String key,
                         String __cwd,
                         String __sessionId) {
-        __sessionId = getBucketKey(__sessionId);
+        String bucketKey = getBucketKey(__sessionId);
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
-        storeProvider.remove(getFinalKey(__sessionId, key));
-        //redis.getBucket().remove(getFinalKey(__sessionId, key));
+        storeProvider.remove(getFinalKey(bucketKey, key));
+
         if (searchProvider != null) {
-            searchProvider.removeIndex(__sessionId, key);
+            searchProvider.removeIndex(bucketKey, key);
         }
 
         return "已从模型中清理 Key: " + key;

@@ -77,6 +77,7 @@ public class MemorySearchProviderLuceneImpl implements MemorySearchProvider, Aut
 
     private List<MemorySearchResult> queryInternal(String userId, String queryStr, int limit, boolean isHotMode) {
         List<MemorySearchResult> results = new ArrayList<>();
+
         // 使用 DirectoryReader.open(writer) 可以实现 Near Real Time (NRT) 搜索
         try (IndexReader reader = DirectoryReader.open(writer)) {
             IndexSearcher searcher = new IndexSearcher(reader);
