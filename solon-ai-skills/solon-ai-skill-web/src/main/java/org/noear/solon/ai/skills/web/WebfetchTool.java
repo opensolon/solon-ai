@@ -12,9 +12,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 public class WebfetchTool {
-    private static final long MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5MB
     private static final int DEFAULT_TIMEOUT_MS = 30000;
+    private static final long DEFAULT_RESPONSE_SIZE = 2 * 1024 * 1024; // 2MB
+    private static final long MAX_ALLOWED_SIZE = 10 * 1024 * 1024;     // 10MB
     private static final int MAX_TIMEOUT_MS = 120000;
+
 
     private static final WebfetchTool instance = new WebfetchTool();
 
@@ -26,7 +28,8 @@ public class WebfetchTool {
     public Document webfetch(
             @Param(name = "url", description = "目标网页的完整 URL（必须包含 http:// 或 https://）") String url,
             @Param(name = "format", required = false, defaultValue = "markdown", description = "返回内容的格式选项：'markdown' (默认，适合阅读结构)、'text' (纯文本，适合摘要提取) 或 'html' (原始结构)") String format,
-            @Param(name = "timeout", required = false, description = "请求超时时间（秒），最大允许 120 秒") Integer timeoutSeconds
+            @Param(name = "timeout", required = false, description = "请求超时时间（秒），最大允许 120 秒") Integer timeoutSeconds,
+            @Param(name = "max_size_kb", required = false, description = "最大抓取大小(KB)，建议根据网页内容长度预估") Integer maxSizeKb
     ) throws Exception {
 
         // 1. URL 合法性校验 (对齐 TypeScript 版)
@@ -58,10 +61,20 @@ public class WebfetchTool {
             throw new RuntimeException("Request failed with status code: " + response.code());
         }
 
+        long contentLength = response.contentLength();
+        if (contentLength > MAX_ALLOWED_SIZE) {
+            throw new RuntimeException("Response too large: " + contentLength + " bytes (limit: " + MAX_ALLOWED_SIZE + " bytes)");
+        }
+
+
+        long currentLimit = (maxSizeKb == null)
+                ? DEFAULT_RESPONSE_SIZE
+                : Math.min(maxSizeKb * 1024L, DEFAULT_RESPONSE_SIZE);
+
         // 5. 严格的内容长度检查 (防止内存溢出)
         byte[] bodyBytes = response.bodyAsBytes();
-        if (bodyBytes.length > MAX_RESPONSE_SIZE) {
-            throw new RuntimeException("Response too large (exceeds 5MB limit)");
+        if (bodyBytes.length > currentLimit) {
+            throw new RuntimeException("Response too large: " + contentLength + " bytes (limit: " + currentLimit + " bytes)");
         }
 
         String contentType = response.header("Content-Type");
