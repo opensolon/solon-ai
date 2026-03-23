@@ -47,12 +47,13 @@ public class WebfetchTool {
         return instance;
     }
 
-    @ToolMapping(name = "webfetch", description = "从 URL 获取内容。当您需要检索和分析web内容时，请使用此工具。")
+    @ToolMapping(name = "webfetch", description = "从 URL 获取网页内容。支持长文分页。若 'isTruncated': true，可以根据提示增加 start_index 再次调用。")
     public Document webfetch(
             @Param(name = "url", description = "目标网页的完整 URL（必须包含 http:// 或 https://）") String url,
             @Param(name = "format", required = false, defaultValue = "markdown", description = "返回内容的格式选项：'markdown' (默认，适合阅读结构)、'text' (纯文本，适合摘要提取) 或 'html' (原始结构)") String format,
             @Param(name = "timeout", required = false, description = "请求超时时间（秒），最大允许 120 秒") Integer timeoutSeconds,
-            @Param(name = "max_length", required = false, description = "期望返回的最大字符数，默认 131072 (128KB)，最大支持 2MB") Integer maxLength
+            @Param(name = "start_index", required = false, description = "起始偏移量，默认为 0。当需要阅读长文章的后续部分时，设为上次返回的结束位置") Integer startIndex,
+            @Param(name = "max_length", required = false, description = "单次返回的最大字符数，默认 131072 (128KB)，处理超长分析时可调大，最大支持 2MB") Integer maxLength
     ) throws Exception {
 
         // 1. URL 合法性校验 (对齐 TypeScript 版)
@@ -132,24 +133,31 @@ public class WebfetchTool {
             output = "";
         }
 
+        int start = (startIndex == null || startIndex < 0) ? 0 : startIndex;
         int rawLength = output.length();
-        int lengthLimit = (maxLength == null)
-                ? DEFAULT_RETURN_LIMIT
-                : Math.min(maxLength, MAX_RETURN_LIMIT);
 
-        boolean isTruncated = false;
-        if (output.length() > lengthLimit) {
-            output = output.substring(0, lengthLimit) + "\n\n...(content truncated due to length limit)";
-            isTruncated = true;
+        if (start >= rawLength) {
+            return new Document().content("").metadata("isTruncated", false).metadata("originalLength", rawLength);
+        }
+
+        int lengthLimit = (maxLength == null) ? DEFAULT_RETURN_LIMIT : Math.min(maxLength, MAX_RETURN_LIMIT);
+        int end = Math.min(start + lengthLimit, rawLength);
+
+        boolean isTruncated = (end < rawLength);
+        String finalContent = output.substring(start, end);
+
+        if (isTruncated) {
+            finalContent += "\n\n...(content truncated, use start_index=" + end + " to read more)";
         }
 
         return new Document()
                 .title(url + " (" + contentType + ")")
-                .content(output)
+                .content(finalContent)
                 .metadata("url", url)
-                .metadata("contentType", contentType)
-                .metadata("originalLength", rawLength)
                 .metadata("format", finalFormat)
+                .metadata("contentType", contentType)
+                .metadata("startIndex", start)
+                .metadata("originalLength", rawLength)
                 .metadata("isTruncated", isTruncated); // 告知 LLM 内容是否完整
     }
 
