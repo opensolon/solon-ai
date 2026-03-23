@@ -1,3 +1,18 @@
+/*
+ * Copyright 2017-2025 noear.org and authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.noear.solon.ai.skills.web;
 
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter;
@@ -11,10 +26,16 @@ import org.noear.solon.net.http.HttpUtils;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
+/**
+ *
+ * @author noear
+ * @since 3.9.6
+ * */
 public class WebfetchTool {
     private static final int DEFAULT_TIMEOUT_MS = 30000;
-    private static final long DEFAULT_RESPONSE_SIZE = 2 * 1024 * 1024; // 2MB
-    private static final long MAX_ALLOWED_SIZE = 10 * 1024 * 1024;     // 10MB
+
+    private static final long MAX_ALLOWED_SIZE = 5 * 1024 * 1024;     // 5MB（限制网页加载）
+    private static final int MAX_RETRUN_SIZE = 5 * 1024; // 5KB（限制返回文档大小）
     private static final int MAX_TIMEOUT_MS = 120000;
 
 
@@ -61,20 +82,16 @@ public class WebfetchTool {
             throw new RuntimeException("Request failed with status code: " + response.code());
         }
 
+
+        // 5. 严格的内容长度检查 (防止内存溢出)
         long contentLength = response.contentLength();
         if (contentLength > MAX_ALLOWED_SIZE) {
             throw new RuntimeException("Response too large: " + contentLength + " bytes (limit: " + MAX_ALLOWED_SIZE + " bytes)");
         }
 
-
-        long currentLimit = (maxSizeKb == null)
-                ? DEFAULT_RESPONSE_SIZE
-                : Math.min(maxSizeKb * 1024L, DEFAULT_RESPONSE_SIZE);
-
-        // 5. 严格的内容长度检查 (防止内存溢出)
         byte[] bodyBytes = response.bodyAsBytes();
-        if (bodyBytes.length > currentLimit) {
-            throw new RuntimeException("Response too large: " + contentLength + " bytes (limit: " + currentLimit + " bytes)");
+        if (bodyBytes.length > MAX_ALLOWED_SIZE) {
+            throw new RuntimeException("Response too large: " + bodyBytes.length + " bytes (limit: " + MAX_ALLOWED_SIZE + " bytes)");
         }
 
         String contentType = response.header("Content-Type");
@@ -108,24 +125,32 @@ public class WebfetchTool {
             output = content;
         }
 
+        int returnLimit = (maxSizeKb == null)
+                ? MAX_RETRUN_SIZE
+                : Math.min(maxSizeKb * 1024, MAX_RETRUN_SIZE);
+
+        boolean isTruncated = false;
+        if (output != null && output.length() > returnLimit) {
+            output = output.substring(0, returnLimit) + "\n\n...(content truncated due to size limit)";
+            isTruncated = true;
+        }
+
         return new Document()
                 .title(url + " (" + contentType + ")")
                 .content(output)
                 .metadata("url", url)
                 .metadata("contentType", contentType)
-                .metadata("format", finalFormat);
+                .metadata("format", finalFormat)
+                .metadata("isTruncated", isTruncated); // 告知 LLM 内容是否完整
     }
 
-    // 复刻 HTMLRewriter 逻辑：移除 script/style 后提取文本
     private String extractTextFromHtml(String html) {
         org.jsoup.nodes.Document doc = Jsoup.parse(html);
         doc.select("script, style, noscript, iframe, object, embed").remove();
         return doc.text().trim();
     }
 
-    // 复刻 Turndown 逻辑：高质量 HTML 转 Markdown
     private String convertHtmlToMarkdown(String html) {
-        // 使用 flexmark 库实现 1:1 的 Markdown 转化
         return FlexmarkHtmlConverter.builder().build().convert(html);
     }
 
