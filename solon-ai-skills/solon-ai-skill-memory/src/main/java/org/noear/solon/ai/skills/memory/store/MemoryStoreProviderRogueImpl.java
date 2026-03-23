@@ -1,8 +1,10 @@
 package org.noear.solon.ai.skills.memory.store;
 
 import com.yomahub.roguemap.RogueMap;
+import com.yomahub.roguemap.serialization.StringCodec;
 import org.noear.solon.ai.skills.memory.MemoryStoreProvider;
 
+import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -13,15 +15,18 @@ import java.util.concurrent.TimeUnit;
 public class MemoryStoreProviderRogueImpl implements MemoryStoreProvider {
     private final RogueMap<String, String> rogueMap;
 
+    public MemoryStoreProviderRogueImpl(String path) {
+        this.rogueMap = RogueMap.<String, String>mmap()
+                .persistent(Paths.get(path, "memory/rogue.db").toAbsolutePath().toString())
+                .autoExpand(true)
+                .allocateSize(64 * 1024 * 1024L)
+                .keyCodec(StringCodec.INSTANCE)
+                .valueCodec(StringCodec.INSTANCE)
+                .build();
+    }
+
     public MemoryStoreProviderRogueImpl(RogueMap<String, String> rogueMap) {
         this.rogueMap = rogueMap;
-//        RogueMap<String, String> map = RogueMap.<String, String>mmap()
-//                .persistent("data/mydata.db")
-//                .autoExpand(true)
-//                .allocateSize(64 * 1024 * 1024L)
-//                .keyCodec(StringCodec.INSTANCE)
-//                .valueCodec(StringCodec.INSTANCE)
-//                .build();
     }
 
     @Override
