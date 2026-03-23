@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
+ * Web 抓取工具 (类似 curl)
  *
  * @author noear
  * @since 3.9.6
@@ -34,8 +35,8 @@ import java.util.Base64;
 public class WebfetchTool {
     private static final int DEFAULT_TIMEOUT_MS = 30000;
 
-    private static final long MAX_ALLOWED_SIZE = 5 * 1024 * 1024;     // 5MB（限制网页加载）
-    private static final int MAX_RETRUN_SIZE = 5 * 1024; // 5KB（限制返回文档大小）
+    private static final long MAX_ALLOWED_SIZE = 10 * 1024 * 1024;     // 10MB（限制网页加载）
+    private static final int MAX_RETURN_LENGTH = 256 * 1024; // 256KB（限制返回文档大小）
     private static final int MAX_TIMEOUT_MS = 120000;
 
 
@@ -49,8 +50,7 @@ public class WebfetchTool {
     public Document webfetch(
             @Param(name = "url", description = "目标网页的完整 URL（必须包含 http:// 或 https://）") String url,
             @Param(name = "format", required = false, defaultValue = "markdown", description = "返回内容的格式选项：'markdown' (默认，适合阅读结构)、'text' (纯文本，适合摘要提取) 或 'html' (原始结构)") String format,
-            @Param(name = "timeout", required = false, description = "请求超时时间（秒），最大允许 120 秒") Integer timeoutSeconds,
-            @Param(name = "max_size_kb", required = false, description = "最大抓取大小(KB)，建议根据网页内容长度预估") Integer maxSizeKb
+            @Param(name = "timeout", required = false, description = "请求超时时间（秒），最大允许 120 秒") Integer timeoutSeconds
     ) throws Exception {
 
         // 1. URL 合法性校验 (对齐 TypeScript 版)
@@ -113,7 +113,7 @@ public class WebfetchTool {
         String content = new String(bodyBytes, StandardCharsets.UTF_8);
         String output;
 
-        if (contentType.contains("text/html")) {
+        if (contentType.contains("html") || contentType.contains("xml")) {
             if ("markdown".equals(finalFormat)) {
                 output = convertHtmlToMarkdown(content);
             } else if ("text".equals(finalFormat)) {
@@ -125,13 +125,10 @@ public class WebfetchTool {
             output = content;
         }
 
-        int returnLimit = (maxSizeKb == null)
-                ? MAX_RETRUN_SIZE
-                : Math.min(maxSizeKb * 1024, MAX_RETRUN_SIZE);
 
         boolean isTruncated = false;
-        if (output != null && output.length() > returnLimit) {
-            output = output.substring(0, returnLimit) + "\n\n...(content truncated due to size limit)";
+        if (output != null && output.length() > MAX_RETURN_LENGTH) {
+            output = output.substring(0, MAX_RETURN_LENGTH) + "\n\n...(content truncated due to length limit)";
             isTruncated = true;
         }
 
@@ -140,6 +137,7 @@ public class WebfetchTool {
                 .content(output)
                 .metadata("url", url)
                 .metadata("contentType", contentType)
+                .metadata("contentLength", output.length())
                 .metadata("format", finalFormat)
                 .metadata("isTruncated", isTruncated); // 告知 LLM 内容是否完整
     }
