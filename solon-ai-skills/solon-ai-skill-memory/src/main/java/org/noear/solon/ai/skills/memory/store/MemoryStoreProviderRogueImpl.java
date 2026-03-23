@@ -1,6 +1,7 @@
-package org.noear.solon.ai.skills.memory;
+package org.noear.solon.ai.skills.memory.store;
 
 import com.yomahub.roguemap.RogueMap;
+import org.noear.solon.ai.skills.memory.MemoryStoreProvider;
 
 import java.util.concurrent.TimeUnit;
 

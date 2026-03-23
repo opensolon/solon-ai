@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.skills.memory;
+package org.noear.solon.ai.skills.memory.search;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -25,6 +25,8 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.noear.solon.Utils;
+import org.noear.solon.ai.skills.memory.MemorySearchProvider;
+import org.noear.solon.ai.skills.memory.MemorySearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

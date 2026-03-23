@@ -1,6 +1,7 @@
-package org.noear.solon.ai.skills.memory;
+package org.noear.solon.ai.skills.memory.store;
 
 import org.noear.redisx.RedisClient;
+import org.noear.solon.ai.skills.memory.MemoryStoreProvider;
 
 /**
  *

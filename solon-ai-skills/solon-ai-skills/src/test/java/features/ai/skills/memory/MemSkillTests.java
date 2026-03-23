@@ -16,7 +16,7 @@ import org.noear.solon.ai.chat.ChatResponse;
 import org.noear.solon.ai.skills.memory.MemorySearchProvider;
 import org.noear.solon.ai.skills.memory.MemorySearchResult;
 import org.noear.solon.ai.skills.memory.MemorySkill;
-import org.noear.solon.ai.skills.memory.MemoryStoreProviderReadisImpl;
+import org.noear.solon.ai.skills.memory.store.MemoryStoreProviderReadisImpl;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Arrays;

@@ -13,11 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.skills.memory;
+package org.noear.solon.ai.skills.memory.search;
 
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.QueryCondition;
+import org.noear.solon.ai.skills.memory.MemorySearchProvider;
+import org.noear.solon.ai.skills.memory.MemorySearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

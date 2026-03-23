@@ -45,15 +45,11 @@ public class MemorySkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(MemorySkill.class);
     private static final String BASE_PREFIX = "ai:memskill:";
 
-    private final MemoryStoreProvider storeProvider;
-    //private final RedisClient redis;
-    private final MemorySearchProvider searchProvider;
+    private final MemorySolution.Factory solutionFactory;
     private boolean sessionIsolation = true; // 默认开启会话隔离
 
-    public MemorySkill(MemoryStoreProvider storeProvider, MemorySearchProvider searchProvider) {
-        //this.redis = redis;
-        this.searchProvider = searchProvider;
-        this.storeProvider = storeProvider;
+    public MemorySkill(MemorySolution.Factory solutionFactory) {
+        this.solutionFactory = solutionFactory;
     }
 
     /**
@@ -98,6 +94,10 @@ public class MemorySkill extends AbsSkill {
      */
     @Override
     public String getInstruction(Prompt prompt) {
+        String __cwd = prompt.attrAs("__cwd");
+
+        MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
+
         String mentalModel = "";
         if (searchProvider != null) {
             String sessionId = getSessoinId(prompt);
@@ -139,8 +139,12 @@ public class MemorySkill extends AbsSkill {
     public String extract(@Param("key") String key,
                           @Param("fact") String fact,
                           @Param(value = "importance", description = "权重(1-10)：1-3琐碎事实, 4-6偏好习惯, 7-9核心规约, 10重大身份定论") int importance,
+                          String __cwd,
                           String __sessionId) {
         __sessionId = getEffectiveSessionId(__sessionId);
+
+        MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
+        MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
         try {
             String finalKey = getFinalKey(__sessionId, key);
@@ -186,7 +190,11 @@ public class MemorySkill extends AbsSkill {
      */
     @ToolMapping(name = "memory_search",
             description = "语义检索：通过自然语言描述在心智模型中寻找相关的记忆碎片，辅助找回背景信息。")
-    public String search(@Param("query") String query, String __sessionId) {
+    public String search(@Param("query") String query,
+                         String __cwd,
+                         String __sessionId) {
+        MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
+
         if (searchProvider == null) {
             return "搜索适配器未配置。";
         }
@@ -210,8 +218,11 @@ public class MemorySkill extends AbsSkill {
      * RECALL: 精确召回
      */
     @ToolMapping(name = "memory_recall", description = "精确召回：通过 Key 获取该认知条目的完整细节。")
-    public String recall(@Param("key") String key, String __sessionId) {
+    public String recall(@Param("key") String key,
+                         String __cwd,
+                         String __sessionId) {
         __sessionId = getEffectiveSessionId(__sessionId);
+        MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
 
         try {
             String val = storeProvider.get(getFinalKey(__sessionId, key));
@@ -237,15 +248,16 @@ public class MemorySkill extends AbsSkill {
     public String consolidate(@Param("keys_to_merge") List<String> oldKeys,
                               @Param("new_key") String newKey,
                               @Param("evolved_insight") String insight,
+                              String __cwd,
                               String __sessionId) {
         __sessionId = getEffectiveSessionId(__sessionId);
 
         // 原论文精神：通过整合减少上下文占用，提高信噪比
         String fact = "[Evolved Insight] " + insight;
-        extract(newKey, fact, 10, __sessionId); // 核心洞察赋予最高重要度
+        extract(newKey, fact, 10, __cwd, __sessionId); // 核心洞察赋予最高重要度
 
         for (String k : oldKeys) {
-            prune(k, __sessionId); // 彻底清理旧碎片，防止语义干扰
+            prune(k, __cwd, __sessionId); // 彻底清理旧碎片，防止语义干扰
         }
 
         return "【心智进化成功】已将碎片认知升维为核心洞察，删除了冗余记录。";
@@ -255,8 +267,12 @@ public class MemorySkill extends AbsSkill {
      * PRUNE: 记忆修剪
      */
     @ToolMapping(name = "memory_prune", description = "认知修正：删除错误、重复或过时的认知。")
-    public String prune(@Param("key") String key, String __sessionId) {
+    public String prune(@Param("key") String key,
+                        String __cwd,
+                        String __sessionId) {
         __sessionId = getEffectiveSessionId(__sessionId);
+        MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
+        MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
         storeProvider.remove(getFinalKey(__sessionId, key));
         //redis.getBucket().remove(getFinalKey(__sessionId, key));
