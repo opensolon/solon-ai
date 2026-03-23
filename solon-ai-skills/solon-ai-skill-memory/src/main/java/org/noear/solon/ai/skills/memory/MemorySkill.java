@@ -35,7 +35,6 @@ import java.time.format.DateTimeFormatter;
  * MemSkill：基于自演进心智模型的长期记忆技能
  *
  * 遵从 MemSkill 论文核心：Extract (提取), Consolidate (整合), Prune (修剪), Search (检索)
- * 通过 Designer 指令引导 Agent 实现认知的自我更新。
  *
  * @author noear
  * @since 3.9.4
@@ -60,7 +59,7 @@ public class MemorySkill extends AbsSkill {
         return this;
     }
 
-    private String getEffectiveSessionId(String __sessionId) {
+    private String getBucketKey(String __sessionId) {
         if (sessionIsolation) {
             return __sessionId == null ? "tmp" : __sessionId;
         } else {
@@ -141,7 +140,7 @@ public class MemorySkill extends AbsSkill {
                           @Param(value = "importance", description = "权重(1-10)：1-3琐碎事实, 4-6偏好习惯, 7-9核心规约, 10重大身份定论") int importance,
                           String __cwd,
                           String __sessionId) {
-        __sessionId = getEffectiveSessionId(__sessionId);
+        __sessionId = getBucketKey(__sessionId);
 
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
@@ -199,7 +198,7 @@ public class MemorySkill extends AbsSkill {
             return "搜索适配器未配置。";
         }
 
-        __sessionId = getEffectiveSessionId(__sessionId);
+        __sessionId = getBucketKey(__sessionId);
 
         List<MemorySearchResult> results = searchProvider.search(__sessionId, query, 3);
         if (results.isEmpty()) {
@@ -221,7 +220,7 @@ public class MemorySkill extends AbsSkill {
     public String recall(@Param("key") String key,
                          String __cwd,
                          String __sessionId) {
-        __sessionId = getEffectiveSessionId(__sessionId);
+        __sessionId = getBucketKey(__sessionId);
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
 
         try {
@@ -250,7 +249,7 @@ public class MemorySkill extends AbsSkill {
                               @Param("evolved_insight") String insight,
                               String __cwd,
                               String __sessionId) {
-        __sessionId = getEffectiveSessionId(__sessionId);
+        __sessionId = getBucketKey(__sessionId);
 
         // 原论文精神：通过整合减少上下文占用，提高信噪比
         String fact = "[Evolved Insight] " + insight;
@@ -270,7 +269,7 @@ public class MemorySkill extends AbsSkill {
     public String prune(@Param("key") String key,
                         String __cwd,
                         String __sessionId) {
-        __sessionId = getEffectiveSessionId(__sessionId);
+        __sessionId = getBucketKey(__sessionId);
         MemoryStoreProvider storeProvider = solutionFactory.get(__cwd).getStoreProvider();
         MemorySearchProvider searchProvider = solutionFactory.get(__cwd).getSearchProvider();
 
