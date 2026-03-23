@@ -13,10 +13,10 @@ import org.noear.solon.ai.agent.simple.SimpleAgent;
 import org.noear.solon.ai.agent.simple.SimpleResponse;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
-import org.noear.solon.ai.skills.memory.MemSearchProvider;
-import org.noear.solon.ai.skills.memory.MemSearchResult;
-import org.noear.solon.ai.skills.memory.MemSkill;
-import org.noear.solon.ai.skills.memory.MemStoreProviderReadisImpl;
+import org.noear.solon.ai.skills.memory.MemorySearchProvider;
+import org.noear.solon.ai.skills.memory.MemorySearchResult;
+import org.noear.solon.ai.skills.memory.MemorySkill;
+import org.noear.solon.ai.skills.memory.MemoryStoreProviderReadisImpl;
 import org.noear.solon.test.SolonTest;
 
 import java.util.Arrays;
@@ -33,21 +33,21 @@ import static org.mockito.Mockito.when;
 @SolonTest
 public class MemSkillTests {
 
-    private MemSkill memSkill;
-    private MemSearchProvider mockSearchProvider;
+    private MemorySkill memSkill;
+    private MemorySearchProvider mockSearchProvider;
     private final String testUserId = "user_123";
 
     @BeforeEach
     public void setup() {
         // 1. 模拟搜索供应商
-        mockSearchProvider = Mockito.mock(MemSearchProvider.class);
+        mockSearchProvider = Mockito.mock(MemorySearchProvider.class);
 
         // 2. 初始化 Redis（假设测试环境已配置或使用 Mock）
         Properties properties = Solon.cfg().getProp("solon.redis");
         RedisClient redisClient = new RedisClient(properties);
 
         // 3. 实例化 MemSkill
-        memSkill = new MemSkill(new MemStoreProviderReadisImpl(redisClient), mockSearchProvider);
+        memSkill = new MemorySkill(new MemoryStoreProviderReadisImpl(redisClient), mockSearchProvider);
 
         // 清理历史数据防止干扰
         memSkill.prune("test_hobby", testUserId);
@@ -80,7 +80,7 @@ public class MemSkillTests {
     @Test
     public void testSearchIntegration() {
         // 模拟搜索返回结果
-        MemSearchResult mockResult = new MemSearchResult("user_profile", "用户是一名 Java 架构师", 5, "2026-02-22 10:00:00");
+        MemorySearchResult mockResult = new MemorySearchResult("user_profile", "用户是一名 Java 架构师", 5, "2026-02-22 10:00:00");
 
         when(mockSearchProvider.search(anyString(), eq("职业"), anyInt()))
                 .thenReturn(Collections.singletonList(mockResult));

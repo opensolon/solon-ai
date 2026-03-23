@@ -41,16 +41,16 @@ import java.time.format.DateTimeFormatter;
  * @since 3.9.4
  */
 @Preview("3.9.4")
-public class MemSkill extends AbsSkill {
-    private static final Logger LOG = LoggerFactory.getLogger(MemSkill.class);
+public class MemorySkill extends AbsSkill {
+    private static final Logger LOG = LoggerFactory.getLogger(MemorySkill.class);
     private static final String BASE_PREFIX = "ai:memskill:";
 
-    private final MemStoreProvider storeProvider;
+    private final MemoryStoreProvider storeProvider;
     //private final RedisClient redis;
-    private final MemSearchProvider searchProvider;
+    private final MemorySearchProvider searchProvider;
     private boolean sessionIsolation = true; // 默认开启会话隔离
 
-    public MemSkill(MemStoreProvider storeProvider, MemSearchProvider searchProvider) {
+    public MemorySkill(MemoryStoreProvider storeProvider, MemorySearchProvider searchProvider) {
         //this.redis = redis;
         this.searchProvider = searchProvider;
         this.storeProvider = storeProvider;
@@ -59,7 +59,7 @@ public class MemSkill extends AbsSkill {
     /**
      * 设置是否启用会话隔离
      */
-    public MemSkill sessionIsolation(boolean sessionIsolation) {
+    public MemorySkill sessionIsolation(boolean sessionIsolation) {
         this.sessionIsolation = sessionIsolation;
         return this;
     }
@@ -89,11 +89,6 @@ public class MemSkill extends AbsSkill {
     }
 
     @Override
-    public String name() {
-        return "mem_skill";
-    }
-
-    @Override
     public String description() {
         return "长期记忆专家：负责用户心智模型的提取、演进、冲突消解与深度检索。";
     }
@@ -106,10 +101,10 @@ public class MemSkill extends AbsSkill {
         String mentalModel = "";
         if (searchProvider != null) {
             String sessionId = getSessoinId(prompt);
-            List<MemSearchResult> hot = searchProvider.getHotMemories(sessionId, 8);
+            List<MemorySearchResult> hot = searchProvider.getHotMemories(sessionId, 8);
             if (!hot.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
-                for (MemSearchResult r : hot) {
+                for (MemorySearchResult r : hot) {
                     sb.append(String.format("- [%s] %s: %s (Imp: %d)\n",
                             r.getTime(), r.getKey(), r.getContent(), r.getImportance()));
                 }
@@ -129,8 +124,8 @@ public class MemSkill extends AbsSkill {
                 "- **7-9 (核心规约)**：项目的架构定义、长期的技术选型、用户明确要求的行为准则。\n" +
                 "- **10 (生命周期关键点)**：足以改变后续所有对话逻辑的重大发现或用户身份定论。\n\n" +
                 "### 3. 认知维护指令：\n" +
-                "- **发现冲突时**：若新事实与“核心认知预览”冲突，必须调用 `mem_extract` 更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正。\n" +
-                "- **碎片过多时**：当你发现检索到多个关于同一主题的低分记录（Imp < 5），应主动调用 `mem_consolidate` 将其升维为一条高分偏好（Imp >= 7）。\n" +
+                "- **发现冲突时**：若新事实与“核心认知预览”冲突，必须调用 `memory_extract` 更新，并根据返回的 `[认知对比]` 向用户确认或在回复中体现认知的修正。\n" +
+                "- **碎片过多时**：当你发现检索到多个关于同一主题的低分记录（Imp < 5），应主动调用 `memory_consolidate` 将其升维为一条高分偏好（Imp >= 7）。\n" +
                 "- **时效性原则**：永远以时间戳（Time）最近的认知记录为准。";
     }
 
@@ -139,7 +134,7 @@ public class MemSkill extends AbsSkill {
      * EXTRACT & UPDATE: 提取与覆盖
      * 解决了记忆冲突与反思逻辑
      */
-    @ToolMapping(name = "mem_extract",
+    @ToolMapping(name = "memory_extract",
             description = "将事实、偏好或进度存入用户心智模型。若存在同名 Key，系统将返回旧记录以供你对比反思。")
     public String extract(@Param("key") String key,
                           @Param("fact") String fact,
@@ -189,7 +184,7 @@ public class MemSkill extends AbsSkill {
     /**
      * SEARCH: 语义搜索
      */
-    @ToolMapping(name = "mem_search",
+    @ToolMapping(name = "memory_search",
             description = "语义检索：通过自然语言描述在心智模型中寻找相关的记忆碎片，辅助找回背景信息。")
     public String search(@Param("query") String query, String __sessionId) {
         if (searchProvider == null) {
@@ -198,13 +193,13 @@ public class MemSkill extends AbsSkill {
 
         __sessionId = getEffectiveSessionId(__sessionId);
 
-        List<MemSearchResult> results = searchProvider.search(__sessionId, query, 3);
+        List<MemorySearchResult> results = searchProvider.search(__sessionId, query, 3);
         if (results.isEmpty()) {
             return "未发现相关认知片段。";
         }
 
         StringBuilder sb = new StringBuilder("匹配到以下认知参考（建议优先参考时间戳较近的记录）：\n");
-        for (MemSearchResult res : results) {
+        for (MemorySearchResult res : results) {
             sb.append(String.format("- [%s] (Key: %s): %s\n",
                     Utils.isNotEmpty(res.getTime()) ? res.getTime() : "未知时间", res.getKey(), res.getContent()));
         }
@@ -214,7 +209,7 @@ public class MemSkill extends AbsSkill {
     /**
      * RECALL: 精确召回
      */
-    @ToolMapping(name = "mem_recall", description = "精确召回：通过 Key 获取该认知条目的完整细节。")
+    @ToolMapping(name = "memory_recall", description = "精确召回：通过 Key 获取该认知条目的完整细节。")
     public String recall(@Param("key") String key, String __sessionId) {
         __sessionId = getEffectiveSessionId(__sessionId);
 
@@ -237,7 +232,7 @@ public class MemSkill extends AbsSkill {
      * CONSOLIDATE: 知识整合
      * 对齐 MemSkill 的“压缩”思想，将事实进化为经验
      */
-    @ToolMapping(name = "mem_consolidate",
+    @ToolMapping(name = "memory_consolidate",
             description = "认知升维：将多个低层事实碎片整合为高层偏好模型，并清理冗余碎片。")
     public String consolidate(@Param("keys_to_merge") List<String> oldKeys,
                               @Param("new_key") String newKey,
@@ -259,7 +254,7 @@ public class MemSkill extends AbsSkill {
     /**
      * PRUNE: 记忆修剪
      */
-    @ToolMapping(name = "mem_prune", description = "认知修正：删除错误、重复或过时的认知。")
+    @ToolMapping(name = "memory_prune", description = "认知修正：删除错误、重复或过时的认知。")
     public String prune(@Param("key") String key, String __sessionId) {
         __sessionId = getEffectiveSessionId(__sessionId);
 

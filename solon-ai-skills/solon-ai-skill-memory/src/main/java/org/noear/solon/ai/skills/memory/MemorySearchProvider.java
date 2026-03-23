@@ -23,11 +23,11 @@ import java.util.List;
  * @author noear
  * @since 3.9.4
  */
-public interface MemSearchProvider {
+public interface MemorySearchProvider {
     /** 语义/模糊搜索 */
-    List<MemSearchResult> search(String userId, String query, int limit);
+    List<MemorySearchResult> search(String userId, String query, int limit);
     /** 获取高价值热记忆（用于画像注入） */
-    List<MemSearchResult> getHotMemories(String userId, int limit);
+    List<MemorySearchResult> getHotMemories(String userId, int limit);
     /** 同步索引 */
     void updateIndex(String userId, String key, String fact, int importance, String time);
     /** 移除索引 */

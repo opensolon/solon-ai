@@ -7,9 +7,9 @@ import org.noear.redisx.RedisClient;
  * @author noear 2026/3/4 created
  *
  */
-public class MemStoreProviderReadisImpl implements MemStoreProvider {
+public class MemoryStoreProviderReadisImpl implements MemoryStoreProvider {
     private final RedisClient redis;
-    public MemStoreProviderReadisImpl(RedisClient redis){
+    public MemoryStoreProviderReadisImpl(RedisClient redis){
         this.redis = redis;
     }
 

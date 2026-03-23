@@ -9,10 +9,10 @@ import java.util.concurrent.TimeUnit;
  * @author noear 2026/3/4 created
  *
  */
-public class MemStoreProviderRogueImpl implements MemStoreProvider {
+public class MemoryStoreProviderRogueImpl implements MemoryStoreProvider {
     private final RogueMap<String, String> rogueMap;
 
-    public MemStoreProviderRogueImpl(RogueMap<String, String> rogueMap) {
+    public MemoryStoreProviderRogueImpl(RogueMap<String, String> rogueMap) {
         this.rogueMap = rogueMap;
 //        RogueMap<String, String> map = RogueMap.<String, String>mmap()
 //                .persistent("data/mydata.db")

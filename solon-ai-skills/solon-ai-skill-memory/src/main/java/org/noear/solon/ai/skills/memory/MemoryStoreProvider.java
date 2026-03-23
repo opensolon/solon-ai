@@ -5,7 +5,7 @@ package org.noear.solon.ai.skills.memory;
  * @author noear 2026/3/4 created
  *
  */
-public interface MemStoreProvider {
+public interface MemoryStoreProvider {
     void put(String key, String val, int ttl);
 
     String get(String key);

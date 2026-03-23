@@ -39,22 +39,22 @@ import java.util.List;
  * @author noear
  * @since 3.9.4
  */
-public class MemSearchProviderLuceneImpl implements MemSearchProvider, AutoCloseable {
-    private static final Logger log = LoggerFactory.getLogger(MemSearchProviderLuceneImpl.class);
+public class MemorySearchProviderLuceneImpl implements MemorySearchProvider, AutoCloseable {
+    private static final Logger log = LoggerFactory.getLogger(MemorySearchProviderLuceneImpl.class);
 
     private final Directory directory;
     private final Analyzer analyzer;
     private final IndexWriter writer; // 保持单例 Writer，避免 LockObtainFailedException
 
-    public MemSearchProviderLuceneImpl() throws IOException {
+    public MemorySearchProviderLuceneImpl() throws IOException {
         this(new ByteBuffersDirectory());
     }
 
-    public MemSearchProviderLuceneImpl(String path) throws IOException {
+    public MemorySearchProviderLuceneImpl(String path) throws IOException {
         this(FSDirectory.open(Paths.get(path)));
     }
 
-    public MemSearchProviderLuceneImpl(Directory directory) throws IOException {
+    public MemorySearchProviderLuceneImpl(Directory directory) throws IOException {
         this.directory = directory;
         this.analyzer = new StandardAnalyzer();
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
@@ -64,17 +64,17 @@ public class MemSearchProviderLuceneImpl implements MemSearchProvider, AutoClose
     }
 
     @Override
-    public List<MemSearchResult> search(String userId, String query, int limit) {
+    public List<MemorySearchResult> search(String userId, String query, int limit) {
         return queryInternal(userId, query, limit, false);
     }
 
     @Override
-    public List<MemSearchResult> getHotMemories(String userId, int limit) {
+    public List<MemorySearchResult> getHotMemories(String userId, int limit) {
         return queryInternal(userId, null, limit, true);
     }
 
-    private List<MemSearchResult> queryInternal(String userId, String queryStr, int limit, boolean isHotMode) {
-        List<MemSearchResult> results = new ArrayList<>();
+    private List<MemorySearchResult> queryInternal(String userId, String queryStr, int limit, boolean isHotMode) {
+        List<MemorySearchResult> results = new ArrayList<>();
         // 使用 DirectoryReader.open(writer) 可以实现 Near Real Time (NRT) 搜索
         try (IndexReader reader = DirectoryReader.open(writer)) {
             IndexSearcher searcher = new IndexSearcher(reader);
@@ -99,7 +99,7 @@ public class MemSearchProviderLuceneImpl implements MemSearchProvider, AutoClose
                 IndexableField impField = d.getField("importance");
                 int importance = (impField != null) ? impField.numericValue().intValue() : 0;
 
-                results.add(new MemSearchResult(
+                results.add(new MemorySearchResult(
                         d.get("mem_key"),
                         d.get("content"),
                         importance,

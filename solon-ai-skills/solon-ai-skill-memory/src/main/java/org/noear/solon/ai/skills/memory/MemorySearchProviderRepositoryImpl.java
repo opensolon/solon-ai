@@ -31,17 +31,17 @@ import java.util.stream.Collectors;
  * @author noear
  * @since 3.9.4
  */
-public class MemSearchProviderRepositoryImpl implements MemSearchProvider {
-    private static final Logger log = LoggerFactory.getLogger(MemSearchProviderRepositoryImpl.class);
+public class MemorySearchProviderRepositoryImpl implements MemorySearchProvider {
+    private static final Logger log = LoggerFactory.getLogger(MemorySearchProviderRepositoryImpl.class);
 
     private final RepositoryStorable repository;
 
-    public MemSearchProviderRepositoryImpl(RepositoryStorable repository) {
+    public MemorySearchProviderRepositoryImpl(RepositoryStorable repository) {
         this.repository = repository;
     }
 
     @Override
-    public List<MemSearchResult> search(String userId, String query, int limit) {
+    public List<MemorySearchResult> search(String userId, String query, int limit) {
         try {
             // 使用更严谨的表达式，并根据需要处理引号
             QueryCondition condition = new QueryCondition(query)
@@ -59,7 +59,7 @@ public class MemSearchProviderRepositoryImpl implements MemSearchProvider {
     }
 
     @Override
-    public List<MemSearchResult> getHotMemories(String userId, int limit) {
+    public List<MemorySearchResult> getHotMemories(String userId, int limit) {
         try {
             // 筛选重要度高且属于当前用户的认知
             QueryCondition condition = new QueryCondition("")
@@ -107,7 +107,7 @@ public class MemSearchProviderRepositoryImpl implements MemSearchProvider {
         return userId + ":" + key;
     }
 
-    protected MemSearchResult mapToResult(Document doc) {
+    protected MemorySearchResult mapToResult(Document doc) {
         String key = doc.getMetadataAs("mem_key");
         String time = doc.getMetadataAs("time");
 
@@ -119,6 +119,6 @@ public class MemSearchProviderRepositoryImpl implements MemSearchProvider {
             importance = Integer.parseInt((String) impObj);
         }
 
-        return new MemSearchResult(key, doc.getContent(), importance, time);
+        return new MemorySearchResult(key, doc.getContent(), importance, time);
     }
 }
