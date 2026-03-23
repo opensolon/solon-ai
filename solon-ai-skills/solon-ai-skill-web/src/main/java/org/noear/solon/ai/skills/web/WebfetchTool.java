@@ -34,9 +34,10 @@ import java.util.Base64;
  * */
 public class WebfetchTool {
     private static final int DEFAULT_TIMEOUT_MS = 30000;
+    private static final int DEFAULT_RETURN_LIMIT = 128 * 1024; // 128KB（限制返回文档大小）
 
+    private static final int MAX_RETURN_LIMIT = 2 * 1024 * 1024; // 2MB
     private static final long MAX_ALLOWED_SIZE = 10 * 1024 * 1024;     // 10MB（限制网页加载）
-    private static final int MAX_RETURN_LENGTH = 256 * 1024; // 256KB（限制返回文档大小）
     private static final int MAX_TIMEOUT_MS = 120000;
 
 
@@ -50,7 +51,8 @@ public class WebfetchTool {
     public Document webfetch(
             @Param(name = "url", description = "目标网页的完整 URL（必须包含 http:// 或 https://）") String url,
             @Param(name = "format", required = false, defaultValue = "markdown", description = "返回内容的格式选项：'markdown' (默认，适合阅读结构)、'text' (纯文本，适合摘要提取) 或 'html' (原始结构)") String format,
-            @Param(name = "timeout", required = false, description = "请求超时时间（秒），最大允许 120 秒") Integer timeoutSeconds
+            @Param(name = "timeout", required = false, description = "请求超时时间（秒），最大允许 120 秒") Integer timeoutSeconds,
+            @Param(name = "max_length", required = false, description = "期望返回的最大字符数，默认 131072 (128KB)，最大支持 2MB") Integer maxLength
     ) throws Exception {
 
         // 1. URL 合法性校验 (对齐 TypeScript 版)
@@ -126,9 +128,18 @@ public class WebfetchTool {
         }
 
 
+        if (output == null) {
+            output = "";
+        }
+
+        int rawLength = output.length();
+        int lengthLimit = (maxLength == null)
+                ? DEFAULT_RETURN_LIMIT
+                : Math.min(maxLength, MAX_RETURN_LIMIT);
+
         boolean isTruncated = false;
-        if (output != null && output.length() > MAX_RETURN_LENGTH) {
-            output = output.substring(0, MAX_RETURN_LENGTH) + "\n\n...(content truncated due to length limit)";
+        if (output.length() > lengthLimit) {
+            output = output.substring(0, lengthLimit) + "\n\n...(content truncated due to length limit)";
             isTruncated = true;
         }
 
@@ -137,7 +148,7 @@ public class WebfetchTool {
                 .content(output)
                 .metadata("url", url)
                 .metadata("contentType", contentType)
-                .metadata("contentLength", output.length())
+                .metadata("originalLength", rawLength)
                 .metadata("format", finalFormat)
                 .metadata("isTruncated", isTruncated); // 告知 LLM 内容是否完整
     }
