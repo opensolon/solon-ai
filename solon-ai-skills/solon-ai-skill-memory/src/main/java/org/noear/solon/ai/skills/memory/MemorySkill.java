@@ -111,7 +111,7 @@ public class MemorySkill extends AbsSkill {
             }
         }
 
-        String scope = sessionIsolation ? "用户私人空间" : "全局公共知识库";
+        String scope = sessionIsolation ? "当前会话私有空间" : "全局公共知识库";
 
         return "## 长期记忆与心智演进指南 (存储域: " + scope + ")\n" +
                 "你拥有自主维护用户心智模型的能力。请实时提取对话中的价值点，并维持认知的一致性。\n\n" +
