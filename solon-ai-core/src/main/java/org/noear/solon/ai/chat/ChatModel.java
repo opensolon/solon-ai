@@ -223,6 +223,14 @@ public class ChatModel implements AiModel {
             return this;
         }
 
+        /**
+         * 系统提示词
+         */
+        public Builder systemPrompt(String systemPrompt) {
+            config.getModelOptions().systemPrompt(systemPrompt);
+            return this;
+        }
+
         public Builder outputSchema(String outputSchema) {
             config.getModelOptions().outputSchema(outputSchema);
             return this;

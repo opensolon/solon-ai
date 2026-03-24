@@ -10,6 +10,9 @@
 
 *  mcp channel 概念改为 transport （并保持兼容）???
 
+### 3.10.1
+
+* 添加 solon-ai-core ChatModel.of().systemPrompt 方法
 
 ### 3.10.0
 
