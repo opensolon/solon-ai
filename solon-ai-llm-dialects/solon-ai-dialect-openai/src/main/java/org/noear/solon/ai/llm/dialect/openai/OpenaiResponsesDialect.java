@@ -16,12 +16,15 @@
 package org.noear.solon.ai.llm.dialect.openai;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatResponseDefault;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.noear.solon.core.util.Assert;
 
 import java.util.List;
@@ -35,6 +38,7 @@ import java.util.Map;
  * 通过 provider: "openai-responses" 来使用
  */
 public class OpenaiResponsesDialect extends AbstractChatDialect {
+    private static final Logger log = LoggerFactory.getLogger(OpenaiResponsesDialect.class);
     private static final OpenaiResponsesDialect instance = new OpenaiResponsesDialect();
 
     private final OpenaiResponsesResponseParser responseParser;
@@ -66,6 +70,75 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
     @Override
     public boolean parseResponseJson(ChatConfig config, ChatResponseDefault resp, String json) {
         return responseParser.parseResponse(resp, json);
+    }
+
+    /**
+     * Responses API 使用 text.format.json_schema 而非 response_format
+     */
+    @Override
+    public void prepareOutputFormatOptions(ChatOptions options) {
+        String outputSchema = options.outputSchema();
+        if (Utils.isNotEmpty(outputSchema)) {
+            ONode formatNode = new ONode();
+            try {
+                ONode schemaNode = ONode.ofJson(outputSchema);
+                applyStrictSchema(schemaNode);
+
+                formatNode.set("type", "json_schema");
+                formatNode.set("name", "output_schema");
+                formatNode.set("schema", schemaNode);
+                formatNode.set("strict", true);
+            } catch (Exception e) {
+                log.warn("Failed to parse outputSchema as JSON, falling back to json_object format", e);
+                formatNode.set("type", "json_object");
+            }
+
+            ONode textNode = new ONode();
+            textNode.set("format", formatNode);
+            options.optionSet("text", textNode);
+        }
+    }
+
+    /**
+     * 递归为 strict 模式补充 additionalProperties 和 required
+     */
+    private void applyStrictSchema(ONode node) {
+        if (node == null || !node.isObject()) {
+            return;
+        }
+
+        ONode typeNode = node.getOrNull("type");
+        if (typeNode != null && "object".equals(typeNode.getString())) {
+            node.set("additionalProperties", false);
+
+            ONode propsNode = node.getOrNull("properties");
+            if (propsNode != null && propsNode.isObject()) {
+                // 如果 required 为空数组，填充所有 properties 的 key
+                ONode requiredNode = node.getOrNull("required");
+                if (requiredNode == null || (requiredNode.isArray() && requiredNode.getArray().isEmpty())) {
+                    StringBuilder sb = new StringBuilder("[");
+                    boolean first = true;
+                    for (String key : propsNode.getObject().keySet()) {
+                        if (!first) sb.append(",");
+                        sb.append("\"").append(key).append("\"");
+                        first = false;
+                    }
+                    sb.append("]");
+                    node.set("required", ONode.ofJson(sb.toString()));
+                }
+
+                // 递归处理嵌套的 properties
+                for (Map.Entry<String, ONode> entry : propsNode.getObject().entrySet()) {
+                    applyStrictSchema(entry.getValue());
+                }
+            }
+        }
+
+        // 处理 array 的 items
+        ONode itemsNode = node.getOrNull("items");
+        if (itemsNode != null && itemsNode.isObject()) {
+            applyStrictSchema(itemsNode);
+        }
     }
 
     /**
