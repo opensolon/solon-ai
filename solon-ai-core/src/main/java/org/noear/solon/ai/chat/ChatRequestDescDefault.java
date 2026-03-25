@@ -74,6 +74,7 @@ public class ChatRequestDescDefault implements ChatRequestDesc {
         this.options.role(config.getModelOptions().role());
         this.options.instruction(config.getModelOptions().instruction());
         this.options.systemPrompt(config.getModelOptions().systemPrompt());
+        this.options.outputSchema(config.getModelOptions().outputSchema());
     }
 
     public ChatRequestDesc session(ChatSession session) {

@@ -80,8 +80,8 @@ public class OpenaiResponsesRequestBuilder {
         // 添加其他选项
         for (Map.Entry<String, Object> kv : options.options().entrySet()) {
             String key = kv.getKey();
-            // 跳过已处理的字段
-            if ("stream".equals(key)) {
+            // 跳过已处理的字段（response_format 不适用于 Responses API，使用 text.format 替代）
+            if ("stream".equals(key) || "response_format".equals(key)) {
                 continue;
             }
             // max_tokens -> max_output_tokens 转换
@@ -118,7 +118,6 @@ public class OpenaiResponsesRequestBuilder {
             if (Utils.isNotEmpty(assistantMessage.getToolCalls())) {
                 if (Utils.isNotEmpty(assistantMessage.getContent())) {
                     inputArray.addNew()
-                            .set("type", "message")
                             .set("role", "assistant")
                             .set("content", assistantMessage.getContent());
                 }
@@ -132,14 +131,12 @@ public class OpenaiResponsesRequestBuilder {
                 }
             } else {
                 inputArray.addNew()
-                        .set("type", "message")
                         .set("role", "assistant")
                         .set("content", assistantMessage.getContent() != null ? assistantMessage.getContent() : "");
             }
         } else if (message instanceof UserMessage) {
             UserMessage userMessage = (UserMessage) message;
             ONode msgNode = inputArray.addNew()
-                    .set("type", "message")
                     .set("role", "user");
             if (userMessage.isMultiModal() == false) {
                 //单模态
@@ -176,7 +173,6 @@ public class OpenaiResponsesRequestBuilder {
             // 其他类型消息
             String role = message.getRole() != null ? message.getRole().name().toLowerCase() : "user";
             inputArray.addNew()
-                    .set("type", "message")
                     .set("role", role)
                     .set("content", message.getContent() != null ? message.getContent() : "");
         }
