@@ -221,7 +221,7 @@ public class TerminalSkill extends AbsSkill {
     // --- 3. 读取内容 ---
     @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新的文本内容、缩进和换行符。支持大文件分页。支持逻辑路径（如 @pool）。")
     public String read(@Param(value = "path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
-                       @Param(value = "start_line", required = false, description = "起始行 (从1开始)。") Integer startLine,
+                       @Param(value = "start_line", required = false, defaultValue = "1", description = "起始行。") Integer startLine,
                        @Param(value = "end_line", required = false, description = "结束行。") Integer endLine,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
