@@ -34,6 +34,9 @@ import java.util.Map;
 public class WebsearchTool {
 
     private static final int DEFAULT_NUM_RESULTS = 8;
+    private static final int DEFAULT_CONTEXT_CHARS = 10000;
+    private static final String DEFAULT_LIVECRAWL = "fallback";
+    private static final String DEFAULT_TYPE = "auto";
 
     private static final WebsearchTool instance = new WebsearchTool();
 
@@ -60,12 +63,22 @@ public class WebsearchTool {
         Map<String, Object> args = new HashMap<>();
         args.put("query", query);
         args.put("numResults", numResults != null ? numResults : DEFAULT_NUM_RESULTS);
-        args.put("livecrawl", livecrawl != null ? livecrawl : "fallback");
-        args.put("type", type != null ? type : "auto");
-        args.put("contextMaxCharacters", contextMaxCharacters != null ? contextMaxCharacters : 10000);
+        args.put("livecrawl", livecrawl != null ? livecrawl : DEFAULT_LIVECRAWL);
+        args.put("type", type != null ? type : DEFAULT_TYPE);
+        args.put("contextMaxCharacters", contextMaxCharacters != null ? contextMaxCharacters : DEFAULT_CONTEXT_CHARS);
 
         // 2. 通过 MCP 协议调用工具
-        ToolResult result = mcpClient.callTool("web_search_exa", args);
+        ToolResult result;
+
+        try {
+            result = mcpClient.callTool("web_search_exa", args);
+        } catch (Exception e) {
+            // 如果是超时相关的异常，转换为与 opencode 一致的文案
+            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("timeout")) {
+                throw new RuntimeException("Search request timed out");
+            }
+            throw e;
+        }
 
         // 3. 处理异常反馈
         if (result.isError()) {
@@ -80,6 +93,7 @@ public class WebsearchTool {
                     .title("Web search: " + query)
                     .content(result.getContent())
                     .metadata("query", query)
+                    .metadata("type", type) // 增加搜索类型溯源
                     .metadata("source", "exa.ai");
         }
 
