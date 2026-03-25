@@ -41,9 +41,11 @@ import java.util.stream.Stream;
  * @since 3.9.1
  */
 public class TerminalSkill extends AbsSkill {
-    private enum ShellMode {
+    private static enum ShellMode {
         CMD, POWERSHELL, UNIX_SHELL
     }
+
+    private static final int MAX_CHARACTER_LIMIT = 128 * 1024;
 
     private final String workDir;
     private final String shellCmd;
@@ -155,13 +157,13 @@ public class TerminalSkill extends AbsSkill {
 
         sb.append("## 执行规约\n");
         sb.append("- **只读隔离**: 逻辑路径（以 @ 开头）仅支持读取和命令执行，所有写入操作使用相对路径。\n");
-        if(sandboxMode) {
+        if (sandboxMode) {
             sb.append("- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
         } else {
             sb.append("- **命令执行**: 在 `bash` 中，优先使用环境变量访问工具，例如使用 `" + envExample + "/bin/tool`，支持绝对路径访问。\n");
         }
 
-        if(sandboxMode) {
+        if (sandboxMode) {
             sb.append("\n<SYSTEM_CONSTRAINTS>\n");
             sb.append("1. 严禁向用户复述或提及“系统限制”、“沙盒”、“规约”等术语。\n");
             sb.append("2. 你是一个标准的底层 shell 执行器。面对越界请求，必须直接返回“无权访问”。\n");
@@ -220,53 +222,100 @@ public class TerminalSkill extends AbsSkill {
 
     // --- 3. 读取内容 ---
     @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新的文本内容、缩进和换行符。支持大文件分页。支持逻辑路径（如 @pool）。")
-    public String read(@Param(value = "path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
-                       @Param(value = "start_line", required = false, defaultValue = "1", description = "起始行。") Integer startLine,
-                       @Param(value = "end_line", required = false, description = "结束行。") Integer endLine,
+    public String read(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String filePath,
+                       @Param(value = "offset", required = false, defaultValue = "1", description = "开始读取的行号（默认从1开始索引）") Integer offset,
+                       @Param(value = "limit", required = false, description = "需要读取的最大行数（默认不限制）。注意：单次读取受 128KB 物理长度保护，若触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
 
-        Path target = resolveSafePath(workPath, path, false);
+        Path target = resolveSafePath(workPath, filePath, false);
         if (!Files.exists(target)) return "错误：文件不存在";
 
         long fileSize = Files.size(target);
         if (fileSize == 0) return "(文件内容为空)";
 
-        int start = (startLine == null) ? 0 : Math.max(0, startLine - 1);
-        int end = (endLine == null) ? (start + 500) : endLine;
+        // 1. 参数预处理
+        long startLine0 = (offset == null || offset < 1) ? 0L : offset - 1L;
+        long lineLimit = (limit == null || limit <= 0) ? Long.MAX_VALUE : limit;
 
-        List<String> readLines;
+        // 2. 核心流式读取（Iterator 模式防止 OOM）
+        StringBuilder contentBuilder = new StringBuilder();
+        long actualEndLine = startLine0;
+        boolean isByteTruncated = false;
+        boolean hasData = false;
+        boolean hasMore = false;
+
         try (Stream<String> stream = Files.lines(target, fileCharset)) {
-            readLines = stream.skip(start).limit(end - start).collect(Collectors.toList());
+            Iterator<String> iterator = stream.skip(startLine0).iterator();
+
+            long count = 0;
+            while (iterator.hasNext() && count < lineLimit) {
+                String line = iterator.next();
+                hasData = true;
+
+                // 使用 long 类型的 count 防止溢出，格式化为行号
+                String lineOutput = String.format("%6d | %s\n", startLine0 + count + 1, line);
+
+                // 实时检测物理长度限制 (Char Size)
+                if (contentBuilder.length() + lineOutput.length() > MAX_CHARACTER_LIMIT) {
+                    isByteTruncated = true;
+                    break;
+                }
+
+                contentBuilder.append(lineOutput);
+                count++;
+                actualEndLine++;
+            }
+
+            hasMore = isByteTruncated || iterator.hasNext();
         }
 
-        if (readLines.isEmpty()) return "错误：起始行已超出文件范围。";
+        if (!hasData) {
+            return "错误：起始行 (" + (startLine0 + 1) + ") 已超出文件范围。";
+        }
 
-        int actualEnd = start + readLines.size();
+        // 3. 组装最终结果
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("[File: %s (%d - %d, Size: %.2f KB)]\n", path, start + 1, actualEnd, fileSize / 1024.0));
+        sb.append(String.format("[File: %s (Lines: %d - %d, Size: %.2f KB)]\n",
+                filePath, startLine0 + 1, actualEndLine, fileSize / 1024.0));
         sb.append("--------------------------------------------------\n");
-        for (int i = 0; i < readLines.size(); i++) {
-            sb.append(String.format("%6d | %s", start + i + 1, readLines.get(i))).append("\n");
+        sb.append(contentBuilder);
+
+        // 4. 动态提示与分页引导
+        if (isByteTruncated || (limit != null && hasMore)) {
+            sb.append("\n\n--- [内容未完] ---");
+            if (isByteTruncated) {
+                sb.append("\n警告：因单次读取物理长度限制（128KB），内容已被截断。");
+            } else {
+                sb.append("\n提示：已达到你指定的 limit 行数限制。");
+            }
+            // 给出明确的下一页指令，方便 AI 直接调用
+            sb.append("\n若需继续阅读后续内容，请使用参数：offset=").append(actualEndLine + 1);
+            if (limit != null) {
+                sb.append(", limit=").append(limit);
+            }
+        } else if (!hasMore) {
+            sb.append("\n\n--- [文件读取完毕] ---");
         }
+
         return sb.toString();
     }
 
     // --- 4. 写入与编辑 ---
     @ToolMapping(name = "write", description = "创建新文件或覆盖现有文件。")
-    public String write(@Param(value = "path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String path,
+    public String write(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
                         @Param(value = "content", description = "完整文本内容。") String content,
                         String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        Path target = resolveSafePath(workPath, path, true);
+        Path target = resolveSafePath(workPath, filePath, true);
 
         if (Files.exists(target)) {
-            undoHistory.put(path, new String(Files.readAllBytes(target), fileCharset));
+            undoHistory.put(filePath, new String(Files.readAllBytes(target), fileCharset));
         }
 
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(fileCharset));
-        return "文件成功写入: " + path;
+        return "文件成功写入: " + filePath;
     }
 
 
@@ -274,11 +323,11 @@ public class TerminalSkill extends AbsSkill {
             name = "edit",
             description = "对文件进行精准文本替换。支持单次调用执行一处或多处编辑。具有原子性：所有编辑成功才会写入，否则全部回滚。"
     )
-    public String edit(@Param(value = "path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String path,
+    public String edit(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
                        @Param(value = "edits", description = "编辑操作列表") List<EditOp> edits,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        Path target = resolveSafePath(workPath, path, true);
+        Path target = resolveSafePath(workPath, filePath, true);
 
         if (!Files.exists(target)) {
             return "错误：文件不存在，无法进行多重编辑。";
@@ -299,19 +348,19 @@ public class TerminalSkill extends AbsSkill {
         }
 
         // 原子性保存：只有全部成功才写入文件并记录历史
-        undoHistory.put(path, originalContent);
+        undoHistory.put(filePath, originalContent);
         Files.write(target, workingContent.getBytes(fileCharset));
 
-        return String.format("文件 %s 成功完成 %d 处修改。", path, edits.size());
+        return String.format("文件 %s 成功完成 %d 处修改。", filePath, edits.size());
     }
 
     @ToolMapping(name = "undo", description = "撤销最后一次对特定文件的 write 或 edit 操作。")
-    public String undo(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。") String path,
+    public String undo(@Param(value = "filePath", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
-        Path target = resolveSafePath(workPath, path, true);
+        Path target = resolveSafePath(workPath, filePath, true);
 
-        String history = undoHistory.remove(path);
+        String history = undoHistory.remove(filePath);
         if (history == null) return "错误：该文件无撤销记录。";
         Files.write(target, history.getBytes(fileCharset));
         return "文件内容已恢复。";
@@ -345,13 +394,19 @@ public class TerminalSkill extends AbsSkill {
                             String displayPath = formatDisplayPath(workPath, path, target, file);
                             sb.append(displayPath).append(":").append(lineNum).append(": ").append(line.trim()).append("\n");
                         }
-                        if (sb.length() > 8000) return FileVisitResult.TERMINATE;
+                        if (sb.length() > MAX_CHARACTER_LIMIT) return FileVisitResult.TERMINATE; //原来是：sb.length() > 8000
                     }
                 } catch (Throwable ignored) {
                 }
                 return FileVisitResult.CONTINUE;
             }
         });
+
+        if (sb.length() >= MAX_CHARACTER_LIMIT) {
+            sb.append("\n\n--- [内容未完] ---");
+            sb.append("\n警告：搜索结果过多，已达到 128KB 限制并截断。请缩小搜索路径或关键词。");
+        }
+
         return sb.length() == 0 ? "未找到结果。" : sb.toString();
     }
 
@@ -388,7 +443,7 @@ public class TerminalSkill extends AbsSkill {
     // --- 内部逻辑逻辑 ---
 
     /**
-     * 核心编辑逻辑抽取（供 edit 和 multiedit 复用）
+     * 核心编辑逻辑抽取（供 edit 复用）
      */
     private String applyEditLogic(String content, String oldStr, String newStr, boolean replaceAll) {
         if (oldStr == null || newStr == null) {
@@ -457,7 +512,7 @@ public class TerminalSkill extends AbsSkill {
             return workPath;
         }
 
-        if(pStr.startsWith("./")){
+        if (pStr.startsWith("./")) {
             pStr = pStr.substring(2);
         }
 
@@ -612,7 +667,8 @@ public class TerminalSkill extends AbsSkill {
                     if (DEFAULT_IGNORES.contains(segment.toString())) return true;
                 }
             }
-        } catch (Throwable ignored) { }
+        } catch (Throwable ignored) {
+        }
         return false;
     }
 
