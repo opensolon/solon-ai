@@ -34,12 +34,8 @@ import java.util.Base64;
  * */
 public class WebfetchTool {
     private static final int DEFAULT_TIMEOUT_MS = 30000;
-    private static final int DEFAULT_RETURN_LIMIT = 128 * 1024; // 128KB（限制返回文档大小）
-
-    private static final int MAX_RETURN_LIMIT = 2 * 1024 * 1024; // 2MB
-    private static final long MAX_ALLOWED_SIZE = 10 * 1024 * 1024;     // 10MB（限制网页加载）
     private static final int MAX_TIMEOUT_MS = 120000;
-
+    private static final long MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5MB 硬限制
 
     private static final WebfetchTool instance = new WebfetchTool();
 
@@ -47,35 +43,33 @@ public class WebfetchTool {
         return instance;
     }
 
-    @ToolMapping(name = "webfetch", description = "从 URL 获取网页内容。支持长文分页。若 'isTruncated': true，可以根据提示增加 start_index 再次调用。")
+    @ToolMapping(name = "webfetch", description = "从 URL 获取网页内容。返回格式支持 markdown, text 或 html。")
     public Document webfetch(
             @Param(name = "url", description = "目标网页的完整 URL（必须包含 http:// 或 https://）") String url,
-            @Param(name = "format", required = false, defaultValue = "markdown", description = "返回内容的格式选项：'markdown' (默认，适合阅读结构)、'text' (纯文本，适合摘要提取) 或 'html' (原始结构)") String format,
-            @Param(name = "timeout", required = false, description = "请求超时时间（秒），最大允许 120 秒") Integer timeoutSeconds,
-            @Param(name = "start_index", required = false, description = "起始偏移量，默认为 0。当需要阅读长文章的后续部分时，设为上次返回的结束位置") Integer startIndex,
-            @Param(name = "max_length", required = false, description = "单次返回的最大字符数，默认 131072 (128KB)，处理超长分析时可调大，最大支持 2MB") Integer maxLength
+            @Param(name = "format", required = false, defaultValue = "markdown", description = "返回格式：'markdown', 'text', 'html'") String format,
+            @Param(name = "timeout", required = false, description = "超时时间（秒），最大 120 秒") Integer timeoutSeconds
     ) throws Exception {
 
-        // 1. URL 合法性校验 (对齐 TypeScript 版)
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        // 1. URL 校验
+        if (url == null || (!url.startsWith("http://") && !url.startsWith("https://"))) {
             throw new IllegalArgumentException("URL must start with http:// or https://");
         }
 
-        // 2. 超时计算 (对齐 TypeScript 的 Math.min 逻辑)
+        // 2. 超时计算
         int timeout = (timeoutSeconds == null)
                 ? DEFAULT_TIMEOUT_MS
                 : Math.min(timeoutSeconds * 1000, MAX_TIMEOUT_MS);
 
         String finalFormat = (format == null) ? "markdown" : format.toLowerCase();
 
-        // 3. 构建 Headers (对齐 TypeScript 的 Accept 权重和 UA)
+        // 3. 构建请求 (对齐 opencode 的 Headers)
         HttpUtils http = HttpUtils.http(url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36")
                 .header("Accept", getAcceptHeader(finalFormat))
                 .header("Accept-Language", "en-US,en;q=0.9")
                 .timeout(timeout);
 
-        // 4. 执行请求并处理 Cloudflare 反爬重试 (100% 对齐重试逻辑)
+        // 4. 执行请求与 Cloudflare 穿透逻辑
         HttpResponse response = http.exec("GET");
         if (response.code() == 403 && "challenge".equals(response.header("cf-mitigated"))) {
             response = http.header("User-Agent", "opencode").exec("GET");
@@ -85,27 +79,28 @@ public class WebfetchTool {
             throw new RuntimeException("Request failed with status code: " + response.code());
         }
 
-
-        // 5. 严格的内容长度检查 (防止内存溢出)
+        // 5. 5MB 限制校验 (对齐 opencode)
         long contentLength = response.contentLength();
-        if (contentLength > MAX_ALLOWED_SIZE) {
-            throw new RuntimeException("Response too large: " + contentLength + " bytes (limit: " + MAX_ALLOWED_SIZE + " bytes)");
+        if (contentLength > MAX_RESPONSE_SIZE) {
+            throw new RuntimeException("Response too large (exceeds 5MB limit)");
         }
 
         byte[] bodyBytes = response.bodyAsBytes();
-        if (bodyBytes.length > MAX_ALLOWED_SIZE) {
-            throw new RuntimeException("Response too large: " + bodyBytes.length + " bytes (limit: " + MAX_ALLOWED_SIZE + " bytes)");
+        if (bodyBytes == null || bodyBytes.length > MAX_RESPONSE_SIZE) {
+            throw new RuntimeException("Response too large (exceeds 5MB limit)");
         }
 
         String contentType = response.header("Content-Type");
         if (contentType == null) contentType = "";
         String mime = contentType.split(";")[0].trim().toLowerCase();
+        String title = url + " (" + contentType + ")";
 
-        // 6. 图片处理逻辑 (对齐 Base64 附件返回)
-        boolean isImage = mime.startsWith("image/") && !mime.contains("svg");
+        // 6. 图片处理
+        boolean isImage = mime.startsWith("image/") && !mime.contains("svg") && !mime.contains("vnd.fastbidsheet");
         if (isImage) {
             String base64 = Base64.getEncoder().encodeToString(bodyBytes);
             return new Document()
+                    .title(title)
                     .content("Image fetched successfully")
                     .metadata("type", "file")
                     .metadata("mime", mime)
@@ -113,61 +108,36 @@ public class WebfetchTool {
         }
 
         // 7. 内容转换核心逻辑
-        String content = new String(bodyBytes, StandardCharsets.UTF_8);
+        String rawContent = new String(bodyBytes, StandardCharsets.UTF_8);
         String output;
 
-        if (contentType.contains("html") || contentType.contains("xml")) {
-            if ("markdown".equals(finalFormat)) {
-                output = convertHtmlToMarkdown(content);
-            } else if ("text".equals(finalFormat)) {
-                output = extractTextFromHtml(content);
-            } else {
-                output = content;
-            }
+        // 仅在 Content-Type 包含 HTML 时进行转换，否则直接输出
+        boolean isHtml = contentType.contains("text/html");
+
+        if ("markdown".equals(finalFormat) && isHtml) {
+            output = convertHtmlToMarkdown(rawContent);
+        } else if ("text".equals(finalFormat) && isHtml) {
+            output = extractTextFromHtml(rawContent);
         } else {
-            output = content;
-        }
-
-
-        if (output == null) {
-            output = "";
-        }
-
-        int start = (startIndex == null || startIndex < 0) ? 0 : startIndex;
-        int rawLength = output.length();
-
-        if (start >= rawLength) {
-            return new Document().content("").metadata("isTruncated", false).metadata("originalLength", rawLength);
-        }
-
-        int lengthLimit = (maxLength == null) ? DEFAULT_RETURN_LIMIT : Math.min(maxLength, MAX_RETURN_LIMIT);
-        int end = Math.min(start + lengthLimit, rawLength);
-
-        boolean isTruncated = (end < rawLength);
-        String finalContent = output.substring(start, end);
-
-        if (isTruncated) {
-            finalContent += "\n\n...(content truncated, use start_index=" + end + " to read more)";
+            output = rawContent;
         }
 
         return new Document()
-                .title(url + " (" + contentType + ")")
-                .content(finalContent)
+                .title(title)
+                .content(output)
                 .metadata("url", url)
-                .metadata("format", finalFormat)
-                .metadata("contentType", contentType)
-                .metadata("startIndex", start)
-                .metadata("originalLength", rawLength)
-                .metadata("isTruncated", isTruncated); // 告知 LLM 内容是否完整
+                .metadata("contentType", contentType);
     }
 
     private String extractTextFromHtml(String html) {
         org.jsoup.nodes.Document doc = Jsoup.parse(html);
+        // 移除不可见内容标签
         doc.select("script, style, noscript, iframe, object, embed").remove();
         return doc.text().trim();
     }
 
     private String convertHtmlToMarkdown(String html) {
+        // 使用 Flexmark 进行转换，配置尽量简约
         return FlexmarkHtmlConverter.builder().build().convert(html);
     }
 
