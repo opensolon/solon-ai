@@ -195,7 +195,7 @@ public class TerminalSkill extends AbsSkill {
 
     // --- 2. 发现文件 ---
     @ToolMapping(name = "ls", description = "列出目录内容。支持递归 Tree 结构展示。支持逻辑路径（如 @pool）。")
-    public String ls(@Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
+    public String ls(@Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                      @Param(value = "recursive", required = false, description = "是否递归展示") Boolean recursive,
                      @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件") Boolean showHidden,
                      String __cwd) throws IOException {
@@ -220,7 +220,7 @@ public class TerminalSkill extends AbsSkill {
 
     // --- 3. 读取内容 ---
     @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新的文本内容、缩进和换行符。支持大文件分页。支持逻辑路径（如 @pool）。")
-    public String read(@Param(value = "path", description = "文件相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
+    public String read(@Param(value = "path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        @Param(value = "start_line", required = false, description = "起始行 (从1开始)。") Integer startLine,
                        @Param(value = "end_line", required = false, description = "结束行。") Integer endLine,
                        String __cwd) throws IOException {
@@ -254,7 +254,7 @@ public class TerminalSkill extends AbsSkill {
 
     // --- 4. 写入与编辑 ---
     @ToolMapping(name = "write", description = "创建新文件或覆盖现有文件。")
-    public String write(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
+    public String write(@Param(value = "path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String path,
                         @Param(value = "content", description = "完整文本内容。") String content,
                         String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
@@ -269,33 +269,14 @@ public class TerminalSkill extends AbsSkill {
         return "文件成功写入: " + path;
     }
 
-    @ToolMapping(name = "edit", description = "精准文本替换。")
-    public String edit(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
-                       @Param(value = "old_str", description = "待替换的唯一文本块。必须唯一且包含精确缩进。") String oldStr,
-                       @Param(value = "new_str", description = "替换后的新内容。") String newStr,
-                       String __cwd) throws IOException {
-        Path workPath = getWorkPath(__cwd);
-        Path target = resolveSafePath(workPath, path, true);
-
-        String content = new String(Files.readAllBytes(target), fileCharset);
-
-        try {
-            String newContent = applyEditLogic(content, oldStr, newStr, false);
-            undoHistory.put(path, content);
-            Files.write(target, newContent.getBytes(fileCharset));
-            return "文件成功修改: " + path;
-        } catch (IllegalArgumentException e) {
-            return "错误：" + e.getMessage();
-        }
-    }
 
     @ToolMapping(
-            name = "multiedit",
-            description = "在单次操作中对单个文件进行多次批量编辑。相比多次调用 edit，此工具效率更高且具有原子性。"
+            name = "edit",
+            description = "对文件进行精准文本替换。支持单次调用执行一处或多处编辑。具有原子性：所有编辑成功才会写入，否则全部回滚。"
     )
-    public String multiedit(@Param(value = "path", description = "文件相对路径。禁止以 ./ 开头。") String path,
-                            @Param(value = "edits", description = "编辑操作列表，每个包含 old_str, new_str, 以及可选的 replace_all。") List<EditOp> edits,
-                            String __cwd) throws IOException {
+    public String edit(@Param(value = "path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String path,
+                       @Param(value = "edits", description = "编辑操作列表") List<EditOp> edits,
+                       String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = resolveSafePath(workPath, path, true);
 
@@ -325,7 +306,7 @@ public class TerminalSkill extends AbsSkill {
     }
 
     @ToolMapping(name = "undo", description = "撤销最后一次对特定文件的 write 或 edit 操作。")
-    public String undo(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
+    public String undo(@Param(value = "path", description = "文件相对路径（如 'src'）。'.' 表示当前根目录。") String path,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = resolveSafePath(workPath, path, true);
@@ -339,7 +320,7 @@ public class TerminalSkill extends AbsSkill {
     // --- 5. 搜索工具 ---
     @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。")
     public String grep(@Param(value = "query", description = "关键字。") String query,
-                       @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
+                       @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = resolveSafePath(workPath, path, false);
@@ -376,7 +357,7 @@ public class TerminalSkill extends AbsSkill {
 
     @ToolMapping(name = "glob", description = "按通配符模式（如 **/*.java）搜索文件。确定文件范围的最高效工具。支持逻辑路径（如 @pool）。")
     public String glob(@Param(value = "pattern", description = "glob 模式。") String pattern,
-                       @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。禁止以 ./ 开头。") String path,
+                       @Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        String __cwd) throws IOException {
         Path workPath = getWorkPath(__cwd);
         Path target = resolveSafePath(workPath, path, false);
@@ -474,6 +455,10 @@ public class TerminalSkill extends AbsSkill {
     private Path resolveSafePath(Path workPath, String pStr, boolean writeMode) {
         if (Assert.isEmpty(pStr) || ".".equals(pStr)) {
             return workPath;
+        }
+
+        if(pStr.startsWith("./")){
+            pStr = pStr.substring(2);
         }
 
         // 1. 如果是逻辑路径（@开头），走 poolManager 逻辑
@@ -644,7 +629,7 @@ public class TerminalSkill extends AbsSkill {
         public String oldStr;
         @Param(value = "new_str", description = "替换后的新内容")
         public String newStr;
-        @Param(value = "replace_all", required = false, description = "是否替换所有匹配项")
+        @Param(value = "replace_all", required = false, defaultValue = "false", description = "是否替换所有匹配项（仅当 old_str 全文唯一时执行替换）。")
         public Boolean replaceAll = false; // 赋默认值
     }
 }
