@@ -33,14 +33,18 @@ import java.util.stream.Stream;
 /**
  * 专家技能管理器
  *
- * 支持三阶段模式自动切换：
- * 1. FULL: 数量 <= dynamicThreshold，全量平铺。
- * 2. DYNAMIC: 数量 <= searchThreshold，指令内展示清单。
- * 3. SEARCH: 数量 > searchThreshold，强制搜索。
+ * 支持四阶段模式自动切换：
+ * 1. FULL: 数量 <= dynamicThreshold。展示全量摘要（名称+描述）。
+ * 2. SUMMARY: 数量 <= listThreshold。展示分组导航（如果有）或带描述的清单。
+ * 3. LIST: 数量 <= searchThreshold。仅展示技能名称路径。
+ * 4. SEARCH: 数量 > searchThreshold。强制搜索。
  */
 public class ExpertSkill extends AbsSkill {
     private final PoolManager poolManager;
-    private int searchThreshold = 50;  // 超过此值，不再展示摘要清单，进入强制搜索
+
+    private int dynamicThreshold = 10;
+    private int listThreshold = 30;
+    private int searchThreshold = 100;
 
     public ExpertSkill(PoolManager poolManager) {
         this.poolManager = poolManager;
@@ -49,6 +53,10 @@ public class ExpertSkill extends AbsSkill {
     public PoolManager getPoolManager() {
         return poolManager;
     }
+
+    public ExpertSkill dynamicThreshold(int val) { this.dynamicThreshold = val; return this; }
+    public ExpertSkill listThreshold(int val) { this.listThreshold = val; return this; }
+    public ExpertSkill searchThreshold(int val) { this.searchThreshold = val; return this; }
 
     @Override
     public String description() {
@@ -63,22 +71,41 @@ public class ExpertSkill extends AbsSkill {
         int total = skillMap.size();
         StringBuilder sb = new StringBuilder();
 
-        sb.append("优先使用合适的技能解决问题（不确定用什么技能时，可通过 skillsearch 搜索）。**注意：在长时间或多步骤任务中，请务必定期通过 skillread 回顾已读取的技能规约，以防细节遗忘。**\n\n");
+        sb.append("优先使用合适的技能解决问题（不确定用什么技能时，可通过 skillsearch 搜索）。**注意：在执行任务中，请务必通过 `skillread` 读取或回顾规约。**\n\n");
 
         sb.append("## 专家技能库执行规约 (当前可用技能: " + total + ")\n");
 
-        if (total <= searchThreshold) {
+        if (total <= dynamicThreshold) {
+            // --- 模式 1: FULL ---
             sb.append("检测到多个专家技能。如需了解具体领域规约或 API，请调用 `skillread`：\n");
+
             sb.append("<available_skills>\n");
             for (PoolManager.SkillDir skill : skillMap.values()) {
                 sb.append("  <skill name=\"").append(skill.aliasPath).append("\">")
                         .append(skill.description).append("</skill>\n");
             }
             sb.append("</available_skills>");
+        } else if (total <= listThreshold) {
+            // --- 模式 2: SUMMARY ---
+            sb.append("请根据描述选定技能名，调用 `skillread` 获取详情：\n");
+
+            for (PoolManager.SkillDir skill : skillMap.values()) {
+                sb.append("- `").append(skill.aliasPath).append("`: ").append(skill.description).append("\n");
+            }
+        } else if (total <= searchThreshold) {
+            // --- 模式 3: LIST ---
+            sb.append("由于技能较多，仅展示路径。请推断功能并调用 `skillread`，或使用 `skillsearch` 检索：\n");
+
+            String names = skillMap.values().stream()
+                    .map(s -> "`" + s.aliasPath + "`")
+                    .collect(Collectors.joining(", "));
+            sb.append("> 可用技能: ").append(names).append("\n");
         } else {
-            sb.append("专家技能库规模较大（" + total + "）。为了确保工程质量，请执行以下检索流程：\n");
-            sb.append("1. **技能检索**：处理特定技术栈前，可以通过 `skillsearch` 检索对应的专家技能。\n");
-            sb.append("2. **按需读取**：仅在需要查看具体 API 参数或执行标准时，调用 `skillread` 获取规约。\n");
+            // --- 模式 4: SEARCH ---
+            sb.append("由于专家技能库规模较大（" + total + "）。已开启**动态发现**模式。请严格遵循检索流程：\n");
+
+            sb.append("1. **搜索**：使用 `skillsearch` 配合关键词（如：'java', 'solon'）定位。\n");
+            sb.append("2. **读取**：确认目标路径后，通过 `skillread` 获取具体执行规约。\n");
         }
 
         return sb.toString();
@@ -89,16 +116,21 @@ public class ExpertSkill extends AbsSkill {
         Map<String, PoolManager.SkillDir> skillMap = poolManager.getSkillMap();
         if (skillMap.isEmpty()) return null;
 
-        int total = skillMap.size();
-        if (total <= searchThreshold) {
+        int total = poolManager.getSkillMap().size();
+
+        if (total <= dynamicThreshold) {
+            // 少量时，不需要列表和搜索，直接 read
             return tools.stream().filter(t -> t.name().equals("skillread")
-                    || t.name().equals("skilllist")
-                    || t.name().equals("skillrefresh")).collect(Collectors.toList());
-        } else {
-            return tools.stream().filter(t -> t.name().equals("skillread")
-                    || t.name().equals("skillsearch")
                     || t.name().equals("skillrefresh")).collect(Collectors.toList());
         }
+
+        if (total <= searchThreshold) {
+            // 中等规模，提供列表方便查阅，不强制搜索
+            return tools.stream().filter(t -> !t.name().equals("skillsearch")).collect(Collectors.toList());
+        }
+
+        // 大规模，强制搜索
+        return tools;
     }
 
     @ToolMapping(name = "skilllist", description = "列出所有已挂载专家技能池中的可用清单。")
