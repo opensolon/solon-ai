@@ -36,12 +36,13 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 智能 REST API 接入技能：实现从 API 定义到 AI 自动化调用的桥梁。
+ * 智能 REST API 接入技能：支持分组与四阶段自动发现模式。
  *
- * 支持三阶段模式自动切换：
- * 1. FULL: 数量 <= dynamicThreshold，全量平铺。
- * 2. DYNAMIC: 数量 <= searchThreshold，指令内展示清单。
- * 3. SEARCH: 数量 > searchThreshold，强制搜索。
+ * 逻辑档位：
+ * 1. FULL: 数量 <= dynamicThreshold。平铺所有 API 的完整定义。
+ * 2. SUMMARY: 数量 <= listThreshold。展示分组、名称、描述及 Endpoint。
+ * 3. LIST: 数量 <= searchThreshold。仅展示分组及接口名列表。
+ * 4. SEARCH: 数量 > searchThreshold。强制搜索。
  *
  * 注意：不能有同名同方式接口
  *
@@ -53,19 +54,27 @@ import java.util.stream.Collectors;
 public class RestApiSkill extends AbsSkill {
     private static final Logger log = LoggerFactory.getLogger(RestApiSkill.class);
 
-    private final Map<String, ApiTool> dynamicTools = new LinkedHashMap<>();
+    private final Map<String, Map<String, ApiTool>> categoryTools = new LinkedHashMap<>();
+    private final Map<String, ApiTool> allTools = new LinkedHashMap<>();
 
     private ApiResolver resolver = OpenApiResolver.getInstance();
     private ApiAuthenticator defaultAuthenticator;
 
-    private int dynamicThreshold = 8; // 超过此值，不再平铺 Schema，进入清单模式
-    private int searchThreshold = 80;  // 超过此值，不再展示清单，进入强制搜索模式
+    private int dynamicThreshold = 8;
+    private int listThreshold = 30;
+    private int searchThreshold = 100;
+
     private int maxContextLength = 8000;
 
     // --- 配置方法 ---
 
     public RestApiSkill dynamicThreshold(int dynamicThreshold) {
         this.dynamicThreshold = dynamicThreshold;
+        return this;
+    }
+
+    public RestApiSkill listThreshold(int listThreshold) {
+        this.listThreshold = listThreshold;
         return this;
     }
 
@@ -148,59 +157,72 @@ public class RestApiSkill extends AbsSkill {
             loadApiFromDefinition(apiSource);
             return this;
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Failed to load API from: " + apiSource.docUrl, e);
         }
     }
 
 
     @Override
     public String description() {
-        return "多源业务 API 专家：能够整合并精准调用多个微服务的 REST 接口。";
+        return "业务 API 专家：能够整合并精准调用多个微服务的 REST 接口。";
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
-        if (dynamicTools.isEmpty()) {
-            return "## API 专家 (RestApiSkill)\n" +
-                    "**警告：当前系统未加载任何业务 API 定义。**\n" +
-                    "- 严禁尝试猜测或伪造任何 API 名称。\n" +
-                    "- 如果用户提问涉及业务数据查询，请直接回答：'抱歉，当前未配置相关的业务接口，无法为您执行查询。'";
+        if (allTools.isEmpty()) {
+            return "## API 专家\n当前未配置任何业务接口。若用户提问涉及业务数据，请告知无法查询。";
         }
 
-        final int size = dynamicTools.size();
+        final int size = allTools.size();
         StringBuilder sb = new StringBuilder();
         sb.append("## 业务 API 发现规范 (共 ").append(size).append(" 个接口)\n");
 
         if (size <= dynamicThreshold) {
-            // FULL 模式
-            sb.append("当前已加载全量接口定义。请分析需求并直接调用 `call_api`。\n\n")
-                    .append("### 接口详细定义 (API Specs):\n")
-                    .append(formatApiDocs(dynamicTools.values()));
-        } else {
-            // 路由模式引导
+            // --- 模式 1: FULL ---
+            sb.append("### 运行模式: 直接调用\n");
+            sb.append("当前已加载全量接口定义。请分析需求并直接调用 `call_api`。\n\n");
+            sb.append("#### 接口详细定义 (API Specs):\n");
+            sb.append(formatApiDocs(allTools.values()));
+
+        } else if (size <= listThreshold) {
+            // --- 模式 2: SUMMARY ---
             sb.append("由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：\n");
 
-            if (size > searchThreshold) {
-                // SEARCH 模式：引导搜索
-                sb.append("- **Step 1 (搜索)**: 业务清单已折叠。请务必先使用 `search_apis` 寻找匹配的接口名。\n");
-            } else {
-                // DYNAMIC 模式：引导阅读清单
-                sb.append("- **Step 1 (锁定)**: 从下方“可用业务接口清单”中直接根据描述选定接口名。\n");
-            }
+            sb.append("- **Step 1 (锁定)**: 从下方“可用业务接口清单”中根据功能描述选定接口名。\n");
+            sb.append("- **Step 2 (详情)**: 调用 `get_api_detail` 获取参数 Schema。\n");
+            sb.append("- **Step 3 (执行)**: 通过 `call_api` 执行。\n\n");
 
-            sb.append("- **Step 2 (详情)**: 使用 `get_api_detail` 获取选定接口的参数定义 (JSON Schema)。\n")
-                    .append("- **Step 3 (执行)**: **必须**通过 `call_api` 执行。禁止直接猜测参数或接口名调用。\n\n");
+            sb.append("### 可用业务接口清单 (按业务分组摘要):\n");
+            categoryTools.forEach((cat, tools) -> {
+                sb.append("- **分组: [").append(cat).append("]**:\n");
+                tools.values().forEach(t ->
+                        sb.append("  - `").append(t.getName()).append("`: ").append(t.getDescription())
+                                .append(" (").append(t.getMethod()).append(" ").append(t.getPath()).append(")\n")
+                );
+            });
+        } else if (size <= searchThreshold) {
+            // --- 模式 3: LIST ---
+            sb.append("由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：\n");
 
-            if (size <= searchThreshold) {
-                // 展示摘要清单
-                sb.append("### 可用业务接口清单:\n");
-                for (ApiTool t : dynamicTools.values()) {
-                    sb.append("- **").append(t.getName()).append("**: ").append(t.getDescription())
-                            .append(" (").append(t.getMethod()).append(" ").append(t.getPath()).append(")\n");
-                }
-            } else {
-                sb.append("> **搜索提示**: 接口较多，建议通过关键词搜索，多个关键词请用空格分隔。例如：`search_apis('订单 查询')`。");
-            }
+            sb.append("- **Step 1 (预选)**: 从下方“接口列表”中推断功能，或用 `search_apis` 检索。\n");
+            sb.append("- **Step 2 (详情)**: 调用 `get_api_detail` 获取参数 Schema。\n");
+            sb.append("- **Step 3 (执行)**: 通过 `call_api` 执行。\n\n");
+
+            sb.append("### 可用业务接口列表 (按业务分组展示):\n");
+            categoryTools.forEach((cat, tools) -> {
+                String names = String.join(", ", tools.keySet());
+                sb.append("- **分组: ").append(cat).append("** -> [").append(names).append("]\n");
+            });
+            sb.append("\n> 提示：分组名和接口名具有语义参考价值，锁定目标后务必先查详情。");
+        } else {
+            // --- 模式 4: SEARCH ---
+            sb.append("由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：\n");
+
+            sb.append("- **Step 1 (搜索)**: 清单已折叠。必须先使用 `search_apis` 通过关键词寻找匹配的接口。**注意**: 搜索结果将按“业务分组”返回，请结合分组语义判断接口准确性。\n");
+            sb.append("- **Step 2 (详情)**: 调用 `get_api_detail` 获取参数 Schema。\n");
+            sb.append("- **Step 3 (执行)**: 通过 `call_api` 执行。\n\n");
+
+            sb.append("> **注意**: 接口库规模巨大。建议搜索关键词，如：search_apis('订单 查询')。");
         }
 
         sb.append("\n\n## 执行约束\n")
@@ -212,23 +234,17 @@ public class RestApiSkill extends AbsSkill {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        int size = dynamicTools.size();
+        int size = allTools.size();
+
         if (size <= dynamicThreshold) {
-            // FULL 模式下只暴露执行工具
-            return tools.stream()
-                    .filter(t -> "call_api".equals(t.name()))
-                    .collect(Collectors.toList());
-        } else {
-            if (size > searchThreshold) {
-                // SEARCH 模式下暴露全量元工具 (search_apis, get_api_detail, call_api)
-                return tools;
-            } else {
-                // DYNAMIC 模式下隐藏 search_apis
-                return tools.stream()
-                        .filter(t -> !"search_apis".equals(t.name()))
-                        .collect(Collectors.toList());
-            }
+            return tools.stream().filter(t -> "call_api".equals(t.name())).collect(Collectors.toList());
         }
+
+        if (size <= listThreshold) {
+            return tools.stream().filter(t -> !"search_apis".equals(t.name())).collect(Collectors.toList());
+        }
+
+        return tools;
     }
 
     // --- 内置工具映射 ---
@@ -240,7 +256,7 @@ public class RestApiSkill extends AbsSkill {
         // 按空格及常见分隔符拆分关键词
         String[] keys = keyword.toLowerCase().split("[\\s,;，；]+");
 
-        List<Map<String, String>> results = dynamicTools.values().stream()
+        List<Map<String, String>> results = allTools.values().stream()
                 .filter(t -> {
                     String content = (t.getName() + " " + t.getDescription() + " " + t.getPath()).toLowerCase();
                     // 多词 AND 匹配
@@ -250,6 +266,7 @@ public class RestApiSkill extends AbsSkill {
                 .map(t -> {
                     Map<String, String> map = new HashMap<>();
                     map.put("api_name", t.getName());
+                    map.put("category", t.getCategory());
                     map.put("description", t.getDescription());
                     map.put("endpoint", t.getMethod() + " " + t.getPath());
                     return map;
@@ -271,7 +288,7 @@ public class RestApiSkill extends AbsSkill {
     public String getApiDetail(@Param("api_name") String apiName) {
         if (Utils.isEmpty(apiName)) return "错误：api_name 不能为空";
 
-        ApiTool tool = dynamicTools.get(apiName.trim().toLowerCase());
+        ApiTool tool = allTools.get(apiName.trim().toLowerCase());
 
         if (tool != null) {
             return formatApiDocs(Collections.singletonList(tool));
@@ -288,7 +305,7 @@ public class RestApiSkill extends AbsSkill {
             @Param("query_params") Map<String, Object> queryParams,
             @Param("body_params") Map<String, Object> bodyParams) throws IOException {
 
-        ApiTool tool = dynamicTools.get(apiName.trim().toLowerCase());
+        ApiTool tool = allTools.get(apiName.trim().toLowerCase());
 
         if (tool == null) {
             return "错误: 未找到名为 [" + apiName + "] 的 API。请先通过 'search_apis' 确认正确的名称。";
@@ -413,7 +430,12 @@ public class RestApiSkill extends AbsSkill {
                 tool.setBaseUrl(source.apiBaseUrl);
                 tool.setSource(source);
 
-                this.dynamicTools.put(tool.getName().toLowerCase(), tool);
+                String nameLower = tool.getName().toLowerCase();
+
+                this.allTools.put(nameLower, tool);
+
+                String cat = tool.getCategory();
+                this.categoryTools.computeIfAbsent(cat, k -> new LinkedHashMap<>()).put(nameLower, tool);
             }
         }
 
@@ -424,6 +446,7 @@ public class RestApiSkill extends AbsSkill {
         StringBuilder sb = new StringBuilder();
         for (ApiTool tool : tools) {
             sb.append("---\n").append("* **API: ").append(tool.getName()).append("**\n")
+                    .append("  - 业务分组: ").append(String.join(", ", tool.getTags())).append("\n")
                     .append("  - 功能: ").append(tool.getDescription()).append("\n")
                     .append("  - 路径: ").append(tool.getMethod()).append(" ").append(tool.getPath()).append("\n");
 

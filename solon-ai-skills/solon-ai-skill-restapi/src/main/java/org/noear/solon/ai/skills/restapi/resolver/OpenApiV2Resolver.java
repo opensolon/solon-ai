@@ -62,6 +62,10 @@ public class OpenApiV2Resolver implements ApiResolver {
         tool.setPath(path);
         tool.setMethod(method.toUpperCase());
 
+        if (op.getTags() != null) {
+            tool.getTags().addAll(op.getTags());
+        }
+
         String opId = op.getOperationId();
         tool.setName(Utils.isNotEmpty(opId) ? opId : generateName(method, path));
 

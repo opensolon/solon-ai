@@ -13,6 +13,8 @@
 ### 3.10.1
 
 * 添加 solon-ai-core ChatModel.of().systemPrompt 方法
+* 优化 solon-ai-skill-restapi 原来的三级升为四级，并添加分组（可增强注意力）
+* 优化 solon-ai-skill-toolgateway 原来的三级升为四级，并添加分组（可增强注意力）
 
 ### 3.10.0
 

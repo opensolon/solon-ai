@@ -17,6 +17,9 @@ package org.noear.solon.ai.skills.restapi;
 
 import org.noear.solon.core.util.Assert;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * API 工具信息模型
  *
@@ -27,6 +30,7 @@ public class ApiTool {
     private ApiSource source;
     private String baseUrl;
     private String name;
+    private List<String> tags;
     private String description;
     private String path;
     private String method;
@@ -123,6 +127,21 @@ public class ApiTool {
         return isDeprecated;
     }
 
+    public List<String> getTags() {
+        if (tags == null) {
+            tags = new ArrayList<>();
+        }
+        return tags;
+    }
+
+    public String getCategory() {
+        if (Assert.isEmpty(tags)) {
+            return "常规接口";
+        } else {
+            return tags.get(0);
+        }
+    }
+
     // --- Setter 方法 ---
 
 
@@ -178,11 +197,16 @@ public class ApiTool {
         isDeprecated = deprecated;
     }
 
+    public void setTags(List<String> tags) {
+        this.tags = tags;
+    }
+
     @Override
     public String toString() {
         return "ApiTool{" +
                 "baseUrl='" + baseUrl + '\'' +
                 ", name='" + name + '\'' +
+                ", tags=" + tags +
                 ", description='" + description + '\'' +
                 ", path='" + path + '\'' +
                 ", method='" + method + '\'' +

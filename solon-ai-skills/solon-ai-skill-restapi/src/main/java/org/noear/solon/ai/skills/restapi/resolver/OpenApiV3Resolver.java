@@ -87,6 +87,10 @@ public class OpenApiV3Resolver implements ApiResolver {
         tool.setDescription(Utils.isNotEmpty(op.getSummary()) ? op.getSummary() : op.getDescription());
         tool.setDeprecated(Boolean.TRUE.equals(op.getDeprecated()));
 
+        if (op.getTags() != null) {
+            tool.getTags().addAll(op.getTags());
+        }
+
         // 容器准备
         ONode pathSchemaRoot = new ONode().asObject().set("type", "object");
         ONode pathProps = pathSchemaRoot.getOrNew("properties");
