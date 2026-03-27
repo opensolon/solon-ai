@@ -40,6 +40,10 @@ public class TodoSkill extends AbsSkill {
     private static final Logger LOG = LoggerFactory.getLogger(TodoSkill.class);
     private final String relativeDir;
 
+    public TodoSkill() {
+       this(null);
+    }
+
     public TodoSkill(String relativeDir) {
         this.relativeDir = relativeDir;
     }
