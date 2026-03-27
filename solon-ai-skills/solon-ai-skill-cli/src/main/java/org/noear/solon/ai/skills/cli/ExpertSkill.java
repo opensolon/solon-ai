@@ -53,6 +53,7 @@ public class ExpertSkill extends AbsSkill {
     }
 
     public ExpertSkill listThreshold(int val) { this.listThreshold = val; return this; }
+
     public ExpertSkill searchThreshold(int val) { this.searchThreshold = val; return this; }
 
     @Override
