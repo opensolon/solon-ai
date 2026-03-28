@@ -65,11 +65,16 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
      * 修改当前请求的运行选项
      */
     public ReActRequest options(Consumer<ReActOptionsAmend> adjustor) {
-        optionsAdjustor = adjustor;
+        if (optionsAdjustor == null) {
+            optionsAdjustor = adjustor;
+        } else {
+            optionsAdjustor.andThen(adjustor);
+        }
+
         return this;
     }
 
-    private void init(){
+    private void init() {
         if (options != null) {
             return; // 已经初始化过了，不再重复逻辑
         }
@@ -86,11 +91,11 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
             options = trace.getOptions();
         }
 
-        if(options == null){
+        if (options == null) {
             options = agent.getConfig().getDefaultOptions().copy();
         }
 
-        if(optionsAdjustor != null){
+        if (optionsAdjustor != null) {
             optionsAdjustor.accept(new ReActOptionsAmend(options));
         }
     }

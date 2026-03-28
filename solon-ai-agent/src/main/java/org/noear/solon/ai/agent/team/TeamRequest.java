@@ -64,7 +64,12 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
      * 修正运行时选项（如调整迭代次数、增加拦截器等）
      */
     public TeamRequest options(Consumer<TeamOptionsAmend> adjustor) {
-        optionsAdjustor = adjustor;
+        if (optionsAdjustor == null) {
+            optionsAdjustor = adjustor;
+        } else {
+            optionsAdjustor.andThen(adjustor);
+        }
+
         return this;
     }
 

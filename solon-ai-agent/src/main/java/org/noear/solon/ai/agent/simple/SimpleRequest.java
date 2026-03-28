@@ -66,8 +66,8 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
     /**
      * 配置运行时选项（如调整 Temperature、MaxTokens 等参数）
      */
-    public SimpleRequest options(Consumer<ModelOptionsAmend<?, SimpleInterceptor>> chatOptionsAdjustor) {
-        chatOptionsAdjustor.accept(options);
+    public SimpleRequest options(Consumer<ModelOptionsAmend<?, SimpleInterceptor>> optionsAdjustor) {
+        optionsAdjustor.accept(options);
         return this;
     }
 
