@@ -288,7 +288,9 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      * @since 3.8.4
      */
     public T toolContextPut(String key, Object val) {
-        this.toolContext.put(key, val);
+        if (val != null) {
+            this.toolContext.put(key, val);
+        }
         return (T) this;
     }
 
