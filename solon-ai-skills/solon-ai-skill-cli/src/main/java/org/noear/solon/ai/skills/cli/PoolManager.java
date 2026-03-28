@@ -55,10 +55,10 @@ public class PoolManager {
         if (Files.exists(rootPath) && Files.isDirectory(rootPath)) {
             poolMap.put(key, rootPath);
             scanAndCache(key, rootPath);
-            LOG.info("技能池已挂载: {} -> {}", key, rootPath);
+            LOG.debug("Skill pool has been loaded.: {} -> {}", key, rootPath);
         } else {
-            String reason = !Files.exists(rootPath) ? "路径不存在" : "不是有效目录";
-            LOG.warn("技能池挂载跳过：{} (alias: {}, path: {})", reason, key, rootPath);
+            String reason = !Files.exists(rootPath) ? "The path does not exist." : "Not an effective directory";
+            LOG.debug("Skill pool loading skip：{} (alias: {}, path: {})", reason, key, rootPath);
         }
 
         return this;
