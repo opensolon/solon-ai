@@ -447,6 +447,7 @@ public class TerminalSkill extends AbsSkill {
 
         String fixedPattern = pattern.replace("\\", "/");
         final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + fixedPattern);
+
         List<String> results = new ArrayList<>();
 
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
@@ -460,10 +461,14 @@ public class TerminalSkill extends AbsSkill {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                String relativePath = target.relativize(file).toString().replace("\\", "/");
-                if (!isIgnored(workPath, file) && matcher.matches(Paths.get(relativePath))) {
+                if (isIgnored(workPath, file) || isIgnored(target, file)) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                if(matcher.matches(target.relativize(file)) || matcher.matches(file)) {
                     results.add("[FILE] " + formatDisplayPath(workPath, path, target, file));
                 }
+
                 return results.size() >= 500 ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
             }
         });
