@@ -22,7 +22,9 @@ import org.noear.solon.ai.chat.skill.AbsSkill;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -379,24 +381,50 @@ public class TerminalSkill extends AbsSkill {
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                return isIgnored(workPath, dir) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+                if (isIgnored(workPath, dir) || isIgnored(target, dir)) {
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+                return FileVisitResult.CONTINUE;
             }
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (isIgnored(workPath, file)) return FileVisitResult.CONTINUE;
-                try (Scanner scanner = new Scanner(Files.newInputStream(file), fileCharset.name())) {
+                if (isIgnored(workPath, file) || isIgnored(target, file)) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                if (attrs.size() > 10 * 1024 * 1024) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                String fileName = file.getFileName().toString().toLowerCase();
+                if (fileName.endsWith(".class") || fileName.endsWith(".jar") ||
+                        fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".exe")) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                try (BufferedReader reader = Files.newBufferedReader(file, fileCharset)) {
                     int lineNum = 0;
-                    while (scanner.hasNextLine()) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
                         lineNum++;
-                        String line = scanner.nextLine();
                         if (line.contains(query)) {
+                            String trimmedLine = line.trim();
+                            if (trimmedLine.length() > 1000) {
+                                trimmedLine = trimmedLine.substring(0, 1000) + "...(line truncated)";
+                            }
+
                             String displayPath = formatDisplayPath(workPath, path, target, file);
-                            sb.append(displayPath).append(":").append(lineNum).append(": ").append(line.trim()).append("\n");
+                            sb.append(displayPath).append(":").append(lineNum).append(": ").append(trimmedLine).append("\n");
+
+                            // 发现匹配后立即检查长度，防止 StringBuilder 过载
+                            if (sb.length() > MAX_CHARACTER_LIMIT) {
+                                return FileVisitResult.TERMINATE;
+                            }
                         }
-                        if (sb.length() > MAX_CHARACTER_LIMIT) return FileVisitResult.TERMINATE; //原来是：sb.length() > 8000
                     }
-                } catch (Throwable ignored) {
+                } catch (IOException | UncheckedIOException ignored) {
+                    // 仅忽略读取异常（如权限、损坏的编码等）
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -417,19 +445,23 @@ public class TerminalSkill extends AbsSkill {
         Path workPath = getWorkPath(__cwd);
         Path target = resolveSafePath(workPath, path, false);
 
-        final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
-        final String logicPrefix = (path != null && path.startsWith("@")) ? path.split("[/\\\\]")[0] : null;
+        String fixedPattern = pattern.replace("\\", "/");
+        final PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + fixedPattern);
         List<String> results = new ArrayList<>();
 
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                return isIgnored(workPath, dir) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+                if (isIgnored(workPath, dir) || isIgnored(target, dir)) {
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+                return FileVisitResult.CONTINUE;
             }
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (!isIgnored(workPath, file) && matcher.matches(target.relativize(file))) {
+                String relativePath = target.relativize(file).toString().replace("\\", "/");
+                if (!isIgnored(workPath, file) && matcher.matches(Paths.get(relativePath))) {
                     results.add("[FILE] " + formatDisplayPath(workPath, path, target, file));
                 }
                 return results.size() >= 500 ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
