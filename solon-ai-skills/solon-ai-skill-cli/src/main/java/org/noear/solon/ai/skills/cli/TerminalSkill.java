@@ -66,10 +66,14 @@ public class TerminalSkill extends AbsSkill {
     protected Charset fileCharset = StandardCharsets.UTF_8;
     protected final ProcessExecutor executor = new ProcessExecutor();
 
-    private final List<String> DEFAULT_IGNORES = Arrays.asList(
-            ".soloncode", ".claude", ".opencode", ".git", ".DS_Store",
-            "node_modules", "target", "bin",
-            "venv", "vendor", "build"
+    private final List<String> DEFAULT_IGNORES_DIR = Arrays.asList(
+            ".soloncode", ".claude", ".opencode",
+            ".idea", ".vscode", ".settings",
+            ".git", ".gradle",".mvn",
+            ".pytest_cache", "__pycache__",
+            ".DS_Store",
+            "node_modules", "venv", "vendor",
+            "target", "build"
     );
 
     public void setSandboxMode(boolean sandboxMode) {
@@ -231,10 +235,18 @@ public class TerminalSkill extends AbsSkill {
         Path workPath = getWorkPath(__cwd);
 
         Path target = resolveSafePath(workPath, filePath, false);
-        if (!Files.exists(target)) return "错误：文件不存在";
+        if (!Files.exists(target)) {
+            return "错误：文件不存在";
+        }
+
+        if (isNotTextFile(target)) {
+            return "错误：该文件是二进制格式，无法作为文本读取。";
+        }
 
         long fileSize = Files.size(target);
-        if (fileSize == 0) return "(文件内容为空)";
+        if (fileSize == 0) {
+            return "(文件内容为空)";
+        }
 
         // 1. 参数预处理
         long startLine0 = (offset == null || offset < 1) ? 0L : offset - 1L;
@@ -393,13 +405,7 @@ public class TerminalSkill extends AbsSkill {
                     return FileVisitResult.CONTINUE;
                 }
 
-                if (attrs.size() > 10 * 1024 * 1024) {
-                    return FileVisitResult.CONTINUE;
-                }
-
-                String fileName = file.getFileName().toString().toLowerCase();
-                if (fileName.endsWith(".class") || fileName.endsWith(".jar") ||
-                        fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".exe")) {
+                if (attrs.size() > 10 * 1024 * 1024 || isNotTextFile(file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -695,17 +701,33 @@ public class TerminalSkill extends AbsSkill {
 
     private boolean isIgnored(Path workPath, Path path) {
         String name = path.getFileName().toString();
-        if (DEFAULT_IGNORES.contains(name)) return true;
+        if (DEFAULT_IGNORES_DIR.contains(name)) return true;
         try {
             // 只有在 workPath 内部时才进行递归片段检查
             if (path.startsWith(workPath)) {
                 Path relative = workPath.relativize(path);
                 for (Path segment : relative) {
-                    if (DEFAULT_IGNORES.contains(segment.toString())) return true;
+                    if (DEFAULT_IGNORES_DIR.contains(segment.toString())) return true;
                 }
             }
         } catch (Throwable ignored) {
         }
+        return false;
+    }
+
+    private boolean isNotTextFile(Path file) {
+        String fileName = file.getFileName().toString().toLowerCase();
+
+        // 1. 基于已知二进制后缀的快速过滤
+        if (fileName.endsWith(".class") || fileName.endsWith(".jar") ||
+                fileName.endsWith(".exe")   || fileName.endsWith(".dll") ||
+                fileName.endsWith(".so")    || fileName.endsWith(".pyc") ||
+                fileName.endsWith(".png")   || fileName.endsWith(".jpg") ||
+                fileName.endsWith(".gif")   || fileName.endsWith(".zip") ||
+                fileName.endsWith(".gz")    || fileName.endsWith(".pdf")) {
+            return true;
+        }
+
         return false;
     }
 
