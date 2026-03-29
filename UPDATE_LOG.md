@@ -17,6 +17,7 @@
 * 优化 solon-ai-skill-restapi 原来的三档展示升为四级，并添加分组（可增强注意力）
 * 优化 solon-ai-skill-toolgateway 原来的三档展示升为四级，并添加分组（可增强注意力）
 * 优化 solon-ai-agent ReActRequest, TeamRequest 支持叠加 options
+* 修复 solon-ai-skill-cli ExpertSkill grep 可能失效的问题
 
 ### 3.10.0
 
