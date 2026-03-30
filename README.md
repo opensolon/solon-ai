@@ -87,8 +87,8 @@ Examples of embeddings (including third-party frameworks) for solon-ai:
 
 ## Example Agent synthesis project (can be used directly for production or customization)
 
-* [SolonCode（Java8 impl version of "Claude Code" or  "OpenCode"](../../../../opensolon/soloncode)
-* [SolonClaw（Java8 impl version of "Claude Code" or  "OpenCode"](../../../../opensolon/solonclaw)
+* [SolonCode (Java impl version of "Claude Code")](../../../../opensolon/soloncode)
+* [SolonClaw (Java impl version of "OpenClaw"](../../../../opensolon/solonclaw)
 
 ## Core Module Experience
 
