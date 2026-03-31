@@ -344,24 +344,42 @@ public class TerminalSkill extends AbsSkill {
         Path target = resolveSafePath(workPath, filePath, true);
 
         if (!Files.exists(target)) {
-            return "错误：文件不存在，无法进行多重编辑。";
+            return "错误：文件不存在，无法进行编辑。";
         }
 
         String originalContent = new String(Files.readAllBytes(target), fileCharset);
-        String workingContent = originalContent;
 
-        // 顺序应用所有编辑
+        // 在尝试应用任何修改前，先校验所有 oldStr 的有效性，确保原子性
         for (int i = 0; i < edits.size(); i++) {
             EditOp edit = edits.get(i);
+            String finalOld = normalizeNewlines(originalContent, edit.oldStr);
 
-            try {
-                workingContent = applyEditLogic(workingContent, edit.oldStr, edit.newStr, edit.replaceAll);
-            } catch (IllegalArgumentException e) {
-                return String.format("第 %d 个编辑操作失败: %s。所有更改已回滚。", i + 1, e.getMessage());
+            int firstIndex = originalContent.indexOf(finalOld);
+            if (firstIndex == -1) {
+                return String.format("预检查失败（操作 #%d）: 找不到指定的文本块。请确保 old_str 的缩进和换行与文件内容完全一致。", i + 1);
+            }
+
+            // 如果不是 replaceAll 模式，校验唯一性
+            if (Boolean.FALSE.equals(edit.replaceAll)) {
+                if (originalContent.lastIndexOf(finalOld) != firstIndex) {
+                    return String.format("预检查失败（操作 #%d）: 文本块在文件中不唯一。请增加上下文行以实现精准定位。", i + 1);
+                }
             }
         }
 
-        // 原子性保存：只有全部成功才写入文件并记录历史
+        String workingContent = originalContent;
+        // 顺序应用所有编辑
+        for (int i = 0; i < edits.size(); i++) {
+            EditOp edit = edits.get(i);
+            try {
+                // 注意：由于前面的修改可能改变了后续匹配项的上下文位置，这里捕获可能的运行时冲突
+                workingContent = applyEditLogic(workingContent, edit.oldStr, edit.newStr, edit.replaceAll);
+            } catch (IllegalArgumentException e) {
+                return String.format("执行失败（操作 #%d）: %s。可能是由于前面的修改破坏了此处的匹配上下文，请尝试分多次调用 edit。", i + 1, e.getMessage());
+            }
+        }
+
+        // 原子性保存
         undoHistory.put(filePath, originalContent);
         Files.write(target, workingContent.getBytes(fileCharset));
 
@@ -485,24 +503,27 @@ public class TerminalSkill extends AbsSkill {
 
     // --- 内部逻辑逻辑 ---
 
-    /**
-     * 核心编辑逻辑抽取（供 edit 复用）
-     */
+    private String normalizeNewlines(String context, String text) {
+        if (text == null) return null;
+        // 如果文件内容包含 \r\n，则将 text 中的 \n 转换为 \r\n
+        if (context.contains("\r\n")) {
+            return text.replace("\r\n", "\n").replace("\n", "\r\n");
+        } else {
+            return text.replace("\r\n", "\n");
+        }
+    }
+
     private String applyEditLogic(String content, String oldStr, String newStr, boolean replaceAll) {
-        if (oldStr == null || newStr == null) {
-            throw new IllegalArgumentException("old_str 和 new_str 不能为空");
+        if (Utils.isEmpty(oldStr)) {
+            throw new IllegalArgumentException("old_str 不能为空");
         }
 
         if (oldStr.equals(newStr)) {
-            throw new IllegalArgumentException("old_str 与 new_str 不能相同");
+            return content; // 内容相同无需处理
         }
 
-        String finalOld = oldStr, finalNew = newStr;
-        // 自动适配换行符
-        if (content.contains("\r\n")) {
-            if (finalOld.contains("\n") && !finalOld.contains("\r\n")) finalOld = finalOld.replace("\n", "\r\n");
-            if (finalNew.contains("\n") && !finalNew.contains("\r\n")) finalNew = finalNew.replace("\n", "\r\n");
-        }
+        String finalOld = normalizeNewlines(content, oldStr);
+        String finalNew = normalizeNewlines(content, newStr);
 
         if (replaceAll) {
             if (!content.contains(finalOld)) {
@@ -512,10 +533,10 @@ public class TerminalSkill extends AbsSkill {
         } else {
             int firstIndex = content.indexOf(finalOld);
             if (firstIndex == -1) {
-                throw new IllegalArgumentException("找不到文本块。请确保 old_str 的缩进和换行完全一致");
+                throw new IllegalArgumentException("找不到文本块。这通常是由于前面的修改改变了文件的字符偏移或内容，建议分步执行。");
             }
             if (content.lastIndexOf(finalOld) != firstIndex) {
-                throw new IllegalArgumentException("文本块在文件中不唯一，请增加上下文行");
+                throw new IllegalArgumentException("文本块在当前状态下不唯一");
             }
             return content.substring(0, firstIndex) + finalNew + content.substring(firstIndex + finalOld.length());
         }
