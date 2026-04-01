@@ -31,13 +31,15 @@ public class ParamDesc {
     private final boolean required;
     private final String description;
     private final String defaultValue;
+    private final String format;
 
-    public ParamDesc(String name, Type type, boolean required, String description, String defaultValue) {
+    public ParamDesc(String name, Type type, boolean required, String description, String defaultValue, String format) {
         this.name = name;
         this.type = type;
         this.required = required;
         this.description = (description == null ? "" : description);
         this.defaultValue = Constants.PARM_UNDEFINED_VALUE.equals(defaultValue) ? null : defaultValue;
+        this.format = format;
     }
 
     /**
@@ -69,6 +71,13 @@ public class ParamDesc {
     }
 
     /**
+     * 格式化
+     */
+    public String format() {
+        return format;
+    }
+
+    /**
      * 是否必须
      */
     public boolean required() {
@@ -81,6 +90,7 @@ public class ParamDesc {
                 "name='" + name + '\'' +
                 ", description='" + description + '\'' +
                 ", defaultValue='" + defaultValue + '\'' +
+                ", format='" + format + '\'' +
                 ", required=" + required +
                 ", type=" + type +
                 '}';

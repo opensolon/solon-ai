@@ -156,7 +156,21 @@ public class FunctionToolDesc implements FunctionTool {
      * @param defaultValue 默认值
      */
     public FunctionToolDesc paramAdd(String name, Type type, boolean required, String description, String defaultValue) {
-        params.add(new ParamDesc(name, type, required, description, defaultValue));
+        return paramAdd(name, type, required, description, defaultValue, null);
+    }
+
+    /**
+     * 申明函数参数
+     *
+     * @param name         参数名字
+     * @param type         参数类型
+     * @param required     是否必须
+     * @param description  参数描述
+     * @param defaultValue 默认值
+     * @param format       格式
+     */
+    public FunctionToolDesc paramAdd(String name, Type type, boolean required, String description, String defaultValue, String format) {
+        params.add(new ParamDesc(name, type, required, description, defaultValue, format));
         inputSchema = null;
         return this;
     }

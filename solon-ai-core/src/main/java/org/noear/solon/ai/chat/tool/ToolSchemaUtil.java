@@ -71,7 +71,7 @@ public class ToolSchemaUtil {
 
             String defVal = (Constants.PARM_UNDEFINED_VALUE.equals(anno.defaultValue()) ? null : anno.defaultValue());
 
-            return new ONodeAttrHolder(name, null, anno.description(), anno.required(), defVal, ae);
+            return new ONodeAttrHolder(name, null, anno.description(), anno.required(), defVal, anno.format(), ae);
         });
 
         bodyDetectors.add(new BodyAnnoDetector());
@@ -153,7 +153,7 @@ public class ToolSchemaUtil {
                     pd1 = getParamDesc(fg1.getField(), fg1.getTypeEggg());
 
                     if (pd1 == null) {
-                        pd1 = new ParamDesc(fg1.getAlias(), fg1.getGenericType(), false, "", null);
+                        pd1 = new ParamDesc(fg1.getAlias(), fg1.getGenericType(), false, "", null, null);
                     }
 
                     paramMap.put(pd1.name(), pd1);
@@ -178,7 +178,12 @@ public class ToolSchemaUtil {
 
             for (ParamDesc fp : paramAry) {
                 ONode paramNode = createSchema(fp.type());
+
                 paramNode.set(SchemaKeyword.DESCRIPTION, fp.description());
+
+                if (Utils.isNotEmpty(fp.format())) {
+                    paramNode.set(SchemaKeyword.FORMAT, fp.format());
+                }
 
                 if (Utils.isNotEmpty(fp.defaultValue())) {
                     Object defVal = ONode.ofBean(fp.defaultValue())
@@ -254,18 +259,18 @@ public class ToolSchemaUtil {
     /**
      * 工具结果转换
      */
-    public static String resultConvert(FunctionTool fun, Object result){
-        if(result == null){
+    public static String resultConvert(FunctionTool fun, Object result) {
+        if (result == null) {
             return null;
         }
 
-        if(result instanceof String){
-            return (String)result;
+        if (result instanceof String) {
+            return (String) result;
         }
 
         Type type = fun.returnType();
-        if(type == null){
-            type= result.getClass();
+        if (type == null) {
+            type = result.getClass();
         }
 
         return fun.resultConverter().convert(result, type);

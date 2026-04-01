@@ -45,11 +45,15 @@ public abstract class AbsTool implements FunctionTool {
     }
 
     protected void addParam(String name, Type type, boolean required, String description) {
-        addParam(name, type, required, description, null);
+        addParam(name, type, required, description, null, null);
     }
 
     protected void addParam(String name, Type type, boolean required, String description, String defaultValue) {
-        params.add(new ParamDesc(name, type, required, description, defaultValue));
+        addParam(name, type, required, description, defaultValue, null);
+    }
+
+    protected void addParam(String name, Type type, boolean required, String description, String defaultValue, String format) {
+        params.add(new ParamDesc(name, type, required, description, defaultValue, format));
         inputSchema = null;
     }
 
