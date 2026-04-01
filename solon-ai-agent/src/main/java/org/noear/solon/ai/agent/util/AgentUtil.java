@@ -59,12 +59,12 @@ public class AgentUtil {
 
     public static <T> T callWithRetry(int maxRetries, long etryDelayMs, CallableTx<T, Throwable> callable) throws Throwable {
         Throwable lastException = null;
-        for (int i = 0; i <= maxRetries; i++) { // 注意是 <=，确保至少执行一次
+        for (int i = 0; i < maxRetries; i++) { // 注意是 <，确保至少执行一次
             try {
                 return callable.call();
             } catch (Throwable e) {
                 lastException = e;
-                if (i < maxRetries) {
+                if (i < (maxRetries - 1)) {
                     try {
                         Thread.sleep(etryDelayMs * (i + 1));
                     } catch (InterruptedException ie) {
