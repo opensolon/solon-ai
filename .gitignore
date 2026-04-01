@@ -29,3 +29,5 @@ nbdist/
 *.DS_Store
 .vscode
 .ace-tool/
+
+.soloncode/
