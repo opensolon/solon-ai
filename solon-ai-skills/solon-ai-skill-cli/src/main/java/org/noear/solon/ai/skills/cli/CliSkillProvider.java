@@ -53,6 +53,15 @@ public class CliSkillProvider implements SkillProvider {
         return this;
     }
 
+    /**
+     * 沙盒模式
+     */
+    public CliSkillProvider sandboxMode(boolean sandboxMode) {
+        terminalSkill.setSandboxMode(sandboxMode);
+        return this;
+    }
+
+
     public PoolManager getPoolManager() {
         return poolManager;
     }
