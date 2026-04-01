@@ -172,13 +172,13 @@ public class ToolGatewaySkill extends AbsSkill {
 
         // SUMMARY 模式：上下文已包含摘要，无需搜索功能，只需提供详情与代理工具
         if (size <= listThreshold) {
-            return this.tools.stream()
+            return this.getToolAry().stream()
                     .filter(f -> !"search_tools".equals(f.name()))
                     .collect(Collectors.toList());
         }
 
         // LIST & SEARCH 模式：提供完整的中转工具集（包含 search_tools）
-        return this.tools;
+        return this.getToolAry();
     }
 
     @ToolMapping(name = "search_tools", description = "搜索业务工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）")

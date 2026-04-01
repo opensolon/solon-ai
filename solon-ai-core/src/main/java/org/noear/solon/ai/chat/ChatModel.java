@@ -290,7 +290,9 @@ public class ChatModel implements AiModel {
          * 默认工具添加（即每次请求都会带上）
          *
          * @param toolObj 工具对象
+         * @deprecated 3.10.1
          */
+        @Deprecated
         public Builder defaultToolAdd(Object toolObj) {
             config.getModelOptions().toolAdd(toolObj);
             return this;

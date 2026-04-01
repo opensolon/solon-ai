@@ -237,14 +237,14 @@ public class RestApiSkill extends AbsSkill {
         int size = allTools.size();
 
         if (size <= dynamicThreshold) {
-            return tools.stream().filter(t -> "call_api".equals(t.name())).collect(Collectors.toList());
+            return getToolAry().stream().filter(t -> "call_api".equals(t.name())).collect(Collectors.toList());
         }
 
         if (size <= listThreshold) {
-            return tools.stream().filter(t -> !"search_apis".equals(t.name())).collect(Collectors.toList());
+            return getToolAry().stream().filter(t -> !"search_apis".equals(t.name())).collect(Collectors.toList());
         }
 
-        return tools;
+        return getToolAry();
     }
 
     // --- 内置工具映射 ---

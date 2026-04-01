@@ -108,17 +108,17 @@ public class ExpertSkill extends AbsSkill {
 
         if (total <= listThreshold) {
             // 少量时，直接 read 即可，不需要 search 和 list 干扰
-            return tools.stream().filter(t -> t.name().equals("skillread")
+            return getToolAry().stream().filter(t -> t.name().equals("skillread")
                     || t.name().equals("skillrefresh")).collect(Collectors.toList());
         }
 
         if (total <= searchThreshold) {
             // 中等规模，保留所有（read, list, refresh），但不强制 search
-            return tools.stream().filter(t -> !t.name().equals("skillsearch")).collect(Collectors.toList());
+            return getToolAry().stream().filter(t -> !t.name().equals("skillsearch")).collect(Collectors.toList());
         }
 
         // 大规模，强制搜索（全量工具开放）
-        return tools;
+        return getToolAry();
     }
 
     @ToolMapping(name = "skilllist", description = "列出所有已挂载专家技能池中的可用清单。")

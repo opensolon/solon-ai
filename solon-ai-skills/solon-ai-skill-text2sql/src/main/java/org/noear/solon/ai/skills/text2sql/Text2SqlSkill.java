@@ -304,7 +304,7 @@ public class Text2SqlSkill extends AbsSkill {
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
         if (schemaMode == SchemaMode.FULL) {
-            return tools.stream().filter(t -> "execute_sql".equals(t.name())).collect(Collectors.toList());
+            return getToolAry().stream().filter(t -> "execute_sql".equals(t.name())).collect(Collectors.toList());
         }
         return super.getTools(prompt);
     }

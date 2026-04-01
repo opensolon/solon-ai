@@ -13,28 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.chat.skill;
-
-import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.chat.tool.MethodToolProvider;
-import org.noear.solon.lang.Preview;
+package org.noear.solon.ai.chat.tool;
 
 import java.util.*;
 
 /**
- * 技能定制基类
+ * 工具提供者定制基类
  *
  * @author noear
- * @since 3.8.4
+ * @since 3.10.1
  */
-@Preview("3.8.4")
-public abstract class AbsSkill implements Skill {
-    private volatile SkillMetadata metadata;
+public class AbsToolProvider implements ToolProvider {
     private final Map<String, FunctionTool> toolMap;
     private final List<FunctionTool> tools;
 
-    protected AbsSkill() {
+    protected AbsToolProvider() {
         this.tools = new ArrayList<>();
         this.tools.addAll(new MethodToolProvider(this).getTools());
 
@@ -55,7 +48,7 @@ public abstract class AbsSkill implements Skill {
     }
 
     public Collection<FunctionTool> getToolAry(String... names) {
-       return getToolAry(Arrays.asList(names));
+        return getToolAry(Arrays.asList(names));
     }
 
     public Collection<FunctionTool> getToolAry(Collection<String> names) {
@@ -69,16 +62,7 @@ public abstract class AbsSkill implements Skill {
     }
 
     @Override
-    public SkillMetadata metadata() {
-        if (this.metadata == null) {
-            this.metadata = new SkillMetadata(this.name(), this.description());
-        }
-
-        return this.metadata;
-    }
-
-    @Override
-    public Collection<FunctionTool> getTools(Prompt prompt) {
+    public Collection<FunctionTool> getTools() {
         return tools;
     }
 }
