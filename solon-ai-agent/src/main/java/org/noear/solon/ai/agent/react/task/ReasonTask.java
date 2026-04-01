@@ -415,7 +415,7 @@ public class ReasonTask implements NamedTaskComponent {
         int maxRetries = trace.getOptions().getMaxRetries();
         Throwable lastException = null;
 
-        for (int i = 0; i <= maxRetries; i++) { // 注意是 <=，确保至少执行一次
+        for (int i = 0; i < maxRetries; i++) { // 注意是 <，确保至少执行一次
             try {
                 final ChatResponse response;
 
