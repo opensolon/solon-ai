@@ -13,6 +13,7 @@
 ### 3.10.1
 
 * 添加 solon-ai-core ChatModel.of().systemPrompt 方法
+* 添加 solon-ai-core 工具执行时的参数注解支持
 * 优化 solon-ai-skill-cli ExpertSkill 原来的二档展示升为三级
 * 优化 solon-ai-skill-restapi 原来的三档展示升为四级，并添加分组（可增强注意力）
 * 优化 solon-ai-skill-toolgateway 原来的三档展示升为四级，并添加分组（可增强注意力）

@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.snack4.ONode;
+import org.noear.snack4.codec.BeanDecoder;
 import org.noear.solon.core.handle.AbstractEntityReader;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.util.LazyReference;
@@ -94,12 +95,8 @@ public class MethodExecuteHandler extends AbstractEntityReader {
                 //如果没有 body 要求；尝试找按属性找
                 //
                 if (tmp.hasKey(p.spec().getName())) {
-                    //支持泛型的转换
-                    if (p.spec().isGenericType()) {
-                        return tmp.get(p.spec().getName()).toBean(p.getGenericType());
-                    } else {
-                        return tmp.get(p.spec().getName()).toBean(pt);
-                    }
+                    //支持泛型和注解
+                    return BeanDecoder.decode(tmp, p.getParameter());
                 }
             }
 

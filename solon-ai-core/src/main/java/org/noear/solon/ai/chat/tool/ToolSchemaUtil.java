@@ -16,6 +16,7 @@
 package org.noear.solon.ai.chat.tool;
 
 import org.noear.eggg.FieldEggg;
+import org.noear.eggg.ParamEggg;
 import org.noear.eggg.TypeEggg;
 import org.noear.snack4.ONode;
 import org.noear.snack4.annotation.ONodeAttrHolder;
@@ -64,6 +65,8 @@ public class ToolSchemaUtil {
             if (Utils.isEmpty(name)) {
                 if (ae instanceof FieldEggg) {
                     name = ((FieldEggg) ae).getName();
+                } else if(ae instanceof ParamEggg){
+                    name = ((ParamEggg) ae).getName();
                 } else {
                     return null;
                 }
