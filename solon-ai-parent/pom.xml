@@ -88,6 +88,12 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>solon-ai-harness</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai-mcp</artifactId>
                 <version>${project.version}</version>
             </dependency>
