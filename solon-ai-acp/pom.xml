@@ -39,13 +39,19 @@
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>java-websocket-ns</artifactId>
-            <version>1.1</version>
+            <version>${java-websocket-ns.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-logging-simple</artifactId>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
