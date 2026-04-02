@@ -12,6 +12,7 @@
 
 ### 3.10.1
 
+* 新增 acp-sdk 模块（从 solon-ai-acp 分离出来，方便独立升级）
 * 添加 solon-ai-core ChatModel.of().systemPrompt 方法
 * 添加 solon-ai-core 工具执行时的参数注解支持
 * 添加 solon-ai-core AbsToolProvider 类（取代之前添加 toolObj 的方式）

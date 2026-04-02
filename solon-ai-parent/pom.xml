@@ -52,6 +52,12 @@
 
             <dependency>
                 <groupId>org.noear</groupId>
+                <artifactId>acp-sdk</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.noear</groupId>
                 <artifactId>solon-ai</artifactId>
                 <version>${project.version}</version>
             </dependency>

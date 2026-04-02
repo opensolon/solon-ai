@@ -11,19 +11,19 @@
         <relativePath>../solon-ai-parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>solon-ai-acp</artifactId>
+    <artifactId>acp-sdk</artifactId>
     <name>${project.artifactId}</name>
     <packaging>jar</packaging>
 
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>acp-sdk</artifactId>
+            <artifactId>solon-net</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-net</artifactId>
+            <artifactId>solon-ai-mcp</artifactId>
         </dependency>
 
         <dependency>
